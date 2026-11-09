@@ -66,6 +66,11 @@ Font texture primitive decodes actual CT32 upload storage into PSMT4 sampling;
 paired codes share cells and choose two CLUT bases by parity. Original glyph1
 is a26x32 triangle button. Final screen transforms/tint/blend/message consumers
 are separate work. Offscreen RTX upload/readback is asset QA, not game rendering.
+The new optional tools/build-ui-qa.ps1 separately builds native D3D11 font
+fragments. It renders an actual original quad using verified GS modulation,
+alpha-test and blend equations;12288 GPU pixels match the limited CPU equation.
+Only integer edges/1:1 nearest and explicitly supplied global GS context are
+supported. This is a real restricted draw backend, not a game scene/window.
 Sound startup owns core/pl00 program/sample tables and AFD→AFS directory maps,
 plus BGM0 tables. Ready7f/7f/0f reflects those actual commits; voices, event
 execution, encrypted ADX decode and audible output are still absent.
@@ -82,6 +87,7 @@ execution, encrypted ADX decode and audible output are still absent.
 | Font/menu | font-state-evidence.json, font-texture-evidence.json, menu-state-evidence.json |
 | Audio/MC/game assets | audio-startup-semantics.json, memory-card-semantics.json, game-start-evidence.json |
 | GPU QA | gpu-capabilities.json, gpu-texture-verification.json, gpu-qa-last-run.json |
+| Restricted font fragment GPU draw | ui-renderer-verification.json, font-draw-evidence.json |
 | Reproducibility | fresh-build-verification.json (older scope; compare its source/test list before reuse) |
 
 RNG differential:10272 seeds/20544 exact comparisons against a restricted model
@@ -114,3 +120,9 @@ Use current worker ownership before edits; do not restart completed slices.
 After every commit reassess which original call can execute next; prioritize
 connected consumers over more isolated metadata parsers. Check git heads before
 pushing; recorded historical commits are not assumptions about remote state.
+
+The user explicitly requested continuing until fully complete while they sleep.
+A persistent goal is active for the full native port; do not mark complete at
+a module/milestone or pause merely because a commit/push finished. No token
+budget was requested. Current chat-only workload estimate after pushedae62976
+is stored privately in analysis/project-review.json, never public progress.
