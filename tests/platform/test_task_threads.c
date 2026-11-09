@@ -41,7 +41,23 @@ static void sleeper(void *context,int32_t arg)
 static DWORD WINAPI foreign_cancel(void *context)
 {
     scenario *s=context;
+    CHECK(gh_task_threads_replace_current(s->backend,sleeper,s,1)==GH_THREAD_WRONG_THREAD);
     return (DWORD)gh_task_threads_cancel(s->backend,2);
+}
+static void replacement(void *context,int32_t arg)
+{
+    scenario *s=context;
+    CHECK(arg==456);s->shared=72;
+    CHECK(gh_task_threads_sleep(s->backend,1)==GH_THREAD_OK);
+    s->shared=73;
+}
+static void replaced(void *context,int32_t arg)
+{
+    scenario *s=context;
+    CHECK(arg==123);s->shared=71;
+    CHECK(gh_task_threads_replace_current(s->backend,0,s,9)==GH_THREAD_INVALID);
+    (void)gh_task_threads_replace_current(s->backend,replacement,s,456);
+    s->shared=-999; /* must never execute on the retired original stack */
 }
 typedef struct foreign_visit {
     gh_task_manager *manager;
@@ -52,6 +68,7 @@ typedef struct foreign_visit {
 static VOID WINAPI foreign_tick(void *context)
 {
     foreign_visit *v=context;
+    CHECK(gh_task_threads_replace_current((gh_task_threads*)v->manager->step_context,replacement,0,0)==GH_THREAD_INVALID);
     v->result=gh_tasks_run_matching_002d52a0(v->manager);
     v->returned=1;
     SwitchToFiber(v->owner_fiber);
@@ -69,6 +86,7 @@ int main(void)
     memset(records,0,sizeof(records));memset(&s,0,sizeof(s));
     CHECK(gh_task_threads_create(&m,&s.backend)==GH_THREAD_OK);
     CHECK(gh_task_threads_sleep(s.backend,1)==GH_THREAD_INVALID);
+    CHECK(gh_task_threads_replace_current(s.backend,replacement,&s,0)==GH_THREAD_INVALID);
     CHECK(gh_task_threads_start(s.backend,-1,task_a,&s,-5,&a)==GH_THREAD_OK && a==2);
     CHECK(gh_task_threads_start(s.backend,-1,task_b,&s,123,&b)==GH_THREAD_OK && b==3);
     CHECK(s.entered==0); /* start marks state2; first selected tick runs it */
@@ -118,6 +136,15 @@ int main(void)
     records[2].attributes=1;tick(&m);CHECK(records[2].running==1);
     records[2].attributes=0;tick(&m);CHECK(records[2].running==1);
     records[2].attributes=1;tick(&m);CHECK(records[2].running==0);
+    /* Tail restart deletes old stack, preserves attr/slot and starts later. */
+    m.flags=0;records[2].attributes=0x55;
+    CHECK(gh_task_threads_start(s.backend,2,replaced,&s,123,&a)==GH_THREAD_OK);
+    records[2].attributes=0x55;
+    tick(&m);CHECK(s.shared==71 && records[2].running==2 && records[2].thread_id==-1);
+    CHECK(records[2].attributes==0x55);
+    tick(&m);CHECK(s.shared==72 && records[2].running==1);
+    tick(&m);CHECK(s.shared==73 && records[2].running==0);
+    CHECK(gh_task_threads_cancel(s.backend,2)==GH_THREAD_OK);
     /* Foreign/external kernel-resumed state4 must not be silently accepted. */
     m.flags=0;records[2].running=4;
     CHECK(gh_tasks_run_matching_002d52a0(&m).status==GH_TASK_STEP_FAILED);

@@ -53,3 +53,26 @@ Matching overlay hashes establish content identity only. Indexing/parsing does
 not execute gameplay. r207 is a small first candidate: consult current
 analysis/r207-source-evidence.json and source before describing it as runnable.
 The skill contains no game bytes or decompiler listings.
+
+## Dynamic call and graphics corrections
+
+The native0030D358 task now reaches the next task request002AE8A8 with real
+bank/DVD/font/menu/ID work. This is cMc_taskBody, not a menu task. Its literal
+jal0 at002AE8E8 is an unresolved SNR2 import: main-module relocation type4,
+symbol index048D, name Main__7cMcBoot, supplied by mcport.rel export+0280.
+Do not inherit upstream placeholder/no-op guesses for this call. The task's
+002D5958 continuation uses002D5990 to set state2 and exit the current thread;
+it must restart the same native slot, not return and mark it empty.
+
+USA font MST uploads64x256 CT32 image bytes but samples them as512x256 PSMT4.
+The paired-code draw consumer002A53A8 selects CLUT base1CF0/1CF1 by code parity;
+it is not an unverified CSA choice. Cell=low12(code)>>1; glyph metric left/right
+fields crop that cell. Native glyph1 is the original26x32 triangle button.
+See analysis/font-texture-evidence.json for source addresses, independent
+coordinate-bit equations and pinned primary implementation research. Final
+screen transforms, tint and blend are separate from extracting glyph pixels.
+
+Sound PrepareDecode naming was misleading: startup first prepares external AFS
+directories, not bulk ADX PCM. Owned native bank commit and real AFD→AFS mapping
+can satisfy startup table readiness without inventing an IOP reply. ADX0408 is
+encrypted type8; no key/decoder is assumed. Voices and output remain separate.

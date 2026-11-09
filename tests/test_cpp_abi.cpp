@@ -11,6 +11,10 @@
 #include "../src/assets/sound_bank.h"
 #include "../src/core/startup_task.h"
 #include "../src/core/dvd_jobs.h"
+#include "../src/platform/startup_host.h"
+#include "../src/assets/font_texture.h"
+#include "../src/core/game_start.h"
+#include "../src/core/mc_boot.h"
 
 // Link actual C objects from the future C++ host. No duplicated implementation.
 int main()
@@ -47,5 +51,14 @@ int main()
         return 10;
     if (gh_startup_task_0030d358(nullptr, nullptr) != -1 || gh_dvd_check(nullptr, 0) != 0)
         return 11;
+    if (gh_startup_host_destroy(nullptr) != GH_HOST_ARGUMENT ||
+        gh_audio_release_bank(nullptr, 0) != GH_AUDIO_ARGUMENT ||
+        gh_font_initialize(nullptr, nullptr, 1) != GH_FONT_ARGUMENT ||
+        gh_menu_load_tables_002ae990(nullptr, nullptr) != GH_MENU_ARGUMENT)
+        return 12;
+    if (gh_font_atlas_rgba(nullptr, nullptr, 0) != GH_FONT_ARGUMENT ||
+        gh_game_assets_release(nullptr) != GH_GAME_ARGUMENT ||
+        gh_mc_boot_checks_create(nullptr, nullptr) != GH_MC_BOOT_ARGUMENT)
+        return 13;
     return 0;
 }

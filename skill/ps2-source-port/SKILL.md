@@ -48,6 +48,13 @@ calling conventions into a 64-bit host without explicit ABI adaptation. Resolve
 guest addresses through an explicit mapping before native dereferences; verify
 bounds and lifetime for any intentional fixed mapping.
 
+Resolve dynamic-module relocations before classifying zero/unknown calls.
+A literal jump target0 may be an unbound import patched by the original loader,
+not logging or an empty function. Trace the relocation type, symbol index/name
+and supplying module export. Do not skip it merely because upstream guessed a
+placeholder name. Function-address-like source filenames also need declaration
+and linker-section verification.
+
 Recover a small algorithm/subsystem with state and callers, then extend toward
 startup, scheduling and a real scene. Keep original behavior reconstruction
 separate from platform replacements. Record assembly fallbacks, guarded
@@ -88,6 +95,12 @@ and overflow before reading. Separate container indexing, relocations and
 exports/imports from recovered overlay logic. Equal overlay hashes establish
 content identity, not recovered source or native execution. Load original data
 through a native asset boundary and avoid redistributing it.
+
+Separate upload storage from sampled texture format. Original graphics packets
+may write CT32 pixels that are later sampled as indexed textures from the same
+VRAM. Verify address permutation, CLUT selection and consumer UVs before using
+a generic linear decoder. GPU upload/readback proves transfer correctness;
+it does not by itself verify original blending or a rendered game scene.
 
 ## Resume and acceptance
 

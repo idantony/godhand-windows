@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-09T16:56:58.105934+00:00",
-  "stage": "readable-source-and-native-module-validation",
+  "verified_utc": "2026-11-09T18:13:02.842434+00:00",
+  "stage": "native-startup-task-integration",
   "playable": false,
   "original_game_scene_observed_in_native_port": false,
   "strategy": "Recover readable original logic and implement native platform dependencies",
@@ -49,20 +49,122 @@
         "0x002D5440",
         "0x002D52A0"
       ],
-      "scope": "Slot choice, attribute inheritance and conditional visitation",
-      "real_EE_thread_step_backend_complete": false
+      "scope": "Slot choice, attribute inheritance, filtered visitation and native serial fiber start/sleep/exit",
+      "native_serial_backend_tested": true,
+      "full_EE_kernel_emulated": false
+    },
+    "dvd_jobs": {
+      "original_functions": [
+        "0x00200CB0",
+        "0x00201098",
+        "0x00201108"
+      ],
+      "scope": "Real allocation/sector reads, original priority order, pressure drain and task waits"
+    },
+    "startup_task": {
+      "original_function": "0x0030D358",
+      "real_native_backends_connected": true,
+      "scope": "Sound-bank commit, core/language DVD reads, font/menu/ID initialization",
+      "normal_path_next_entry": "0x002AE8A8",
+      "next_entry_available": false,
+      "earlier_boot_and_complete_main_loop_run": false
+    },
+    "font": {
+      "initializer": "0x002A4970",
+      "scope": "Bounded MST/MSA views, glyph metrics and restricted atlas/glyph RGBA"
+    },
+    "menu_id": {
+      "original_functions": [
+        "0x002AE990",
+        "0x002ACC70"
+      ],
+      "scope": "Original MSD/IDD/TBL binding, reset and global identity"
+    },
+    "game_assets": {
+      "original_function": "0x0030D5C8",
+      "object_table_records": 41,
+      "scope": "Actual core/room-jump/object/player reads with original branch and task waits",
+      "integrated_from_complete_game_boot": false
+    },
+    "game_gates": {
+      "original_functions": [
+        "0x002A6CA8",
+        "0x002A6DA8"
+      ],
+      "scope": "Disc-change countdown and modal input conditions; draw dependencies remain mandatory"
+    },
+    "memory_card": {
+      "scope": "Native profile GetInfo/SearchFile, original slot/file check slice and localized/fallback ID resource binding",
+      "full_Main_UI_or_save_load_complete": false
+    },
+    "sound": {
+      "startup": "0x002CA798",
+      "scope": "Owned program/sample bank commits and real AFD-to-AFS indexes",
+      "ready_flags": [
+        "0x7F",
+        "0x7F",
+        "0x0F"
+      ],
+      "voices_or_audible_output": false
+    },
+    "asset_views": {
+      "scope": "Bounded core bundles, restricted indexed4 TIM2 RGBA, SCR mesh descriptors and SES/ADX headers",
+      "model_vertices_animation_or_audio_decode_complete": false
     }
   },
   "tests": {
     "native_build": "passed",
+    "built_modules": [
+      "rng",
+      "boot",
+      "disc",
+      "r207",
+      "memory",
+      "tasks",
+      "task_threads",
+      "tim2",
+      "model",
+      "startup_task",
+      "dvd_jobs",
+      "core_bundle",
+      "sound_bank",
+      "font_state",
+      "menu_state",
+      "audio_startup",
+      "startup_host",
+      "font_texture",
+      "game_start",
+      "memory_card",
+      "mc_boot",
+      "mc_boot_id",
+      "font_draw",
+      "game_gate"
+    ],
     "passed_steps": [
       "test-rng",
       "test-boot",
       "test-room",
       "test-memory",
       "test-tasks",
+      "test-task-threads",
+      "test-tim2",
+      "test-model",
+      "test-startup-task",
       "test-cpp-abi",
-      "test-original-disc"
+      "test-original-disc",
+      "test-dvd-jobs",
+      "test-core-bundle",
+      "test-sound-bank",
+      "test-font-state",
+      "test-menu-state",
+      "test-audio-startup",
+      "test-startup-host",
+      "test-font-texture",
+      "test-game-start",
+      "test-memory-card",
+      "test-mc-id",
+      "test-font-draw",
+      "test-game-gate"
     ],
     "rng_differential": {
       "distinct_seeds": 10272,
@@ -72,7 +174,8 @@
     }
   },
   "remaining": [
-    "Subystem/task initialization and main-loop integration",
+    "Memory-card boot UI and remaining original next-task entries",
+    "Earlier subsystem initialization and full main-loop integration",
     "Asset object/model/animation loading",
     "Native rendering, audio, input and save adapters",
     "Full game progression and timing validation"

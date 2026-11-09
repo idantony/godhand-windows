@@ -4,140 +4,137 @@
 
 ## English
 
-A source port of the original PS2 **God Hand**, preserving its gameplay and
-assets while recovering readable code and replacing platform dependencies with
-native Windows implementations. The approach follows OpenGOAL's source recovery
-and platform adaptation method. God Hand was not written in GOAL, so Jak's
-specialized decompiler cannot be used directly.
+Recover readable source for the original PS2 **God Hand**, preserve its gameplay
+and assets, and replace platform dependencies with native Windows implementations.
+This follows OpenGOAL's source recovery and platform adaptation method. God Hand
+was not written in GOAL, so Jak's specialized decompiler is not directly usable.
 
-**Early development: this project is not playable yet.** It does not reach a
-game scene. The current test programs and DLL are verified modules, not a game
-release or an emulator launcher.
+**Early development; no playable game scene, controls or audible output yet.**
+The developer startup host executes a recovered task with real native backends.
+It stops explicitly when the next original task is unavailable.
 
 ### Verified progress
 
-- Indexed 1445 resources and 81 dynamic modules from the user's NTSC-U 1.00
+- Indexed 1445 resources and 81 dynamic modules from the user's patched NTSC-U
   `SLUS-21503` disc. All 81 module hashes match the pinned upstream manifest.
-- The supplied patched boot ELF and loaded image differ from the upstream
-  retail baseline. Upstream PS2 matching percentages are not native-port progress.
-- Native C modules cover original-disc access, two RNG functions, the
-  `0x0030B298` boot dependency slice, nine small r207 room routines, three
-  task-manager functions and a real host-memory adapter.
-- Seven integrated native checks pass, including actual resource reads,
-  allocation/read/write/free, lifecycle, task traversal and C++/C linkage.
-- Two RNG routines passed 20544 exact state/float-bit comparisons across 10272
-  seeds against a restricted model of instructions from the actual ELF.
-  This is modeled evidence, not a PS2 hardware capture or whole-game validation.
+  The boot ELF and loaded image differ from the upstream retail baseline.
+- Native serial tasks use Windows fibers to preserve their C stacks across the
+  original sleep/exit handshake. DVD jobs read actual ISO sectors, preserve
+  priority ordering and implement the original extra wait after completion.
+- The actual `0x0030D358` startup task now loads sound banks and core/language
+  bundles, then initializes original font, menu and ID state. Its normal path
+  reaches `0x002AE8A8`, the memory-card boot task, which remains a real dependency.
+  This starts at that task, not at the game's entry point or full boot sequence.
+- Sound startup commits owned program/sample tables and real AFD→AFS mappings;
+  ready flags are `0x7F/0x7F/0x0F`. Voice execution and audio output are pending.
+- Original font packets now decode into native atlas/glyph RGBA, including the
+  original odd/even CLUT selection. Final screen drawing and blending are pending.
+- Bounded native asset views cover core bundles, indexed TIM2 textures, SCR mesh
+  descriptors and SES banks. A descriptor parser is not model/animation rendering.
+- Nine r207 routines and a boot dependency slice are recovered. Two RNG routines
+  pass 20544 exact state/float-bit comparisons across 10272 seeds against a
+  restricted actual-instruction model. This is not PS2 hardware validation.
+- Original portrait texture decoding and offscreen RTX GPU upload/readback pass.
+  This is asset QA, not a rendered game scene.
 
-Current status: [docs/progress.json](docs/progress.json).
-Milestones and remaining work: [docs/PROGRESS.md](docs/PROGRESS.md).
+Current checks and boundaries: [docs/progress.json](docs/progress.json).
+Milestones: [docs/PROGRESS.md](docs/PROGRESS.md).
+Upstream PS2 matching percentages do not measure this port's progress.
 
-### Local layout and verification
+### Prepare and verify
 
-The current workspace keeps source, tools and useful evidence under
-`E:\godhand_windows`, with build products, temporary files and caches under
-`G:\middle_thing\godhand_windows`. The original disc is always read-only.
-
-| Directory | Purpose |
-|---|---|
-| `src/`, `tests/` | Native source and meaningful module checks |
-| `tools/` | Repeatable inspection, build and verification scripts |
-| `docs/` | Curated public progress |
-| `skill/ps2-source-port/` | Self-contained reusable skill and resume notes |
-| `reference/`, `analysis/` | Private extracted inputs and recovery evidence, excluded from Git |
-| `vendor/`, `.tools/` | Pinned upstream source and separately installed tools, excluded from Git |
-
-With your own game data and the local project inputs prepared:
+The repository contains authored source, tests and tools. It includes no ISO,
+game binary/assets, BIOS, private SDK or credentials. Use your own game data.
 
 ```powershell
 .\tools\bootstrap-toolchain.ps1
+python -B .\tools\prepare-inputs.py --iso 'X:\your\God Hand.iso'
 python -B .\tools\build-native.py
 python -B .\tools\verify_rng.py
 python -B .\tools\export-progress.py
 python -B .\tools\check-public-tree.py
 ```
 
-The bootstrap installs a project-local compiler and verifies its published
-SHA-256. The build runs native module tests; it does not start the game.
-Disc-dependent tests need the user's own ISO and locally extracted references.
-The repository includes no ISO, game binary/assets, BIOS, private SDK or keys.
+The bootstrap verifies the compiler's published SHA-256. Preparation pins the
+upstream checkout and reads the ISO without bulk extraction. The integrated
+build records source fingerprints and executes native module/integration checks.
+
+The development host is built in the external scratch tree:
+
+```powershell
+& 'G:\middle_thing\godhand_windows\build\native\run-startup.exe' 'X:\your\God Hand.iso'
+```
+
+It currently reports an expected next-entry frontier with exit code **2**;
+that is an incomplete execution slice, not game startup success. Its ticks are
+scheduler visits, not timed video frames. Bank loading uses synchronous host I/O.
+
+| Directory | Purpose |
+|---|---|
+| `src/`, `tests/` | Native source and module/integration checks |
+| `tools/` | Repeatable input preparation, inspection and verification |
+| `docs/` | Curated public progress |
+| `skill/ps2-source-port/` | Independent reusable skill and resumable project notes |
+| `reference/`, `analysis/` | Private input samples and recovery evidence; excluded from Git |
+| `vendor/`, `.tools/` | Pinned upstream source and project tools; excluded from Git |
+
+This workspace keeps useful files under `E:\godhand_windows` and generated
+build/cache/log files under `G:\middle_thing\godhand_windows`. Build scripts accept
+external scratch/compiler options. The original disc is always read-only.
 See [NOTICE.md](NOTICE.md) for attribution.
 
 ### Next work
 
-Implement real task/thread operations and subsystem startup, integrate the main
-loop, recover model/animation loading, and connect native rendering, audio,
-input and save services. Real scenes and gameplay progression must be tested
-before a playable port can be claimed. Progress is committed incrementally.
-
-The reusable [PS2 source-port skill](skill/ps2-source-port/SKILL.md) is maintained
-during development. It separates verified methods, title-specific evidence and
-the current resumable state.
+Recover memory-card startup UI and the next original tasks, connect the earlier
+boot and full main loop, and implement rendering, voices/audio output, input,
+model/animation loading and save services. Verify real scenes and progression.
+Local commits retain rollback points; public pushes mark substantial milestones.
 
 ## 简体中文
 
-目标：恢复并验证《神之手》原游戏的可读代码，保留原玩法和资源，替换 PS2 平台依赖，构建独立 Windows 版本。采用 OpenGOAL 的源码恢复与平台移植方法；God Hand 原本不是 GOAL 程序，不能直接使用 Jak 专用反编译器。
+恢复并验证《神之手》原游戏的可读源码，保留原玩法和资源，替换 PS2 平台依赖，
+构建独立 Windows 版本。采用 OpenGOAL 的源码恢复与平台移植方法；本作原本不是
+GOAL 程序，不能直接使用 Jak 专用反编译器。
 
-**当前是源码恢复与原生模块阶段，还不能运行游戏。** 测试程序和 DLL 不是可玩的移植版，不是模拟器启动器。
+**目前还没有可玩的游戏场景、操作或声音输出。** 开发用原生启动宿主已能运行一个
+恢复后的原任务，并在缺少下一原任务时明确停止。
 
-## 文件位置
+### 已验证的进展
 
-| 路径 | 用途 |
-|---|---|
-| 原始 `.iso` | 用户提供的补丁镜像，始终只读 |
-| `src/` | 可读、可在 Windows 编译的移植源码 |
-| `tests/` | 原函数证据和有意义的模块验证 |
-| `tools/` | 可重复执行的分析、构建和验证入口 |
-| `analysis/` | 版本、哈希、格式、反编译与验证记录 |
-| `reference/` | 从自己的镜像提取的必要主程序、资源表和小样本 |
-| `vendor/god-hand-decomp/` | 固定提交的社区源码恢复成果，保留原样与许可 |
-| `.tools/` | 项目便携 Ghidra、Java、Zig/Clang 和开发用 Python 环境 |
-| `G:\middle_thing\godhand_windows\` | 全部构建产物、缓存、临时文件和大型日志 |
+- 从用户提供的美版补丁镜像索引 1445 项资源和 81 个动态模块；81 个模块哈希均与
+  固定上游提交相同。补丁主程序和加载映像与上游零售版不同，不能照搬匹配结论。
+- Windows fiber 保存真实 C 调用栈，实现原任务的启动、睡眠和退出交接。DVD 队列
+  读取真实 ISO 扇区，保留优先级排序及完成后的额外一次等待。
+- 原 `0x0030D358` 任务已串联声音 bank 加载、核心包/语言包读取、字体绑定、菜单表
+  和 ID 初始化。默认路径走到 `0x002AE8A8` 存档启动任务，后续仍需恢复。
+  这段执行从该任务开始，并未运行完整游戏入口和前置启动。
+- 声音启动持有真实程序/样本表，建立原 AFD→AFS 映射；ready 标志为
+  `0x7F/0x7F/0x0F`。事件执行、voices 和声音输出尚未完成。
+- 原字体图集与单字形已能解码为原生 RGBA，保留原来的奇偶 CLUT 选择。
+  最终屏幕绘字、着色与混合仍需接入。
+- 原生资源层包含核心包、受限 TIM2 纹理、SCR 网格描述和 SES bank。
+  解析描述信息不代表已经能绘制模型或动画。
+- 已恢复 r207 的九个小型函数和启动依赖切片。两个 RNG 原函数对 10272 个种子、
+  共 20544 次调用，与实际指令受限模型的状态及浮点位完全一致；这不是 PS2 实机验证。
+- 原 UI 头像纹理已成功解码，并通过 RTX GPU 离屏上传/读回验证；这是资源审核，
+  还不是原游戏场景渲染。
 
-## 已经验证的工作
+当前验证与限制见 [docs/progress.json](docs/progress.json)，里程碑见
+[docs/PROGRESS.md](docs/PROGRESS.md)。上游 PS2 字节匹配比例不是 Windows 移植完成比例。
 
-- 镜像为美版 `SLUS-21503`、版本 1.00；实际 ISO、ELF 和各段哈希已记录。
-- 补丁主程序及加载映像与上游零售版基准不同，不能照搬上游的 byte-matching 结论。
-- 读取并索引 1445 项 AFS/FST 资源、81 个 SNR2 动态模块；81 个模块均与上游提交的哈希一致。
-- 原生 C 资源层直接读取 ISO，无需解包整个镜像、Python 或 PS2 运行时；真实资源、路径查找和越界验证通过。
-- 实际 R5900 ELF 已经由 PS2 专用 Ghidra 后端导入；13 个局部函数得到反编译证据，启动路径定位至 `0x0030AC40` 主循环候选。
-- 两个 RNG 原函数 `0x0031CF78`、`0x0031CF30` 已移植为原生 C。保持模 2^32 状态演化，明确处理 EE 的 chop 舍入；不改变宿主浮点环境。
-- 原生测试通过；对 10272 个种子、两个函数共 20544 次调用，实际 MIPS 指令的受限离线模型与 DLL 的状态及返回浮点位全部一致。该模型不是 PS2 实机，也不验证整台 EE。
-- 首个小型房间模块恢复9个分配/释放、初始化、原本为空的更新及已核查空表的生命周期函数；启动函数 `0x0030B298` 的控制流和固定宽度状态布局已移植。真实启动平台回调尚未接入。
-- 原生内存后端已完成真实分配、读写和释放测试；任务管理的槽选择、属性继承、条件遍历也已恢复。原 EE 线程操作和完整 cHeap 语义尚未接入。
-- 房间、启动切片与 C++ 调用 C 接口的链接测试已纳入统一构建。
+### 使用自己的镜像验证
 
-更多结果以 `analysis/native-verification.json`、`analysis/rng-differential.json` 和后续模块报告为准。
-本地 `analysis/` 含原始恢复证据，不进入公共仓库；公开进展见 [docs/progress.json](docs/progress.json)。
+公共仓库不包含游戏镜像、程序/资源、BIOS、私有 SDK 或密钥。
+执行上方英文段落的准备和构建命令即可；ISO 路径换成自己的文件。
+原始镜像始终只读，不会整盘解包。构建会记录输入哈希并运行模块和集成验证。
 
-## 可重复执行
+`run-startup.exe` 当前以退出码 **2** 报告下一入口尚未实现。这是明确的执行边界，
+不代表游戏启动成功。输出的 tick 是调度访问次数，不是视频帧；声音 bank 使用同步
+宿主读取来替代原异步时序。
 
-PowerShell，工作目录 `E:\godhand_windows`：
+源码和有用文件保存在 `E:\godhand_windows`，构建、缓存和临时日志保存在
+`G:\middle_thing\godhand_windows`。原始提取样本、私有恢复证据、上游源码和工具不进 Git。
+独立的 [PS2 移植 skill](skill/ps2-source-port/SKILL.md) 随开发维护，保留可恢复的项目状态。
 
-```powershell
-# 项目专用 C 编译器；下载地址及发布者 SHA-256 固定，缓存留在 G:。
-.\tools\bootstrap-toolchain.ps1
-
-# 编译并实际运行原生函数与原始资源测试。
-python -B .\tools\build-native.py
-python -B .\tools\verify_rng.py
-python -B .\tools\export-progress.py
-python -B .\tools\check-public-tree.py
-
-# 只读重做镜像与资源索引。
-python -B .\tools\inspect_disc.py '.\God Hand (USA)(Uncensor Patch v1.0).iso'
-python -B .\tools\inspect_assets.py '.\God Hand (USA)(Uncensor Patch v1.0).iso'
-
-# PS2 专用 Ghidra 局部分析；项目和缓存写在 G:。
-.\tools\run-ghidra.ps1
-```
-
-## 采用的技术与下一步
-
-社区 [god-hand-decomp](https://github.com/LucasPicoli/god-hand-decomp) 的目标是用原 PS2 工具链重建相同的 PS2 二进制。我们复用其经过核查的符号、类型与源码，另外完成 Windows 平台层；其约 56.5% 匹配代码字节不等于本项目已移植的比例。
-
-OpenGOAL 的借鉴点是[类型与逐函数恢复](https://opengoal.dev/docs/developing/decompiling/getting_started/)、[平台移植](https://opengoal.dev/docs/porting-info/porting_to_x86/)和[图形资源转换](https://opengoal.dev/docs/porting-info/drawable_and_tfrag/porting_tfrag/)。原游戏恢复代码及新增平台代码保留清楚的出处和验证范围。
-
-接下来的关键工作是房间动态模块源码、启动和任务调度、原生图形与音频平台接入。必须继续验证真实游戏场景、转场、操作和存读档，才能交付可玩的 Windows 程序。
-
-REA 已从 npm 官方 registry 和 GitHub 最新发行核查：本地 6.8.0 已是最新稳定版，Ghidra 与 MCP 专项检查通过。God Hand ELF 使用独立 Ghidra EE 后端，不改变已有 REA 配置。
+后续继续恢复存档 UI 和后续原任务，接入前置启动与完整主循环、渲染、声音、输入、
+模型/动画和保存服务，再验证真实场景与游戏流程。本地小提交保留回退点，大节点再推送。

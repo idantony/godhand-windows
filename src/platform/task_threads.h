@@ -26,6 +26,12 @@ gh_thread_status gh_task_threads_start(gh_task_threads *, int32_t request,
 /* Original uint16 sleep semantics: 1 resumes on the next selected visit;
  * 0 wraps and requires 65536 selected visits. Valid only inside its active task. */
 gh_thread_status gh_task_threads_sleep(gh_task_threads *, int32_t frames);
+/* Original current-task tail restart (002D5958 ->002D5990).
+ * On success DOES NOT RETURN: retire old stack on owner step stack, preserve
+ * slot/attributes and state2; next selected visit invokes new entry/context/arg.
+ * Errors return before mutation. No C stack unwinding/destructors occur. */
+gh_thread_status gh_task_threads_replace_current(gh_task_threads *,
+    gh_native_task_entry,void *context,int32_t argument);
 /* Cancels a suspended/unstarted task; does not unwind its C stack. Cancelling
  * the currently executing task or from another OS thread is rejected. */
 gh_thread_status gh_task_threads_cancel(gh_task_threads *, int32_t slot);

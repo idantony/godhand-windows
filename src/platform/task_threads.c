@@ -18,6 +18,7 @@ typedef struct task_slot {
     int32_t argument;
     size_t index;
     int registered;
+    int replacing;
 } task_slot;
 struct gh_task_threads {
     gh_task_manager *manager;
@@ -130,10 +131,35 @@ int gh_task_threads_step(void *context,gh_task_manager *manager,gh_task_record32
     b->executing=s;
     SwitchToFiber(s->fiber);
     b->executing=0;
-    if(!work->running) {
+    if(s->replacing) {
+        /* Old fiber yielded permanently. Delete only from the owner stack;
+         * retain registration/new entry and state2 for a later selected visit. */
+        DeleteFiber(s->fiber);s->fiber=0;s->replacing=0;
+    } else if(!work->running) {
         DeleteFiber(s->fiber);s->fiber=0;s->registered=0;s->entry=0;
     }
     return GH_THREAD_OK;
+}
+
+gh_thread_status gh_task_threads_replace_current(gh_task_threads *b,
+    gh_native_task_entry entry,void *context,int32_t argument)
+{
+    task_slot *s;
+    gh_thread_status status=check(b);
+    if(status)return status;
+    if(!entry || !IsThreadAFiber() || !b->executing)return GH_THREAD_INVALID;
+    s=b->executing;
+    if(GetCurrentFiber()!=s->fiber || !s->registered || s->replacing ||
+       b->manager->current_index!=(int32_t)s->index ||
+       b->manager->current!=&b->records[s->index] ||
+       b->records[s->index].running!=0x7f)return GH_THREAD_INVALID;
+    s->entry=entry;s->context=context;s->argument=argument;s->replacing=1;
+    /* Original 002D5958 clears task halfword+1E before the restart. */
+    {uint16_t zero=0;memcpy((unsigned char*)&b->records[s->index]+0x1e,&zero,2);}
+    b->records[s->index].running=2;
+    b->records[s->index].thread_id=-1;
+    SwitchToFiber(b->caller_fiber);
+    abort(); /* retired fiber must never resume into old caller stack */
 }
 gh_thread_status gh_task_threads_sleep(gh_task_threads *b,int32_t frames)
 {
