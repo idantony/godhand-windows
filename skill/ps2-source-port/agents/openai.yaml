@@ -1,0 +1,3 @@
+interface:
+  display_name: "PS2 Source Port"
+  short_description: "Recover PS2 source and build native platform ports"
