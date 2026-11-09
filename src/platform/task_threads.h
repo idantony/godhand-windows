@@ -15,7 +15,10 @@ typedef enum gh_thread_status {
  * No arbitrary EE syscalls, preemption, interrupts, kernel priority scheduling,
  * or state4 external wakeups are implemented. A task that never yields blocks
  * its caller, just as the original manager waits for its semaphore signal.
- * Creating a backend attaches its step callback to an otherwise unbound manager.
+ * Multiple managers may share one OS thread. The first backend attaches to a
+ * stable root caller fiber; additional backends inherit it, including when
+ * constructed from one of its executing tasks. Creating a backend attaches
+ * its step callback to an otherwise unbound manager.
  * The caller owns records and must keep their base/capacity/count valid. */
 gh_thread_status gh_task_threads_create(gh_task_manager *, gh_task_threads **);
 gh_thread_status gh_task_threads_destroy(gh_task_threads *);
@@ -38,6 +41,13 @@ gh_thread_status gh_task_threads_cancel(gh_task_threads *, int32_t slot);
 /* Bound gh_task_step_fn; drive only from the creating caller fiber on the
  * same OS thread. Errors propagate through GH_TASK_STEP_FAILED. */
 int gh_task_threads_step(void *, gh_task_manager *, gh_task_record32 *);
+/* Explicit nested manager visit from an executing native parent task. Only
+ * that registered parent fiber may call; temporarily bind the child manager's
+ * return fiber, run its original filtered traversal, then restore the root
+ * caller even on a child error. Direct foreign-fiber steps remain invalid.
+ * Each suspended task context/record must outlive its task. Root backend cannot
+ * convert back to an OS thread until the other managers have been destroyed. */
+gh_task_run_result gh_task_threads_run_nested(gh_task_threads *parent,gh_task_threads *child);
 #ifdef __cplusplus
 }
 #endif

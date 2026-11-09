@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 typedef struct gh_memory_card gh_memory_card;
-typedef enum gh_mc_error {GH_MC_OK,GH_MC_ARGUMENT,GH_MC_BUSY,GH_MC_IO,GH_MC_MEMORY,GH_MC_UNSUPPORTED} gh_mc_error;
+typedef enum gh_mc_error {GH_MC_OK,GH_MC_ARGUMENT,GH_MC_BUSY,GH_MC_IO,GH_MC_MEMORY,GH_MC_UNSUPPORTED,GH_MC_ENDED} gh_mc_error;
 typedef struct gh_mc_result {
     int32_t result; /* original command result: GetInfo0, SearchFile1/0 */
     int32_t card_type,free_clusters,formatted;
@@ -18,6 +18,11 @@ typedef struct gh_mc_result {
  * initialization, writes, formatting or save-data interpretation is claimed. */
 gh_mc_error gh_memory_card_open(const char *profile_directory,gh_memory_card **);
 void gh_memory_card_close(gh_memory_card *);
+/* Native endpoint shutdown corresponding to McPort.End service lifetime.
+ * Pending real filesystemcommand returnsBUSY withoutcanceling/mutating it.
+ * Idle End isidempotent; furtherrequests/poll returnENDED. Caller stillowns
+ * objectandmustcloseit. No guestRPC/thread/semaphore success isfabricated. */
+gh_mc_error gh_memory_card_end(gh_memory_card *);
 gh_mc_error gh_memory_card_request_info(gh_memory_card *);
 /* USA original folder base, slot0..19, icon.sys. No caller path interpolation. */
 gh_mc_error gh_memory_card_request_icon(gh_memory_card *,uint32_t save_slot);

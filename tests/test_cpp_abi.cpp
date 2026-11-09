@@ -15,6 +15,21 @@
 #include "../src/assets/font_texture.h"
 #include "../src/core/game_start.h"
 #include "../src/core/mc_boot.h"
+#include "../src/core/id_path.h"
+#include "../src/core/mc_control_flow.h"
+#include "../src/core/mc_exit.h"
+#include "../src/core/game_cockpit.h"
+#include "../src/core/game_objects.h"
+#include "../src/core/game_prepare.h"
+#include "../src/core/game_room_state.h"
+#include "../src/core/game_room_pack.h"
+#include "../src/core/game_room_pools.h"
+#include "../src/core/game_camera.h"
+#include "../src/core/game_movie_pool.h"
+#include "../src/core/movie_task.h"
+#include "../src/platform/game_services.h"
+#include "../src/platform/native_input.h"
+#include "../src/platform/video_player.h"
 
 // Link actual C objects from the future C++ host. No duplicated implementation.
 int main()

@@ -93,10 +93,28 @@ int main(int argc,char **argv)
         C(gh_id_base_release_002aa078(runtime,&object,&ret,&freed)==GH_ID_OK && freed);
         C(gh_id_base_initialize_002a9ea0(runtime,&object,2,0,random_word,&rng_calls,&ret)==GH_ID_OK && rng_calls==5);
         C(gh_id_base_release_002aa078(runtime,&object,&ret,&freed)==GH_ID_OK && freed);
-        put(s+4,0);s[0x6e]=4;
+        put(s+4,0);s[0x6e]=4;put(s+0x138,0x3f800000);put(s+0x13c,0x3f800000);
         C(gh_id_base_initialize_002a9ea0(runtime,&object,2,0,0,0,&ret)==GH_ID_UNSUPPORTED && object.first_unported==0x2abc30);
         C(gh_id_base_release_002aa078(runtime,&object,&ret,&freed)==GH_ID_OK && freed);
         manager->pair[2].data=save;
+    }
+    {
+        unsigned ids[]={1,14,18,21};uint32_t rng_calls=0;
+        C(gh_id_runtime_set_path_policy(runtime,(gh_id_path_policy)99)==GH_ID_ARGUMENT);
+        C(gh_id_base_initialize_002a9ea0(runtime,&object,1,1,random_word,&rng_calls,&ret)==GH_ID_UNSUPPORTED);
+        C(object.first_unported==0x2abc30 && object.path_policy==GH_ID_PATH_EXACT);
+        C(gh_id_runtime_set_path_policy(runtime,GH_ID_PATH_REFERENCE_NEAREST)==GH_ID_BUSY);
+        C(gh_id_base_release_002aa078(runtime,&object,&ret,&freed)==GH_ID_OK && freed);
+        C(gh_id_runtime_set_path_policy(runtime,GH_ID_PATH_REFERENCE_NEAREST)==GH_ID_OK);
+        for(i=0;i<4;++i){
+            C(gh_id_base_initialize_002a9ea0(runtime,&object,1,(int32_t)ids[i],random_word,&rng_calls,&ret)==GH_ID_OK && ret==1);
+            C(object.path_policy==GH_ID_PATH_REFERENCE_NEAREST);
+            if(ids[i]==1)C(bits(object.entries[18].path_length)==0x41953f95);
+            C(gh_id_base_restart_anim(&object,random_word,&rng_calls)==GH_ID_OK);
+            if(ids[i]==1)C(bits(object.entries[18].path_length)==0x41953f95);
+            C(gh_id_base_release_002aa078(runtime,&object,&ret,&freed)==GH_ID_OK && freed);
+        }
+        C(gh_id_runtime_set_path_policy(runtime,GH_ID_PATH_EXACT)==GH_ID_OK);
     }
     {
         gh_id_pool_run runs[100],large;int found;
@@ -112,5 +130,5 @@ int main(int argc,char **argv)
     C(gh_id_runtime_destroy(runtime)==GH_ID_OK);
     C(gh_mc_boot_release_id_resource(&l.r,heap,manager)==GH_MC_BOOT_OK);
     free(manager);C(gh_heap_release(heap,language_allocation)==GH_MEM_OK);C(gh_heap_destroy(heap)==GH_MEM_OK);gh_disc_close(disc);
-    puts("PASS actual67 MC IDP entries: pool/build/parents/reset/release; generic RNG and sqrt frontiers explicit");return 0;
+    puts("PASS actual67 MC entries and four realHUD IDs: pool/build/parents/reset/release; explicit exact/reference path policy and restart retention");return 0;
 }

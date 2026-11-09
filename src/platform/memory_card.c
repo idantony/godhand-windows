@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <wchar.h>
 #include "memory_card.h"
-struct gh_memory_card {wchar_t root[1024];unsigned command,slot;};
+struct gh_memory_card {wchar_t root[1024];unsigned command,slot,ended;};
 gh_mc_error gh_memory_card_open(const char *root,gh_memory_card **out)
 {
     gh_memory_card *c;
@@ -15,15 +15,18 @@ gh_mc_error gh_memory_card_open(const char *root,gh_memory_card **out)
     *out=c;return GH_MC_OK;
 }
 void gh_memory_card_close(gh_memory_card *c) {if(c)HeapFree(GetProcessHeap(),0,c);}
+gh_mc_error gh_memory_card_end(gh_memory_card *c)
+{if(!c)return GH_MC_ARGUMENT;if(c->command)return GH_MC_BUSY;c->ended=1;return GH_MC_OK;}
 gh_mc_error gh_memory_card_request_info(gh_memory_card *c)
-{if(!c)return GH_MC_ARGUMENT;if(c->command)return GH_MC_BUSY;c->command=1;return GH_MC_OK;}
+{if(!c)return GH_MC_ARGUMENT;if(c->ended)return GH_MC_ENDED;if(c->command)return GH_MC_BUSY;c->command=1;return GH_MC_OK;}
 gh_mc_error gh_memory_card_request_icon(gh_memory_card *c,uint32_t slot)
-{if(!c || slot>=20)return GH_MC_ARGUMENT;if(c->command)return GH_MC_BUSY;c->command=2;c->slot=slot;return GH_MC_OK;}
+{if(!c || slot>=20)return GH_MC_ARGUMENT;if(c->ended)return GH_MC_ENDED;if(c->command)return GH_MC_BUSY;c->command=2;c->slot=slot;return GH_MC_OK;}
 gh_mc_error gh_memory_card_poll(gh_memory_card *c,int *done,gh_mc_result *r)
 {
     DWORD attributes,error;
     if(!c || !done || !r)return GH_MC_ARGUMENT;
     *done=0;ZeroMemory(r,sizeof(*r));
+    if(c->ended)return GH_MC_ENDED;
     if(!c->command)return GH_MC_OK;
     if(c->command==1) {
         ULARGE_INTEGER available;

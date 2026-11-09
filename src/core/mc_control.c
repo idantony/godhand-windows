@@ -50,6 +50,8 @@ static gh_mc_boot_error update_ui(gh_mc_control_state *c,gh_mc_task_state *s,con
     if(error){if(!c->first_unported)c->first_unported=0x72c8;return GH_MC_BOOT_UNSUPPORTED;}
     return GH_MC_BOOT_OK;
 }
+gh_id_error gh_mc_control_set_boot_display_000072c8(gh_mc_control_state*c,gh_mc_task_state*s,const gh_mc_task_bindings*b)
+{if(!c||!s||!b||!b->id_runtime||!s->ui_initialized)return GH_ID_ARGUMENT;return ui_move(c,s,b);}
 gh_mc_boot_error gh_mc_control_advance(gh_mc_control_state *c,gh_mc_task_state *s,const gh_mc_task_bindings *b)
 {
     gh_mc_boot_error error;

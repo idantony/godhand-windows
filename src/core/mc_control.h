@@ -16,6 +16,9 @@ typedef struct gh_mc_control_state {
  * finish_delay. phase2 fileLoad/errorProc remain explicit frontiers. */
 gh_mc_boot_error gh_mc_control_advance(gh_mc_control_state *,gh_mc_task_state *,const gh_mc_task_bindings *);
 gh_mc_boot_error gh_mc_control_finish_delay(gh_mc_control_state *,gh_mc_task_state *,const gh_mc_task_bindings *);
+/* Actual SetDisp72C8 restricted bootmode2 stage, without Controlframecount.
+ * ExposedforcompleteControl dispatch; othermodesuseverifiedconsumers. */
+gh_id_error gh_mc_control_set_boot_display_000072c8(gh_mc_control_state *,gh_mc_task_state *,const gh_mc_task_bindings *);
 /* Must perform the real original draw consumer represented by this job.
  * Unknown consumers return UNSUPPORTED; no successful empty draw adapter.
  * consumer_address is diagnostic only, never called as a host function ptr. */

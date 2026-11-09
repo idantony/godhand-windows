@@ -26,11 +26,21 @@ struct gh_task_threads {
     size_t capacity;
     task_slot *slots;
     void *caller_fiber;
+    void *root_fiber;
     DWORD thread_id;
     int converted;
     task_slot *executing;
+    struct gh_task_threads *next;
 };
-static _Thread_local gh_task_threads *thread_backend;
+static _Thread_local gh_task_threads *thread_backends;
+static _Thread_local uint32_t next_native_task_id;
+static int known_fiber(void *fiber)
+{
+    gh_task_threads *b;
+    for(b=thread_backends;b;b=b->next)
+        if(b->root_fiber==fiber || (b->executing && b->executing->fiber==fiber))return 1;
+    return 0;
+}
 static gh_thread_status check(gh_task_threads *b)
 {
     if(!b || !b->manager || b->manager->records!=b->records ||
@@ -62,7 +72,8 @@ gh_thread_status gh_task_threads_create(gh_task_manager *m,gh_task_threads **out
     size_t i;
     if(!out) return GH_THREAD_INVALID;
     *out=0;
-    if(thread_backend) return GH_THREAD_BUSY;
+    if(thread_backends && (!IsThreadAFiber() || !known_fiber(GetCurrentFiber())))
+        return GH_THREAD_INVALID;
     if(!m || !m->records || !m->capacity || m->capacity>65535 ||
        m->count>m->capacity || m->step) return GH_THREAD_INVALID;
     for(i=0;i<m->count;++i) if(m->records[i].running) return GH_THREAD_BUSY;
@@ -71,11 +82,14 @@ gh_thread_status gh_task_threads_create(gh_task_manager *m,gh_task_threads **out
     b->slots=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,m->capacity*sizeof(*b->slots));
     if(!b->slots) { HeapFree(GetProcessHeap(),0,b); return GH_THREAD_NO_MEMORY; }
     b->converted=!IsThreadAFiber();
-    b->caller_fiber=b->converted?ConvertThreadToFiberEx(0,FIBER_FLAG_FLOAT_SWITCH):GetCurrentFiber();
+    b->caller_fiber=thread_backends?thread_backends->root_fiber:
+        (b->converted?ConvertThreadToFiberEx(0,FIBER_FLAG_FLOAT_SWITCH):GetCurrentFiber());
     if(!b->caller_fiber) {HeapFree(GetProcessHeap(),0,b->slots);HeapFree(GetProcessHeap(),0,b);return GH_THREAD_NO_MEMORY;}
+    b->root_fiber=b->caller_fiber;
     b->manager=m;b->records=m->records;b->capacity=m->capacity;b->thread_id=GetCurrentThreadId();
     for(i=0;i<b->capacity;++i) {b->slots[i].backend=b;b->slots[i].index=i;}
-    m->step=gh_task_threads_step;m->step_context=b;*out=b;thread_backend=b;
+    m->step=gh_task_threads_step;m->step_context=b;*out=b;
+    b->next=thread_backends;thread_backends=b;
     return GH_THREAD_OK;
 }
 gh_thread_status gh_task_threads_start(gh_task_threads *b,int32_t request,
@@ -123,9 +137,10 @@ int gh_task_threads_step(void *context,gh_task_manager *manager,gh_task_record32
         if(count) return GH_THREAD_OK;
     } else if(work->running==2) {
         if(s->fiber) return GH_THREAD_INVALID;
+        if(next_native_task_id==INT32_MAX)return GH_THREAD_UNSUPPORTED;
         s->fiber=CreateFiberEx(0,0,FIBER_FLAG_FLOAT_SWITCH,enter_task,s);
         if(!s->fiber) return GH_THREAD_NO_MEMORY;
-        work->thread_id=manager->current_index; /* host diagnostic token, not EE id */
+        work->thread_id=(int32_t)++next_native_task_id; /* unique live host token, not EE id */
     } else return GH_THREAD_UNSUPPORTED;
     work->running=0x7f;
     b->executing=s;
@@ -189,13 +204,34 @@ gh_thread_status gh_task_threads_cancel(gh_task_threads *b,int32_t slot)
 gh_thread_status gh_task_threads_destroy(gh_task_threads *b)
 {
     size_t i;
+    gh_task_threads **link;
     gh_thread_status status=check(b);
     if(status) return status;
     if(b->executing) return GH_THREAD_BUSY;
     if(GetCurrentFiber()!=b->caller_fiber) return GH_THREAD_INVALID;
     for(i=0;i<b->capacity;++i) if(b->slots[i].fiber || b->slots[i].registered) return GH_THREAD_BUSY;
+    for(link=&thread_backends;*link && *link!=b;link=&(*link)->next) {}
+    if(!*link)return GH_THREAD_INVALID;
+    if(b->converted && (thread_backends!=b || b->next))return GH_THREAD_BUSY;
     if(b->converted && !ConvertFiberToThread()) return GH_THREAD_INVALID;
-    b->manager->step=0;b->manager->step_context=0;thread_backend=0;
+    *link=b->next;
+    if(!thread_backends)next_native_task_id=0;
+    b->manager->step=0;b->manager->step_context=0;
     HeapFree(GetProcessHeap(),0,b->slots);HeapFree(GetProcessHeap(),0,b);
     return GH_THREAD_OK;
+}
+gh_task_run_result gh_task_threads_run_nested(gh_task_threads *parent,gh_task_threads *child)
+{
+    gh_task_run_result result={GH_TASK_STEP_FAILED,GH_THREAD_INVALID};
+    gh_thread_status status=check(parent);void *previous;
+    if(status){result.platform_error=status;return result;}
+    status=check(child);if(status){result.platform_error=status;return result;}
+    if(parent==child || !IsThreadAFiber() || !parent->executing ||
+       GetCurrentFiber()!=parent->executing->fiber || child->executing ||
+       parent->root_fiber!=child->root_fiber || child->caller_fiber!=child->root_fiber)
+        return result;
+    previous=child->caller_fiber;child->caller_fiber=GetCurrentFiber();
+    result=gh_tasks_run_matching_002d52a0(child->manager);
+    child->caller_fiber=previous;
+    return result;
 }

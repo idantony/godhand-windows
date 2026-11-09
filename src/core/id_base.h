@@ -24,6 +24,7 @@ struct gh_id_entry {
     int8_t parent_ref,id,layer,b8c;
 };
 typedef struct gh_id_runtime gh_id_runtime;
+typedef enum gh_id_path_policy {GH_ID_PATH_EXACT=0,GH_ID_PATH_REFERENCE_NEAREST=1} gh_id_path_policy;
 typedef struct gh_id_base {
     gh_id_view source_records,packed;
     gh_id_entry *entries;
@@ -35,6 +36,7 @@ typedef struct gh_id_base {
     int16_t h44;
     uint8_t initialized,owns_run;
     uint32_t first_unported;
+    gh_id_path_policy path_policy; /* host metadata, never a guest ABI field */
 } gh_id_base;
 typedef uint32_t (*gh_id_random_u32)(void *);
 typedef struct gh_id_pool_run {gh_id_entry *entries;uint32_t start,count;} gh_id_pool_run;
@@ -48,6 +50,9 @@ gh_id_error gh_id_lookup_002acd78(const gh_id_state *,uint32_t slot,uint32_t n,g
  * original global-identity SRC_SKIP filtering. No game pointer truncation. */
 gh_id_error gh_id_runtime_create(gh_id_state *,int default_manager,gh_id_runtime **);
 gh_id_error gh_id_runtime_destroy(gh_id_runtime *);
+/* Must be selected with no live objects. Default EXACT; reference policy is
+ * explicitly a pinned PCSX2 default numeric model, not PS2 hardware proof. */
+gh_id_error gh_id_runtime_set_path_policy(gh_id_runtime *,gh_id_path_policy);
 gh_id_error gh_id_pool_allocate_002ace48(gh_id_runtime *,uint32_t count,int32_t tag,int32_t arg,gh_id_pool_run *);
 /* Original free helper only reclaims a matching LAST run, compares tag but
  * ignores arg, and sign-extends stored8-bit count. Nonmatching returns freed0. */
@@ -58,7 +63,8 @@ void gh_id_base_clear_002a9df8(gh_id_base *);
  * separately:0 missing resource,1 resource existed, -1 if unported work blocked.
  * initialized means original entry init/reset completed, NOT render readiness.
  * Actual USA MC67 records need neither RAND nor path-sqrt branches. Missing
- * required RNG or a nontrivial2ABC30 path reports exact first_unported address.
+ * required RNG or a path outside the selected numeric domain reports exact
+ * first_unported address. Runtime path policy is captured in host metadata.
  * Source bundle and runtime must outlive the object. */
 gh_id_error gh_id_base_initialize_002a9ea0(gh_id_runtime *,gh_id_base *,int32_t resource,
     int32_t id,gh_id_random_u32,void *random_context,int *original_return);

@@ -16,6 +16,8 @@ SCRATCH = Path(r"G:\middle_thing\godhand_windows")
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-tests", action="store_true")
+    parser.add_argument("--hardware-audio", action="store_true", help="Run muted real-device voice and MC-flow checks")
+    parser.add_argument("--movie-codec", type=Path, help="Also run the muted Movie0 native codec/device check")
     parser.add_argument("--compiler", type=Path, default=PROJECT / ".tools" / "zig-x86_64-windows-0.17.1" / "zig.exe", help="Zig executable; permits reusing an installed toolchain")
     parser.add_argument("--scratch", type=Path, default=SCRATCH, help="External build/cache root")
     args = parser.parse_args()
@@ -43,6 +45,8 @@ def main():
     report = PROJECT / "analysis" / "native-verification.json"
 
     def run(label, command):
+        if len(command)>1 and command[0]==compiler and command[1] in ("cc", "c++") and "-c" not in command:
+            command = command + ["-lwinmm"]
         started = time.monotonic()
         result = subprocess.run([str(item) for item in command], cwd=PROJECT, env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
@@ -78,7 +82,41 @@ def main():
                ("id_jobs", "src/core/id_jobs.c"), ("id_jobs_texture", "src/core/id_jobs_texture.c"),
                ("id_jobs_primitive", "src/core/id_jobs_primitive.c"), ("mc_control", "src/core/mc_control.c"),
                ("game_stage", "src/core/game_stage.c"), ("game_children", "src/core/game_children.c"),
-               ("id_text", "src/core/id_text.c")]
+               ("id_text", "src/core/id_text.c"), ("id_path", "src/core/id_path.c"),
+               ("mc_error", "src/core/mc_error.c"), ("mc_file_load", "src/core/mc_file_load.c"),
+               ("game_cockpit", "src/core/game_cockpit.c"), ("game_objects", "src/core/game_objects.c"),
+               ("game_prepare", "src/core/game_prepare.c"), ("game_room_state", "src/core/game_room_state.c"),
+               ("game_room_pack", "src/core/game_room_pack.c"), ("game_room_pools", "src/core/game_room_pools.c"),
+               ("movie_task", "src/core/movie_task.c"), ("game_camera", "src/core/game_camera.c"),
+               ("game_movie_pool", "src/core/game_movie_pool.c"), ("game_services", "src/platform/game_services.c"),
+               ("mc_exit", "src/core/mc_exit.c"), ("mc_control_flow", "src/core/mc_control_flow.c"),
+               ("audio_events", "src/platform/audio_events.c"), ("se_voice", "src/core/se_voice.c"),
+               ("sound_control", "src/core/sound_control.c"), ("video_player", "src/platform/video_player.c"),
+               ("native_input", "src/platform/native_input.c")]
+    extra_tests = [
+        ("nested-tasks", "tests/platform/test_nested_tasks.c", "none"),
+        ("id-path", "tests/core/test_id_path.c", "iso"),
+        ("mc-error", "tests/core/test_mc_error.c", "iso"),
+        ("mc-file-load", "tests/core/test_mc_file_load.c", "none"),
+        ("game-cockpit", "tests/core/test_game_cockpit.c", "both"),
+        ("game-objects", "tests/core/test_game_objects.c", "both"),
+        ("game-prepare", "tests/core/test_game_prepare.c", "none"),
+        ("game-room-state", "tests/core/test_game_room_state.c", "elf"),
+        ("game-room-pack", "tests/core/test_game_room_pack.c", "iso"),
+        ("game-room-pools", "tests/core/test_game_room_pools.c", "iso"),
+        ("movie-task", "tests/core/test_movie_task.c", "none"),
+        ("game-camera", "tests/core/test_game_camera.c", "elf"),
+        ("game-movie-pool", "tests/core/test_game_movie_pool.c", "none"),
+        ("game-services", "tests/platform/test_game_services.c", "iso"),
+        ("mc-exit", "tests/core/test_mc_exit.c", "iso"),
+        ("memory-card-end", "tests/platform/test_memory_card_end.c", "none"),
+        ("mc-control-flow", "tests/core/test_mc_control_flow.c", "iso"),
+        ("audio-events", "tests/platform/test_audio_events.c", "iso"),
+        ("se-voice", "tests/core/test_se_voice.c", "iso"),
+        ("sound-control", "tests/core/test_sound_control.c", "iso"),
+        ("video-player", "tests/platform/test_video_player.c", "movie"),
+        ("native-input", "tests/platform/test_native_input.c", "iso"),
+    ]
     source_inputs = {"tools/build-native.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
                      "tests/platform/test_memory.c", "tests/core/test_tasks.c",
@@ -95,6 +133,7 @@ def main():
                      "tests/core/test_mc_control.c", "tests/core/test_game_stage.c", "tests/core/test_game_children.c",
                      "tests/core/test_id_text.c"}
     shared_headers = {"id_jobs_texture": "src/core/id_jobs.h", "id_jobs_primitive": "src/core/id_jobs.h"}
+    source_inputs.update(source for _, source, _ in extra_tests)
     for name, source in modules:
         source_inputs.add(source)
         source_inputs.add(shared_headers.get(name, str(Path(source).with_suffix(".h")).replace("\\", "/")))
@@ -120,7 +159,7 @@ def main():
     run("compile-font-state-tests", common + [objects["font_state"], objects["core_bundle"], objects["disc"], "tests/core/test_font_state.c", "-o", output / "test_font_state.exe"])
     run("compile-menu-state-tests", common + ["-Isrc/core", objects["menu_state"], objects["core_bundle"], objects["dvd_jobs"], objects["disc"], objects["memory"], objects["tasks"], objects["task_threads"], "tests/core/test_menu_state.c", "-o", output / "test_menu_state.exe"])
     run("compile-audio-startup-tests", common + ["-Isrc/platform", objects["audio_startup"], objects["sound_bank"], objects["disc"], "tests/platform/test_audio_startup.c", "-o", output / "test_audio_startup.exe"])
-    host_objects = [objects[name] for name in ("startup_host", "audio_startup", "sound_bank", "startup_task", "dvd_jobs", "disc", "memory", "tasks", "task_threads", "font_state", "font_texture", "menu_state", "core_bundle", "game_start", "game_gate", "game_init", "id_base", "packed_message", "mc_task", "mc_boot", "mc_boot_id", "memory_card", "mc_control", "id_jobs", "id_jobs_texture", "id_jobs_primitive", "game_stage", "game_children")]
+    host_objects = list(objects.values())
     run("compile-startup-host-tests", common + host_objects + ["tests/platform/test_startup_host.c", "-o", output / "test_startup_host.exe"])
     run("compile-startup-host-cli", common + host_objects + ["-municode", "tools/run-startup.c", "-o", output / "run-startup.exe"])
     font_objects = [objects[name] for name in ("font_texture", "font_state", "core_bundle", "disc")]
@@ -131,17 +170,19 @@ def main():
     run("compile-mc-id-tests", common + ["-Isrc/core"] + [objects[name] for name in ("mc_boot_id", "menu_state", "core_bundle", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_mc_boot_id.c", "-o", output / "test_mc_boot_id.exe"])
     run("compile-font-draw-tests", common + [objects["font_draw"], objects["font_state"], objects["core_bundle"], objects["disc"], "tests/core/test_font_draw.c", "-o", output / "test_font_draw.exe"])
     run("compile-game-gate-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_gate", "game_start", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_game_gate.c", "-o", output / "test_game_gate.exe"])
-    run("compile-id-base-tests", common + ["-Isrc/core"] + [objects[name] for name in ("id_base", "mc_boot_id", "menu_state", "core_bundle", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_id_base.c", "-o", output / "test_id_base.exe"])
-    run("compile-packed-message-tests", common + [objects[name] for name in ("packed_message", "id_base", "font_state", "core_bundle", "menu_state", "disc")] + ["tests/core/test_packed_message.c", "-o", output / "test_packed_message.exe"])
+    run("compile-id-base-tests", common + ["-Isrc/core"] + [objects[name] for name in ("id_base", "id_path", "mc_boot_id", "menu_state", "core_bundle", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_id_base.c", "-o", output / "test_id_base.exe"])
+    run("compile-packed-message-tests", common + [objects[name] for name in ("packed_message", "id_base", "id_path", "font_state", "core_bundle", "menu_state", "disc")] + ["tests/core/test_packed_message.c", "-o", output / "test_packed_message.exe"])
     run("compile-game-init-tests", common + ["-Isrc/core", objects["game_init"], "tests/core/test_game_init.c", "-o", output / "test_game_init.exe"])
     run("compile-mc-task-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_task.c", "-o", output / "test_mc_task.exe"])
-    id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "menu_state", "font_state", "font_texture", "core_bundle", "disc")]
+    id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "menu_state", "font_state", "font_texture", "core_bundle", "disc")]
     run("compile-id-jobs-tests", common + id_objects + ["tests/core/test_id_jobs.c", "-o", output / "test_id_jobs.exe"])
     run("compile-id-texture-tests", common + id_objects + ["tests/core/test_id_texture.c", "-o", output / "test_id_texture.exe"])
     run("compile-mc-control-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_control.c", "-o", output / "test_mc_control.exe"])
     run("compile-game-stage-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_game_stage.c", "-o", output / "test_game_stage.exe"])
-    run("compile-game-children-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_children", "id_base", "core_bundle")] + ["tests/core/test_game_children.c", "-o", output / "test_game_children.exe"])
+    run("compile-game-children-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_children", "id_base", "id_path", "core_bundle")] + ["tests/core/test_game_children.c", "-o", output / "test_game_children.exe"])
     run("compile-id-text-tests", common + [objects["id_text"], objects["font_draw"], objects["packed_message"]] + id_objects + ["tests/core/test_id_text.c", "-o", output / "test_id_text.exe"])
+    for name, source, _ in extra_tests:
+        run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform"] + list(objects.values()) + [source, "-o", output / ("test_" + name.replace("-", "_") + ".exe")])
     run("compile-core-dll", common + ["-shared", "-Wl,--export-all-symbols"] + list(objects.values()) + ["-o", output / "godhand_core.dll"])
     cpp = [compiler, "c++", "-target", "x86_64-windows-gnu", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror"]
     run("compile-cpp-abi", cpp + list(objects.values()) + ["tests/test_cpp_abi.cpp", "-o", output / "test_cpp_abi.exe"])
@@ -181,6 +222,18 @@ def main():
         run("test-game-stage", [output / "test_game_stage.exe", baseline["source_iso"]["path"]])
         run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
         run("test-id-text", [output / "test_id_text.exe", baseline["source_iso"]["path"]])
+        for name, _, inputs in extra_tests:
+            if (name in ("se-voice", "mc-control-flow") and not args.hardware_audio) or (inputs == "movie" and not args.movie_codec):
+                manifest.setdefault("skipped_checks", []).append({"name": "test-" + name, "reason": "Explicit hardware/codec opt-in not supplied"})
+                continue
+            arguments = []
+            if inputs in ("iso", "both", "movie"):
+                arguments.append(baseline["source_iso"]["path"])
+            if inputs in ("elf", "both"):
+                arguments.append(PROJECT / "reference" / "SLUS_215.03")
+            if inputs == "movie":
+                arguments.append(args.movie_codec.resolve())
+            run("test-" + name, [output / ("test_" + name.replace("-", "_") + ".exe")] + arguments)
     manifest["status"] = "passed" if not args.skip_tests else "build-only"
     final_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
     if initial_sources != final_sources:

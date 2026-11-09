@@ -3,6 +3,7 @@
  * Actual patched ELF and original MC data evidence: analysis/id-base-semantics.json.
  */
 #include "id_base.h"
+#include "id_path.h"
 #include <stdlib.h>
 #include <string.h>
 #include <float.h>
@@ -12,6 +13,7 @@ struct gh_id_runtime {
     gh_id_state *manager;
     int default_manager;
     uint32_t live_objects;
+    gh_id_path_policy path_policy;
     gh_id_entry entries[POOL_COUNT];
     gh_id_job_view jobs[JOB_COUNT];
     gh_id_entry fallback;
@@ -27,6 +29,12 @@ static void put32(unsigned char *p,uint32_t n)
 {p[0]=(unsigned char)n;p[1]=(unsigned char)(n>>8);p[2]=(unsigned char)(n>>16);p[3]=(unsigned char)(n>>24);}
 static int runtime_valid(const gh_id_runtime *r)
 {return r && r->manager && r->manager->pool_used<=POOL_COUNT && r->manager->job_count<=JOB_COUNT;}
+gh_id_error gh_id_runtime_set_path_policy(gh_id_runtime *r,gh_id_path_policy policy)
+{
+    if(!runtime_valid(r) || (policy!=GH_ID_PATH_EXACT && policy!=GH_ID_PATH_REFERENCE_NEAREST))return GH_ID_ARGUMENT;
+    if(r->live_objects)return GH_ID_BUSY;
+    r->path_policy=policy;return GH_ID_OK;
+}
 
 gh_id_error gh_id_lookup_002acd78(const gh_id_state *m,uint32_t slot,uint32_t n,gh_id_view *out)
 {
@@ -112,7 +120,7 @@ void gh_id_base_clear_002a9df8(gh_id_base *o)
     memset(&o->source_records,0,sizeof(o->source_records));memset(&o->packed,0,sizeof(o->packed));
     o->entries=0;o->entry_count=0;o->stop=0;o->hide=0;o->frame=0;o->playing=0;o->b1d=0;o->b1e=0;
     memcpy(o->vector_a,identity,sizeof(identity));memcpy(o->vector_b,identity,sizeof(identity));
-    o->f40=0.01f;o->h44=0x80;o->mode=6;o->initialized=0;o->owns_run=0;o->first_unported=0;
+    o->f40=0.01f;o->h44=0x80;o->mode=6;o->initialized=0;o->owns_run=0;o->first_unported=0;o->path_policy=GH_ID_PATH_EXACT;
 }
 static void init_entry(gh_id_entry *e,const unsigned char *s,uint32_t index)
 {
@@ -152,10 +160,9 @@ static gh_id_error reset_anim(gh_id_base *o,gh_id_random_u32 random,void *contex
             e->jitter[2]=(int16_t)(random(context)%9999);
         } else memset(e->jitter,0,sizeof(e->jitter));
         e->jitter[0]=0;e->flags&=~UINT32_C(0x4000);
-        e->jitter[1]=0;
-        if(s8(s[0x5d])==0)flag(e,0x2000,s16(s+0x6c)<2 || s16(s+0x6e)<2);
-        e->path_length=0;
-        if(s16(s+0x6e)>3) {o->first_unported=0x2abc30;return GH_ID_UNSUPPORTED;}
+        gh_id_error path_error=o->path_policy==GH_ID_PATH_REFERENCE_NEAREST?
+            gh_id_path_reset_reference_nearest(e):gh_id_path_reset_002abc30(e);
+        if(path_error){o->first_unported=0x2abc30;return path_error;}
         e->jitter[2]=0;if(s8(s[0x5e])==0)flag(e,0x1000,s16(s+0x1b0)<2);
         e->jitter[3]=0;if(s8(s[0x5f])==0)flag(e,0x800,s16(s+0x214)<2);
         e->jitter[4]=0;if(s8(s[0x64])==0)flag(e,0x400,s16(s+0x278)<2);
@@ -169,7 +176,7 @@ gh_id_error gh_id_base_initialize_002a9ea0(gh_id_runtime *r,gh_id_base *o,int32_
     if(!runtime_valid(r) || !o || !original_return)return GH_ID_ARGUMENT;
     *original_return=-1;
     if(o->owns_run || o->entries)return GH_ID_BUSY;
-    gh_id_base_clear_002a9df8(o);o->id=id;o->resource_number=resource;o->mode=6;
+    gh_id_base_clear_002a9df8(o);o->id=id;o->resource_number=resource;o->mode=6;o->path_policy=r->path_policy;
     error=gh_id_lookup_002acd78(r->manager,(uint32_t)resource,(uint32_t)id+1,&view);
     if(error) {if(error==GH_ID_NOT_FOUND)*original_return=0;return error;}
     if(view.size<16 || u32(view.bytes)!=0x504449) {*original_return=1;return GH_ID_FORMAT;}
