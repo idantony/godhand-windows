@@ -34,8 +34,9 @@ int main(int argc,char **argv)
     for(i=0;i<30 && gh_startup_host_tick(h)==GH_HOST_RUNNING;++i) {}
     CHECK(gh_startup_host_snapshot(h,&s)==GH_HOST_OK);
     CHECK(s.phase==GH_HOST_FRONTIER && s.error==GH_HOST_ENTRY_UNAVAILABLE);
-    CHECK(s.unavailable_entry==0x2e8 && s.failed_operation==GH_START_OP_COUNT);
-    CHECK(s.frontier_module && s.mc_ui && s.mc_ui->initialized && s.mc_ui->entry_count==67);
+    CHECK(s.unavailable_entry==0x2ab0b8 && s.failed_operation==GH_START_OP_COUNT);
+    CHECK(!s.frontier_module && s.mc_ui && s.mc_ui->initialized && s.mc_ui->entry_count==67);
+    CHECK(s.mc_ui->frame==1 && s.mc_ui->entries[0].message==0x2007);
     CHECK(s.mc_messages && s.mc_messages->initialized && s.mc_messages->cursor.bytes);
     CHECK(s.startup_returned && s.ticks==8 && s.loaded_bundles==2);
     CHECK((s.flags&0xc4000)==0xc4000);
@@ -69,8 +70,9 @@ int main(int argc,char **argv)
     CHECK(gh_startup_host_create(argv[1],1,0x80000000u,32*1024*1024,&h)==GH_HOST_OK);
     for(i=0;i<200 && gh_startup_host_tick(h)==GH_HOST_RUNNING;++i) {}
     CHECK(gh_startup_host_snapshot(h,&s)==GH_HOST_OK && s.phase==GH_HOST_FRONTIER);
-    CHECK(s.unavailable_entry==0x2a5bb8 && s.failed_operation==GH_START_OP_COUNT);
+    CHECK(s.unavailable_entry==0x140c88 && s.failed_operation==GH_START_OP_COUNT);
     CHECK(s.game_state==1 && s.game_rate==0.5f && s.game_assets_loaded);
+    CHECK(s.game_texture_banks==2);
     CHECK(s.ticks>90 && s.startup_returned);
     CHECK(gh_startup_host_destroy(h)==GH_HOST_OK);
     /* Actual host allocation failure must stop before menu/ID initialization. */

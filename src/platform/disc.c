@@ -22,7 +22,7 @@
 
 struct gh_disc {
     FILE *file;
-    uint64_t size, afs_base, afs_size;
+    uint64_t size, afs_base, afs_size,boot_offset,boot_size;
     uint32_t slots;
     unsigned char *afs, *fst, *visited;
     size_t fst_size, string_start, entry_start, count, capacity;
@@ -170,12 +170,17 @@ gh_disc_error gh_disc_open(const char *path,gh_disc **out) {
         if(!fits((uint64_t)lba*2048,len,d->size)){err=GH_DISC_BOUNDS;goto fail;}
         if(!(r[25]&2)) {
             memcpy(name,r+33,nl);name[nl]=0;semi=strchr(name,';');if(semi)*semi=0;
-            if(same_path(name,"_DATA.AFS") || same_path(name,"GODHAND.FST")) {
+            if(same_path(name,"_DATA.AFS") || same_path(name,"GODHAND.FST") || same_path(name,"SLUS_215.03")) {
                 if(r[25]&0x80)goto fail;
                 if(same_path(name,"_DATA.AFS")) {
                     if(d->afs_base)goto fail;
                     d->afs_base=(uint64_t)lba*2048;d->afs_size=len;
-                }else {if(fst_off)goto fail;fst_off=(uint64_t)lba*2048;d->fst_size=len;}
+                }else if(same_path(name,"GODHAND.FST")) {
+                    if(fst_off)goto fail;fst_off=(uint64_t)lba*2048;d->fst_size=len;
+                }else {
+                    if(d->boot_offset)goto fail;
+                    d->boot_offset=(uint64_t)lba*2048;d->boot_size=len;
+                }
             }
         }
         pos+=n;
@@ -212,6 +217,13 @@ fail:
     free(root);gh_disc_close(d);return err;
 }
 size_t gh_disc_count(const gh_disc *d){return d?d->count:0;}
+uint64_t gh_disc_boot_elf_size(const gh_disc *d){return d?d->boot_size:0;}
+gh_disc_error gh_disc_read_boot_elf(gh_disc *d,uint64_t offset,void *buffer,size_t bytes) {
+    if(!d || (!buffer && bytes))return GH_DISC_ARGUMENT;
+    if(!d->boot_offset)return GH_DISC_NOT_FOUND;
+    if(!fits(offset,bytes,d->boot_size))return GH_DISC_BOUNDS;
+    return bytes?read_at(d,d->boot_offset+offset,buffer,bytes):GH_DISC_OK;
+}
 gh_disc_error gh_disc_entry_at(const gh_disc *d,size_t i,gh_disc_entry *out) {
     if(!d||!out)return GH_DISC_ARGUMENT;
     if(i>=d->count)return GH_DISC_BOUNDS;

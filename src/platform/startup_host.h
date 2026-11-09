@@ -6,6 +6,7 @@
 #include "../core/font_state.h"
 #include "../core/menu_state.h"
 #include "../core/mc_task.h"
+#include "../core/mc_control.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -37,6 +38,7 @@ typedef struct gh_startup_snapshot {
     const char *frontier_module; /* NULL=main ELF, otherwise module-relative entry */
     const gh_id_base *mc_ui;
     const gh_packed_message_state *mc_messages;
+    uint32_t game_texture_banks;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization
@@ -51,6 +53,11 @@ gh_host_error gh_startup_host_create(const char *iso,int32_t language,
  * host; absent directory is genuinely no card when Control later queries it. */
 gh_host_error gh_startup_host_create_with_profile(const char *iso,const char *profile,
     int32_t language,uint32_t flags598,size_t heap_capacity,gh_startup_host **);
+/* Configure actual consumers before the first visit. Without one, the host
+ * returns an explicit draw frontier in original order. Callback success must
+ * mean the actual consumer ran; collecting a job is not rendered success. */
+gh_host_error gh_startup_host_set_mc_consumers(gh_startup_host *,gh_mc_draw_consumer,
+    void *draw_context,gh_id_post_message,void *post_context);
 /* Advances selected tasks, then the actual DVD queue in original relative
  * order. A tick is a scheduler visit, not a timed/video frame. Audio startup
  * performs actual synchronous native commits; no fake per-frame RPC polling.

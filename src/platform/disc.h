@@ -31,6 +31,11 @@ gh_disc_error gh_disc_read(gh_disc *disc, size_t index, uint64_t offset,
  * or another payload; padding is read from the disc, not synthesized as zero. */
 gh_disc_error gh_disc_read_blocks(gh_disc *disc, size_t index,
                                 uint64_t block_offset, void *buffer, size_t block_count);
+/* Original root SLUS_215.03, for bounded read-only static data such as the
+ * game's text palette. Independent from the AFS/FST resource index. Bytes are
+ * never executed or treated as native pointers. No extraction is required. */
+uint64_t gh_disc_boot_elf_size(const gh_disc *);
+gh_disc_error gh_disc_read_boot_elf(gh_disc *,uint64_t offset,void *,size_t bytes);
 const char *gh_disc_error_string(gh_disc_error error);
 #ifdef __cplusplus
 }

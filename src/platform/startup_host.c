@@ -7,6 +7,8 @@
 #include "../core/dvd_jobs.h"
 #include "../core/game_gate.h"
 #include "../core/game_init.h"
+#include "../core/game_stage.h"
+#include "../core/game_children.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -56,6 +58,12 @@ struct gh_startup_host {
     gh_packed_message_state mc_messages;
     int32_t mc_game_suspend;
     const char *frontier_module;
+    gh_stage_case1 game_stage;
+    gh_game_children *game_children;
+    gh_mc_control_state mc_control;
+    gh_mc_draw_consumer mc_draw;
+    gh_id_post_message mc_post;
+    void *mc_draw_context,*mc_post_context;
 };
 static int on_owner(const gh_startup_host *h)
 {return GetCurrentThreadId()==h->owner_thread && IsThreadAFiber() && GetCurrentFiber()==h->owner_fiber;}
@@ -162,14 +170,44 @@ static int game_initialize(void *context,gh_game_loop *loop)
     return (int)gh_game_init_002a5b18(&h->game_init,&h->work,
         &loop->game_state[0],&h->game_rate,save);
 }
+static int initialize_children(void *context,gh_stage_case1 *stage)
+{
+    gh_startup_host *h=context;gh_child_status e;(void)stage;
+    if(!h->game_children) {
+        e=gh_game_children_create(0,&h->game_children);
+        if(e)return failure(h,GH_HOST_MEMORY,(int)e);
+    }
+    return (int)gh_game_children_initialize_0015fd98(h->game_children);
+}
+static int initialize_stage(void *context,gh_game_loop *loop)
+{
+    gh_startup_host *h=context;gh_stage_status e;gh_stage_case1 *s=&h->game_stage;
+    loaded_bundle *language=language_bundle(h,&h->task);
+    if(!language)return (int)h->error;
+    if(!s->textures) {
+        e=gh_stage_textures_create(&s->textures);
+        if(e)return failure(h,GH_HOST_MEMORY,(int)e);
+    }
+    s->assets=&h->game_assets;s->core_bin=h->bundles[0].allocation.pointer;
+    s->core_bin_bytes=h->bundles[0].bytes;s->language=&language->view;
+    s->font=&h->font;s->menu=&h->menu;s->id=&h->id;s->id_global=&h->id_global;
+    s->game_state=&loop->game_state[0];s->save=(gh_core_save_view){h->save_bytes,sizeof(h->save_bytes)};
+    s->context=h;s->init_children_15fd98=initialize_children;
+    e=gh_game_stage_002a5bb8(s);
+    if(e && e!=GH_STAGE_UNAVAILABLE && e!=GH_STAGE_UNSUPPORTED)
+        (void)failure(h,GH_HOST_ASSET,(int)e);
+    return (int)e;
+}
 static void game_main_entry(void *context,int32_t argument)
 {
     gh_startup_host *h=context;gh_game_status e;(void)argument;
     e=gh_game_main_002a5998(&h->game_loop,&h->game_platform);
     if(e) {
+        if(h->error && h->error!=GH_HOST_ENTRY_UNAVAILABLE) {h->phase=GH_HOST_FAILED;return;}
         if(e==GH_GAME_UNAVAILABLE) {
             if(!h->unavailable_entry)h->unavailable_entry=h->game_gate.failed_entry?
-                h->game_gate.failed_entry:h->game_loop.failed_entry;
+                h->game_gate.failed_entry:(h->game_loop.failed_entry==0x2a5bb8 && h->game_stage.failed_entry?
+                    h->game_stage.failed_entry:h->game_loop.failed_entry);
             (void)failure(h,GH_HOST_ENTRY_UNAVAILABLE,h->game_loop.platform_error);
         } else {
             (void)failure(h,e==GH_GAME_DISC?GH_HOST_DISC:GH_HOST_THREADS,(int)e);
@@ -188,11 +226,33 @@ static void game_assets_entry(void *context,int32_t argument)
         h->phase=GH_HOST_FAILED;
     }
 }
+static gh_id_error missing_mc_draw(void *context,const gh_id_draw_job *job)
+{(void)context;(void)job;return GH_ID_UNSUPPORTED;}
 static void mc_entry(void *context,int32_t argument)
 {
     gh_startup_host *h=context;gh_mc_task_status e;(void)argument;
     e=gh_mc_task_prepare_002ae8a8(&h->mc,&h->mc_bindings);
-    if(e==GH_MC_TASK_CONTROL_FRONTIER || e==GH_MC_TASK_UNSUPPORTED) {
+    if(e==GH_MC_TASK_CONTROL_FRONTIER) {
+        /* Execute the actual first Control and Sleep prefix. The next missing
+         * draw is reported before claiming a completed frame or sleeping. */
+        gh_mc_boot_error control=gh_mc_control_advance(&h->mc_control,&h->mc,&h->mc_bindings);
+        if(control==GH_MC_BOOT_OK) {
+            gh_id_error draw=gh_mc_control_sleep_frame(&h->mc_control,&h->mc,&h->mc_bindings,
+                h->mc_post,h->mc_post_context,h->mc_draw?h->mc_draw:missing_mc_draw,h->mc_draw_context);
+            if(draw!=GH_ID_OK) {
+                h->unavailable_entry=h->mc_control.first_unported;
+                h->frontier_module=h->unavailable_entry<0x100000?"mcport.rel":0;
+                (void)failure(h,GH_HOST_ENTRY_UNAVAILABLE,(int)draw);return;
+            }
+            /* Further Main/control/exit integration is distinct from prefix
+             * completion; never return whole-task success here. */
+            h->unavailable_entry=0x2e8;h->frontier_module="mcport.rel";
+            (void)failure(h,GH_HOST_ENTRY_UNAVAILABLE,GH_MC_TASK_CONTROL_FRONTIER);return;
+        }
+        h->unavailable_entry=h->mc_control.first_unported?h->mc_control.first_unported:0x2e8;
+        h->frontier_module="mcport.rel";
+        (void)failure(h,GH_HOST_ENTRY_UNAVAILABLE,(int)control);return;
+    } else if(e==GH_MC_TASK_UNSUPPORTED) {
         h->unavailable_entry=h->mc.frontier_offset;
         h->frontier_module=h->mc.frontier_offset<0x100000?"mcport.rel":0;
         (void)failure(h,GH_HOST_ENTRY_UNAVAILABLE,(int)e);
@@ -252,12 +312,16 @@ gh_host_error gh_startup_host_create_with_profile(const char *iso,const char *pr
     h->owner_thread=GetCurrentThreadId();h->owner_fiber=GetCurrentFiber();
     gh_dvd_jobs_init(&h->dvd,h->disc);
     h->work.language=language;h->work.flags598=flags598;h->task.work=&h->work;
+    /* Observed caller0030B728 inputs, not a claim its other setup ran. */
+    h->work.room=0x20;
+    {uint32_t one=0x3f800000;memcpy((unsigned char*)&h->work+0x574,&one,4);}
     gh_game_init_state_initialize(&h->game_init);
     {gh_core_save_view save={h->save_bytes,sizeof(h->save_bytes)};
      if(gh_core_save_system_init(save)!=GH_INIT_OK)goto failed;}
     h->game_loop.work=&h->work;h->game_loop.threads=h->threads;
     h->game_platform.context=h;h->game_platform.dvd_cover=game_cover;
     h->game_platform.modal_input=game_modal;h->game_platform.states[0]=game_initialize;
+    h->game_platform.states[1]=initialize_stage;
     h->game_gate.work=&h->work;h->game_gate.dvd=&h->dvd;
     h->game_gate.threads=h->threads;h->game_gate.game_state=h->game_loop.game_state;
     h->game_assets.work=&h->work;h->game_assets.dvd=&h->dvd;
@@ -279,6 +343,14 @@ failed:
     if(h->heap)(void)gh_heap_destroy(h->heap);
     if(h->disc)gh_disc_close(h->disc);
     free(h);return e;
+}
+gh_host_error gh_startup_host_set_mc_consumers(gh_startup_host *h,gh_mc_draw_consumer draw,
+    void *draw_context,gh_id_post_message post,void *post_context)
+{
+    if(!h || h->ticks || h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
+    if(!on_owner(h))return GH_HOST_THREADS;
+    h->mc_draw=draw;h->mc_draw_context=draw_context;
+    h->mc_post=post;h->mc_post_context=post_context;return GH_HOST_OK;
 }
 gh_host_phase gh_startup_host_tick(gh_startup_host *h)
 {
@@ -304,7 +376,12 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
         h->task.failed_operation,h->unavailable_entry,h->ticks,h->work.flags,
         h->bundle_count,h->startup_returned,&h->font,&h->menu,h->id_global,h->audio,
         h->game_loop.game_state[0],h->game_assets_loaded,h->game_rate,h->frontier_module,
-        h->mc.ui_initialized?&h->mc.id_base:0,h->mc.ui_initialized?&h->mc_messages:0};
+        h->mc.ui_initialized?&h->mc.id_base:0,h->mc.ui_initialized?&h->mc_messages:0,0};
+    if(h->game_stage.textures) {
+        gh_stage_texture_cursor cursor;
+        if(gh_stage_texture_cursor_get(h->game_stage.textures,&cursor)==GH_STAGE_OK)
+            out->game_texture_banks=cursor.count;
+    }
     return GH_HOST_OK;
 }
 gh_host_error gh_startup_host_destroy(gh_startup_host *h)
@@ -326,6 +403,9 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
     if(h->id_runtime && gh_id_runtime_destroy(h->id_runtime)!=GH_ID_OK)return GH_HOST_ASSET;
     for(i=0;i<h->bundle_count;++i)
         (void)gh_heap_release(h->heap,h->bundles[i].allocation);
+    gh_stage_skills_clear(&h->game_stage.skills);
+    gh_stage_textures_destroy(h->game_stage.textures);
+    gh_game_children_destroy(h->game_children);
     if(gh_game_assets_release(&h->game_assets)!=GH_GAME_OK)return GH_HOST_MEMORY;
     gh_audio_registry_destroy(h->audio);
     gh_memory_card_close(h->card);

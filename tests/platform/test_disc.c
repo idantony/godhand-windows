@@ -15,10 +15,24 @@ int main(int argc,char **argv) {
     unsigned char raw[1720],ref[1721],sentinel=0x7b;
     FILE *f;
     gh_disc_error err;
-    CHECK(argc==3);
+    CHECK(argc==4);
     err=gh_disc_open(argv[1],&d);
     if(err){fprintf(stderr,"open: %s\n",gh_disc_error_string(err));return 1;}
     CHECK(gh_disc_count(d)==1445);
+    {
+        unsigned char actual[8192],expected[8192];size_t n;uint64_t total=0;
+        CHECK(gh_disc_boot_elf_size(d)==3607008);
+        f=fopen(argv[3],"rb");CHECK(f);
+        while((n=fread(expected,1,sizeof(expected),f))!=0) {
+            CHECK(gh_disc_read_boot_elf(d,total,actual,n)==GH_DISC_OK);
+            CHECK(!memcmp(actual,expected,n));total+=n;
+        }
+        CHECK(!ferror(f) && total==gh_disc_boot_elf_size(d));fclose(f);
+        CHECK(gh_disc_read_boot_elf(d,total,NULL,0)==GH_DISC_OK);
+        CHECK(gh_disc_read_boot_elf(d,total,&sentinel,1)==GH_DISC_BOUNDS);
+        CHECK(gh_disc_read_boot_elf(d,UINT64_MAX,&sentinel,1)==GH_DISC_BOUNDS);
+        CHECK(gh_disc_read_boot_elf(d,0,NULL,1)==GH_DISC_ARGUMENT && sentinel==0x7b);
+    }
     for(i=0;i<gh_disc_count(d);i++) {
         CHECK(gh_disc_entry_at(d,i,&e)==GH_DISC_OK);
         CHECK(gh_disc_find(d,e.path,&other)==GH_DISC_OK && other==i);

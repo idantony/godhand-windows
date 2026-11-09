@@ -76,7 +76,9 @@ def main():
                ("id_base", "src/core/id_base.c"), ("packed_message", "src/core/packed_message.c"),
                ("game_init", "src/core/game_init.c"), ("mc_task", "src/core/mc_task.c"),
                ("id_jobs", "src/core/id_jobs.c"), ("id_jobs_texture", "src/core/id_jobs_texture.c"),
-               ("id_jobs_primitive", "src/core/id_jobs_primitive.c")]
+               ("id_jobs_primitive", "src/core/id_jobs_primitive.c"), ("mc_control", "src/core/mc_control.c"),
+               ("game_stage", "src/core/game_stage.c"), ("game_children", "src/core/game_children.c"),
+               ("id_text", "src/core/id_text.c")]
     source_inputs = {"tools/build-native.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
                      "tests/platform/test_memory.c", "tests/core/test_tasks.c",
@@ -89,7 +91,9 @@ def main():
                      "tests/platform/test_memory_card.c", "tests/core/test_mc_boot_id.c",
                      "tests/core/test_font_draw.c", "tests/core/test_game_gate.c",
                      "tests/core/test_id_base.c", "tests/core/test_packed_message.c", "tests/core/test_game_init.c",
-                     "tests/core/test_mc_task.c", "tests/core/test_id_jobs.c", "tests/core/test_id_texture.c"}
+                     "tests/core/test_mc_task.c", "tests/core/test_id_jobs.c", "tests/core/test_id_texture.c",
+                     "tests/core/test_mc_control.c", "tests/core/test_game_stage.c", "tests/core/test_game_children.c",
+                     "tests/core/test_id_text.c"}
     shared_headers = {"id_jobs_texture": "src/core/id_jobs.h", "id_jobs_primitive": "src/core/id_jobs.h"}
     for name, source in modules:
         source_inputs.add(source)
@@ -116,7 +120,7 @@ def main():
     run("compile-font-state-tests", common + [objects["font_state"], objects["core_bundle"], objects["disc"], "tests/core/test_font_state.c", "-o", output / "test_font_state.exe"])
     run("compile-menu-state-tests", common + ["-Isrc/core", objects["menu_state"], objects["core_bundle"], objects["dvd_jobs"], objects["disc"], objects["memory"], objects["tasks"], objects["task_threads"], "tests/core/test_menu_state.c", "-o", output / "test_menu_state.exe"])
     run("compile-audio-startup-tests", common + ["-Isrc/platform", objects["audio_startup"], objects["sound_bank"], objects["disc"], "tests/platform/test_audio_startup.c", "-o", output / "test_audio_startup.exe"])
-    host_objects = [objects[name] for name in ("startup_host", "audio_startup", "sound_bank", "startup_task", "dvd_jobs", "disc", "memory", "tasks", "task_threads", "font_state", "menu_state", "core_bundle", "game_start", "game_gate", "game_init", "id_base", "packed_message", "mc_task", "mc_boot", "mc_boot_id", "memory_card")]
+    host_objects = [objects[name] for name in ("startup_host", "audio_startup", "sound_bank", "startup_task", "dvd_jobs", "disc", "memory", "tasks", "task_threads", "font_state", "font_texture", "menu_state", "core_bundle", "game_start", "game_gate", "game_init", "id_base", "packed_message", "mc_task", "mc_boot", "mc_boot_id", "memory_card", "mc_control", "id_jobs", "id_jobs_texture", "id_jobs_primitive", "game_stage", "game_children")]
     run("compile-startup-host-tests", common + host_objects + ["tests/platform/test_startup_host.c", "-o", output / "test_startup_host.exe"])
     run("compile-startup-host-cli", common + host_objects + ["-municode", "tools/run-startup.c", "-o", output / "run-startup.exe"])
     font_objects = [objects[name] for name in ("font_texture", "font_state", "core_bundle", "disc")]
@@ -134,6 +138,10 @@ def main():
     id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "menu_state", "font_state", "font_texture", "core_bundle", "disc")]
     run("compile-id-jobs-tests", common + id_objects + ["tests/core/test_id_jobs.c", "-o", output / "test_id_jobs.exe"])
     run("compile-id-texture-tests", common + id_objects + ["tests/core/test_id_texture.c", "-o", output / "test_id_texture.exe"])
+    run("compile-mc-control-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_control.c", "-o", output / "test_mc_control.exe"])
+    run("compile-game-stage-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_game_stage.c", "-o", output / "test_game_stage.exe"])
+    run("compile-game-children-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_children", "id_base", "core_bundle")] + ["tests/core/test_game_children.c", "-o", output / "test_game_children.exe"])
+    run("compile-id-text-tests", common + [objects["id_text"], objects["font_draw"], objects["packed_message"]] + id_objects + ["tests/core/test_id_text.c", "-o", output / "test_id_text.exe"])
     run("compile-core-dll", common + ["-shared", "-Wl,--export-all-symbols"] + list(objects.values()) + ["-o", output / "godhand_core.dll"])
     cpp = [compiler, "c++", "-target", "x86_64-windows-gnu", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror"]
     run("compile-cpp-abi", cpp + list(objects.values()) + ["tests/test_cpp_abi.cpp", "-o", output / "test_cpp_abi.exe"])
@@ -149,7 +157,7 @@ def main():
         run("test-startup-task", [output / "test_startup_task.exe"])
         run("test-cpp-abi", [output / "test_cpp_abi.exe"])
         baseline = json.loads((PROJECT / "analysis" / "disc-baseline.json").read_text(encoding="utf-8"))
-        run("test-original-disc", [output / "test_disc.exe", baseline["source_iso"]["path"], PROJECT / "reference" / "overlays" / "r207.rel"])
+        run("test-original-disc", [output / "test_disc.exe", baseline["source_iso"]["path"], PROJECT / "reference" / "overlays" / "r207.rel", PROJECT / "reference" / "SLUS_215.03"])
         run("test-dvd-jobs", [output / "test_dvd_jobs.exe", baseline["source_iso"]["path"], PROJECT / "reference" / "overlays" / "r207.rel"])
         run("test-core-bundle", [output / "test_core_bundle.exe", baseline["source_iso"]["path"]])
         run("test-sound-bank", [output / "test_sound_bank.exe", baseline["source_iso"]["path"]])
@@ -169,6 +177,10 @@ def main():
         run("test-mc-task", [output / "test_mc_task.exe", baseline["source_iso"]["path"]])
         run("test-id-jobs", [output / "test_id_jobs.exe", baseline["source_iso"]["path"]])
         run("test-id-texture", [output / "test_id_texture.exe", baseline["source_iso"]["path"]])
+        run("test-mc-control", [output / "test_mc_control.exe", baseline["source_iso"]["path"]])
+        run("test-game-stage", [output / "test_game_stage.exe", baseline["source_iso"]["path"]])
+        run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
+        run("test-id-text", [output / "test_id_text.exe", baseline["source_iso"]["path"]])
     manifest["status"] = "passed" if not args.skip_tests else "build-only"
     final_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
     if initial_sources != final_sources:
