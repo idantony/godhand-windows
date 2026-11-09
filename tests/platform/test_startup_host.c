@@ -3,6 +3,7 @@
 #include "../../src/platform/startup_host.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
 typedef struct other_fiber {
     gh_startup_host *host;void *owner;gh_host_error destroyed;gh_host_phase ticked;
@@ -14,15 +15,29 @@ static VOID WINAPI foreign_call(void *context)
     f->ticked=gh_startup_host_tick(f->host);
     SwitchToFiber(f->owner);abort();
 }
+/* Scheduling/lifetime fixture only. Production gets actual GPU consumers;
+ * these callbacks do not constitute a successful rendering test. */
+typedef struct frame_fixture {unsigned begins,jobs;} frame_fixture;
+static gh_id_error fixture_begin(void *context){frame_fixture *f=context;++f->begins;return GH_ID_OK;}
+static gh_id_error fixture_draw(void *context,const gh_id_draw_job *job){frame_fixture *f=context;CHECK(job && job->entry);++f->jobs;return GH_ID_OK;}
 int main(int argc,char **argv)
 {
     gh_startup_host *h=0;gh_startup_snapshot s;gh_font_glyph glyph;unsigned i;
     gh_sound_span programs,system,samples,afd;
     uint32_t core_flags,pl00_flags,bgm_flags;
-    CHECK(argc==2);
+    CHECK(argc==2 || (argc==3 && !strcmp(argv[2],"--hardware-audio")));
     CHECK(gh_startup_host_create(argv[1],-1,0,4*1024*1024,&h)==GH_HOST_ARGUMENT && !h);
     CHECK(gh_startup_host_create(argv[1],1,0,4*1024*1024,&h)==GH_HOST_OK);
     CHECK(gh_startup_host_snapshot(h,&s)==GH_HOST_OK && s.phase==GH_HOST_RUNNING && !s.ticks);
+    CHECK(s.work && s.work->phase569==2 && !s.normal_continuation && s.movie_pool);
+    {
+        gh_native_input_snapshot input={0};uint64_t logical;uint32_t raw;
+        input.raw_pressed=0x40;input.pressed=UINT64_C(0x8123456787654321);
+        CHECK(gh_startup_host_set_input(h,&input)==GH_HOST_OK);
+        memcpy(&logical,(const unsigned char*)s.work+0x1a0,8);memcpy(&raw,(const unsigned char*)s.work+8,4);
+        CHECK(logical==input.pressed && raw==input.raw_pressed);
+        memset(&input,0,sizeof(input));CHECK(gh_startup_host_set_input(h,&input)==GH_HOST_OK);
+    }
     /* Wrong caller must not cancel a queued task or mutate the session. */
     {
         other_fiber f={h,GetCurrentFiber(),GH_HOST_OK,GH_HOST_RUNNING};
@@ -53,6 +68,38 @@ int main(int argc,char **argv)
     CHECK(core_flags==0x7f && pl00_flags==0x7f && bgm_flags==0xf);
     CHECK(gh_startup_host_tick(h)==GH_HOST_FRONTIER);
     CHECK(gh_startup_host_destroy(h)==GH_HOST_OK);
+    if(argc==3){
+        gh_startup_continuation c={1,1,GH_SE_DSP_NATIVE_LINEAR_REFERENCE,0,0,0};
+        frame_fixture fixture={0};unsigned inputs=0;
+        CHECK(gh_startup_host_create_with_profile(argv[1],"G:\\middle_thing\\godhand_windows\\build\\startup-normal-host\\absent-profile",1,0,64*1024*1024,&h)==GH_HOST_OK);
+        CHECK(gh_startup_host_set_continuation(h,&c)==GH_HOST_OK);
+        CHECK(gh_startup_host_set_mc_consumers(h,fixture_draw,&fixture,0,0)==GH_HOST_OK);
+        CHECK(gh_startup_host_set_mc_frame_begin(h,fixture_begin,&fixture)==GH_HOST_OK);
+        for(i=0;i<100;++i){
+            gh_native_input_snapshot input={0};CHECK(gh_startup_host_snapshot(h,&s)==GH_HOST_OK);
+            if(s.mc_ui_live && s.mc_phase==3){
+                if(s.mc_subphase==1 && !inputs){input.pressed=0x10000000;++inputs;}
+                else if(s.mc_subphase==2 && inputs==1){input.repeat_menu=0x04000000;++inputs;}
+                else if(s.mc_subphase==2 && inputs==2){input.pressed=0x10000000;++inputs;}
+            }
+            CHECK(gh_startup_host_set_input(h,&input)==GH_HOST_OK);
+            if(gh_startup_host_tick(h)!=GH_HOST_RUNNING)break;
+        }
+        CHECK(gh_startup_host_snapshot(h,&s)==GH_HOST_OK && s.phase==GH_HOST_FRONTIER && s.unavailable_entry==0x2b4be8);
+        CHECK(inputs==3 && s.mc_done && !s.mc_ui_live && s.mc_ui_epoch==2 && !s.mc_frame_ready);
+        CHECK(s.mc_frame_serial==fixture.begins && s.mc_frame_serial>=5 && fixture.jobs>0);
+        CHECK(s.id->pool_used==0 && s.id->job_count==0 && s.sound_control && s.normal_continuation);
+        CHECK(gh_startup_host_set_continuation(h,&c)==GH_HOST_ARGUMENT);
+        CHECK(gh_startup_host_destroy(h)==GH_HOST_OK);
+        /* True alternate branch through Main/services and real assets; no
+         * fake movie/UI consumers are needed on this original branch. */
+        CHECK(gh_startup_host_create(argv[1],1,0x80000000u,64*1024*1024,&h)==GH_HOST_OK);
+        CHECK(gh_startup_host_set_continuation(h,&c)==GH_HOST_OK);
+        for(i=0;i<300 && gh_startup_host_tick(h)==GH_HOST_RUNNING;++i){}
+        CHECK(gh_startup_host_snapshot(h,&s)==GH_HOST_OK && s.phase==GH_HOST_FRONTIER);
+        CHECK(s.unavailable_entry==0x2be708 && s.game_state==3 && s.game_assets_loaded);
+        CHECK(gh_startup_host_destroy(h)==GH_HOST_OK);
+    }
     /* Tear down a real suspended startup C stack with live allocations. */
     CHECK(gh_startup_host_create(argv[1],1,0,4*1024*1024,&h)==GH_HOST_OK);
     CHECK(gh_startup_host_tick(h)==GH_HOST_RUNNING);

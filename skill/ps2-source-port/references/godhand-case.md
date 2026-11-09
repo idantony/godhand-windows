@@ -76,3 +76,44 @@ Sound PrepareDecode naming was misleading: startup first prepares external AFS
 directories, not bulk ADX PCM. Owned native bank commit and real AFD→AFS mapping
 can satisfy startup table readiness without inventing an IOP reply. ADX0408 is
 encrypted type8; no key/decoder is assumed. Voices and output remain separate.
+
+## Later integration corrections
+
+- ID path lengths are floating-point: raw LWC1/ADD.S/SWC1 contradict a decompiler
+  integer cumulative-length guess. Native EXACT policy rejects unsupported
+  non-square roots; the explicit REFERENCE_NEAREST profile uses pinned PCSX2
+  reference semantics. Neither profile is a hardware capture. The HUD actually
+  needs the reference policy. See analysis/id-path-semantics.json.
+- Preserve global identity across recovered subsystems. GamePrepare's span at
+  005E8658, stage WorkArea at005F3970, VBS at005E80E0, child storage at00566E50
+  and Cockpit at00464080 are distinct. Do not enlarge/merge similarly named
+  storage to make an offset fit. Camera reset borrows GameInit's actual camera.
+- 00307388 is screen-fade drawing, not pad input. Actual digital input follows
+  0031A808/0031B560/0031AFE0 and two original ELF mapping tables. US table1 maps
+  Cross/Circle to confirm and Triangle to cancel. Write original raw32/logical64
+  fields explicitly; host long/pointer widths are unsuitable.
+- Real native MC rendering uses original job order and dark palette. Styling
+  text by taste or reordering the window changes original behavior. Font nearest
+  sampling and T32 sprite4-bit bilinear need different restricted GPU pipelines.
+  Pixel agreement applies to the explicit supplied GS state, not every GS mode.
+- The true origin SFX entry is002CB8A0;002CB968 is a different overload. Program
+  to sample mapping follows the actual descriptor chain, not a guessed offset.
+  Device submission, actual completion and audible QA are separate observations.
+- Original Movie0 requires video EOF and real audio-buffer completion. A timer
+  alone cannot report finished. Native QA may mute its own PCM/output gain while
+  still running the actual decoder, device queue and completion tracking.
+- In this FST, configured directory token Release can alias the first actual
+  child directory (debugoptimize). This comes from001FF858/001FFA68, not a general
+  rule to strip missing directories. Exact gh_disc_find does not implement it;
+  a typed overlay loader must validate the actual canonical association.
+- Upstream recon/rel_inventory.py's relocation addend unpack is unreliable for
+  nonzero addends. R020 exposes the issue: inspect the real12-byte record and
+  original loader; the addend is at+8, not the script's overlapping+6 read.
+  Earlier r207 zero-addend records did not expose this. Inventory is evidence
+  about names/structure, not proof that guest relocations or code can execute.
+
+Independent task managers share one stable root fiber. A Scenario traversal
+from a running Main task needs explicit nested entry and caller restoration;
+it must not replace Scenario16 records with Main4 records. Destroy Scenario and
+its runs before root backend/runtime/assets. See test_nested_tasks.c and the
+GameServices ownership tests. A successful module test is not a full boot.

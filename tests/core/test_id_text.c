@@ -21,6 +21,15 @@ int main(int argc,char**argv){
  C(glyphs[0].quad.u0==536&&glyphs[0].quad.v0==1032&&glyphs[0].quad.palette_parity==0);
  C(gh_id_text_prepare(&object,&object.entries[0],&menu,&packed,&font,&context,glyphs,1,&result)==GH_ID_CAPACITY);
  C(gh_id_text_palette_from_elf(elf,40,&context.palette)==GH_ID_FORMAT);
+ /* Actualnotice/choiceMSD contents, including2021 whoseexisting-save
+  * Controlbranch stillstopsatOpen3350. ThisisassetconsumerQA, notfakedflow. */
+ {static const uint16_t messages[]={0x2003,0x2004,0x201e,0x201f,0x2020,0x2021};
+  static const size_t counts[]={3,2,37,188,157,226};
+  static const size_t lines[]={1,1,1,5,5,7};
+  C(gh_id_text_palette_from_elf(elf,elfsize,&context.palette)==GH_ID_OK);
+  for(size_t k=0;k<sizeof(messages)/sizeof(messages[0]);k++){object.entries[0].message=messages[k];C(gh_id_text_prepare(&object,&object.entries[0],&menu,&packed,&font,&context,glyphs,512,&result)==GH_ID_OK);C(result.glyph_count==counts[k]&&result.line_count==lines[k]);}
+  object.entries[0].message=0x2007;
+ }
  C(gh_id_text_prepare(&object,&object.entries[0],&menu,&packed,&font,&context,glyphs,512,&result)==GH_ID_OK);
  printf("PASS actual firstMC text2007: %zu originalglyphs/%zulines, palette7, .9zoom, subpixelquad and capacity bounds\n",result.glyph_count,result.line_count);
  C(gh_id_base_release_002aa078(runtime,&object,&original,&reclaimed)==GH_ID_OK);C(gh_id_runtime_destroy(runtime)==GH_ID_OK);free(elf);free(save);free(language);free(manager);gh_disc_close(d);return 0;

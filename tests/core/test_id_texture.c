@@ -1,5 +1,6 @@
 #include "../../src/core/id_jobs.h"
 #include "../../src/platform/disc.h"
+#include "../../src/assets/tim2.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define C(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
@@ -10,4 +11,14 @@ int main(int argc,char **argv){gh_disc *d;gh_disc_entry entry;size_t i;unsigned 
  for(i=0;i<512*512;i++)changed+=rgba[i*4]!=0||rgba[i*4+1]!=0||rgba[i*4+2]!=0;C(changed>1000);
  if(argc==3){FILE *f=fopen(argv[2],"wbx");C(f);C(fwrite(rgba,1,512*512*4,f)==512*512*4);C(fclose(f)==0);}
  C(gh_id_texture_rgba(&t,rgba,12)==GH_ID_CAPACITY);C(gh_id_texture_open(manager,11,3,&t)==GH_ID_OK&&t.height==256);C(gh_id_texture_rgba(&t,rgba,512*512*4)==GH_ID_OK);C(gh_id_texture_open(manager,11,4,&t)==GH_ID_NOT_FOUND);
+ /* ReallanguagecursorTIM2 isnotanopaqueT32 packet. NativegenericTBL1lookup
+  * mustdispatchtheoriginalTIM2 branchandretainactual16coloralpha domain. */
+ {unsigned char*lang;gh_bundle bundle;gh_tim2_picture picture;uint64_t hash=UINT64_C(14695981039346656037);unsigned nonzero=0;
+  C(gh_disc_find(d,"etc/core_usa.bin",&i)==GH_DISC_OK&&gh_disc_entry_at(d,i,&entry)==GH_DISC_OK);lang=malloc((size_t)entry.size);C(lang&&gh_disc_read(d,i,0,lang,(size_t)entry.size)==GH_DISC_OK&&gh_bundle_open(lang,(size_t)entry.size,&bundle)==GH_BUNDLE_OK&&gh_id_find_language_data(&bundle,&idd)==GH_MENU_OK&&gh_id_system_init_002acc70(manager,&idd)==GH_MENU_OK);
+  C(gh_id_texture_open(manager,1,47,&t)==GH_ID_OK&&t.width==32&&t.height==32&&gh_tim2_first(t.source.bytes,t.source.size,&picture)==GH_TIM2_OK&&picture.colors==16&&picture.image_size==512&&picture.clut_size==64);
+  for(i=0;i<16;i++)C(picture.clut[i*4+3]<=128);
+  C(gh_id_texture_rgba(&t,rgba,4096)==GH_ID_OK);for(i=0;i<4096;i++)hash=(hash^rgba[i])*UINT64_C(1099511628211);for(i=0;i<1024;i++)nonzero+=rgba[i*4+3]!=0;C(hash==UINT64_C(0x4950639901636b2f)&&nonzero==194);
+  {unsigned char*alpha=(unsigned char*)picture.clut+3;unsigned char saved=*alpha;*alpha=129;C(gh_id_texture_rgba(&t,rgba,4096)==GH_ID_UNSUPPORTED);*alpha=saved;}
+  printf("actualcursor32x32 RGBAfnv%016llx nontransparent%u\n",(unsigned long long)hash,nonzero);free(lang);
+ }
  free(rgba);free(b);free(manager);gh_disc_close(d);puts("PASS actual MC TBL1 T32/PSMT8 512x512 and512x256 native decoding; source bounds and empty slots");return 0;}

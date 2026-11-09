@@ -19,9 +19,9 @@ See [progress.json](progress.json) for the latest verified, machine-readable sta
 
 ## Work still required
 
-Connect real initialization and task scheduling, port the main loop, recover
-asset/model/animation handling and implement rendering/audio/input/save platform
-services. Then verify original scenes, transitions, controls and progression.
+Complete the original frame loop, title/scene and model/animation consumers,
+remaining audio/input/save services, then verify original combat, transitions
+and progression. Native startup, MC and Movie0 integration are described below.
 The current room slice covers its small allocation/init/move behavior only; it
 does not render or enter a playable room.
 
@@ -72,7 +72,7 @@ all claims must remain tied to the actual input and verification scope.
   actual host profile directory. Localized/fallback idsavecore loads bind slot11
   without replacing slot1. Full MC Main still needs IDBase/UI and save semantics.
 
-## Local continuation: original GameMain case0
+## Earlier local continuation: original GameMain case0
 
 - The alternate original flags branch now registers the recovered GameMain and
   asset-loader tasks. Real no-draw gates and all eight case0 subsystem
@@ -94,10 +94,34 @@ The development host begins at the recovered startup task. Earlier boot
 initialization, the complete main loop and the actual next tasks are still
 required. No playable scene or controls have been demonstrated.
 
+## Milestone 4: native Windows MC, movie and Main continuation
+
+- A single hidden native HWND/D3D11 run presents six actual MC interface frames,
+  executes normal MC cleanup and same-slot tail restart, then presents all90
+  Clover movie frames. Real videoEOF and audioDONE complete before continuation.
+- The run uses an explicit synthetic digital input fixture, through the original
+  ELF table. It is not a human input/playability claim. QA output is muted while
+  the decoder/device queues and completion tracking actually run.
+- Original GameMain setup advances through states0/1/2 into3, using canonical
+  save, camera, HUD, room and task owners. Actual r020 title-room resources and
+  RHT-based pools load. The precise next frontier is main ELF002BE708, native
+  room overlay binding; no title scene or combat is claimed.
+- The MC GPU consumers preserve actual draw order, original palette, font
+  nearest sampling and separate T32/TIM2 four-bit bilinear sprite math. Real
+  cursor and window pixels match independent CPU equations. Reusing the common
+  renderer preserves the initial MC frame's byte hash.
+- All55 C modules and56 checks pass with hardware/codec opt-ins enabled. An
+  independent clean staged-source foundation snapshot also passes55/56. Separate
+  Windows targets rebuild every C module and fingerprint all consumed sources.
+- The normal native target accepts actual window/device input. Synthetic keys
+  exist only in the separately compiled startup-QA target. Unknown consumers
+  remain explicit frontiers. Earlier boot and complete game frame timing remain
+  unverified; the executable is not yet a playable game.
+
 ## 中文进展摘要
 
-目前已从独立模块进入原启动任务集成：原生任务、DVD 读取、声音 bank、字体、
-菜单和 ID 初始化已经串联并通过真实资源测试。默认路径走到存档模块入口后明确停止。
-原字体图集和单字形像素也已恢复，最终屏幕绘字与混合仍需接入。
-声音输出、完整主循环、游戏场景、模型/动画、操作和存档流程仍未完成。
+同一个 Windows 原生程序已串联原存储卡可见界面、正常退出、Clover 片头和主游戏初始化，
+真实加载标题房间资源后停在002BE708模块绑定。隐藏静音验收显示6帧存档界面和90帧片头，
+使用明确标注的合成按键；视频EOF及音频设备DONE均实际完成。55个C模块通过56项检查。
+完整主循环、可玩场景、模型/动画、战斗和存档读写仍未完成，不以此宣称玩家实测或移植完成。
 当前测试和限制以 [progress.json](progress.json) 为准。

@@ -174,7 +174,7 @@ def main():
     run("compile-packed-message-tests", common + [objects[name] for name in ("packed_message", "id_base", "id_path", "font_state", "core_bundle", "menu_state", "disc")] + ["tests/core/test_packed_message.c", "-o", output / "test_packed_message.exe"])
     run("compile-game-init-tests", common + ["-Isrc/core", objects["game_init"], "tests/core/test_game_init.c", "-o", output / "test_game_init.exe"])
     run("compile-mc-task-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_task.c", "-o", output / "test_mc_task.exe"])
-    id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "menu_state", "font_state", "font_texture", "core_bundle", "disc")]
+    id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "menu_state", "font_state", "font_texture", "core_bundle", "disc", "tim2")]
     run("compile-id-jobs-tests", common + id_objects + ["tests/core/test_id_jobs.c", "-o", output / "test_id_jobs.exe"])
     run("compile-id-texture-tests", common + id_objects + ["tests/core/test_id_texture.c", "-o", output / "test_id_texture.exe"])
     run("compile-mc-control-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_control.c", "-o", output / "test_mc_control.exe"])
@@ -205,7 +205,7 @@ def main():
         run("test-font-state", [output / "test_font_state.exe", baseline["source_iso"]["path"]])
         run("test-menu-state", [output / "test_menu_state.exe", baseline["source_iso"]["path"]])
         run("test-audio-startup", [output / "test_audio_startup.exe", baseline["source_iso"]["path"]])
-        run("test-startup-host", [output / "test_startup_host.exe", baseline["source_iso"]["path"]])
+        run("test-startup-host", [output / "test_startup_host.exe", baseline["source_iso"]["path"]] + (["--hardware-audio"] if args.hardware_audio else []))
         run("test-font-texture", [output / "test_font_texture.exe", baseline["source_iso"]["path"]])
         run("test-game-start", [output / "test_game_start.exe", baseline["source_iso"]["path"], PROJECT / "reference" / "SLUS_215.03"])
         run("test-memory-card", [output / "test_memory_card.exe", card_scratch])

@@ -2,7 +2,8 @@ param(
     [string]$Compiler,
     [string]$ScratchRoot = 'G:\middle_thing\godhand_windows',
     [Parameter(Mandatory=$true)][string]$Iso,
-    [string]$OutputRgba
+    [string]$OutputRgba,
+    [switch]$Sprite
 )
 $ErrorActionPreference = 'Stop'
 $godhandProject = Split-Path -Parent $PSScriptRoot
@@ -26,10 +27,20 @@ if (-not $godhandSdk) { throw 'This optional GPU check requires Windows SDK x64 
 $godhandSdkLib = Join-Path $godhandSdk.FullName 'um\x64'
 $godhandSources = @('src/core/font_draw.c','src/core/font_state.c','src/assets/font_texture.c',
     'src/assets/core_bundle.c','src/platform/disc.c')
+$godhandRenderer = 'src/platform/ui_renderer.cpp'
+$godhandTest = 'tests/platform/test_ui_renderer.cpp'
+$godhandStem = 'ui_renderer'
+if ($Sprite) {
+    $godhandSources += @('src/assets/tim2.c','src/core/id_base.c','src/core/id_path.c','src/core/menu_state.c','src/core/id_jobs.c',
+        'src/core/id_jobs_texture.c','src/core/id_jobs_primitive.c')
+    $godhandRenderer = 'src/platform/ui_sprite_renderer.cpp'
+    $godhandTest = 'tests/platform/test_ui_sprite_renderer.cpp'
+    $godhandStem = 'ui_sprite_renderer'
+}
 $godhandInputs = $godhandSources + @('src/core/font_draw.h','src/core/font_state.h',
     'src/assets/font_texture.h','src/assets/core_bundle.h','src/platform/disc.h',
-    'src/platform/ui_renderer.cpp','src/platform/ui_renderer.h',
-    'tests/platform/test_ui_renderer.cpp','tools/build-ui-qa.ps1')
+    'src/platform/ui_renderer.h',$godhandRenderer,$godhandTest,'tools/build-ui-qa.ps1')
+if ($Sprite) { $godhandInputs += @('src/assets/tim2.h','src/core/id_base.h','src/core/id_path.h','src/core/menu_state.h','src/core/id_jobs.h','src/platform/ui_sprite_renderer.h') }
 $godhandHashes = [ordered]@{}
 foreach ($godhandName in $godhandInputs) {
     $godhandHashes[$godhandName] = (Get-FileHash -LiteralPath (Join-Path $godhandProject $godhandName) -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -50,8 +61,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "UI dependency compilation failed: $godhandSource" }
         $godhandObjects += $godhandObject
     }
-    $godhandExe = Join-Path $godhandBuild 'test_ui_renderer.exe'
-    & $Compiler c++ -target x86_64-windows-gnu -std=c++17 -O2 -Wall -Wextra -Werror -ffp-contract=off -fno-fast-math -D_CRT_SECURE_NO_WARNINGS @godhandObjects (Join-Path $godhandProject 'src/platform/ui_renderer.cpp') (Join-Path $godhandProject 'tests/platform/test_ui_renderer.cpp') "-L$godhandSdkLib" -ld3d11 -ldxgi -ld3dcompiler -o $godhandExe
+    $godhandExe = Join-Path $godhandBuild ('test_'+$godhandStem+'.exe')
+    & $Compiler c++ -target x86_64-windows-gnu -std=c++17 -O2 -Wall -Wextra -Werror -ffp-contract=off -fno-fast-math -D_CRT_SECURE_NO_WARNINGS @godhandObjects (Join-Path $godhandProject $godhandRenderer) (Join-Path $godhandProject $godhandTest) "-L$godhandSdkLib" -ld3d11 -ldxgi -ld3dcompiler -o $godhandExe
     if ($LASTEXITCODE -ne 0) { throw 'UI renderer compilation failed.' }
     $godhandArgs = @($Iso)
     if ($OutputRgba) { $godhandArgs += $OutputRgba }
@@ -63,17 +74,18 @@ try {
         }
     }
     $godhandReport = [ordered]@{
-        status='passed'; scope='Restricted original-font quad/GS fragment GPU QA; not full game renderer or gameplay'
+        status='passed'; scope='Restricted original UI primitives/GS fragment GPU QA; not a completed MC frame, full game renderer or gameplay'
         source_sha256=$godhandHashes; compiler=$Compiler; compiler_version=(& $Compiler version)
         executable=$godhandExe; executable_sha256=(Get-FileHash -LiteralPath $godhandExe -Algorithm SHA256).Hash.ToLowerInvariant()
         output=$godhandOutput; gpu_requirement='NVIDIA hardware adapter, no software fallback'
-        compared_pixels=12288; actual_game_scene_observed=$false
+        compared_pixels=$(if($Sprite){229376}else{12288}); actual_game_scene_observed=$false
     }
     if ($OutputRgba) {
         $godhandReport.raw_output=$OutputRgba
         $godhandReport.raw_sha256=(Get-FileHash -LiteralPath $OutputRgba -Algorithm SHA256).Hash.ToLowerInvariant()
     }
-    $godhandReport | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $godhandProject 'analysis/ui-renderer-verification.json') -Encoding utf8
+    $godhandReportName = if($Sprite){'ui-sprite-verification.json'}else{'ui-renderer-verification.json'}
+    $godhandReport | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path (Join-Path $godhandProject 'analysis') $godhandReportName) -Encoding utf8
     $godhandOutput
 }
 finally {

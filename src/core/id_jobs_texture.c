@@ -3,6 +3,7 @@
  * no GPL tables/source copied. See id-jobs-evidence.json. */
 #include "id_jobs.h"
 #include "../assets/font_texture.h"
+#include "../assets/tim2.h"
 #include <stdlib.h>
 #include <string.h>
 static uint16_t u16(const unsigned char *p){return (uint16_t)(p[0]|p[1]<<8);}
@@ -17,6 +18,14 @@ gh_id_error gh_id_texture_open(const gh_id_state *m,uint32_t slot,uint32_t n,gh_
  if(offset<4+(size_t)count*4||offset>=table->size)return GH_ID_BOUNDS;
  end=table->size;for(i=1;i<=count;i++){uint32_t next=u32(table->bytes+(size_t)i*4);if(next&&(next<4+(size_t)count*4||next>table->size))return GH_ID_BOUNDS;if(next>offset&&next<end)end=next;}
  t.source.bytes=table->bytes+offset;t.source.offset=offset;t.source.size=end-offset;
+ if(t.source.size>=4&&!memcmp(t.source.bytes,"TIM2",4)){
+  gh_tim2_picture picture;gh_tim2_error pe=gh_tim2_first(t.source.bytes,t.source.size,&picture);
+  if(pe)return pe==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
+  /* ActualMC confirmationcursor: languageTBL1 item47. Original151630
+   * classifiesTIM2as0;15BCF0 calls15E0A0 linearPSMT4+8x2CLUTupload. */
+  if(picture.width!=32||picture.height!=32||picture.image_type!=4||picture.clut_type!=3||picture.colors!=16||((picture.tex0>>20)&63)!=20||((picture.tex0>>26)&15)!=5||((picture.tex0>>30)&15)!=5||((picture.tex0>>35)&3))return GH_ID_UNSUPPORTED;
+  t.width=picture.width;t.height=picture.height;t.tex0=picture.tex0;*out=t;return GH_ID_OK;
+ }
  if(t.source.size<48||u32(t.source.bytes)&0x80000000U)return GH_ID_UNSUPPORTED;
  t.tex0=u64(t.source.bytes+32);
  if(((t.tex0>>20)&63)!=19||((t.tex0>>26)&15)!=9||((t.tex0>>51)&31)!=0)return GH_ID_UNSUPPORTED;
@@ -38,6 +47,12 @@ static unsigned addr8(unsigned x,unsigned y,unsigned pages){
 gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity){
  gh_font_slot slot;gh_font_transfer image,clut;unsigned *inverse;unsigned x,y,i,words;unsigned char *out=rgba;
  if(!t||!rgba||!t->source.bytes)return GH_ID_ARGUMENT;if(capacity<(size_t)t->width*t->height*4)return GH_ID_CAPACITY;
+ if(t->source.size>=4&&!memcmp(t->source.bytes,"TIM2",4)){
+  gh_tim2_picture p;gh_tim2_error e=gh_tim2_first(t->source.bytes,t->source.size,&p);
+  if(e)return e==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
+  if(t->width!=32||t->height!=32||p.width!=32||p.height!=32||t->tex0!=p.tex0)return GH_ID_UNSUPPORTED;
+  e=gh_tim2_rgba4(&p,rgba,capacity);return e==GH_TIM2_OK?GH_ID_OK:e==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
+ }
  if(t->source.size<48||t->width!=512||(t->height!=256&&t->height!=512))return GH_ID_UNSUPPORTED;
  memset(&slot,0,sizeof(slot));slot.bound=1;slot.mst=t->source.bytes;slot.mst_size=t->source.size;
  for(i=0;i<2;i++){slot.table_offset[i]=u32(slot.mst+8+i*4);slot.table_count[i]=u16(slot.mst+16+i*2);}
