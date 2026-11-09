@@ -19,7 +19,12 @@ For this project only:
 - Development-agent models are at most gpt-6.1-sol; prefer gpt-6-luna for narrow
   mechanical work. No gpt-6-sol, gpt-6-astra or Codex Fast. Do not imply historical
   logs prove active sessions were migrated.
-- User authorized progress pushes to public GitHub idantony/godhand-windows.
+- User authorized public GitHub idantony/godhand-windows. Latest cadence: small
+  local commits retain rollback points; push only substantial execution milestones.
+  After every code commit, review the whole project's execution frontier,
+  blockers and critical path before choosing the next steps and assignments.
+  After milestone pushes, provide a subjective workload estimate in chat only;
+  do not record or publish that percentage in the repository.
   Review diffs/ignore rules; publish distributable authored code/instructions
   and non-game-data reports only. Exclude ISO/ELF/assets/SDK/tool binaries and
   credentials. This is not publishing permission for future projects.

@@ -26,6 +26,11 @@ gh_disc_error gh_disc_entry_at(const gh_disc *disc, size_t index, gh_disc_entry 
 gh_disc_error gh_disc_find(const gh_disc *disc, const char *path, size_t *index);
 gh_disc_error gh_disc_read(gh_disc *disc, size_t index, uint64_t offset,
                            void *buffer, size_t bytes);
+/* Original DVD-sector reads may include actual padding to the next 2048-byte
+ * boundary. Offsets/count are sectors, not bytes. Never crosses AFS/ISO bounds
+ * or another payload; padding is read from the disc, not synthesized as zero. */
+gh_disc_error gh_disc_read_blocks(gh_disc *disc, size_t index,
+                                uint64_t block_offset, void *buffer, size_t block_count);
 const char *gh_disc_error_string(gh_disc_error error);
 #ifdef __cplusplus
 }

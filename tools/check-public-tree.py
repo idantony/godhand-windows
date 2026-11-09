@@ -6,7 +6,7 @@ import subprocess
 
 ROOT_FILES = {".gitattributes", ".gitignore", "AGENTS.md", "README.md", "LICENSE", "NOTICE.md"}
 PREFIXES = {"src", "tests", "tools", "docs", "skill"}
-BINARY_SUFFIXES = {".iso", ".elf", ".rel", ".afs", ".fst", ".exe", ".dll", ".obj", ".o", ".pdb", ".zip", ".tgz", ".pyc", ".class", ".img", ".ims"}
+BINARY_SUFFIXES = {".iso", ".elf", ".rel", ".afs", ".fst", ".exe", ".dll", ".obj", ".o", ".pdb", ".zip", ".tgz", ".pyc", ".class", ".img", ".ims", ".png", ".jpg", ".bmp", ".rgba", ".tm2", ".rom", ".bin", ".lib"}
 SECRETS = re.compile(rb"(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{32,})")
 
 

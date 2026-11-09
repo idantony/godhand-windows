@@ -178,7 +178,8 @@ def main():
                     "extensions": dict(extensions.most_common()),
                     "boot": {"disc_path": boot_path, "local_path": str(boot_local), "size": len(boot),
                              "sha256": hashlib.sha256(boot).hexdigest(), "sha1": hashlib.sha1(boot).hexdigest(), "elf": elf},
-                    "input_note": "Image filename says Uncensor Patch v1.0. Retail ELF identity must be checked independently; no retail equivalence assumed."}
+                    "input_filename": iso_path.name,
+                    "input_note": "Retail identity and patch equivalence require independent hashes; neither is inferred from the input filename."}
         after = iso_path.stat()
         if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise ValueError("Input ISO changed during inspection")

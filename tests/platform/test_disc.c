@@ -36,6 +36,24 @@ int main(int argc,char **argv) {
     f=fopen(argv[2],"rb");CHECK(f);
     CHECK(fread(ref,1,sizeof(ref),f)==sizeof(raw));CHECK(!ferror(f));fclose(f);
     CHECK(!memcmp(raw,ref,sizeof(raw)));
+    {
+        unsigned char sectors[2048],original[2048];
+        CHECK(gh_disc_read_blocks(d,index,0,sectors,1)==GH_DISC_OK);
+        CHECK(!memcmp(sectors,ref,sizeof(raw)));
+        f=fopen(argv[1],"rb");CHECK(f);
+#ifdef _WIN32
+        CHECK(_fseeki64(f,(int64_t)e.iso_offset,SEEK_SET)==0);
+#else
+        CHECK(fseek(f,(long)e.iso_offset,SEEK_SET)==0);
+#endif
+        CHECK(fread(original,1,sizeof(original),f)==sizeof(original));fclose(f);
+        CHECK(!memcmp(sectors,original,sizeof(original)));
+        CHECK(gh_disc_read_blocks(d,index,1,NULL,0)==GH_DISC_OK);
+        CHECK(gh_disc_read_blocks(d,index,1,&sentinel,1)==GH_DISC_BOUNDS);
+        CHECK(gh_disc_read_blocks(d,index,UINT64_MAX,&sentinel,1)==GH_DISC_BOUNDS);
+        CHECK(gh_disc_read_blocks(d,index,0,&sentinel,SIZE_MAX)==GH_DISC_BOUNDS);
+        CHECK(sentinel==0x7b);
+    }
     CHECK(gh_disc_find(d,"../r207.rel",&other)==GH_DISC_UNSAFE_PATH);
     CHECK(gh_disc_find(d,"dll/../r207.rel",&other)==GH_DISC_UNSAFE_PATH);
     CHECK(gh_disc_find(d,"C:\\r207.rel",&other)==GH_DISC_UNSAFE_PATH);

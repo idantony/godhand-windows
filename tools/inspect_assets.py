@@ -182,7 +182,7 @@ def main():
             slot_count=count, named_file_count=len(assets), overlay_count=len(overlays), directory_size=len(table)),
             evidence=[dict(path='vendor/god-hand-decomp/scripts/afs.py', sha256=sha((project / 'vendor/god-hand-decomp/scripts/afs.py').read_bytes())),
                       dict(path='vendor/god-hand-decomp/scripts/recon/rel_inventory.py', sha256=sha((project / 'vendor/god-hand-decomp/scripts/recon/rel_inventory.py').read_bytes()))],
-            limitations=['Input is named Uncensor Patch v1.0; no retail asset equivalence asserted',
+            limitations=['No retail asset or patch equivalence is inferred from filename; use the recorded input hashes',
                           'FST size_hint is retained but never used as byte size',
                           'SNR2 relocation bytes are inventoried, not executed or applied'],
             upstream_overlay_comparison=comparison,

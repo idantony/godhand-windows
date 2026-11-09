@@ -233,3 +233,21 @@ const char *gh_disc_error_string(gh_disc_error e) {
     static const char *const names[]={"success","invalid argument","file I/O failure","unsupported or malformed disc format","offset or index out of bounds","resource not found","allocation failed","unsafe resource path"};
     return (unsigned)e<sizeof(names)/sizeof(names[0])?names[e]:"unknown disc error";
 }
+gh_disc_error gh_disc_read_blocks(gh_disc *d,size_t i,uint64_t block_offset,void *buffer,size_t block_count) {
+    gh_disc_entry *entry;
+    uint64_t blocks,rounded,start;
+    size_t j;
+    if(!d || (!buffer && block_count))return GH_DISC_ARGUMENT;
+    if(i>=d->count)return GH_DISC_BOUNDS;
+    entry=&d->entries[i];
+    blocks=(entry->size+2047)/2048;
+    if(!fits(block_offset,block_count,blocks) || block_count>SIZE_MAX/2048)return GH_DISC_BOUNDS;
+    if(!block_count)return GH_DISC_OK;
+    rounded=blocks*2048;start=entry->iso_offset-d->afs_base;
+    if(entry->iso_offset%2048 || !fits(start,rounded,d->afs_size) || !fits(entry->iso_offset,rounded,d->size))return GH_DISC_BOUNDS;
+    for(j=0;j<d->slots;++j) {
+        uint32_t other=le32(d->afs+8+j*8),length=le32(d->afs+12+j*8);
+        if(j!=entry->afs_index && length && other>=start && (uint64_t)other<start+rounded)return GH_DISC_BOUNDS;
+    }
+    return read_at(d,entry->iso_offset+block_offset*2048,buffer,block_count*2048);
+}
