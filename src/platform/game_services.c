@@ -14,8 +14,10 @@ struct gh_game_services {
  gh_task_record32 scenario_records[16];gh_task_manager scenario;gh_task_threads *scenario_threads;
  uint8_t scenario_scalar[0x114]; /*canonical5FEB00scalarspan;managerhasitsowntypedowner*/
  gh_room_state room_state;gh_room_pack room_pack;gh_room_pools pools;gh_game_pl_camera camera;
- gh_room_module module;gh_sound_scene sound_scene;gh_collision_pairs collision_pairs;unsigned case3_stage;
+ gh_room_module module;gh_collision_pairs collision_pairs;unsigned case3_stage;int sound_load_started;
  gh_game_effects effects;gh_scene_filters filters;
+ gh_game_world_light world_light;gh_game_model_packets model_packets;
+ gh_game_collision_solids collision_solids;gh_game_scene_tables scene_tables;gh_game_title_player title_player;
  gh_stage_object_init old_children,old_cockpit;void *old_context;
  int owns_children,owns_textures,owns_skills,stage_attempted;
  gh_game_children *created_children;gh_stage_textures *created_textures;
@@ -66,6 +68,7 @@ gh_game_services_status gh_game_services_create(const gh_game_services_bindings*
  s->module.input=(gh_room_pack){.dvd=b->assets->dvd,.heap=b->assets->heap,.threads=b->threads};
  /* Actual2B8AE0 is a scalar constructor; allocation occurs only at2B8B50. */
  (void)gh_collision_pairs_construct_002b8ae0(&s->collision_pairs,b->assets->heap);
+ (void)gh_game_world_light_construct_002d6d80(&s->world_light);
  *out=s;return GH_SERVICES_OK;
 create_failure:
  gh_game_objects_destroy(s->room_objects);gh_game_objects_destroy(s->objects);free(s);return result;
@@ -159,11 +162,11 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
  }
  if(s->case3_stage==3){
   gh_sound_scene_status se;gh_bundle bundle;
-  if(!s->b.audio_registry)return fail(s,GH_SERVICES_FRONTIER,0x2cabe8,0);
-  if(!s->sound_scene.startup_bound){se=gh_sound_scene_from_startup(&s->sound_scene,s->b.sound_control,s->b.audio_registry);if(se)return fail(s,GH_SERVICES_ASSET,0x2cabe8,se);}
+  if(!s->b.audio_registry||!s->b.sound_scene)return fail(s,GH_SERVICES_FRONTIER,0x2cabe8,0);
+  if(!s->b.sound_scene->startup_bound||s->b.sound_scene->control!=s->b.sound_control||s->b.sound_scene->registry!=s->b.audio_registry)return fail(s,GH_SERVICES_ASSET,0x2cabe8,GH_SOUND_SCENE_ARGUMENT);
   if(gh_game_room_pack_bundle(&s->room_pack,&bundle))return fail(s,GH_SERVICES_ASSET,0x31ccf0,0);
-  se=gh_sound_scene_initialize_002cabe8(&s->sound_scene,&bundle,work,s->b.assets->dvd,s->b.assets->heap,s->b.threads);
-  if(se)return fail(s,se==GH_SOUND_SCENE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->sound_scene.frontier?s->sound_scene.frontier:0x2cabe8,se);
+  s->sound_load_started=1;se=gh_sound_scene_initialize_002cabe8(s->b.sound_scene,&bundle,work,s->b.assets->dvd,s->b.assets->heap,s->b.threads);
+  if(se)return fail(s,se==GH_SOUND_SCENE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->b.sound_scene->frontier?s->b.sound_scene->frontier:0x2cabe8,se);
   s->case3_stage=4;
  }
  if(s->case3_stage==4){
@@ -182,7 +185,30 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
   if(fe)return fail(s,fe==GH_FILTER_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->filters.frontier?s->filters.frontier:0x2993a0,fe);
   s->case3_stage=7;
  }
- return fail(s,GH_SERVICES_FRONTIER,0x2d6f40,0);
+ if(s->case3_stage==7){
+  gh_bundle bundle;if(gh_game_room_pack_bundle(&s->room_pack,&bundle))return fail(s,GH_SERVICES_ASSET,0x31ccf0,0);
+  gh_light_status le=gh_game_world_light_initialize_002d6f40(&s->world_light,&bundle);
+  if(le)return fail(s,le==GH_LIGHT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->world_light.frontier?s->world_light.frontier:0x2d6f40,le);s->case3_stage=8;
+ }
+ if(s->case3_stage==8){gh_game_model_packets_reset_001509a0(&s->model_packets);s->case3_stage=9;}
+ if(s->case3_stage==9){
+  gh_id_error ie=gh_game_cockpit_room_reset_00140de0(s->cockpit,s->b.save,work,s->b.init->heat);
+  if(ie)return fail(s,ie==GH_ID_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,gh_game_cockpit_frontier(s->cockpit)?gh_game_cockpit_frontier(s->cockpit):0x140de0,ie);s->case3_stage=10;
+ }
+ if(s->case3_stage==10){gh_init_status ie=gh_game_object_pool_reset_001fdea8(s->b.init);if(ie)return fail(s,GH_SERVICES_ASSET,0x1fdf88,ie);s->case3_stage=11;}
+ if(s->case3_stage==11){gh_game_collision_solids_reset_00134690(&s->collision_solids);s->case3_stage=12;}
+ if(s->case3_stage>=12&&s->case3_stage<=15){
+  gh_bundle bundle;if(gh_game_room_pack_bundle(&s->room_pack,&bundle))return fail(s,GH_SERVICES_ASSET,0x31ccf0,0);gh_scene_table_status te;
+  if(s->case3_stage==12){te=gh_scene_environment_002a71b0(&s->scene_tables,work,&bundle);if(te)return fail(s,te==GH_TABLE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_tables.frontier,te);s->case3_stage=13;}
+  if(s->case3_stage==13){te=gh_scene_scrolls_0031d1b0(&s->scene_tables,work,&bundle);if(te)return fail(s,te==GH_TABLE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_tables.frontier,te);s->case3_stage=14;}
+  if(s->case3_stage==14){te=gh_scene_actors_0012e670(&s->scene_tables,&bundle);if(te)return fail(s,te==GH_TABLE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_tables.frontier,te);s->case3_stage=15;}
+  if(s->case3_stage==15){te=gh_scene_actor_scroll_links_00307a60(&s->scene_tables);if(te)return fail(s,te==GH_TABLE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_tables.frontier,te);s->case3_stage=16;}
+ }
+ if(s->case3_stage==16){
+  gh_title_player_status pe=gh_game_title_player_create_0031c4e0(&s->title_player,s->b.assets->heap,work);
+  if(pe)return fail(s,pe==GH_PLAYER_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->title_player.frontier?s->title_player.frontier:0x31c4e0,pe);s->case3_stage=17;
+ }
+ return fail(s,GH_SERVICES_FRONTIER,0x2bf8f8,0);
 }
 void gh_game_services_inspect(const gh_game_services*s,gh_game_services_snapshot*out){
  if(!out)return;memset(out,0,sizeof(*out));if(!s)return;
@@ -196,9 +222,15 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  if(!s)return GH_SERVICES_ARGUMENT;
  if((s->owns_children&&*s->b.children!=s->created_children)||(s->owns_textures&&s->b.stage->textures!=s->created_textures))return fail(s,GH_SERVICES_BUSY,0x2a5bb8,0);
  if(s->cockpit_snapshot&&(s->b.id->pool_used!=s->cockpit_pool_end||s->b.id->job_count!=s->cockpit_jobs_end))return fail(s,GH_SERVICES_BUSY,0x2aa078,GH_ID_BUSY);
+ if(gh_game_title_player_release(&s->title_player))return fail(s,GH_SERVICES_ASSET,0x31c4e0,0);
  if(gh_collision_pairs_release(&s->collision_pairs))return fail(s,GH_SERVICES_ASSET,0x2b8b50,0);
- if(s->sound_scene.job&&gh_dvd_check(s->b.assets->dvd,s->sound_scene.job))gh_dvd_cancel(s->b.assets->dvd,s->sound_scene.job);
- if(gh_sound_scene_release_loading(&s->sound_scene,s->b.assets->dvd,s->b.assets->heap))return fail(s,GH_SERVICES_ASSET,0x2cabe8,0);
+ if(s->sound_load_started){
+  if(s->b.sound_scene->job&&gh_dvd_check(s->b.assets->dvd,s->b.sound_scene->job))gh_dvd_cancel(s->b.assets->dvd,s->b.sound_scene->job);
+  if(gh_sound_scene_release_loading(s->b.sound_scene,s->b.assets->dvd,s->b.assets->heap))return fail(s,GH_SERVICES_ASSET,0x2cabe8,0);
+  /* Endborrowedroomviews beforetheirpackallocation isfreed. Rootglobal
+   * ratios/controller/registry remainalive; ready isonlyhostmetadata. */
+  s->b.sound_scene->seh=(gh_bundle_entry){0};s->b.sound_scene->bmh=(gh_bundle_entry){0};s->b.sound_scene->ts=(gh_bundle_entry){0};s->b.sound_scene->ready=0;s->sound_load_started=0;
+ }
  if(s->module.input.job&&gh_dvd_check(s->b.assets->dvd,s->module.input.job))gh_dvd_cancel(s->b.assets->dvd,s->module.input.job);
  if(gh_room_module_release(&s->module))return fail(s,GH_SERVICES_ASSET,0x2be708,0);
  if(s->pools.heap){gh_room_pool_status e=gh_game_room_pools_release(&s->pools);if(e)return fail(s,GH_SERVICES_FRONTIER,s->pools.failed_entry,e);}
@@ -219,8 +251,10 @@ gh_game_services_status gh_game_services_get_scene_view(gh_game_services*s,gh_ga
  *out=(gh_game_services_scene_view){.root=&s->b,.prepare=&s->prepare,.scenario=&s->scenario,
   .scenario_threads=s->scenario_threads,.scenario_bytes=s->scenario_scalar,.scenario_bytes_size=sizeof(s->scenario_scalar),.room_state=&s->room_state,.room_pack=&s->room_pack,.pools=&s->pools,
   .pl_camera=&s->camera,.cockpit=s->cockpit,.objects=s->objects,.room_objects=s->room_objects,
-  .module=&s->module,.sound_scene=&s->sound_scene,.collision_pairs=&s->collision_pairs,
+  .module=&s->module,.sound_scene=s->b.sound_scene,.collision_pairs=&s->collision_pairs,
   .effects=&s->effects,.filters=&s->filters,
+  .world_light=&s->world_light,.model_packets=&s->model_packets,
+  .collision_solids=&s->collision_solids,.scene_tables=&s->scene_tables,.title_player=&s->title_player,
   .main_word4=&s->main_word4,.main_records=s->main_records,.main_record_count=32,
   .scene_buffer_a=s->scene_buffer_a,.scene_buffer_b=s->scene_buffer_b,
   .scene_buffer_a_size=sizeof(s->scene_buffer_a),.scene_buffer_b_size=sizeof(s->scene_buffer_b)};

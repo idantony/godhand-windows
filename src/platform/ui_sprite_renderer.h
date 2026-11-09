@@ -12,7 +12,8 @@ typedef struct {uint32_t texture;gh_id_texture_quad quad;} gh_ui_sprite_item;
  * uploads are explicit and cached by returned handle until destroy. */
 gh_ui_error gh_ui_sprite_create(unsigned width,unsigned height,gh_ui_sprite_renderer **);
 void gh_ui_sprite_destroy(gh_ui_sprite_renderer *);
-/* Original T32/PSMT8 512x256/512 andverified32x32TIM2/PSMT4cursor. QA alpha must be even
+/* Original T32/PSMT8 512x256/512, T32/PSMT4 512x512titlelogo,
+ * andverified32x32TIM2/PSMT4cursor. QA alpha must be even
  * or255 and is losslessly reversed to GS0..128 before integer filtering. */
 gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *,const gh_id_texture *,
  const unsigned char *rgba,size_t bytes,uint32_t *handle);

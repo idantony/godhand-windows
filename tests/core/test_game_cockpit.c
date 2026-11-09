@@ -66,6 +66,17 @@ CHECK(gh_disc_open(argv[1],&d)==GH_DISC_OK);
  CHECK(gh_id_base_get_work_002aa410(r,base,0,&entry,NULL)==GH_ID_OK && entry->pos_y==-50);
  CHECK(fields[0x1cb0+0x102]==90 && fields[0x1520+0x9c]==255 && fields[0x23bc]==0);
  CHECK(gh_game_cockpit_initialize_00140c88(c,sv)==GH_ID_BUSY);
+ gh_boot_work work_state={0};uint8_t heat[0x18]={0};uint32_t maximum=0x42f00000;memcpy(heat,&maximum,4);
+ uint32_t tick=0; /*actualcase3 clearsWork.playerObj beforethisgetter*/memcpy((uint8_t*)&work_state+0x5f4,&tick,4);
+ result=gh_game_cockpit_room_reset_00140de0(c,sv,&work_state,heat);
+ if(result)fprintf(stderr,"roomreset blocked%d frontier%08X\n",result,gh_game_cockpit_frontier(c));
+ CHECK(result==GH_ID_OK&&m->pool_used==405&&m->job_count==39);
+ CHECK(u32(fields+0x6e0+0x98)==tick&&u32(fields+0x6e0+0x5d0)==0x41a00000);
+ for(unsigned j=0;j<11;j++){CHECK(!gh_game_cockpit_widget_at(c,j,&w));const uint8_t*vt=elf_at(elf,(size_t)es,w.vtable+0x18,8);CHECK(vt[0]==0&&vt[1]==0);CHECK(fields[w.offset+0x75]==1&&fields[w.offset+0x76]==0);}
+ CHECK(gh_game_cockpit_base(c,0x460+0x190,&base)==GH_ID_OK&&!base->playing);
+ CHECK(fields[0x460+0x17c]==0&&fields[0x15c0+0x33c]==255&&fields[0x15c0+0x343]==255);
+ CHECK(gh_game_cockpit_entry_at(c,0x6e0+0x4a0,&entry)==GH_ID_OK&&entry);
+ CHECK(gh_game_cockpit_room_reset_00140de0(c,sv,&work_state,heat)==GH_ID_BUSY);
  CHECK(gh_game_cockpit_destroy(c)==GH_ID_OK && m->pool_used==0 && m->job_count==0);
  CHECK(gh_id_runtime_destroy(r)==GH_ID_OK);free(m);free(b);free(elf);gh_disc_close(d);
  puts("PASS actual USA Cockpit11 widget initialization, native entries/gauge layout, ownership cleanup");return 0;

@@ -1,3 +1,5 @@
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include "bgm_requests.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +34,34 @@ int main(int argc,char**argv){
  CHECK(gh_bgm_event_set_prefix_002d15a8(s,56,-1,9)==GH_BGM_BOUNDS&&gh_bgm_requests_frontier(s)==0x373158&&!gh_heap_used(h));
  CHECK(gh_bgm_requests_inspect(s,0,&v)==GH_BGM_OK&&v.mode==5&&v.original_scalars[0xa0]==255&&v.original_scalars[0xa1]==255&&v.original_scalars[0xa2]==9);
  CHECK(gh_bgm_requests_abort_pending(s)==GH_BGM_OK&&gh_bgm_requests_inspect(s,0,&v)==GH_BGM_NOT_READY);
+ /* Nativeconstructor completes only after actualkey/sourcevalidation and
+  * endpointprepare. Originalmode5 neverrequestsstart byitself. */
+ size_t elf_size=(size_t)gh_disc_boot_elf_size(d);uint8_t*elf=malloc(elf_size);gh_adx_key key;
+ CHECK(elf&&!gh_disc_read_boot_elf(d,0,elf,elf_size)&&gh_adx_key_from_elf(elf,elf_size,&key)==GH_ADX_OK);free(elf);
+ CHECK(!gh_bgm_requests_enable_native(s,&key,1,GH_BGM_GAIN_NATIVE_DB_REFERENCE));
+ CHECK(gh_bgm_requests_enable_native(s,&key,1,GH_BGM_GAIN_NATIVE_DB_REFERENCE)==GH_BGM_BUSY);
+ CHECK(!gh_bgm_event_set_002d15a8(s,0,0,0)&&!gh_bgm_requests_pending(s)&&gh_bgm_requests_active(s)==1);
+ CHECK(!gh_bgm_requests_inspect(s,0,&v)&&v.linked&&v.prepared&&v.transport.prepared&&!v.transport.started&&!v.transport.submitted_frames&&!v.transport.queued_buffers&&v.transport.muted);
+ CHECK(u32(v.original_scalars+0xb0)==1&&u32(v.original_scalars+0x14)==0x42900000&&v.stream_flags==3&&v.transport.gain>.4027f&&v.transport.gain<.4028f);
+ CHECK(!gh_bgm_event_set_002d15a8(s,0,0,0)&&gh_bgm_requests_active(s)==2&&!gh_bgm_requests_inspect(s,1,&v));
+ CHECK(gh_bgm_requests_abort_pending(s)==GH_BGM_BUSY);
+ gh_boot_work work={0};for(unsigned m=0;m<4;m++){CHECK(!fesetround(modes[m]));int before=fegetround();CHECK(!gh_bgm_requests_update_002d0938(s,&work)&&fegetround()==before);}
+ CHECK(!fesetround(FE_TONEAREST)&&!gh_bgm_requests_inspect(s,0,&v)&&!v.transport.started&&!v.transport.completed_frames&&!v.transport.submitted_frames);
+ CHECK(!gh_bgm_event_start_002d1610(s,0,0,0)&&!gh_bgm_requests_inspect(s,1,&v)&&v.transport.started&&v.transport.submitted_frames>0&&v.transport.muted&&!v.request_flags);
+ CHECK((control.flags_ac&0x10000000)&&(control.flags_b0&0x10000000));
+ for(unsigned spin=0;spin<200&&!v.transport.completed_frames;spin++){Sleep(10);CHECK(!gh_bgm_requests_update_002d0938(s,&work)&&!gh_bgm_requests_inspect(s,1,&v));}
+ CHECK(v.transport.completed_frames>0&&v.transport.submitted_frames>=v.transport.completed_frames);
+ CHECK(gh_bgm_event_start_002d1610(s,0,0,0)==GH_BGM_UNSUPPORTED&&gh_bgm_requests_frontier(s)==0x2cc900);
+ CHECK(!gh_bgm_event_stop_002d1800(s,0)&&!(control.flags_ac&0x10000000)&&!(control.flags_b0&0x10000000));
+ /* Actual mask50==0 branch fades tozero over originalrelease60ticks, then
+  * tearsdownstream; followingtick removesrequest fromtypedactivelist. */
+ CHECK(control.event_mask50==0x80000000);control.event_mask50=0;
+ for(unsigned i=0;i<60;i++)CHECK(!gh_bgm_requests_update_002d0938(s,&work));
+ CHECK(gh_bgm_requests_active(s)==2&&!gh_heap_used(h));
+ CHECK(!gh_bgm_requests_update_002d0938(s,&work)&&!gh_bgm_requests_active(s)&&!gh_bgm_requests_pending(s));
+ CHECK(gh_bgm_requests_inspect(s,0,&v)==GH_BGM_NOT_READY);
+ control.flags_ac|=0x10000000;CHECK(!gh_bgm_requests_update_002d0938(s,&work)&&!(control.flags_ac&0x10000000));control.flags_ac|=0x200000;CHECK(gh_bgm_requests_update_002d0938(s,&work)==GH_BGM_UNSUPPORTED&&gh_bgm_requests_frontier(s)==0x2d0ea0);control.flags_ac&=~0x200000u;
+ CHECK(!gh_bgm_requests_abort_pending(s));
  gh_bgm_requests_destroy(s);CHECK(gh_heap_destroy(h)==GH_MEM_OK);gh_audio_registry_destroy(r);gh_disc_close(d);
- puts("PASS realBGM0/request prefix/AFD-ownedsource/workbuffer/FEnv/error; SDKconstructor329438 remains unsupported, no linked/play claim");return 0;
+ puts("PASS realBGM0 nativeSet/no-autoplay/actual-muted-Start-consumption/Stop/fade/list/tick/source/FEnv");return 0;
 }

@@ -6,6 +6,10 @@ gh_sound_scene_status gh_sound_scene_from_startup(gh_sound_scene*s,gh_sound_cont
  if(!s||!c||!r||!c->initialized)return GH_SOUND_SCENE_ARGUMENT;
  if(s->startup_bound)return GH_SOUND_SCENE_BUSY;
  if(!gh_audio_startup_ready(r,0,0,0))return GH_SOUND_SCENE_ASSET;
+ /* Actual5FEE60/74/88 ratios and5FEE9C/A0,5FEF18/1C/20 remainBSS0
+  * through2C9F58. Its2CA220 call has NOcSndargument: it configuresADX,
+  * not these arrays. Later2CABE8 writes1/defaultstep/current=-1/-2/-1.
+  * Bindthis singleowner early so original2CAF28 can pumpthose realzeros. */
  *s=(gh_sound_scene){0};s->control=c;s->registry=r;s->sound_group130=0;s->startup_bound=1;
  return GH_SOUND_SCENE_OK;
 }

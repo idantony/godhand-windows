@@ -2,6 +2,8 @@
  * Host handles replace every guest pointer. Finite UI source reconstruction,
  * not a GS interpreter or a claim of Cockpit Move/Trans implementation. */
 #include "game_cockpit.h"
+#include "id_entry_reset.h"
+#include "id_animation.h"
 #include <stdlib.h>
 #include <string.h>
 static const uint32_t offsets[]={0,0xd0,0x3a0,0x460,0x540,0x5f0,0x670,0x6e0,0xb90,0xbe0,0xc30,
@@ -21,7 +23,7 @@ struct gh_game_cockpit {
  gh_id_base bases[BASES],*owned[BASES];unsigned owned_count;
  gh_cockpit_widget widgets[11];uint8_t fields[0x23c0];
  struct {uint32_t offset;gh_id_entry *entry;} refs[160];unsigned ref_count;
- gh_id_view gauge_texture[5],icon_texture;uint32_t frontier;int begun,ready;
+ gh_id_view gauge_texture[5],icon_texture;uint32_t frontier;int begun,ready,room_begun,room_ready;
 };
 static uint32_t u32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w32(gh_game_cockpit *s,unsigned o,uint32_t n){for(unsigned i=0;i<4;i++)s->fields[o+i]=(uint8_t)(n>>(8*i));}
@@ -130,6 +132,55 @@ gh_id_error gh_game_cockpit_initialize_00140c88(gh_game_cockpit *s,gh_core_save_
  for(unsigned i=0;i<11;i++){TRY(widget(s,i,save));s->widgets[i].initialized=1;}
  s->fields[0x23bc]=0;s->ready=1;return GH_ID_OK;
 }
+static gh_id_error reset_only(gh_game_cockpit*s,unsigned o){gh_id_base*b=base(s,o);uint8_t playing=b->playing;gh_id_error e=restart(s,o);b->playing=playing;return e;}
+static const gh_id_animation_profile room_animation_profile={1,0}; /*explicitnativeadaptation: originalunwrittenstackdistance seed0*/
+static gh_id_error move_only(gh_game_cockpit*s,unsigned o){gh_id_frontier f={0};gh_id_error e=gh_id_jobs_move_reference(base(s,o),NULL,NULL,&room_animation_profile,&f);if(e)s->frontier=f.address;return e;}
+static gh_id_error reset_family(gh_game_cockpit*s,unsigned o,int id,int16_t hidden){gh_id_entry*e;gh_id_frontier f={0};TRY(work(s,o,id,0,&e));gh_id_error result=gh_id_entry_reset_family_reference(base(s,o),e,hidden,&room_animation_profile,&f);if(result)s->frontier=f.address;return result;}
+static gh_id_error flag_entry(gh_game_cockpit*s,unsigned o,int id,uint32_t set,uint32_t clear){gh_id_entry*e;TRY(work(s,o,id,0,&e));e->flags=(e->flags&~clear)|set;return GH_ID_OK;}
+gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit*s,gh_core_save_view save,const gh_boot_work*work_state,const uint8_t heat[0x18]){
+ gh_id_entry*e;const uint8_t*wr=(const uint8_t*)work_state;unsigned o;
+ if(!s||!s->ready||!save.bytes||save.size<GH_CORE_SAVE_BYTES||!work_state||!heat)return GH_ID_ARGUMENT;
+ if(s->room_begun)return GH_ID_BUSY;s->room_begun=1;s->frontier=0;
+ /*143BE8, firstnonNULL registryrow. Allpointercachefields stay native. */
+ o=0x6e0;w32(s,o+0x90,0);if(u32(wr+0x5f4)){s->frontier=0x2db6b0;return GH_ID_UNSUPPORTED;}w32(s,o+0x98,0);wf(s,o+0x5d0,20);
+ TRY(restart(s,o));TRY(restart(s,o+0x500));TRY(move_only(s,o+0x500));TRY(restart(s,o+0x550));TRY(move_only(s,o+0x550));TRY(restart(s,o+0x4b0));
+ TRY(cache(s,o,2,o+0x4a0,0));TRY(work(s,o+0x500,0,o+0x5a4,&e));TRY(work(s,o+0x550,0,o+0x5a8,&e));TRY(work(s,o+0x4b0,0,o+0x5a0,&e));
+ s->fields[o+0x5dc]=s->fields[o+0x5dd]=0;w32(s,o+0x5d8,0x80808080);
+ /*141CE8: saved level, upgrade icons and original per-entry/directchild
+  * reset do not call wholeMove or advance unrelatedentries. */
+ o=0x460;w32(s,o+0x90,0);TRY(restart(s,o));TRY(restart(s,o+0x210));for(int id=12;id<=15;id++)TRY(flag_entry(s,o,id,0x8000000,0));
+ TRY(restart(s,o+0xe0));TRY(restart(s,o+0x190));base(s,o+0x190)->playing=0;w32(s,o+0x180,0);
+ int lev=level(save);if(lev==4)lev=3;else if(lev==5)lev=4;lev--;w16(s,o+0x17c,(unsigned)lev);
+ TRY(flag_entry(s,o,lev+12,0,0x8000000));TRY(reset_family(s,o,lev+12,0));
+ for(int id=7;id<=9;id++)TRY(flag_entry(s,o+0x190,id,0x8000000,0));for(int id=12;id<=15;id++)TRY(flag_entry(s,o,id,0x400,0));
+ TRY(flag_entry(s,o+0x190,6,0x1000,0));TRY(work(s,o+0x190,6,0,&e));e->scale_x=e->scale_y=.75f;
+ unsigned upgrades=0;for(unsigned i=0;i<6&&i<save.bytes[0x156];i++)if(save.bytes[0xa8+i])upgrades++;s->fields[o+0x260]=(uint8_t)upgrades;
+ for(unsigned i=0;i<6;i++)TRY(flag_entry(s,o+0xe0,(int)i,i<upgrades?0:0x8000000,i<upgrades?0x8000000:0));
+ /* Actualfirstboot Heat.current=0. This branch is exactlyzero foranyfinite
+  * nonzeroMaximum; other runtime ratios need explicitnumericalpolicy. */
+ if(u32(heat+4)!=0&&u32(heat+4)!=0x80000000){s->frontier=0x2a9c98;return GH_ID_UNSUPPORTED;}
+ w32(s,o+0x264,0);w32(s,o+0x268,0);
+ for(int id=13;id<=18;id++)TRY(flag_entry(s,o+0xe0,id,0x8000000,0));TRY(flag_entry(s,o,17,0x8000000,0));TRY(flag_entry(s,o,6,0x8000000,0));
+ TRY(reset_family(s,o,11,1));TRY(work(s,o,11,0,&e));e->color_base&=0xffffff;
+ static const int reset_ids[]={2,10,11};for(unsigned i=0;i<3;i++){TRY(reset_family(s,o+0x190,reset_ids[i],1));TRY(work(s,o+0x190,reset_ids[i],0,&e));e->color_base=(e->color_base&0xffffff)|(i==2?0x80000000:0);}
+ s->fields[o+0x26f]=0;
+ /*144C08 then13D0B8: actualreset-only preserves baseplaying. */
+ o=0xea0;TRY(gauge(s));for(unsigned i=0;i<5;i++)TRY(reset_only(s,o+0x100+i*0x50));TRY(reset_only(s,o+0x430));TRY(reset_only(s,o+0x480));w16(s,o+0x41e,0);w16(s,o+0x420,0);w32(s,o+0x90,0);w16(s,o+0x4d0,95);
+ o=0xcc0;TRY(reset_only(s,o));TRY(reset_only(s,o+0x140));TRY(reset_only(s,o+0x190));TRY(reset_only(s,o+0xa0));TRY(reset_only(s,o+0xf0));
+ o=0x1380;w32(s,o+0x90,0);TRY(restart(s,o));TRY(cache(s,o,13,o+0xb0,0));s->fields[o+0x95]=s->fields[o+0x94]=0;
+ o=0x1470;w32(s,o+0x90,0);TRY(restart(s,o));TRY(cache(s,o,4,o+0x98,0));w32(s,o+0x94,0);
+ o=0x1520;TRY(restart(s,o));TRY(cache(s,o,3,o+0x90,0));
+ o=0x15c0;for(unsigned i=0;i<8;i++)TRY(restart(s,o+0x90+i*0x50));memset(s->fields+o+0x33c,255,8);
+ /*146878->1468B0, sameoriginalfamilyhide semantics asinitialization. */
+ o=0x1cb0;memset(s->fields+o+0x79,0,4);for(int id=0;id<4;id++)TRY(hide(s,o,id));TRY(work(s,o,0,0,&e));e->pos_y=-50;
+ for(int id=0;id<4;id++)TRY(hide(s,o+0xa0,id));TRY(work(s,o+0xa0,0,0,&e));e->pos_y=-50;w16(s,o+0x102,90);w16(s,o+0x100,0);TRY(restart(s,o));
+ s->fields[0x1910+0x104]=0;
+ o=0x1ae0;TRY(restart(s,o));if(u32(wr+0x594)&0x2000000)for(unsigned i=0;i<4;i++)save.bytes[0x20+i]=(uint8_t)(999999u>>(8*i));
+ uint32_t money=u32(save.bytes+0x20);w32(s,o+0x90,money);TRY(cache(s,o,4,o+0x94,0));memset(s->fields+o+0x1b0,0,16);TRY(flag_entry(s,o,2,0x8000000,0));TRY(work(s,o,0,0,&e));e->seed=money;memset(save.bytes+0x24,0,4);s->fields[o+0x1c0]=0;
+ s->fields[0x23bc]=0;for(unsigned i=0;i<11;i++){s->fields[registry[i].offset+0x76]=0;s->fields[registry[i].offset+0x75]=1;}
+ s->room_ready=1;return GH_ID_OK;
+}
+
 gh_id_error gh_game_cockpit_destroy(gh_game_cockpit *s){
  gh_id_error result=GH_ID_OK;if(!s)return GH_ID_ARGUMENT;
  while(s->owned_count){int original,freed;gh_id_error e=gh_id_base_release_002aa078(s->runtime,s->owned[--s->owned_count],&original,&freed);if(e)result=e;else if(!freed)result=GH_ID_BUSY;}

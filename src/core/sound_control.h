@@ -7,7 +7,10 @@ extern "C" {
 #endif
 /* Decoded fields of original cSnd005FEE00, not a guest-memory layout. This is
  * the shared live controller; callers must not create a separate zero shadow. */
-typedef struct gh_sound_control {uint32_t flags_ac,flags_b0;int32_t bgm_state_13c;uint8_t initialized;} gh_sound_control;
+typedef struct gh_sound_control {uint32_t flags_ac,flags_b0;int32_t bgm_state_13c;uint8_t initialized;
+ /* Actual2C9E78 bootgainfloatbits at+0..14, and2C9F58 +50 eventmask.
+  * One canonical source for BGM/SE consumers, not separate bootshadows. */
+ uint32_t event_mask50,gain_bits[6];uint8_t output_mode;} gh_sound_control;
 /* Restore exact actual-ELF PT_LOAD values (including BSS), then require actual
  * startup bank readiness. Verified current startup/MC path has no other writes
  * to these fields except the original SE flush pending-bit operation. Not a

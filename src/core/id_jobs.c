@@ -2,6 +2,8 @@
  * Reconstruction reference MIT upstream src/cod/id/cIDBase.c and002aa6e0.c;
  * notice LICENSE.upstream. No native draw success invented by collecting jobs. */
 #include "id_jobs.h"
+#include "id_layout_rotation.h"
+#include "id_animation.h"
 #include <stdint.h>
 #include <math.h>
 #include <string.h>
@@ -68,20 +70,21 @@ static gh_id_error layout(gh_id_base *o,gh_id_frontier *f){
  }
  return GH_ID_OK;
 }
-gh_id_error gh_id_jobs_move(gh_id_base *o,gh_id_post_message post,void *ctx,gh_id_frontier *f){
+static gh_id_error move_policy(gh_id_base *o,gh_id_post_message post,void *ctx,gh_id_frontier *f,int reference_rotation,const gh_id_animation_profile*profile){
  uint32_t i;gh_id_error error;static const uint32_t source_bits[]={0x02000000,0x01000000,0x00800000,0x00400000,0x00200000};
  static const uint32_t done_bits[]={0x4000,0x2000,0x1000,0x800,0x400};
  static const unsigned hold[]={0x5c,0x5d,0x5e,0x5f,0x64};
  static const uint32_t entry[]={0x2abdc0,0x2ac048,0x2ac1c0,0x2ac298,0x2ac378};
  if(!o)return GH_ID_ARGUMENT;if(f){f->address=0;f->entry_index=0;f->kind=0;}o->first_unported=0;
  if(o->stop||!o->entries)return GH_ID_OK;
- error=layout(o,f);if(error)return error;if(!o->playing)return GH_ID_OK;
+ error=reference_rotation?gh_id_layout_rotation_reference(o,f):layout(o,f);if(error)return error;if(!o->playing)return GH_ID_OK;
  o->frame=(uint16_t)(o->frame+1);if(o->frame<0x8000&&o->frame>=10000)o->frame=0;
  for(i=0;i<o->entry_count;i++){
   gh_id_entry *e=&o->entries[i];unsigned j;uintptr_t src=(uintptr_t)e->source,base=(uintptr_t)o->source_records.bytes;
   if(!e->source||src<base||src-base>o->source_records.size||o->source_records.size-(size_t)(src-base)<0x2e0)return GH_ID_BOUNDS;
   for(j=0;j<5;j++)if((u32(e->source+4)&source_bits[j])&&!(e->flags&done_bits[j])&&!e->source[hold[j]]){
    if(j==4){error=color_step(e);if(error)return frontier(o,f,i,entry[j]);}
+   else if(reference_rotation){error=gh_id_animation_reference(o,e,j,profile,f);if(error){if(o->first_unported)return error;return frontier(o,f,i,entry[j]);}}
    else return frontier(o,f,i,entry[j]);
   }
   if(e->kind==4&&!(e->flags&2)&&e->message!=65535){
@@ -91,6 +94,10 @@ gh_id_error gh_id_jobs_move(gh_id_base *o,gh_id_post_message post,void *ctx,gh_i
  }
  return GH_ID_OK;
 }
+
+gh_id_error gh_id_jobs_move(gh_id_base*o,gh_id_post_message post,void*ctx,gh_id_frontier*f){return move_policy(o,post,ctx,f,0,NULL);}
+gh_id_error gh_id_jobs_move_reference_rotation(gh_id_base*o,gh_id_post_message post,void*ctx,gh_id_frontier*f){return move_policy(o,post,ctx,f,1,NULL);}
+gh_id_error gh_id_jobs_move_reference(gh_id_base*o,gh_id_post_message post,void*ctx,const gh_id_animation_profile*p,gh_id_frontier*f){return move_policy(o,post,ctx,f,1,p);}
 gh_id_error gh_id_jobs_collect_visible(gh_id_base *o,gh_id_draw_job *jobs,size_t capacity,size_t *count,gh_id_frontier *f){
  int layer;uint32_t i;size_t n=0;if(!o||!count||(!jobs&&capacity))return GH_ID_ARGUMENT;*count=0;
  if(f){f->address=0;f->entry_index=0;f->kind=0;}
@@ -105,3 +112,24 @@ gh_id_error gh_id_jobs_collect_visible(gh_id_base *o,gh_id_draw_job *jobs,size_t
  }
  *count=n;return GH_ID_OK;
 }
+
+/* Shared actualcalcleaves, deliberately not a wholeMove substitution. */
+static gh_id_error calc_policy(gh_id_base*o,gh_id_entry*e,gh_id_frontier*f,int reference,const gh_id_animation_profile*profile){
+ static const uint32_t source_bits[]={0x02000000,0x01000000,0x00800000,0x00400000,0x00200000};
+ static const uint32_t done_bits[]={0x4000,0x2000,0x1000,0x800,0x400};
+ static const unsigned hold[]={0x5c,0x5d,0x5e,0x5f,0x64};
+ static const uint32_t entry[]={0x2abdc0,0x2ac048,0x2ac1c0,0x2ac298,0x2ac378};
+ if(!o||!e)return GH_ID_ARGUMENT;if(f)*f=(gh_id_frontier){0};o->first_unported=0;
+ if(!o->entries||!owned(o,e))return GH_ID_BOUNDS;
+ uintptr_t src=(uintptr_t)e->source,base=(uintptr_t)o->source_records.bytes;
+ if(!e->source||src<base||src-base>o->source_records.size||o->source_records.size-(size_t)(src-base)<0x2e0)return GH_ID_BOUNDS;
+ uint32_t index=(uint32_t)(e-o->entries);
+ for(unsigned j=0;j<5;j++)if((u32(e->source+4)&source_bits[j])&&!(e->flags&done_bits[j])&&!e->source[hold[j]]){
+  if(j==4){gh_id_error error=color_step(e);if(error)return frontier(o,f,index,entry[j]);}
+  else if(reference){gh_id_error error=gh_id_animation_reference(o,e,j,profile,f);if(error){if(o->first_unported)return error;return frontier(o,f,index,entry[j]);}}
+  else return frontier(o,f,index,entry[j]);
+ }
+ return GH_ID_OK;
+}
+gh_id_error gh_id_jobs_calc_entry(gh_id_base*o,gh_id_entry*e,gh_id_frontier*f){return calc_policy(o,e,f,0,NULL);}
+gh_id_error gh_id_jobs_calc_entry_reference(gh_id_base*o,gh_id_entry*e,const gh_id_animation_profile*p,gh_id_frontier*f){return calc_policy(o,e,f,1,p);}

@@ -1,5 +1,6 @@
 #include "game_services.h"
 #include "../core/game_gate.h"
+#include "../core/sound_scene_tick.h"
 #include "../platform/audio_startup.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,7 +8,7 @@
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"line%d %s\n",__LINE__,#x);exit(1);}}while(0)
 typedef struct {
  gh_game_services_bindings bindings;gh_game_services *services;gh_game_gate gate;
- gh_audio_registry *audio;gh_disc *disc;gh_sound_control sound_control;int main_returned,assets_returned;gh_game_status main_result,assets_result;
+ gh_audio_registry *audio;gh_disc *disc;gh_sound_control sound_control;gh_sound_scene sound_scene;int main_returned,assets_returned;gh_game_status main_result,assets_result;
  unsigned calls[4];
 } context;
 static int cover(void*p,gh_game_loop*l){context*c=p;(void)l;return gh_game_gate_002a6ca8(&c->gate);}
@@ -22,7 +23,7 @@ static int state1(void*p,gh_game_loop*l){context*c=p;(void)l;c->calls[1]++;if(!c
 static int state2(void*p,gh_game_loop*l){context*c=p;(void)l;c->calls[2]++;return gh_game_services_state2(c->services);}
 static int state3(void*p,gh_game_loop*l){context*c=p;(void)l;c->calls[3]++;return gh_game_services_state3(c->services);}
 static void main_task(void*p,int32_t arg){context*c=p;(void)arg;gh_game_platform platform={.context=c,.dvd_cover=cover,.modal_input=modal,.states={state0,state1,state2,state3,NULL,NULL}};c->main_result=gh_game_main_002a5998(c->bindings.loop,&platform);c->main_returned=1;}
-static int sound(void*p){context*c=p;gh_audio_status e=gh_audio_startup_load(c->audio,c->disc);if(e)return e;return c->sound_control.initialized?0:gh_sound_control_from_startup(&c->sound_control,c->disc,c->audio);}
+static int sound(void*p){context*c=p;gh_audio_status e=gh_audio_startup_load(c->audio,c->disc);if(e)return e;if(!c->sound_control.initialized&&gh_sound_control_from_startup(&c->sound_control,c->disc,c->audio))return 1;return c->sound_scene.startup_bound?0:gh_sound_scene_from_startup(&c->sound_scene,&c->sound_control,c->audio);}
 static void assets_task(void*p,int32_t arg){context*c=p;(void)arg;c->assets_result=gh_game_assets_0030d5c8(c->bindings.assets,gh_core_save_costume(c->bindings.save));c->assets_returned=1;}
 static void *payload(gh_disc*d,const char*path,size_t*bytes){size_t index;gh_disc_entry e;CHECK(gh_disc_find(d,path,&index)==GH_DISC_OK&&gh_disc_entry_at(d,index,&e)==GH_DISC_OK);void*p=malloc((size_t)e.size);CHECK(p&&gh_disc_read(d,index,0,p,(size_t)e.size)==GH_DISC_OK);*bytes=(size_t)e.size;return p;}
 int main(int argc,char**argv){
@@ -40,19 +41,21 @@ int main(int argc,char**argv){
   if(borrowed){CHECK(gh_game_children_create(NULL,&children)==GH_CHILD_OK);original_child=children;}
   assets=(gh_game_assets){.work=&work,.dvd=&dvd,.heap=heap,.threads=threads};loop=(gh_game_loop){.work=&work,.threads=threads};
   uint8_t em_set_first_byte=0xa5;context c={.disc=disc};gh_movie_pool*movie_pool;CHECK(gh_movie_pool_create_002b4960(&movie_pool)==GH_MOVIE_OK);CHECK(gh_audio_registry_create(&c.audio)==GH_AUDIO_OK);assets.sound_context=&c;assets.sound_startup=sound;
-  c.bindings=(gh_game_services_bindings){.assets=&assets,.loop=&loop,.init=init,.stage=stage,.children=&children,.save=save,.rate=&rate,.work=&work,.threads=threads,.id=id,.id_global=&id_global,.runtime=&runtime,.font=&font,.menu=&menu,.core_bin=core,.core_bin_size=core_bytes,.language=&bundle,.sound_control=&c.sound_control,.movie_pool=movie_pool,.audio_registry=c.audio,.em_set_first_byte=&em_set_first_byte};
+  c.bindings=(gh_game_services_bindings){.assets=&assets,.loop=&loop,.init=init,.stage=stage,.children=&children,.save=save,.rate=&rate,.work=&work,.threads=threads,.id=id,.id_global=&id_global,.runtime=&runtime,.font=&font,.menu=&menu,.core_bin=core,.core_bin_size=core_bytes,.language=&bundle,.sound_control=&c.sound_control,.movie_pool=movie_pool,.audio_registry=c.audio,.em_set_first_byte=&em_set_first_byte,.sound_scene=&c.sound_scene};
   c.gate=(gh_game_gate){.work=&work,.dvd=&dvd,.threads=threads,.game_state=loop.game_state};int32_t slot;
   CHECK(gh_task_threads_start(threads,0,main_task,&c,0,&slot)==GH_THREAD_OK&&slot==0);
   CHECK(gh_task_threads_start(threads,2,assets_task,&c,0,&slot)==GH_THREAD_OK&&slot==2);
-  unsigned visits=0;while((!c.main_returned||!c.assets_returned)&&visits<200){CHECK(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK);CHECK(gh_dvd_pump(&dvd)==GH_DVD_OK);visits++;}
+  unsigned visits=0;while((!c.main_returned||!c.assets_returned)&&visits<200){CHECK(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK);CHECK(gh_dvd_pump(&dvd)==GH_DVD_OK);if(c.sound_scene.startup_bound)CHECK(!gh_sound_scene_tick_002caf28(&c.sound_scene,&work,children));visits++;}
   CHECK(c.main_returned&&c.assets_returned&&c.main_result==GH_GAME_UNAVAILABLE&&c.assets_result==GH_GAME_OK);
   for(unsigned i=0;i<4;i++)CHECK(c.calls[i]==1);CHECK(c.services&&loop.game_state[0]==3&&rate==.5f);
   gh_game_services_snapshot snapshot;gh_game_services_inspect(c.services,&snapshot);
-  CHECK(snapshot.frontier==0x2d6f40&&snapshot.cockpit_ready&&snapshot.id_entries==405&&snapshot.id_runs==39&&!snapshot.scenario_active&&snapshot.room_loaded&&snapshot.room_pools_ready);
+  CHECK(snapshot.frontier==0x2bf8f8&&snapshot.cockpit_ready&&snapshot.id_entries==405&&snapshot.id_runs==39&&!snapshot.scenario_active&&snapshot.room_loaded&&snapshot.room_pools_ready);
   gh_game_services_scene_view scene;CHECK(gh_game_services_get_scene_view(c.services,&scene)==GH_SERVICES_OK);
   CHECK(scene.root->assets==&assets&&scene.root->init==init&&scene.root->children==&children&&scene.root->loop==&loop);
   CHECK(scene.scenario->records!=records&&scene.scenario->count==16&&scene.scenario_threads!=threads&&scene.scenario_bytes[0x14]==0xa5);
   CHECK(!em_set_first_byte&&scene.module->bound&&scene.module->hook4.kind==GH_SCENE_HOOK_ABSENT&&scene.module->hook8.kind==GH_SCENE_HOOK_UNRESOLVED);
+  CHECK(scene.title_player->ready&&scene.title_player->view.alias_f0==scene.title_player->view.bytes+0xb0&&scene.scene_tables->actors_ready&&!scene.collision_solids->unit_head);
+  CHECK(scene.world_light->ready&&scene.model_packets->packet_count3c==0&&scene.sound_scene==&c.sound_scene);
   CHECK(scene.effects->ready&&scene.filters->ready&&scene.effects->resources[0].kind==0);
   CHECK(scene.sound_scene->ready&&scene.sound_scene->registry==c.audio&&scene.collision_pairs->records.pointer&&scene.collision_pairs->count==400);
   CHECK(scene.room_pack->loaded&&scene.room_pack->file_bytes==25568&&scene.pools->initialized&&scene.pl_camera->identity==&init->camera);
@@ -60,7 +63,7 @@ int main(int argc,char**argv){
   for(unsigned i=0;i<32;i++)CHECK(scene.main_records[i].kind==0xffff&&scene.main_records[i].handle==-1&&!scene.main_records[i].field);
   for(size_t i=0;i<scene.scene_buffer_a_size;i++)CHECK(!scene.scene_buffer_a[i]);for(size_t i=0;i<scene.scene_buffer_b_size;i++)CHECK(!scene.scene_buffer_b[i]);
   size_t used_before_retry=gh_heap_used(heap);void*module_pointer=scene.module->input.allocation.pointer;scene.scenario_bytes[0x14]=0x5a;
-  CHECK(gh_game_services_state3(c.services)==GH_SERVICES_FRONTIER&&gh_game_services_frontier(c.services)==0x2d6f40);
+  CHECK(gh_game_services_state3(c.services)==GH_SERVICES_FRONTIER&&gh_game_services_frontier(c.services)==0x2bf8f8);
   CHECK(gh_heap_used(heap)==used_before_retry&&scene.module->input.allocation.pointer==module_pointer&&scene.scenario_bytes[0x14]==0x5a);
   CHECK(id_global==id&&children&&(borrowed?children==original_child:1));CHECK(stage->global_slots.count==80&&stage->room_slots.count==32&&stage->skills.image&&stage->skills.count==114);
   CHECK(stage->assets==&assets&&stage->game_state==loop.game_state&&init->active_camera==&init->camera);
@@ -70,13 +73,13 @@ int main(int argc,char**argv){
   gh_id_pool_run later;int freed;CHECK(gh_id_pool_allocate_002ace48(runtime,1,777,0,&later)==GH_ID_OK);
   CHECK(gh_game_services_destroy(c.services)==GH_SERVICES_BUSY);gh_game_services_inspect(c.services,&snapshot);CHECK(snapshot.cockpit_ready&&children);
   CHECK(gh_id_pool_release_002acf30(runtime,later,777,&freed)==GH_ID_OK&&freed);
-  CHECK(gh_game_services_destroy(c.services)==GH_SERVICES_OK);c.services=NULL;
+  CHECK(gh_game_services_destroy(c.services)==GH_SERVICES_OK);c.services=NULL;CHECK(c.sound_scene.startup_bound&&!c.sound_scene.ready&&c.sound_scene.registry==c.audio);
   CHECK(id->pool_used==0&&id->job_count==0&&!stage->global_slots.configured&&!stage->room_slots.configured&&!stage->textures&&!stage->skills.image);
   CHECK(borrowed?children==original_child:children==NULL);if(children)gh_game_children_destroy(children);
   CHECK(gh_task_threads_destroy(threads)==GH_THREAD_OK&&gh_id_runtime_destroy(runtime)==GH_ID_OK);
   CHECK(gh_game_assets_release(&assets)==GH_GAME_OK&&gh_heap_used(heap)==0&&gh_heap_destroy(heap)==GH_MEM_OK);
   CHECK(gh_movie_pool_destroy(movie_pool)==GH_MOVIE_OK);gh_audio_registry_destroy(c.audio);free(init);free(stage);free(id);
-  printf("services %s child identity: true GameMain0/1/2/3,405entries39runs, assets finished %u ticks, first frontier002D6F40, all owned resources released\n",borrowed?"borrowed":"owned",visits);
+  printf("services %s child identity: true GameMain0/1/2/3,405entries39runs, assets finished %u ticks, first frontier002BF8F8, all owned resources released\n",borrowed?"borrowed":"owned",visits);
  }
  free(core);free(language);gh_disc_close(disc);puts("PASS actual GameMain/DVD/audio/assets integrated services, canonical identity, nested Scenario lifetime and safe cleanup");return 0;
 }

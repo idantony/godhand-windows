@@ -13,6 +13,7 @@
 #include "../core/sound_control.h"
 #include "../core/game_movie_pool.h"
 #include "../core/screen_fade.h"
+#include "../core/bgm_requests.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,6 +66,7 @@ typedef struct gh_startup_snapshot {
     gh_video_status movie_video;
     const gh_screen_fade *fade;
     uint64_t fade_draw_serial;
+    const gh_bgm_requests *bgm;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization

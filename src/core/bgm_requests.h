@@ -1,13 +1,16 @@
 #ifndef GH_BGM_REQUESTS_H
 #define GH_BGM_REQUESTS_H
 #include "sound_control.h"
+#include "boot.h"
 #include "../platform/memory.h"
+#include "../platform/adx_stream.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef struct gh_bgm_requests gh_bgm_requests;
 typedef enum {GH_BGM_OK,GH_BGM_ARGUMENT,GH_BGM_MEMORY,GH_BGM_NOT_READY,
- GH_BGM_BOUNDS,GH_BGM_DISC,GH_BGM_BUSY,GH_BGM_UNSUPPORTED} gh_bgm_status;
+ GH_BGM_BOUNDS,GH_BGM_DISC,GH_BGM_BUSY,GH_BGM_UNSUPPORTED,GH_BGM_NATIVE} gh_bgm_status;
+typedef enum {GH_BGM_GAIN_NATIVE_DB_REFERENCE=1} gh_bgm_gain_policy;
 typedef struct {
  uint32_t slot,event,logical_id,mode,request_flags,stream_flags;
  uint32_t rate,original_buffer_bytes;uint16_t member;
@@ -16,6 +19,7 @@ typedef struct {
  const uint8_t *original_scalars;size_t original_scalar_bytes;
  gh_sound_span afd_row,encoded; /*owned, stable untilabort/destroy*/
  uint32_t frontier;int linked,prepared;
+ gh_adx_stream_status transport; /*actualnativequeue/status,notSDKnumericstatus*/
 } gh_bgm_request_view;
 /* Borrows unique startupregistry/controller/disc/heap. Does not add another
  * soundcontroller or a second BGM table. No output device is opened here. */
@@ -27,6 +31,21 @@ gh_bgm_status gh_bgm_requests_create(gh_audio_registry *,gh_sound_control *,gh_d
  * request is NOT linked at2CC5C0, not ready/playing, and cannot complete Init.
  * Failure retains partialstate for inspection and explicitabort. */
 gh_bgm_status gh_bgm_event_set_prefix_002d15a8(gh_bgm_requests *,uint32_t event,int16_t arg3,int16_t arg4);
+/* Explicit native transport/DSP adaptation. Key comes from actualbootELF.
+ * Converts original quantized tenthdB table to nativePCM gain using a pinned
+ * binary32 nearest pow10 reference; not a claim of originalSPU2 DSP equality.
+ * Configure before requests; masterMute is player-local, before firststart. */
+gh_bgm_status gh_bgm_requests_enable_native(gh_bgm_requests *,const gh_adx_key *,int muted,gh_bgm_gain_policy);
+/* Full immediate mode5 R020event0 path, including realnativeprepare,original
+ * update andlistinsert. Doesnotstartplayback untiloriginalflagsrequest it. */
+gh_bgm_status gh_bgm_event_set_002d15a8(gh_bgm_requests *,uint32_t event,int16_t arg3,int16_t arg4);
+/* Actual existingprepared-request Start path. Missing/unprepared request's
+ * different2CC900/373298 constructor path remains preciseunsupported. */
+gh_bgm_status gh_bgm_event_start_002d1610(gh_bgm_requests *,uint32_t event,int16_t arg3,int16_t arg4);
+gh_bgm_status gh_bgm_event_stop_002d1800(gh_bgm_requests *,int preserve_mode5);
+/* Original2D0938 activeBGM update only, not the entire2CAF28 soundsystemtick.
+ * Unknownactivebranches stop at exactcallee; no discardedBGM request. */
+gh_bgm_status gh_bgm_requests_update_002d0938(gh_bgm_requests *,const gh_boot_work *);
 unsigned gh_bgm_requests_pending(const gh_bgm_requests *);
 unsigned gh_bgm_requests_active(const gh_bgm_requests *);
 uint32_t gh_bgm_requests_frontier(const gh_bgm_requests *);

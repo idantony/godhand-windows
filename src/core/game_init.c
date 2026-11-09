@@ -79,6 +79,21 @@ static gh_init_status pool_record(uint8_t *b,gh_game_damage_link **links,unsigne
  w32(b,0x4c,0);w32(b,0x34,0);b[0x49]=(uint8_t)kind;if(kind==2)w32(b,0x60,0);
  return GH_INIT_OK;
 }
+gh_init_status gh_game_object_pool_reset_001fdea8(gh_game_init_state*s){
+ gh_init_status e;if(!s)return GH_INIT_ARGUMENT;
+ for(unsigned i=0;i<160;i++){e=pool_record(s->object_pool+(size_t)i*0x60,&s->object_links[i],1);if(e)return e;}
+ for(unsigned i=0;i<256;i++){e=pool_record(s->object_pool+0x3c00+(size_t)i*0x70,&s->object_links[160+i],2);if(e)return e;}
+ s->object_pool[0xac49]=s->object_pool[0xaca9]=0;
+ for(unsigned bank=0;bank<2;bank++){
+  unsigned count=bank?512:160;
+  for(unsigned i=0;i<count;i++){
+   uint8_t*b=bank?s->records_b[i]:s->records_a[i];
+   w32(b,0x24,0);w32(b,0x28,0);w16(b,0x30,0);w32(b,0x20,0);w16(b,0x2c,(uint16_t)i);
+  }
+ }
+ return GH_INIT_OK;
+}
+
 gh_init_status gh_game_init_002a5b18(gh_game_init_state *s,gh_boot_work *work,
  uint8_t *started,float *rate,gh_core_save_view save){
  uint32_t random;gh_init_status e;uint8_t *em;
@@ -93,16 +108,7 @@ gh_init_status gh_game_init_002a5b18(gh_game_init_state *s,gh_boot_work *work,
  em[0x53e]=em[0x540]=em[0x541]=0;em[0x53f]=(uint8_t)(random%5);
  memset(em+0x560,0,0x14);memset(em+0x588,0,0x10);memset(em+0x5ac,0,8);memset(em+0x574,0,20);
  em[0x518]=0;s->side_counter[4]=0;w32(s->side_counter,8,0);w32(s->side_counter,12,0);em[0x5b5]=0;
- for(unsigned i=0;i<160;i++){e=pool_record(s->object_pool+(size_t)i*0x60,&s->object_links[i],1);if(e)return e;}
- for(unsigned i=0;i<256;i++){e=pool_record(s->object_pool+0x3c00+(size_t)i*0x70,&s->object_links[160+i],2);if(e)return e;}
- s->object_pool[0xac49]=s->object_pool[0xaca9]=0;
- for(unsigned bank=0;bank<2;bank++){
-  unsigned count=bank?512:160;
-  for(unsigned i=0;i<count;i++){
-   uint8_t *b=bank?s->records_b[i]:s->records_a[i];
-   w32(b,0x24,0);w32(b,0x28,0);w16(b,0x30,0);w32(b,0x20,0);w16(b,0x2c,(uint16_t)i);
-  }
- }
+ e=gh_game_object_pool_reset_001fdea8(s);if(e)return e;
  /* Heat reset precedes CoreSave gameInit and therefore reads persistent
   * tension upgrades, with the original cheat-side effect. All conversions
   * here are exact small integers and the resulting current/max ratio is0. */

@@ -28,6 +28,29 @@ gh_voice_status gh_sound_control_from_startup(gh_sound_control *s,gh_disc *d,con
  error=initial_word(d,0x5feeac,&candidate.flags_ac);if(error)return error;
  error=initial_word(d,0x5feeb0,&candidate.flags_b0);if(error)return error;
  error=initial_word(d,0x5fef3c,&bgm);if(error)return error;
+ /* Validate decisive actualboot instructions before applying postconstructor
+  * values that differ from ELF BSS. Constants are primarycode signatures,
+  * not a guestinstruction runtime or an invented successfulRPC reply. */
+ {static const uint32_t checks[][2]={
+  {0x2c9e88,0x0c0dd5c0},{0x2c9e8c,0x24040001},
+  {0x2c9e90,0x2402007f},{0x2c9e94,0x2403005a},
+  {0x2c9e98,0xa7a30008},{0x2c9ea4,0xa7a20000},
+  {0x2c9ea8,0xa7a20002},{0x2c9eb0,0xa7a2000a},
+  {0x2c9ec8,0x97a40002},{0x2c9ecc,0x97a20008},
+  {0x2c9ed0,0x97a3000a},{0x2c9ed8,0x87a50000},
+  {0x2c9f20,0xe6020008},{0x2c9f24,0xe6030014},
+  {0x2c9f28,0xe6000004},{0x2c9f2c,0xe6010010},
+  {0x2c9f30,0xe6020000},{0x2c9f38,0xe603000c},
+  {0x2c9f84,0x3c078000},{0x2c9fb8,0xae070050}};
+  for(unsigned i=0;i<sizeof(checks)/sizeof(checks[0]);i++){
+   uint32_t code;error=initial_word(d,checks[i][0],&code);if(error)return error;
+   if(code!=checks[i][1])return GH_VOICE_UNSUPPORTED;
+  }
+ }
+ candidate.event_mask50=0x80000000u;candidate.output_mode=1;
+ candidate.gain_bits[0]=candidate.gain_bits[1]=candidate.gain_bits[2]=0x42fe0000;
+ candidate.gain_bits[3]=candidate.gain_bits[5]=0x42b40000;
+ candidate.gain_bits[4]=0x42fe0000;
  memcpy(&candidate.bgm_state_13c,&bgm,4);candidate.initialized=1;*s=candidate;return GH_VOICE_OK;
 }
 gh_voice_status gh_sound_control_prepare_scene_002ca8c8(gh_sound_control *s)

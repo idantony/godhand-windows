@@ -143,3 +143,27 @@ supplied MT words against their actual restricted instructions. This reference
 is independent of host rounding and remains distinct from hardware/full-boot
 validation. New Fade GPU primitives are available; unknown frame surfaces remain
 explicitly unsupported.
+
+
+## Local continuation: scene setup, native ADX and direct title UI
+
+84 C modules pass85 checks with device/codec/reference opt-ins. Hidden Windows
+startup reaches002BF8F8 after native world-light defaults, model-packet reset,
+Cockpit room reset, collision/table setup and the original title-player
+constructor. Earlier boot, the rest of case3 and complete state4 remain pending.
+
+Native encrypted ADX decoding matches all6369200 stereo sampleframes against an
+independent vgmstream output. Bounded native streaming passes real muted device
+consumption, pause, loop, seek, stop and EOF checks. Original BGM request Set,
+Start and Stop execute supported actual paths; unsupported paths remain explicit.
+The original logo SFX uses its real bank/program/sample and device lifetime.
+
+A separate direct R020 Init/Move GPU fixture renders the original warning
+screen using its actual IDD. It has an explicit512x448 black reference clear;
+it does not bypass missing scene operations in production, establish final OT
+order, or demonstrate a playable game. The earlier MC first-frame hash remains
+unchanged after reusing the renderer and adding the rotated polygon backend.
+
+本地检查点：84个C模块通过85项检查，隐藏Windows主流程到达002BF8F8。原加密ADX
+逐样本验证和真实静音设备队列通过；原标题Init/Move的独立GPU验证已画出警告首屏。
+完整case3/state4、最终绘制顺序、摄像机、模型/动画、玩法和存档仍需继续，不宣称可玩。

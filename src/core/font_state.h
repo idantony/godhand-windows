@@ -14,6 +14,9 @@ typedef struct {const unsigned char *record,*data;size_t record_offset,data_offs
 gh_font_error gh_font_bind_language(gh_font_state *,const gh_bundle *);
 /* Complete original 2A4970 selector/control flow; no upload occurs there. */
 gh_font_error gh_font_initialize(gh_font_state *,const gh_bundle *,int32_t selector);
+/* Actual2A4CB0 sharedpairbinder. NULLMST/MSA preservesexisting slot exactly;
+ * immutableboundedoffsetviews replace originalin-placeguestrelocation. */
+gh_font_error gh_font_bind_pair_002a4cb0(gh_font_state *,unsigned,const gh_bundle_entry *,const gh_bundle_entry *);
 typedef struct {uint32_t packed;uint8_t low_byte,left,right,bearing;int16_t width,baseline_delta;} gh_font_glyph;
 /* Original encoded glyph high nibble selects slot, low12 selects MSA word.
  * Glyph0 has language-specific special width; rejected by this query. */

@@ -118,6 +118,7 @@ int main(int argc,char **argv)
         app.window_error=gh_window_create(&window,&app.window);
         if(app.window_error!=GH_WINDOW_OK)break;
         if(gh_mc_renderer_create(app.elf.data(),app.elf.size(),1,&app.renderer)!=GH_ID_OK)break;
+        if(gh_mc_renderer_enable_reference_polygons(app.renderer,1)!=GH_ID_OK)break;
         host_error=gh_startup_host_create_with_profile(iso,profile,1,0,64*1024*1024,&app.host);
         if(host_error!=GH_HOST_OK)break;
         host_error=gh_startup_host_set_mc_consumers(app.host,draw_mc,&app,post_mc,&app);

@@ -39,6 +39,10 @@ typedef struct gh_game_init_state {
 /* Host storage initialization, not the earlier complete PS2 boot. Existing
  * save data must separately be system-initialized or loaded by its owner. */
 void gh_game_init_state_initialize(gh_game_init_state *);
+/* Actual1FDEA8, also reached by later1FDF88. Same canonical actorpool/links
+ * andrecordbanks ascase0, without enemy/Heat/RNG resets. Clears eachdamage
+ * head BEFORE mode4, so priorlinks are dropped withouttraversal/free. */
+gh_init_status gh_game_object_pool_reset_001fdea8(gh_game_init_state *);
 /* Actual case0 task handler2A5B18; these dependencies are native concrete
  * writes/list reset/RNG/save operations, no successful empty callbacks. */
 gh_init_status gh_game_init_002a5b18(gh_game_init_state *,gh_boot_work *,

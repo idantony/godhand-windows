@@ -35,5 +35,13 @@ int main(int argc,char**argv){
   CHECK(fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==flags&&!memcmp(&identity,&before,sizeof(identity)));
   CHECK(gh_game_camera_reset_00138210(&c,&other)==GH_CAMERA_UNSUPPORTED&&c.failed_entry==0x138210&&!memcmp(c.fields,expected,sizeof(expected)));
  }
- CHECK(!fesetround(FE_TONEAREST));free(elf);puts("PASS actual camera vtable/coefficients, cold construction/reset preserve fields and identity, four host FP modes");return 0;
+ {
+  gh_game_init_state *s=calloc(1,sizeof(*s));CHECK(s);uint32_t frontier=99;
+  s->camera.mode=1;s->active_camera=&other;gh_game_camera original=s->camera;
+  CHECK(gh_game_camera_before_move_00138f98(s,&frontier)==GH_CAMERA_OK&&!frontier&&!memcmp(&s->camera,&original,sizeof(original))&&s->active_camera==&other);
+  s->camera.mode=4;CHECK(gh_game_camera_before_move_00138f98(s,&frontier)==GH_CAMERA_UNSUPPORTED&&frontier==0x138600);
+  s->camera.mode=0x80;CHECK(gh_game_camera_before_move_00138f98(s,&frontier)==GH_CAMERA_OK&&!frontier);
+  CHECK(gh_game_camera_before_move_00138f98(NULL,&frontier)==GH_CAMERA_ARGUMENT&&!frontier);free(s);
+ }
+ CHECK(!fesetround(FE_TONEAREST));free(elf);puts("PASS actual camera vtable/coefficients, reset identity, four host FP modes and canonical early-mode gate");return 0;
 }

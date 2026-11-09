@@ -23,6 +23,9 @@ void gh_game_children_destroy(gh_game_children *);
  * proven concrete initializer bodies,thenfixed footer reset. No UI/scene calls
  * are replaced with no-ops; the original nine methods only reset fields. */
 gh_child_status gh_game_children_initialize_0015fd98(gh_game_children *);
+/* Actual15FEE0: nine descendingfooterwordsEE8..F08=-1 andbyteF15=0.
+ * No virtualwidgetdispatch, IDallocation or objectreconstruction occurs. */
+gh_child_status gh_game_children_room_reset_0015fee0(gh_game_children *);
 gh_child_status gh_game_child_at(const gh_game_children *,uint32_t registry_index,gh_game_child_view *);
 /* NativeIDBase views reuse the already-recovered IDruntime implementation.
  * This module initializes but neverallocates IDentryruns; later consumers must

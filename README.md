@@ -12,8 +12,8 @@ not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 **Early development. No playable original game scene has been verified.**
 A native Windows execution now connects the original memory-card interface,
 normal exit, Clover movie and GameMain initialization. It loads the actual title
-room resources and stops explicitly at the next world-lighting initializer,
-`0x002D6F40`. It begins at startup task `0x0030D358`; earlier boot and the full
+room resources and stops explicitly at the next checkpoint operation,
+`0x002BF8F8`. It begins at startup task `0x0030D358`; earlier boot and the full
 game loop remain unfinished.
 
 ### Verified progress
@@ -37,12 +37,18 @@ game loop remain unfinished.
 - Original case0 initialization, HUD setup, room state, camera reset and room
   allocation operate on shared native owners. Asset descriptors are distinct
   from completed model/animation rendering or gameplay.
-- 64 C modules pass 66 checks with optional hardware/codec checks enabled.
+- 84 C modules pass 85 checks with hardware/codec checks and an independent
+  ADX reference WAV enabled.
   The earlier foundation also passes in an independent clean source snapshot.
   Restricted GPU pixels match separate CPU equations; the first MC frame stays
   byte-identical after renderer reuse.
 - Two RNG routines pass 20544 exact state/float-bit comparisons across 10272
   seeds against a restricted actual-instruction model, not console traces.
+
+Native encrypted title BGM decoding now matches every sample from independent
+vgmstream output. A separate direct R020 Init/Move GPU fixture renders the
+original warning screen. This fixture does not establish full scene execution
+or final OT composition order.
 
 Current boundaries: [docs/progress.json](docs/progress.json).
 Milestone history: [docs/PROGRESS.md](docs/PROGRESS.md).
@@ -126,7 +132,7 @@ mark substantial milestones.
 
 **仍处于早期开发，尚未验证可玩的原游戏场景。** 同一个 Windows 原生程序已串联
 原版存储卡界面、正常退出、Clover 片头和 GameMain 初始化，加载真实标题房间资源后，
-明确停在下一处世界光照初始化入口 `0x002D6F40`。执行从原启动任务 `0x0030D358`
+明确停在下一处检查点操作入口 `0x002BF8F8`。执行从原启动任务 `0x0030D358`
 开始，前置启动和完整游戏主循环仍未完成。
 
 ### 已验证的进展
@@ -144,7 +150,7 @@ mark substantial milestones.
   音频设备播放。数值参考策略有明确范围，不声称完整音频或 PS2 实机位精确。
 - 原系统、HUD、房间、相机和内存池初始化共用真实原生状态；描述解析不代表模型、
   动画、战斗或游戏场景已经完成。
-- 启用硬件/解码器检查后，64 个 C 模块通过 66 项检查；基础模块另经独立干净源码副本
+- 启用硬件/解码器检查后，84 个 C 模块通过 85 项检查（包含独立 ADX 参考 WAV）；基础模块另经独立干净源码副本
   验证。受限 GPU 像素与独立 CPU 方程一致，复用渲染器后首帧字节保持一致。
 - 两个 RNG 对 10272 个种子完成 20544 次精确比较，依据实际指令的受限模型验证；
   这不是 PS2 实机验证。上游匹配比例也不是本项目的移植完成比例。
@@ -159,13 +165,16 @@ Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音
 目录不存在时走真实无卡分支，打开时不会自动创建。默认键位为 Z=Cross、X=Circle、
 方向键、Enter=Start、Escape=Triangle；确认/取消仍由原版 ELF 映射表决定。
 
-当前以退出码 **4** 报告标题模块尚未实现，并非游戏完成。独立 `startup-qa` 目标才
+当前以退出码 **4** 报告下一个尚未接通的原始调用，并非游戏完成。独立 `startup-qa` 目标才
 包含合成输入选项 `--qa-confirm`；生产目标没有该选项。真实图形、音频或视频消费失败
 会明确停止，不用空回调假装完成。
 
 有用文件保存在 `E:\godhand_windows`，构建、缓存及大日志保存在
 `G:\middle_thing\godhand_windows`。原镜像始终只读，私有恢复证据和工具不进 Git。
 独立 [PS2 移植 skill](skill/ps2-source-port/SKILL.md) 随开发维护。
+
+原加密标题 BGM 已逐样本匹配独立 vgmstream 输出；单独的 R020 Init/Move GPU 验证
+能绘制原始警告首屏。这仍不代表完整场景流程或最终 OT 合成顺序已验证。
 
 接下来继续原 r020 标题逻辑和实际图形调用、场景/模型/动画、完整帧流程、战斗、切换与
 存档验收。本地提交保留回退，大节点才推送。当前状态见 [进展数据](docs/progress.json)。

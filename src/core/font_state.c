@@ -28,6 +28,9 @@ static gh_font_error bind(gh_font_slot *dst,const gh_bundle_entry *mst,const gh_
  }
  *dst=s;return GH_FONT_OK;
 }
+gh_font_error gh_font_bind_pair_002a4cb0(gh_font_state*s,unsigned slot,const gh_bundle_entry*mst,const gh_bundle_entry*msa){
+ if(!s||slot>=5)return GH_FONT_ARGUMENT;if(!mst||!msa||!mst->bytes||!msa->bytes)return GH_FONT_OK;return bind(&s->slots[slot],mst,msa);
+}
 gh_font_error gh_font_bind_language(gh_font_state *state,const gh_bundle *language){
  static const unsigned slots[]={0,1,4};unsigned i;gh_font_state next;
  if(!state||!language)return GH_FONT_ARGUMENT;next=*state;

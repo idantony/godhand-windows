@@ -14,7 +14,7 @@ DEFAULT_SCRATCH = Path(r"G:\middle_thing\godhand_windows")
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target", choices=("mc-frame", "native", "startup-qa"), default="mc-frame")
+    parser.add_argument("--target", choices=("mc-frame", "title-ui", "native", "startup-qa"), default="mc-frame")
     parser.add_argument("--scratch", type=Path, default=DEFAULT_SCRATCH)
     parser.add_argument("--compiler", type=Path, default=PROJECT / ".tools/zig-x86_64-windows-0.17.1/zig.exe")
     parser.add_argument("--sdk-lib", type=Path, help="Windows SDK um/x64 import-library directory")
@@ -42,7 +42,8 @@ def main():
     tree = ast.parse((PROJECT / "tools/build-native.py").read_text(encoding="utf-8"))
     modules = next(ast.literal_eval(n.value) for n in ast.walk(tree) if isinstance(n, ast.Assign)
                    and any(isinstance(t, ast.Name) and t.id == "modules" for t in n.targets))
-    cpp_sources = ["src/platform/ui_text_renderer.cpp", "src/platform/ui_sprite_renderer.cpp", "src/platform/mc_renderer.cpp"]
+    cpp_sources = ["src/platform/ui_text_renderer.cpp", "src/platform/ui_sprite_renderer.cpp",
+                   "src/platform/ui_polygon_renderer.cpp", "src/platform/mc_renderer.cpp"]
     if args.target in ("native", "startup-qa"):
         for source in ("src/platform/native_input.c", "src/platform/video_player.c", "src/platform/audio_events.c",
                        "src/core/se_voice.c", "src/core/sound_control.c", "src/core/mc_exit.c",
@@ -50,6 +51,8 @@ def main():
             if source not in {s for _, s in modules}:
                 modules.append((Path(source).stem, source))
         cpp_sources += ["src/platform/window_host.cpp", "src/platform/ui_fade_renderer.cpp", "src/main.cpp"]
+    elif args.target == "title-ui":
+        cpp_sources += ["tools/probe-title-ui.cpp"]
     else:
         cpp_sources += ["tools/probe-mc-frame.cpp"]
     inputs = {"tools/build-native.py", "tools/build-windows.py", *cpp_sources, *(s for _, s in modules)}
@@ -82,7 +85,7 @@ def main():
         obj = build / (name + ".o")
         run("compile-" + name, [compiler, "cc", "-std=c11", *flags, "-c", source, "-o", obj])
         objects.append(obj)
-    exe = build / {"native": "godhand-windows.exe", "startup-qa": "probe-native-startup.exe", "mc-frame": "probe-mc-frame.exe"}[args.target]
+    exe = build / {"native": "godhand-windows.exe", "startup-qa": "probe-native-startup.exe", "mc-frame": "probe-mc-frame.exe", "title-ui": "probe-title-ui.exe"}[args.target]
     if args.target == "startup-qa":
         flags.append("-DGH_NATIVE_STARTUP_QA=1")
     run("link", [compiler, "c++", "-std=c++17", *flags, *objects, *cpp_sources,

@@ -24,6 +24,8 @@ int main(int argc,char **argv){
  CHECK(gh_game_children_create(&room_jump,&s)==GH_CHILD_OK && gh_game_children_room_jump(s)==&room_jump);
  CHECK(gh_game_children_manager_view(s,&bytes,&size)==GH_CHILD_OK && size>=0xf16);
  CHECK(gh_game_child_at(s,0,&child)==GH_CHILD_BOUNDS);
+ uint8_t prior[0xf18];memcpy(prior,bytes,sizeof(prior));CHECK(gh_game_children_room_reset_0015fee0(s)==GH_CHILD_OK);
+ for(size_t at=0;at<sizeof(prior);at++){int changed=(at>=0xee8&&at<0xf0c)||at==0xf15;CHECK(changed?bytes[at]==(at==0xf15?0:255):bytes[at]==prior[at]);}
  CHECK(u32(bytes+0x580+12)==0x3f800000 && u32(bytes+0x830+12)==0x3f800000);
  /* Simulate selected mutable prior-state fields, never the vtableidentity. */
  {static const unsigned offsets[]={0x60,0x310,0x620,0x730,0x880,0x9c0,0xba0,0xc40,0xae0};

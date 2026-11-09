@@ -10,6 +10,8 @@
 #include "../core/game_stage.h"
 #include "../core/game_children.h"
 #include "../core/frame_state.h"
+#include "../core/sound_scene_tick.h"
+#include "../core/game_event.h"
 #include "../core/mc_control_flow.h"
 #include "../core/mc_exit.h"
 #include "../core/movie_task.h"
@@ -90,6 +92,9 @@ struct gh_startup_host {
     gh_host_fade_consumer fade_consumer;
     void *fade_context;
     uint64_t fade_draw_serial;
+    gh_bgm_requests *bgm;
+    gh_sound_scene sound_scene;
+    gh_game_event event;
 };
 static int register_task(void *,uint32_t,int32_t);
 static void movie_entry(void *,int32_t);
@@ -101,6 +106,23 @@ static int entry_frontier(gh_startup_host *h,uint32_t address,const char *module
 {h->unavailable_entry=address;h->frontier_module=module;return failure(h,GH_HOST_ENTRY_UNAVAILABLE,detail);}
 static char *copy_string(const char *s)
 {size_t n=strlen(s)+1;char *p=malloc(n);if(p)memcpy(p,s,n);return p;}
+static int initialize_native_bgm(gh_startup_host *h)
+{
+    gh_adx_key key;gh_adx_error decoded;gh_bgm_status status;
+    uint64_t bytes=gh_disc_boot_elf_size(h->disc);void *elf;
+    if(h->bgm)return failure(h,GH_HOST_AUDIO,GH_BGM_BUSY);
+    if(!bytes||bytes>SIZE_MAX)return failure(h,GH_HOST_DISC,GH_ADX_BOUNDS);
+    elf=malloc((size_t)bytes);if(!elf)return failure(h,GH_HOST_MEMORY,GH_ADX_MEMORY);
+    if(gh_disc_read_boot_elf(h->disc,0,elf,(size_t)bytes)!=GH_DISC_OK){free(elf);return failure(h,GH_HOST_DISC,GH_ADX_BOUNDS);}
+    decoded=gh_adx_key_from_elf(elf,(size_t)bytes,&key);
+    gh_game_event_status event_status=gh_game_event_from_elf(&h->event,elf,(size_t)bytes);
+    free(elf);
+    if(decoded)return failure(h,GH_HOST_AUDIO,decoded);
+    if(event_status)return failure(h,GH_HOST_ASSET,event_status);
+    status=gh_bgm_requests_create(h->audio,&h->sound_control,h->disc,h->heap,&h->bgm);
+    if(!status)status=gh_bgm_requests_enable_native(h->bgm,&key,h->continuation.muted,GH_BGM_GAIN_NATIVE_DB_REFERENCE);
+    return status?failure(h,GH_HOST_AUDIO,status):0;
+}
 static int sound_startup(void *context)
 {
     gh_startup_host *h=context;
@@ -111,6 +133,10 @@ static int sound_startup(void *context)
     gh_audio_status e=gh_audio_startup_load(h->audio,h->disc);
     if(e)return failure(h,GH_HOST_AUDIO,(int)e);
     if(!h->sound_control.initialized){gh_voice_status se=gh_sound_control_from_startup(&h->sound_control,h->disc,h->audio);if(se)return failure(h,GH_HOST_AUDIO,se);}
+    if(!h->sound_scene.startup_bound){
+        gh_sound_scene_status scene=gh_sound_scene_from_startup(&h->sound_scene,&h->sound_control,h->audio);
+        if(scene)return failure(h,GH_HOST_AUDIO,scene);
+    }
     if(h->continuation.enabled){
         gh_se_mix mix;int32_t native=0;gh_voice_status se;
         se=gh_audio_output_create(&h->audio_output,&native);
@@ -119,6 +145,7 @@ static int sound_startup(void *context)
         if(!se)se=gh_se_mix_boot_defaults_002c9e78(&mix,h->work.flags,h->continuation.audio_dsp_policy);
         if(!se)se=gh_se_voice_create(h->audio,h->audio_output,&mix,&h->voices);
         if(se)return failure(h,GH_HOST_AUDIO,se);
+        if(initialize_native_bgm(h))return (int)h->error;
     }
     return 0;
 }
@@ -241,6 +268,8 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.core_bin_size=h->bundles[0].bytes;b.language=&language->view;
         b.sound_control=&h->sound_control;b.movie_pool=h->movies;
         b.fade=&h->fade;b.audio_registry=h->audio;b.em_set_first_byte=&h->em_set_first_byte;
+        b.bgm_requests=h->bgm;
+        b.sound_scene=&h->sound_scene;
         e=gh_game_services_create(&b,&h->services);
         if(e)return failure(h,GH_HOST_ASSET,e);
     }
@@ -614,6 +643,25 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
     }
     e=gh_dvd_pump(&h->dvd);
     if(e) {failure(h,GH_HOST_DISC,(int)e);h->phase=GH_HOST_FAILED;}
+    if(h->phase==GH_HOST_RUNNING && h->continuation.enabled && h->sound_scene.startup_bound){
+        gh_sound_scene_status scene=gh_sound_scene_tick_002caf28(&h->sound_scene,&h->work,h->game_children);
+        if(scene){
+            if(scene==GH_SOUND_SCENE_UNSUPPORTED){
+                entry_frontier(h,h->sound_scene.frontier?h->sound_scene.frontier:0x2caf28,0,scene);h->phase=GH_HOST_FRONTIER;
+            }else{failure(h,GH_HOST_AUDIO,scene);h->phase=GH_HOST_FAILED;}
+        }
+    }
+    if(h->phase==GH_HOST_RUNNING && h->bgm){
+        /* Actual second callee of2CA470, before its later SE flush. Other
+         * sound sub-updates are not silently implemented by this subset. */
+        gh_bgm_status bgm=gh_bgm_requests_update_002d0938(h->bgm,&h->work);
+        if(bgm){
+            if(bgm==GH_BGM_UNSUPPORTED){
+                uint32_t frontier=gh_bgm_requests_frontier(h->bgm);
+                entry_frontier(h,frontier?frontier:0x2d0938,0,bgm);h->phase=GH_HOST_FRONTIER;
+            }else{failure(h,GH_HOST_AUDIO,bgm);h->phase=GH_HOST_FAILED;}
+        }
+    }
     if(h->phase==GH_HOST_RUNNING && h->voices){
         gh_voice_status audio=gh_sound_control_flush_se_002ca5d8(&h->sound_control,h->voices);
         if(audio){failure(h,GH_HOST_AUDIO,audio);h->phase=GH_HOST_FAILED;}
@@ -644,6 +692,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->sound_control=h->sound_control.initialized?&h->sound_control:0;
     out->movie_pool=h->movies;out->movie_video=h->movie_video;
     out->fade=&h->fade;out->fade_draw_serial=h->fade_draw_serial;
+    out->bgm=h->bgm;
     if(h->game_stage.textures) {
         gh_stage_texture_cursor cursor;
         if(gh_stage_texture_cursor_get(h->game_stage.textures,&cursor)==GH_STAGE_OK)
@@ -670,6 +719,9 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
         if(gh_game_services_destroy(h->services)!=GH_SERVICES_OK)return GH_HOST_ASSET;
         h->services=0;
     }
+    /* Close actual BGM endpoints before encoded source/heap/registry owners. */
+    if(h->bgm){gh_bgm_requests_destroy(h->bgm);h->bgm=0;}
+    if(gh_sound_scene_release_loading(&h->sound_scene,&h->dvd,h->heap)!=GH_SOUND_SCENE_OK)return GH_HOST_AUDIO;
     h->mc_bindings.id_runtime=h->id_runtime;
     if(h->mc.stage && h->mc.stage!=5 && gh_mc_task_abort(&h->mc,&h->mc_bindings)!=GH_MC_TASK_OK)
         return GH_HOST_ASSET;

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-09T21:27:24.766197+00:00",
+  "verified_utc": "2026-11-09T22:35:43.733365+00:00",
   "stage": "native-windows-startup-mc-movie-main-integration",
   "playable": false,
   "original_game_scene_observed_in_native_port": false,
@@ -69,13 +69,13 @@
       "next_entry_available": true,
       "current_frontier": {
         "module": "main ELF",
-        "address": "002D6F40",
+        "address": "002BF8F8",
         "operation": "Next original scene initialization callee"
       },
       "alternate_original_branch": {
         "GameMain_case0_and_parallel_asset_loader_tested": true,
         "full_native_services_tested": true,
-        "next_unavailable_entry": "0x002D6F40"
+        "next_unavailable_entry": "0x002BF8F8"
       },
       "earlier_boot_and_complete_main_loop_run": false
     },
@@ -139,7 +139,7 @@
     }
   },
   "native_windows_execution": {
-    "scope": "Real hidden Windows HWND/D3D11 startup, original MC visible draw/normal exit, native Movie0 and original Main initialization",
+    "scope": "Real hidden Windows startup MC/movie/Main integration through original room initialization to checkpoint frontier",
     "hidden": true,
     "muted": true,
     "synthetic_input_fixture": true,
@@ -150,7 +150,7 @@
     "video_EOF_and_audio_done": true,
     "original_GameMain_state": 3,
     "assets_loaded": true,
-    "frontier": "002D6F40",
+    "frontier": "002BF8F8",
     "full_game_scene_or_gameplay_observed": false
   },
   "tests": {
@@ -219,7 +219,27 @@
       "game_room_module",
       "game_effects",
       "game_scene_filters",
-      "bgm_requests"
+      "bgm_requests",
+      "adx",
+      "adx_stream",
+      "sound_scene_tick",
+      "game_world_light",
+      "game_model_packets",
+      "game_collision_solids",
+      "game_scene_tables",
+      "game_title_player",
+      "game_checkpoint",
+      "game_scene_at",
+      "game_action_buttons",
+      "game_scene_spawns",
+      "game_scene_placements",
+      "game_scene_ui",
+      "game_event",
+      "id_entry_reset",
+      "id_layout_rotation",
+      "id_animation",
+      "id_texture_polygon",
+      "r020_title"
     ],
     "passed_steps": [
       "test-rng",
@@ -287,7 +307,26 @@
       "test-game-effects",
       "test-game-scene-filters",
       "test-bgm-requests",
-      "test-title-texture"
+      "test-title-texture",
+      "test-adx",
+      "test-adx-stream",
+      "test-sound-scene-tick",
+      "test-game-world-light",
+      "test-game-model-packets",
+      "test-game-collision-solids",
+      "test-game-scene-tables",
+      "test-game-title-player",
+      "test-game-checkpoint",
+      "test-game-scene-at",
+      "test-game-action-buttons",
+      "test-game-scene-spawns",
+      "test-game-scene-placements",
+      "test-game-scene-ui",
+      "test-game-event",
+      "test-id-entry-reset",
+      "test-id-layout-rotation",
+      "test-id-animation",
+      "test-r020-title"
     ],
     "rng_differential": {
       "distinct_seeds": 10272,

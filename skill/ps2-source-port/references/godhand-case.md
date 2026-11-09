@@ -127,3 +127,40 @@ advance consumes two words before tasks, sharing GameInit's MT owner. Actual
 31CEB8 seeds MT withD8A9523D and LCG66B; using MT's uninitialized fallback5489
 as the game's observed boot seed was incomplete. The developer host still
 does not claim all intervening boot/constructor behavior or hardware cadence.
+
+Work+5F4 is the original GetPlayer identity (2DB6B0/31C4E0), not a clock. The
+first-room Cockpit reset precedes player creation and sees NULL. Later nonzero
+tokens need the canonical typed actor owner; never treat them as time or cast
+32-bit guest data into a host pointer. Some early provisional notes/tests called
+this a clock; later primary call/store evidence rejected that interpretation.
+
+Sound-scene ratios60/74/88 and related fields really remain BSS zero through
+2C9F58. Its2CA220 call has no cSnd argument and performs ADX platform setup,
+not initialization of those arrays. Bind one early native owner at startup and
+run real2CAF28 updates before2D0938 BGM and later SE flush; services must borrow
+that owner rather than construct a fresh room-local copy.
+
+
+Two explicit native memory profiles are now required for observed original
+uninitialized inputs. They are documented adaptations, not PS2 captures:
+
+- ID paths 002AC6E0/002AC878 read an unwritten cumulative-distance stack slot.
+  Strict APIs retain the frontier. The opt-in animation profile supplies a
+  zero distance origin; a supplied nonzero origin must actually affect output.
+- R020 title player constructor 00107E40 does not write vitality at +54A.
+  Strict allocation leaves this unknown and checkpoint stops at 001F9BEC.
+  ZERO_REFERENCE supplies allocation bytes before the unchanged constructor;
+  original checkpoint clamp turns HP0 into HP1. PROVIDED_BYTES preserves a
+  caller's concrete memory image. Never manufacture normal gameplay HP100.
+
+The encrypted ADX decoder derives the actual key through the user's ELF
+callsite/string/prime table. Full title PCM matches independent vgmstream;
+the native waveOut provider owns bounded buffers, actual completion, pause,
+seek, stop and looping. This is a native codec/platform boundary, not an
+external decoder process or a complete SPU2 equivalence claim. BGM Set prepares
+the stream; it must wait for the original Start request before playing.
+
+Immediate ID consumer submission order is not yet proof of final GS display
+order. Final OT insertion/traversal can change composition. Keep the palette
+and submission evidence, audit 0031A338/0014FE78/0014FF60/0015FBA8, and do not
+reorder or brighten the MC window based on appearance alone.

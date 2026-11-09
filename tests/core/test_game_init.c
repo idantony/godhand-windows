@@ -72,5 +72,16 @@ int main(void){
   CHECK(s->active_camera==&prior && s->camera.previous_mode==9 && s->camera.mode==(int32_t)mode);
  }
  {gh_core_save_view short_view={record,GH_CORE_SAVE_BYTES-1};CHECK(gh_core_save_game_init(short_view,&work)!=GH_INIT_OK);}
+ /* Later1FDF88 uses the exact same canonical pool without replaying case0. */
+ CHECK(gh_game_object_pool_reset_001fdea8(NULL)==GH_INIT_ARGUMENT);
+ memset(s,0xa5,sizeof(*s));gh_game_init_state *snapshot=malloc(sizeof(*snapshot));CHECK(snapshot);
+ uint32_t retained_target=0x12345678;gh_game_damage_link retained_link={.target_mask=&retained_target};
+ for(unsigned i=0;i<416;i++)s->object_links[i]=&retained_link;memcpy(snapshot,s,sizeof(*s));
+ CHECK(gh_game_object_pool_reset_001fdea8(s)==GH_INIT_OK&&retained_target==0x12345678);
+ for(unsigned i=0;i<416;i++)CHECK(!s->object_links[i]);
+ CHECK(!memcmp(s->enemies,snapshot->enemies,sizeof(s->enemies))&&!memcmp(s->heat,snapshot->heat,sizeof(s->heat))&&!memcmp(&s->random,&snapshot->random,sizeof(s->random))&&!memcmp(&s->camera,&snapshot->camera,sizeof(s->camera)));
+ CHECK(s->object_pool[0x48]==4&&s->object_pool[0x49]==1&&s->object_pool[0x3c48]==4&&s->object_pool[0x3c49]==2&&s->object_pool[0x1c]==0xa5);
+ for(unsigned i=0;i<160;i++)CHECK(r16(s->records_a[i],0x2c)==i&&s->records_a[i][0x2e]==0xa5);
+ for(unsigned i=0;i<512;i++)CHECK(r16(s->records_b[i],0x2c)==i&&s->records_b[i][0x2e]==0xa5);free(snapshot);
  free(s);puts("PASS actual case0 manager fields, pool counts/handles, MT vectors and persistent CoreSave reset branches");return 0;
 }

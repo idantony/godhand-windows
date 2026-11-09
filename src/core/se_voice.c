@@ -5,8 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #define NONE 255
-struct voice {gh_se_voice_info info;gh_adpcm_pcm pcm;uint32_t age;int next;uint8_t used,priority;};
-struct gh_se_voice_engine {const gh_audio_registry *registry;gh_audio_output *output;gh_se_mix mix;struct voice voices[64];int channels[5],head;uint32_t serial,frontier;};
+struct voice {gh_se_voice_info info;gh_adpcm_pcm pcm;uint32_t age,ee_age;int next;uint8_t used,priority,group_first,group_count,replace_equal;};
+struct gh_se_voice_engine {const gh_audio_registry *registry;gh_audio_output *output;gh_se_mix mix;struct voice voices[64];int channels[51],head;uint32_t serial,frontier;const void *origin_seh;size_t origin_seh_size;uint8_t origin_scene_bound;};
 static unsigned h(const uint8_t *p){return (unsigned)p[0]|(unsigned)p[1]<<8;}
 static uint32_t w(const uint8_t *p){return (uint32_t)h(p)|(uint32_t)h(p+2)<<16;}
 static int32_t floor_shift(int64_t n,unsigned shift){int64_t d=INT64_C(1)<<shift;return (int32_t)(n>=0?n/d:-((-n+d-1)/d));}
@@ -20,7 +20,7 @@ static void drop(gh_se_voice_engine *s,int i,int stop)
 {
  struct voice *v=s->voices+i;
  if(v->info.native_voice && stop)(void)gh_audio_output_stop(s->output,v->info.native_voice);
- if(v->info.channel<5 && s->channels[v->info.channel]==i)s->channels[v->info.channel]=-1;
+ if(v->info.channel<51 && s->channels[v->info.channel]==i)s->channels[v->info.channel]=-1;
  int *link=&s->head;while(*link!=-1){if(*link==i){*link=v->next;break;}link=&s->voices[*link].next;}
  gh_audio_pcm_release(&v->pcm);v->used=0;
 }
@@ -49,19 +49,32 @@ gh_voice_status gh_se_voice_create(const gh_audio_registry *r,gh_audio_output *o
 {
  gh_se_voice_engine *s;if(!r || !output || !mix || !out || mix->se_level_q8>0x7f00 || mix->output_mode>1)return GH_VOICE_ARGUMENT;
  if(mix->dsp_policy!=GH_SE_DSP_NATIVE_LINEAR_REFERENCE)return GH_VOICE_UNSUPPORTED;
- s=calloc(1,sizeof(*s));if(!s)return GH_VOICE_MEMORY;s->registry=r;s->output=output;s->mix=*mix;s->head=-1;for(unsigned i=0;i<5;++i)s->channels[i]=-1;*out=s;return GH_VOICE_OK;
+ s=calloc(1,sizeof(*s));if(!s)return GH_VOICE_MEMORY;s->registry=r;s->output=output;s->mix=*mix;s->head=-1;for(unsigned i=0;i<51;++i)s->channels[i]=-1;*out=s;return GH_VOICE_OK;
+}
+gh_voice_status gh_se_voice_bind_origin_seh(gh_se_voice_engine *s,const void *bytes,size_t size)
+{
+ if(!s || (!bytes && size))return GH_VOICE_ARGUMENT;
+ s->origin_seh=bytes;s->origin_seh_size=size;s->origin_scene_bound=1;return GH_VOICE_OK;
 }
 void gh_se_voice_destroy(gh_se_voice_engine *s){if(s){for(int i=0;i<64;++i)if(s->voices[i].used)drop(s,i,1);free(s);}}
 gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *s,int16_t bank,int16_t program,int16_t arg3,int16_t arg4,uint32_t flags,int32_t delay,uint32_t *handle)
 {
  uint8_t p[48];gh_sound_span descriptor,tail;gh_voice_status result;unsigned i,slot,rate,level;struct voice candidate={0};
  if(!s || !handle)return GH_VOICE_ARGUMENT;*handle=0;s->frontier=0;
- if(bank || (program!=0x15e && program!=0x160 && program!=0x161) || arg3!=-1 || arg4!=-1 || flags || delay)return unsupported(s,0x2cb8a0);
+ if(bank || (program!=0x2d && program!=0x15e && program!=0x160 && program!=0x161) || arg3!=-1 || arg4!=-1 || flags || delay)return unsupported(s,0x2cb8a0);
  if(s->mix.system_flags&0x08000040)return unsupported(s,0x2ce588);
  if(gh_audio_get_program(s->registry,bank,program,0,p)!=GH_AUDIO_OK)return unsupported(s,0x374cb8);
- /* Audited simple MC descriptors: no random variant, spatial binding, sequence,
-  * fade or nonzero pitch range. Unknown changes fail before claiming a voice. */
- if(p[6] || p[7]!=4 || p[8]!=120 || p[9] || h(p+0xe)!=0x23 || h(p+0x10)!=h(p+0x12) || h(p+0x14)!=64 || h(p+0x16)!=90 || w(p+0x18) || h(p+0x1c) || h(p+0x1e)!=255 || w(p+0x20) || w(p+0x24) || h(p+0x28)!=65535 || h(p+0x2a) || w(p+0x2c))return unsupported(s,0x2cdff0);
+ /* Exact audited subsets; +21 controls random variants, +22 duplicate age
+  * window. +09 is origin/output selection, not variant count. */
+ if(program==0x2d){
+  if(p[6]!=15 || p[7]!=1 || p[8]!=104 || p[9]!=2 || h(p+0xe)!=0x21 || w(p+0x20)!=0x00030005 || h(p+0x10)!=90)return unsupported(s,0x2cdff0);
+  if(!s->origin_scene_bound || s->origin_seh || s->origin_seh_size)return unsupported(s,0x2cae10);
+  /* 2CBF78 mode2 selects the youngest matching EE voice whose update age
+   * is <=descriptor+22. Equal origin positions/delay reject even pending.
+   * Once all same-program ages exceed3, another request is permitted. */
+  for(int j=s->head;j!=-1;j=s->voices[j].next)if(s->voices[j].info.program==program && (s->voices[j].ee_age<=p[0x22] || s->voices[j].ee_age>=UINT32_C(0x80000000)))return GH_VOICE_OK;
+ }else if(p[6] || p[7]!=4 || p[8]!=120 || p[9] || h(p+0xe)!=0x23 || w(p+0x20))return unsupported(s,0x2cdff0);
+ if(h(p+0x10)!=h(p+0x12) || h(p+0x14)!=64 || h(p+0x16)!=90 || w(p+0x18) || h(p+0x1c) || h(p+0x1e)!=255 || w(p+0x24) || h(p+0x28)!=65535 || h(p+0x2a) || w(p+0x2c))return unsupported(s,0x2cdff0);
  for(i=0;i<64 && s->voices[i].used;++i){}if(i==64)return GH_VOICE_OK;
  slot=h(p+4);if(gh_audio_sample_at(s->registry,bank,slot,&descriptor,&tail)!=GH_AUDIO_OK)return unsupported(s,0x35fc);
  if(descriptor.size!=16 || h(descriptor.data+8)!=0x80ff || h(descriptor.data+10)!=0x5fc0 || w(descriptor.data+12))return unsupported(s,0x35fc);
@@ -73,27 +86,35 @@ gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *s,int16_t bank,in
  level=(unsigned)((uint64_t)level*32767/0x7f00)/2;
  candidate.info.level_q14=(uint16_t)level;candidate.info.rate=rate;candidate.info.sample_slot=slot;candidate.info.frames=(uint32_t)candidate.pcm.frames;
  candidate.info.adsr1=0x80ff;candidate.info.adsr2=0x5fc0;candidate.info.program=program;candidate.info.pending=1;candidate.info.channel=NONE;
- if(!++s->serial)++s->serial;candidate.info.original_handle=s->serial;candidate.next=s->head;candidate.used=1;candidate.priority=p[8];s->voices[i]=candidate;s->head=(int)i;*handle=s->serial;return GH_VOICE_OK;
+ if(!++s->serial)++s->serial;candidate.info.original_handle=s->serial;candidate.next=s->head;candidate.used=1;candidate.priority=p[8];candidate.group_first=p[6];candidate.group_count=p[7]+1;candidate.replace_equal=(p[0xe]&0x20)!=0;s->voices[i]=candidate;s->head=(int)i;*handle=s->serial;return GH_VOICE_OK;
 }
 gh_voice_status gh_se_voice_update(gh_se_voice_engine *s)
 {
  int i;unsigned issued=0;if(!s)return GH_VOICE_ARGUMENT;s->frontier=0;i=s->head;
  /* 375380 ages existing links before37BE98 consumes this frame's queue.
   * Newly constructed37C160 links start at0 and must stay0 this visit. */
- for(unsigned c=0;c<5;++c)if(s->channels[c]!=-1){struct voice *old=s->voices+s->channels[c];if(old->age!=UINT32_MAX)++old->age;}
+ for(unsigned c=0;c<51;++c)if(s->channels[c]!=-1){struct voice *old=s->voices+s->channels[c];if(old->age!=UINT32_MAX)++old->age;}
  while(i!=-1){struct voice *v=s->voices+i;int next=v->next;
   if(!v->used){i=next;continue;}
   if(v->info.pending){
    /* Original shared SDE queue has48 entries. Overflowed EE voices observe
     * no SDE handle on the next update; don't invent extra queue capacity. */
    if(issued>=48){v->info.pending=0;i=next;continue;}++issued;
-   unsigned channel;for(channel=0;channel<5 && s->channels[channel]!=-1;++channel){}
-   if(channel==5){unsigned picked=0;uint32_t age=0;for(unsigned c=0;c<5;++c){struct voice *old=s->voices+s->channels[c];if(age<=old->age){age=old->age;picked=c;}}channel=picked;drop(s,s->channels[channel],1);}
+   unsigned first=v->group_first,end=first+v->group_count,channel;
+   for(channel=first;channel<end && s->channels[channel]!=-1;++channel){}
+   if(channel==end){
+    unsigned minimum=255,picked=first;uint32_t age=0;
+    for(unsigned c=first;c<end;++c){struct voice *old=s->voices+s->channels[c];if(old->priority<minimum)minimum=old->priority;}
+    if(v->priority<minimum || (v->priority==minimum && !v->replace_equal)){v->info.pending=0;++v->ee_age;i=next;continue;}
+    for(unsigned c=first;c<end;++c){struct voice *old=s->voices+s->channels[c];if(old->priority==minimum && age<=old->age){age=old->age;picked=c;}}
+    channel=picked;drop(s,s->channels[channel],1);
+   }
    gh_voice_status error=gh_audio_output_play(s->output,&v->pcm,48000,(float)v->info.level_q14/16384.0f,(float)v->info.level_q14/16384.0f,&v->info.native_voice);
    if(error){s->frontier=0x374df8;return error;}
    gh_audio_pcm_release(&v->pcm);v->info.pending=0;v->info.channel=(uint8_t)channel;s->channels[channel]=i;
   }else if(!v->info.native_voice)drop(s,i,0);
   else {int active;uint64_t played;gh_voice_status error=gh_audio_output_active(s->output,v->info.native_voice,&active,&played);if(error==GH_VOICE_BOUNDS)active=0;else if(error)return error;if(!active)drop(s,i,1);}
+  if(v->used)++v->ee_age; /* actual EE+24 ADDIU/SW, modulo2^32 */
   i=next;
  }
  return GH_VOICE_OK;

@@ -11,6 +11,9 @@ int main(int argc,char**argv){gh_disc*d;gh_audio_registry*r;gh_sound_control con
  CHECK(gh_sound_scene_from_startup(&scene,&control,r)==GH_SOUND_SCENE_ARGUMENT);
  CHECK(gh_audio_startup_load(r,d)==GH_AUDIO_OK&&gh_sound_control_from_startup(&control,d,r)==GH_VOICE_OK);
  CHECK(gh_sound_scene_from_startup(&scene,&control,r)==GH_SOUND_SCENE_OK&&scene.sound_group130==0);
+ CHECK(!scene.ready&&!scene.fade_ratio_bits&&!scene.default_ratio_bits);
+ CHECK(!scene.current_bank118&&!scene.current_request11c&&!scene.current_weight120);
+ for(unsigned j=0;j<5;j++)CHECK(!scene.ratios60[j]&&!scene.ratios74[j]&&!scene.ratios88[j]);
  CHECK(gh_sound_scene_from_startup(&scene,&control,r)==GH_SOUND_SCENE_BUSY);
  uint8_t*pack=read_file(d,"st0/r020.dat",&n);CHECK(gh_bundle_open(pack,n,&bundle)==GH_BUNDLE_OK);
  CHECK(gh_heap_create(2*1024*1024,&h)==GH_MEM_OK);gh_dvd_jobs_init(&dvd,d);CHECK(gh_task_threads_create(&m,&t)==GH_THREAD_OK);

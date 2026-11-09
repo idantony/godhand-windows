@@ -46,7 +46,10 @@ gh_child_status gh_game_children_initialize_0015fd98(gh_game_children *s){
  }
  for(unsigned i=0;i<9;i++){initialize_child(s->bytes+s->pairs[i].original_offset,s->pairs[i].kind);s->pairs[i].initialized=1;}
  w16(s->bytes,0x50,0);w32(s->bytes,0x48,0xffffffffu);w32(s->bytes,0xed0,0);s->bytes[0xed4]=0;
- for(unsigned i=0;i<9;i++)w32(s->bytes,0xf08-i*4,0xffffffffu);s->bytes[0xf15]=0;return GH_CHILD_OK;
+ return gh_game_children_room_reset_0015fee0(s);
+}
+gh_child_status gh_game_children_room_reset_0015fee0(gh_game_children*s){
+ if(!s)return GH_CHILD_ARGUMENT;for(unsigned i=0;i<9;i++)w32(s->bytes,0xf08-i*4,0xffffffffu);s->bytes[0xf15]=0;return GH_CHILD_OK;
 }
 gh_child_status gh_game_child_at(const gh_game_children *s,uint32_t n,gh_game_child_view *out){
  if(!s || !out)return GH_CHILD_ARGUMENT;if(n>=s->count)return GH_CHILD_BOUNDS;*out=s->pairs[n];return GH_CHILD_OK;

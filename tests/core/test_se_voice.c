@@ -53,6 +53,38 @@ int main(int argc,char **argv){
  C(gh_se_voice_create(registry,output,&defaults,&engine)==GH_VOICE_OK);
  C(gh_se_voice_request_origin(engine,0,0x160,-1,-1,0,0,&unknown)==GH_VOICE_OK && unknown);
  C(gh_se_voice_query(engine,unknown,&info)==GH_VOICE_OK && info.level_q14==11610);
+ uint32_t mc_handle=unknown;
+ /* Actual R020 logo program2D: verified absent canonicalSEH is explicit;
+  * nonempty/unknown environment cannot silently become a successful event. */
+ C(gh_se_voice_request_origin(engine,0,0x2d,-1,-1,0,0,&unknown)==GH_VOICE_UNSUPPORTED && gh_se_voice_frontier(engine)==0x2cae10);
+ const uint8_t unknown_seh=0;C(gh_se_voice_bind_origin_seh(engine,&unknown_seh,1)==GH_VOICE_OK);
+ C(gh_se_voice_request_origin(engine,0,0x2d,-1,-1,0,0,&unknown)==GH_VOICE_UNSUPPORTED && !unknown);
+ C(gh_se_voice_bind_origin_seh(engine,0,0)==GH_VOICE_OK);
+ C(gh_se_voice_request_origin(engine,0,0x2d,-1,-1,0,0,&handle[0])==GH_VOICE_OK && handle[0]);
+ pcm(engine,handle[0],71456,UINT64_C(0xc9dde56414a0a8b8));
+ C(gh_se_voice_query(engine,handle[0],&info)==GH_VOICE_OK && info.sample_slot==34 && info.rate==18000 && info.pitch_q12==1536 && info.level_q14==8227);
+ C(gh_se_voice_request_origin(engine,0,0x2d,-1,-1,0,0,&unknown)==GH_VOICE_OK && !unknown);
+ C(gh_se_voice_update(engine)==GH_VOICE_OK);
+ C(gh_se_voice_query(engine,handle[0],&info)==GH_VOICE_OK && info.channel==15 && info.native_voice);
+ C(gh_se_voice_request_origin(engine,0,0x2d,-1,-1,0,0,&unknown)==GH_VOICE_OK && !unknown);
+ for(unsigned t=1;t<4;++t)C(gh_se_voice_update(engine)==GH_VOICE_OK);
+ C(gh_se_voice_request_origin(engine,0,0x2d,-1,-1,0,0,&handle[1])==GH_VOICE_OK && handle[1]);
+ C(gh_se_voice_update(engine)==GH_VOICE_OK);
+ C(gh_se_voice_query(engine,handle[1],&info)==GH_VOICE_OK && info.channel==16);
+ for(unsigned t=1;t<4;++t)C(gh_se_voice_update(engine)==GH_VOICE_OK);
+ C(gh_se_voice_request_origin(engine,0,0x2d,-1,-1,0,0,&handle[2])==GH_VOICE_OK && handle[2]);
+ C(gh_se_voice_update(engine)==GH_VOICE_OK);
+ C(gh_se_voice_query(engine,handle[0],&info)==GH_VOICE_BOUNDS);
+ C(gh_se_voice_query(engine,handle[1],&info)==GH_VOICE_OK && info.channel==16);
+ C(gh_se_voice_query(engine,handle[2],&info)==GH_VOICE_OK && info.channel==15);
+ /* Same real device, muted master: independent group0 voice remains active. */
+ C(gh_se_voice_query(engine,mc_handle,&info)==GH_VOICE_OK && info.channel==0);
+ Sleep(80);C(gh_se_voice_update(engine)==GH_VOICE_OK);
+ C(gh_se_voice_query(engine,handle[2],&info)==GH_VOICE_OK);int logo_active;uint64_t logo_played;
+ C(gh_audio_output_active(output,info.native_voice,&logo_active,&logo_played)==GH_VOICE_OK && logo_active && logo_played>0);
+ end=GetTickCount64()+2500;
+ do{C(gh_se_voice_update(engine)==GH_VOICE_OK);active_count=0;for(unsigned k=1;k<3;++k)if(gh_se_voice_query(engine,handle[k],&info)==GH_VOICE_OK)++active_count;if(!active_count)break;Sleep(10);}while(GetTickCount64()<end);
+ C(!active_count); /* real logo voice EOS, not a timer-acknowledged event */
  gh_se_voice_destroy(engine);gh_audio_output_destroy(output);gh_audio_registry_destroy(registry);gh_disc_close(disc);
- printf("PASS actualMC program->sample->nativePCM/ADSR->muted realXAudio2 voices; LIFO, five channels, equalpriority replacement, completion/reuse; progress%llu\n",(unsigned long long)progress);return 0;
+ printf("PASS actualMC/logo program->sample->nativePCM/ADSR->muted realXAudio2 voices; LIFO, five channels, equalpriority replacement, completion/reuse; progress%llu\n",(unsigned long long)progress);return 0;
 }

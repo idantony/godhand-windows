@@ -20,6 +20,12 @@
 #include "../core/game_collision_pairs.h"
 #include "../core/game_effects.h"
 #include "../core/game_scene_filters.h"
+#include "../core/bgm_requests.h"
+#include "../core/game_world_light.h"
+#include "../core/game_model_packets.h"
+#include "../core/game_collision_solids.h"
+#include "../core/game_scene_tables.h"
+#include "../core/game_title_player.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -37,6 +43,8 @@ typedef struct {
  gh_screen_fade *fade; /*actual747470, borrowedRootONEowner*/
  gh_audio_registry *audio_registry; /*sameactualstartup/voiceowner*/
  uint8_t *em_set_first_byte; /*canonical00586AB0fieldonly;notwholeEmconstructor*/
+ gh_bgm_requests *bgm_requests; /*RootONEoriginal16requestpool,borrowed*/
+ gh_sound_scene *sound_scene; /*RootONEearlycSndextraowner,borrowed*/
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;
@@ -55,6 +63,9 @@ typedef struct {
  gh_game_objects *objects,*room_objects;
  gh_room_module *module;gh_sound_scene *sound_scene;gh_collision_pairs *collision_pairs;
  gh_game_effects *effects;gh_scene_filters *filters;
+ gh_game_world_light *world_light;gh_game_model_packets *model_packets;
+ gh_game_collision_solids *collision_solids;gh_game_scene_tables *scene_tables;
+ gh_game_title_player *title_player; /*canonicaltypedWork.playerObj*/
  uint32_t *main_word4;gh_game_main_record *main_records;size_t main_record_count;
  uint8_t *scene_buffer_a,*scene_buffer_b;size_t scene_buffer_a_size,scene_buffer_b_size;
 } gh_game_services_scene_view;

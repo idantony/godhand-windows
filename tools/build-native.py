@@ -16,7 +16,8 @@ SCRATCH = Path(r"G:\middle_thing\godhand_windows")
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-tests", action="store_true")
-    parser.add_argument("--hardware-audio", action="store_true", help="Run muted real-device voice and MC-flow checks")
+    parser.add_argument("--hardware-audio", action="store_true", help="Run muted real-device voice, ADX, BGM and scene-flow checks")
+    parser.add_argument("--adx-reference-wave", type=Path, help="Independent vgmstream WAV for the full native ADX sample comparison")
     parser.add_argument("--movie-codec", type=Path, help="Also run the muted Movie0 native codec/device check")
     parser.add_argument("--compiler", type=Path, default=PROJECT / ".tools" / "zig-x86_64-windows-0.17.1" / "zig.exe", help="Zig executable; permits reusing an installed toolchain")
     parser.add_argument("--scratch", type=Path, default=SCRATCH, help="External build/cache root")
@@ -96,7 +97,18 @@ def main():
                ("screen_fade", "src/core/screen_fade.c"), ("game_scene_setup", "src/core/game_scene_setup.c"),
                ("sound_scene", "src/core/sound_scene.c"), ("game_collision_pairs", "src/core/game_collision_pairs.c"),
                ("game_room_module", "src/core/game_room_module.c"), ("game_effects", "src/core/game_effects.c"),
-               ("game_scene_filters", "src/core/game_scene_filters.c"), ("bgm_requests", "src/core/bgm_requests.c")]
+               ("game_scene_filters", "src/core/game_scene_filters.c"), ("bgm_requests", "src/core/bgm_requests.c"),
+               ("adx", "src/assets/adx.c"), ("adx_stream", "src/platform/adx_stream.c"),
+               ("sound_scene_tick", "src/core/sound_scene_tick.c"),
+               ("game_world_light", "src/core/game_world_light.c"), ("game_model_packets", "src/core/game_model_packets.c"),
+               ("game_collision_solids", "src/core/game_collision_solids.c"), ("game_scene_tables", "src/core/game_scene_tables.c"),
+               ("game_title_player", "src/core/game_title_player.c"), ("game_checkpoint", "src/core/game_checkpoint.c"),
+               ("game_scene_at", "src/core/game_scene_at.c"), ("game_action_buttons", "src/core/game_action_buttons.c"),
+               ("game_scene_spawns", "src/core/game_scene_spawns.c"), ("game_scene_placements", "src/core/game_scene_placements.c"),
+               ("game_scene_ui", "src/core/game_scene_ui.c"), ("game_event", "src/core/game_event.c"),
+               ("id_entry_reset", "src/core/id_entry_reset.c"), ("id_layout_rotation", "src/core/id_layout_rotation.c"),
+               ("id_animation", "src/core/id_animation.c"), ("id_texture_polygon", "src/core/id_texture_polygon.c"),
+               ("r020_title", "src/rooms/r020_title.c")]
     extra_tests = [
         ("nested-tasks", "tests/platform/test_nested_tasks.c", "none"),
         ("id-path", "tests/core/test_id_path.c", "iso"),
@@ -130,6 +142,25 @@ def main():
         ("game-scene-filters", "tests/core/test_game_scene_filters.c", "iso"),
         ("bgm-requests", "tests/core/test_bgm_requests.c", "iso"),
         ("title-texture", "tests/core/test_title_texture.c", "iso"),
+        ("adx", "tests/assets/test_adx.c", "adx-reference"),
+        ("adx-stream", "tests/platform/test_adx_stream.c", "iso"),
+        ("sound-scene-tick", "tests/core/test_sound_scene_tick.c", "iso"),
+        ("game-world-light", "tests/core/test_game_world_light.c", "iso"),
+        ("game-model-packets", "tests/core/test_game_model_packets.c", "none"),
+        ("game-collision-solids", "tests/core/test_game_collision_solids.c", "none"),
+        ("game-scene-tables", "tests/core/test_game_scene_tables.c", "iso"),
+        ("game-title-player", "tests/core/test_game_title_player.c", "none"),
+        ("game-checkpoint", "tests/core/test_game_checkpoint.c", "none"),
+        ("game-scene-at", "tests/core/test_game_scene_at.c", "iso"),
+        ("game-action-buttons", "tests/core/test_game_action_buttons.c", "none"),
+        ("game-scene-spawns", "tests/core/test_game_scene_spawns.c", "none"),
+        ("game-scene-placements", "tests/core/test_game_scene_placements.c", "iso"),
+        ("game-scene-ui", "tests/core/test_game_scene_ui.c", "iso"),
+        ("game-event", "tests/core/test_game_event.c", "elf"),
+        ("id-entry-reset", "tests/core/test_id_entry_reset.c", "iso"),
+        ("id-layout-rotation", "tests/core/test_id_layout_rotation.c", "iso"),
+        ("id-animation", "tests/core/test_id_animation.c", "iso"),
+        ("r020-title", "tests/rooms/test_r020_title.c", "iso"),
     ]
     source_inputs = {"tools/build-native.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
@@ -188,7 +219,7 @@ def main():
     run("compile-packed-message-tests", common + [objects[name] for name in ("packed_message", "id_base", "id_path", "font_state", "core_bundle", "menu_state", "disc")] + ["tests/core/test_packed_message.c", "-o", output / "test_packed_message.exe"])
     run("compile-game-init-tests", common + ["-Isrc/core", objects["game_init"], "tests/core/test_game_init.c", "-o", output / "test_game_init.exe"])
     run("compile-mc-task-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_task.c", "-o", output / "test_mc_task.exe"])
-    id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "menu_state", "font_state", "font_texture", "core_bundle", "disc", "tim2")]
+    id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "id_animation", "id_layout_rotation", "menu_state", "font_state", "font_texture", "core_bundle", "disc", "tim2")]
     run("compile-id-jobs-tests", common + id_objects + ["tests/core/test_id_jobs.c", "-o", output / "test_id_jobs.exe"])
     run("compile-id-texture-tests", common + id_objects + ["tests/core/test_id_texture.c", "-o", output / "test_id_texture.exe"])
     run("compile-mc-control-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_control.c", "-o", output / "test_mc_control.exe"])
@@ -196,7 +227,7 @@ def main():
     run("compile-game-children-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_children", "id_base", "id_path", "core_bundle")] + ["tests/core/test_game_children.c", "-o", output / "test_game_children.exe"])
     run("compile-id-text-tests", common + [objects["id_text"], objects["font_draw"], objects["packed_message"]] + id_objects + ["tests/core/test_id_text.c", "-o", output / "test_id_text.exe"])
     for name, source, _ in extra_tests:
-        run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform"] + list(objects.values()) + [source, "-o", output / ("test_" + name.replace("-", "_") + ".exe")])
+        run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms"] + list(objects.values()) + [source, "-o", output / ("test_" + name.replace("-", "_") + ".exe")])
     run("compile-core-dll", common + ["-shared", "-Wl,--export-all-symbols"] + list(objects.values()) + ["-o", output / "godhand_core.dll"])
     cpp = [compiler, "c++", "-target", "x86_64-windows-gnu", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror"]
     run("compile-cpp-abi", cpp + list(objects.values()) + ["tests/test_cpp_abi.cpp", "-o", output / "test_cpp_abi.exe"])
@@ -237,16 +268,20 @@ def main():
         run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
         run("test-id-text", [output / "test_id_text.exe", baseline["source_iso"]["path"]])
         for name, _, inputs in extra_tests:
-            if (name in ("se-voice", "mc-control-flow") and not args.hardware_audio) or (inputs == "movie" and not args.movie_codec):
+            if ((name in ("se-voice", "mc-control-flow", "bgm-requests", "adx-stream", "r020-title") and not args.hardware_audio)
+                    or (inputs == "movie" and not args.movie_codec)
+                    or (inputs == "adx-reference" and not args.adx_reference_wave)):
                 manifest.setdefault("skipped_checks", []).append({"name": "test-" + name, "reason": "Explicit hardware/codec opt-in not supplied"})
                 continue
             arguments = []
-            if inputs in ("iso", "both", "movie"):
+            if inputs in ("iso", "both", "movie", "adx-reference"):
                 arguments.append(baseline["source_iso"]["path"])
             if inputs in ("elf", "both"):
                 arguments.append(PROJECT / "reference" / "SLUS_215.03")
             if inputs == "movie":
                 arguments.append(args.movie_codec.resolve())
+            if inputs == "adx-reference":
+                arguments.append(args.adx_reference_wave.resolve())
             run("test-" + name, [output / ("test_" + name.replace("-", "_") + ".exe")] + arguments)
     manifest["status"] = "passed" if not args.skip_tests else "build-only"
     final_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}

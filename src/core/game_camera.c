@@ -68,3 +68,10 @@ gh_camera_status gh_game_camera_reset_00138210(gh_game_pl_camera*s,const gh_game
  if(active!=s->identity||u32(s->fields+0x35c)!=0x41dbb0){s->failed_entry=0x138210;return GH_CAMERA_UNSUPPORTED;}
  return reset_fields(s);
 }
+
+gh_camera_status gh_game_camera_before_move_00138f98(const gh_game_init_state*s,uint32_t*frontier){
+ if(frontier)*frontier=0;
+ if(!s)return GH_CAMERA_ARGUMENT;
+ if((uint32_t)s->camera.mode&4u){if(frontier)*frontier=0x138600;return GH_CAMERA_UNSUPPORTED;}
+ return GH_CAMERA_OK;
+}

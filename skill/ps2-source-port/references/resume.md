@@ -155,3 +155,20 @@ Private evidence paths are not public assets. File existence is not a pass.
 Build scripts keep outputs/cache/logs onG and accept compiler/scratch overrides.
 Skill validation: python -B C:/Users/sutong/.codex/skills/.system/skill-creator/scripts/quick_validate.py
 E:/godhand_windows/skill/ps2-source-port (one command). Never serialize credentials.
+
+
+New local checkpoint after b2f5708:84 C modules/85 checks passed with real muted
+hardware, FFmpeg and independent vgmstream WAV. Windows195ticks/6MC/90Movie now
+reaches002BF8F8, not2D6F40. Native ADX/BGM/LogoSE and new scene leaves are built.
+Direct title-ui target renders the original warning screen at Move4 using actual
+R020 Init/Move; explicit black512448 clear and final OT order remain scoped QA,
+not the whole scene. Raw bf70bcf724b7b776ddf3e4faf436aef137bbe5e44c108cf00b3be26ab0cd8ebb.
+
+Current workers are adding full case3 tail/Title binding (skill_forward_test),
+state4 order and final OT audit (opengoal_method), late camera using the same
+canonical ACD owner (godhand_upstream). Root integrates, verifies and owns the
+canonical cEvent prefix initialized from actual mapped ELF/BSS before state4;
+services must borrow it. New game_scene_step is not in the above84-module suite.
+Preserve explicit path-distance and title-player allocation memory profiles.
+Last pushed milestone is still4578b62; subjective percentage belongs only in
+chat/private review and was8. Keep working until the full playable port goal.

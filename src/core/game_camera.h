@@ -17,6 +17,9 @@ gh_camera_status gh_game_camera_construct_pl_00139bc8(gh_game_pl_camera *,gh_gam
  * operationorder, not a claim ofVU MAC/FDIV/SQRT hardwarebitidentity.
  * Only this recovered PlCamera subtype is accepted; others reportfrontier. */
 gh_camera_status gh_game_camera_reset_00138210(gh_game_pl_camera *,const gh_game_camera *active);
+/* Original early update 138F98 reads canonical CamManager+1028 only.
+ * Mode bit4 delegates to real cCamera_move; other modes do no work here. */
+gh_camera_status gh_game_camera_before_move_00138f98(const gh_game_init_state *,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif
