@@ -1,0 +1,24 @@
+# User-owned original game and locally derived reference data.
+*.iso
+reference/*
+!reference/.gitkeep
+# Build products and caches belong in G:/middle_thing/godhand_windows.
+__pycache__/
+*.pyc
+build/
+cache/
+*.exe
+*.dll
+*.obj
+*.o
+*.pdb
+.tools/
+vendor/
+# Private evidence contains local paths, extracted instructions and decompiled
+# game text. Publish only the deliberately curated docs/progress.json summary.
+/analysis/
+/tests/core/rng_elf_evidence.json
+/tests/platform/validation.json
+*.lib
+*.exp
+*.ilk
