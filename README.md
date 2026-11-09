@@ -1,4 +1,80 @@
-# God Hand — Windows 源码移植
+# God Hand — Windows Source Port / Windows 源码移植
+
+[English](#english) · [简体中文](#简体中文)
+
+## English
+
+A source port of the original PS2 **God Hand**, preserving its gameplay and
+assets while recovering readable code and replacing platform dependencies with
+native Windows implementations. The approach follows OpenGOAL's source recovery
+and platform adaptation method. God Hand was not written in GOAL, so Jak's
+specialized decompiler cannot be used directly.
+
+**Early development: this project is not playable yet.** It does not reach a
+game scene. The current test programs and DLL are verified modules, not a game
+release or an emulator launcher.
+
+### Verified progress
+
+- Indexed 1445 resources and 81 dynamic modules from the user's NTSC-U 1.00
+  `SLUS-21503` disc. All 81 module hashes match the pinned upstream manifest.
+- The supplied patched boot ELF and loaded image differ from the upstream
+  retail baseline. Upstream PS2 matching percentages are not native-port progress.
+- Native C modules cover original-disc access, two RNG functions, the
+  `0x0030B298` boot dependency slice, nine small r207 room routines, three
+  task-manager functions and a real host-memory adapter.
+- Seven integrated native checks pass, including actual resource reads,
+  allocation/read/write/free, lifecycle, task traversal and C++/C linkage.
+- Two RNG routines passed 20544 exact state/float-bit comparisons across 10272
+  seeds against a restricted model of instructions from the actual ELF.
+  This is modeled evidence, not a PS2 hardware capture or whole-game validation.
+
+Current status: [docs/progress.json](docs/progress.json).
+Milestones and remaining work: [docs/PROGRESS.md](docs/PROGRESS.md).
+
+### Local layout and verification
+
+The current workspace keeps source, tools and useful evidence under
+`E:\godhand_windows`, with build products, temporary files and caches under
+`G:\middle_thing\godhand_windows`. The original disc is always read-only.
+
+| Directory | Purpose |
+|---|---|
+| `src/`, `tests/` | Native source and meaningful module checks |
+| `tools/` | Repeatable inspection, build and verification scripts |
+| `docs/` | Curated public progress |
+| `skill/ps2-source-port/` | Self-contained reusable skill and resume notes |
+| `reference/`, `analysis/` | Private extracted inputs and recovery evidence, excluded from Git |
+| `vendor/`, `.tools/` | Pinned upstream source and separately installed tools, excluded from Git |
+
+With your own game data and the local project inputs prepared:
+
+```powershell
+.\tools\bootstrap-toolchain.ps1
+python -B .\tools\build-native.py
+python -B .\tools\verify_rng.py
+python -B .\tools\export-progress.py
+python -B .\tools\check-public-tree.py
+```
+
+The bootstrap installs a project-local compiler and verifies its published
+SHA-256. The build runs native module tests; it does not start the game.
+Disc-dependent tests need the user's own ISO and locally extracted references.
+The repository includes no ISO, game binary/assets, BIOS, private SDK or keys.
+See [NOTICE.md](NOTICE.md) for attribution.
+
+### Next work
+
+Implement real task/thread operations and subsystem startup, integrate the main
+loop, recover model/animation loading, and connect native rendering, audio,
+input and save services. Real scenes and gameplay progression must be tested
+before a playable port can be claimed. Progress is committed incrementally.
+
+The reusable [PS2 source-port skill](skill/ps2-source-port/SKILL.md) is maintained
+during development. It separates verified methods, title-specific evidence and
+the current resumable state.
+
+## 简体中文
 
 目标：恢复并验证《神之手》原游戏的可读代码，保留原玩法和资源，替换 PS2 平台依赖，构建独立 Windows 版本。采用 OpenGOAL 的源码恢复与平台移植方法；God Hand 原本不是 GOAL 程序，不能直接使用 Jak 专用反编译器。
 
@@ -27,7 +103,8 @@
 - 实际 R5900 ELF 已经由 PS2 专用 Ghidra 后端导入；13 个局部函数得到反编译证据，启动路径定位至 `0x0030AC40` 主循环候选。
 - 两个 RNG 原函数 `0x0031CF78`、`0x0031CF30` 已移植为原生 C。保持模 2^32 状态演化，明确处理 EE 的 chop 舍入；不改变宿主浮点环境。
 - 原生测试通过；对 10272 个种子、两个函数共 20544 次调用，实际 MIPS 指令的受限离线模型与 DLL 的状态及返回浮点位全部一致。该模型不是 PS2 实机，也不验证整台 EE。
-- 首个小型房间模块恢复6个分配/释放、初始化与原本为空的更新函数；启动函数 `0x0030B298` 的控制流和固定宽度状态布局已移植。真实平台回调尚未接入。
+- 首个小型房间模块恢复9个分配/释放、初始化、原本为空的更新及已核查空表的生命周期函数；启动函数 `0x0030B298` 的控制流和固定宽度状态布局已移植。真实启动平台回调尚未接入。
+- 原生内存后端已完成真实分配、读写和释放测试；任务管理的槽选择、属性继承、条件遍历也已恢复。原 EE 线程操作和完整 cHeap 语义尚未接入。
 - 房间、启动切片与 C++ 调用 C 接口的链接测试已纳入统一构建。
 
 更多结果以 `analysis/native-verification.json`、`analysis/rng-differential.json` 和后续模块报告为准。
@@ -45,6 +122,7 @@ PowerShell，工作目录 `E:\godhand_windows`：
 python -B .\tools\build-native.py
 python -B .\tools\verify_rng.py
 python -B .\tools\export-progress.py
+python -B .\tools\check-public-tree.py
 
 # 只读重做镜像与资源索引。
 python -B .\tools\inspect_disc.py '.\God Hand (USA)(Uncensor Patch v1.0).iso'

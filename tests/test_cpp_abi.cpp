@@ -2,6 +2,8 @@
 #include "../src/core/boot.h"
 #include "../src/platform/disc.h"
 #include "../src/rooms/r207.h"
+#include "../src/platform/memory.h"
+#include "../src/core/tasks.h"
 
 // Link actual C objects from the future C++ host. No duplicated implementation.
 int main()
@@ -16,5 +18,11 @@ int main()
         return 2;
     if (gh_disc_count(nullptr) != 0)
         return 3;
+    if (gh_heap_used(nullptr) != 0)
+        return 4;
+    gh_task_manager manager = {};
+    const gh_task_selection selection = gh_tasks_select_002d5b30(&manager, -1);
+    if (selection.status != GH_TASK_OK || selection.index != -1)
+        return 5;
     return 0;
 }

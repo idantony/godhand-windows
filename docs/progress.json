@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-09T16:44:46.910206+00:00",
+  "verified_utc": "2026-11-09T16:56:58.105934+00:00",
   "stage": "readable-source-and-native-module-validation",
   "playable": false,
   "original_game_scene_observed_in_native_port": false,
@@ -34,9 +34,23 @@
       "real_platform_adapters_complete": false
     },
     "room_r207": {
-      "source_functions_recovered": 6,
-      "scope": "Allocation/release, initialization and original empty move",
-      "crt_helpers_pending": 3
+      "source_functions_recovered": 9,
+      "scope": "Allocation/release, initialization, original empty move and verified empty-table lifecycle",
+      "crt_helpers_pending": 0
+    },
+    "memory": {
+      "native_allocation_tested": true,
+      "r207_uses_real_host_backend_in_test": true,
+      "original_cHeap_capacity_and_fragmentation_verified": false
+    },
+    "tasks": {
+      "original_functions": [
+        "0x002D5B30",
+        "0x002D5440",
+        "0x002D52A0"
+      ],
+      "scope": "Slot choice, attribute inheritance and conditional visitation",
+      "real_EE_thread_step_backend_complete": false
     }
   },
   "tests": {
@@ -45,6 +59,8 @@
       "test-rng",
       "test-boot",
       "test-room",
+      "test-memory",
+      "test-tasks",
       "test-cpp-abi",
       "test-original-disc"
     ],

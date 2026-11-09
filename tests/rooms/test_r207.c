@@ -16,6 +16,18 @@ static void release(void *ctx,void *owner,void *ptr) {
     recorder *r=ctx;r->release_calls++;r->freed_owner=owner;r->freed_pointer=ptr;
 }
 int main(void) {
+    gh_r207_lifecycle life;
+    gh_r207_lifecycle_reset(&life);
+    CHECK(life.main_guard==0 && life.dtor_cursor==0x40c);
+    gh_r207_do_global_dtors(&life);
+    CHECK(life.main_guard==0 && life.dtor_cursor==0x40c);
+    gh_r207_do_global_ctors();
+    CHECK(life.main_guard==0);
+    gh_r207_main(&life); gh_r207_main(&life);
+    CHECK(life.main_guard==1 && life.dtor_cursor==0x40c);
+    gh_r207_do_global_dtors(&life); gh_r207_do_global_dtors(&life);
+    gh_r207_main(&life);
+    CHECK(life.main_guard==1 && life.dtor_cursor==0x40c);
     recorder r={0};
     int default_heap, actual_owner, payload;
     gh_r207_memory m={&r,&default_heap,allocate,release};
@@ -25,6 +37,9 @@ int main(void) {
     gh_r207_init(&state,&m);
     CHECK(r.alloc_calls==1 && r.requested==1 && r.alignment==16);
     CHECK(r.heap==&default_heap && state.room_work.pointer==&payload);
+    gh_r207_do_global_dtors(&life);
+    CHECK(r.alloc_calls==1 && r.release_calls==0);
+    CHECK(state.room_work.pointer==&payload);
     /* Allocation belongs to a different heap than the default: deletion must
      * pass its recorded owner, matching the original pointer-0x20 load. */
     gh_r207_builtin_delete(&m,state.room_work);

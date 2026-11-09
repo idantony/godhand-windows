@@ -18,6 +18,17 @@ typedef struct {
 typedef struct {
     gh_r207_allocation room_work; /* Original image word at REL offset 0x480. */
 } gh_r207_state;
+/* This exact overlay has zero constructors (count word at 0x400 = 0)
+ * and a zero destructor at cursor 0x40c. No Windows CRT is invoked.
+ * Initialize separately for each newly loaded native module instance. */
+typedef struct {
+    uint32_t main_guard; /* original 0x484, initially zero */
+    uint32_t dtor_cursor; /* original 0x300, initially 0x40c */
+} gh_r207_lifecycle;
+void gh_r207_lifecycle_reset(gh_r207_lifecycle *);
+void gh_r207_do_global_ctors(void);
+void gh_r207_do_global_dtors(gh_r207_lifecycle *);
+void gh_r207_main(gh_r207_lifecycle *);
 /* Required callbacks are supplied by the host. Size is original uint32_t.
  * These are recovered behavior, not a replacement game-loop implementation. */
 gh_r207_allocation gh_r207_builtin_new(const gh_r207_memory *, uint32_t size);

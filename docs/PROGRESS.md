@@ -28,3 +28,17 @@ does not render or enter a playable room.
 The upstream project's PS2 matching percentage is not our Windows-port
 completion percentage. The patched boot ELF differs from its retail target;
 all claims must remain tied to the actual input and verification scope.
+
+## Milestone 2: lifecycle and real host memory
+
+- Recovered r207's three remaining lifecycle routines from its actual zero-count
+  constructor table and empty destructor list. This exact module has no observed
+  nonempty constructor/destructor sequence; no general CRT was invented.
+- Added real native aligned allocation, bounded payload capacity, ownership and
+  explicit error handling. The room initialization test allocates/writes/releases
+  actual host memory. This does not claim complete original cHeap behavior.
+- Recovered three task-manager functions: slot selection, attribute inheritance
+  and filtered visitation, including changes to flags/count during traversal.
+  Thread step/start/wait/kill remain separate unconnected platform work.
+- Build evidence fingerprints the actual inputs; progress export rejects changed
+  sources or a stale DLL differential result instead of reusing old pass labels.

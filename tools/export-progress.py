@@ -1,5 +1,6 @@
 """Publish an allowlisted progress summary, without local data or code dumps."""
 import datetime
+import hashlib
 import json
 from pathlib import Path
 
@@ -17,6 +18,14 @@ def main():
     baseline = read("disc-baseline.json")
     if native["status"] != "passed" or differential["status"] != "passed":
         raise SystemExit("Refusing to publish a passing milestone from failed verification")
+    if not native.get("source_sha256"):
+        raise SystemExit("Rebuild native modules to record source fingerprints before exporting progress")
+    for name, expected in native["source_sha256"].items():
+        if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != expected:
+            raise SystemExit("Native verification is stale for changed source: " + name)
+    current_dll = Path(differential["native_dll"])
+    if hashlib.sha256(current_dll.read_bytes()).hexdigest() != differential["native_sha256"]:
+        raise SystemExit("RNG differential report is stale for the rebuilt DLL")
     progress = {
         "schema_version": 1,
         "verified_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -34,7 +43,11 @@ def main():
         "native_modules": {
             "rng": {"original_functions": ["0x0031CF78", "0x0031CF30"], "numeric_policy": "EE chop adaptation, independent of host FEnv"},
             "boot": {"original_function": "0x0030B298", "platform_callbacks_required": 12, "real_platform_adapters_complete": False},
-            "room_r207": {"source_functions_recovered": 6, "scope": "Allocation/release, initialization and original empty move", "crt_helpers_pending": 3}},
+            "room_r207": {"source_functions_recovered": 9, "scope": "Allocation/release, initialization, original empty move and verified empty-table lifecycle", "crt_helpers_pending": 0},
+            "memory": {"native_allocation_tested": True, "r207_uses_real_host_backend_in_test": True,
+                       "original_cHeap_capacity_and_fragmentation_verified": False},
+            "tasks": {"original_functions": ["0x002D5B30", "0x002D5440", "0x002D52A0"],
+                      "scope": "Slot choice, attribute inheritance and conditional visitation", "real_EE_thread_step_backend_complete": False}},
         "tests": {"native_build": native["status"],
                   "passed_steps": [step["name"] for step in native["steps"] if step["name"].startswith("test-") and step["returncode"] == 0],
                   "rng_differential": {"distinct_seeds": differential["distinct_seeds"], "calls_compared": differential["function_calls_compared"],

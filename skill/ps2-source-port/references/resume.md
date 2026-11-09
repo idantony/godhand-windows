@@ -48,9 +48,11 @@ Native RNG and read-only asset layers passed recorded tests. RNG report records
 10272 seed inputs and 20544 comparisons against a restricted original-instruction
 model, not console traces. src/core/boot.{h,c} compiles and its callback/order/
 layout tests pass; actual platform callbacks are not connected. The r207 slice
-has six recovered allocation/release/init/move functions. Three CRT/once lifecycle
-helpers remain pending in that snapshot. The integrated build includes all four
-modules and a C++ linkage test. Consult current source/reports before assuming
+has nine recovered allocation/release/init/move/lifecycle functions. Its actual
+constructor count and destructor list are empty; this specialization is not a
+generic CRT. Native memory allocation and three task-manager functions are also
+implemented. The integrated build includes six modules and a C++ linkage test.
+Consult current source/reports before assuming
 the snapshot is exhaustive; do not infer active workers from this document.
 
 The project is not playable. These reports do not prove real-scene execution,
@@ -75,13 +77,20 @@ SDKs or execute upstream setup merely to advance matching. Existing REA settings
 are unrelated environment state; use this project's separate PS2 Ghidra backend
 without changing another project's configuration.
 
-Next concrete slices: finish r207 CRT/once lifecycle from actual table and relocation
-evidence, connect a real native memory adapter to its allocation boundary, then
-integrate task/startup dependencies and real boot platform operations. Continue
-toward renderer/audio/input and a first real scene. The six existing r207
-functions are already recovered: do not restart them. Coordinate file ownership
+Next concrete slices: implement actual task step/thread/start/wait semantics and
+the remaining subsystem initialization, then integrate real boot platform
+operations. Original cHeap initial capacity/fragmentation behavior still requires
+evidence; the current memory backend supplies explicit host policies only.
+Continue toward renderer/audio/input and a first real scene. The nine r207
+functions, three task helpers and host memory adapter are already implemented:
+do not restart them. Coordinate file ownership
 with actual current workers when parallel work is running.
 Record unsupported instructions, inferred names and unconnected backends.
+
+GPU use was explicitly authorized for needed work. Actual host capability
+records remain local in analysis/gpu-host.json and analysis/gpu-capabilities.json;
+do not infer GPU memory from the overflowing legacy CIM AdapterRAM field. GPU
+availability does not establish that any game renderer has been ported.
 
 The public GitHub first verified milestone is commit
 `a7a72e3d13e21402482bc2b552491f30a908e246`. Check the actual local/remote heads before
