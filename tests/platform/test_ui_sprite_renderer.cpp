@@ -26,9 +26,10 @@ static void oracle(std::vector<unsigned char>&dst,unsigned w,unsigned h,const gh
  }
 }
 int main(int argc,char**argv){
- C(argc==2||argc==3);gh_disc *disc;C(gh_disc_open(argv[1],&disc)==GH_DISC_OK);auto language=load(disc,"etc/core_usa.bin"),idsave=load(disc,"id/local/US/idsavecore_US.idd");gh_disc_close(disc);
+ C(argc==2||argc==3);gh_disc *disc;C(gh_disc_open(argv[1],&disc)==GH_DISC_OK);auto language=load(disc,"etc/core_usa.bin"),idsave=load(disc,"id/local/US/idsavecore_US.idd"),title=load(disc,"id/local/us/idtitlecore_us.idd");gh_disc_close(disc);
  auto manager=std::make_unique<gh_id_state>();gh_bundle lang;gh_bundle_entry idd;
  C(gh_bundle_open(language.data(),language.size(),&lang)==GH_BUNDLE_OK);C(gh_id_find_language_data(&lang,&idd)==GH_MENU_OK);C(gh_id_system_init_002acc70(manager.get(),&idd)==GH_MENU_OK);idd.bytes=idsave.data();idd.size=idsave.size();C(gh_id_set_data_002accf8(manager.get(),11,&idd)==GH_MENU_OK);
+ idd.bytes=title.data();idd.size=title.size();C(gh_id_set_data_002accf8(manager.get(),2,&idd)==GH_MENU_OK);
  gh_id_runtime *runtime;gh_id_base object={};int original,reclaimed;C(gh_id_runtime_create(manager.get(),1,&runtime)==GH_ID_OK);C(gh_id_base_initialize_002a9ea0(runtime,&object,11,0,nullptr,nullptr,&original)==GH_ID_OK);C(gh_id_jobs_move(&object,nullptr,nullptr,nullptr)==GH_ID_OK);
  gh_ui_sprite_item items[2]={};C(gh_id_texture_quad_prepare(manager.get(),&object,&object.entries[63],&items[0].quad)==GH_ID_OK);
  // Actual MCworker DispInit/Control values for ID40 entry6. This QA combines
@@ -54,9 +55,17 @@ int main(int argc,char**argv){
  auto invalid_cursor=cursor.quad.texture;invalid_cursor.tex0^=UINT64_C(1)<<26;uint32_t invalid_handle;
  C(gh_ui_sprite_upload(renderer,&invalid_cursor,cursor_rgba.data(),cursor_rgba.size(),&invalid_handle)==GH_UI_UNSUPPORTED);
  output=previous; // ExistingoptionalT32QAartifact remainsbyte-identical.
+ // DecodedoriginalSofdec/ADXlogo atlas, fulltextureassetQAquad. Thisdoesnot
+ // pretendtheR020title/BGMcallerhasalreadyrunorchooseitsactualscreenlayout.
+ gh_ui_sprite_item logo={};C(gh_id_texture_open(manager.get(),2,7,&logo.quad.texture)==GH_ID_OK);
+ C(logo.quad.texture.width==512&&logo.quad.texture.height==512&&((logo.quad.texture.tex0>>20)&63)==20);
+ logo.quad.x1=512;logo.quad.y1=448;logo.quad.u1=logo.quad.v1=1;logo.quad.color=0x80808080;logo.quad.color_mode=6;logo.quad.font_mode=5;
+ std::vector<unsigned char> logo_rgba(512*512*4);C(gh_id_texture_rgba(&logo.quad.texture,logo_rgba.data(),logo_rgba.size())==GH_ID_OK);C(gh_ui_sprite_upload(renderer,&logo.quad.texture,logo_rgba.data(),logo_rgba.size(),&logo.texture)==GH_UI_OK);
+ auto logo_expected=back;oracle(logo_expected,512,448,logo.quad,logo_rgba);C(gh_ui_sprite_batch(renderer,&state,&logo,1,back.data(),output.data(),output.size())==GH_UI_OK&&output==logo_expected);
+ auto invalid_logo=logo.quad.texture;invalid_logo.tex0|=UINT64_C(1)<<56;C(gh_ui_sprite_upload(renderer,&invalid_logo,logo_rgba.data(),logo_rgba.size(),&invalid_handle)==GH_UI_UNSUPPORTED);output=previous;
  auto saved=textures[0][3];textures[0][3]=3;uint32_t bad;C(gh_ui_sprite_upload(renderer,&items[0].quad.texture,textures[0].data(),textures[0].size(),&bad)==GH_UI_UNSUPPORTED);textures[0][3]=saved;
  state.tex1=0;C(gh_ui_sprite_batch(renderer,&state,items,2,back.data(),output.data(),output.size())==GH_UI_UNSUPPORTED);
  if(argc==3){FILE*f=std::fopen(argv[2],"wbx");C(f);C(std::fwrite(output.data(),1,output.size(),f)==output.size());C(std::fclose(f)==0);}
  gh_ui_sprite_destroy(renderer);C(gh_id_base_release_002aa078(runtime,&object,&original,&reclaimed)==GH_ID_OK);C(gh_id_runtime_destroy(runtime)==GH_ID_OK);
- std::puts("PASS hardware MC T32 scaled1.4Y batch andreal32x32TIM2cursor: originalUVcrop, GS4bitbilinear/modulate/test/blend; each229376pixels match independent64bitCPU, invalidTIM2extent rejected");return 0;
+ std::puts("PASS hardware MC T32 scaled1.4Y, real32x32TIM2cursor andTitleT32PSMT4Logo: GS4bitbilinear/modulate/test/blend; each229376pixels match independentCPU; invalidTIM2extent/LogoCSA rejected");return 0;
 }

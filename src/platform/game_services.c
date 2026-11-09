@@ -12,13 +12,16 @@ struct gh_game_services {
  gh_game_services_bindings b;gh_game_cockpit *cockpit;
  gh_game_objects *objects,*room_objects;gh_game_prepare prepare;
  gh_task_record32 scenario_records[16];gh_task_manager scenario;gh_task_threads *scenario_threads;
+ uint8_t scenario_scalar[0x114]; /*canonical5FEB00scalarspan;managerhasitsowntypedowner*/
  gh_room_state room_state;gh_room_pack room_pack;gh_room_pools pools;gh_game_pl_camera camera;
+ gh_room_module module;gh_sound_scene sound_scene;gh_collision_pairs collision_pairs;unsigned case3_stage;
+ gh_game_effects effects;gh_scene_filters filters;
  gh_stage_object_init old_children,old_cockpit;void *old_context;
  int owns_children,owns_textures,owns_skills,stage_attempted;
  gh_game_children *created_children;gh_stage_textures *created_textures;
  uint32_t cockpit_pool_end,cockpit_jobs_end;int cockpit_snapshot;
  uint32_t frontier;int detail;gh_game_services_status status;uint32_t main_word4;
- struct {uint32_t kind;int32_t handle;uint32_t field;} main_records[32];
+ gh_game_main_record main_records[32];
  uint8_t scene_buffer_a[0x100180],scene_buffer_b[0x26060];
 };
 static uint32_t u32(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
@@ -52,10 +55,17 @@ gh_game_services_status gh_game_services_create(const gh_game_services_bindings*
  ce=gh_game_camera_construct_pl_00139bc8(&s->camera,&b->init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE);if(ce){result=GH_SERVICES_ASSET;goto create_failure;}
  s->scenario=(gh_task_manager){.records=s->scenario_records,.capacity=16,.count=16,.current_index=-1};
  for(unsigned i=0;i<16;i++)s->scenario_records[i].thread_id=-1;
+ /* ActualELF5FEB00..114 isPT_LOADBSS;2C5338 storesVF0at0,constructs
+  * manager1C..4Fandsetsderivedvptr4C. Do notduplicate its nativepointer
+  * fields; bytes1C..4Farediagnostic/reserved, nativeScenarioisabove. */
+ w32(s->scenario_scalar+12,0x3f800000);w32(s->scenario_scalar+0x4c,0x44d1a8);
  /* Lastpotentialfailingconstructor: newbackendinheritsRootcaller even when
   * thiscreateexecutesinsideMainfiber; noforcedforeignfiber tick. */
  te=gh_task_threads_create(&s->scenario,&s->scenario_threads);if(te){result=GH_SERVICES_THREAD;goto create_failure;}
  s->room_pack=(gh_room_pack){.dvd=b->assets->dvd,.heap=b->assets->heap,.threads=b->threads};
+ s->module.input=(gh_room_pack){.dvd=b->assets->dvd,.heap=b->assets->heap,.threads=b->threads};
+ /* Actual2B8AE0 is a scalar constructor; allocation occurs only at2B8B50. */
+ (void)gh_collision_pairs_construct_002b8ae0(&s->collision_pairs,b->assets->heap);
  *out=s;return GH_SERVICES_OK;
 create_failure:
  gh_game_objects_destroy(s->room_objects);gh_game_objects_destroy(s->objects);free(s);return result;
@@ -87,6 +97,7 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
  gh_boot_work*work;uint8_t*raw;uint32_t flags,frontier;gh_room_status re;gh_camera_status ce;
  if(!s||s->b.loop->game_state[0]!=3)return GH_SERVICES_ARGUMENT;
  work=s->b.work;raw=(uint8_t*)work;s->frontier=0;s->detail=0;
+ if(!s->case3_stage){
  memset(raw+0x5d8,0,8);memset(raw+0x5e0,0,4);memset(raw+0x5ec,0,8);
  if((u32(raw+0x594)&0x800)&&(work->flags&0x200)){
   size_t bytes;const uint8_t*p=gh_game_cockpit_fields(s->cockpit,&bytes);if(!p||bytes<0x460)return fail(s,GH_SERVICES_ASSET,0x2a5ec0,GH_ID_BOUNDS);
@@ -127,9 +138,51 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
  gh_bundle bundle;gh_bundle_error be=gh_game_room_pack_bundle(&s->room_pack,&bundle);if(be)return fail(s,GH_SERVICES_ASSET,0x31ccf0,be);
  gh_room_pool_status rp=gh_game_room_pools_initialize_002a5d80(&s->pools,&bundle,s->b.assets->heap);
  if(rp)return fail(s,GH_SERVICES_ASSET,s->pools.failed_entry?s->pools.failed_entry:0x2a5d80,rp);
- /*2BE708 reallyloadstheroomnativeoverlayonlywhenrecordflagsbyte10==1.
-  * Thattypedmodulebindingisnotyetconnected; donotexecuteRELguestcode. */
- return fail(s,GH_SERVICES_FRONTIER,s->room_state.record&&s->room_state.record->flags==1?0x2be708:0x2c33d8,0);
+ s->case3_stage=1;
+ }
+ /* Cursor survives a returned frontier. Earlier file waits and destructive
+  * resets must never be replayed when a missing later callee is connected. */
+ if(s->case3_stage==1){
+  if(s->room_state.record&&s->room_state.record->flags==1){
+   gh_room_module_status me=gh_room_module_load_002be708(&s->module,(uint16_t)work->room);
+   if(me)return fail(s,me==GH_ROOM_MODULE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->module.frontier?s->module.frontier:0x2be708,me);
+  }
+  s->case3_stage=2;
+ }
+ if(s->case3_stage==2){
+  if(!s->b.em_set_first_byte)return fail(s,GH_SERVICES_FRONTIER,0x2c33d8,0);
+  gh_scene_scenario_view sv={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};
+  gh_scene_hook hook=s->module.bound?s->module.hook4:(gh_scene_hook){.kind=GH_SCENE_HOOK_ABSENT};
+  gh_scene_status se=gh_scene_before_objects_002c33d8(sv,work,s->b.em_set_first_byte,hook,&frontier);
+  if(se)return fail(s,GH_SERVICES_FRONTIER,frontier?frontier:0x2c33d8,se);
+  s->case3_stage=3;
+ }
+ if(s->case3_stage==3){
+  gh_sound_scene_status se;gh_bundle bundle;
+  if(!s->b.audio_registry)return fail(s,GH_SERVICES_FRONTIER,0x2cabe8,0);
+  if(!s->sound_scene.startup_bound){se=gh_sound_scene_from_startup(&s->sound_scene,s->b.sound_control,s->b.audio_registry);if(se)return fail(s,GH_SERVICES_ASSET,0x2cabe8,se);}
+  if(gh_game_room_pack_bundle(&s->room_pack,&bundle))return fail(s,GH_SERVICES_ASSET,0x31ccf0,0);
+  se=gh_sound_scene_initialize_002cabe8(&s->sound_scene,&bundle,work,s->b.assets->dvd,s->b.assets->heap,s->b.threads);
+  if(se)return fail(s,se==GH_SOUND_SCENE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->sound_scene.frontier?s->sound_scene.frontier:0x2cabe8,se);
+  s->case3_stage=4;
+ }
+ if(s->case3_stage==4){
+  gh_collision_status pe=gh_collision_pairs_initialize_002b8b50(&s->collision_pairs);
+  if(pe)return fail(s,GH_SERVICES_ASSET,0x2b8b50,pe);s->case3_stage=5;
+ }
+ if(s->case3_stage==5){
+  gh_bundle bundle;if(gh_game_room_pack_bundle(&s->room_pack,&bundle))return fail(s,GH_SERVICES_ASSET,0x31ccf0,0);
+  gh_effect_status ee=gh_game_effects_initialize_00305a68(&s->effects,s->scene_buffer_a,sizeof(s->scene_buffer_a),s->scene_buffer_b,sizeof(s->scene_buffer_b),s->b.assets->core.pointer,s->b.assets->core_size,&bundle);
+  if(ee)return fail(s,ee==GH_EFFECT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->effects.frontier?s->effects.frontier:0x305a68,ee);
+  s->case3_stage=6;
+ }
+ if(s->case3_stage==6){
+  gh_bundle bundle;if(gh_game_room_pack_bundle(&s->room_pack,&bundle))return fail(s,GH_SERVICES_ASSET,0x31ccf0,0);
+  gh_filter_status fe=gh_scene_filters_initialize_002993a0(&s->filters,&bundle);
+  if(fe)return fail(s,fe==GH_FILTER_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->filters.frontier?s->filters.frontier:0x2993a0,fe);
+  s->case3_stage=7;
+ }
+ return fail(s,GH_SERVICES_FRONTIER,0x2d6f40,0);
 }
 void gh_game_services_inspect(const gh_game_services*s,gh_game_services_snapshot*out){
  if(!out)return;memset(out,0,sizeof(*out));if(!s)return;
@@ -143,6 +196,11 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  if(!s)return GH_SERVICES_ARGUMENT;
  if((s->owns_children&&*s->b.children!=s->created_children)||(s->owns_textures&&s->b.stage->textures!=s->created_textures))return fail(s,GH_SERVICES_BUSY,0x2a5bb8,0);
  if(s->cockpit_snapshot&&(s->b.id->pool_used!=s->cockpit_pool_end||s->b.id->job_count!=s->cockpit_jobs_end))return fail(s,GH_SERVICES_BUSY,0x2aa078,GH_ID_BUSY);
+ if(gh_collision_pairs_release(&s->collision_pairs))return fail(s,GH_SERVICES_ASSET,0x2b8b50,0);
+ if(s->sound_scene.job&&gh_dvd_check(s->b.assets->dvd,s->sound_scene.job))gh_dvd_cancel(s->b.assets->dvd,s->sound_scene.job);
+ if(gh_sound_scene_release_loading(&s->sound_scene,s->b.assets->dvd,s->b.assets->heap))return fail(s,GH_SERVICES_ASSET,0x2cabe8,0);
+ if(s->module.input.job&&gh_dvd_check(s->b.assets->dvd,s->module.input.job))gh_dvd_cancel(s->b.assets->dvd,s->module.input.job);
+ if(gh_room_module_release(&s->module))return fail(s,GH_SERVICES_ASSET,0x2be708,0);
  if(s->pools.heap){gh_room_pool_status e=gh_game_room_pools_release(&s->pools);if(e)return fail(s,GH_SERVICES_FRONTIER,s->pools.failed_entry,e);}
  if(s->room_pack.job&&gh_dvd_check(s->room_pack.dvd,s->room_pack.job))gh_dvd_cancel(s->room_pack.dvd,s->room_pack.job);
  if(gh_game_room_pack_release(&s->room_pack)!=GH_PACK_OK)return fail(s,GH_SERVICES_ASSET,0x31cc48,0);
@@ -154,4 +212,17 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
   gh_thread_status e=gh_task_threads_destroy(s->scenario_threads);if(e)return fail(s,GH_SERVICES_THREAD,0x2d56a8,e);s->scenario_threads=NULL;}
  if(s->b.stage->context==s){s->b.stage->context=s->old_context;s->b.stage->init_children_15fd98=s->old_children;s->b.stage->init_cockpit_140c88=s->old_cockpit;}
  gh_game_objects_destroy(s->room_objects);gh_game_objects_destroy(s->objects);free(s);return GH_SERVICES_OK;
+}
+
+gh_game_services_status gh_game_services_get_scene_view(gh_game_services*s,gh_game_services_scene_view*out){
+ if(!s||!out)return GH_SERVICES_ARGUMENT;
+ *out=(gh_game_services_scene_view){.root=&s->b,.prepare=&s->prepare,.scenario=&s->scenario,
+  .scenario_threads=s->scenario_threads,.scenario_bytes=s->scenario_scalar,.scenario_bytes_size=sizeof(s->scenario_scalar),.room_state=&s->room_state,.room_pack=&s->room_pack,.pools=&s->pools,
+  .pl_camera=&s->camera,.cockpit=s->cockpit,.objects=s->objects,.room_objects=s->room_objects,
+  .module=&s->module,.sound_scene=&s->sound_scene,.collision_pairs=&s->collision_pairs,
+  .effects=&s->effects,.filters=&s->filters,
+  .main_word4=&s->main_word4,.main_records=s->main_records,.main_record_count=32,
+  .scene_buffer_a=s->scene_buffer_a,.scene_buffer_b=s->scene_buffer_b,
+  .scene_buffer_a_size=sizeof(s->scene_buffer_a),.scene_buffer_b_size=sizeof(s->scene_buffer_b)};
+ return GH_SERVICES_OK;
 }

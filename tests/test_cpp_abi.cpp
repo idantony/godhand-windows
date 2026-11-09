@@ -30,6 +30,15 @@
 #include "../src/platform/game_services.h"
 #include "../src/platform/native_input.h"
 #include "../src/platform/video_player.h"
+#include "../src/core/frame_state.h"
+#include "../src/core/game_scene_setup.h"
+#include "../src/core/sound_scene.h"
+#include "../src/core/game_collision_pairs.h"
+#include "../src/core/game_room_module.h"
+#include "../src/core/screen_fade.h"
+#include "../src/core/game_effects.h"
+#include "../src/core/game_scene_filters.h"
+#include "../src/core/bgm_requests.h"
 
 // Link actual C objects from the future C++ host. No duplicated implementation.
 int main()

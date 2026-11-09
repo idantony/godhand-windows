@@ -125,3 +125,21 @@ required. No playable scene or controls have been demonstrated.
 使用明确标注的合成按键；视频EOF及音频设备DONE均实际完成。55个C模块通过56项检查。
 完整主循环、可玩场景、模型/动画、战斗和存档读写仍未完成，不以此宣称玩家实测或移植完成。
 当前测试和限制以 [progress.json](progress.json) 为准。
+
+## Local continuation: original scene setup and outer-frame leaves
+
+The same hidden native startup now reaches002D6F40. It actually loads and
+version-binds R020's module identity, performs the preceding Scenario leaf,
+commits the real room SE bank, initializes collision records, effect resources
+and room filter presets. R020's exported Init/Move have not been claimed as
+executed.64 C modules/66 checks pass; Windows QA still presents6 MC/90 movie
+frames before the precise new frontier.
+
+Known outer-loop order now places Movie update before tasks and Fade after
+tasks, ahead of DVD/audio. Recovered frame policy preserves the separate FPS
+and mode bytes. The observed boot seed and two-word MT advance share the actual
+GameInit MT owner. The finite conversions pass20534 comparisons across10267
+supplied MT words against their actual restricted instructions. This reference
+is independent of host rounding and remains distinct from hardware/full-boot
+validation. New Fade GPU primitives are available; unknown frame surfaces remain
+explicitly unsupported.

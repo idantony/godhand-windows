@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-09T20:47:40.539710+00:00",
+  "verified_utc": "2026-11-09T21:27:24.766197+00:00",
   "stage": "native-windows-startup-mc-movie-main-integration",
   "playable": false,
   "original_game_scene_observed_in_native_port": false,
@@ -69,13 +69,13 @@
       "next_entry_available": true,
       "current_frontier": {
         "module": "main ELF",
-        "address": "002BE708",
-        "operation": "Room overlay binding after original title-room resource load"
+        "address": "002D6F40",
+        "operation": "Next original scene initialization callee"
       },
       "alternate_original_branch": {
         "GameMain_case0_and_parallel_asset_loader_tested": true,
         "full_native_services_tested": true,
-        "next_unavailable_entry": "0x002BE708"
+        "next_unavailable_entry": "0x002D6F40"
       },
       "earlier_boot_and_complete_main_loop_run": false
     },
@@ -150,7 +150,7 @@
     "video_EOF_and_audio_done": true,
     "original_GameMain_state": 3,
     "assets_loaded": true,
-    "frontier": "002BE708",
+    "frontier": "002D6F40",
     "full_game_scene_or_gameplay_observed": false
   },
   "tests": {
@@ -210,7 +210,16 @@
       "se_voice",
       "sound_control",
       "video_player",
-      "native_input"
+      "native_input",
+      "frame_state",
+      "screen_fade",
+      "game_scene_setup",
+      "sound_scene",
+      "game_collision_pairs",
+      "game_room_module",
+      "game_effects",
+      "game_scene_filters",
+      "bgm_requests"
     ],
     "passed_steps": [
       "test-rng",
@@ -268,7 +277,17 @@
       "test-se-voice",
       "test-sound-control",
       "test-video-player",
-      "test-native-input"
+      "test-native-input",
+      "test-frame-state",
+      "test-screen-fade",
+      "test-game-scene-setup",
+      "test-sound-scene",
+      "test-game-collision-pairs",
+      "test-game-room-module",
+      "test-game-effects",
+      "test-game-scene-filters",
+      "test-bgm-requests",
+      "test-title-texture"
     ],
     "rng_differential": {
       "distinct_seeds": 10272,

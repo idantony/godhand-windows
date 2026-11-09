@@ -9,6 +9,7 @@
 #include "../core/game_init.h"
 #include "../core/game_stage.h"
 #include "../core/game_children.h"
+#include "../core/frame_state.h"
 #include "../core/mc_control_flow.h"
 #include "../core/mc_exit.h"
 #include "../core/movie_task.h"
@@ -83,6 +84,12 @@ struct gh_startup_host {
     gh_movie_task movie_task;
     gh_video_status movie_video;
     gh_game_services *services;
+    gh_frame_random frame_random;
+    gh_screen_fade fade;
+    uint8_t em_set_first_byte;
+    gh_host_fade_consumer fade_consumer;
+    void *fade_context;
+    uint64_t fade_draw_serial;
 };
 static int register_task(void *,uint32_t,int32_t);
 static void movie_entry(void *,int32_t);
@@ -233,6 +240,7 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.font=&h->font;b.menu=&h->menu;b.core_bin=h->bundles[0].allocation.pointer;
         b.core_bin_size=h->bundles[0].bytes;b.language=&language->view;
         b.sound_control=&h->sound_control;b.movie_pool=h->movies;
+        b.fade=&h->fade;b.audio_registry=h->audio;b.em_set_first_byte=&h->em_set_first_byte;
         e=gh_game_services_create(&b,&h->services);
         if(e)return failure(h,GH_HOST_ASSET,e);
     }
@@ -536,7 +544,10 @@ gh_host_error gh_startup_host_set_continuation(gh_startup_host *h,const gh_start
        (c->enabled && c->audio_dsp_policy!=GH_SE_DSP_NATIVE_LINEAR_REFERENCE))return GH_HOST_ARGUMENT;
     if(c->ffmpeg_path){if(!*c->ffmpeg_path)return GH_HOST_ARGUMENT;path=copy_string(c->ffmpeg_path);if(!path)return GH_HOST_MEMORY;}
     free(h->ffmpeg_path);h->ffmpeg_path=path;h->continuation=*c;
-    h->continuation.ffmpeg_path=h->ffmpeg_path;return GH_HOST_OK;
+    h->continuation.ffmpeg_path=h->ffmpeg_path;
+    if(c->enabled && gh_frame_seed_0031ceb8(&h->frame_random,&h->game_init.random,GH_FRAME_CHOP_REFERENCE)!=GH_FRAME_OK)
+        return GH_HOST_ASSET;
+    return GH_HOST_OK;
 }
 gh_host_error gh_startup_host_set_mc_frame_begin(gh_startup_host *h,gh_host_mc_frame_begin begin,void *context)
 {
@@ -557,12 +568,31 @@ gh_host_error gh_startup_host_set_input(gh_startup_host *h,const gh_native_input
     memcpy(raw+0x1a8,&input->released,8);memcpy(raw+0x1b8,&input->repeat_fast,8);
     memcpy(raw+0x1b0,&input->repeat_menu,8);return GH_HOST_OK;
 }
+gh_host_error gh_startup_host_set_fade_consumer(gh_startup_host *h,gh_host_fade_consumer consumer,void *context)
+{
+    if(!h || h->ticks || h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
+    if(!on_owner(h))return GH_HOST_THREADS;
+    h->fade_consumer=consumer;h->fade_context=context;return GH_HOST_OK;
+}
 gh_host_phase gh_startup_host_tick(gh_startup_host *h)
 {
     gh_task_run_result r;gh_dvd_error e;unsigned i;int active=0;
     if(!h)return GH_HOST_FAILED;
     if(!on_owner(h))return GH_HOST_FAILED;
     if(h->phase!=GH_HOST_RUNNING)return h->phase;
+    if(h->continuation.enabled){
+        /* Actual30AC40 relative order. Other outer-loop GS/OT/boot operations
+         * are still outside this developer host, not successful empty calls. */
+        if(gh_frame_rate_policy(&h->work)!=GH_FRAME_OK){
+            failure(h,GH_HOST_ASSET,GH_FRAME_ARGUMENT);h->phase=GH_HOST_FAILED;return h->phase;
+        }
+        gh_movie_status movie=gh_movie_pool_update_002b4a50(h->movies,&h->work);
+        if(movie){if(!h->error)failure(h,GH_HOST_ASSET,movie);h->phase=GH_HOST_FAILED;return h->phase;}
+        if(gh_frame_counter_advance(&h->work)!=GH_FRAME_OK ||
+           gh_frame_random_before_tasks_0030b008(&h->frame_random,&h->game_init.random,&h->work)!=GH_FRAME_OK){
+            failure(h,GH_HOST_ASSET,GH_FRAME_RANDOM);h->phase=GH_HOST_FAILED;return h->phase;
+        }
+    }
     r=gh_tasks_run_matching_002d52a0(&h->manager);
     if(r.status) {failure(h,GH_HOST_THREADS,r.platform_error);h->phase=GH_HOST_FAILED;return h->phase;}
     ++h->ticks;
@@ -571,15 +601,22 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
     if(h->mc_frame_pending && h->mc_slot>=0 && h->records[h->mc_slot].running==1 && !h->error){
         ++h->mc_frame_serial;h->mc_frame_ready=1;h->mc_frame_pending=0;
     }
+    if(h->continuation.enabled && !h->error){
+        gh_screen_fade_context context={512,1824,0,0};gh_fade_draw draw;
+        memcpy(&context.frame_shift,(unsigned char*)&h->work+0x564,4);
+        memcpy(&context.input_mask_5e0,(unsigned char*)&h->work+0x5e0,4);
+        gh_fade_error fade=gh_screen_fade_step_00307388(&h->fade,&context,&draw);
+        if(fade || (draw.visible && (!h->fade_consumer || h->fade_consumer(h->fade_context,&draw)!=GH_ID_OK))){
+            (void)entry_frontier(h,0x307388,0,fade?fade:GH_ID_UNSUPPORTED);
+            h->phase=GH_HOST_FRONTIER;return h->phase;
+        }
+        if(draw.visible)++h->fade_draw_serial;
+    }
     e=gh_dvd_pump(&h->dvd);
     if(e) {failure(h,GH_HOST_DISC,(int)e);h->phase=GH_HOST_FAILED;}
     if(h->phase==GH_HOST_RUNNING && h->voices){
         gh_voice_status audio=gh_sound_control_flush_se_002ca5d8(&h->sound_control,h->voices);
         if(audio){failure(h,GH_HOST_AUDIO,audio);h->phase=GH_HOST_FAILED;}
-    }
-    if(h->phase==GH_HOST_RUNNING && h->continuation.enabled){
-        gh_movie_status movie=gh_movie_pool_update_002b4a50(h->movies,&h->work);
-        if(movie){if(!h->error)failure(h,GH_HOST_ASSET,movie);h->phase=GH_HOST_FAILED;}
     }
     if(h->phase==GH_HOST_RUNNING && h->startup_returned) {
         for(i=0;i<4;++i)if(h->records[i].running)active=1;
@@ -606,6 +643,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->normal_continuation=h->continuation.enabled;out->work=&h->work;
     out->sound_control=h->sound_control.initialized?&h->sound_control:0;
     out->movie_pool=h->movies;out->movie_video=h->movie_video;
+    out->fade=&h->fade;out->fade_draw_serial=h->fade_draw_serial;
     if(h->game_stage.textures) {
         gh_stage_texture_cursor cursor;
         if(gh_stage_texture_cursor_get(h->game_stage.textures,&cursor)==GH_STAGE_OK)

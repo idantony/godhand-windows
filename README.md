@@ -12,8 +12,8 @@ not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 **Early development. No playable original game scene has been verified.**
 A native Windows execution now connects the original memory-card interface,
 normal exit, Clover movie and GameMain initialization. It loads the actual title
-room resources and stops explicitly at the next unimplemented overlay binding,
-`0x002BE708`. It begins at startup task `0x0030D358`; earlier boot and the full
+room resources and stops explicitly at the next world-lighting initializer,
+`0x002D6F40`. It begins at startup task `0x0030D358`; earlier boot and the full
 game loop remain unfinished.
 
 ### Verified progress
@@ -37,7 +37,7 @@ game loop remain unfinished.
 - Original case0 initialization, HUD setup, room state, camera reset and room
   allocation operate on shared native owners. Asset descriptors are distinct
   from completed model/animation rendering or gameplay.
-- 55 C modules pass 56 checks with optional hardware/codec checks enabled.
+- 64 C modules pass 66 checks with optional hardware/codec checks enabled.
   The earlier foundation also passes in an independent clean source snapshot.
   Restricted GPU pixels match separate CPU equations; the first MC frame stays
   byte-identical after renderer reuse.
@@ -126,7 +126,7 @@ mark substantial milestones.
 
 **仍处于早期开发，尚未验证可玩的原游戏场景。** 同一个 Windows 原生程序已串联
 原版存储卡界面、正常退出、Clover 片头和 GameMain 初始化，加载真实标题房间资源后，
-明确停在尚未实现的模块绑定入口 `0x002BE708`。执行从原启动任务 `0x0030D358`
+明确停在下一处世界光照初始化入口 `0x002D6F40`。执行从原启动任务 `0x0030D358`
 开始，前置启动和完整游戏主循环仍未完成。
 
 ### 已验证的进展
@@ -144,7 +144,7 @@ mark substantial milestones.
   音频设备播放。数值参考策略有明确范围，不声称完整音频或 PS2 实机位精确。
 - 原系统、HUD、房间、相机和内存池初始化共用真实原生状态；描述解析不代表模型、
   动画、战斗或游戏场景已经完成。
-- 启用硬件/解码器检查后，55 个 C 模块通过 56 项检查；基础模块另经独立干净源码副本
+- 启用硬件/解码器检查后，64 个 C 模块通过 66 项检查；基础模块另经独立干净源码副本
   验证。受限 GPU 像素与独立 CPU 方程一致，复用渲染器后首帧字节保持一致。
 - 两个 RNG 对 10272 个种子完成 20544 次精确比较，依据实际指令的受限模型验证；
   这不是 PS2 实机验证。上游匹配比例也不是本项目的移植完成比例。

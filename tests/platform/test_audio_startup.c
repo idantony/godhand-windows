@@ -66,6 +66,27 @@ int main(int argc,char **argv){
   CHECK(!gh_audio_token_complete(r,tokens[n]) && gh_audio_token_complete(r,next));
   tokens[n]=next;
  }
+ /* Actual room020 has no AFD at all. Registry owns all remaining sections;
+  * corrupt nonempty AFD must reject atomically and preserve this generation. */
+ {size_t size;uint8_t *source=read_file(disc,"se/r020.ses",&size);
+  gh_audio_token token,bad;gh_sound_span prog,sys,data,afd;gh_sound_bank original;
+  CHECK(gh_sound_bank_open(source,size,&original)==GH_SOUND_OK);
+  CHECK(!le(source+0x18)&&!le(source+0x1c)&&!original.external_afs);
+  CHECK(gh_audio_commit_se(r,2,source,size,&token)==GH_AUDIO_OK);
+  CHECK(gh_audio_token_complete(r,token));
+  CHECK(gh_audio_bank_views(r,2,&prog,&sys,&data,&afd)==GH_AUDIO_OK);
+  CHECK(!afd.data&&!afd.size&&prog.size==original.sections[0].size&&sys.size==256);
+  CHECK(!memcmp(prog.data,original.sections[0].data,prog.size));
+  CHECK(!memcmp(data.data,original.sections[3].data,data.size));
+  /* Pretend its program bytes are a short AFD: neither absent nor valid. */
+  source[0x18]=0x40;source[0x1c]=1;
+  CHECK(gh_audio_commit_se(r,2,source,size,&bad)==GH_AUDIO_BOUNDS);
+  CHECK(gh_audio_token_complete(r,token)&&!gh_audio_token_complete(r,bad));
+  source[0x18]=0;source[0x1c]=0;source[0x30]=0x40;
+  CHECK(gh_audio_commit_se(r,2,source,size,&bad)==GH_AUDIO_BOUNDS);
+  CHECK(gh_audio_token_complete(r,token));free(source);
+  CHECK(gh_audio_release_bank(r,2)==GH_AUDIO_OK&&!gh_audio_token_complete(r,token));
+ }
  CHECK(gh_audio_release_bank(r,0)==GH_AUDIO_OK && !gh_audio_token_complete(r,tokens[0]));
  CHECK(gh_audio_token_complete(r,tokens[1]));
  CHECK(gh_audio_release_bank(r,3)==GH_AUDIO_OK && !gh_audio_token_complete(r,tokens[1]));

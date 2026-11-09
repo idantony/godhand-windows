@@ -97,7 +97,7 @@ int main(int argc,char **argv)
         CHECK(gh_startup_host_set_continuation(h,&c)==GH_HOST_OK);
         for(i=0;i<300 && gh_startup_host_tick(h)==GH_HOST_RUNNING;++i){}
         CHECK(gh_startup_host_snapshot(h,&s)==GH_HOST_OK && s.phase==GH_HOST_FRONTIER);
-        CHECK(s.unavailable_entry==0x2be708 && s.game_state==3 && s.game_assets_loaded);
+        CHECK(s.unavailable_entry==0x2d6f40 && s.game_state==3 && s.game_assets_loaded);
         CHECK(gh_startup_host_destroy(h)==GH_HOST_OK);
     }
     /* Tear down a real suspended startup C stack with live allocations. */

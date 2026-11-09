@@ -49,7 +49,7 @@ def main():
                        "src/core/game_camera.c", "src/core/game_movie_pool.c", "src/platform/game_services.c"):
             if source not in {s for _, s in modules}:
                 modules.append((Path(source).stem, source))
-        cpp_sources += ["src/platform/window_host.cpp", "src/main.cpp"]
+        cpp_sources += ["src/platform/window_host.cpp", "src/platform/ui_fade_renderer.cpp", "src/main.cpp"]
     else:
         cpp_sources += ["tools/probe-mc-frame.cpp"]
     inputs = {"tools/build-native.py", "tools/build-windows.py", *cpp_sources, *(s for _, s in modules)}

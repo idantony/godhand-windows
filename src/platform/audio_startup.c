@@ -39,8 +39,12 @@ gh_audio_status gh_audio_commit_se(gh_audio_registry *r,int16_t id,const void *s
  if(e!=GH_SOUND_OK){free(b.bytes);return e==GH_SOUND_BOUNDS?GH_AUDIO_BOUNDS:GH_AUDIO_FORMAT;}
  prog=b.view.sections[0];sys=b.view.sections[2];samples=b.view.sections[3];
  {gh_sound_span afd=b.view.sections[1];
-  if(afd.size<16 || afd.data[12] || le(afd.data)>65536 ||
-     !fits(afd.size,le(afd.data+4),(size_t)le(afd.data)*32))goto bad;
+  /* Actual cSeData_CheckImage supports f18==0: no AFD or directory task.
+   * A nonzero section still receives every original bounded-table check. */
+  if(afd.data || afd.size){
+   if(!afd.data || afd.size<16 || afd.data[12] || le(afd.data)>65536 ||
+      !fits(afd.size,le(afd.data+4),(size_t)le(afd.data)*32))goto bad;
+  }else if(b.view.external_afs)goto bad;
  }
  if(prog.size<32)goto bad;
  b.count=le(prog.data);b.table=le(prog.data+4);
@@ -57,7 +61,7 @@ gh_audio_status gh_audio_commit_se(gh_audio_registry *r,int16_t id,const void *s
  for(size_t i=0;i<sys.size;i+=16)if(le(sys.data+i)>=samples.size)goto bad;
  /* All committed pointers now resolve to own image; transfer copies and both
   * table registrations become visible together. Playback remains separate. */
- b.generation=++r->next;b.flags=0x77; /* directory completion8 still absent */
+ b.generation=++r->next;b.flags=b.view.sections[1].data?0x77u:0x7fu; /* absent AFD has no directory operation */
  free(r->banks[id].bytes);free(r->banks[id].afs.pairs);r->banks[id]=b;
  token->bank=id;token->generation=b.generation;token->owner=r;return GH_AUDIO_OK;
 bad:free(b.bytes);return GH_AUDIO_BOUNDS;

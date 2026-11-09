@@ -12,11 +12,13 @@
 #include "../core/se_voice.h"
 #include "../core/sound_control.h"
 #include "../core/game_movie_pool.h"
+#include "../core/screen_fade.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef struct gh_startup_host gh_startup_host;
 typedef gh_id_error (*gh_host_mc_frame_begin)(void *);
+typedef gh_id_error (*gh_host_fade_consumer)(void *,const gh_fade_draw *);
 typedef struct gh_startup_continuation {
     int enabled;
     int muted; /* QA/user master mute, never simulated audio completion */
@@ -61,6 +63,8 @@ typedef struct gh_startup_snapshot {
     const gh_sound_control *sound_control;
     const gh_movie_pool *movie_pool;
     gh_video_status movie_video;
+    const gh_screen_fade *fade;
+    uint64_t fade_draw_serial;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization
@@ -89,6 +93,9 @@ gh_host_error gh_startup_host_set_continuation(gh_startup_host *,const gh_startu
  * complete draw reaches its actual task Sleep, so present once per serial.
  * UI epoch changes on creation/normal release; borrowed UI views can expire. */
 gh_host_error gh_startup_host_set_mc_frame_begin(gh_startup_host *,gh_host_mc_frame_begin,void *);
+/* Actual307388 runs after task traversal and before DVD/audio. A visible fade
+ * requires a real native draw consumer; status queries never advance time. */
+gh_host_error gh_startup_host_set_fade_consumer(gh_startup_host *,gh_host_fade_consumer,void *);
 /* Owner-fiber only, normally once before each timed engine tick. Writes raw
  * 32-bit and logical64-bit original work fields via memcpy, no host-long casts.
  * Does not invent physical input, replay, analog or pad-lock policy. */

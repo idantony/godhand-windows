@@ -92,7 +92,11 @@ def main():
                ("mc_exit", "src/core/mc_exit.c"), ("mc_control_flow", "src/core/mc_control_flow.c"),
                ("audio_events", "src/platform/audio_events.c"), ("se_voice", "src/core/se_voice.c"),
                ("sound_control", "src/core/sound_control.c"), ("video_player", "src/platform/video_player.c"),
-               ("native_input", "src/platform/native_input.c")]
+               ("native_input", "src/platform/native_input.c"), ("frame_state", "src/core/frame_state.c"),
+               ("screen_fade", "src/core/screen_fade.c"), ("game_scene_setup", "src/core/game_scene_setup.c"),
+               ("sound_scene", "src/core/sound_scene.c"), ("game_collision_pairs", "src/core/game_collision_pairs.c"),
+               ("game_room_module", "src/core/game_room_module.c"), ("game_effects", "src/core/game_effects.c"),
+               ("game_scene_filters", "src/core/game_scene_filters.c"), ("bgm_requests", "src/core/bgm_requests.c")]
     extra_tests = [
         ("nested-tasks", "tests/platform/test_nested_tasks.c", "none"),
         ("id-path", "tests/core/test_id_path.c", "iso"),
@@ -116,6 +120,16 @@ def main():
         ("sound-control", "tests/core/test_sound_control.c", "iso"),
         ("video-player", "tests/platform/test_video_player.c", "movie"),
         ("native-input", "tests/platform/test_native_input.c", "iso"),
+        ("frame-state", "tests/core/test_frame_state.c", "none"),
+        ("screen-fade", "tests/core/test_screen_fade.c", "none"),
+        ("game-scene-setup", "tests/core/test_game_scene_setup.c", "none"),
+        ("sound-scene", "tests/core/test_sound_scene.c", "iso"),
+        ("game-collision-pairs", "tests/core/test_game_collision_pairs.c", "none"),
+        ("game-room-module", "tests/core/test_game_room_module.c", "iso"),
+        ("game-effects", "tests/core/test_game_effects.c", "iso"),
+        ("game-scene-filters", "tests/core/test_game_scene_filters.c", "iso"),
+        ("bgm-requests", "tests/core/test_bgm_requests.c", "iso"),
+        ("title-texture", "tests/core/test_title_texture.c", "iso"),
     ]
     source_inputs = {"tools/build-native.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
@@ -244,8 +258,8 @@ def main():
     manifest["module_names"] = [name for name, _ in modules]
     manifest["artifacts"] = [{"path": str(path), "size": path.stat().st_size,
                               "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in sorted(output.glob("*")) if path.is_file()]
-    manifest["limitations"] = ["Developer startup-task execution slice reaches an explicit next-task frontier; no complete boot/game loop or game renderer yet",
-                               "Audio startup commits real owned banks and AFS indexes, without voices or audible output",
+    manifest["limitations"] = ["Developer native startup/MC/movie/Main execution reaches an explicit original-callee frontier; full boot/game frame/scene rendering incomplete",
+                               "Real limited MC voices and Movie0 device output use explicit native references; full BGM/SPU2 audio behavior incomplete",
                                "Serial task sleep/start/exit use native fibers; state4, async EE syscalls, interrupt/priority preemption remain unsupported",
                                "Original cHeap capacity/fragmentation and final GS indexed texture blending remain unverified",
                                "PS2 numerical reference is an implementation model, not a hardware capture",

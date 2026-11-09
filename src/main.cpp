@@ -3,6 +3,7 @@
 #include "platform/startup_host.h"
 #include "platform/window_host.h"
 #include "platform/mc_renderer.h"
+#include "platform/ui_fade_renderer.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -12,9 +13,13 @@ struct NativeApp {
     gh_startup_host *host=nullptr;
     gh_window_host *window=nullptr;
     gh_mc_renderer *renderer=nullptr;
+    gh_ui_fade_renderer *fade_renderer=nullptr;
     gh_startup_snapshot snapshot={};
     std::vector<unsigned char> elf;
+    std::vector<unsigned char> fade_pixels;
     uint64_t resource_epoch=0,frame_serial=0,presented_mc=0,presented_movie=0;
+    uint64_t presented_fade_serial=0;
+    unsigned surface_kind=0; /* 1=actual MC512448,2=Movie640448 */
     gh_window_error window_error=GH_WINDOW_OK;
 };
 static gh_id_error begin_mc(void *opaque)
@@ -22,7 +27,7 @@ static gh_id_error begin_mc(void *opaque)
     auto &app=*(NativeApp*)opaque;gh_startup_snapshot s={};
     if(gh_startup_host_snapshot(app.host,&s)!=GH_HOST_OK)return GH_ID_ARGUMENT;
     if(s.mc_ui_epoch!=app.resource_epoch){gh_mc_renderer_reset_resources(app.renderer);app.resource_epoch=s.mc_ui_epoch;}
-    gh_mc_renderer_begin(app.renderer);return GH_ID_OK;
+    gh_mc_renderer_begin(app.renderer);app.surface_kind=1;return GH_ID_OK;
 }
 static gh_id_error draw_mc(void *opaque,const gh_id_draw_job *job)
 {
@@ -40,7 +45,20 @@ static int present_movie(void *opaque,const unsigned char *rgba,size_t bytes,uns
     auto &app=*(NativeApp*)opaque;
     app.window_error=gh_window_present(app.window,rgba,bytes,width,height,4,3);
     if(app.window_error!=GH_WINDOW_OK)return 0;
-    ++app.presented_movie;return 1;
+    app.surface_kind=2;++app.presented_movie;return 1;
+}
+static gh_id_error draw_fade(void *opaque,const gh_fade_draw *draw)
+{
+    auto &app=*(NativeApp*)opaque;
+    // This backend needs an actual rendered512448 surface. A previous movie
+    // frame is640448 and cannot silently become a made-up black background.
+    if(app.surface_kind!=1)return GH_ID_UNSUPPORTED;
+    size_t bytes=0;const unsigned char *base=gh_mc_renderer_pixels(app.renderer,&bytes);
+    if(!base||bytes!=512*448*4)return GH_ID_UNSUPPORTED;
+    if(!app.fade_renderer&&gh_ui_fade_create(&app.fade_renderer)!=GH_UI_OK)return GH_ID_UNSUPPORTED;
+    app.fade_pixels.resize(bytes);
+    gh_ui_fade_context context={512,448,1824,448.0f/480.0f,1,1,0,0,0};
+    return gh_ui_fade_apply(app.fade_renderer,draw,&context,base,app.fade_pixels.data(),bytes)==GH_UI_OK?GH_ID_OK:GH_ID_UNSUPPORTED;
 }
 static void usage()
 {
@@ -106,6 +124,8 @@ int main(int argc,char **argv)
         if(host_error!=GH_HOST_OK)break;
         host_error=gh_startup_host_set_mc_frame_begin(app.host,begin_mc,&app);
         if(host_error!=GH_HOST_OK)break;
+        host_error=gh_startup_host_set_fade_consumer(app.host,draw_fade,&app);
+        if(host_error!=GH_HOST_OK)break;
         if(!prefix){
             gh_startup_continuation config={};config.enabled=1;config.muted=muted;
             config.audio_dsp_policy=GH_SE_DSP_NATIVE_LINEAR_REFERENCE;
@@ -132,7 +152,12 @@ int main(int argc,char **argv)
             host_error=gh_startup_host_set_input(app.host,&input);if(host_error!=GH_HOST_OK)break;
             gh_host_phase phase=gh_startup_host_tick(app.host);
             host_error=gh_startup_host_snapshot(app.host,&app.snapshot);if(host_error!=GH_HOST_OK)break;
-            if(app.snapshot.mc_frame_ready&&app.snapshot.mc_frame_serial!=app.frame_serial){
+            if(app.snapshot.fade_draw_serial!=app.presented_fade_serial){
+                app.window_error=gh_window_present(app.window,app.fade_pixels.data(),app.fade_pixels.size(),512,448,4,3);
+                if(app.window_error!=GH_WINDOW_OK)break;
+                app.presented_fade_serial=app.snapshot.fade_draw_serial;
+                if(app.snapshot.mc_frame_ready){app.frame_serial=app.snapshot.mc_frame_serial;++app.presented_mc;}
+            }else if(app.snapshot.mc_frame_ready&&app.snapshot.mc_frame_serial!=app.frame_serial){
                 size_t bytes=0;const unsigned char *pixels=gh_mc_renderer_pixels(app.renderer,&bytes);
                 app.window_error=gh_window_present(app.window,pixels,bytes,512,448,4,3);
                 if(app.window_error!=GH_WINDOW_OK)break;
@@ -170,6 +195,6 @@ int main(int argc,char **argv)
         app.snapshot.game_assets_loaded?"true":"false",(unsigned)renderer.id_error,renderer.frontier,
         (unsigned)app.window_error,result);
     if(app.host){gh_host_error cleanup=gh_startup_host_destroy(app.host);if(cleanup!=GH_HOST_OK){std::fprintf(stderr,"Native host cleanup failed: %u\n",(unsigned)cleanup);result=1;}}
-    gh_mc_renderer_destroy(app.renderer);gh_window_destroy(app.window);
+    gh_ui_fade_destroy(app.fade_renderer);gh_mc_renderer_destroy(app.renderer);gh_window_destroy(app.window);
     return result;
 }

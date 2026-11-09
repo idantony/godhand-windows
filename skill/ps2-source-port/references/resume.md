@@ -81,6 +81,23 @@ hardware/codec checks. The later integrated working snapshot also passed55/56.
 Read current HEAD/remote; do not assume historical milestones are latest code.
 RNG:10272 seeds/20544 exact modeled comparisons; not hardware captures.
 
+Later local checkpoint:64 C modules/66 checks pass. Connected Windows run still
+presents6 MC/90 movie frames in195 ticks but advances through actual R020 module
+identity loading, room SE bank2, collision/effects/filter setup to002D6F40.
+Known outer-frame leaves now use observed31CEB8 seed, shared two-MT advance and
+proper Movie-before-tasks/Fade-after-tasks order. Finite frame RNG adds20534
+actual-instruction comparisons over10267 words. See frame-rng-differential.json.
+R020 Init/Move are still not reached in this checkpoint; later worker changes
+may advance that frontier. Public pushed milestone4578b62 precedes this local
+checkpoint. Read Git rather than assuming the snapshot is current.
+
+The real title encrypted ADX decoder is now assigned to opengoal_method. Primary
+VGMStream support was found, actual key string/callsite identified in the user's
+ELF, and the full6369200 stereo frames match independent vgmstream PCM in the
+worker's initial test. This is decoder evidence, not playback or BGM Init success;
+real stereo queue/provider integration is still ongoing. Codec source/tests are
+not part of the above64-module checkpoint until explicitly built/integrated.
+
 ## Immediate ownership and next work
 
 - Root: native Windows app, reusable MC renderer, build/verification/review,

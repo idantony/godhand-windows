@@ -117,3 +117,13 @@ from a running Main task needs explicit nested entry and caller restoration;
 it must not replace Scenario16 records with Main4 records. Destroy Scenario and
 its runs before root backend/runtime/assets. See test_nested_tasks.c and the
 GameServices ownership tests. A successful module test is not a full boot.
+
+Outer-loop0030AC40 writes FPS at Work+568 with SB, not SW. The next byte+569 is
+the independent frame-mode selector. Poisoned-neighbor tests caught a draft
+word-store mistake; actual instructions resolved it. Work+564 controls fade
+duration shifting. Movie update precedes task traversal; Fade307388 follows
+tasks, before DVD and audio.31A338 builds OT chains, not pad input. Frame MT
+advance consumes two words before tasks, sharing GameInit's MT owner. Actual
+31CEB8 seeds MT withD8A9523D and LCG66B; using MT's uninitialized fallback5489
+as the game's observed boot seed was incomplete. The developer host still
+does not claim all intervening boot/constructor behavior or hardware cadence.

@@ -16,7 +16,8 @@ typedef struct {uint64_t generation;int16_t bank;
 gh_audio_status gh_audio_registry_create(gh_audio_registry **);
 void gh_audio_registry_destroy(gh_audio_registry *);
 /* Atomic commit. Deep-copies all SES data; verifies all table ranges before
- * publishing. Failed replacement preserves prior generation and bank. */
+ * publishing. Absent AFD (offset/size0) is valid, with no external directory.
+ * Failed replacement preserves prior generation and bank. */
 gh_audio_status gh_audio_commit_se(gh_audio_registry *,int16_t bank,
  const void *ses,size_t bytes,gh_audio_token *);
 int gh_audio_token_complete(const gh_audio_registry *,gh_audio_token);

@@ -68,8 +68,9 @@ extern "C" gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *r,const gh_id_
  if(!r||!t||!rgba||!handle||GetCurrentThreadId()!=r->thread)return GH_UI_ARGUMENT;
  // T32 template may have TCC0. Actual15BE44..15BE54 forces TCC1 before draw.
  bool t32=t->width==512&&(t->height==256||t->height==512)&&((t->tex0>>20)&63)==19;
+ bool logo=t->width==512&&t->height==512&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==9&&((t->tex0>>30)&15)==9&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  bool cursor=t->width==32&&t->height==32&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==5&&((t->tex0>>30)&15)==5&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
- if((!t32&&!cursor)||bytes!=(size_t)t->width*t->height*4||((t->tex0>>35)&3)!=0)return GH_UI_UNSUPPORTED;
+ if((!t32&&!cursor&&!logo)||bytes!=(size_t)t->width*t->height*4||((t->tex0>>35)&3)!=0)return GH_UI_UNSUPPORTED;
  std::vector<unsigned char> raw;try{raw.assign(rgba,rgba+bytes);}catch(const std::bad_alloc&){return GH_UI_MEMORY;}
  for(size_t i=3;i<bytes;i+=4){if((raw[i]&1)&&raw[i]!=255)return GH_UI_UNSUPPORTED;raw[i]=raw[i]==255?128:(unsigned char)(raw[i]/2);}
  std::unique_ptr<SpriteTexture> texture(new(std::nothrow)SpriteTexture);if(!texture)return GH_UI_MEMORY;texture->width=t->width;texture->height=t->height;
