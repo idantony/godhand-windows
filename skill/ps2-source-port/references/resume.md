@@ -41,14 +41,27 @@ Read references/godhand-case.md for exact hashes and rejected assumptions.
 The native developer host begins at task0030D358 in original slot3 of a four-slot
 manager. It connects real sound-bank commits, core/language DVD reads and fiber
 waits, font/MST/MSA binding, menu MSD tables, global ID binding and IDD/TBL reset.
-Default USA run reaches a request for002AE8A8 after five scheduler visits. The
-CLI exits2 and reports an explicit next-entry frontier, never game success.
+Default USA run executes002AE8A8's recovered native MC prefix and reaches
+mcport.rel Control+02E8 after eight scheduler visits, with67 real UI entries
+and packed message state live. CLI exits2 for that explicit frontier, never
+game success. Module SHA256 binding rejects mismatched source versions.
 Earlier boot/GS/IOP initialization and the full main loop have NOT executed.
+The original negativeflags598 branch now registers real GameMain and the
+parallel asset loader. Actual no-draw gates and all eight case0 initializers run,
+then stop at state1 handler002A5BB8. Asset loading drains before that frontier:
+current measured run95 scheduler visits, game_state1,rate0.5,assets loaded.
+This explicitly selected original branch does not replace default MC startup.
 
 002AE8A8 loads mcport.rel and calls imported Main__7cMcBoot. Literal jal0 there
 is a dynamic relocation, not a no-op. Full memory-card Main depends on actual ID
-UI/save behavior still under recovery. Native GetInfo/SearchFile plus recovered
-slot/file-check slice exist separately; they do not replace complete Main.
+UI/save behavior still under recovery. Native GetInfo/SearchFile and recovered
+slot/file-check slice exist separately; the native module/Main/DispInit prefix
+is now connected to the developer host, not complete Main/Control.
+Actual67-entry IDBase initialize/build/link/reset, typed640-entry/100-job pools,
+dummy-entry/family operations and packed-message binding/environment now pass
+separately. The MC wrapper now calls these actual operations. Control and
+actual final message/sprite submission are still being connected;
+do not restart those completed primitives or treat them as full UI execution.
 
 Task fibers preserve serial start/sleep/exit and same-slot tail restart. Restart
 success does not return to the old stack; owner deletes it and next selected
@@ -86,6 +99,8 @@ execution, encrypted ADX decode and audible output are still absent.
 | Tasks/DVD | task-thread-semantics.json, task-replace-evidence.json, dvd-job-semantics.json |
 | Font/menu | font-state-evidence.json, font-texture-evidence.json, menu-state-evidence.json |
 | Audio/MC/game assets | audio-startup-semantics.json, memory-card-semantics.json, game-start-evidence.json |
+| IDBase, messages and GameMain case0 | id-base-semantics.json, packed-message-evidence.json, game-init-evidence.json |
+| ConnectedMC prefix and ID consumers | mc-task-semantics.json, id-jobs-evidence.json |
 | GPU QA | gpu-capabilities.json, gpu-texture-verification.json, gpu-qa-last-run.json |
 | Restricted font fragment GPU draw | ui-renderer-verification.json, font-draw-evidence.json |
 | Reproducibility | fresh-build-verification.json (older scope; compare its source/test list before reuse) |

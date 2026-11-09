@@ -72,6 +72,24 @@ all claims must remain tied to the actual input and verification scope.
   actual host profile directory. Localized/fallback idsavecore loads bind slot11
   without replacing slot1. Full MC Main still needs IDBase/UI and save semantics.
 
+## Local continuation: original GameMain case0
+
+- The alternate original flags branch now registers the recovered GameMain and
+  asset-loader tasks. Real no-draw gates and all eight case0 subsystem
+  initializers run; the loader finishes concurrently before the host reports
+  the next unavailable state1 handler (`0x002A5BB8`). This is a developer branch
+  execution slice, not the default complete game startup.
+- Original CoreSave system/game initialization preserves fields according to
+  the actual writes. Enemy/object pool bounds, linked-head reset and the
+  separate624-word random generator are explicitly recovered and tested.
+- Actual67-entry MC IDBase initialization, typed pools, parent linking/reset
+  and the packed-message consumer pass original-resource tests separately.
+
+原 GameMain 的case0与并行资源任务已能在开发宿主中真实执行，接下来停在case1。
+默认存档启动路径已连接真实模块核验、图标分配、67个ID初始化、packed环境和
+初始DispInit，停在模块Control循环；仍未到达可玩场景。原T32存档素材已解码，
+ID的实际移动、颜色动画、绘制顺序和受限纹理quad也已分别验证；完整窗口绘制待接。
+
 The development host begins at the recovered startup task. Earlier boot
 initialization, the complete main loop and the actual next tasks are still
 required. No playable scene or controls have been demonstrated.

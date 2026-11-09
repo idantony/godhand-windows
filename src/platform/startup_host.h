@@ -5,6 +5,7 @@
 #include "../core/startup_task.h"
 #include "../core/font_state.h"
 #include "../core/menu_state.h"
+#include "../core/mc_task.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,6 +31,12 @@ typedef struct gh_startup_snapshot {
     const gh_menu_state *menu;
     const gh_id_state *id;
     const gh_audio_registry *audio;
+    uint8_t game_state;
+    int game_assets_loaded;
+    float game_rate;
+    const char *frontier_module; /* NULL=main ELF, otherwise module-relative entry */
+    const gh_id_base *mc_ui;
+    const gh_packed_message_state *mc_messages;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization
@@ -39,11 +46,17 @@ typedef struct gh_startup_snapshot {
  * Same OS thread and creating caller fiber only, as task_threads requires. */
 gh_host_error gh_startup_host_create(const char *iso,int32_t language,
     uint32_t flags598,size_t heap_capacity,gh_startup_host **);
+/* Explicit native save-profile location. Opening never creates or modifies
+ * it. The shorter create uses relative userdata/memory_card for this developer
+ * host; absent directory is genuinely no card when Control later queries it. */
+gh_host_error gh_startup_host_create_with_profile(const char *iso,const char *profile,
+    int32_t language,uint32_t flags598,size_t heap_capacity,gh_startup_host **);
 /* Advances selected tasks, then the actual DVD queue in original relative
  * order. A tick is a scheduler visit, not a timed/video frame. Audio startup
  * performs actual synchronous native commits; no fake per-frame RPC polling.
  * Unrecovered next entries stop at FRONTIER instead of successful empty tasks.
- * COMPLETE would mean only task0030D358, never a playable-game claim.
+ * Recovered next tasks may run too; independent recovered tasks drain before
+ * reporting another task's frontier. COMPLETE never means a playable game.
  * A call from the wrong owner returns FAILED without mutating host state;
  * snapshot still reports the session's actual execution phase. */
 gh_host_phase gh_startup_host_tick(gh_startup_host *);

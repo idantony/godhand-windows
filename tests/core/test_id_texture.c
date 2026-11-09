@@ -1,0 +1,13 @@
+#include "../../src/core/id_jobs.h"
+#include "../../src/platform/disc.h"
+#include <stdio.h>
+#include <stdlib.h>
+#define C(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
+int main(int argc,char **argv){gh_disc *d;gh_disc_entry entry;size_t i;unsigned char *b,*rgba;gh_bundle_entry idd={0};gh_id_state *manager=calloc(1,sizeof(*manager));gh_id_texture t;unsigned changed=0;
+ C(argc==2||argc==3);C(manager);C(gh_disc_open(argv[1],&d)==GH_DISC_OK);C(gh_disc_find(d,"id/local/US/idsavecore_US.idd",&i)==GH_DISC_OK);C(gh_disc_entry_at(d,i,&entry)==GH_DISC_OK);b=malloc((size_t)entry.size);rgba=malloc(512*512*4);C(b&&rgba);C(gh_disc_read(d,i,0,b,(size_t)entry.size)==GH_DISC_OK);idd.bytes=b;idd.size=(size_t)entry.size;C(gh_id_set_data_002accf8(manager,11,&idd)==GH_MENU_OK);
+ C(gh_id_texture_open(manager,11,1,&t)==GH_ID_NOT_FOUND);C(gh_id_texture_open(manager,11,2,&t)==GH_ID_OK&&t.width==512&&t.height==512);
+ C(gh_id_texture_rgba(&t,rgba,512*512*4)==GH_ID_OK);
+ for(i=0;i<512*512;i++)changed+=rgba[i*4]!=0||rgba[i*4+1]!=0||rgba[i*4+2]!=0;C(changed>1000);
+ if(argc==3){FILE *f=fopen(argv[2],"wbx");C(f);C(fwrite(rgba,1,512*512*4,f)==512*512*4);C(fclose(f)==0);}
+ C(gh_id_texture_rgba(&t,rgba,12)==GH_ID_CAPACITY);C(gh_id_texture_open(manager,11,3,&t)==GH_ID_OK&&t.height==256);C(gh_id_texture_rgba(&t,rgba,512*512*4)==GH_ID_OK);C(gh_id_texture_open(manager,11,4,&t)==GH_ID_NOT_FOUND);
+ free(rgba);free(b);free(manager);gh_disc_close(d);puts("PASS actual MC TBL1 T32/PSMT8 512x512 and512x256 native decoding; source bounds and empty slots");return 0;}

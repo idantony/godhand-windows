@@ -23,7 +23,8 @@ It stops explicitly when the next original task is unavailable.
   priority ordering and implement the original extra wait after completion.
 - The actual `0x0030D358` startup task now loads sound banks and core/language
   bundles, then initializes original font, menu and ID state. Its normal path
-  reaches `0x002AE8A8`, the memory-card boot task, which remains a real dependency.
+  enters `0x002AE8A8`, verifies the original MC module and initializes67 real UI
+  entries and message state. It currently stops at mcport's Control routine.
   This starts at that task, not at the game's entry point or full boot sequence.
 - Sound startup commits owned program/sample tables and real AFD→AFS mappings;
   ready flags are `0x7F/0x7F/0x0F`. Voice execution and audio output are pending.
@@ -85,7 +86,7 @@ See [NOTICE.md](NOTICE.md) for attribution.
 
 ### Next work
 
-Recover memory-card startup UI and the next original tasks, connect the earlier
+Connect memory-card Control/drawing and GameMain state1, then the earlier
 boot and full main loop, and implement rendering, voices/audio output, input,
 model/animation loading and save services. Verify real scenes and progression.
 Local commits retain rollback points; public pushes mark substantial milestones.
@@ -106,7 +107,8 @@ GOAL 程序，不能直接使用 Jak 专用反编译器。
 - Windows fiber 保存真实 C 调用栈，实现原任务的启动、睡眠和退出交接。DVD 队列
   读取真实 ISO 扇区，保留优先级排序及完成后的额外一次等待。
 - 原 `0x0030D358` 任务已串联声音 bank 加载、核心包/语言包读取、字体绑定、菜单表
-  和 ID 初始化。默认路径走到 `0x002AE8A8` 存档启动任务，后续仍需恢复。
+  和 ID 初始化。默认路径已进入 `0x002AE8A8`，核验原存档模块并初始化67个真实 UI
+  对象和消息环境，目前停在模块 Control 循环。
   这段执行从该任务开始，并未运行完整游戏入口和前置启动。
 - 声音启动持有真实程序/样本表，建立原 AFD→AFS 映射；ready 标志为
   `0x7F/0x7F/0x0F`。事件执行、voices 和声音输出尚未完成。
@@ -136,5 +138,5 @@ GOAL 程序，不能直接使用 Jak 专用反编译器。
 `G:\middle_thing\godhand_windows`。原始提取样本、私有恢复证据、上游源码和工具不进 Git。
 独立的 [PS2 移植 skill](skill/ps2-source-port/SKILL.md) 随开发维护，保留可恢复的项目状态。
 
-后续继续恢复存档 UI 和后续原任务，接入前置启动与完整主循环、渲染、声音、输入、
+后续继续接入存档 Control/绘制和 GameMain 的case1，再接前置启动与完整主循环、渲染、声音、输入、
 模型/动画和保存服务，再验证真实场景与游戏流程。本地小提交保留回退点，大节点再推送。

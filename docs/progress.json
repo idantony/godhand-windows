@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-09T18:13:02.842434+00:00",
+  "verified_utc": "2026-11-09T18:43:16.948251+00:00",
   "stage": "native-startup-task-integration",
   "playable": false,
   "original_game_scene_observed_in_native_port": false,
@@ -66,7 +66,16 @@
       "real_native_backends_connected": true,
       "scope": "Sound-bank commit, core/language DVD reads, font/menu/ID initialization",
       "normal_path_next_entry": "0x002AE8A8",
-      "next_entry_available": false,
+      "next_entry_available": true,
+      "current_frontier": {
+        "module": "mcport.rel",
+        "offset": "0x2E8",
+        "operation": "cMcBoot Control"
+      },
+      "alternate_original_branch": {
+        "GameMain_case0_and_parallel_asset_loader_tested": true,
+        "next_unavailable_entry": "0x002A5BB8"
+      },
       "earlier_boot_and_complete_main_loop_run": false
     },
     "font": {
@@ -94,8 +103,21 @@
       "scope": "Disc-change countdown and modal input conditions; draw dependencies remain mandatory"
     },
     "memory_card": {
-      "scope": "Native profile GetInfo/SearchFile, original slot/file check slice and localized/fallback ID resource binding",
+      "scope": "Real module read/version binding, native card service, icon allocation, localizedID/67-entry initialization/packed/DispInit prefix and separate slot/file checks",
       "full_Main_UI_or_save_load_complete": false
+    },
+    "id_base": {
+      "scope": "Bounded table lookup, typed640-entry/100-job pool, actual67-entry MC initialization/link/reset and packed-message environment",
+      "full_UI_rendering_complete": false
+    },
+    "id_jobs": {
+      "scope": "Actual MC zero-rotation layout/move/color animation, ordered visible consumers, T32 indexed8 decoding and restricted original texture quads",
+      "complete_MC_window_rendered": false
+    },
+    "game_init": {
+      "original_function": "0x002A5B18",
+      "scope": "Concrete world/camera/enemy/object/heat/input/save initialization and separate MT generator",
+      "scene_loading_or_combat_complete": false
     },
     "sound": {
       "startup": "0x002CA798",
@@ -138,7 +160,14 @@
       "mc_boot",
       "mc_boot_id",
       "font_draw",
-      "game_gate"
+      "game_gate",
+      "id_base",
+      "packed_message",
+      "game_init",
+      "mc_task",
+      "id_jobs",
+      "id_jobs_texture",
+      "id_jobs_primitive"
     ],
     "passed_steps": [
       "test-rng",
@@ -164,7 +193,13 @@
       "test-memory-card",
       "test-mc-id",
       "test-font-draw",
-      "test-game-gate"
+      "test-game-gate",
+      "test-id-base",
+      "test-packed-message",
+      "test-game-init",
+      "test-mc-task",
+      "test-id-jobs",
+      "test-id-texture"
     ],
     "rng_differential": {
       "distinct_seeds": 10272,
