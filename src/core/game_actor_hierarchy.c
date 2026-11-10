@@ -15,7 +15,12 @@ static gh_actor_model_status fail(gh_actor_model*s,uint32_t f,unsigned d,gh_acto
 
 gh_actor_model_status gh_actor_model_update_hierarchy_00149eb8(gh_actor_model*s,gh_static_transform_policy policy){
  if(!s||!s->bound||!s->parts_ready)return GH_ACTOR_MODEL_ARGUMENT;s->frontier=0;s->detail=0;uint8_t*r=s->root.bytes;
- const uint8_t*external_parent=NULL;if(s->external_owner){if(gh_actor_model_external_parent_at(s,0,&external_parent))return fail(s,0x1501d0,0,GH_ACTOR_MODEL_UNSUPPORTED);}else if(s->external_parent)return fail(s,0x1501d0,0,GH_ACTOR_MODEL_UNSUPPORTED);
+ const uint8_t *external_parents[255]={0};
+ if(s->external_owner){
+  if(s->external_parts||gh_actor_model_external_parent_at(s,0,&external_parents[0]))return fail(s,0x1501d0,0,GH_ACTOR_MODEL_UNSUPPORTED);
+ }else if(s->external_parent)return fail(s,0x1501d0,0,GH_ACTOR_MODEL_UNSUPPORTED);
+ if(s->external_parts)for(unsigned i=0;i<s->part_count;i++)
+  if(gh_actor_model_external_parts_at(s,i,&external_parents[i]))return fail(s,0x1501d0,i,GH_ACTOR_MODEL_UNSUPPORTED);
  if(policy!=GH_STATIC_BINARY32_REFERENCE)return fail(s,0x149eb8,0,GH_ACTOR_MODEL_UNSUPPORTED);
  if(!isfinite(value(r+0x27c)))return fail(s,0x149eb8,0,GH_ACTOR_MODEL_UNSUPPORTED);uint32_t rootflags=value(r+0x27c)>0?word(r+0x250)|4u:word(r+0x250)&~4u;
  float rootmatrix[16],locals[255][16],adjusted[255][4];uint32_t frontier=0;
@@ -28,6 +33,6 @@ gh_actor_model_status gh_actor_model_update_hierarchy_00149eb8(gh_actor_model*s,
   if(value(r+0x27c)>0&&!(f&0x100000)&&!(rootflags&0x20)){float old[16];memcpy(old,p+0x40,64);if(!s->blend_globals||gh_actor_matrix_blend_00156d70(value(r+0x27c),locals[i],old,locals[i],s->blend_globals,policy,&frontier)){fesetenv(&saved);return fail(s,frontier?frontier:0x156d70,i,GH_ACTOR_MODEL_UNSUPPORTED);}}
  }
  if(!(rootflags&0x800)){memcpy(r+0x80,rootmatrix,64);memcpy(r+0x120,r+0x110,12);}put(r,0x250,rootflags);
- for(unsigned i=0;i<s->part_count;i++){gh_actor_part*part=s->parts+i;uint8_t*p=part->bytes;uint32_t flags=word(p+0x154);memcpy(p+0x100,adjusted[i],16);if(!(flags&8)||(value(r+0x27c)>0&&!(flags&0x100000)&&!(rootflags&0x20)))memcpy(p,locals[i],64);if(!(flags&16)){const uint8_t*parent=(i==0&&external_parent)?external_parent:part->parent_is_model?r:s->parts[part->parent].bytes;float pm[16],world[16];memcpy(pm,parent+0x80,64);if(i==0&&external_parent){if(gh_actor_matrix_product_00147548(pm,locals[i],world,policy,&frontier)){fesetenv(&saved);return fail(s,frontier?frontier:0x1501d0,i,GH_ACTOR_MODEL_UNSUPPORTED);}}else for(unsigned col=0;col<4;col++)for(unsigned row=0;row<4;row++){float n=mul(pm[row],locals[i][col*4]);n=add(n,mul(pm[4+row],locals[i][col*4+1]));n=add(n,mul(pm[8+row],locals[i][col*4+2]));world[col*4+row]=add(n,mul(pm[12+row],locals[i][col*4+3]));}for(unsigned k=0;k<16;k++)if(!isfinite(world[k])){fesetenv(&saved);return fail(s,0x1501d0,i,GH_ACTOR_MODEL_UNSUPPORTED);}memcpy(p+0x80,world,64);}}
+ for(unsigned i=0;i<s->part_count;i++){gh_actor_part*part=s->parts+i;uint8_t*p=part->bytes;uint32_t flags=word(p+0x154);memcpy(p+0x100,adjusted[i],16);if(!(flags&8)||(value(r+0x27c)>0&&!(flags&0x100000)&&!(rootflags&0x20)))memcpy(p,locals[i],64);if(!(flags&16)){const uint8_t*parent=external_parents[i]?external_parents[i]:part->parent_is_model?r:s->parts[part->parent].bytes;float pm[16],world[16];memcpy(pm,parent+0x80,64);if(external_parents[i]){if(gh_actor_matrix_product_00147548(pm,locals[i],world,policy,&frontier)){fesetenv(&saved);return fail(s,frontier?frontier:0x1501d0,i,GH_ACTOR_MODEL_UNSUPPORTED);}}else for(unsigned col=0;col<4;col++)for(unsigned row=0;row<4;row++){float n=mul(pm[row],locals[i][col*4]);n=add(n,mul(pm[4+row],locals[i][col*4+1]));n=add(n,mul(pm[8+row],locals[i][col*4+2]));world[col*4+row]=add(n,mul(pm[12+row],locals[i][col*4+3]));}for(unsigned k=0;k<16;k++)if(!isfinite(world[k])){fesetenv(&saved);return fail(s,0x1501d0,i,GH_ACTOR_MODEL_UNSUPPORTED);}memcpy(p+0x80,world,64);}}
  if(fesetenv(&saved))return fail(s,0x149eb8,0,GH_ACTOR_MODEL_UNSUPPORTED);return GH_ACTOR_MODEL_OK;
 }

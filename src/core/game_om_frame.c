@@ -1,6 +1,7 @@
 /* Readable original waiting-state Move for verified R100 OM classes.
  * Patched SLUS_215.03; semantic host pointers replace raw644/634/414. */
 #include "game_om_frame.h"
+#include "game_model_texture_scroll.h"
 #include "game_actor_model_nodes.h"
 #include "game_om303.h"
 #include "game_om307.h"
@@ -65,18 +66,9 @@ static gh_object_step_status bind(gh_om_frame_state*s,const gh_om_factory*f,cons
 }
 static gh_object_step_status model_rate(gh_om_frame_state*s,float rate,uint32_t*f){
  gh_om_init_state*c=common(s);if(!c||!c->model.ready||c->model.root.bytes!=s->object->view.bytes)return fail(s,0x14e4d0,f,GH_OBJSTEP_UNSUPPORTED);
- if(c->model.root.bytes[0x2b1]!=c->model.script.mesh_count)return fail(s,0x14b6f8,f,GH_OBJSTEP_UNSUPPORTED);
- while(s->node_index<c->model.script.mesh_count){const gh_actor_node_packets*p;unsigned i=s->node_index;if(gh_actor_model_packet_at(&c->model,i,&p)||!p||!p->ready)return fail(s,0x14b6f8,f,GH_OBJSTEP_CALLEE);uint8_t*n=p->node;
-  if(!(word(n+0x410)&0x80000000u)){
-   if(word(n+0x414))return fail(s,0x149244,f,GH_OBJSTEP_UNSUPPORTED);
-   gh_model_mesh m;if(gh_model_mesh_at(&p->script,p->mesh_index,&m)||m.descriptor_offset>p->script.size||p->script.size-m.descriptor_offset<0x42)return fail(s,0x149244,f,GH_OBJSTEP_CALLEE);
-   const uint8_t*d=p->script.bytes+m.descriptor_offset;uint32_t u=gh_om_half_bits_00156488((uint16_t)half(d+0x3e)),v=gh_om_half_bits_00156488((uint16_t)half(d+0x40));float du,dv;memcpy(&du,&u,4);memcpy(&dv,&v,4);float x=add(number(n+0x38c),mul(du,rate)),y=add(number(n+0x390),mul(dv,rate));
-   if(!isfinite(x)||!isfinite(y)||fabsf(x)>=16777216.0f||fabsf(y)>=16777216.0f)return fail(s,0x14927c,f,GH_OBJSTEP_UNSUPPORTED);
-   /* PinnedPCSX2 EE CVT_W casts to signedinteger; preserve negative
-    * fractions (trunc), never substitute floor/fract or host FEnv casts. */
-   x=add(x,-truncf(x));y=add(y,-truncf(y));memcpy(n+0x38c,&x,4);memcpy(n+0x390,&y,4);
-  }s->node_index++;
- }return GH_OBJSTEP_OK;
+ uint32_t pc;
+ gh_actor_model_status status=gh_game_model_texture_scroll_0014e4d0(&c->model,rate,&s->node_index,&pc);
+ return !status?GH_OBJSTEP_OK:fail(s,pc,f,status==GH_ACTOR_MODEL_BOUNDS?GH_OBJSTEP_CALLEE:GH_OBJSTEP_UNSUPPORTED);
 }
 /* Actual1BF518/1BF5E0 tutorial rotation and gated player proximity. */
 static gh_object_step_status special3eb(gh_om_frame_state*s,gh_static_transform_policy policy,uint32_t*f){

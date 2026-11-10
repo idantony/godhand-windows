@@ -74,14 +74,18 @@ static int has_dependency(const uint8_t*p,uint32_t key){for(unsigned i=0;i<4;i++
 /* Actual1FF710 counts pre-existingFFFF only; removedmatches donotcountasempty.
  * Multiplematchingdependencies thereforedoNOTreturnlast-reference true. */
 static int remove_dependency(uint8_t*p,uint32_t key){unsigned empty=0;int found=0;for(unsigned i=0;i<4;i++){uint8_t*q=p+0x4c+i*4;uint32_t old=u32(q);if(old==key){w32(q,0xffff);found=1;}else if(old==0xffff)empty++;}return empty==3&&found;}
-gh_object_status gh_game_objects_update_001fe748(gh_game_objects*s,uint32_t*f){
+static gh_object_status check_ready_slot(gh_game_objects *,unsigned,uint8_t *,const gh_object_resource_bindings *,int *,uint32_t *);
+gh_object_status gh_game_objects_update_bound_001fe748(gh_game_objects*s,const gh_object_resource_bindings*b,uint32_t*f){
  if(f)*f=0;if(!manager_valid(s))return GH_OBJECT_ARGUMENT;
- /* Onlypure scalarpaths commit. AnunknownIO/free consumer isdetectedbefore
-  * owner mutation; thisnativepreflight isnot anexecutedpartialoriginalcall. */
+ /* Read the actual DVD and sound owners. Commit scalar changes together so
+  * a later unknown release cannot leave this manager update half applied. */
  uint8_t plan[80][0x5c];memcpy(plan,s->slots->records,(size_t)s->slots->count*0x5c);
  for(uint32_t n=s->slots->count;n;n--){uint8_t*p=plan[n-1];uint32_t state=u32(p);
-  if(state==1||state==7){if(f)*f=state==1?0x1ff238:0x1ff338;return GH_OBJECT_UNSUPPORTED;}
-  if(state==5)w32(p,6);else if(state==6)w32(p,7);
+  if(state==1){
+   if(!b){if(f)*f=0x1ff238;return GH_OBJECT_UNSUPPORTED;}
+   int ready=0;gh_object_status status=check_ready_slot(s,n-1,p,b,&ready,f);if(status)return status;
+  }else if(state==7){if(f)*f=0x1ff338;return GH_OBJECT_UNSUPPORTED;}
+  else if(state==5)w32(p,6);else if(state==6)w32(p,7);
   if(u32(p)==8&&has_dependency(p,0xfffe)){
    uint32_t kind=u32(p+0x20);(void)remove_dependency(p,0xfffe);
    for(uint32_t j=s->slots->count;j;j--){uint8_t*q=plan[j-1];int is_valid=u32(q+4)!=0||(!(u32(q+8)&4)&&u32(q+0x10)!=0);
@@ -91,6 +95,7 @@ gh_object_status gh_game_objects_update_001fe748(gh_game_objects*s,uint32_t*f){
  }
  memcpy(s->slots->records,plan,(size_t)s->slots->count*0x5c);return GH_OBJECT_OK;
 }
+gh_object_status gh_game_objects_update_001fe748(gh_game_objects*s,uint32_t*f){return gh_game_objects_update_bound_001fe748(s,NULL,f);}
 
 
 gh_object_status gh_game_objects_release_nonpinned_001fef30(gh_game_objects*s,gh_object_slot_release call,void*ctx,uint32_t*f){
@@ -182,4 +187,34 @@ gh_object_status gh_game_objects_load_wait_001fe8a0(gh_object_resource_load*op,g
 
 gh_object_status gh_game_objects_sound_slots(const gh_game_objects*s,uint32_t kind,uint32_t*count,int32_t slots[10]){if(!manager_valid(s)||!count||!slots)return GH_OBJECT_ARGUMENT;int index=find(s,kind);if(index<0)return GH_OBJECT_MISSING;const uint8_t*p=s->slots->records+(size_t)index*0x5c;uint32_t n=u32(p+0x18);if(n>10)return GH_OBJECT_BOUNDS;for(unsigned i=0;i<10;i++){uint32_t raw=u32(p+0x24+i*4);slots[i]=raw<=INT32_MAX?(int32_t)raw:(int32_t)((int64_t)raw-4294967296LL);}*count=n;return GH_OBJECT_OK;}
 gh_object_status gh_game_objects_append_sound_slot(gh_game_objects*s,uint32_t kind,int32_t slot){if(!manager_valid(s)||slot<0||slot>=52)return GH_OBJECT_ARGUMENT;int index=find(s,kind);if(index<0)return GH_OBJECT_MISSING;uint8_t*p=s->slots->records+(size_t)index*0x5c;uint32_t count=u32(p+0x18);if(count>=10)return GH_OBJECT_BOUNDS;w32(p+0x24+count*4,(uint32_t)slot);w32(p+0x18,count+1);return GH_OBJECT_OK;}
-gh_object_status gh_game_objects_check_ready_001ff238(gh_game_objects*s,uint32_t kind,const gh_object_resource_bindings*b,int*out,uint32_t*f){if(f)*f=0;if(!manager_valid(s)||!b||!out)return GH_OBJECT_ARGUMENT;*out=0;int index=find(s,kind);if(index<0)return GH_OBJECT_MISSING;uint8_t*p=s->slots->records+(size_t)index*0x5c;if(u32(p+8)&1){gh_dvd_jobs*d=s->source[index].dvd?s->source[index].dvd:b->dvd;if(!d||(b->dvd&&d!=b->dvd))return resource_fail(f,0x201098,GH_OBJECT_ARGUMENT);uint32_t id=u32(p+0x1c);if(gh_dvd_check(d,id))return GH_OBJECT_OK;if(d->failed_id==id)return resource_fail(f,0x201098,GH_OBJECT_DISC);w32(p+8,u32(p+8)&~1u);}if(u32(p+0x20)!=0xffff){for(unsigned i=0;i<10;i++){uint32_t raw=u32(p+0x24+i*4);int32_t slot=raw<=INT32_MAX?(int32_t)raw:(int32_t)((int64_t)raw-4294967296LL);if(slot==-1)continue;if(!b->sound_check)return resource_fail(f,0x2cb778,GH_OBJECT_UNSUPPORTED);int ready=0;gh_object_status e=b->sound_check(b->sound_context,slot,&ready,f);if(e)return e;if(ready!=0&&ready!=1)return resource_fail(f,0x2cb778,GH_OBJECT_ARGUMENT);if(!ready)return GH_OBJECT_OK;}}w32(p,2);*out=1;return GH_OBJECT_OK;}
+static gh_object_status check_ready_slot(gh_game_objects *s, unsigned index, uint8_t *p,
+ const gh_object_resource_bindings *b, int *out, uint32_t *f){
+ *out=0;
+ if(u32(p+8)&1){
+  gh_dvd_jobs *dvd=s->source[index].dvd?s->source[index].dvd:b->dvd;
+  if(!dvd||(b->dvd&&dvd!=b->dvd))return resource_fail(f,0x201098,GH_OBJECT_ARGUMENT);
+  uint32_t id=u32(p+0x1c);
+  if(gh_dvd_check(dvd,id))return GH_OBJECT_OK;
+  if(dvd->failed_id==id)return resource_fail(f,0x201098,GH_OBJECT_DISC);
+  w32(p+8,u32(p+8)&~1u);
+ }
+ if(u32(p+0x20)!=0xffff){
+  for(unsigned i=0;i<10;i++){
+   uint32_t raw=u32(p+0x24+i*4);
+   int32_t slot=raw<=INT32_MAX?(int32_t)raw:(int32_t)((int64_t)raw-4294967296LL);
+   if(slot==-1)continue;
+   if(!b->sound_check)return resource_fail(f,0x2cb778,GH_OBJECT_UNSUPPORTED);
+   int ready=0;
+   gh_object_status status=b->sound_check(b->sound_context,slot,&ready,f);
+   if(status)return status;
+   if(ready!=0&&ready!=1)return resource_fail(f,0x2cb778,GH_OBJECT_ARGUMENT);
+   if(!ready)return GH_OBJECT_OK;
+  }
+ }
+ w32(p,2);*out=1;return GH_OBJECT_OK;
+}
+gh_object_status gh_game_objects_check_ready_001ff238(gh_game_objects*s,uint32_t kind,const gh_object_resource_bindings*b,int*out,uint32_t*f){
+ if(f)*f=0;if(!manager_valid(s)||!b||!out)return GH_OBJECT_ARGUMENT;
+ *out=0;int index=find(s,kind);if(index<0)return GH_OBJECT_MISSING;
+ return check_ready_slot(s,(unsigned)index,s->slots->records+(size_t)index*0x5c,b,out,f);
+}

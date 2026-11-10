@@ -4,6 +4,7 @@
 #include "id_jobs.h"
 #include "../assets/font_texture.h"
 #include "../assets/tim2.h"
+#include "../assets/gs_indexed_layout.h"
 #include <stdlib.h>
 #include <string.h>
 static uint16_t u16(const unsigned char *p){return (uint16_t)(p[0]|p[1]<<8);}
@@ -45,12 +46,6 @@ static unsigned addr32(unsigned x,unsigned y){
  unsigned col=(x&1)^((x&2)<<1)^((x&4)<<1)^((y&1)<<1)^((y&2)<<3)^((y&4)<<3);
  return (y/32)*2048+block*64+col;
 }
-static unsigned addr8(unsigned x,unsigned y,unsigned pages){
- unsigned bx=(x%128)/16,by=(y%64)/16,cx=x%16,cy=y%16;
- unsigned block=(bx&1)^((bx&2)<<1)^((bx&4)<<2)^((by&1)<<1)^((by&2)<<2);
- unsigned col=((cx&1)<<2)^((cx&2)<<3)^((cx&4)<<3)^((cx&8)>>2)^((cy&1)<<3)^((cy&2)?33:0)^((cy&4)?96:0)^((cy&8)<<4);
- return ((x/128)+(y/64)*pages)*8192+block*256+col;
-}
 static unsigned addr4(unsigned x,unsigned y){
  /* Actual512widePSMT4: 128x128page,32x16block,4x8column. Sameindependently
   * derivedGSbitpermutation asfontatlas; extendYpages, notlinear-nibbleguess. */
@@ -80,13 +75,13 @@ gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity
  for(i=0;i<words;i++)inverse[i]=UINT32_MAX;
  for(y=0;y<image.height;y++)for(x=0;x<64;x++){unsigned a=addr32(x,y);if(a>=words||inverse[a]!=UINT32_MAX){free(inverse);return GH_ID_FORMAT;}inverse[a]=y*64+x;}
  for(y=0;y<t->height;y++)for(x=0;x<t->width;x++){
-  unsigned a=psm==20?addr4(x,y):addr8(x,y,t->width/128),index,palette;const unsigned char *color;
+  unsigned a=psm==20?addr4(x,y):(unsigned)gh_gs_psmt8_offset(x,y,t->width/128),index,palette;const unsigned char *color;
   if(a/(psm==20?8:4)>=words){free(inverse);return GH_ID_BOUNDS;}
   if(psm==20){index=(image.pixels[inverse[a/8]*4+(a%8)/2]>>((a&1)*4))&15;palette=(index&7)+(index>>3)*16;}
   else{index=image.pixels[inverse[a/4]*4+a%4];
   /* CSM1 PSMT8 palette index swaps bits3/4, matching official gsKit T8 CLUT
    * rotation and unlike its T4 path. Other bits remain unchanged. */
-  palette=(index&~24U)|((index&8)<<1)|((index&16)>>1);}
+  palette=gh_gs_csm1_palette256(index);}
   color=clut.pixels+palette*4;i=(y*t->width+x)*4;
   out[i]=color[0];out[i+1]=color[1];out[i+2]=color[2];out[i+3]=color[3]>=128?255:(unsigned char)(color[3]*2);
  }

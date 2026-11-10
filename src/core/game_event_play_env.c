@@ -137,15 +137,31 @@ gh_game_event_status gh_event_env_extra_move_object_00006b08(
     return GH_EVENT_OK;
 }
 
-gh_game_event_status gh_event_play_00296c28(
-    gh_event_play_state *play, gh_game_event *event, gh_event_components *components,
-    const gh_game_event_config *config, gh_boot_work *work, gh_screen_fade *fade,
-    const gh_display_state *display, int *original_done, uint32_t *frontier)
+static gh_game_event_status visit_component(gh_event_play_state *play, const gh_event_play_bindings *b,
+    uint32_t site, int *end, uint32_t *frontier)
+{
+    *frontier = site;
+    if (!b->visit) return GH_EVENT_UNSUPPORTED;
+    uint32_t child = 0;
+    int relative = 0;
+    gh_game_event_status status = b->visit(b->context, site, end, &child, &relative);
+    if (status && child) {
+        *frontier = child;
+        play->frontier_relative = (uint8_t)(relative != 0);
+    }
+    return status;
+}
+
+gh_game_event_status gh_event_play_00296c28(gh_event_play_state *play,
+    const gh_event_play_bindings *b, int *original_done, uint32_t *frontier)
 {
     if (!original_done || !frontier) return GH_EVENT_ARGUMENT;
     *original_done = 0;
     *frontier = 0x296c28;
-    if (!play || !event || !event->initialized || !work) return GH_EVENT_ARGUMENT;
+    if (!play || !b || !b->event || !b->event->initialized || !b->work) return GH_EVENT_ARGUMENT;
+    gh_game_event *event = b->event;
+    gh_event_components *components = b->components;
+    play->frontier_relative = 0;
     if (play->event &&
         (play->event != event || play->components != components ||
          play->event_number != event->fields.data_number))
@@ -160,26 +176,53 @@ gh_game_event_status gh_event_play_00296c28(
             play->components = components;
             play->event_number = event->fields.data_number;
             if (!play->next_initialization) {
-                uint8_t *raw_work = (uint8_t *)work;
+                uint8_t *raw_work = (uint8_t *)b->work;
                 write_word(raw_work + 0x5e4, read_word(raw_work + 0x5e4) | 1);
                 gh_game_event_status status = gh_event_env_init_play_00005930(
-                    components, config, work, fade, display, frontier);
+                    components, b->config, b->work, b->fade, b->display, frontier);
                 if (status) return status;
                 play->next_initialization = 1;
             }
             if (play->next_initialization == 1) {
-                gh_game_event_status status = extra_play_init(components, config, frontier);
+                gh_game_event_status status = extra_play_init(components, b->config, frontier);
                 if (status) return status;
                 play->next_initialization = 2;
             }
-            *frontier = 0x296d08;
-            return GH_EVENT_UNSUPPORTED;
+            static const uint32_t init_sites[] = {
+                0x296d08, 0x296d14, 0x296d20, 0x296d2c, 0x296d38, 0x296d44, 0x296d50,
+                0x296d5c, 0x296d68, 0x296d74, 0x296d80, 0x296d8c, 0x296d98, 0x296da4, 0x296db0
+            };
+            for (; play->next_initialization - 2u < sizeof(init_sites) / sizeof(*init_sites);
+                 ++play->next_initialization) {
+                int ignored = 0;
+                gh_game_event_status status = visit_component(play, b, init_sites[play->next_initialization - 2u],
+                    &ignored, frontier);
+                if (status) return status;
+            }
+            event->fields.flags |= 4;
         }
         event->fields.phase++;
     }
     if (event->fields.phase == 1 && (event->fields.flags & 4)) {
-        *frontier = 0x296dfc;
-        return GH_EVENT_UNSUPPORTED;
+        static const uint32_t move_sites[] = {
+            0x296dfc, 0x296e04, 0x296e0c, 0x296e18, 0x296e24, 0x296e30, 0x296e3c,
+            0x296e48, 0x296e54, 0x296e60, 0x296e6c, 0x296e78, 0x296e84, 0x296e90,
+            0x296e9c, 0x296ea8, 0x296eb4, 0x296ec0, 0x296ec8
+        };
+        if (!play->quit_pending) {
+            int end = 0;
+            for (; play->next_move < sizeof(move_sites) / sizeof(*move_sites); ++play->next_move) {
+                end = 0;
+                gh_game_event_status status = visit_component(play, b, move_sites[play->next_move], &end, frontier);
+                if (status) return status;
+            }
+            play->next_move = 0;
+            play->quit_pending = (uint8_t)(end != 0);
+        }
+        if (play->quit_pending) {
+            *frontier = 0x296ef0;
+            return GH_EVENT_UNSUPPORTED;
+        }
     }
     *frontier = 0;
     return GH_EVENT_OK;

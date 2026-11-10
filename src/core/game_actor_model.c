@@ -113,7 +113,7 @@ gh_actor_model_status gh_actor_model_initialize_00149738(gh_actor_model*s,const 
 }
 gh_actor_model_status gh_actor_model_part_at(const gh_actor_model*s,unsigned i,const gh_actor_part**out){if(!s||!s->bound||!out)return GH_ACTOR_MODEL_ARGUMENT;if(i>=s->parts_allocated)return GH_ACTOR_MODEL_BOUNDS;*out=s->parts+i;return GH_ACTOR_MODEL_OK;}
 gh_actor_model_status gh_actor_model_release(gh_actor_model*s){
- if(!s)return GH_ACTOR_MODEL_ARGUMENT;if(s->external_owner||s->external_borrowers||s->sound_borrowers)return GH_ACTOR_MODEL_BUSY;if(s->bound&&s->native_identity!=s)return GH_ACTOR_MODEL_ARGUMENT;if(!s->bound){*s=(gh_actor_model){0};return GH_ACTOR_MODEL_OK;}
+ if(!s)return GH_ACTOR_MODEL_ARGUMENT;if(s->external_owner||s->external_parts||s->external_borrowers||s->sound_borrowers)return GH_ACTOR_MODEL_BUSY;if(s->bound&&s->native_identity!=s)return GH_ACTOR_MODEL_ARGUMENT;if(!s->bound){*s=(gh_actor_model){0};return GH_ACTOR_MODEL_OK;}
  gh_actor_model_status released=gh_actor_model_release_nodes(s);if(released)return released;
  if(s->first_node_handle){if(gh_room_block_put_002a9800(&s->pools->blocks[1],s->first_node_handle))return GH_ACTOR_MODEL_BUSY;s->pools->blocks[1].remaining1c++;s->first_node_handle=0;}
  for(unsigned i=s->parts_allocated;i;i--){gh_actor_part*p=s->parts+i-1;if(gh_room_block_put_002a9800(&s->pools->blocks[0],p->handle))return GH_ACTOR_MODEL_BUSY;s->pools->blocks[0].remaining1c++;s->parts_allocated--;}

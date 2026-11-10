@@ -2,6 +2,7 @@
  * Address mathematics independently reconstructed for native pixels; no GPL
  * implementation copied. See existing GS-layout/font/T32 evidence. */
 #include "tm3.h"
+#include "gs_indexed_layout.h"
 #include <string.h>
 static uint16_t u16(const uint8_t*p){return (uint16_t)(p[0]|(unsigned)p[1]<<8);}
 static uint32_t u32(const uint8_t*p){return (uint32_t)u16(p)|(uint32_t)u16(p+2)<<16;}
@@ -22,10 +23,14 @@ gh_tm3_error gh_tm3_member(const gh_tm3_bundle*t,unsigned index,gh_tm3_picture*o
  if(memcmp(b,"TIM3",4)||b[4]!=4||(b[5]!=0&&b[5]!=6)||u16(b+6)!=1)return GH_TM3_UNSUPPORTED;
  const uint8_t*p=b+16;uint32_t total=u32(p),clut=u32(p+4),image=u32(p+8);uint16_t head=u16(p+12),w=u16(p+20),h=u16(p+22);
  if(head<48||total<head||total>end-off-16||image>total-head||clut>total-head-image)return GH_TM3_BOUNDS;
- if(u16(p+14)!=16||p[17]!=1||p[18]!=3||p[19]!=4||!w||!h||(w&(w-1))||(h&(h-1))||image!=(size_t)w*h/2||clut!=64)return GH_TM3_UNSUPPORTED;
  uint64_t tex0=u64(p+24);unsigned tw=(unsigned)(tex0>>26)&15,th=(unsigned)(tex0>>30)&15;
- if(((tex0>>20)&63)!=20||((tex0>>51)&63)||((tex0>>56)&31)||(1u<<tw)!=w||(1u<<th)!=h)return GH_TM3_UNSUPPORTED;
- if(b[5]==0){if((w!=32&&w!=64&&w!=128)||(h!=16&&h!=32&&h!=64))return GH_TM3_UNSUPPORTED;}
+ unsigned psm=(unsigned)(tex0>>20)&63;
+ if((psm!=19&&psm!=20)||((tex0>>51)&63)||((tex0>>56)&31)||(1u<<tw)!=w||(1u<<th)!=h||p[17]!=1||p[18]!=3)return GH_TM3_UNSUPPORTED;
+ unsigned indexed8=psm==19;
+ if(u16(p+14)!=(indexed8?256:16)||p[19]!=(indexed8?5:4)||
+    image!=(size_t)w*h/(indexed8?1:2)||clut!=(indexed8?1024:64))return GH_TM3_UNSUPPORTED;
+ if(indexed8){if(b[5]!=6||w<128||w>512||h<64||h>512)return GH_TM3_UNSUPPORTED;}
+ else if(b[5]==0){if((w!=32&&w!=64&&w!=128)||(h!=16&&h!=32&&h!=64))return GH_TM3_UNSUPPORTED;}
  else if((w!=128&&w!=256)||(h!=128&&h!=256&&h!=512))return GH_TM3_UNSUPPORTED;
  *out=(gh_tm3_picture){b,p+head,p+head+image,end-off,image,clut,w,h,tex0,b[5]};return GH_TM3_OK;
 }
@@ -36,20 +41,39 @@ static size_t addr4(unsigned x,unsigned y,unsigned pitch){
  return ((x/128)+(size_t)(y/128)*pitch)*16384+block*512+column;
 }
 static unsigned bit(size_t a,unsigned n){return (unsigned)(a>>n)&1u;}
+static size_t upload_word(size_t word,unsigned pitch){
+ size_t page=word/2048;
+ unsigned x=bit(word,0)|(bit(word,2)<<1)|(bit(word,3)<<2)|(bit(word,6)<<3)|(bit(word,8)<<4)|(bit(word,10)<<5);
+ unsigned y=bit(word,1)|(bit(word,4)<<1)|(bit(word,5)<<2)|(bit(word,7)<<3)|(bit(word,9)<<4);
+ return ((page/pitch)*32+y)*(pitch*64)+(page%pitch)*64+x;
+}
 gh_tm3_error gh_tm3_rgba_gs(const gh_tm3_picture*p,void*raw,size_t capacity){
  if(!p||!raw||!p->image||!p->clut)return GH_TM3_ARGUMENT;size_t pixels=(size_t)p->width*p->height;
- if(!pixels||p->image_bytes!=pixels/2||p->clut_bytes!=64)return GH_TM3_BOUNDS;if(capacity<pixels*4)return GH_TM3_CAPACITY;
+ unsigned psm=(unsigned)(p->tex0>>20)&63,indexed8=psm==19;
+ if(psm!=19&&psm!=20)return GH_TM3_UNSUPPORTED;
+ if(!pixels||p->image_bytes!=pixels/(indexed8?1:2)||p->clut_bytes!=(indexed8?1024:64))return GH_TM3_BOUNDS;if(capacity<pixels*4)return GH_TM3_CAPACITY;
  if(p->transfer_kind!=0&&p->transfer_kind!=6)return GH_TM3_UNSUPPORTED;
+ if(indexed8){
+  if(p->transfer_kind!=6||p->width<128||p->width>512||p->height<64||p->height>512||
+     (p->width&(p->width-1))||(p->height&(p->height-1)))return GH_TM3_UNSUPPORTED;
+  uint8_t *out=raw;unsigned pitch=p->width/128;
+  /* 151168 uploads PSMT8 through CT32 at half width and half height. */
+  for(unsigned y=0;y<p->height;y++)for(unsigned x=0;x<p->width;x++){
+   size_t address=(size_t)gh_gs_psmt8_offset(x,y,pitch);
+   size_t offset=upload_word(address/4,pitch)*4+address%4;
+   if(offset>=p->image_bytes)return GH_TM3_BOUNDS;
+   unsigned palette=gh_gs_csm1_palette256(p->image[offset]);
+   memcpy(out+((size_t)y*p->width+x)*4,p->clut+palette*4,4);
+  }
+  return GH_TM3_OK;
+ }
  uint8_t*out=raw;
  for(unsigned y=0;y<p->height;y++)for(unsigned x=0;x<p->width;x++){
   size_t nibble=(size_t)y*p->width+x;
   if(p->transfer_kind==6){
    if((p->width!=128&&p->width!=256)||(p->height!=128&&p->height!=256&&p->height!=512))return GH_TM3_UNSUPPORTED;
-   size_t a=addr4(x,y,p->width/128),word=a/8,page=word/2048;unsigned pitch=p->width/128;
-   unsigned ux=bit(word,0)|(bit(word,2)<<1)|(bit(word,3)<<2)|(bit(word,6)<<3)|(bit(word,8)<<4)|(bit(word,10)<<5);
-   unsigned uy=bit(word,1)|(bit(word,4)<<1)|(bit(word,5)<<2)|(bit(word,7)<<3)|(bit(word,9)<<4);
-   ux+=(unsigned)(page%pitch)*64;uy+=(unsigned)(page/pitch)*32;
-   nibble=((size_t)uy*(p->width/2)+ux)*8+a%8;
+   unsigned pitch=p->width/128;size_t a=addr4(x,y,pitch);
+   nibble=upload_word(a/8,pitch)*8+a%8;
   }
   if(nibble/2>=p->image_bytes)return GH_TM3_BOUNDS;
   unsigned index=p->image[nibble/2]>>((nibble&1)*4)&15;memcpy(out+((size_t)y*p->width+x)*4,p->clut+index*4,4);

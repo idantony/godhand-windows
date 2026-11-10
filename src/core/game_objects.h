@@ -48,6 +48,8 @@ gh_object_status gh_game_objects_register_startup(gh_game_objects *,gh_game_asse
  * scalar dependency removal are recovered. IOstate1/releasestate7 or an
  * actualresource-free cascade fail preflight atomically atoriginalcallee. */
 gh_object_status gh_game_objects_update_001fe748(gh_game_objects *,uint32_t *frontier);
+/* Same holder pass with canonical DVD and sound owners for the state 1 check. */
+gh_object_status gh_game_objects_update_bound_001fe748(gh_game_objects *,const gh_object_resource_bindings *,uint32_t *frontier);
 typedef gh_object_status (*gh_object_slot_release)(void *,int32_t slot,uint32_t *frontier);
 /* Original descending1FEF30: negative use-count pins persist. Required sound
  * slot consumer is invoked even for-1. Retry resumes after completed calls. */

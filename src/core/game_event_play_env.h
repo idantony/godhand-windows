@@ -20,15 +20,27 @@ typedef struct {
     const gh_game_event *event;
     const gh_event_components *components;
     int32_t event_number;
-    uint8_t next_initialization;
+    uint8_t next_initialization, next_move, quit_pending, frontier_relative;
 } gh_event_play_state;
 
-/* 296C28 dispatch with the first two recovered 296CA8 init calls.
- * A pending Camera init resumes after EventEnv and ExtraPlayInit. */
-gh_game_event_status gh_event_play_00296c28(
-    gh_event_play_state *, gh_game_event *, gh_event_components *,
-    const gh_game_event_config *, gh_boot_work *, gh_screen_fade *,
-    const gh_display_state *, int *original_done, uint32_t *frontier);
+typedef gh_game_event_status (*gh_event_play_visit)(void *, uint32_t original_site,
+    int *original_end, uint32_t *frontier, int *relative);
+
+typedef struct {
+    gh_game_event *event;
+    gh_event_components *components;
+    const gh_game_event_config *config;
+    gh_boot_work *work;
+    gh_screen_fade *fade;
+    const gh_display_state *display;
+    gh_event_play_visit visit;
+    void *context;
+} gh_event_play_bindings;
+
+/* Original Init and Move visit order. Retain the next call across a failed
+ * component visit so Fade, frame publication and producers run only once. */
+gh_game_event_status gh_event_play_00296c28(gh_event_play_state *,
+    const gh_event_play_bindings *, int *original_done, uint32_t *frontier);
 
 /* The EV01 typed callback selected by 298060 -> 297B40 -> REL+6A80.
  * The actual call site in REL+6B08 supplies the current cut and actor. */

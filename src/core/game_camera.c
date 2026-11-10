@@ -53,17 +53,26 @@ static gh_camera_status reset_fields(gh_game_pl_camera*s){
  p[0x264]=0;w32(p+0x274,0);w32(p+0x268,0);w32(p+0x270,0);w32(p+0x26c,0);p[0x278]=0;
  w32(p+0x260,0);w32(p+0x254,0);w32(p+0x25c,0);w32(p+0x258,0);s->failed_entry=0;return GH_CAMERA_OK;
 }
-gh_camera_status gh_game_camera_construct_pl_00139bc8(gh_game_pl_camera*s,gh_game_camera*identity,gh_camera_numeric_policy policy){
+static gh_camera_status construct_base_001380a8(gh_game_pl_camera*s,gh_game_camera*identity,gh_camera_numeric_policy policy){
  if(!s||!identity)return GH_CAMERA_ARGUMENT;if(s->constructed)return GH_CAMERA_BUSY;
  s->identity=identity;s->policy=policy;if(policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE){s->failed_entry=0x1f8180;return GH_CAMERA_UNSUPPORTED;}
  memset(s->fields,0,sizeof(s->fields));
  static const unsigned vectors[]={0x1d0,0x1e0,0x200,0x210,0x220,0x230,0x240,0x280,0x290,0x2a0,0x300,0x320,0x330,0x340};
  for(unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);i++)w32(s->fields+vectors[i]+12,0x3f800000);
  for(unsigned matrix=0;matrix<7;matrix++)for(unsigned i=0;i<4;i++)w32(s->fields+matrix*0x40+i*20,0x3f800000);
- gh_camera_status status=reset_fields(s);if(status)return status;
+ return reset_fields(s);
+}
+gh_camera_status gh_game_camera_construct_pl_00139bc8(gh_game_pl_camera*s,gh_game_camera*identity,gh_camera_numeric_policy policy){
+ gh_camera_status status=construct_base_001380a8(s,identity,policy);if(status)return status;
  static const unsigned derived[]={0x370,0x380,0x390,0x3b0,0x3c0,0x3d0,0x400,0x410,0x440,0x450,0x480,0x490,0x4c0,0x4d0,0x500};
  for(unsigned i=0;i<sizeof(derived)/sizeof(*derived);i++)w32(s->fields+derived[i]+12,0x3f800000);
  w32(s->fields+0x35c,0x41dbb0);s->constructed=1;return GH_CAMERA_OK;
+}
+gh_camera_status gh_game_camera_construct_motion_00138be8(gh_game_pl_camera*s,gh_game_camera*identity,gh_camera_numeric_policy policy){
+ gh_camera_status status=construct_base_001380a8(s,identity,policy);if(status)return status;
+ static const unsigned vectors[]={0x370,0x380,0x390,0x3b0,0x3c0,0x3d0};
+ for(unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);i++)w32(s->fields+vectors[i]+12,0x3f800000);
+ w32(s->fields+0x35c,0x41d8f8);s->constructed=1;return GH_CAMERA_OK;
 }
 gh_camera_status gh_game_camera_reset_00138210(gh_game_pl_camera*s,const gh_game_camera*active){
  if(!s||!active||!s->constructed)return GH_CAMERA_ARGUMENT;

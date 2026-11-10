@@ -674,9 +674,11 @@ int main(int argc,char **argv)
     if(qa_new_game&&app.snapshot.fade){
         const auto &d=app.snapshot;const auto &fade=*d.fade;uint32_t shift=0;
         if(d.work)std::memcpy(&shift,(const uint8_t*)d.work+0x564,4);
-        std::fprintf(stderr,"QA_EVENT_BOUNDARY number%d flags%08X state%u phase%u config%08X callee%d clearStage%u clearDetail%d audioFlags%X cameraCuts%u actorRecords%u timingRows%u fadeState%02X count%u time%u from%08X to%08X shift%u\n",
+        std::fprintf(stderr,"QA_EVENT_BOUNDARY number%d flags%08X state%u phase%u config%08X callee%d clearStage%u clearDetail%d audioFlags%X cameraCuts%u actorRecords%u timingRows%u actorHandle%u actorParts%u actorsInitialized%u accessoryHandle%u jacketAttached%u fadeState%02X count%u time%u from%08X to%08X shift%u\n",
             d.event_number,d.event_flags,(unsigned)d.event_state,(unsigned)d.event_phase,d.event_config_flags,d.event_callee_error,
-            d.event_clear_stage,d.event_clear_detail,d.event_audio_flags,d.event_camera_cuts,d.event_actor_records,d.event_timing_rows,(unsigned)fade.state,(unsigned)fade.count,(unsigned)fade.time,
+            d.event_clear_stage,d.event_clear_detail,d.event_audio_flags,d.event_camera_cuts,d.event_actor_records,d.event_timing_rows,
+            d.event_actor_handle,d.event_actor_parts,d.event_actors_initialized,d.event_actor_accessory_handle,
+            (unsigned)d.event_actor_jacket_attached,(unsigned)fade.state,(unsigned)fade.count,(unsigned)fade.time,
             fade.color_from,fade.color_to,shift);
     }
     if(qa_new_game)for(unsigned i=0;i<app.snapshot.emitter_samples;i++)std::fprintf(stderr,"QA Emitter slot%u bank%u kind%u flags%08X known%u type%u\n",app.snapshot.emitter_slots[i],app.snapshot.emitter_banks[i],app.snapshot.emitter_kinds[i],app.snapshot.emitter_flags[i],app.snapshot.emitter_known[i],app.snapshot.emitter_types[i]);

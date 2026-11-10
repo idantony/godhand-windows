@@ -10,6 +10,75 @@ static const uint8_t *at(const uint8_t *b,size_t size,uint32_t a,size_t n){
   uint32_t v=u32(p+8),sz=u32(p+16),off=u32(p+4);if(u32(p)==1&&a>=v&&a-v<=sz&&n<=sz-(a-v)){CHECK((uint64_t)off+a-v+n<=size);return b+off+a-v;}}
  CHECK(0);return NULL;
 }
+
+typedef struct {
+ gh_game_objects *objects;
+ gh_object_resource_bindings bindings;
+ gh_object_resource_load load;
+ gh_object_view view;
+ gh_object_status result;
+ uint32_t frontier;
+ int sound_ready, sound_calls, returned;
+} object_load_case;
+
+static gh_object_status sound_ready(void *context,int32_t slot,int *ready,uint32_t *frontier){
+ object_load_case *test=context;
+ CHECK(slot==17);
+ *frontier=0;
+ *ready=test->sound_ready;
+ test->sound_calls++;
+ return GH_OBJECT_OK;
+}
+
+static void load_el00(void *context,int32_t kind){
+ object_load_case *test=context;
+ test->result=gh_game_objects_load_wait_001fe8a0(&test->load,test->objects,(uint32_t)kind,
+  &test->bindings,1,&test->view,&test->frontier);
+ test->returned=1;
+}
+
+static void verify_live_update(gh_disc *disc){
+ gh_stage_slots slots={0};
+ gh_heap *heap;
+ gh_dvd_jobs dvd;
+ gh_dvd_jobs_init(&dvd,disc);
+ gh_task_record32 tasks[2]={{.thread_id=-1},{.thread_id=-1}};
+ gh_task_manager manager={.records=tasks,.capacity=2,.count=2,.current_index=-1};
+ gh_task_threads *threads;
+ object_load_case test={0};
+ CHECK(!gh_heap_create(1024*1024,&heap));
+ CHECK(!gh_game_objects_create(&slots,0,&test.objects));
+ CHECK(!gh_stage_slots_reset(&slots,NULL));
+ CHECK(!gh_task_threads_create(&manager,&threads));
+ test.bindings=(gh_object_resource_bindings){.dvd=&dvd,.heap=heap,.threads=threads,
+  .sound_check=sound_ready,.sound_context=&test};
+ int32_t slot=-1;
+ CHECK(!gh_task_threads_start(threads,0,load_el00,&test,0x600,&slot)&&slot==0);
+ CHECK(!gh_tasks_run_matching_002d52a0(&manager).status&&!test.returned&&test.load.stage==1);
+ CHECK(!gh_game_objects_append_sound_slot(test.objects,0x600,17));
+
+ uint32_t frontier;
+ gh_object_view view;
+ CHECK(!gh_game_objects_find(test.objects,0x600,&view)&&view.state==1&&(view.flags&1));
+ const uint8_t *bytes=view.bytes;
+ CHECK(!gh_game_objects_update_bound_001fe748(test.objects,&test.bindings,&frontier)&&!frontier);
+ CHECK(!gh_game_objects_find(test.objects,0x600,&view)&&view.state==1&&(view.flags&1)&&!test.sound_calls);
+ uint32_t job=u32(slots.records+0x1c);
+ for(unsigned i=0;i<8&&gh_dvd_check(&dvd,job);i++)CHECK(!gh_dvd_pump(&dvd));
+ CHECK(!gh_dvd_check(&dvd,job));
+ CHECK(!gh_game_objects_update_bound_001fe748(test.objects,&test.bindings,&frontier)&&!frontier);
+ CHECK(!gh_game_objects_find(test.objects,0x600,&view)&&view.state==1&&!(view.flags&1)&&test.sound_calls==1);
+ test.sound_ready=1;
+ CHECK(!gh_game_objects_update_bound_001fe748(test.objects,&test.bindings,&frontier)&&!frontier);
+ CHECK(!gh_game_objects_find(test.objects,0x600,&view)&&view.state==2&&view.bytes==bytes&&test.sound_calls==2);
+ for(unsigned i=0;i<4&&!test.returned;i++)CHECK(!gh_tasks_run_matching_002d52a0(&manager).status);
+ CHECK(test.returned&&!test.result&&!test.frontier&&test.view.state==3&&test.view.use_count==1&&test.view.bytes==bytes);
+ CHECK(!gh_game_objects_release_reference_001ff0b0(test.objects,0x600));
+ CHECK(!gh_task_threads_destroy(threads));
+ gh_game_objects_destroy(test.objects);
+ CHECK(!gh_heap_used(heap)&&!gh_heap_destroy(heap));
+}
+
 int main(int argc,char **argv){
  gh_stage_slots slots={0},room={0};gh_game_objects *m,*rm;gh_game_assets assets={0};gh_boot_work work={0};gh_object_view view;
  gh_disc *disc;CHECK(argc==3 && gh_disc_open(argv[1],&disc)==GH_DISC_OK);
@@ -60,6 +129,7 @@ int main(int argc,char **argv){
  /* Canonical reset invalidates the pointer handles without stale-view alias. */
  CHECK(gh_stage_slots_reset(&slots,NULL)==GH_STAGE_OK && gh_game_objects_find(m,0x100,&view)==GH_OBJECT_MISSING);
  gh_game_objects_destroy(m);gh_game_objects_destroy(rm);CHECK(!slots.configured && !room.configured);
+ verify_live_update(disc);
  for(unsigned i=0;i<43;i++)free(assets.objects[i].pointer);free(elf);gh_disc_close(disc);
  puts("PASS actual43 asset/ELF source associations, original80/32 slots, pinned replacement/full/reset handles");return 0;
 }

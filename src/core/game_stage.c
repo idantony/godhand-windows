@@ -2,6 +2,7 @@
  * supported by the independently verified font_texture helper are admitted. */
 #include "game_stage.h"
 #include "../assets/tm3.h"
+#include "../assets/gs_indexed_layout.h"
 #include <stdlib.h>
 #include <string.h>
 #define VRAM_BYTES (4u*1024u*1024u)
@@ -53,7 +54,7 @@ gh_stage_status gh_stage_tm3_resolve(gh_stage_textures*s,const void*raw,size_t n
  stage_material_node*p=calloc(1,sizeof(*p));if(!p)return GH_STAGE_MEMORY;
  size_t bytes=(size_t)picture.width*picture.height*4;p->pixels=malloc(bytes);if(!p->pixels){free(p);return GH_STAGE_MEMORY;}
  e=gh_tm3_rgba_gs(&picture,p->pixels,bytes);if(e){free(p->pixels);free(p);return e==GH_TM3_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;}
- p->view=(gh_stage_material){picture.source,p->pixels,picture.source_bytes,bytes,++s->next_material_id,picture.tex0,picture.width,picture.height,(uint8_t)mode,(uint8_t)pool,20,1,(uint8_t)((picture.tex0>>35)&3)};
+ p->view=(gh_stage_material){picture.source,p->pixels,picture.source_bytes,bytes,++s->next_material_id,picture.tex0,picture.width,picture.height,(uint8_t)mode,(uint8_t)pool,(uint8_t)((picture.tex0>>20)&63),1,(uint8_t)((picture.tex0>>35)&3)};
  p->next=s->materials;s->materials=p;s->material_count++;*out=&p->view;return GH_STAGE_OK;
 }
 static gh_stage_status transfer(uint8_t *vram,const gh_font_transfer *t,uint32_t base){
@@ -128,12 +129,6 @@ gh_stage_status gh_stage_vram_ct32(const gh_stage_textures *s,uint16_t base,uint
  *out=u32(s->vram+(size_t)a);return GH_STAGE_OK;
 }
 
-static uint64_t address8(unsigned x,unsigned y,unsigned pitch){
- unsigned bx=(x%128)/16,by=(y%64)/16,cx=x%16,cy=y%16;
- unsigned block=(bx&1)^((bx&2)<<1)^((bx&4)<<2)^((by&1)<<1)^((by&2)<<2);
- unsigned col=((cx&1)<<2)^((cx&2)<<3)^((cx&4)<<3)^((cx&8)>>2)^((cy&1)<<3)^((cy&2)?33:0)^((cy&4)?96:0)^((cy&8)<<4);
- return ((uint64_t)x/128+(uint64_t)(y/64)*pitch)*8192+block*256+col;
-}
 static uint64_t address4(unsigned x,unsigned y,unsigned pitch){
  unsigned bx=(x%128)/32,by=(y%128)/16,cx=x%32,cy=y%16;
  unsigned block=((bx&1)<<1)^((bx&2)<<2)^(by&1)^((by&2)<<1)^((by&4)<<2);
@@ -148,12 +143,12 @@ static gh_stage_status channel_rgba(const gh_stage_textures *s,gh_stage_channel 
  if(capacity<(size_t)c.width*c.height*4)return GH_STAGE_BOUNDS;
  pitch=(unsigned)((c.tex0>>14)&63)/2;
  for(unsigned y=0;y<c.height;y++)for(unsigned x=0;x<c.width;x++){
-  uint64_t unit=c.psm==19?address8(x,y,pitch):address4(x,y,pitch);
+  uint64_t unit=c.psm==19?gh_gs_psmt8_offset(x,y,pitch):address4(x,y,pitch);
   uint64_t a=(uint64_t)c.base*256+(c.psm==19?unit:unit/2),color;
   unsigned index,pal;uint32_t pixel;
   if(a>=VRAM_BYTES)return GH_STAGE_BOUNDS;
   index=c.psm==19?s->vram[(size_t)a]:(s->vram[(size_t)a]>>((unit&1)*4))&15;
-  pal=(index&~24u)|((index&8)<<1)|((index&16)>>1);
+  pal=gh_gs_csm1_palette256(index);
   color=(uint64_t)c.clut_base*256+addr32(pal&15,pal>>4,1);
   if(color>VRAM_BYTES-4)return GH_STAGE_BOUNDS;
   pixel=u32(s->vram+(size_t)color);
@@ -182,8 +177,8 @@ gh_stage_status gh_stage_tex0_material(gh_stage_textures *s,uint64_t tex0,const 
   if(c->psm!=19&&c->psm!=20)continue;
   unsigned a=(unsigned)((c->tex0>>14)&63)/2,b=(unsigned)((tex0>>14)&63)/2;int same_addresses=1;
   for(unsigned y=0;y<c->height&&same_addresses;y++)for(unsigned x=0;x<c->width;x++){
-   uint64_t first=c->psm==19?address8(x,y,a):address4(x,y,a);
-   uint64_t second=c->psm==19?address8(x,y,b):address4(x,y,b);
+   uint64_t first=c->psm==19?gh_gs_psmt8_offset(x,y,a):address4(x,y,a);
+   uint64_t second=c->psm==19?gh_gs_psmt8_offset(x,y,b):address4(x,y,b);
    if(first!=second){same_addresses=0;break;}
   }
   if(!same_addresses)continue;if(found!=256)return GH_STAGE_UNSUPPORTED;found=i;

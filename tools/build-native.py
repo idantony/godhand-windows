@@ -20,6 +20,8 @@ SCRATCH = Path(r"G:\middle_thing\godhand_windows")
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-tests", action="store_true")
+    parser.add_argument("--focus", action="append", default=[], metavar="TEST",
+                        help="Run only this manifest test after a fresh native module build; repeat for more tests")
     parser.add_argument("--jobs", type=int, default=4, help="Independent compiler processes (1..16); device tests remain serial")
     parser.add_argument("--hardware-audio", action="store_true", help="Run muted real-device voice, ADX, BGM and scene-flow checks")
     parser.add_argument("--adx-reference-wave", type=Path, help="Independent vgmstream WAV for the full native ADX sample comparison")
@@ -33,6 +35,8 @@ def main():
                    "event-adx-reference": args.event_adx_reference_wave}
     if not 1 <= args.jobs <= 16:
         parser.error("--jobs must be in 1..16")
+    if args.focus and args.skip_tests:
+        parser.error("--focus runs selected tests and cannot be combined with --skip-tests")
     compiler, scratch = args.compiler.resolve(), args.scratch.resolve()
     try:
         scratch.relative_to(PROJECT)
@@ -54,7 +58,7 @@ def main():
                 "compiler": str(compiler), "compiler_version": subprocess.check_output([str(compiler), "version"], text=True).strip(),
                 "target": "x86_64-windows-gnu", "status": "running", "steps": [],
                 "is_playable_game": False, "purpose": "Verify recovered game functions and native original-disc resource access"}
-    report = PROJECT / "analysis" / "native-verification.json"
+    report = logs / "focused-verification.json" if args.focus else PROJECT / "analysis" / "native-verification.json"
 
     report_lock = threading.Lock()
 
@@ -285,6 +289,12 @@ def main():
                ("game_event_data_prefix", "src/core/game_event_data_prefix.c"),
                ("game_event_timing", "src/core/game_event_timing.c"),
                ("game_event_actor_create", "src/core/game_event_actor_create.c"),
+               ("game_event_actor_factory", "src/core/game_event_actor_factory.c"),
+               ("game_event_actor_extra", "src/core/game_event_actor_extra.c"),
+               ("game_event_accessory_move", "src/core/game_event_accessory_move.c"),
+               ("game_model_texture_scroll", "src/core/game_model_texture_scroll.c"),
+               ("game_event_camera_track", "src/core/game_event_camera_track.c"),
+               ("game_motion_camera", "src/core/game_motion_camera.c"),
                ("game_event_play_env", "src/core/game_event_play_env.c"),
                ("game_event_audio", "src/core/game_event_audio.c"),
                ("game_event_link", "src/core/game_event_link.c"),
@@ -640,6 +650,11 @@ def main():
         ("r020-title", "tests/rooms/test_r020_title.c", "iso"),
         ("r100", "tests/rooms/test_r100.c", "iso"),
     ]
+    by_name = {case[0]: case for case in extra_tests}
+    missing_focus = set(args.focus).difference(by_name)
+    if missing_focus:
+        parser.error("Unknown manifest test: " + ", ".join(sorted(missing_focus)))
+    focused = [by_name[name] for name in dict.fromkeys(args.focus)]
     try:
         manifest["test_contracts"] = check_contracts(PROJECT, extra_tests)
     except TestContractError as error:
@@ -680,6 +695,57 @@ def main():
         source_inputs.add(source)
         source_inputs.add(shared_headers.get(name, str(Path(source).with_suffix(".h")).replace("\\", "/")))
     initial_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
+    def finish_build(status):
+        manifest["status"] = status
+        final_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
+        if initial_sources != final_sources:
+            manifest["status"] = "failed-source-changed-during-build"
+            report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            raise SystemExit("Source changed during compilation/testing; rebuild the stabilized inputs")
+        manifest["source_sha256"] = final_sources
+        manifest["module_names"] = [name for name, _ in modules]
+        manifest["artifacts"] = [{"path": str(path), "size": path.stat().st_size,
+                                  "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                                 for path in sorted(output.glob("*")) if path.is_file()]
+        report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print("Report: " + str(report), flush=True)
+
+    def extra_test_path(name):
+        return output / ("test_" + name.replace("-", "_") + ".exe")
+
+    def compile_extra_test(test):
+        name, source, _ = test
+        run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms", "-Isrc/assets"]
+            + list(objects.values()) + [source, "-o", extra_test_path(name)])
+
+    def extra_test_command(test, baseline):
+        name, _, inputs = test
+        requires_audio = name in ("game-event-create", "se-voice", "se-stop", "se-bank2", "se-voice-stop-bank",
+                                  "mc-control-flow", "bgm-requests", "bgm-automatic", "adx-stream", "r020-title",
+                                  "game-services", "game-scene-exit", "scene-exit-cleanup", "game-object-sound", "sound-scene-exit")
+        if ((requires_audio and not args.hardware_audio) or (inputs == "movie" and not args.movie_codec)
+                or (inputs in wave_inputs and not wave_inputs[inputs])):
+            return None
+        arguments = [extra_test_path(name)]
+        if inputs in ("iso", "both", "movie") or inputs in wave_inputs:
+            arguments.append(baseline["source_iso"]["path"])
+        if inputs in ("elf", "both"):
+            arguments.append(PROJECT / "reference" / "SLUS_215.03")
+        if inputs == "movie":
+            arguments.append(args.movie_codec.resolve())
+        if inputs in wave_inputs:
+            arguments.append(wave_inputs[inputs].resolve())
+        if name in ("enemy-se-banks", "game-object-sounds", "game-enemy-resources", "game-event-audio") and args.hardware_audio:
+            arguments.append("--hardware-audio")
+        return arguments
+
+    if focused:
+        manifest["focused_tests"] = [case[0] for case in focused]
+        baseline = json.loads((PROJECT / "analysis" / "disc-baseline.json").read_text(encoding="utf-8"))
+        focused_commands = [(case, extra_test_command(case, baseline)) for case in focused]
+        for case, command in focused_commands:
+            if command is None:
+                parser.error(case[0] + " requires its hardware, codec or reference WAV option")
     # Host headers must also parse when the real Windows SDK was included
     # first. Its legacy far/near macros previously erased new actor fields.
     run("check-windows-public-headers", [compiler,"c++","-target","x86_64-windows-gnu",
@@ -692,6 +758,13 @@ def main():
         return name, target
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as workers:
         objects = dict(workers.map(compile_module, modules))
+        if focused:
+            list(workers.map(compile_extra_test, focused))
+    if focused:
+        for case, command in focused_commands:
+            run("test-" + case[0], command)
+        finish_build("focused-passed")
+        return
     run("compile-rng-tests", common + ["-Isrc/core", objects["rng"], "tests/core/test_rng.c", "-o", output / "test_rng.exe"])
     run("compile-disc-tests", common + [objects["disc"], "tests/platform/test_disc.c", "-o", output / "test_disc.exe"])
     run("compile-boot-tests", common + ["-Isrc/core", objects["boot"], "tests/core/test_boot.c", "-o", output / "test_boot.exe"])
@@ -733,9 +806,6 @@ def main():
     run("compile-game-stage-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_game_stage.c", "-o", output / "test_game_stage.exe"])
     run("compile-game-children-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_children", "game_render_steps", "id_base", "id_path", "core_bundle")] + ["tests/core/test_game_children.c", "-o", output / "test_game_children.exe"])
     run("compile-id-text-tests", common + [objects["id_text"], objects["font_draw"], objects["packed_message"]] + id_objects + ["tests/core/test_id_text.c", "-o", output / "test_id_text.exe"])
-    def compile_extra_test(test):
-        name, source, _ = test
-        run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms", "-Isrc/assets"] + list(objects.values()) + [source, "-o", output / ("test_" + name.replace("-", "_") + ".exe")])
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as workers:
         list(workers.map(compile_extra_test, extra_tests))
     run("compile-core-dll", common + ["-shared", "-Wl,--export-all-symbols"] + list(objects.values()) + ["-o", output / "godhand_core.dll"])
@@ -777,42 +847,20 @@ def main():
         run("test-game-stage", [output / "test_game_stage.exe", baseline["source_iso"]["path"]])
         run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
         run("test-id-text", [output / "test_id_text.exe", baseline["source_iso"]["path"]])
-        for name, _, inputs in extra_tests:
-            if ((name in ("game-event-create", "se-voice", "se-stop", "se-bank2", "se-voice-stop-bank", "mc-control-flow", "bgm-requests", "bgm-automatic", "adx-stream", "r020-title", "game-services", "game-scene-exit", "scene-exit-cleanup", "game-object-sound", "sound-scene-exit") and not args.hardware_audio)
-                    or (inputs == "movie" and not args.movie_codec)
-                    or (inputs in wave_inputs and not wave_inputs[inputs])):
-                manifest.setdefault("skipped_checks", []).append({"name": "test-" + name, "reason": "Explicit hardware/codec opt-in not supplied"})
+        for test in extra_tests:
+            label = "test-" + test[0]
+            command = extra_test_command(test, baseline)
+            if command is None:
+                manifest.setdefault("skipped_checks", []).append({"name": label, "reason": "Explicit hardware/codec opt-in not supplied"})
                 continue
-            arguments = []
-            if inputs in ("iso", "both", "movie") or inputs in wave_inputs:
-                arguments.append(baseline["source_iso"]["path"])
-            if inputs in ("elf", "both"):
-                arguments.append(PROJECT / "reference" / "SLUS_215.03")
-            if inputs == "movie":
-                arguments.append(args.movie_codec.resolve())
-            if inputs in wave_inputs:
-                arguments.append(wave_inputs[inputs].resolve())
-            if name in ("enemy-se-banks", "game-object-sounds", "game-enemy-resources", "game-event-audio") and args.hardware_audio:
-                arguments.append("--hardware-audio")
-            run("test-" + name, [output / ("test_" + name.replace("-", "_") + ".exe")] + arguments)
-    manifest["status"] = "passed" if not args.skip_tests else "build-only"
-    final_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
-    if initial_sources != final_sources:
-        manifest["status"] = "failed-source-changed-during-build"
-        report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        raise SystemExit("Source changed during compilation/testing; rebuild the stabilized inputs")
-    manifest["source_sha256"] = final_sources
-    manifest["module_names"] = [name for name, _ in modules]
-    manifest["artifacts"] = [{"path": str(path), "size": path.stat().st_size,
-                              "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in sorted(output.glob("*")) if path.is_file()]
+            run(label, command)
     manifest["limitations"] = ["Developer native startup/MC/movie/Main execution reaches an explicit original-callee frontier; full boot/game frame/scene rendering incomplete",
                                "Real limited MC voices and Movie0 device output use explicit native references; full BGM/SPU2 audio behavior incomplete",
                                "Serial task sleep/start/exit use native fibers; state4, async EE syscalls, interrupt/priority preemption remain unsupported",
                                "Original cHeap capacity/fragmentation and final GS indexed texture blending remain unverified",
                                "PS2 numerical reference is an implementation model, not a hardware capture",
                                "No full-ELF retail matching claim for the patched disc"]
-    report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print("Report: " + str(report), flush=True)
+    finish_build("passed" if not args.skip_tests else "build-only")
 
 
 if __name__ == "__main__":

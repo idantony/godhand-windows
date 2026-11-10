@@ -24,7 +24,10 @@ static gh_game_event_status component(gh_event_components *components, unsigned 
 static int same(const gh_event_actor_create_bindings *a, const gh_event_actor_create_bindings *b) {
     return a->components == b->components && a->data == b->data && a->heap == b->heap && a->pools == b->pools &&
            a->objects == b->objects && a->global_threads == b->global_threads && a->save.bytes == b->save.bytes &&
-           a->save.size == b->save.size && a->object_view == b->object_view && a->context == b->context;
+           a->save.size == b->save.size && a->object_view == b->object_view && a->context == b->context &&
+           a->factory == b->factory && a->factory_context == b->factory_context &&
+           a->initialize == b->initialize && a->extra == b->extra && a->extra_context == b->extra_context &&
+           a->row_limit == b->row_limit && a->finish == b->finish;
 }
 
 static gh_game_event_status suspend_unneeded(gh_event_actor_create *s, uint32_t *frontier) {
@@ -87,33 +90,40 @@ gh_game_event_status gh_event_actor_create_task_status(const gh_event_actor_crea
     return s->task_error;
 }
 
-static gh_game_event_status first_request(gh_event_actor_create *s) {
+static gh_game_event_status create_row(gh_event_actor_create *s, size_t index) {
     const gh_event_actor_create_bindings *b = &s->bindings;
     gh_event_component_view actor;
     s->frontier = 0x297a48;
     if (component(b->components, 2, 0xcf00, 0x1c, &actor)) return GH_EVENT_ARGUMENT;
-    if (!b->data->actor_count) return GH_EVENT_UNSUPPORTED; // REL+10F0 player/weapon tail.
     const uint8_t *info;
-    if (gh_event_actor_info_at(b->data, 0, &info)) return GH_EVENT_BOUNDS;
+    if (gh_event_actor_info_at(b->data, index, &info)) return GH_EVENT_BOUNDS;
     uint16_t source;
     s->frontier = 0x2c4c58;
     gh_game_event_status status = el_kind(info, &source);
     if (status) return status;
-    uint8_t *row = s->work.pointer;
+    uint8_t *row = (uint8_t *)s->work.pointer + index * 0x48;
     put(row + 4, source);
     row[8] = actor.bytes[8] = info[4];
 
-    // Actual EV01 first EL00. REL+04D0 selects one of three costume remaps
-    // from the jump table at CB10. REL+07B8 has no EL replacement.
     s->frontier = 0x297a48;
-    if (source != 0x600) return GH_EVENT_UNSUPPORTED;
+    s->frontier_rel = 0x04d0;
+    if ((source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60c) &&
+        source != 0x630 && source != 0x631 && source != 0x667) return GH_EVENT_UNSUPPORTED;
     const unsigned costume = gh_core_save_costume(b->save);
-    const uint16_t create = costume == 2 || costume == 3 ? 0x6f0 :
-                            costume == 4 || costume == 5 ? 0x6f2 :
-                            costume == 6 || costume == 7 ? 0x6f6 : source;
+    uint16_t create = source;
+    if ((source == 0x600 || source == 0x602) && costume >= 2 && costume < 8) {
+        const uint16_t variants[] = {0x6f0, 0x6f2, 0x6f6};
+        create = variants[(costume - 2) / 2] + (source == 0x602);
+    }
+    if (source == 0x60a) {
+        gh_event_component_view env;
+        if (component(b->components, 0, 0xd200, 0x44, &env)) return GH_EVENT_ARGUMENT;
+        if (word(env.bytes) == 0x24) create = 0x609;
+        else if (b->save.bytes[0xbc0] == 1) create = 0x6f4;
+    }
     put(row + 0x40, create);
     gh_event_actor_create_request request = {
-        .info = info, .work = row, .data = b->data, .source_kind = source,
+        .info = info, .work = row, .data = b->data, .actor_index = index, .source_kind = source,
         .create_kind = create, .resource_kind = source, .create_argument = 0xffff
     };
     s->frontier = 0x1fea00;
@@ -124,13 +134,98 @@ static gh_game_event_status first_request(gh_event_actor_create *s) {
     row[0x25] = (uint8_t)(flags >> 8);
     s->pending = request;
     s->frontier = 0x312a80;
+    s->frontier_rel = 0;
+    if (b->factory) {
+        int nonnull = 0;
+        uint32_t child = 0;
+        status = b->factory(b->factory_context, &s->pending, &nonnull, &child);
+        if (status) {
+            if (child) s->frontier = child;
+            return status;
+        }
+        if (nonnull == 1) {
+            // REL+0F84 dispatches actor vtable 44B528+44 before publishing its work row.
+            s->frontier = 0x2b6768;
+            if (b->initialize) {
+                uint32_t handle = 0;
+                child = 0;
+                status = b->initialize(b->factory_context, &s->pending, &handle, &child);
+                if (status) {
+                    if (child) s->frontier = child;
+                    return status;
+                }
+                if (!handle) {
+                    s->frontier = 0x312778; // Actual virtual Init false calls delObj.
+                    return GH_EVENT_UNSUPPORTED;
+                }
+                s->actor_handles[index] = handle;
+                if (!index) s->first_actor_handle = handle;
+                s->frontier = 0x297a48; // REL+1A30 ExtraInitialize, after row publication.
+                s->frontier_rel = 0x1a30;
+                if (b->extra) {
+                    int original = 0;
+                    child = 0;
+                    status = b->extra(b->extra_context, &s->pending, handle, &original, &child);
+                    if (status) {
+                        if (child) s->frontier = child;
+                        return status;
+                    }
+                    if (original == 1) {
+                        return GH_EVENT_OK;
+                    } else if (original == 0) {
+                        s->frontier = 0x312778; // REL+10C4 calls delObj before clearing the work pointer.
+                    } else {
+                        return GH_EVENT_ARGUMENT;
+                    }
+                }
+            }
+        } else if (nonnull == 0) {
+            // REL+1060..1078 marks the genuine failed actor and moves to the next row.
+            row[0x24] &= (uint8_t)~4u;
+            put(actor.bytes, word(actor.bytes) | 2u);
+            s->frontier = 0x297a48; // Next actor iteration at REL+0DF8.
+            s->frontier_rel = 0x0df8;
+            return GH_EVENT_OK;
+        } else {
+            return GH_EVENT_ARGUMENT;
+        }
+    }
     return GH_EVENT_UNSUPPORTED;
 }
 
 static void create_task(void *context, int32_t argument) {
     gh_event_actor_create *s = context;
     s->task_entered = 1;
-    s->task_error = argument == -1 ? first_request(s) : GH_EVENT_ARGUMENT;
+    s->task_error = argument == -1 ? GH_EVENT_OK : GH_EVENT_ARGUMENT;
+    if (!s->task_error) {
+        const size_t limit = s->bindings.row_limit ? s->bindings.row_limit : 1;
+        for (; s->actor_cursor < s->bindings.data->actor_count && s->actor_cursor < limit; ++s->actor_cursor) {
+            s->frontier_rel = 0;
+            s->task_error = create_row(s, s->actor_cursor);
+            if (s->task_error) break;
+        }
+        if (!s->task_error) {
+            s->frontier = 0x297a48;
+            s->frontier_rel = s->actor_cursor == s->bindings.data->actor_count ? 0x10f0 : 0x0df8;
+            if (s->actor_cursor == s->bindings.data->actor_count && s->bindings.finish) {
+                uint32_t child = 0;
+                s->task_error = s->bindings.finish(s->bindings.extra_context, &child);
+                if (s->task_error && child) s->frontier = child;
+                if (!s->task_error) {
+                    gh_event_component_view actor;
+                    s->task_error = component(s->bindings.components, 2, 0xcf00, 0x1c, &actor);
+                    if (!s->task_error) {
+                        put(actor.bytes, word(actor.bytes) | 1);
+                        s->frontier = s->frontier_rel = 0;
+                        s->task_live = 0;
+                        return;
+                    }
+                }
+            } else {
+                s->task_error = GH_EVENT_UNSUPPORTED;
+            }
+        }
+    }
     // Preserve the suspended task and its work at the native factory boundary.
     while (gh_task_threads_sleep(s->bindings.global_threads, 1) == GH_THREAD_OK) {}
     s->task_live = 0;

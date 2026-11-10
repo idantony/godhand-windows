@@ -15,6 +15,23 @@ typedef gh_game_event_status (*gh_event_create_actor_view)(
     void *, uint32_t handle, gh_title_player_view *, uint32_t *frontier);
 
 typedef struct {
+    const uint8_t *info;
+    uint8_t *work;
+    const gh_event_data_prefix *data;
+    size_t actor_index;
+    uint16_t source_kind, create_kind, resource_kind, create_argument;
+    gh_object_view loaded_resource;
+} gh_event_actor_create_request;
+
+typedef gh_game_event_status (*gh_event_create_factory)(void *, const gh_event_actor_create_request *,
+    int *original_nonnull, uint32_t *frontier);
+typedef gh_game_event_status (*gh_event_create_initialize)(void *, const gh_event_actor_create_request *,
+    uint32_t *handle, uint32_t *frontier);
+typedef gh_game_event_status (*gh_event_create_extra)(void *, const gh_event_actor_create_request *,
+    uint32_t handle, int *original_success, uint32_t *frontier);
+typedef gh_game_event_status (*gh_event_create_finish)(void *, uint32_t *frontier);
+
+typedef struct {
     gh_event_components *components;
     const gh_event_data_prefix *data;
     gh_heap *heap;
@@ -24,16 +41,15 @@ typedef struct {
     gh_core_save_view save;
     gh_event_create_actor_view object_view;
     void *context;
+    gh_event_create_factory factory;
+    void *factory_context;
+    gh_event_create_initialize initialize;
+    gh_event_create_extra extra;
+    void *extra_context;
+    /* Zero retains the legacy single-row provider contract. */
+    size_t row_limit;
+    gh_event_create_finish finish;
 } gh_event_actor_create_bindings;
-
-typedef struct {
-    const uint8_t *info;
-    uint8_t *work;
-    const gh_event_data_prefix *data;
-    size_t actor_index;
-    uint16_t source_kind, create_kind, resource_kind, create_argument;
-    gh_object_view loaded_resource;
-} gh_event_actor_create_request;
 
 typedef struct {
     gh_event_actor_create_bindings bindings;
@@ -44,11 +60,18 @@ typedef struct {
     uint32_t frontier;
     gh_game_event_status task_error;
     uint8_t stage, task_entered, task_live;
+    /* Native counterpart of work row 0's object pointer. */
+    uint32_t first_actor_handle;
+    /* Event.rel offset when frontier names the enclosing main-ELF import. */
+    uint32_t frontier_rel;
+    size_t actor_cursor;
+    uint32_t actor_handles[255];
 } gh_event_actor_create;
 
 /* After the actual Env allocation, run REL+0AC0, +0BA8 and +0D20.
  * Success here means the original create task was registered. Its first
- * actual object request remains strict at 312A80 until a factory is wired. */
+ * actual object request remains strict at 312A80 if the factory is absent.
+ * A positive factory result next requires virtual initialization. */
 gh_game_event_status gh_event_actor_create_start_002979f0(
     gh_event_actor_create *, const gh_event_actor_create_bindings *, uint32_t *frontier);
 /* REL work+44 association as a bounded resource offset. */

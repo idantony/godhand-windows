@@ -53,6 +53,7 @@
 #include "../core/game_event_environment.h"
 #include "../core/packed_message.h"
 #include "../core/game_event_clear.h"
+#include "../core/game_event_actor_extra.h"
 #include "../core/game_cloth_runtime.h"
 #include "../core/game_actor_render.h"
 #include "../core/game_object_step.h"
@@ -132,6 +133,11 @@ typedef struct {
  uint8_t *scene_buffer_a,*scene_buffer_b;size_t scene_buffer_a_size,scene_buffer_b_size;
 } gh_game_services_scene_view;
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services *,gh_game_services_scene_view *);
+/* Bind the Event controller's factory roster to the live room and resolver. */
+gh_game_event_status gh_game_services_bind_event_actor_roster(gh_game_services *,
+ gh_event_actor_roster *,gh_event_actor_factory *rows,size_t capacity);
+gh_game_event_status gh_game_services_bind_event_actor_extra(gh_game_services *,
+ gh_event_actor_extra *,const gh_event_actor_create *);
 /* Read-only native execution diagnostics; counters are not game state. */
 typedef struct {uint64_t player_updates_completed,child_updates_completed,om_updates_completed;
  uint32_t last_move_handle,last_move_entry,player_stage,player_frontier,child_stage,child_frontier;

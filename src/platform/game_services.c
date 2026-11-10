@@ -34,6 +34,7 @@
 #include "../core/game_om3eb.h"
 #include "../core/game_enemy_resources.h"
 #include "../core/game_event_player_reset.h"
+#include "../core/game_event_accessory_move.h"
 #include "../core/game_player_frame.h"
 #include "../core/game_player_idle_input.h"
 #include "../core/game_effect_create.h"
@@ -78,6 +79,10 @@ struct gh_game_services {
  gh_hitarea_shape_bindings om_shapes;gh_scene_dynamic_owner dynamic_objects;
  gh_game_player_factory player_factory;
  gh_object_resource_bindings object_resources;
+ gh_event_actor_roster *event_actor_roster;
+ gh_event_actor_extra *event_actor_extra;
+ gh_event_accessory_move event_accessory_move;
+ gh_actor_render_call event_actor_render[10];
  gh_game_player_init player_init;gh_actor_model player_model;
  gh_game_player_init_tail player_tail;gh_game_player_child player_child;
  gh_player_child_attachment player_attachment;
@@ -824,8 +829,67 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  gh_game_objects_destroy(s->room_objects);gh_game_objects_destroy(s->objects);free(s);return GH_SERVICES_OK;
 }
 
+gh_game_event_status gh_game_services_bind_event_actor_roster(gh_game_services *s,
+    gh_event_actor_roster *roster, gh_event_actor_factory *rows, size_t capacity)
+{
+    if (!s || !roster || (s->event_actor_roster && s->event_actor_roster != roster)) return GH_EVENT_ARGUMENT;
+    if (s->event_actor_roster == roster && roster->rows)
+        return roster->rows == rows && roster->capacity == capacity ? GH_EVENT_OK : GH_EVENT_ARGUMENT;
+    const gh_event_actor_factory_bindings bindings = {
+        .pools = &s->pools,
+        .global_objects = s->objects,
+        .room_objects = s->room_objects,
+        .work = s->b.work,
+        .factory_serial = s->b.factory_serial,
+        .resources = s->object_resources,
+        .packet_heap = s->b.assets->heap,
+        .fog_rgb = s->world_light.scalar + 4
+    };
+    gh_game_event_status status = gh_event_actor_roster_bind(roster, &bindings, rows, capacity);
+    if (!status) s->event_actor_roster = roster;
+    return status;
+}
+
+gh_game_event_status gh_game_services_bind_event_actor_extra(gh_game_services *s,
+    gh_event_actor_extra *extra, const gh_event_actor_create *creation)
+{
+    if (!s || !extra || !creation || !s->event_actor_roster || !s->event_actor_roster->rows ||
+        (s->event_actor_extra && s->event_actor_extra != extra)) return GH_EVENT_ARGUMENT;
+    if (s->event_actor_extra == extra && extra->bound)
+        return extra->bindings.creation == creation ? GH_EVENT_OK : GH_EVENT_ARGUMENT;
+    const gh_event_actor_extra_bindings bindings = {
+        .factory = s->event_actor_roster->rows,
+        .player = &s->title_player.view,
+        .child = s->work5f8,
+        .attachment = &s->player_attachment,
+        .weapon_slot = &s->player_weapon,
+        .save = s->b.save,
+        .roster = s->event_actor_roster,
+        .creation = creation,
+        .math = s->b.math_globals,
+        .boot_elf = s->b.boot_elf,
+        .boot_elf_size = s->b.boot_elf_bytes
+    };
+    gh_game_event_status status = gh_event_actor_extra_bind(extra, &bindings);
+    if (!status) s->event_actor_extra = extra;
+    return status;
+}
+
+static gh_event_actor_factory *event_actor_for_handle(gh_game_services *s, uint32_t handle)
+{
+    if (!handle || !s->event_actor_roster) return NULL;
+    gh_event_actor_roster *roster = s->event_actor_roster;
+    for (size_t i = 0; i < roster->capacity; ++i)
+        if (roster->rows[i].handle == handle) return &roster->rows[i];
+    if (s->event_actor_extra && s->event_actor_extra->olivia_accessory.handle == handle)
+        return &s->event_actor_extra->olivia_accessory;
+    return NULL;
+}
+
 gh_game_services_status gh_game_services_actor_view(gh_game_services*s,uint32_t handle,gh_title_player_view*out){
  if(!s||!out)return GH_SERVICES_ARGUMENT;
+ gh_event_actor_factory*event_actor=event_actor_for_handle(s,handle);
+ if(event_actor)return gh_event_actor_factory_view(event_actor,handle,out)==GH_EVENT_OK?GH_SERVICES_OK:GH_SERVICES_ASSET;
  const gh_title_player_view *player=NULL;
  if(gh_game_player_factory_scalar_view(&s->player_factory,handle,&player)==GH_PLAYER_OK){*out=*player;return GH_SERVICES_OK;}
  if(s->player_child.handle==handle&&s->player_child.complete){void*registered=NULL;
@@ -853,8 +917,10 @@ gh_game_services_status gh_game_services_mask_actor_nodes(gh_game_services*s,uin
   }*f=0x14b6f8;return GH_SERVICES_ASSET;
  }
  gh_actor_model*m=NULL;const gh_title_player_view*player=NULL;
+ gh_event_actor_factory*event_actor=event_actor_for_handle(s,handle);
  if(!gh_game_player_factory_scalar_view(&s->player_factory,handle,&player))m=&s->player_model;
  else if(handle==s->player_child.handle&&s->player_child.complete){gh_title_player_view v;gh_game_services_status e=gh_game_services_actor_view(s,handle,&v);if(e){*f=0x14b6f8;return e;}m=&s->player_child.model;}
+ else if(event_actor){gh_title_player_view v;gh_game_services_status e=gh_game_services_actor_view(s,handle,&v);if(e){*f=0x14b6f8;return e;}m=&event_actor->model;}
  else if(gh_om_factory_model_at(&s->om_factory,handle,&m)){*f=0x14b6f8;return GH_SERVICES_FRONTIER;}
  if(!m||!m->ready||m->native_identity!=m||!m->root.bytes||m->root.size<0x2b2){*f=0x14b6f8;return GH_SERVICES_ASSET;}
  if(m->script.mesh_count>255||m->root.bytes[0x2b1]!=m->script.mesh_count){*f=0x14b6f8;return GH_SERVICES_FRONTIER;}
@@ -905,6 +971,12 @@ static gh_player_frame_status player_frame_door_probe(void*p,const gh_title_play
 gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t handle,uint32_t entry,int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,uint32_t*f){
  if(f)*f=0;if(!s||!v||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
  s->update_diagnostic.last_move_handle=handle;s->update_diagnostic.last_move_entry=entry;
+ if(s->event_actor_extra&&handle&&handle==s->event_actor_extra->accessory_handle){
+  gh_event_actor_factory *actor=&s->event_actor_extra->olivia_accessory;
+  if(entry!=0x2b6930||delta||v->bytes!=actor->object.view.bytes||v->size!=actor->object.view.size){*f=entry;return GH_SERVICES_FRONTIER;}
+  gh_game_event_status status=gh_game_event_accessory_move_002b6930(&s->event_accessory_move,actor,s->b.player_shared_vector,f);
+  return !status?GH_SERVICES_OK:status==GH_EVENT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+ }
   if(handle==s->player_child.handle&&s->player_child.complete&&v->bytes==s->player_child.object.view.bytes&&v->size==s->player_child.object.view.size){
    if(entry!=0x100530||delta){*f=entry;return GH_SERVICES_FRONTIER;}
    if(s->child_update.original.original_returned)s->child_update=(gh_child_wind_update){0};
@@ -993,12 +1065,23 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh
  if(q->kind!=GH_OBJECT_TRANS_NORMAL||q->original_entry!=0x14a3e8||q->this_delta){*f=q->original_entry;return GH_SERVICES_FRONTIER;}
  gh_actor_model*model=NULL;const gh_player_shadow*shadow=NULL;gh_actor_render_call*call=NULL;
  const gh_title_player_view*player=NULL;
+ gh_event_actor_factory *event_actor=event_actor_for_handle(s,q->handle);
  if(!gh_game_player_factory_scalar_view(&s->player_factory,q->handle,&player)){
   if(!s->player_tail.complete||s->player_model.root.bytes!=player->bytes){*f=0x14a3e8;return GH_SERVICES_FRONTIER;}
   model=&s->player_model;shadow=&s->player_tail.shadow;call=&s->player_render;
  }else if(q->handle==s->player_child.handle&&s->player_child.complete){
   void*registered=NULL;if(gh_room_object_lookup(&s->pools,q->handle,GH_ROOM_OBJECT_PLAYER_CHILD,&s->player_child.object,&registered)||registered!=&s->player_child.object){*f=0x14a3e8;return GH_SERVICES_ASSET;}
   model=&s->player_child.model;call=&s->child_render;
+ }else if(event_actor){
+  gh_title_player_view registered;
+  if(gh_event_actor_factory_view(event_actor,q->handle,&registered)){*f=0x14a3e8;return GH_SERVICES_ASSET;}
+  const size_t capacity=sizeof(s->event_actor_render)/sizeof(*s->event_actor_render);
+  int accessory=s->event_actor_extra&&event_actor==&s->event_actor_extra->olivia_accessory;
+  if(!accessory&&event_actor->actor_index>=capacity-1){*f=0x14a3e8;return GH_SERVICES_ASSET;}
+  size_t index=accessory?capacity-1:event_actor->actor_index;
+  model=&event_actor->model;
+  shadow=event_actor->shadow.initialized?&event_actor->shadow:NULL;
+  call=&s->event_actor_render[index];
  }else{
   void*registered=NULL;if(gh_room_object_lookup(&s->pools,q->handle,GH_ROOM_OBJECT_OM,&s->om_factory,&registered)){*f=q->original_entry;return GH_SERVICES_FRONTIER;}
   size_t index;for(index=0;index<s->om_factory.count;index++)if(registered==s->om_factory.objects+index)break;
@@ -1008,7 +1091,7 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh
   if(s->om_renders_capacity!=s->om_factory.capacity){*f=0x14a3e8;return GH_SERVICES_BUSY;}call=s->om_renders+index;
  }
  if(!model||!model->ready||model->native_identity!=model||model->root.bytes!=q->actor.bytes||model->root.size!=q->actor.size||model->root.alias_f0!=q->actor.alias_f0){*f=0x14a3e8;return GH_SERVICES_ASSET;}
- /* These three concrete factory paths execute the recovered1495A0 base
+ /* These factory paths execute the recovered1495A0 base
   * constructor. Its four NULL auxiliary refs are explicit provenance, not
   * a generic inference from removed guest-pointer words. */
  gh_actor_model_status auxiliary=gh_actor_model_aux_bind_constructor_empty_001495a0(model);

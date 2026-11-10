@@ -14,6 +14,8 @@ gh_camera_status gh_game_angle_001f8180(float y,float x,float *out,gh_camera_num
  * identity is the EXISTING game_init.camera handle atoriginal463050; mode,
  * previousmode and previous/active identity stay canonical in game_init. */
 gh_camera_status gh_game_camera_construct_pl_00139bc8(gh_game_pl_camera *,gh_game_camera *identity,gh_camera_numeric_policy);
+/* CamManager+530 invokes the same base constructor, then the motion subtype. */
+gh_camera_status gh_game_camera_construct_motion_00138be8(gh_game_pl_camera *,gh_game_camera *identity,gh_camera_numeric_policy);
 /* Original138210 vdispatch ->actual41DBB0+8delta0/+C139090->138240.
  * Explicit nativebinary32 reference policy restores originalpolynomials and
  * operationorder, not a claim ofVU MAC/FDIV/SQRT hardwarebitidentity.

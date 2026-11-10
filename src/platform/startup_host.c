@@ -26,6 +26,7 @@
 #include "../core/game_event_data_prefix.h"
 #include "../core/game_event_timing.h"
 #include "../core/game_event_actor_create.h"
+#include "../core/game_motion_camera.h"
 #include "../core/game_event_play_env.h"
 #include "../core/game_event_audio.h"
 #include "../core/game_event_link.h"
@@ -33,6 +34,7 @@
 #include "../core/game_hitarea_internal.h"
 #include "../core/game_dynamic_corners.h"
 #include "../core/enemy_se_banks.h"
+#include "../core/game_object_sounds.h"
 #include "../core/game_camera_shake.h"
 #include "../core/game_object_step.h"
 #include "../core/game_object_live_trans.h"
@@ -149,6 +151,10 @@ struct gh_startup_host {
     gh_event_data_prefix event_data;
     gh_event_timing event_timing;
     gh_event_actor_create event_actor_create;
+    gh_event_actor_roster event_actor_roster;
+    gh_event_actor_factory event_actor_rows[9];
+    gh_event_actor_extra event_actor_extra;
+    gh_game_motion_camera event_camera;
     gh_event_play_state event_play;
     gh_event_audio_channel1 event_audio;
     int event_link_relative;
@@ -398,6 +404,19 @@ static gh_game_event_status event_data_prepare(void *context, uint32_t *frontier
         *frontier = 0x297a1c;
         return GH_EVENT_ARGUMENT;
     }
+    const size_t capacity = sizeof(host->event_actor_rows) / sizeof(*host->event_actor_rows);
+    status = gh_game_services_bind_event_actor_roster(host->services, &host->event_actor_roster,
+        host->event_actor_rows, capacity);
+    if (status) {
+        *frontier = 0x312a80;
+        return status;
+    }
+    status = gh_game_services_bind_event_actor_extra(host->services, &host->event_actor_extra,
+        &host->event_actor_create);
+    if (status) {
+        *frontier = 0x297a48;
+        return status;
+    }
     const gh_event_actor_create_bindings bindings = {
         .components = &host->event_link.components,
         .data = &host->event_data,
@@ -407,7 +426,14 @@ static gh_game_event_status event_data_prepare(void *context, uint32_t *frontier
         .global_threads = host->threads,
         .save = {host->save_bytes, sizeof(host->save_bytes)},
         .object_view = event_object_view,
-        .context = host
+        .context = host,
+        .factory = gh_event_actor_roster_run,
+        .factory_context = &host->event_actor_roster,
+        .initialize = gh_event_actor_roster_initialize,
+        .extra = gh_event_actor_extra_run,
+        .extra_context = &host->event_actor_extra,
+        .row_limit = capacity,
+        .finish = gh_event_actor_extra_finish
     };
     return gh_event_actor_create_start_002979f0(&host->event_actor_create, &bindings, frontier);
 }
@@ -415,7 +441,12 @@ static gh_game_event_status event_data_prepare(void *context, uint32_t *frontier
 static gh_game_event_status event_actor_task_status(void *context, uint32_t *frontier)
 {
     gh_startup_host *host = context;
-    return gh_event_actor_create_task_status(&host->event_actor_create, frontier);
+    gh_game_event_status status = gh_event_actor_create_task_status(&host->event_actor_create, frontier);
+    if (status && host->event_actor_create.frontier_rel) {
+        *frontier = host->event_actor_create.frontier_rel;
+        host->event_link_relative = 1;
+    }
+    return status;
 }
 
 static gh_game_event_status event_abnormal_fade(void *context, uint32_t *frontier)
@@ -450,24 +481,56 @@ static int event_create_stage(void *context,gh_game_event *event,int *done)
     return status;
 }
 
+static gh_game_event_status event_play_visit(void *context, uint32_t site, int *end,
+    uint32_t *frontier, int *relative)
+{
+    gh_startup_host *host = context;
+    *end = 0;
+    *frontier = 0;
+    *relative = 0;
+    if (site == 0x296d08) {
+        if (!host->event_camera.camera.constructed) {
+            gh_camera_status status = gh_game_motion_camera_construct_00138be8(&host->event_camera,
+                GH_CAMERA_NATIVE_BINARY32_REFERENCE);
+            if (status) {
+                *frontier = 0x138be8;
+                return status == GH_CAMERA_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+            }
+        }
+        *relative = 1;
+        return gh_event_camera_init_play_00004bd8(&host->event_link.components, &host->game_init,
+            &host->event_camera, frontier);
+    }
+    return GH_EVENT_UNSUPPORTED;
+}
+
 static int event_play_stage(void *context, gh_game_event *event, int *done)
 {
     gh_startup_host *host = context;
     if (event != &host->event) return GH_EVENT_ARGUMENT;
     uint32_t frontier;
     host->event_link_relative = 0;
-    gh_game_event_status status = gh_event_play_00296c28(
-        &host->event_play, event, &host->event_link.components, &host->event_config,
-        &host->work, &host->fade, &host->display, done, &frontier);
-    if (status) event->frontier = frontier;
+    const gh_event_play_bindings bindings = {
+        .event = event,
+        .components = &host->event_link.components,
+        .config = &host->event_config,
+        .work = &host->work,
+        .fade = &host->fade,
+        .display = &host->display,
+        .visit = event_play_visit,
+        .context = host
+    };
+    gh_game_event_status status = gh_event_play_00296c28(&host->event_play, &bindings, done, &frontier);
+    if (status) {
+        event->frontier = frontier;
+        host->event_link_relative = host->event_play.frontier_relative;
+    }
     return status;
 }
 
 static gh_game_event_status event_abort_resources(gh_startup_host *h)
 {
-    gh_game_event_status status=gh_event_actor_create_abort(&h->event_actor_create);
-    if(status)return status;
-    status=gh_event_timing_abort(&h->event_timing);
+    gh_game_event_status status=gh_event_timing_abort(&h->event_timing);
     if(status)return status;
     status=gh_game_event_resource_abort(&h->event_resource);
     if(status)return status;
@@ -558,7 +621,12 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     }else if(address==0x1fe748){
         gh_game_objects *objects=argument==0x580d20?s.objects:argument==0x5864e0?s.room_objects:0;
         if(!objects)return GH_SCENE_STEP_ARGUMENT;
-        gh_object_status e=gh_game_objects_update_001fe748(objects,frontier);
+        const gh_object_resource_bindings resources = {
+            .dvd = &h->dvd,
+            .sound_check = h->enemy_banks ? gh_enemy_se_object_sound_check : NULL,
+            .sound_context = h->enemy_banks
+        };
+        gh_object_status e=gh_game_objects_update_bound_001fe748(objects,&resources,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2d7560){
         gh_light_move_bindings bindings={s.scene_at,light_actor_view,h};
@@ -1521,6 +1589,11 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->event_camera_cuts=h->event_data.camera_count;
     out->event_actor_records=h->event_data.actor_count;
     out->event_timing_rows=h->event_timing.count;
+    out->event_actor_handle=h->event_actor_create.first_actor_handle;
+    out->event_actor_parts=h->event_actor_rows[0].model.part_count;
+    out->event_actors_initialized=(uint32_t)h->event_actor_create.actor_cursor;
+    out->event_actor_accessory_handle=h->event_actor_extra.accessory_handle;
+    out->event_actor_jacket_attached=h->event_actor_extra.retargeted;
     out->current_room=(uint16_t)h->work.room;memcpy(&out->next_room,(const uint8_t*)&h->work+0x5b4,2);
     if(h->services){gh_game_update_diagnostic d={0};if(!gh_game_services_update_diagnostic(h->services,&d)){
         out->player_updates_completed=d.player_updates_completed;out->child_updates_completed=d.child_updates_completed;out->om_updates_completed=d.om_updates_completed;
@@ -1624,6 +1697,9 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
     /* Scenario/Cockpit hold the canonical runtime/assets and nested backend.
      * Cancel their parent first, then release these owners before root backend. */
     gh_scene_visibility_destroy(h->visibility);h->visibility=NULL;
+    if(gh_event_actor_create_abort(&h->event_actor_create)!=GH_EVENT_OK)return GH_HOST_THREADS;
+    if(gh_event_actor_extra_abort(&h->event_actor_extra)!=GH_EVENT_OK)return GH_HOST_ASSET;
+    if(gh_event_actor_roster_abort(&h->event_actor_roster)!=GH_EVENT_OK)return GH_HOST_ASSET;
     if(h->services){
         if(gh_game_services_destroy(h->services)!=GH_SERVICES_OK)return GH_HOST_ASSET;
         h->services=0;
