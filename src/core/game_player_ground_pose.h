@@ -7,7 +7,13 @@ extern "C" {
 typedef enum {GH_GROUND_OK,GH_GROUND_ARGUMENT,GH_GROUND_BOUNDS,GH_GROUND_BUSY,GH_GROUND_NUMERIC,GH_GROUND_UNSUPPORTED} gh_player_ground_status;
 /* ONE mutable original.data3BD470. Load once at host startup, never per room
  * or player; loaded zero comes from the actual ELF, not a guessed reset. */
-typedef struct {float tilt;uint8_t loaded;} gh_player_ground_globals;
+typedef struct {float tilt;uint8_t loaded;
+ /* Same original.data neighborhood474/478/47C/480. Mutable shared tuning,
+  * not four forever-constant copies read afresh by idle/walk callers. */
+ float idle_turn_cap,walk_turn_cap,idle_turn_speed,walk_turn_speed;
+ float run_turn_speed; /* same original.data484, originalrun target */
+ uint8_t tuning_loaded;
+} gh_player_ground_globals;
 typedef struct {const uint8_t *actor;gh_actor_model *model;gh_player_ground_globals *globals;
  uint8_t stage,active,complete;float target;uint32_t frontier;} gh_player_ground_pose_call;
 gh_player_ground_status gh_player_ground_globals_from_elf(gh_player_ground_globals *,const void *,size_t);

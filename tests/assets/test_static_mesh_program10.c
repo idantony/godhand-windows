@@ -33,7 +33,7 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;size_t i;gh_disc_entry file;C
  memcpy(saved,v,sizeof(v));gh_static_geometry_result before=r;
  C(gh_static_mesh_transform_program10_batch(&s,0x1001000,0,&in,0,v,38,indices,108,&r,&frontier)==GH_STATIC_UNSUPPORTED&&frontier.vu_byte_pc==0x0138&&!memcmp(saved,v,sizeof(v))&&!memcmp(&before,&r,sizeof(r)));
  gh_static_transform_inputs bad=in;bad.screen_matrix[15]=0;bad.screen_matrix[11]=0;
- C(gh_static_mesh_transform_program10_batch(&s,0x1001000,0,&bad,GH_STATIC_BINARY32_REFERENCE,v,38,indices,108,&r,&frontier)==GH_STATIC_UNSUPPORTED&&frontier.vu_byte_pc==0x01b0&&!memcmp(saved,v,sizeof(v)));
+ C(gh_static_mesh_transform_program10_batch(&s,0x1001000,0,&bad,GH_STATIC_BINARY32_REFERENCE,v,38,indices,108,&r,&frontier)==GH_STATIC_UNSUPPORTED&&frontier.vu_byte_pc==0x0260&&!memcmp(saved,v,sizeof(v)));
  C(gh_static_mesh_transform_program10_batch(&s,0x1001000,0,&in,GH_STATIC_BINARY32_REFERENCE,v,37,indices,108,&r,&frontier)==GH_STATIC_BOUNDS&&!memcmp(saved,v,sizeof(v)));
  bad=in;bad.clip_matrix[12]=100;
  C(gh_static_mesh_transform_program10_batch(&s,0x1001000,0,&bad,GH_STATIC_BINARY32_REFERENCE,v,38,indices,108,&r,&frontier)==GH_STATIC_UNSUPPORTED&&frontier.vu_byte_pc==0x308&&!memcmp(saved,v,sizeof(v))&&!memcmp(&before,&r,sizeof(r))); /* Noalias14 clippedtriangle suppression. */

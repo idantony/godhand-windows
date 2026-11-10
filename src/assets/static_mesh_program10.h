@@ -6,8 +6,8 @@ extern "C" {
 #endif
 /* Independently recovered actual program10/MSCAL0 straight strip path.
  * Same typed raw-VIF/GS boundary and explicit binary32 policy as program14.
- * Requires every transformed clip coordinate inside |W| and positive finite
- * screenW. Any clipping returns UNSUPPORTED at VU0308 atomically; no clipped
+ * Requires every transformed clip coordinate inside |W|. Finite signed
+ * screenW / exactzero DIV saturation are supported in the bounded domain. Any clipping returns UNSUPPORTED at VU0308 atomically; no clipped
  * polygon is silently suppressed or delegated to another program.
  * This is a bounded subset, not the full clipping/fan implementation. */
 gh_static_mesh_status gh_static_mesh_transform_program10_batch(

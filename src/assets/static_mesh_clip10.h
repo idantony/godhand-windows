@@ -14,7 +14,8 @@ typedef struct {float projection[16],fog[2];} gh_static_clip10_inputs;
  * On success result.primitive=fan(7D/5D), triangles indexed 0,i-1,i.
  * Capacity9 vertices/21 indices is sufficient for a triangle in sixplanes.
  * Zero polygon/backface gives zero vertices/triangles. Explicit reference,
- * positive finite projectionW, no EE/VU-bitexact claim; atomic outputs. */
+ * finite signed projectionW / exactzero DIV saturation in boundeddomain;
+ * no EE/VU-bitexact claim; atomic outputs. */
 gh_static_mesh_status gh_static_clip10_triangle(const gh_static_clip10_vertex triangle[3],
  const gh_static_clip10_inputs *,uint16_t primitive,gh_static_transform_policy,
  gh_static_gs_vertex *,size_t,uint32_t *,size_t,gh_static_geometry_result *,

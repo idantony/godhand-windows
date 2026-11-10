@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 import subprocess
 import threading
+from compiler_response import write_response_file
 
 PROJECT = Path(__file__).resolve().parents[1]
 DEFAULT_SCRATCH = Path(r"G:\middle_thing\godhand_windows")
@@ -69,7 +70,7 @@ def main():
         cpp_sources += ["tools/probe-title-ui.cpp"]
     else:
         cpp_sources += ["tools/probe-mc-frame.cpp"]
-    inputs = {"tools/build-native.py", "tools/build-windows.py", *cpp_sources, *(s for _, s in modules)}
+    inputs = {"tools/build-native.py", "tools/build-windows.py", "tools/compiler_response.py", *cpp_sources, *(s for _, s in modules)}
     if args.target in ("native","startup-qa"):
         inputs.add("tests/test_cpp_abi.cpp")
     # Fingerprint actual project include dependencies. Unrelated headers being
@@ -102,8 +103,16 @@ def main():
         report_path.parent.mkdir(exist_ok=True)
         report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     def run(name, command):
-        result = subprocess.run([str(v) for v in command], cwd=PROJECT, env=env,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+        if name == "link":
+            response = write_response_file(build / "link.rsp", command[2:])
+            with report_lock:
+                report.setdefault("response_files", []).append(response)
+            command = command[:2] + ["@" + response["path"]]
+        try:
+            result = subprocess.run([str(v) for v in command], cwd=PROJECT, env=env,
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+        except OSError as error:
+            result = subprocess.CompletedProcess(command, 1, "Compiler launch failed: " + str(error))
         log = logs / (name + ".log")
         log.write_text(result.stdout, encoding="utf-8")
         with report_lock:

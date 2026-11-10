@@ -28,7 +28,8 @@ typedef struct {uint32_t ee_entry,vu_byte_pc;} gh_static_transform_frontier;
  * triangle-list equivalents of the original strip, already ADC/clip/backface
  * filtered. Original packet's first2 vertices cannot kick a GS triangle, so
  * triangle_tested=0; their unknown previous-packet flag history is not claimed.
- * Positive finite screenW only; unsupported numerics return exact VU PC.
+ * Finite signed screenW and exactzero DIV saturation are supported;
+ * unresolved UV/cross overflow and subnormalDIV retain exact VU frontiers.
  * Output buffers/result are committed only after complete success. */
 gh_static_mesh_status gh_static_mesh_transform_batch(const gh_scene_mesh_stream *,
  uint32_t node_flags,size_t batch,const gh_static_transform_inputs *,gh_static_transform_policy,

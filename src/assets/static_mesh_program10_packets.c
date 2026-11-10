@@ -2,6 +2,7 @@
  * Uses independently recovered clip helper, never instruction interpretation.
  * Evidence: analysis/static-mesh-program10-evidence.json. */
 #include "static_mesh_program10_packets.h"
+#include "static_mesh_vu_numeric.h"
 #include <fenv.h>
 #include <math.h>
 #include <string.h>
@@ -24,16 +25,6 @@ static int transform(const float matrix[16],const float p[3],float out[4]){
  }
  return finite_vector(out,4);
 }
-static uint8_t clip_flags(const float p[4]){
- float w=fabsf(p[3]);uint8_t flags=0;
- for(unsigned i=0;i<3;i++){if(p[i]>w)flags|=(uint8_t)(1u<<(2*i));if(p[i]<-w)flags|=(uint8_t)(2u<<(2*i));}
- return flags;
-}
-static int fixed4(float x,int32_t*out){
- float scaled=mul(x,16.0f);
- if(!isfinite(scaled)||scaled < -2147483648.0f||scaled >=2147483648.0f)return 0;
- *out=(int32_t)scaled;return 1; /* Original FTOI truncates towardzero. */
-}
 static int sign_bit(float x){uint32_t bits;memcpy(&bits,&x,4);return (int)(bits>>31);}
 
 static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t flags,
@@ -49,12 +40,11 @@ static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t fla
   float p[3],screen[4],clip[4];
   for(unsigned j=0;j<3;j++)p[j]=mul((float)raw.position[j],0.01f); /* VU0138/0158 */
   if(!transform(in->screen_matrix,p,screen)||!transform(in->clip_matrix,p,clip))return unsupported(f,0x0190);
-  if(!(screen[3]>0.0f))return unsupported(f,0x01b0);
-  float q=divide(1.0f,screen[3]);if(!isfinite(q))return unsupported(f,0x01b0);
-  gh_static_gs_vertex v={0};v.raw_control=raw.raw_w;v.clip_flags=clip_flags(clip);
+  float q;if(!gh_static_vu_reciprocal(screen[3],&q))return unsupported(f,0x01b0);
+  gh_static_gs_vertex v={0};v.raw_control=raw.raw_w;v.clip_flags=gh_static_vu_clip_flags(clip);
   for(unsigned j=0;j<3;j++){
    screen_history[i][j]=mul(screen[j],q);
-   if(!fixed4(screen_history[i][j],v.xyz_fixed4+j))return unsupported(f,0x0290);
+   if(!gh_static_vu_ftoi4(screen_history[i][j],v.xyz_fixed4+j))return unsupported(f,0x0290);
   }
   for(unsigned j=0;j<2;j++){
    float uv=add(divide((float)raw.uv[j],4096.0f),in->uv_offset[j]);
@@ -73,7 +63,7 @@ static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t fla
   float fog=add(in->fog[0],mul(in->fog[1],screen[3]));
   if(!isfinite(fog))return unsupported(f,0x0228);
   if(fog>255.0f)fog=255.0f;if(fog<0.0f)fog=0.0f;
-  int32_t fog_fixed; if(!fixed4(fog,&fog_fixed))return unsupported(f,0x0290);
+  int32_t fog_fixed; if(!gh_static_vu_ftoi4(fog,&fog_fixed))return unsupported(f,0x0290);
   v.fog_fixed4=(uint16_t)fog_fixed;
   v.adc=(raw.raw_w&0x8000u)!=0;
   if(i>=2){
@@ -125,7 +115,7 @@ gh_static_mesh_status gh_static_mesh_program10_packets(const gh_scene_mesh_strea
  if(!finite_vector(in->screen_matrix,16)||!finite_vector(in->clip_matrix,16)||!finite_vector(in->uv_offset,2)||!finite_vector(in->color_scale,4)||!finite_vector(in->fog,2)||!finite_vector(projection,16))return GH_STATIC_ARGUMENT;
  gh_static_mesh_batch b;uint32_t ee;gh_static_mesh_status status=gh_static_mesh_batch_at(s,flags,batch,&b,&ee);if(status){if(f)f->ee_entry=ee;return status;}
  gh_static_gs_vertex tmp[362];uint32_t ix[864];gh_static_packet_range packets[37];gh_static_packet_result r;
- fenv_t saved;if(fegetenv(&saved)||fesetround(FE_TONEAREST))return unsupported(f,0x0138);
+ fenv_t saved;if(feholdexcept(&saved)||fesetround(FE_TONEAREST))return unsupported(f,0x0138);
  status=calculate(s,flags,&b,in,projection,tmp,ix,packets,&r,f);int restored=fesetenv(&saved);if(restored)return unsupported(f,0x0138);if(status)return status;
  if(capacity<r.vertices||index_capacity<r.triangles*3||range_capacity<r.packets)return GH_STATIC_BOUNDS;
  memcpy(vertices,tmp,r.vertices*sizeof(*vertices));memcpy(indices,ix,r.triangles*3*sizeof(*indices));memcpy(ranges,packets,r.packets*sizeof(*ranges));*result=r;return GH_STATIC_OK;

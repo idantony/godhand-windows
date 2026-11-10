@@ -3,6 +3,8 @@
 #include "id_jobs.h"
 #include "game_init.h"
 #include "cockpit_fan.h"
+#include "game_title_player.h"
+#include "game_camera.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -52,6 +54,13 @@ gh_id_error gh_game_cockpit_tutorial_finish_00147028(gh_game_cockpit *);
  * Not a claim that original147188 freed its ID run (it only clears B0/AC/B8).
  * Requires Main/consumers cancelled, exactly as other source-view releases. */
 gh_id_error gh_game_cockpit_tutorial_detach(gh_game_cockpit *);
+typedef gh_id_error (*gh_cockpit_resolve_actor)(void *,uint32_t handle,gh_title_player_view *,uint32_t *frontier);
+typedef struct {const gh_game_init_state *init;const gh_title_player_view *player;
+ const gh_room_pools *pools;const gh_game_pl_camera *camera;
+ gh_cockpit_resolve_actor resolve_handle;void *context;uint8_t player_known;} gh_cockpit_gameplay_bindings;
+/* SAME original GetPlayer/actor registry sources, no copied HP/profile.
+ * Explicit knownNULL is distinct from unresolved publisher. */
+gh_id_error gh_game_cockpit_bind_gameplay(gh_game_cockpit *,const gh_cockpit_gameplay_bindings *);
 /* Actual frame consumers, same explicit nativebinary32/seed0 reference policy
  * as room reset, not EE/VU bit identity. Successful IDTrans callback must queue/execute real
  * entries, never acknowledge unknown consumers. Pointer stays owned here. */
@@ -63,9 +72,15 @@ typedef struct {
  gh_core_save_view save;
  gh_id_error (*fan)(void *,const gh_cockpit_fan *,uint32_t *frontier);
 } gh_cockpit_frame_callbacks;
-/* Loads original immutable radar curves41E780/41E7A8 and scalar3BD6F4.
- * One canonical Cockpit owner retains its original global pulse companion. */
+/* Loads original radar curves and mutable globals3BD6EC..F4/466440..447
+ * from file-backed or zero-filled PT_LOAD. These persist across room reset. */
 gh_id_error gh_game_cockpit_bind_frame_elf(gh_game_cockpit *,const void *,size_t);
+/* Actual142060 finite binary32 reference subset: zero currentHeat/mode,
+ * stable level0..2, life changes use real reset/damage-marker/shake branches;
+ * no depleted upgrade/active level-change animation.
+ * Original Save.maximum update and four IDMove calls are real; changed or
+ * active Heat/level branches remain strict, no SFX/HeatReady ack is invented. */
+gh_id_error gh_game_cockpit_heat_move_00142060(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);
 gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);
 gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);
 /* Borrowed SAME original1414..1467 fields for actual1F75B0/1F7680.

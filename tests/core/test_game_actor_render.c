@@ -36,6 +36,9 @@ int main(int argc,char **argv)
  C(gh_actor_render_0014a3e8(&call,&model,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x31a600&&o.rays==8&&o.attempts==2&&!o.groups);
  gh_actor_render_call copied=call;C(gh_actor_render_0014a3e8(&copied,&model,&b,&pc)==GH_ACTOR_MODEL_BUSY);
  gh_actor_render_bindings foreign=b;foreign.depth_shift=NULL;C(gh_actor_render_0014a3e8(&call,&model,&foreign,&pc)==GH_ACTOR_MODEL_BUSY);
+ /* Preserve the strict numeric retry case using a genuinely unsupported
+  * nonfinite input; the original VU supports an exact zero direction. */
+ putf(light->scalar+0x161a0,NAN);
  o.accept=1;C(gh_actor_render_0014a3e8(&call,&model,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x30a370&&o.rays==8&&o.groups==1&&call.shadow.complete&&call.trans.phase==7);
  uint8_t alpha=bytes[0x2b7];C(gh_actor_render_0014a3e8(&call,&model,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x30a370&&o.groups==1&&o.rays==8&&bytes[0x2b7]==alpha);
  /* Fill the existing numerical light fixture, then resume without another

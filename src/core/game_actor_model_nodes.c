@@ -68,3 +68,14 @@ gh_actor_model_status gh_actor_model_object_program_reset(gh_actor_model*s,unsig
  if(!s->ready||!s->nodes||!s->nodes->object_ready)return GH_ACTOR_MODEL_BUSY;
  s->nodes->object.object_program[parity]=UINT32_C(0x80000000);return GH_ACTOR_MODEL_OK;
 }
+
+gh_actor_model_status gh_actor_model_aux_bind_constructor_empty_001495a0(gh_actor_model*s){
+ if(!s||!s->bound||s->native_identity!=s||!s->root.bytes||s->root.size<0x29c)return GH_ACTOR_MODEL_ARGUMENT;
+ if(!s->ready||!s->nodes||!s->nodes->object_ready)return GH_ACTOR_MODEL_BUSY;
+ struct gh_actor_model_nodes*n=s->nodes;if(!s->packet_heap||!n->object_allocation.pointer||n->object_allocation.owner!=s->packet_heap)return GH_ACTOR_MODEL_ARGUMENT;
+ gh_actor_object_packets*p=&n->object;
+ if(p->auxiliary_constructor_bound&&(p->auxiliary_owner!=s||p->auxiliary_absent_mask!=15))return GH_ACTOR_MODEL_BUSY;
+ if(!p->auxiliary_constructor_bound&&(p->auxiliary_owner||p->auxiliary_absent_mask))return GH_ACTOR_MODEL_BUSY;
+ for(unsigned i=0;i<4;i++)if(w(s->root.bytes+0x28c+i*4)){if(p->auxiliary_constructor_bound)p->auxiliary_absent_mask=0;return GH_ACTOR_MODEL_UNSUPPORTED;}
+ p->auxiliary_owner=s;p->auxiliary_absent_mask=15;p->auxiliary_constructor_bound=1;return GH_ACTOR_MODEL_OK;
+}

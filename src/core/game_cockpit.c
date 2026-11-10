@@ -4,6 +4,7 @@
 #include "game_cockpit.h"
 #include "id_entry_reset.h"
 #include "id_animation.h"
+#include "id_tick.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -28,6 +29,14 @@ struct gh_game_cockpit {
  gh_id_view gauge_texture[5],icon_texture;uint32_t frontier;int begun,ready,room_begun,room_ready;
  float radar_curve[5][2];uint8_t radar_color_curve[5][5],radar_pulse,frame_bound;
  unsigned update_stage,draw_stage,radar_stage,heat_stage;gh_cockpit_fan heat_fan;
+ gh_cockpit_gameplay_bindings gameplay;const gh_title_player_view *radar_player;
+ uint8_t gameplay_bound,hud_cold_known;unsigned gameplay_index,radar_move_stage,radar_move_index;
+ gh_id_error gameplay_error;uint32_t gameplay_error_frontier;
+ /* Original mutable function statics, initialized from PT_LOAD (including
+  * its zero-fill), retained across room resets, never inferred from calloc. */
+ float life_origin_y,life_shake;uint32_t life_origin_known;
+ uint8_t life_level_counter,life_level_direction;unsigned heat_move_stage;
+ unsigned widget_step;
 };
 static uint32_t u32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w32(gh_game_cockpit *s,unsigned o,uint32_t n){for(unsigned i=0;i<4;i++)s->fields[o+i]=(uint8_t)(n>>(8*i));}
@@ -137,7 +146,7 @@ gh_id_error gh_game_cockpit_initialize_00140c88(gh_game_cockpit *s,gh_core_save_
  TRY(init(s,0x3a0,2));w16(s,0x3a0+0xbe,0xffff);
  w32(s,0x1dc0+0x9c,0);w32(s,0x1dc0+0x94,0);w32(s,0x1e90+0xa0,0);
  for(unsigned i=0;i<5;i++)w32(s,0x1e90+0x250+i*4,0);s->fields[0x1e90+0x358]=0;
- w32(s,0x2220+0x9c,0);w32(s,0x2220+0x94,0);w32(s,0x1a20+0xb0,0);w16(s,0x1a20+0xac,0xffff);
+ s->hud_cold_known=7;w32(s,0x2220+0x9c,0);w32(s,0x2220+0x94,0);w32(s,0x1a20+0xb0,0);w16(s,0x1a20+0xac,0xffff);
  for(unsigned i=0;i<11;i++){TRY(widget(s,i,save));s->widgets[i].initialized=1;}
  s->fields[0x23bc]=0;s->ready=1;return GH_ID_OK;
 }
@@ -218,37 +227,192 @@ static const uint8_t *frame_elf(const uint8_t*e,size_t z,uint32_t va,size_t n){
   if(u32(p)!=1||v>va||(uint64_t)va+n>(uint64_t)v+files)continue;if(files>u32(p+20)||off>z||files>z-off)return NULL;return e+off+(va-v);
  }return NULL;
 }
+static int frame_elf_value(const uint8_t*e,size_t z,uint32_t va,void*out,size_t n){
+ if(z<52||memcmp(e,"\177ELF\1\1\1",7)||e[18]!=8||e[19])return 0;
+ uint32_t table=u32(e+28);unsigned stride=e[42]|(unsigned)e[43]<<8,count=e[44]|(unsigned)e[45]<<8;
+ if(stride<32||count>128||table>z||count>(z-table)/stride)return 0;
+ for(unsigned i=0;i<count;i++){const uint8_t*p=e+table+(size_t)i*stride;uint32_t off=u32(p+4),v=u32(p+8),files=u32(p+16),mem=u32(p+20);
+  if(u32(p)!=1||va<v||(uint64_t)va+n>(uint64_t)v+mem)continue;
+  if(files>mem||off>z||files>z-off)return 0;size_t delta=va-v,copied=delta<files?files-delta:0;if(copied>n)copied=n;
+  memset(out,0,n);if(copied)memcpy(out,e+off+delta,copied);return 1;
+ }return 0;
+}
 gh_id_error gh_game_cockpit_bind_frame_elf(gh_game_cockpit*s,const void*data,size_t z){
  if(!s||!data)return GH_ID_ARGUMENT;if(s->frame_bound)return GH_ID_BUSY;const uint8_t*e=data;
  const uint8_t*a=frame_elf(e,z,0x41e780,40),*b=frame_elf(e,z,0x41e7a8,25),*p=frame_elf(e,z,0x3bd6f4,1);
  if(!a||!b||!p)return GH_ID_BOUNDS;
+ uint8_t life[8],origin[8];if(!frame_elf_value(e,z,0x3bd6ec,life,8)||!frame_elf_value(e,z,0x466440,origin,8))return GH_ID_BOUNDS;
  float curve[5][2];memcpy(curve,a,40);
  for(unsigned i=0;i<5;i++)if(!isfinite(curve[i][0])||!isfinite(curve[i][1])||(i&&curve[i][0]<=curve[i-1][0])||(i&&b[i*5]<=b[(i-1)*5]))return GH_ID_FORMAT;
  if(curve[0][0]!=0||curve[4][0]!=16||b[0]!=0||b[20]!=16)return GH_ID_UNSUPPORTED;
+ float shake,origin_y;memcpy(&shake,life,4);memcpy(&origin_y,origin,4);if(!isfinite(shake)||!isfinite(origin_y))return GH_ID_FORMAT;
+ s->life_shake=shake;s->life_origin_y=origin_y;s->life_origin_known=u32(origin+4);s->life_level_counter=life[4];s->life_level_direction=life[5];
  memcpy(s->radar_curve,curve,40);memcpy(s->radar_color_curve,b,25);s->radar_pulse=*p;s->frame_bound=1;return GH_ID_OK;
 }
 static gh_id_error frame_move_base(gh_game_cockpit*s,unsigned o,const gh_cockpit_frame_callbacks*c){gh_id_frontier f={0};
  gh_id_error e=gh_id_jobs_move_reference(base(s,o),c?c->post:NULL,c?c->post_context:NULL,&room_animation_profile,&f);if(e)s->frontier=f.address;return e;
 }
+static float frame_number(const uint8_t*p){uint32_t n=u32(p);float f;memcpy(&f,&n,4);return f;}
+gh_id_error gh_game_cockpit_bind_gameplay(gh_game_cockpit*s,const gh_cockpit_gameplay_bindings*b){
+ if(!s||!b||!b->init||!b->pools||b->player_known>1||(b->player&&(!b->player->bytes||b->player->size<0x300)))return GH_ID_ARGUMENT;
+ if(s->gameplay_bound){const gh_cockpit_gameplay_bindings*a=&s->gameplay;int same=a->init==b->init&&a->pools==b->pools&&a->camera==b->camera&&a->resolve_handle==b->resolve_handle&&a->context==b->context;if(!same)return GH_ID_BUSY;if(a->player_known&&(a->player_known!=b->player_known||a->player!=b->player))return GH_ID_BUSY;if(!a->player_known&&s->radar_move_stage)return GH_ID_BUSY;}
+ s->gameplay=*b;s->gameplay_bound=1;return GH_ID_OK;
+}
+static gh_id_error gameplay_move_base(gh_game_cockpit*s,unsigned o,const gh_cockpit_frame_callbacks*c){
+ if(s->gameplay_error){s->frontier=s->gameplay_error_frontier;return s->gameplay_error;}
+ gh_id_error e=frame_move_base(s,o,c);if(e){s->gameplay_error=e;s->gameplay_error_frontier=s->frontier;}return e;
+}
+static gh_id_error gameplay_radar_body(gh_game_cockpit*s,const gh_cockpit_frame_callbacks*c){
+ const unsigned o=0x6e0;const gh_cockpit_gameplay_bindings*b=&s->gameplay;gh_id_entry*entry;
+ if(!s->radar_move_stage){if(!s->gameplay_bound||!b->player_known)return frame_stop(s,0x2db6b0);s->radar_player=b->player;TRY(gh_game_cockpit_entry_at(s,o+0x5a4,&entry));entry->flags|=0x8000000;TRY(gh_game_cockpit_entry_at(s,o+0x5a8,&entry));entry->flags|=0x8000000;s->radar_move_stage=1;}
+ if(s->radar_move_stage==1){const gh_room_vector*v;if(gh_room_registry_view(b->pools,0x754c58,&v)||(!v->allocation.pointer&&v->count))return frame_stop(s,0x143d20);
+  while(s->radar_move_index<v->count){if(!b->resolve_handle)return frame_stop(s,0x143d20);uint32_t handle=u32((const uint8_t*)v->allocation.pointer+(size_t)s->radar_move_index*4),f=0;gh_title_player_view actor;gh_id_error e=b->resolve_handle(b->context,handle,&actor,&f);if(e){s->frontier=f?f:0x143d20;return e;}if(!actor.bytes||actor.size<0x300)return GH_ID_ARGUMENT;unsigned k=actor.bytes[0x2fe]|(unsigned)actor.bytes[0x2ff]<<8;
+   if(k>=0x200&&k<0x500){if(actor.size<0x532)return GH_ID_BOUNDS;if(actor.bytes[0x531]!=255){if(!s->radar_player||!s->radar_player->alias_f0||!actor.alias_f0)return frame_stop(s,0x2db6b0);float dx=add(frame_number(actor.alias_f0),-frame_number(s->radar_player->alias_f0)),dz=add(frame_number(actor.alias_f0+8),-frame_number(s->radar_player->alias_f0+8)),limit=frame_number(s->fields+o+0x5d0);if(!isfinite(dx)||!isfinite(dz)||!isfinite(limit))return frame_stop(s,0x143e4c);unsigned code=actor.bytes[0x531];int special=code==5||code==6||code==1||code==4;if(special||(fabsf(dx)<=limit&&fabsf(dz)<=limit)){float distance=sqrtf(add(mul(dx,dx),mul(dz,dz)));if(!isfinite(distance))return frame_stop(s,0x1f7df8);if(special||distance<=limit)return frame_stop(s,0x30a870);}}}
+   s->radar_move_index++;
+  }w32(s,o+0x49c,0);TRY(gh_game_cockpit_entry_at(s,o+0x4a4,&entry));entry->flags|=0x8000000;s->radar_move_stage=2;
+ }
+ if(s->radar_move_stage==2){TRY(gameplay_move_base(s,o,c));s->radar_move_stage=3;}
+ if(s->radar_move_stage==3){TRY(gameplay_move_base(s,o+0x4b0,c));s->radar_move_stage=4;}
+ if(s->radar_move_stage==4){gh_id_error e=gh_id_tick_entries_002aaba0(base(s,o+0x500));if(e){s->frontier=0x2aaba0;return e;}s->radar_move_stage=5;}
+ if(s->radar_move_stage==5){gh_id_error e=gh_id_tick_entries_002aaba0(base(s,o+0x550));if(e){s->frontier=0x2aaba0;return e;}s->radar_move_stage=6;}
+ return GH_ID_OK;
+}
+static gh_id_error gameplay_radar(gh_game_cockpit*s,const gh_cockpit_frame_callbacks*c){fenv_t env;if(feholdexcept(&env))return GH_ID_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_ID_UNSUPPORTED;}gh_id_error e=gameplay_radar_body(s,c);if(fesetenv(&env))return GH_ID_UNSUPPORTED;return e;}
+static gh_id_error heat_entry(gh_game_cockpit*s,unsigned field,gh_id_entry**out){return gh_game_cockpit_entry_at(s,0x460+field,out);}
+static gh_id_error gameplay_heat_body(gh_game_cockpit*s,const gh_boot_work*work_state,const gh_cockpit_frame_callbacks*c){
+ const unsigned o=0x460;gh_id_entry*e;const uint8_t*w=(const uint8_t*)work_state;
+ if(s->gameplay_error){s->frontier=s->gameplay_error_frontier;return s->gameplay_error;}
+ if(!s->heat_move_stage){
+  if(!c||!c->save.bytes||c->save.size<GH_CORE_SAVE_BYTES)return frame_stop(s,0x1fac68);
+  if(!s->gameplay_bound)return frame_stop(s,0x2a9c98);
+  if(!s->frame_bound)return frame_stop(s,0x142060);
+  gh_core_save_view save=c->save;const uint8_t*h=s->gameplay.init->heat;
+  int32_t life,maximum;uint32_t raw=u32(save.bytes+0x84);memcpy(&life,&raw,4);raw=u32(save.bytes+0x80);memcpy(&maximum,&raw,4);
+  float heatmax=frame_number(h),current=frame_number(h+4);
+  if(!isfinite(heatmax)||heatmax<0||!isfinite(current)||u32(h+4)!=0||h[0x10])return frame_stop(s,0x2a9c98);
+  /* Explicit finite binary32 reference domain. Changed level and live
+   * Heat require their original reset/SFX branches, never an empty ack. */
+  if(life < -16777216||life>16777216||maximum<=0||maximum>16777216)return frame_stop(s,0x1fac80);
+  unsigned upgrades=0;for(unsigned i=0;i<6&&i<save.bytes[0x156];i++)if(save.bytes[0xa8+i])upgrades++;
+  int lev=level(save);if(lev==4)lev=3;else if(lev==5)lev=4;lev--;
+  unsigned oldlev=s->fields[o+0x17c]|(unsigned)s->fields[o+0x17d]<<8;
+  if(lev<0||lev>=3||oldlev!=(unsigned)lev||s->life_level_counter||upgrades<s->fields[o+0x260])return frame_stop(s,0x142060);
+  if(frame_number(s->fields+o+0x268)!=0||(u32(s->fields+o+0x90)&0x2000000))return frame_stop(s,0x2cbba0);
+  float ratio=(float)life/(float)maximum;
+  s->heat_move_stage=10;/* A failed reset/calc cannot replay earlier mutations. */
+  if(!s->life_origin_known){TRY(heat_entry(s,0xa8,&e));s->life_origin_y=e->pos_y;s->life_origin_known=1;}
+  if(!(u32(s->fields+o+0x90)&0x40000000)){
+   w32(s,o+0x94,u32(save.bytes+0x84));wf(s,o+0x264,0);wf(s,o+0x268,0);w32(s,o+0x90,u32(s->fields+o+0x90)|0x40000000);
+   static const unsigned hidden[]={0xa0,0xb4,0xac,0xb0};for(unsigned i=0;i<4;i++){TRY(heat_entry(s,hidden[i],&e));e->flags|=0x8000000;}
+   static const unsigned warnings[]={0x1ec,0x1f0,0x1f4};const float threshold[]={.8f,.5f,.25f};for(unsigned i=0;i<3;i++){TRY(heat_entry(s,warnings[i],&e));e->color_base=(e->color_base&0xffffff)|0x80000000;if(ratio<threshold[i])e->flags&=~0x8000000u;else e->flags|=0x8000000;}
+   TRY(heat_entry(s,0xa4,&e));e->flags|=0x400;w32(s,o+0x90,u32(s->fields+o+0x90)|0x1c000000);
+  }
+  int32_t oldlife;raw=u32(s->fields+o+0x94);memcpy(&oldlife,&raw,4);
+  if(life!=oldlife){
+   s->fields[o+0x1ac]=1;s->life_shake=1;
+   gh_id_entry*bar;TRY(heat_entry(s,0x9c,&bar));TRY(heat_entry(s,0xa0,&e));e->scale_x=bar->scale_x;TRY(heat_entry(s,0xb4,&e));e->scale_x=bar->scale_x;
+   unsigned changed[]={2,7,life<oldlife?5u:17u,6};
+   for(unsigned i=0;i<4;i++){TRY(heat_entry(s,0x98+changed[i]*4,&e));e->flags&=~0x8000000u;}
+   for(unsigned i=0;i<4;i++)TRY(reset_family(s,o,(int)changed[i],0));
+  }
+  TRY(heat_entry(s,0xa8,&e));e->pos_y=add(s->life_origin_y,mul(s->life_shake,5));s->life_shake=mul(s->life_shake,-.8f);
+  gh_id_entry*bar;TRY(heat_entry(s,0x9c,&bar));bar->scale_x=ratio;TRY(heat_entry(s,0xb8,&e));
+  if(life<oldlife){e->pos_x=add(add(bar->draw_x,mul(bar->f68,bar->draw_scale_x)),-8);TRY(reset_family(s,o,8,0));TRY(heat_entry(s,0xb8,&e));e->flags&=~0x8000000u;}
+  else if((e->flags&0x400)||life==oldlife)e->flags|=0x8000000;
+  unsigned alpha=s->fields[o+0x26e];if(s->fields[o+0x26f]==1){alpha=(alpha+3)&255;if(alpha>76){alpha=76;s->fields[o+0x26f]=0;}}
+  else if(alpha<3){alpha=0;s->fields[o+0x26f]=1;}else alpha-=3;s->fields[o+0x26e]=(uint8_t)alpha;
+  float previous=frame_number(s->fields+o+0x264);TRY(heat_entry(s,0xc4,&e));if(previous==0||!(e->flags&0x8000000)){if(!alpha)e->flags|=0x8000000;}else{e->flags&=~0x8000000u;e->scale_x=1;s->fields[o+0x26f]=1;s->fields[o+0x26e]=0;}
+  wf(s,o+0x264,0);float smoothed=frame_number(s->fields+o+0x268);smoothed=add(smoothed,-mul(smoothed,.1f));wf(s,o+0x268,smoothed);TRY(heat_entry(s,0xa4,&e));e->scale_x=smoothed;
+  if(!isfinite(smoothed)||smoothed!=0||(u32(s->fields+o+0x90)&0x2000000))return frame_stop(s,0x2cbba0);
+  TRY(heat_entry(s,0xc0,&e));e->flags|=0x8000000;TRY(heat_entry(s,0xc4,&e));e->color_base=(e->color_base&0xffffff)|(uint32_t)s->fields[o+0x26e]<<24;
+  TRY(heat_entry(s,0xbc,&e));e->color_base=0x80744042;
+  unsigned old=s->fields[o+0x260];for(unsigned i=0;i<6;i++){
+   TRY(heat_entry(s,0x130+i*4,&e));if(i<old)e->flags&=~0x8000000u;else e->flags|=0x8000000;
+   /* Original 1FAEE0 is called inside this loop, after 1FABB0 above. */
+   if(u32(w+0x598)&0x8000000)save.bytes[0x156]=6;
+   TRY(heat_entry(s,0x130+(i+7)*4,&e));if(i<save.bytes[0x156])e->flags&=~0x8000000u;else e->flags|=0x8000000;
+  }s->fields[o+0x260]=(uint8_t)upgrades;
+  if(u32(s->fields+o+0x90)&0x20000000){TRY(reset_family(s,o,lev+12,0));TRY(heat_entry(s,0x98+(unsigned)(lev+12)*4,&e));e->flags|=0x400;}
+  TRY(heat_entry(s,0x1f8,&e));e->seed=(uint32_t)lev+1;e->flags&=~0x8000000u;TRY(heat_entry(s,0x1e4,&e));e->flags|=0x8000000;
+  /* Actual 1FACB0 mutates Save.maximum, not the player's HP/profile. */
+  if(u32(w+0x598)&0x8000000)save.bytes[0x154]=13;uint32_t maxlife=100u+20u*save.bytes[0x154];memcpy(save.bytes+0x80,&maxlife,4);
+  TRY(heat_entry(s,0xa8,&e));e->scale_x=add(mul(add((float)maxlife,-100)/260,2.6f),1);
+  TRY(heat_entry(s,0xd8,&e));e->scale_x=add(mul(add(heatmax,-120)/150,1.25f),1);w32(s,o+0x94,u32(save.bytes+0x84));s->heat_move_stage=1;
+ }
+ static const unsigned ordered[]={0x460,0x540,0x5f0,0x670};while(s->heat_move_stage<=4){TRY(gameplay_move_base(s,ordered[s->heat_move_stage-1],c));s->heat_move_stage++;}
+ w32(s,o+0x90,u32(s->fields+o+0x90)&0xfeffffff);s->heat_move_stage=0;return GH_ID_OK;
+}
+gh_id_error gh_game_cockpit_heat_move_00142060(gh_game_cockpit*s,const gh_boot_work*w,const gh_cockpit_frame_callbacks*c){
+ if(!s||!w||!s->room_ready)return GH_ID_ARGUMENT;fenv_t env;if(feholdexcept(&env))return GH_ID_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_ID_UNSUPPORTED;}
+ gh_id_error e=gameplay_heat_body(s,w,c);if(e&&s->heat_move_stage==10){s->gameplay_error=e;s->gameplay_error_frontier=s->frontier;}if(fesetenv(&env))return GH_ID_UNSUPPORTED;return e;
+}
+static gh_id_error widget_moves(gh_game_cockpit*s,const gh_cockpit_frame_callbacks*c,const unsigned*list,unsigned count,int tick){
+ if(!s->widget_step)s->widget_step=1;
+ while(s->widget_step<=count){unsigned o=list[s->widget_step-1];if(tick){gh_id_error e=gh_id_tick_entries_002aaba0(base(s,o));if(e){s->frontier=0x2aaba0;return e;}}else TRY(gameplay_move_base(s,o,c));s->widget_step++;}
+ s->widget_step=0;return GH_ID_OK;
+}
+static gh_id_error gameplay_widget_body(gh_game_cockpit*s,unsigned index,const gh_boot_work*work_state,const gh_cockpit_frame_callbacks*c){
+ const unsigned o=registry[index].offset;const uint8_t*w=(const uint8_t*)work_state;gh_id_entry*e;unsigned list[5];
+ if(s->gameplay_error){s->frontier=s->gameplay_error_frontier;return s->gameplay_error;}
+ switch(index){
+ case 2:{/*145238 ->145410 coldstate0. No request means no144C90. */
+  unsigned state=s->fields[o+0x41e]|(unsigned)s->fields[o+0x41f]<<8;
+  if(state>=1&&state<=4){static const uint32_t calls[]={0,0x145460,0x145810,0x145fc8,0x146190};return frame_stop(s,calls[state]);}
+  if(state==0&&(u32(s->fields+o+0x90)&0x40000000))return frame_stop(s,0x144c90);
+  for(unsigned i=0;i<5;i++)list[i]=o+0x100+i*0x50;return widget_moves(s,c,list,5,0);
+ }
+ case 3:/*13D100: five originalcounter advances, no wholeIDMove. */
+  list[0]=o;list[1]=o+0x140;list[2]=o+0x190;list[3]=o+0xa0;list[4]=o+0xf0;return widget_moves(s,c,list,5,1);
+ case 4:/*13BD40 explicitly disabled by bit0; no IDMove in this branch. */
+  return (s->fields[o+0x94]&1)?frame_stop(s,0x13bd40):GH_ID_OK;
+ case 5:/*13C318 four one-frame high-bit indicators, then clear requests. */
+  if(!s->widget_step){uint32_t request=u32(s->fields+o+0x94);for(unsigned i=0;i<4;i++){TRY(gh_game_cockpit_entry_at(s,o+0x98+i*4,&e));if(request&(UINT32_C(0x80000000)>>i))e->flags&=~0x8000000u;else e->flags|=0x8000000;}w32(s,o+0x94,request&0xfffffff);}
+  list[0]=o;return widget_moves(s,c,list,1,0);
+ case 6:/*13F1C0's comparison is fullword, source value copied ashalf. */
+  if(!s->widget_step&&u32(s->fields+o+0x9c)!=0xffff){uint16_t message=(uint16_t)u32(s->fields+o+0x9c);TRY(work(s,o,0,0,&e));e->message=message;TRY(work(s,o,1,0,&e));e->message=message;}
+  list[0]=o;return widget_moves(s,c,list,1,0);
+ case 7:/*13E0B0 all eight signedcounters-1 genuinely skip work. */
+  for(unsigned i=0;i<8;i++)if(s->fields[o+0x33c+i]!=255)return frame_stop(s,0x13e0b0);return GH_ID_OK;
+ case 8:/*146A18 coldstate0, no queueditem: clearactual104bit0. */
+  if(s->fields[o+0x79]||(s->fields[o+0x100]|s->fields[o+0x101]))return frame_stop(s,0x146a18);s->fields[o+0x104]&=0xfe;return GH_ID_OK;
+ case 9:/*13E4F0 cache9C is a nativeentry, never inferNULL fromraw0. */
+  if((u32(w+0x584)&8)||(u32(w+0x58c)&0x80000000))return GH_ID_OK;
+  if(!s->widget_step){if(!c||!c->save.bytes||c->save.size<GH_CORE_SAVE_BYTES)return frame_stop(s,0x1fa950);
+   if(u32(s->fields+o+0x90))return frame_stop(s,0x13e4f0);
+   for(unsigned i=0;i<2;i++){uint32_t value=u32(c->save.bytes+0x68+i*4);TRY(gh_game_cockpit_entry_at(s,o+0x9c+i*4,&e));if(!(value&0x80000000)&&value){e->flags&=~0x8000000u;e->seed=value;}else e->flags|=0x8000000;}
+  }list[0]=o;return widget_moves(s,c,list,1,0);
+ case 10:/*143670 no pendingmoney particles. Original display stillticks. */
+  if(!s->widget_step){if(!c||!c->save.bytes||c->save.size<GH_CORE_SAVE_BYTES)return frame_stop(s,0x1fa710);uint8_t*save=c->save.bytes;
+   for(unsigned i=0;i<16;i++)if(s->fields[o+0x1b0+i]==1)return frame_stop(s,0x143670);
+   uint32_t money=u32(save+0x20);if(u32(w+0x594)&0x2000000)money=999999;
+   if((money!=u32(s->fields+o+0x90)&&u32(save+0x24))||((s->fields[o+0x1c0]&3)==1))return frame_stop(s,0x143670);
+   TRY(gh_game_cockpit_entry_at(s,o+0x9c,&e));e->flags|=0x8000000;TRY(gh_game_cockpit_entry_at(s,o+0x94,&e));
+   uint32_t target=u32(s->fields+o+0x90),seed=e->seed;if(seed+1000u<target)seed+=1000;else if(seed+100u<target)seed+=100;else if(seed+10u<target)seed+=10;else seed++;if(target<seed)seed=target;e->seed=seed;
+   /*1FA710 actualcheat write;1FA820 clears rewardcount after loop. */
+   memcpy(save+0x20,&money,4);w32(s,o+0x90,money);memset(save+0x24,0,4);s->fields[o+0x1c0]&=0xfc;
+  }list[0]=o;return widget_moves(s,c,list,1,0);
+ default:return GH_ID_ARGUMENT;
+ }
+}
+static gh_id_error gameplay_widget(gh_game_cockpit*s,unsigned i,const gh_boot_work*w,const gh_cockpit_frame_callbacks*c){
+ fenv_t env;if(feholdexcept(&env))return GH_ID_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_ID_UNSUPPORTED;}gh_id_error e=gameplay_widget_body(s,i,w,c);if(fesetenv(&env))return GH_ID_UNSUPPORTED;return e;
+}
 gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit*s,const gh_boot_work*work_state,const gh_cockpit_frame_callbacks*c){
  if(!s||!s->ready||!s->room_ready||!work_state)return GH_ID_ARGUMENT;const uint8_t*w=(const uint8_t*)work_state;s->frontier=0;
  if(!s->update_stage){if(u32(w+0x58c)&0x80000000)return GH_ID_OK;
-  /* Optional1415E0 is verified jrra/nop;13C950 is the first real
-   * unported operation of the other global branch. */
-  if(!(u32(w+0x5d8)&0x40000))return frame_stop(s,0x13c950);
-  /* Actual13F1C0 on registered kind14 only in this global branch. */
-  if(u32(s->fields+0x15bc)!=0xffff){gh_id_entry*a,*b;TRY(gh_game_cockpit_entry_at(s,0x15b0,&a));TRY(gh_game_cockpit_entry_at(s,0x15b4,&b));uint32_t n=u32(s->fields+0x15bc)&0xffff;a->seed=(a->seed&0xffff0000)|n;b->seed=(b->seed&0xffff0000)|n;}
-  s->update_stage=1;
+  if(!(u32(w+0x5d8)&0x40000)){s->update_stage=10;}
+  else{if(u32(s->fields+0x15bc)!=0xffff){gh_id_entry*a,*b;TRY(gh_game_cockpit_entry_at(s,0x15b0,&a));TRY(gh_game_cockpit_entry_at(s,0x15b4,&b));uint32_t n=u32(s->fields+0x15bc)&0xffff;a->seed=(a->seed&0xffff0000)|n;b->seed=(b->seed&0xffff0000)|n;}s->update_stage=1;}
  }
+ if(s->update_stage==10){/* Actual13C808 constructor-established resourceNULL. */if(!(s->hud_cold_known&1)||u32(s->fields+0x1dc0+0x94)||base(s,0x1dc0)->owns_run)return frame_stop(s,0x13c950);s->update_stage=11;}
+ if(s->update_stage==11){/*13F5D0 global guards precede real140860 cleanup. */if(!(u32(w+0x584)&8)&&!(u32(w+0x58c)&0x80000000)){if(!(s->hud_cold_known&2)||s->fields[0x1e90+0x358])return frame_stop(s,0x140860);if(u32(s->fields+0x1e90+0xa0))return frame_stop(s,0x13f5d0);}s->update_stage=12;}
+ if(s->update_stage==12){if(!(s->hud_cold_known&4)||u32(s->fields+0x2220+0x94)||base(s,0x2220)->owns_run)return frame_stop(s,0x13e970);s->update_stage=13;}
+ if(s->update_stage==13){if(u32(s->fields+0x1a20+0xb0)){unsigned state=s->fields[0x1a20+0xb8];if(state>=1&&state<=5)return frame_stop(s,0x1471f0);TRY(gameplay_move_base(s,0x1a20,c));}s->update_stage=14;}
+ if(s->update_stage==14){/* First true registeredwidget,unlessoriginal77 gate. */if(!s->fields[0x6e0+0x77])TRY(gameplay_radar(s,c));s->gameplay_index=1;s->update_stage=15;}
+ if(s->update_stage==15){while(s->gameplay_index<11){unsigned i=s->gameplay_index;if(!s->fields[registry[i].offset+0x77]){if(i==1)TRY(gh_game_cockpit_heat_move_00142060(s,work_state,c));else TRY(gameplay_widget(s,i,work_state,c));}s->gameplay_index++;}s->update_stage=2;}
  if(s->update_stage==1){TRY(frame_move_base(s,0x1520,c));s->update_stage=2;}
- if(s->update_stage==2){int a=u32(s->fields+0x1e5c)&&(u32(s->fields+0x1e60)&0x20000000);
-  int b=s->fields[0x21e8]&&(u32(s->fields+0x1f20)&0x80000000);
-  int d=u32(s->fields+0x22bc)&&(u32(s->fields+0x22c0)&0x20000000);
-  if(a||b||d)s->fields[0x1ca0]|=2;
-  if(a||b)s->fields[0x1db4]|=1;else if(d)s->fields[0x1db4]|=2;s->update_stage=3;
- }
+ if(s->update_stage==2){int a=u32(s->fields+0x1e5c)&&(u32(s->fields+0x1e60)&0x20000000);int b=s->fields[0x21e8]&&(u32(s->fields+0x1f20)&0x80000000);int d=u32(s->fields+0x22bc)&&(u32(s->fields+0x22c0)&0x20000000);if(a||b||d)s->fields[0x1ca0]|=2;if(a||b)s->fields[0x1db4]|=1;else if(d)s->fields[0x1db4]|=2;s->update_stage=3;}
  if(u32(w+0x584)&0x20000){if(!c||!c->set_draw_order)return frame_stop(s,0x2c7850);uint32_t f=0;gh_id_error e=c->set_draw_order(c->context,6,5,&f);if(e){s->frontier=f?f:0x2c7850;return e;}}
- s->update_stage=0;return GH_ID_OK;
+ s->update_stage=s->gameplay_index=s->radar_move_stage=s->radar_move_index=0;s->gameplay_error=GH_ID_OK;s->gameplay_error_frontier=0;return GH_ID_OK;
 }
 static gh_id_error frame_trans(gh_game_cockpit*s,unsigned o,const gh_cockpit_frame_callbacks*c){
  if(!c||!c->trans)return frame_stop(s,0x2aac28);uint32_t f=0;gh_id_error e=c->trans(c->context,base(s,o),&f);if(e)s->frontier=f?f:0x2aac28;return e;
@@ -363,7 +527,7 @@ gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit*s,gh_core_save_vi
  o=0x2220;if(u32(s->fields+o+0x94)){s->frontier=0x2aa078;return GH_ID_UNSUPPORTED;}w32(s,o+0xa0,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);
  o=0x1a20;if(u32(s->fields+o+0xb0)){s->fields[o+0xb8]=0;w16(s,o+0xac,0xffff);w32(s,o+0xb0,0);}
  if(u32(s->fields+0x460+0x80)!=0x41e620){s->frontier=0x1434a8;return GH_ID_UNSUPPORTED;}
- TRY(room_heat_reset_00141ce8(s,save,heat));s->room_begun=s->room_ready=0;s->update_stage=s->draw_stage=s->radar_stage=s->heat_stage=0;return GH_ID_OK;
+ TRY(room_heat_reset_00141ce8(s,save,heat));s->gameplay_bound=0;s->radar_player=NULL;s->hud_cold_known=7;s->gameplay_index=s->radar_move_stage=s->radar_move_index=s->heat_move_stage=s->widget_step=0;s->gameplay_error=GH_ID_OK;s->gameplay_error_frontier=0;s->room_begun=s->room_ready=0;s->update_stage=s->draw_stage=s->radar_stage=s->heat_stage=0;return GH_ID_OK;
 }
 
 gh_id_error gh_game_cockpit_action_view_001f7680(gh_game_cockpit*s,gh_cockpit_action_view*out){if(!s||!out||!s->ready)return GH_ID_ARGUMENT;*out=(gh_cockpit_action_view){s->fields+0x1414,s->fields+0x1415,s->fields+0x1420,s->fields+0x1424,s->fields+0x1464,s};return GH_ID_OK;}

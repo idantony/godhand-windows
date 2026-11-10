@@ -61,7 +61,7 @@ int main(int argc,char**argv){
  C(batches_executed>300&&vertices_executed==9009);gh_actor_world_group setup;C(!gh_actor_world_queue_group_at(world,26,&setup)&&!setup.packets&&setup.command.kind==GH_ACTOR_DRAW_SETUP);
  /* A late stream failure must roll back already-converted batches. */
  gh_actor_draw_command bad=queued.commands[13];C(bad.materials.count>1);bad.materials.streams[1].tex0|=UINT64_C(3)<<35;size_t sentinel=777;gh_static_transform_frontier deep;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_UNSUPPORTED&&deep.ee_entry==0x148690&&sentinel==777&&gh_actor_world_queue_count(world)==27);
- bad=queued.commands[0];bad.selected_program=30;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_UNSUPPORTED&&deep.ee_entry==0x155ae8&&sentinel==777&&gh_actor_world_queue_count(world)==27);
+ bad=queued.commands[0];bad.selected_program=32;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_UNSUPPORTED&&deep.ee_entry==0x155ae8&&sentinel==777&&gh_actor_world_queue_count(world)==27);
  bad=queued.commands[0];bad.inputs.palette=(const uint8_t*)1;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_ARGUMENT&&sentinel==777&&gh_actor_world_queue_count(world)==27);
  gh_actor_world_packet saved;C(!gh_actor_world_queue_packet_at(world,0,0,&saved));uint64_t before=0;const uint8_t *bits=(const uint8_t*)saved.vertices;for(size_t i=0;i<saved.vertex_count*sizeof(*saved.vertices);i++)before=before*131+bits[i];memset((void*)queued.commands[0].inputs.palette,0,queued.commands[0].inputs.palette_bytes);uint64_t after=0;for(size_t i=0;i<saved.vertex_count*sizeof(*saved.vertices);i++)after=after*131+bits[i];C(before==after);
 
@@ -72,7 +72,7 @@ int main(int argc,char**argv){
   * bank selection can put A.geometry after B.SETUP, so a frontend must keep
   * one FOGCOL state rather than enforce model-matching setup ownership. */
  gh_actor_world_queue_reset(world);queued=(queue_fixture){.native=world};
- C(!gh_actor_model_node_mask_flags(&model,1,0x380,~0x4080u,0));
+ const uint8_t *routed_node;size_t routed_mesh;C(!gh_actor_model_node_at(&model,1,&routed_node,&routed_mesh));uint32_t routed_flags=w(routed_node+0x380);C(!gh_actor_model_node_mask_flags(&model,1,0x380,~0x4080u,0));
  putf(light->scalar+0x16158,10);putf(light->scalar+0x1615c,20);putf(light->scalar+0x16160,30);
  call=(gh_actor_draw_call){0};C(!gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc));
  uint8_t *second_bytes=calloc(1,GH_TITLE_PLAYER_BYTES);C(second_bytes);gh_title_player_view second_view;C(!gh_title_player_construct_00107e40(second_bytes,GH_TITLE_PLAYER_BYTES,&second_view));gh_actor_model second={0};C(!gh_actor_model_bind_packet_inputs(&second,heap,&fog)&&!gh_actor_model_initialize_00149738(&second,&second_view,&work,&pools,&md,&texture,0,0,GH_STATIC_BINARY32_REFERENCE,&original)&&original);
@@ -80,8 +80,29 @@ int main(int argc,char**argv){
  gh_actor_draw_call second_call={0};C(!gh_actor_model_draw_0014ac90(&second_call,&second,20,0,&b,&pc)&&queued.count==54);
  for(size_t i=0;i<queued.count;i++)groups[i]=(gh_ui_order_group){queued.commands[i].bank,queued.commands[i].depth,i};C(!gh_ui_order_indices(groups,queued.count,0,0,order,64,&written,&omitted)&&written==54&&!omitted);
  uint32_t global_fog=0;int crossed=0;for(size_t i=0;i<written;i++){gh_actor_world_group group;C(!gh_actor_world_queue_group_at(world,order[i],&group));if(group.command.kind==GH_ACTOR_DRAW_SETUP)global_fog=group.command.fog_rgb;else if(group.command.model==&model&&group.command.node_index==1){C(global_fog==0x3c3228);crossed=1;}}
- C(crossed);gh_actor_world_queue_reset(world);C(!gh_actor_model_release(&second));free(second_bytes);
- /* A real program30 material stays strict; it is never routed toprogram2. */
- bytes[0x2b6]=255;gh_actor_world_queue_reset(world);queued=(queue_fixture){.native=world};call=(gh_actor_draw_call){0};C(gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x155ae8&&call.selected_program==30&&!call.complete);
- gh_actor_world_queue_reset(world);C(!gh_actor_world_queue_count(world)&&gh_actor_world_queue_group_at(world,0,&setup)==GH_ACTOR_WORLD_BOUNDS);gh_actor_world_queue_destroy(world);gh_stage_textures_destroy(textures);C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(light);free(data);free(elf);free(room);printf("PASS actual PL00 %zu material streams/26nodes, direct TM3 source/TEX0 oracle, cache identity/remap/CBP-bias strict, actual27groups owned GS queue/setup-first/reverse26nodes, programselectors/full9009vertices/late rollback and palette-value capture/cross-model globalFOGCOL; no GPU/frame ack\n",total);return 0;
+ C(crossed);gh_actor_world_queue_reset(world);C(!gh_actor_model_release(&second));free(second_bytes);C(!gh_actor_model_node_mask_flags(&model,1,0x380,0,routed_flags));
+ /* Original node24 chooses program30 at full alpha. Its real material and
+  * sameWorldLight/camera produce positive highlight; compare against both
+  * the true30 algorithm and2 to prove dispatch is not an alias. */
+ putf(camera.fields+0x214,1);putf(light->scalar+0x16208,-1);for(unsigned k=0;k<3;k++)putf(light->scalar+0x16210+k*4,1);putf(light->scalar+0x4c,1);
+ bytes[0x2b6]=255;gh_actor_world_queue_reset(world);queued=(queue_fixture){.native=world};call=(gh_actor_draw_call){0};C(!gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)&&call.complete&&queued.count==27);
+ const gh_actor_draw_command *shiny=&queued.commands[24];C(shiny->selected_program==30&&shiny->specular_squarings>0&&((shiny->materials.streams[0].tex0>>35)&3)==3);
+ gh_actor_world_group highlighted_group;C(!gh_actor_world_queue_group_at(world,24,&highlighted_group)&&highlighted_group.packets);
+ unsigned alpha_changed=0;for(size_t p=0;p<highlighted_group.packets;p++){
+  gh_actor_world_packet owned;C(!gh_actor_world_queue_packet_at(world,24,p,&owned)&&((owned.tex0>>35)&3)==3);
+  gh_skinned_program30_inputs input={.base=shiny->inputs,.squarings=shiny->specular_squarings};memcpy(input.half_vector,shiny->specular_half,12);
+  gh_static_gs_vertex expected[26],plain[26];uint32_t expected_indices[72],plain_indices[72];gh_static_geometry_result expected_result,plain_result;gh_static_transform_frontier f;
+  C(!gh_skinned_transform_program30_batch(&shiny->packet->streams[owned.stream].input,owned.batch,&input,GH_STATIC_BINARY32_REFERENCE,expected,26,expected_indices,72,&expected_result,&f));
+  C(!gh_skinned_transform_program2_batch(&shiny->packet->streams[owned.stream].input,owned.batch,&input.base,GH_STATIC_BINARY32_REFERENCE,plain,26,plain_indices,72,&plain_result,&f));
+  C(owned.vertex_count==expected_result.vertices&&!memcmp(owned.vertices,expected,owned.vertex_count*sizeof(*expected)));for(size_t v=0;v<owned.vertex_count;v++)if(owned.vertices[v].rgba[3]!=plain[v].rgba[3])alpha_changed++;
+ }
+ C(alpha_changed>0);printf("node24 program30 %zu packets/%u vertices with alpha differing fromprogram2, exponent%u\n",highlighted_group.packets,alpha_changed,shiny->specular_squarings);
+ uint32_t p23,p24,p25;C(!gh_actor_model_node_program_get(&model,23,0,&p23)&&!gh_actor_model_node_program_get(&model,24,0,&p24)&&!gh_actor_model_node_program_get(&model,25,0,&p25)&&p23==2&&p24==30&&p25==2);
+ for(size_t i=0;i<queued.count;i++)groups[i]=(gh_ui_order_group){queued.commands[i].bank,queued.commands[i].depth,i};C(!gh_ui_order_indices(groups,queued.count,0,0,order,64,&written,&omitted)&&written==27&&!omitted&&order[0]==26&&order[1]==25&&order[2]==24);
+ /* Positive30 must remain atomic on its real exponent/numeric boundaries. */
+ bad=*shiny;bad.specular_squarings=0;sentinel=777;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_UNSUPPORTED&&deep.vu_byte_pc==0x3a8&&gh_actor_world_queue_count(world)==27&&sentinel==777);
+ bad=*shiny;bad.materials.streams[0].tex0&=~(UINT64_C(3)<<35);C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_UNSUPPORTED&&deep.ee_entry==0x148690&&gh_actor_world_queue_count(world)==27&&sentinel==777);
+ bad=queued.commands[0];bad.selected_program=30;bad.specular_squarings=shiny->specular_squarings;memcpy(bad.specular_half,shiny->specular_half,12);for(size_t i=0;i<bad.materials.count;i++)bad.materials.streams[i].tex0|=UINT64_C(3)<<35;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_UNSUPPORTED&&deep.ee_entry==0x155ae8&&gh_actor_world_queue_count(world)==27&&sentinel==777);
+ bad=*shiny;bad.selected_program=20;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_UNSUPPORTED&&deep.ee_entry==0x155ae8&&gh_actor_world_queue_count(world)==27);
+ gh_actor_world_queue_reset(world);C(!gh_actor_world_queue_count(world)&&gh_actor_world_queue_group_at(world,0,&setup)==GH_ACTOR_WORLD_BOUNDS);gh_actor_world_queue_destroy(world);gh_stage_textures_destroy(textures);C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(light);free(data);free(elf);free(room);printf("PASS actual PL00 %zu material streams/26nodes, direct TM3 source/TEX0 oracle, cache identity/remap/CBP-bias strict, actual27groups owned GS queue/setup-first/reverse26nodes, programselectors/full9009vertices/late rollback and palette-value capture/cross-model globalFOGCOL/true node24 program30+TFX3 and switchback; no GPU/frame ack\n",total);return 0;
 }

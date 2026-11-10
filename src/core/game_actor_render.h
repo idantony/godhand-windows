@@ -21,6 +21,7 @@ typedef struct {
  gh_actor_trans_callee other_callee;void *other_context;
  gh_static_transform_policy policy;
  gh_actor_draw_emit actor_emit;void *actor_emit_context;
+ const gh_actor_light_globals *light_globals;
 } gh_actor_render_bindings;
 
 typedef struct {

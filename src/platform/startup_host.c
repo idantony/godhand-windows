@@ -29,6 +29,7 @@
 #include "../core/game_camera_shake.h"
 #include "../core/game_object_step.h"
 #include "../core/game_object_live_trans.h"
+#include "../core/game_scene_visibility.h"
 #include "../core/game_render_projection.h"
 #include "../core/game_render_steps.h"
 #include "../core/game_scene_at_step.h"
@@ -40,6 +41,8 @@
 #include "../core/game_object_sound.h"
 #include "../core/game_scene_exit_leaves.h"
 #include "../core/game_world_light_step.h"
+#include "../core/game_actor_light_globals.h"
+#include "../core/game_effects_trans.h"
 #include "../core/mc_control_flow.h"
 #include "../core/mc_exit.h"
 #include "../core/movie_task.h"
@@ -100,6 +103,7 @@ struct gh_startup_host {
     gh_object_static_emit world_emit;void *world_context;
     gh_shadow_emit shadow_emit;void *shadow_context;gh_shadow_templates shadow_templates;
     gh_actor_draw_emit actor_emit;void *actor_context;
+    gh_scene_visibility *visibility;uint64_t visibility_epoch;uint8_t visibility_completed;
     gh_id_post_message mc_post;
     void *mc_draw_context,*mc_post_context;
     gh_startup_continuation continuation;
@@ -137,6 +141,8 @@ struct gh_startup_host {
     gh_game_render_projection render_projection;
     gh_camera_follow camera_follow;gh_camera_envelope camera_envelope;
     gh_player_shared_vector player_shared_vector;
+    gh_actor_light_globals actor_light_globals;
+    gh_game_effects_trans effects_trans;
     gh_game_math_globals math_globals;
     gh_player_ground_globals player_ground_globals;
     gh_player_opacity_globals player_opacity_globals;
@@ -271,6 +277,23 @@ static gh_object_step_status trans_actor_invoke(void *context,const gh_object_tr
     gh_game_services_status e=gh_game_services_trans_actor(h->services,r,work,&provider,frontier);
     return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
 }
+static gh_scene_post_status visibility_actor_view(void *context,uint32_t handle,gh_title_player_view*out,uint32_t*frontier)
+{
+    gh_startup_host*h=context;gh_game_services_status e=gh_game_services_actor_view(h->services,handle,out);
+    if(e&&frontier)*frontier=0x14b6f8;
+    return !e?GH_POST_OK:e==GH_SERVICES_FRONTIER?GH_POST_UNSUPPORTED:GH_POST_POOLS;
+}
+static gh_scene_post_status visibility_mask_nodes(void *context,uint32_t handle,uint32_t and_mask,uint32_t or_mask,uint32_t*frontier)
+{
+    gh_startup_host*h=context;gh_game_services_status e=gh_game_services_mask_actor_nodes(h->services,handle,and_mask,or_mask,frontier);
+    return !e?GH_POST_OK:e==GH_SERVICES_FRONTIER?GH_POST_UNSUPPORTED:GH_POST_POOLS;
+}
+static gh_id_error cockpit_actor_view(void *context,uint32_t handle,gh_title_player_view*out,uint32_t*frontier)
+{
+    gh_startup_host*h=context;gh_game_services_status e=gh_game_services_actor_view(h->services,handle,out);
+    if(e&&frontier)*frontier=0x143d20;
+    return !e?GH_ID_OK:e==GH_SERVICES_FRONTIER?GH_ID_UNSUPPORTED:GH_ID_ARGUMENT;
+}
 static gh_game_event_status event_loading_menu(void *context,uint32_t *frontier)
 {
     gh_game_services_status e=scene_start_loading_menu(context,frontier);
@@ -349,8 +372,14 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_scene_post_status e=gh_scene_scroll_forward_002c5470(s.pools,&h->work,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x307b28){
-        gh_scene_post_bindings b={&h->work,s.pools,s.scene_tables,&h->game_init,s.pl_camera,&s.title_player->view,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
-        gh_scene_post_status e=gh_scene_model_hide_00307b28(&b,frontier);
+        uint64_t epoch=gh_game_services_ui_resource_epoch(h->services);
+        if(h->visibility&&h->visibility_epoch!=epoch){gh_scene_visibility_destroy(h->visibility);h->visibility=NULL;h->visibility_completed=0;}
+        if(!h->visibility){gh_scene_post_status e=gh_scene_visibility_create(&h->visibility);if(e){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}h->visibility_epoch=epoch;}
+        if(h->visibility_completed){gh_scene_post_status e=gh_scene_visibility_next_call(h->visibility);if(e){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}h->visibility_completed=0;}
+        gh_scene_visibility_bindings b={.scene={&h->work,s.pools,s.scene_tables,&h->game_init,s.pl_camera,&s.title_player->view,GH_CAMERA_NATIVE_BINARY32_REFERENCE},
+            .resolve_handle=visibility_actor_view,.mask_nodes=visibility_mask_nodes,.context=h};
+        gh_scene_post_status e=gh_scene_visibility_step_00307b28(h->visibility,&b,frontier);
+        if(!e)h->visibility_completed=1;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2aefa8){
         gh_scene_ui_status e=gh_scene_message_update_002aefa8(s.scene_ui,&h->work,frontier);
@@ -370,6 +399,10 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
             s.pl_camera,&s.title_player->view,GH_CAMERA_NATIVE_BINARY32_REFERENCE,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x140e58||address==0x1410a8){
+        gh_cockpit_gameplay_bindings gameplay={.init=&h->game_init,.player=s.title_player->ready?&s.title_player->view:NULL,
+            .pools=s.pools,.camera=s.pl_camera,.resolve_handle=cockpit_actor_view,.context=h,.player_known=(uint8_t)(s.title_player->ready!=0)};
+        gh_id_error bound=gh_game_cockpit_bind_gameplay(s.cockpit,&gameplay);
+        if(bound){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
         gh_cockpit_frame_callbacks callbacks={.context=h,.trans=scene_cockpit_trans,.set_draw_order=scene_cockpit_order,
             .save={h->save_bytes,sizeof(h->save_bytes)},.fan=scene_cockpit_fan};
         gh_id_error e=address==0x140e58?gh_game_cockpit_move_00140e58(s.cockpit,&h->work,&callbacks):gh_game_cockpit_trans_001410a8(s.cockpit,&h->work,&callbacks);
@@ -389,7 +422,17 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_render_step_status e=gh_render_messages_002af028(s.scene_ui,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2fb310){
-        uint32_t slot;gh_render_step_status e=gh_render_particles_002fb310(&h->work,s.effects,s.scene_buffer_a,s.scene_buffer_a_size,frontier,&slot);
+        if(!h->effects_trans.identity||h->effects_trans.complete){
+            gh_effect_status begin=gh_effects_trans_begin_002fb310(&h->effects_trans);
+            if(begin){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
+        }
+        gh_effects_trans_bindings b={.storage={.effects=s.effects,.esp=s.scene_buffer_a,.esp_bytes=s.scene_buffer_a_size,
+            .emitters=s.scene_buffer_b,.emitter_bytes=s.scene_buffer_b_size,.actor_match=gh_effect_create_actor_match,.context=s.effects},
+            .work=&h->work,.globals=&h->effects_globals,.display=&h->display,.policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE};
+        /* A positive original postpass requires the native ONE-OT provider;
+         * until it exists, this producer returns its precise consumer frontier. */
+        gh_effect_status e=gh_game_effects_trans_002fb310(&h->effects_trans,&b);
+        if(e&&frontier)*frontier=h->effects_trans.frontier?h->effects_trans.frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x160b90){
         gh_child_status e=gh_game_children_draw_00160b90(h->game_children,&h->work,&h->draw_env,scene_menu_cover,h,frontier);
@@ -399,7 +442,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_effects_frame_bindings b={.storage={.effects=s.effects,.esp=s.scene_buffer_a,.esp_bytes=s.scene_buffer_a_size,
             .emitters=s.scene_buffer_b,.emitter_bytes=s.scene_buffer_b_size,.actor_match=gh_effect_create_actor_match,.context=s.effects},
             .work=&h->work,.init=&h->game_init,.current_player=&s.title_player->view,.globals=&h->effects_globals,
-            .profile=&h->scene_aux,.clock=scene_profile_clock,.clock_context=h,.atan_coeff=h->camera_envelope.atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE};
+            .profile=&h->scene_aux,.clock=scene_profile_clock,.clock_context=h,.atan_coeff=h->camera_envelope.atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE,.actors=s.scene_tables};
         gh_effect_status e=gh_game_effects_frame_update_0030f228(&h->effects_frame,&b);
         if(e&&frontier)*frontier=h->effects_frame.frontier?h->effects_frame.frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -457,6 +500,7 @@ static int initialize_native_bgm(gh_startup_host *h)
     gh_scene_mesh_status factory_status=gh_scene_mesh_factory_serial_from_elf(elf,(size_t)bytes,&h->factory_serial);
     uint32_t camera_frontier=0;gh_camera_status camera_status=gh_game_camera_envelope_from_elf(&h->camera_envelope,elf,(size_t)bytes,&camera_frontier);
     gh_title_player_status player_vector_status=gh_player_shared_vector_from_elf(&h->player_shared_vector,elf,(size_t)bytes);
+    gh_actor_model_status actor_light_status=gh_actor_light_globals_from_elf(&h->actor_light_globals,elf,(size_t)bytes);
     gh_scene_placement_status door_shared_status=gh_om_door_shared_from_elf(&h->door_shared,elf,(size_t)bytes);
     gh_player_nodes_status node_names_status=gh_player_node_names_from_elf(&h->player_node_names,elf,(size_t)bytes);
     gh_actor_motion_status motion_globals_status=gh_motion_ik_globals_from_elf(&h->motion_ik_globals,elf,(size_t)bytes);
@@ -482,6 +526,7 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(factory_status)return failure(h,GH_HOST_ASSET,factory_status);h->factory_serial_ready=1;
     if(camera_status)return entry_frontier(h,camera_frontier,0,camera_status);
     if(player_vector_status)return failure(h,GH_HOST_ASSET,player_vector_status);
+    if(actor_light_status)return failure(h,GH_HOST_ASSET,actor_light_status);
     if(door_shared_status)return failure(h,GH_HOST_ASSET,door_shared_status);
     if(node_names_status)return failure(h,GH_HOST_ASSET,node_names_status);
     if(motion_globals_status)return failure(h,GH_HOST_ASSET,motion_globals_status);
@@ -662,6 +707,7 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.camera_follow=&h->camera_follow;
         b.camera_envelope=&h->camera_envelope;
         b.player_shared_vector=&h->player_shared_vector;
+        b.actor_light_globals=&h->actor_light_globals;
         b.math_globals=&h->math_globals;b.player_ground_globals=&h->player_ground_globals;b.player_opacity_globals=&h->player_opacity_globals;b.voices=h->voices;
         b.door_shared=&h->door_shared;
         b.player_node_names=&h->player_node_names;b.motion_ik_globals=&h->motion_ik_globals;
@@ -1177,12 +1223,6 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
     if(h->system_menu.error&&!h->error)entry_frontier(h,h->system_menu.frontier?h->system_menu.frontier:0x2b6600,0,h->system_menu.error);
     if(h->error)h->phase=h->error==GH_HOST_ENTRY_UNAVAILABLE?GH_HOST_FRONTIER:GH_HOST_FAILED;
     if(h->scene_frame_open&&h->game_loop.game_state[0]!=4&&!h->error)h->scene_frame_pending=1;
-    /* Consumers are synchronous. A pending frame reaches owner only at its
-     * real Sleep after all jobs succeeded, never at an intermediate glyph. */
-    if(h->mc_frame_pending && h->mc_slot>=0 && h->records[h->mc_slot].running==1 && !h->error){
-        ++h->mc_frame_serial;h->mc_frame_ready=1;h->mc_frame_pending=0;
-    }
-    if(h->scene_frame_pending&&!h->error){++h->scene_frame_serial;h->scene_frame_ready=1;h->scene_frame_pending=0;}
     if(h->continuation.enabled && !h->error){
         gh_screen_fade_context context={h->display.screen_width,h->display.gs_y_origin,0,0};gh_fade_draw draw;
         memcpy(&context.frame_shift,(unsigned char*)&h->work+0x564,4);
@@ -1194,6 +1234,12 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
         }
         if(draw.visible)++h->fade_draw_serial;
     }
+    /* Fade adds to the SAME original OT after task jobs. Publish only after
+     * that consumer succeeds, so a frontier cannot expose a partial frame. */
+    if(h->mc_frame_pending && h->mc_slot>=0 && h->records[h->mc_slot].running==1 && !h->error){
+        ++h->mc_frame_serial;h->mc_frame_ready=1;h->mc_frame_pending=0;
+    }
+    if(h->scene_frame_pending&&!h->error){++h->scene_frame_serial;h->scene_frame_ready=1;h->scene_frame_pending=0;}
     e=gh_dvd_pump(&h->dvd);
     if(e) {failure(h,GH_HOST_DISC,(int)e);h->phase=GH_HOST_FAILED;}
     if(h->phase==GH_HOST_RUNNING && h->continuation.enabled && h->sound_scene.startup_bound){
@@ -1360,6 +1406,7 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
     }
     /* Scenario/Cockpit hold the canonical runtime/assets and nested backend.
      * Cancel their parent first, then release these owners before root backend. */
+    gh_scene_visibility_destroy(h->visibility);h->visibility=NULL;
     if(h->services){
         if(gh_game_services_destroy(h->services)!=GH_SERVICES_OK)return GH_HOST_ASSET;
         h->services=0;

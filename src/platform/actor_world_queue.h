@@ -20,7 +20,7 @@ void gh_actor_world_queue_reset(gh_actor_world_queue *);
 void gh_actor_world_queue_destroy(gh_actor_world_queue *);
 size_t gh_actor_world_queue_count(const gh_actor_world_queue *);
 /* Atomic failure leaves existing groups and output index unchanged. Exact
- * VU frontier is retained. Program30/TFX3 are never routed toprogram2. */
+ * VU frontier is retained. Only matched program2/TFX0 or program30/TFX3 profiles are accepted. */
 gh_actor_world_status gh_actor_world_queue_append(gh_actor_world_queue *,const gh_actor_draw_command *,size_t *,gh_static_transform_frontier *);
 gh_actor_world_status gh_actor_world_queue_group_at(const gh_actor_world_queue *,size_t,gh_actor_world_group *);
 gh_actor_world_status gh_actor_world_queue_packet_at(const gh_actor_world_queue *,size_t,size_t,gh_actor_world_packet *);

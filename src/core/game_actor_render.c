@@ -11,7 +11,7 @@ static int same(const gh_actor_render_bindings *a,const gh_actor_render_bindings
   a->ray==b->ray&&a->ray_context==b->ray_context&&
   a->draw_callee==b->draw_callee&&a->draw_context==b->draw_context&&
   a->other_callee==b->other_callee&&a->other_context==b->other_context&&a->policy==b->policy&&
-  a->actor_emit==b->actor_emit&&a->actor_emit_context==b->actor_emit_context;
+  a->actor_emit==b->actor_emit&&a->actor_emit_context==b->actor_emit_context&&a->light_globals==b->light_globals;
 }
 
 static gh_actor_model_status invoke(void *context,const gh_actor_trans_request *r,uint32_t *f)
@@ -29,7 +29,8 @@ static gh_actor_model_status invoke(void *context,const gh_actor_trans_request *
   if(r->depth<0||r->depth>UINT16_MAX){if(f)*f=r->entry;return GH_ACTOR_MODEL_UNSUPPORTED;}
   gh_actor_draw_bindings draw={.camera=b->camera,.light=b->light,
    .callee=b->draw_callee,.context=b->draw_context,.policy=b->policy,.textures=b->textures,
-   .emit=b->actor_emit,.emit_context=b->actor_emit_context};
+   .emit=b->actor_emit,.emit_context=b->actor_emit_context,
+   .light_globals=b->light_globals,.pivot_owner=b->pivot_owner};
   return gh_actor_model_draw_0014ac90(&c->draw,c->model,(uint16_t)r->depth,r->far_mode,&draw,f);
  }
  if(!b->other_callee){if(f)*f=r->entry;return GH_ACTOR_MODEL_UNSUPPORTED;}

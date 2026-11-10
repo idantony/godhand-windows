@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <string>
 
 struct ShadowEntry {gh_shadow_world_packet packet;const gh_stage_material *material;};
 struct NativeApp {
@@ -39,6 +40,7 @@ struct NativeApp {
     gh_model_gpu_error world_gpu_error=GH_MODEL_GPU_OK;
     uint32_t world_frontier=0,world_vu_pc=0;
     uint64_t world_packets=0;
+    gh_fade_draw frame_fade={};bool frame_fade_seen=false;
 };
 static constexpr uint64_t world_identity=UINT64_C(1)<<63;
 static constexpr uint64_t shadow_identity=UINT64_C(1)<<62;
@@ -48,7 +50,7 @@ static gh_id_error begin_mc(void *opaque)
     auto &app=*(NativeApp*)opaque;gh_startup_snapshot s={};
     if(gh_startup_host_snapshot(app.host,&s)!=GH_HOST_OK)return GH_ID_ARGUMENT;
     if(s.mc_ui_epoch!=app.resource_epoch){gh_mc_renderer_reset_resources(app.renderer);app.resource_epoch=s.mc_ui_epoch;}
-    gh_mc_renderer_begin(app.renderer);gh_static_world_queue_reset(app.world_queue);gh_actor_world_queue_reset(app.actor_queue);app.shadow_queue.clear();app.groups.clear();app.frame_building=true;app.building_scene=false;app.surface_kind=1;return GH_ID_OK;
+    gh_mc_renderer_begin(app.renderer);gh_static_world_queue_reset(app.world_queue);gh_actor_world_queue_reset(app.actor_queue);app.shadow_queue.clear();app.groups.clear();app.frame_fade_seen=false;app.frame_building=true;app.building_scene=false;app.surface_kind=1;return GH_ID_OK;
 }
 static gh_id_error begin_scene(void *opaque,uint32_t *)
 {
@@ -56,8 +58,45 @@ static gh_id_error begin_scene(void *opaque,uint32_t *)
     if(gh_startup_host_snapshot(app.host,&s)!=GH_HOST_OK)return GH_ID_ARGUMENT;
     if(s.mc_ui_epoch!=app.resource_epoch||s.ui_resource_epoch!=app.scene_resource_epoch){
         gh_mc_renderer_reset_resources(app.renderer);gh_model_renderer_reset_resources(app.world_renderer);app.resource_epoch=s.mc_ui_epoch;app.scene_resource_epoch=s.ui_resource_epoch;}
-    gh_mc_renderer_begin(app.renderer);gh_static_world_queue_reset(app.world_queue);gh_actor_world_queue_reset(app.actor_queue);app.shadow_queue.clear();app.groups.clear();app.frame_building=true;app.building_scene=true;app.surface_kind=1;return GH_ID_OK;
+    gh_mc_renderer_begin(app.renderer);gh_static_world_queue_reset(app.world_queue);gh_actor_world_queue_reset(app.actor_queue);app.shadow_queue.clear();app.groups.clear();app.frame_fade_seen=false;app.frame_building=true;app.building_scene=true;app.surface_kind=1;return GH_ID_OK;
 }
+#ifdef GH_NATIVE_STARTUP_QA
+static void qa_float_bits(const char *name,const float *values,size_t count)
+{
+    std::fprintf(stderr,",\"%s\":[",name);
+    for(size_t i=0;i<count;i++){uint32_t bits;std::memcpy(&bits,values+i,4);std::fprintf(stderr,"%s\"%08X\"",i?",":"",bits);}
+    std::fprintf(stderr,"]");
+}
+static void qa_static_failure(const gh_object_static_command *command)
+{
+    if(!command->object)return;
+    const auto &d=command->object->descriptor;
+    // Private runtime constants only; source assets remain on the user's disc.
+    std::fprintf(stderr,"QA_STATIC_INPUT {\"object_index\":%llu,\"handle\":%u,\"program\":%u,\"script_index\":%u,\"mesh_index\":%u,\"node_flags\":\"%08X\",\"streams\":%u",
+        (unsigned long long)command->object_index,command->handle,command->selected_program,d.script_index,d.mesh_index,d.node_flags,command->material_count);
+    qa_float_bits("screen_bits",command->packet.inputs.screen_matrix,16);
+    qa_float_bits("clip_bits",command->packet.inputs.clip_matrix,16);
+    qa_float_bits("projection_bits",command->packet.projection,16);
+    qa_float_bits("uv_offset_bits",command->packet.inputs.uv_offset,2);
+    qa_float_bits("color_scale_bits",command->packet.inputs.color_scale,4);
+    qa_float_bits("fog_bits",command->packet.inputs.fog,2);
+    std::fprintf(stderr,"}\n");
+}
+static void qa_actor_gpu_failure(const gh_actor_world_group &g,const gh_actor_world_packet &p,const gh_model_draw_state &s)
+{
+    std::fprintf(stderr,"QA_ACTOR_GPU_INPUT {\"node_index\":%llu,\"program\":%u,\"bank\":%u,\"depth\":%u,\"triangles\":%llu,\"vertex_count\":%llu,\"tex0\":\"%016llX\",\"test\":\"%016llX\",\"alpha\":\"%016llX\",\"tex1\":\"%016llX\",\"clamp\":\"%016llX\",\"primitive\":%u,\"texture_function\":%u,\"offset_x\":%u,\"offset_y\":%u,\"fog_rgb\":%u,\"texture_width\":%u,\"texture_height\":%u,\"texture_psm\":%u,\"indices\":[",
+        (unsigned long long)g.command.node_index,g.command.selected_program,g.command.bank,g.command.depth,(unsigned long long)p.triangles,(unsigned long long)p.vertex_count,
+        (unsigned long long)p.tex0,(unsigned long long)s.test,(unsigned long long)s.alpha,(unsigned long long)s.tex1,(unsigned long long)s.clamp,s.primitive,s.texture_function,s.xy_offset_x16,s.xy_offset_y16,s.fog_rgb,p.material->width,p.material->height,p.material->psm);
+    for(size_t i=0;i<p.triangles*3;i++)std::fprintf(stderr,"%s%u",i?",":"",p.indices[i]);
+    std::fprintf(stderr,"],\"vertices\":[");
+    for(size_t i=0;i<p.vertex_count;i++){
+        const auto &v=p.vertices[i];uint32_t q[3];std::memcpy(q,v.stq,12);
+        std::fprintf(stderr,"%s{\"stq_bits\":[\"%08X\",\"%08X\",\"%08X\"],\"rgba\":[%u,%u,%u,%u],\"xyz_fixed4\":[%d,%d,%d],\"fog_fixed4\":%u,\"control\":%u,\"clip\":%u,\"adc\":%u}",
+            i?",":"",q[0],q[1],q[2],v.rgba[0],v.rgba[1],v.rgba[2],v.rgba[3],v.xyz_fixed4[0],v.xyz_fixed4[1],v.xyz_fixed4[2],v.fog_fixed4,v.raw_control,v.clip_flags,v.adc);
+    }
+    std::fprintf(stderr,"]}\n");
+}
+#endif
 static gh_object_step_status queue_world(void *opaque,const gh_object_static_command *command,uint32_t *frontier)
 {
     auto &app=*(NativeApp*)opaque;
@@ -65,7 +104,11 @@ static gh_object_step_status queue_world(void *opaque,const gh_object_static_com
     try {
         app.groups.reserve(app.groups.size()+1);size_t index=0;gh_static_transform_frontier f={};
         gh_static_world_status e=gh_static_world_queue_append(app.world_queue,command,&index,&f);
-        if(e){app.world_frontier=f.ee_entry;app.world_vu_pc=f.vu_byte_pc;if(frontier)*frontier=f.ee_entry;return e==GH_WORLD_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;}
+        if(e){
+#ifdef GH_NATIVE_STARTUP_QA
+            qa_static_failure(command);
+#endif
+            app.world_frontier=f.ee_entry;app.world_vu_pc=f.vu_byte_pc;if(frontier)*frontier=f.ee_entry;return e==GH_WORLD_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;}
         app.groups.push_back({command->bank,command->depth,world_identity|index});return GH_OBJSTEP_OK;
     }catch(const std::bad_alloc&){return GH_OBJSTEP_CALLEE;}
 }
@@ -153,6 +196,7 @@ static gh_id_error draw_fade(void *opaque,const gh_fade_draw *draw)
     std::memcpy(&aspect,&display->pixel_aspect_bits,4);
     gh_ui_fade_context context={512,448,display->gs_y_origin,aspect,1,1,0,0,0};gh_ui_ot_tag tag={};
     gh_id_error error=gh_mc_renderer_queue_fade(app.renderer,draw,&context,&tag);
+    if(error==GH_ID_OK){app.frame_fade=*draw;app.frame_fade_seen=true;}
     if(error==GH_ID_OK){try {app.groups.push_back({tag.bank,(uint32_t)tag.depth,(uint64_t)tag.index});}
         catch(const std::bad_alloc&){return GH_ID_MEMORY;}}
     return error;
@@ -215,16 +259,20 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
                 for(size_t j=0;j<g.packets;j++){
                     gh_actor_world_packet packet={};
                     if(gh_actor_world_queue_packet_at(app.actor_queue,i,j,&packet)!=GH_ACTOR_WORLD_OK)return GH_ID_ARGUMENT;
-                    if(!packet.triangles)continue;
                     if((packet.primitive&32)&&!fog_known){app.world_frontier=0x14c5a0;return GH_ID_UNSUPPORTED;}
                     uint32_t texture=0;app.world_gpu_error=gh_model_renderer_upload(app.world_renderer,packet.material,&texture);
                     if(app.world_gpu_error!=GH_MODEL_GPU_OK){app.world_frontier=0x151368;return GH_ID_UNSUPPORTED;}
                     gh_model_draw_state state={};state.test=g.command.test;state.alpha=g.command.alpha;state.tex1=g.command.tex1;state.clamp=g.command.clamp;state.primitive=packet.primitive;
+                    state.texture_function=(uint8_t)((packet.tex0>>35)&3);
                     state.xy_offset_x16=(2048-display->screen_width/2)*16;state.xy_offset_y16=display->gs_y_origin*16;state.fog_rgb=fog_rgb;
                     state.zbuf_psm=58;state.z_write=state.colclamp=state.native_float_reference=1;
                     app.world_gpu_error=gh_model_renderer_draw(app.world_renderer,&state,texture,packet.vertices,packet.vertex_count,packet.indices,packet.triangles*3);
-                    if(app.world_gpu_error!=GH_MODEL_GPU_OK){app.world_frontier=0x31a650;return GH_ID_UNSUPPORTED;}
-                    ++app.world_packets;
+                    if(app.world_gpu_error!=GH_MODEL_GPU_OK){
+#ifdef GH_NATIVE_STARTUP_QA
+                        qa_actor_gpu_failure(g,packet,state);
+#endif
+                        app.world_frontier=0x31a650;return GH_ID_UNSUPPORTED;}
+                    if(packet.triangles)++app.world_packets;
                 }
                 continue;
             }
@@ -409,6 +457,14 @@ int main(int argc,char **argv)
                     if(!capture||std::fwrite(app.queued_pixels.data(),1,app.queued_pixels.size(),capture)!=app.queued_pixels.size()){
                         if(capture)std::fclose(capture);std::fprintf(stderr,"QA scene capture failed\n");break;}
                     if(std::fclose(capture))break;qa_captured=true;
+                    if(!app.world_pixels.empty()){
+                        std::string world_path=std::string(qa_capture)+".world.rgba";FILE *world=std::fopen(world_path.c_str(),"wbx");
+                        if(!world||std::fwrite(app.world_pixels.data(),1,app.world_pixels.size(),world)!=app.world_pixels.size()){
+                            if(world)std::fclose(world);std::fprintf(stderr,"QA pre-UI world capture failed\n");break;}
+                        if(std::fclose(world))break;
+                    }
+                    std::fprintf(stderr,"QA_WORLD_CAPTURE {\"scene_serial\":%llu,\"world_bytes\":%llu,\"fade_visible\":%u,\"fade_rgba\":\"%08X\",\"fade_alpha\":\"%016llX\"}\n",
+                        (unsigned long long)app.snapshot.scene_frame_serial,(unsigned long long)app.world_pixels.size(),app.frame_fade_seen?1u:0u,app.frame_fade.rgba,(unsigned long long)app.frame_fade.alpha);
                     std::fprintf(stderr,"QA scene capture: frame%llu, 512x448 rawRGBA\n",(unsigned long long)app.snapshot.scene_frame_serial);
                 }
 #endif

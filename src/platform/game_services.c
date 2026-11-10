@@ -42,8 +42,11 @@
 #include "../core/game_player_child_update.h"
 #include "../core/game_cloth_wind.h"
 #include "../core/game_actor_attached_sound.h"
+#include "../core/game_actor_aux.h"
+#include "../core/game_actor_model_light.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 struct gh_game_services {
  gh_game_services_bindings b;gh_game_cockpit *cockpit;
  gh_game_objects *objects,*room_objects;gh_game_prepare prepare;
@@ -825,9 +828,40 @@ gh_game_services_status gh_game_services_actor_view(gh_game_services*s,uint32_t 
  if(!s||!out)return GH_SERVICES_ARGUMENT;
  const gh_title_player_view *player=NULL;
  if(gh_game_player_factory_scalar_view(&s->player_factory,handle,&player)==GH_PLAYER_OK){*out=*player;return GH_SERVICES_OK;}
- if(s->player_child.handle==handle&&s->player_child.complete){*out=s->player_child.object.view;return GH_SERVICES_OK;}
+ if(s->player_child.handle==handle&&s->player_child.complete){void*registered=NULL;
+  if(gh_room_object_lookup(&s->pools,handle,GH_ROOM_OBJECT_PLAYER_CHILD,&s->player_child.object,&registered)||registered!=&s->player_child.object)return GH_SERVICES_ASSET;
+  *out=s->player_child.object.view;return GH_SERVICES_OK;}
+ void*scroll=NULL;if(!gh_room_object_lookup(&s->pools,handle,GH_ROOM_OBJECT_SCROLL_MESH,&s->meshes,&scroll)){
+  for(size_t i=0;i<s->meshes.count;i++){const gh_scene_mesh_object*o;
+   if(!gh_scene_meshes_object_at(&s->meshes,i,&o)&&o==scroll){
+    if(!o->constructor_complete||!o->allocation.pointer||o->handle!=handle||o->local_matrix_offset>0x350||o->rotation_matrix_offset>0x350)return GH_SERVICES_ASSET;
+    uint8_t*p=o->allocation.pointer;*out=(gh_title_player_view){.bytes=p,.size=0x360,.alias_d0=p+o->local_matrix_offset,.alias_f0=p+o->rotation_matrix_offset};return GH_SERVICES_OK;
+   }
+  }return GH_SERVICES_ASSET;
+ }
  gh_scene_placement_status e=gh_om_factory_object_view(&s->om_factory,handle,out);
  return !e?GH_SERVICES_OK:e==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+}
+gh_game_services_status gh_game_services_mask_actor_nodes(gh_game_services*s,uint32_t handle,uint32_t and_mask,uint32_t or_mask,uint32_t*f){
+ if(f)*f=0;if(!s||!f)return GH_SERVICES_ARGUMENT;
+ void*scroll=NULL;if(!gh_room_object_lookup(&s->pools,handle,GH_ROOM_OBJECT_SCROLL_MESH,&s->meshes,&scroll)){
+  for(size_t i=0;i<s->meshes.count;i++){const gh_scene_mesh_object*o;
+   if(!gh_scene_meshes_object_at(&s->meshes,i,&o)&&o==scroll){
+    if(!o->constructor_complete||!o->node){*f=0x14b6f8;return GH_SERVICES_ASSET;}
+    uint8_t*p=(uint8_t*)o->node+0x380;w32(p,(u32(p)&and_mask)|or_mask);return GH_SERVICES_OK;
+   }
+  }*f=0x14b6f8;return GH_SERVICES_ASSET;
+ }
+ gh_actor_model*m=NULL;const gh_title_player_view*player=NULL;
+ if(!gh_game_player_factory_scalar_view(&s->player_factory,handle,&player))m=&s->player_model;
+ else if(handle==s->player_child.handle&&s->player_child.complete){gh_title_player_view v;gh_game_services_status e=gh_game_services_actor_view(s,handle,&v);if(e){*f=0x14b6f8;return e;}m=&s->player_child.model;}
+ else if(gh_om_factory_model_at(&s->om_factory,handle,&m)){*f=0x14b6f8;return GH_SERVICES_FRONTIER;}
+ if(!m||!m->ready||m->native_identity!=m||!m->root.bytes||m->root.size<0x2b2){*f=0x14b6f8;return GH_SERVICES_ASSET;}
+ if(m->script.mesh_count>255||m->root.bytes[0x2b1]!=m->script.mesh_count){*f=0x14b6f8;return GH_SERVICES_FRONTIER;}
+ unsigned count=(unsigned)m->script.mesh_count;
+ for(unsigned i=0;i<count;i++){const uint8_t*node;size_t mesh;if(gh_actor_model_node_at(m,i,&node,&mesh)){*f=0x14b6f8;return GH_SERVICES_ASSET;}}
+ for(unsigned i=0;i<count;i++)if(gh_actor_model_node_mask_flags(m,i,0x380,and_mask,or_mask)){*f=0x14b6f8;return GH_SERVICES_ASSET;}
+ return GH_SERVICES_OK;
 }
 static gh_player_target_status player_target_view(void*p,uint32_t handle,gh_title_player_view*v,uint32_t*f){
  gh_game_services*s=p;gh_game_services_status e=gh_game_services_actor_view(s,handle,v);if(e&&f)*f=0x30f16c;
@@ -932,6 +966,27 @@ gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t 
  if(!e&&s->player_frame.stage==31&&!s->player_frame.bound)s->update_diagnostic.player_updates_completed++;
  return !e?GH_SERVICES_OK:e==GH_PLAYER_FRAME_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
 }
+static gh_actor_model_status render_other(void*context,const gh_actor_trans_request*r,uint32_t*f){
+ gh_game_services*s=context;if(!s||!r||!f)return GH_ACTOR_MODEL_ARGUMENT;*f=0;
+ if(r->entry==0x14d828){
+  gh_actor_light_bindings b={.pivot_owner=s->b.player_shared_vector,.camera=&s->camera};
+  return gh_actor_model_light_0014d828(r->model,&s->world_light,&b,GH_STATIC_BINARY32_REFERENCE,f);
+ }
+ if(r->entry!=0x31a600){*f=r->entry;return GH_ACTOR_MODEL_UNSUPPORTED;}
+ unsigned packets=UINT32_MAX;gh_actor_model_status e=gh_actor_auxiliary_0014a3e8(r->model,r->parity,&packets,f);
+ if(e)return e;if(packets){*f=0x31a600;return GH_ACTOR_MODEL_UNSUPPORTED;}return GH_ACTOR_MODEL_OK;
+}
+/* Developer frontier diagnostics. Copy bits from the canonical model while
+ * alive; do not retain a second model/actor owner or change original state. */
+static void trace_render_frontier(const gh_game_services*s,const gh_object_trans_request*q,const gh_actor_model*m,const gh_actor_render_call*c,uint32_t frontier){
+ const uint8_t*n=NULL;size_t mesh=0;uint32_t root_flags[2]={0},node_flags=0,node_tail=0,rt[4]={0},nt[4]={0};
+ if(m->root.size>=0x258)memcpy(root_flags,m->root.bytes+0x250,8);
+ if(m->root.size>=0x250)memcpy(rt,m->root.bytes+0x240,16);
+ int known=gh_actor_model_node_at(m,(unsigned)c->draw.node_index,&n,&mesh)==GH_ACTOR_MODEL_OK;
+ if(known){memcpy(&node_flags,n+0x380,4);memcpy(&node_tail,n+0x410,4);memcpy(nt,n+0x3a0,16);}
+ fprintf(stderr,"GH_ACTOR_FRONTIER {\"model_kind\":\"%s\",\"part_count\":%u,\"node_count\":%llu,\"handle\":%u,\"entry\":\"%08X\",\"frontier\":\"%08X\",\"trans_phase\":%u,\"draw_phase\":%u,\"node_index\":%llu,\"node_known\":%d,\"mesh_index\":%llu,\"root250\":\"%08X\",\"root254\":\"%08X\",\"node380\":\"%08X\",\"node410\":\"%08X\",\"root_tint_bits\":[\"%08X\",\"%08X\",\"%08X\",\"%08X\"],\"node_tint_bits\":[\"%08X\",\"%08X\",\"%08X\",\"%08X\"]}\n",
+ m==&s->player_model?"player":m==&s->player_child.model?"child":"om",(unsigned)m->part_count,(unsigned long long)m->script.mesh_count,q->handle,q->original_entry,frontier,c->trans.phase,c->draw.phase,(unsigned long long)c->draw.node_index,known,(unsigned long long)mesh,root_flags[0],root_flags[1],node_flags,node_tail,rt[0],rt[1],rt[2],rt[3],nt[0],nt[1],nt[2],nt[3]);
+}
 gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh_object_trans_request*q,
  const gh_boot_work*work,const gh_game_actor_render_provider*provider,uint32_t*f){
  if(f)*f=0;if(!s||!q||!provider||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
@@ -953,14 +1008,20 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh
   if(s->om_renders_capacity!=s->om_factory.capacity){*f=0x14a3e8;return GH_SERVICES_BUSY;}call=s->om_renders+index;
  }
  if(!model||!model->ready||model->native_identity!=model||model->root.bytes!=q->actor.bytes||model->root.size!=q->actor.size||model->root.alias_f0!=q->actor.alias_f0){*f=0x14a3e8;return GH_SERVICES_ASSET;}
+ /* These three concrete factory paths execute the recovered1495A0 base
+  * constructor. Its four NULL auxiliary refs are explicit provenance, not
+  * a generic inference from removed guest-pointer words. */
+ gh_actor_model_status auxiliary=gh_actor_model_aux_bind_constructor_empty_001495a0(model);
+ if(auxiliary){*f=0x31a600;return auxiliary==GH_ACTOR_MODEL_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;}
  if(call->trans.complete&&gh_actor_render_next_call(call)){*f=0x14a3e8;return GH_SERVICES_BUSY;}
  gh_actor_render_bindings b={.work=work,.camera=&s->camera,.light=&s->world_light,.depth_shift=provider->depth_shift,
   .elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes,.shadow=shadow,.actors=&s->scene_tables,
   .up_owner=s->b.camera_follow,.pivot_owner=s->b.player_shared_vector,.templates=provider->shadow_templates,
   .textures=s->b.stage->textures,.emit_shadow=provider->shadow_emit,.emit_context=provider->shadow_context,.policy=GH_STATIC_BINARY32_REFERENCE,
-  .actor_emit=provider->actor_emit,.actor_emit_context=provider->actor_context};
+  .actor_emit=provider->actor_emit,.actor_emit_context=provider->actor_context,
+  .other_callee=render_other,.other_context=s,.light_globals=s->b.actor_light_globals};
  gh_actor_model_status e=gh_actor_render_0014a3e8(call,model,&b,f);
- if(e)return e==GH_ACTOR_MODEL_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+ if(e){trace_render_frontier(s,q,model,call,*f);return e==GH_ACTOR_MODEL_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;}
  if(!call->trans.complete){*f=0x14a3e8;return GH_SERVICES_ASSET;}return GH_SERVICES_OK;
 }
 

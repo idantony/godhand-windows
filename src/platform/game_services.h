@@ -23,6 +23,7 @@
 #include "../core/game_scene_filters.h"
 #include "../core/bgm_requests.h"
 #include "../core/game_world_light.h"
+#include "../core/game_actor_light_globals.h"
 #include "../core/game_model_packets.h"
 #include "../core/game_collision_solids.h"
 #include "../core/game_scene_tables.h"
@@ -95,6 +96,7 @@ typedef struct {
  gh_cloth_templates *cloth_templates;gh_cloth_runtime_globals *cloth_globals; /*Rootpersistent ctor owners*/
  gh_player_ground_globals *player_ground_globals; /*RootONE original.data3BD470*/
  gh_player_opacity_globals *player_opacity_globals;gh_se_voice_engine *voices; /*borrow RootONE owners*/
+ const gh_actor_light_globals *actor_light_globals; /*RootONE3BD870/890, no permodel reset*/
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;
@@ -141,6 +143,10 @@ gh_game_services_status gh_game_services_update_diagnostic(const gh_game_service
 
 /* Resolve actual canonical actor identity before caller-specific ID filtering. */
 gh_game_services_status gh_game_services_actor_view(gh_game_services *,uint32_t handle,gh_title_player_view *);
+/* Original visibility bit writes on every node of the SAME registered model,
+ * including a static scroll object's one canonical node. */
+gh_game_services_status gh_game_services_mask_actor_nodes(gh_game_services *,uint32_t handle,
+ uint32_t and_mask,uint32_t or_mask,uint32_t *frontier);
 /* Dispatches a verified original Move descriptor on the SAME canonical actor.
  * Unknown methods/this-adjustments retain their exact original entry frontier. */
 gh_game_services_status gh_game_services_move_actor(gh_game_services *,uint32_t handle,uint32_t original_entry,

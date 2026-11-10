@@ -8,7 +8,13 @@ typedef struct {size_t header_offset[2],constants_offset[2],palette_offset[2],pa
  uint32_t object_program[2],node_selector[2],palette_unpack,fog_rgb;
  uint64_t dma_constants,cycle,gif,gs_fog_register,dma_palette,ret;
  uint32_t flush,direct,mscnt;const gh_actor_part *parts;size_t part_count;uint8_t ready;
+ /* Explicit native factory witness, default UNKNOWN. Not inferred by setupModel. */
+ const gh_actor_model *auxiliary_owner;uint8_t auxiliary_constructor_bound,auxiliary_absent_mask;
 } gh_actor_object_packets;
+/* Caller explicitly certifies original1495A0 constructor path; no reset of
+ * an already-published positive/unknown auxiliary owner is allowed. */
+gh_actor_model_status gh_actor_model_aux_bind_constructor_empty_001495a0(gh_actor_model *);
+
 gh_actor_model_status gh_actor_model_object_packet(const gh_actor_model *,const gh_actor_object_packets **);
 /* SAME object packet allocation; returned span is borrowed until model release.
  * Does not allocate, resolve guest pointers, or acknowledge DMA execution. */

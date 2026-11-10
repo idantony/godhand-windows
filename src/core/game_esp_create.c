@@ -1,5 +1,8 @@
 #include "game_esp_create.h"
 #include "game_effects_frame.h"
+#include "game_effect_exp.h"
+#include "game_effect_node.h"
+#include "game_ray_query.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -8,7 +11,7 @@ static unsigned h(const uint8_t*p){return p[0]|(unsigned)p[1]<<8;}
 static void put(void*p,uint32_t n){memcpy(p,&n,4);}
 static void half(void*p,uint16_t n){memcpy(p,&n,2);}
 static gh_effect_status fail(gh_esp_create_call*c,uint32_t f,gh_effect_status e){c->frontier=f;return e;}
-static int same(const gh_esp_create_bindings*a,const gh_esp_create_bindings*b){return a->storage.effects==b->storage.effects&&a->storage.esp==b->storage.esp&&a->storage.emitters==b->storage.emitters&&a->storage.esp_bytes==b->storage.esp_bytes&&a->storage.emitter_bytes==b->storage.emitter_bytes&&a->random==b->random&&a->work==b->work&&a->policy==b->policy&&a->globals==b->globals;}
+static int same(const gh_esp_create_bindings*a,const gh_esp_create_bindings*b){return a->storage.effects==b->storage.effects&&a->storage.esp==b->storage.esp&&a->storage.emitters==b->storage.emitters&&a->storage.esp_bytes==b->storage.esp_bytes&&a->storage.emitter_bytes==b->storage.emitter_bytes&&a->random==b->random&&a->work==b->work&&a->policy==b->policy&&a->globals==b->globals&&(a->actors==b->actors||(!a->actors&&b->actors))&&(a->atan_coeff==b->atan_coeff||(!a->atan_coeff&&b->atan_coeff));}
 gh_effect_status gh_esp_create_begin_00300e30(gh_esp_create_call*c,unsigned emitter,uint32_t serial){if(!c||emitter>=256||!serial||(c->active&&!c->complete))return GH_EFFECT_ARGUMENT;*c=(gh_esp_create_call){.identity=c,.emitter_slot=emitter,.emitter_serial=serial,.active=1};return GH_EFFECT_OK;}
 /* Actual3060B0 uses signed bank and unsigned byte item; <count, not<=.
  * Pointer fields remain removed guesttokens, while metadata borrows the exact
@@ -51,7 +54,9 @@ static gh_effect_status initial_transform(gh_esp_create_call*c,uint8_t*p,const u
  memcpy(next+0x178,velocity,12);next[0x16]=0;put(next+0x90,w(next+0x90)&~1u);memcpy(next+0x30,angles,12);memcpy(next+0x40,position,12);memcpy(p,next,sizeof(next));return GH_EFFECT_OK;
 }
 static gh_effect_status initial_direction(gh_esp_create_call*c,uint8_t*p,const uint8_t*r,const uint8_t*source){
- unsigned mode=r[0x28f]<2?r[0x28f]:0;if(mode)return fail(c,0x302060,GH_EFFECT_UNSUPPORTED);
+ unsigned mode=r[0x28f]<2?r[0x28f]:0;
+ if(mode){for(unsigned offset=0x94;offset<=0xb8;offset+=4)if(!isfinite(floating(r+offset)))return fail(c,0x302060,GH_EFFECT_UNSUPPORTED);if(floating(source+0x1e0)!=1.0f)return fail(c,0x302060,GH_EFFECT_UNSUPPORTED);uint8_t next[0x400];memcpy(next,p,sizeof(next));next[0x141]=1;const unsigned variation[]={0xa0,0xa8,0xac};for(unsigned axis=0;axis<3;axis++){float v=add(floating(r+0x94+axis*4),mul(floating(r+variation[axis]),random_signed(next)));if(!isfinite(v))return fail(c,0x302060,GH_EFFECT_UNSUPPORTED);if(!axis&&(source[0x1e8]&0x80u))v=-v;store_float(next+0x124+axis*4,v);}put(next+0x130,w(r+0xa4));float x=floating(r+0xb0);if(source[0x1e8]&0x80u)x=-x;store_float(next+0x134,x);memcpy(next+0x138,r+0xb4,8);memcpy(p,next,sizeof(next));return GH_EFFECT_OK;}
+
  /* Actual R100 first ambient: zero input direction AND zero perturbation.
   * Both original101E28 lengths are genuinely0; the <=0 branches retain
   * initializedVF0.xyz. Random calls still occur, even multiplying zero. */
@@ -70,16 +75,40 @@ static gh_effect_status initial_colour(gh_esp_create_call*c,uint8_t*p,const uint
 static gh_effect_status finish_source(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
  if(w(p+0x114))return fail(c,0x30273c,GH_EFFECT_UNSUPPORTED);if(!isfinite(floating(r+0x138)))return fail(c,0x302684,GH_EFFECT_UNSUPPORTED);uint8_t next[0x400];memcpy(next,p,sizeof(next));next[0x247]=r[0x129];next[0x24a]=r[0x134];next[0x24b]=r[0x135];half(next+0x276,(uint16_t)h(r+0x2ca));put(next+0x254,w(r+0x138)^0x80000000u);if(w(r)&0x1000000u){if(random_signed(next)>0)for(unsigned j=0;j<3;j++)store_float(next+0x178+j*4,-floating(next+0x178+j*4));}memcpy(p,next,sizeof(next));return GH_EFFECT_OK;
 }
+static float divide(float a,float b){volatile float n=a/b;return n;}
+static gh_effect_status initialize_type6(gh_esp_create_call*c,uint8_t*p){
+ gh_effects_frame_globals*g=c->b.globals;if(!g||!g->initialized)return fail(c,0x2e8038,GH_EFFECT_ARGUMENT);gh_effect_status status=gh_effect_create_bind_frame_globals(c->b.storage.effects,g);if(status)return fail(c,0x2e8038,status);
+ unsigned count=w(p+0x2bc);if(!count||count>32)return fail(c,0x2e8038,GH_EFFECT_ARGUMENT);float radius=floating(p+0x2b4),variance=radius==0?25.0f:mul(radius,radius);if(!(variance>0)||!isfinite(variance))return fail(c,0x2e8038,GH_EFFECT_UNSUPPORTED);
+ float spacing=floating(p+0x2b8);if(spacing==0)spacing=1.0f;if(!isfinite(spacing))return fail(c,0x2e8168,GH_EFFECT_UNSUPPORTED);
+ /* Original pure synchronous numerical calls have no yield. Compute bounded
+  * complete output before publishing to shared arrays; invalid domains never
+  * expose a half-normalized kernel. Preserve all original unused tailwords. */
+ uint32_t weights[32],offsets[32];float sum=0,distance=0;offsets[0]=0;
+ for(unsigned i=0;i<count;i++){float exponent=divide(mul((float)(i*i),-.5f),variance),weight;uint32_t frontier=0;status=gh_effect_exp_reference_003a1c78(exponent,&weight,c->b.policy,&frontier);if(status)return fail(c,frontier?frontier:0x3a1c78,status);memcpy(weights+i,&weight,4);sum=add(sum,i?add(weight,weight):weight);}
+ if(!(sum>0)||!isfinite(sum))return fail(c,0x2e8038,GH_EFFECT_UNSUPPORTED);for(unsigned i=0;i<count;i++){float weight;memcpy(&weight,weights+i,4);weight=divide(weight,sum);if(!isfinite(weight))return fail(c,0x2e8038,GH_EFFECT_UNSUPPORTED);memcpy(weights+i,&weight,4);}
+ for(unsigned i=1;i<count;i++){float signed_distance=(i&1)?distance:-distance;if(!isfinite(signed_distance)||signed_distance < -2147483648.0f||signed_distance>=2147483648.0f)return fail(c,0x2e8168,GH_EFFECT_UNSUPPORTED);int32_t integer=(int32_t)signed_distance;memcpy(offsets+i,&integer,4);if(i&1)distance=add(distance,spacing);}
+ memcpy(g->gaussian_weights_61b5c0,weights,count*4);memcpy(g->gaussian_offsets_61b540,offsets,count*4);return GH_EFFECT_OK;
+}
+static gh_effect_status initialize_1a(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
+ uint32_t frontier=0;gh_effect_status status;
+ if(c->stage==10){if(w(p+0xf0)!=0x44f270u)return fail(c,0x2f4be0,GH_EFFECT_UNSUPPORTED);status=gh_effect_node_detach_update_002fcb88(&c->detach,c->b.storage.effects,c->slot,c->serial,c->b.atan_coeff,c->b.policy,&frontier);if(status)return fail(c,frontier?frontier:0x2fcb88,status);if(!c->detach.complete)return fail(c,0x2fcb88,GH_EFFECT_ARGUMENT);c->stage=13;}
+ if(c->stage==13){float distance=floating(r+0x144);if(distance==0)distance=10.0f;if(!isfinite(distance)||!isfinite(floating(r+0x140)))return fail(c,0x2f4be0,GH_EFFECT_UNSUPPORTED);status=gh_effect_node_world_position_native(c->b.storage.effects,0,c->slot,c->serial,c->ground_position,c->b.policy,&frontier);if(status)return fail(c,frontier,status);memcpy(c->ground_from,c->ground_position,16);memcpy(c->ground_to,c->ground_position,16);c->ground_from[1]=add(c->ground_from[1],1.0f);c->ground_to[1]=add(c->ground_to[1],-add(distance,1.0f));if(!isfinite(c->ground_from[1])||!isfinite(c->ground_to[1]))return fail(c,0x2f4c88,GH_EFFECT_UNSUPPORTED);memset(c->ground_hit,0,12);c->ground_hit[3]=1;c->stage=14;}
+ if(c->stage==14){if(!c->b.actors)return fail(c,0x131e10,GH_EFFECT_UNSUPPORTED);gh_scene_ray_request request={.mask=2,.flags=0,.hit_position=c->ground_hit,.report_limit=0,.segmented=1};memcpy(request.from,c->ground_from,16);memcpy(request.to,c->ground_to,16);int hit=0;gh_scene_ray_status ray=gh_scene_ray_query_00131e10(c->b.actors,&request,&hit,&frontier);if(ray)return fail(c,frontier?frontier:0x131e10,ray==GH_RAY_BOUNDS?GH_EFFECT_BOUNDS:ray==GH_RAY_ARGUMENT?GH_EFFECT_ARGUMENT:GH_EFFECT_UNSUPPORTED);c->ground_ray_hit=hit;c->stage=15;}
+ if(c->stage==15){float position[3];memcpy(position,c->ground_ray_hit==1?c->ground_hit:c->ground_position,12);if(c->ground_ray_hit==1)position[1]=add(position[1],floating(r+0x140));status=gh_effect_node_set_position_native(c->b.storage.effects,0,c->slot,c->serial,position,&frontier);if(status)return fail(c,frontier,status);c->stage=16;}
+ if(c->stage==16){status=gh_effect_create_esp_commit_1a(c->b.storage.effects,c->slot,c->serial);if(status)return fail(c,0x2f4be0,status);c->complete=1;c->stage=17;return GH_EFFECT_OK;}
+ return fail(c,0x2f4be0,GH_EFFECT_ARGUMENT);
+}
 static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bindings*b){
- if(!c||!b||!c->active||c->identity!=c||!b->work)return GH_EFFECT_ARGUMENT;if(b->policy!=GH_STATIC_BINARY32_REFERENCE)return fail(c,0x300ef8,GH_EFFECT_UNSUPPORTED);if(c->stage&&!same(&c->b,b))return fail(c,0x300e30,GH_EFFECT_ARGUMENT);c->frontier=0;if(c->complete)return GH_EFFECT_OK;if(!c->stage)c->b=*b;
+ if(!c||!b||!c->active||c->identity!=c||!b->work)return GH_EFFECT_ARGUMENT;if(b->policy!=GH_STATIC_BINARY32_REFERENCE)return fail(c,0x300ef8,GH_EFFECT_UNSUPPORTED);if(c->stage&&!same(&c->b,b))return fail(c,0x300e30,GH_EFFECT_ARGUMENT);if(c->stage&&!c->b.actors&&b->actors)c->b.actors=b->actors;if(c->stage&&!c->b.atan_coeff&&b->atan_coeff)c->b.atan_coeff=b->atan_coeff;c->frontier=0;if(c->complete)return GH_EFFECT_OK;if(!c->stage)c->b=*b;
  gh_effect_emitter_view emitter;gh_effect_status status=gh_effect_create_emitter_at(b->storage.effects,c->emitter_slot,&emitter);if(status||emitter.serial!=c->emitter_serial||!emitter.initialized||emitter.payload!=b->storage.emitters+(size_t)c->emitter_slot*0x260)return fail(c,0x300e30,GH_EFFECT_ARGUMENT);uint8_t*source=emitter.payload;const uint8_t*r=emitter.record.bytes;
+ status=gh_effect_create_bind_frame_globals(b->storage.effects,b->globals);if(status)return fail(c,0x2e8038,status);if(r[0x133]==0x1a&&b->actors){status=gh_effect_create_bind_frame_actors(b->storage.effects,b->actors);if(status)return fail(c,0x131e10,status);}
  if(!c->stage){int allocated=0;uint32_t f=0;status=gh_effect_create_esp_allocate_002faa88(&b->storage,c->emitter_slot,c->emitter_serial,&c->slot,&c->serial,&allocated,&f);if(status)return fail(c,f?f:0x2faa88,status);c->allocated=(uint8_t)allocated;if(!allocated){c->complete=1;return GH_EFFECT_OK;}c->stage=1;}
  gh_effect_esp_view view;status=gh_effect_create_esp_at(b->storage.effects,c->slot,&view);if(status||view.serial!=c->serial||view.emitter_slot!=c->emitter_slot||view.emitter_serial!=c->emitter_serial||view.payload!=b->storage.esp+(size_t)c->slot*0x400)return fail(c,0x300ef8,GH_EFFECT_ARGUMENT);uint8_t*p=view.payload;
  if(c->stage==1){uint32_t seed;if(!r[0x28e]){if(!b->random)return fail(c,0x31cfe0,GH_EFFECT_ARGUMENT);if(gh_game_mt_next_0030f348(b->random,&seed))return fail(c,0x31cfe0,GH_EFFECT_ARGUMENT);}else seed=w(source+0x220)*UINT32_C(0x19660d)+UINT32_C(0x3c6ef35f);put(source+0x220,seed);c->stage=2;}
  if(c->stage==2){unsigned remaining=0,duration=h(source+0x224);if(duration){float elapsed;memcpy(&elapsed,source+0x228,4);if(!isfinite(elapsed)||elapsed < -2147483648.0f||elapsed>=2147483648.0f||(float)(int32_t)elapsed!=elapsed)return fail(c,0x300e84,GH_EFFECT_UNSUPPORTED);remaining=(duration-(uint32_t)(int32_t)elapsed)&0xffffu;if(!remaining)remaining=1;}
   /* Original300EF8 arguments9..13 are explicit caller stackstores, not
    * uninitialized locals: cfg118,bank18C,flags114,seed220,remainingduration. */
-  put(p+0x220,w(source+0x220));half(p+0x23c,(uint16_t)h(source+0x18e));put(p+0x108,0);put(p+0x114,0);put(p+0x10c,w(source+0x110));put(p+0x120,w(source+0x218));int part=(int8_t)r[0xbe],override=(int8_t)source[0x1ec];if(override>=-3&&override!=-1)part=override;if(part!=-4){if(w(p+4)||w(p+8)||w(p+0x10))return fail(c,0x2b5d58,GH_EFFECT_UNSUPPORTED);p[0x16]=0;put(p+0x90,0);}half(p+0x22c,(uint16_t)remaining);put(p+0x104,w(source+0x118));put(p+0x110,0);p[0x101]=r[0x12a];c->stage=3;
+  put(p+0x220,w(source+0x220));half(p+0x23c,(uint16_t)h(source+0x18e));put(p+0x108,0);put(p+0x114,0);put(p+0x10c,w(source+0x110));put(p+0x120,w(source+0x218));int part=(int8_t)r[0xbe],override=(int8_t)source[0x1ec];if(override>=-3&&override!=-1)part=override;if(part!=-4){status=gh_effect_create_esp_attach_emitter_002b5d58(b->storage.effects,c->slot,c->serial,c->emitter_slot,c->emitter_serial);if(status)return fail(c,0x2b5d58,status);}half(p+0x22c,(uint16_t)remaining);put(p+0x104,w(source+0x118));put(p+0x110,0);p[0x101]=r[0x12a];c->stage=3;
  }
  if(c->stage==3){gh_effect_view first,secondary;status=texture(c,(int16_t)h(r+0x28c),r[0x12e],&first);if(status)return status;if(!first.bytes){status=texture(c,0,0xff,&first);if(status)return status;}secondary=first;if(w(r+4)&0x08000000u){status=texture(c,(int16_t)h(r+0x28c),r[0x297],&secondary);if(status)return status;}status=gh_effect_create_esp_bind_textures(b->storage.effects,c->slot,c->serial,first,secondary);if(status)return fail(c,0x3060b0,status);c->stage=4;}
  if(c->stage==4){status=source_flags(c,p,r,source);if(status)return status;c->stage=5;}
@@ -88,10 +117,11 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
  if(c->stage==7){status=initial_direction(c,p,r,source);if(status)return status;c->stage=8;}
  if(c->stage==8){status=initial_colour(c,p,r,source);if(status)return status;c->stage=9;}
  if(c->stage==9){status=finish_source(c,p,r);if(status)return status;c->stage=10;}
+ if(view.type==0x1a&&c->stage>=10)return initialize_1a(c,p,r);
  if(c->stage==10){
   if(w(p+0xf0)!=0x44e6d8u)return fail(c,0x2e8210,GH_EFFECT_UNSUPPORTED);put(p+0x2b0,w(r+0x16c));uint32_t count=w(r+0x170);int32_t signed_count;memcpy(&signed_count,&count,4);if(signed_count<1)count=25;if(count>32)count=32;put(p+0x2bc,count);put(p+0x2b4,w(r+0x13c));put(p+0x2b8,w(r+0x140));c->stage=11;
  }
- if(c->stage==11){if(!b->globals||!b->globals->initialized)return fail(c,0x2e8038,GH_EFFECT_ARGUMENT);return fail(c,0x3a1c78,GH_EFFECT_UNSUPPORTED);}
+ if(c->stage==11){status=initialize_type6(c,p);if(status)return status;status=gh_effect_create_esp_commit_type6(b->storage.effects,c->slot,c->serial);if(status)return fail(c,0x2e8210,status);c->stage=12;c->complete=1;return GH_EFFECT_OK;}
  return fail(c,0x2e8210,GH_EFFECT_UNSUPPORTED);
 }
 

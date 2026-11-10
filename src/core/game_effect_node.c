@@ -1,0 +1,52 @@
+#include "game_effect_node.h"
+#include "game_actor_matrix.h"
+#include "game_actor_two_bone.h"
+#include "game_scene_at_geometry.h"
+#include <fenv.h>
+#include <string.h>
+#include <math.h>
+static uint32_t w(const void*p){uint32_t n;memcpy(&n,p,4);return n;}
+static void put(void*p,uint32_t n){memcpy(p,&n,4);}
+static gh_effect_status bad(uint32_t*f,uint32_t pc,gh_effect_status e){if(f)*f=pc;return e;}
+static gh_effect_status parentless_world(uint8_t*p,size_t n,float*out,gh_static_transform_policy policy,uint32_t*f){
+ if(!p||n<0xf4||!out||!f)return GH_EFFECT_ARGUMENT;*f=0;if(policy!=GH_STATIC_BINARY32_REFERENCE)return bad(f,0x2b61b0,GH_EFFECT_UNSUPPORTED);if(w(p+4)||w(p+8)||w(p+0x10))return bad(f,0x2b5e50,GH_EFFECT_UNSUPPORTED);
+ if(!w(p+0x90)){float local[16];if(!p[0x16]){float position[3],angles[3],scale[3];memcpy(position,p+0x40,12);memcpy(angles,p+0x30,12);memcpy(scale,p+0x20,12);uint32_t pc=0;if(gh_actor_matrix_compose_00147a48(position,angles,scale,p[0x15],local,policy,&pc))return bad(f,pc?pc:0x147a48,GH_EFFECT_UNSUPPORTED);memcpy(p+0x50,local,64);p[0x16]=1;}else memcpy(local,p+0x50,64);memcpy(p+0xb0,local,64);put(p+0x90,w(p+0x90)|1u);}memcpy(out,p+0xb0,64);return GH_EFFECT_OK;
+}
+typedef struct {uint8_t*p;size_t size;int32_t parent,first_child;uint32_t parent_serial;} native_node;
+static gh_effect_status node(gh_game_effects*e,int emitter,unsigned slot,uint32_t serial,native_node*out,uint32_t*f){
+ if(!e||!out||!f||emitter<0||emitter>1)return GH_EFFECT_ARGUMENT;*f=0;
+ if(emitter){gh_effect_emitter_view v;if(gh_effect_create_emitter_at(e,slot,&v)||v.serial!=serial)return bad(f,0x2b61b0,GH_EFFECT_ARGUMENT);if(v.actor||v.selector||v.model||v.part)return bad(f,0x2b61b0,GH_EFFECT_UNSUPPORTED);*out=(native_node){v.payload,v.payload_size,-1,v.first_esp_child,0};}
+ else {gh_effect_esp_view v;if(gh_effect_create_esp_at(e,slot,&v)||v.serial!=serial)return bad(f,0x2b61b0,GH_EFFECT_ARGUMENT);if(v.actor||v.selector)return bad(f,0x2b61b0,GH_EFFECT_UNSUPPORTED);*out=(native_node){v.payload,v.payload_size,v.parent_emitter,-1,v.parent_serial};}
+ if(w(out->p+4)||w(out->p+8)||w(out->p+0xc)||w(out->p+0x10))return bad(f,0x2b5e50,GH_EFFECT_UNSUPPORTED);return GH_EFFECT_OK;
+}
+gh_effect_status gh_effect_node_world_matrix_native(gh_game_effects*e,int emitter,unsigned slot,uint32_t serial,float*out,gh_static_transform_policy policy,uint32_t*f){
+ if(!out||!f)return GH_EFFECT_ARGUMENT;native_node n;gh_effect_status status=node(e,emitter,slot,serial,&n,f);if(status)return status;if(policy!=GH_STATIC_BINARY32_REFERENCE)return bad(f,0x2b61b0,GH_EFFECT_UNSUPPORTED);if(w(n.p+0x90)){memcpy(out,n.p+0xb0,64);return GH_EFFECT_OK;}
+ if(n.parent<0)return parentless_world(n.p,n.size,out,policy,f);
+ float parent[16],local[16],world[16];status=gh_effect_node_world_matrix_native(e,1,(unsigned)n.parent,n.parent_serial,parent,policy,f);if(status)return status;
+ if(!n.p[0x16]){float position[3],angles[3],scale[3];memcpy(position,n.p+0x40,12);memcpy(angles,n.p+0x30,12);memcpy(scale,n.p+0x20,12);if(gh_actor_matrix_compose_00147a48(position,angles,scale,n.p[0x15],local,policy,f))return bad(f,*f?*f:0x147a48,GH_EFFECT_UNSUPPORTED);}else memcpy(local,n.p+0x50,64);
+ if(gh_actor_matrix_product_00147548(parent,local,world,policy,f))return bad(f,*f?*f:0x147548,GH_EFFECT_UNSUPPORTED);if(!n.p[0x16]){memcpy(n.p+0x50,local,64);n.p[0x16]=1;}memcpy(n.p+0xb0,world,64);put(n.p+0x90,w(n.p+0x90)|1);memcpy(out,world,64);return GH_EFFECT_OK;
+}
+gh_effect_status gh_effect_node_world_position_native(gh_game_effects*e,int emitter,unsigned slot,uint32_t serial,float*out,gh_static_transform_policy policy,uint32_t*f){if(!out||!f)return GH_EFFECT_ARGUMENT;float world[16];gh_effect_status status=gh_effect_node_world_matrix_native(e,emitter,slot,serial,world,policy,f);if(status)return status;float position[4]={world[12],world[13],world[14],1};for(unsigned i=0;i<3;i++)if(!isfinite(position[i]))return bad(f,0x2b6160,GH_EFFECT_UNSUPPORTED);memcpy(out,position,16);return GH_EFFECT_OK;}
+static gh_effect_status children(gh_game_effects*e,unsigned parent,uint32_t serial,int32_t head,int mutate,uint32_t*f){int32_t previous=-1,current=head;unsigned count=0;while(current!=-1){if(current<0||current>=1024||++count>1024)return bad(f,0x2b6370,GH_EFFECT_ARGUMENT);gh_effect_esp_view v;if(gh_effect_create_esp_at(e,(unsigned)current,&v)||v.parent_emitter!=(int32_t)parent||v.parent_serial!=serial||v.previous!=previous)return bad(f,0x2b6370,GH_EFFECT_ARGUMENT);if(mutate&&w(v.payload+0x90))put(v.payload+0x90,w(v.payload+0x90)&~1u);previous=current;current=v.next;}return GH_EFFECT_OK;}
+static gh_effect_status native_set(gh_game_effects*e,int emitter,unsigned slot,uint32_t serial,const float*xyz,unsigned offset,uint32_t*f){if(!xyz||!f)return GH_EFFECT_ARGUMENT;native_node n;gh_effect_status status=node(e,emitter,slot,serial,&n,f);if(status)return status;for(unsigned i=0;i<3;i++)if(!isfinite(xyz[i]))return bad(f,offset==0x20?0x2b61d8:offset==0x30?0x2b6230:0x2b6288,GH_EFFECT_UNSUPPORTED);if(emitter&&w(n.p+0x90)){status=children(e,slot,serial,n.first_child,0,f);if(status)return status;}n.p[0x16]=0;if(w(n.p+0x90)){if(emitter){status=children(e,slot,serial,n.first_child,1,f);if(status)return status;}put(n.p+0x90,w(n.p+0x90)&~1u);}if((const void*)(n.p+offset)!=(const void*)xyz)memcpy(n.p+offset,xyz,12);return GH_EFFECT_OK;}
+gh_effect_status gh_effect_node_set_euler_native(gh_game_effects*e,int emitter,unsigned slot,uint32_t serial,const float*v,uint32_t*f){return native_set(e,emitter,slot,serial,v,0x30,f);}
+gh_effect_status gh_effect_node_set_position_native(gh_game_effects*e,int emitter,unsigned slot,uint32_t serial,const float*v,uint32_t*f){return native_set(e,emitter,slot,serial,v,0x40,f);}
+gh_effect_status gh_effect_node_set_scale_native(gh_game_effects*e,int emitter,unsigned slot,uint32_t serial,const float*v,uint32_t*f){return native_set(e,emitter,slot,serial,v,0x20,f);}
+static float rf(const void*p){float v;memcpy(&v,p,4);return v;}
+static int16_t sh(const uint8_t*p){uint16_t v=(uint16_t)(p[0]|(unsigned)p[1]<<8);int16_t n;memcpy(&n,&v,2);return n;}
+static gh_effect_status world_euler(gh_game_effects*e,unsigned slot,uint32_t serial,const float*coeff,float*out,gh_static_transform_policy policy,uint32_t*f){native_node n;gh_effect_status status=node(e,0,slot,serial,&n,f);if(status)return status;float world[16];status=gh_effect_node_world_matrix_native(e,0,slot,serial,world,policy,f);if(status)return status;if(rf(n.p+0x20)==0||rf(n.p+0x24)==0||rf(n.p+0x28)==0){memset(out,0,12);return GH_EFFECT_OK;}if(!coeff)return bad(f,0x147c88,GH_EFFECT_ARGUMENT);if(gh_actor_matrix_extract_euler_00147c88(world,coeff,out,policy,f))return bad(f,*f?*f:0x147c88,GH_EFFECT_UNSUPPORTED);return GH_EFFECT_OK;}
+static gh_effect_status detach_body(gh_effect_node_detach_call*c,gh_game_effects*e,unsigned slot,uint32_t serial,const float*coeff,gh_static_transform_policy policy,uint32_t*f){
+ if(!c||!e||!f)return GH_EFFECT_ARGUMENT;*f=0;if(c->identity&&(c->identity!=c||c->effects!=e||c->slot!=slot||c->serial!=serial))return bad(f,0x2fcb88,GH_EFFECT_ARGUMENT);if(c->complete)return GH_EFFECT_OK;gh_effect_esp_view v;if(gh_effect_create_esp_at(e,slot,&v)||v.serial!=serial)return bad(f,0x2fcb88,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;
+ if(!c->identity){c->identity=c;c->effects=e;c->slot=slot;c->serial=serial;c->parent=v.parent_emitter;c->parent_serial=v.parent_serial;if(c->parent<0||(int8_t)p[0x103]<0||(int)(int8_t)p[0x103]-(int)sh(p+0x22e)>=1){c->complete=1;return GH_EFFECT_OK;}p[0x103]=0;memcpy(c->local_euler,p+0x30,12);c->stage=1;}
+ if(c->stage<=5&&(v.parent_emitter!=c->parent||v.parent_serial!=c->parent_serial))return bad(f,0x2fcb88,GH_EFFECT_ARGUMENT);
+ if(c->stage==1){uint32_t flags=w(p+0x11c);if(flags&0x100000u)c->stage=3;else if(flags&0x8000u){c->complete=1;return GH_EFFECT_OK;}else {put(p+0x11c,flags|0x8000u);c->stage=2;}}
+ if(c->stage==2){float parent[16],velocity[4],acceleration[4],input[3];gh_effect_status status=gh_effect_node_world_matrix_native(e,1,(unsigned)c->parent,c->parent_serial,parent,policy,f);if(status)return status;parent[12]=parent[13]=parent[14]=0;memcpy(input,p+0x124,12);if(gh_scene_at_apply_world_001508d8(parent,input,velocity))return bad(f,0x30a2b0,GH_EFFECT_UNSUPPORTED);if(p[0x141]==1){memcpy(input,p+0x134,12);if(gh_scene_at_apply_world_001508d8(parent,input,acceleration))return bad(f,0x30a2b0,GH_EFFECT_UNSUPPORTED);}memcpy(p+0x124,velocity,12);if(p[0x141]==1)memcpy(p+0x134,acceleration,12);c->stage=3;}
+ if(c->stage==3){if(!(w(p+0x11c)&0x40000000u)){gh_effect_status status=world_euler(e,slot,serial,coeff,c->local_euler,policy,f);if(status)return status;}c->stage=4;}
+ if(c->stage==4){float world[16];gh_effect_status status=gh_effect_node_world_matrix_native(e,0,slot,serial,world,policy,f);if(status)return status;if(gh_actor_matrix_extract_scale_00148160(world,c->world_scale,policy,f))return bad(f,*f?*f:0x148160,GH_EFFECT_UNSUPPORTED);status=world_euler(e,slot,serial,coeff,c->world_euler,policy,f);if(status)return status;memcpy(c->world_position,world+12,12);for(unsigned i=0;i<3;i++)if(!isfinite(c->world_position[i]))return bad(f,0x2b6160,GH_EFFECT_UNSUPPORTED);c->stage=5;}
+ if(c->stage==5){gh_effect_status status=gh_effect_create_esp_unlink_002b5ec0(e,slot,serial);if(status)return bad(f,0x2b5ec0,status);c->stage=6;}
+ if(c->stage==6){gh_effect_status status=gh_effect_node_set_scale_native(e,0,slot,serial,c->world_scale,f);if(status)return status;c->stage=7;}
+ if(c->stage==7){gh_effect_status status=gh_effect_node_set_euler_native(e,0,slot,serial,c->world_euler,f);if(status)return status;c->stage=8;}
+ if(c->stage==8){gh_effect_status status=gh_effect_node_set_position_native(e,0,slot,serial,c->world_position,f);if(status)return status;c->stage=9;}
+ if(c->stage==9){gh_effect_status status=gh_effect_node_set_euler_native(e,0,slot,serial,c->local_euler,f);if(status)return status;c->stage=10;c->complete=1;}return GH_EFFECT_OK;
+}
+gh_effect_status gh_effect_node_detach_update_002fcb88(gh_effect_node_detach_call*c,gh_game_effects*e,unsigned slot,uint32_t serial,const float*coeff,gh_static_transform_policy policy,uint32_t*f){if(!f)return GH_EFFECT_ARGUMENT;*f=0;if(policy!=GH_STATIC_BINARY32_REFERENCE)return bad(f,0x2fcb88,GH_EFFECT_UNSUPPORTED);fenv_t env;if(feholdexcept(&env))return GH_EFFECT_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_EFFECT_UNSUPPORTED;}gh_effect_status status=detach_body(c,e,slot,serial,coeff,policy,f);if(fesetenv(&env))return GH_EFFECT_UNSUPPORTED;return status;}

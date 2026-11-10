@@ -16,6 +16,8 @@
 #include "game_actor_finish_model.h"
 #include "game_player_opacity.h"
 #include "game_player_frame_tail.h"
+#include "game_player_walk_state.h"
+#include "game_player_run_state.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -58,6 +60,8 @@ typedef struct {gh_player_frame_bindings b;uint32_t stage,frontier;uint8_t bound
  gh_scene_ray_report wall_report,floor_report;float terrain_position[3],terrain_normal[3],floor_height;
  gh_player_ground_pose_call ground_pose;gh_motion_solve pose_solve;uint8_t model_failure_latched;gh_player_frame_status model_failure_status;uint32_t sequence_effect_index;
  gh_player_opacity_call opacity_call;gh_game_player_frame_tail tail;gh_actor_finish_model_call finish_model;
+ gh_player_walk_call walk;
+ gh_player_run_call run;
 } gh_game_player_frame;
 gh_player_frame_status gh_game_player_frame_00108ab0(gh_game_player_frame *,const gh_player_frame_bindings *);
 /* Actual126820 +five-entry button history leaves1268B0/1268F0. */

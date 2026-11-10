@@ -47,6 +47,6 @@ int main(void){
   for(unsigned i=0;i<3;i++)outside[i].clip[axis]=side?2:-2;
   C(!gh_static_clip10_triangle(outside,&in,0x5d,GH_STATIC_BINARY32_REFERENCE,out,9,indices,21,&r,&f)&&!r.vertices&&!r.triangles&&r.primitive==0x5d);
  }
- in.projection[15]=0;C(gh_static_clip10_triangle(tri,&in,0x7d,GH_STATIC_BINARY32_REFERENCE,out,9,indices,21,&r,&f)==GH_STATIC_UNSUPPORTED&&f.vu_byte_pc==0xd48);
+ in.projection[15]=0;C(gh_static_clip10_triangle(tri,&in,0x7d,GH_STATIC_BINARY32_REFERENCE,out,9,indices,21,&r,&f)==GH_STATIC_UNSUPPORTED&&f.vu_byte_pc==0xe38);
  puts("PASS originalprogram10 sixplane clipping/fan explicitbinary32 fixture, intersections/ordering/cull/GSfixed outputs/4FEnv/atomicbounds; nothardwarecapture");return 0;
 }

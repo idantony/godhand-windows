@@ -1,5 +1,7 @@
 #include "game_actor_model_draw.h"
 #include "game_actor_matrix.h"
+#include "game_actor_light_normalize.h"
+#include "game_actor_light_ambient.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -54,9 +56,10 @@ gh_actor_model_status gh_actor_palette_0014c7e8(gh_actor_model *model,const gh_g
  if(fesetenv(&env))return GH_ACTOR_MODEL_UNSUPPORTED;return e;
 }
 
-/* 154240 ordinary lit material profile. Reflections/unlit globals and
- * alternate projection remain explicit boundaries rather than guessed data. */
-static gh_actor_model_status node_light(gh_actor_model *model,unsigned index,const gh_game_pl_camera *camera,const gh_game_world_light *light,uint32_t *frontier) {
+/* 154240 canonical lit/unlit branches. Mutable globalvectors are borrowed;
+ * positional2D8008 and alternateprojection retain explicit frontiers. */
+static gh_actor_model_status node_light(gh_actor_model *model,unsigned index,const gh_game_pl_camera *camera,const gh_game_world_light *light,
+ const gh_actor_light_globals *globals,const gh_player_shared_vector *pivot,uint32_t *frontier) {
  const uint8_t *raw;size_t mesh;gh_actor_model_status e=gh_actor_model_node_at(model,index,&raw,&mesh);if(e)return e;
  uint8_t *node=(uint8_t*)raw;uint32_t flags=word(node+0x380);const uint8_t *root=model->root.bytes;
  if(flags&1)return GH_ACTOR_MODEL_OK;
@@ -65,20 +68,38 @@ static gh_actor_model_status node_light(gh_actor_model *model,unsigned index,con
  float tint[4];for(unsigned k=0;k<4;k++)tint[k]=product(number(root+0x240+k*4),number(node+0x3a0+k*4));
  tint[3]=product(tint[3],quotient((float)root[0x2b6],255));tint[3]=product(tint[3],quotient((float)root[0x2b7],255));tint[3]=product(tint[3],quotient((float)root[0x2bc],255));
  for(unsigned k=0;k<4;k++)if(!isfinite(tint[k]))return fail(frontier,0x154240,GH_ACTOR_MODEL_UNSUPPORTED);
- if((flags&0x800000)||(word(node+0x410)&0x20000000))return fail(frontier,0x154240,GH_ACTOR_MODEL_UNSUPPORTED);
- if(word(root+0x250)&0x800000)return fail(frontier,0x2d8008,GH_ACTOR_MODEL_UNSUPPORTED);
  float normals[16]={0};normals[15]=1;
+ float colors[16];
+ int ambient_only=0;
+ if((flags&0x800000)||(word(node+0x410)&0x20000000)){
+  if(!pivot||!pivot->initialized)return fail(frontier,0x154240,GH_ACTOR_MODEL_UNSUPPORTED);
+  if((flags&0x800000)&&(!globals||!globals->initialized))return fail(frontier,0x154240,GH_ACTOR_MODEL_UNSUPPORTED);
+  /* Both branches copy ALL FOUR words of the canonical3BD880 vector,
+   * not a manufactured zero normal/light matrix. Later fog writes2C. */
+  for(unsigned i=0;i<3;i++){memcpy(normals+i*4,pivot->bytes,16);memcpy(colors+i*4,pivot->bytes,16);}
+  if(flags&0x800000)memcpy(colors+12,globals->bytes_3bd890,16);
+  else for(unsigned k=0;k<4;k++){colors[12+k]=product(number(light->scalar+0x30+k*4),tint[k]);if(!isfinite(colors[12+k]))return fail(frontier,0x30a4d0,GH_ACTOR_MODEL_UNSUPPORTED);}
+ }else{
+ if(word(root+0x250)&0x800000){
+  if(!model->root.alias_f0)return fail(frontier,0x2d8008,GH_ACTOR_MODEL_UNSUPPORTED);
+  memcpy(normals,out+0x10,64);memcpy(colors,out+0x50,64);
+  e=gh_actor_ambient_fast_002d8008(light,normals,colors,model->root.alias_f0,tint,GH_STATIC_BINARY32_REFERENCE,frontier);if(e)return e;
+  ambient_only=1;
+ }else{
  for(unsigned i=0;i<3;i++) {
-  float direction[3],length=0;
-  for(unsigned k=0;k<3;k++){direction[k]=-number(light->scalar+0x161a0+i*16+k*4);if(!isfinite(direction[k]))return fail(frontier,0x30a370,GH_ACTOR_MODEL_UNSUPPORTED);volatile float term=direction[k]*direction[k];volatile float next=length+term;length=next;}
-  length=sqrtf(length);if(!isfinite(length)||!(length>0))return fail(frontier,0x30a370,GH_ACTOR_MODEL_UNSUPPORTED);
-  float inv=quotient(1,length);for(unsigned k=0;k<3;k++)normals[k*4+i]=product(direction[k],inv);
+  float direction[3],unit[4];
+  for(unsigned k=0;k<3;k++)direction[k]=-number(light->scalar+0x161a0+i*16+k*4);
+  e=gh_actor_light_normalize_0030a370(direction,unit,GH_STATIC_BINARY32_REFERENCE,frontier);if(e)return e;
+  for(unsigned k=0;k<3;k++)normals[k*4+i]=unit[k];
  }
- float colors[16];for(unsigned i=0;i<4;i++)for(unsigned k=0;k<4;k++) {float n=number(light->scalar+(i<3?0x161d0+i*16:0x40)+k*4);if(!isfinite(n))return fail(frontier,0x2d7e50,GH_ACTOR_MODEL_UNSUPPORTED);if(n<0)n=0;if(n>1)n=1;colors[i*4+k]=n;}
+ for(unsigned i=0;i<4;i++)for(unsigned k=0;k<4;k++) {float n=number(light->scalar+(i<3?0x161d0+i*16:0x40)+k*4);if(!isfinite(n))return fail(frontier,0x2d7e50,GH_ACTOR_MODEL_UNSUPPORTED);if(n<0)n=0;if(n>1)n=1;colors[i*4+k]=n;}
+ }
+ }
  /*30A978 normal matrix, tint fourth column;2D7E50 clipped light colors. */
- memcpy(normals+12,tint,16);memcpy(out+0x10,normals,64);memcpy(out+0x50,colors,64);
+ if(!ambient_only){memcpy(normals+12,tint,16);}
+ memcpy(out+0x10,normals,64);memcpy(out+0x50,colors,64);
  uint32_t actor_flags=word(root+0x250),work608=word((const uint8_t*)model->work+0x608);
- if(actor_flags&0x80000)return fail(frontier,0x154240,GH_ACTOR_MODEL_UNSUPPORTED);
+ if(actor_flags&0x80000){if(!globals||!globals->initialized)return fail(frontier,0x154240,GH_ACTOR_MODEL_UNSUPPORTED);memcpy(out+0x80,globals->bytes_3bd870,16);}
  if((flags&0x20000000)&&tint[3]==1) {
   if(!model->root.alias_f0)return fail(frontier,0x154774,GH_ACTOR_MODEL_UNSUPPORTED);
   float view_direction[3],halfway[3];
@@ -112,9 +133,13 @@ static gh_actor_model_status node_light(gh_actor_model *model,unsigned index,con
  memcpy(header+0x30,&fog,8);memcpy(out+0x2c,&factor,4);return GH_ACTOR_MODEL_OK;
 }
 gh_actor_model_status gh_actor_node_light_00154240(gh_actor_model *model,unsigned index,const gh_game_pl_camera *camera,const gh_game_world_light *light,gh_static_transform_policy policy,uint32_t *frontier) {
+ return gh_actor_node_light_00154240_ex(model,index,camera,light,NULL,NULL,policy,frontier);
+}
+gh_actor_model_status gh_actor_node_light_00154240_ex(gh_actor_model *model,unsigned index,const gh_game_pl_camera *camera,const gh_game_world_light *light,
+ const gh_actor_light_globals *globals,const gh_player_shared_vector *pivot,gh_static_transform_policy policy,uint32_t *frontier) {
  uint32_t local=0;if(!frontier)frontier=&local;*frontier=0;if(!model||!model->ready||model->native_identity!=model||!camera||!camera->constructed||policy!=GH_STATIC_BINARY32_REFERENCE)return GH_ACTOR_MODEL_ARGUMENT;
  fenv_t env;if(feholdexcept(&env))return GH_ACTOR_MODEL_UNSUPPORTED;if(fesetround(FE_TONEAREST)){fesetenv(&env);return GH_ACTOR_MODEL_UNSUPPORTED;}
- gh_actor_model_status e=node_light(model,index,camera,light,frontier);if(fesetenv(&env))return GH_ACTOR_MODEL_UNSUPPORTED;return e;
+ gh_actor_model_status e=node_light(model,index,camera,light,globals,pivot,frontier);if(fesetenv(&env))return GH_ACTOR_MODEL_UNSUPPORTED;return e;
 }
 
 static void transform(const float *m,const float *v,float *out) {for(unsigned r=0;r<4;r++){float n=product(m[r],v[0]);n=sum(n,product(m[4+r],v[1]));n=sum(n,product(m[8+r],v[2]));out[r]=sum(n,product(m[12+r],v[3]));}}
@@ -158,7 +183,7 @@ static gh_actor_model_status draw(gh_actor_draw_call *call,uint32_t *frontier) {
  if(call->phase==1) {gh_actor_model_status e=gh_actor_palette_0014c7e8(model,call->bindings.camera,call->bindings.policy,frontier);if(e)return e;call->phase=2;}
  while(call->phase==2&&call->node_index<root[0x2b1]) {
   const uint8_t *node;size_t mesh;gh_actor_model_status e=gh_actor_model_node_at(model,(unsigned)call->node_index,&node,&mesh);if(e)return fail(frontier,0x14b6f8,e);
-  if(!(word(node+0x380)&1u)) {e=gh_actor_node_light_00154240(model,(unsigned)call->node_index,call->bindings.camera,call->bindings.light,call->bindings.policy,frontier);if(e)return e;}
+  if(!(word(node+0x380)&1u)) {e=gh_actor_node_light_00154240_ex(model,(unsigned)call->node_index,call->bindings.camera,call->bindings.light,call->bindings.light_globals,call->bindings.pivot_owner,call->bindings.policy,frontier);if(e)return e;}
   call->node_index++;
  }
  if(call->phase==2) {
@@ -187,9 +212,9 @@ static gh_actor_model_status draw(gh_actor_draw_call *call,uint32_t *frontier) {
    if(!isfinite(alpha))return fail(frontier,0x14be38,GH_ACTOR_MODEL_UNSUPPORTED);
    uint32_t program=(actor_flags&0x2000)?20:2;if((flags&0x20000000)&&alpha==1)program=30;if((flags&0x40000000)&&word((uint8_t*)model->work+0x608))program=32;
    call->selected_program=program;
-   /* Identity is recovered for all four selectors; only actual program2's
-    * raster algorithm is implemented. Others never route to a static kernel. */
-   if(program!=2)return fail(frontier,0x155ae8,GH_ACTOR_MODEL_UNSUPPORTED);
+   /* Identity is recovered for all four selectors; only actual program2/30's
+    * raster algorithms are implemented. Others never route to a static kernel. */
+   if(program!=2&&program!=30)return fail(frontier,0x155ae8,GH_ACTOR_MODEL_UNSUPPORTED);
    if(!call->materials.ready)return fail(frontier,0x151368,GH_ACTOR_MODEL_UNSUPPORTED);
    if(gh_actor_model_node_program_set(model,(unsigned)call->node_index,call->parity,program|UINT32_C(0x80000000)))return fail(frontier,0x155ae8,GH_ACTOR_MODEL_UNSUPPORTED);
    if(call->has_previous&&call->previous_program!=program&&gh_actor_model_node_program_set(model,(unsigned)call->previous_node,call->parity,call->previous_program))return fail(frontier,0x155ae8,GH_ACTOR_MODEL_UNSUPPORTED);
@@ -197,7 +222,7 @@ static gh_actor_model_status draw(gh_actor_draw_call *call,uint32_t *frontier) {
    gh_actor_draw_command command={.kind=GH_ACTOR_DRAW_GEOMETRY,.model=model,.node_index=call->node_index,.parity=call->parity,.selected_program=program,.packet=packet,.materials=call->materials,.packet_group=1};
    if(word(root+0x2c0)==10){command.bank=(flags&0x4080)?2:1;command.depth=(flags&0x4080)?call->depth:13;}else{command.bank=word(root+0x2c0);uint16_t depth;memcpy(&depth,root+0x2ac,2);command.depth=depth;}
    memcpy(&command.test,node+call->parity*0xb0+0x30,8);memcpy(&command.tex1,node+call->parity*0xb0+0x40,8);memcpy(&command.alpha,node+call->parity*0xb0+0x50,8);memcpy(&command.clamp,node+call->parity*0xb0+0x60,8);
-   e=gh_actor_model_program2_inputs(model,(unsigned)call->node_index,&command.inputs,frontier);if(e)return e;
+   if(program==30){gh_skinned_program30_inputs highlighted;e=gh_actor_model_program30_inputs(model,(unsigned)call->node_index,&highlighted,frontier);if(e)return e;command.inputs=highlighted.base;memcpy(command.specular_half,highlighted.half_vector,12);command.specular_squarings=highlighted.squarings;}else{e=gh_actor_model_program2_inputs(model,(unsigned)call->node_index,&command.inputs,frontier);if(e)return e;}
    call->pending=command;call->phase=7;
   }
   if(call->phase==7) {
@@ -230,7 +255,7 @@ gh_actor_model_status gh_actor_model_draw_0014ac90(gh_actor_draw_call *call,gh_a
  uint32_t local=0;if(!frontier)frontier=&local;*frontier=0;
  if(!call||!model||!model->ready||model->native_identity!=model||!bindings||!bindings->camera||!bindings->camera->constructed||bindings->policy!=GH_STATIC_BINARY32_REFERENCE||far_mode>1)return GH_ACTOR_MODEL_ARGUMENT;
  if(call->active) {
-  if(call->identity!=call||call->model!=model||call->root_identity!=model->root.bytes||call->work_identity!=model->work||call->frame_counter!=word((uint8_t*)model->work+0x210)||call->depth!=depth||call->far_mode!=far_mode||call->bindings.camera!=bindings->camera||call->bindings.light!=bindings->light||call->bindings.callee!=bindings->callee||call->bindings.context!=bindings->context||call->bindings.policy!=bindings->policy||call->bindings.textures!=bindings->textures||call->bindings.emit!=bindings->emit||call->bindings.emit_context!=bindings->emit_context)return GH_ACTOR_MODEL_BUSY;
+  if(call->identity!=call||call->model!=model||call->root_identity!=model->root.bytes||call->work_identity!=model->work||call->frame_counter!=word((uint8_t*)model->work+0x210)||call->depth!=depth||call->far_mode!=far_mode||call->bindings.camera!=bindings->camera||call->bindings.light!=bindings->light||call->bindings.callee!=bindings->callee||call->bindings.context!=bindings->context||call->bindings.policy!=bindings->policy||call->bindings.textures!=bindings->textures||call->bindings.emit!=bindings->emit||call->bindings.emit_context!=bindings->emit_context||call->bindings.light_globals!=bindings->light_globals||call->bindings.pivot_owner!=bindings->pivot_owner)return GH_ACTOR_MODEL_BUSY;
  } else {*call=(gh_actor_draw_call){.model=model,.bindings=*bindings,.identity=call,.root_identity=model->root.bytes,.parity=word((uint8_t*)model->work+0x210)&1u,.depth=depth,.far_mode=far_mode,.active=1,.work_identity=model->work,.frame_counter=word((uint8_t*)model->work+0x210)};}
  if(call->complete)return GH_ACTOR_MODEL_OK;
  fenv_t env;if(feholdexcept(&env))return GH_ACTOR_MODEL_UNSUPPORTED;if(fesetround(FE_TONEAREST)){fesetenv(&env);return GH_ACTOR_MODEL_UNSUPPORTED;}

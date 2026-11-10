@@ -11,6 +11,7 @@ import sys
 import time
 import threading
 from test_contracts import check_contracts, TestContractError
+from compiler_response import write_response_file
 
 PROJECT = Path(__file__).resolve().parents[1]
 SCRATCH = Path(r"G:\middle_thing\godhand_windows")
@@ -56,9 +57,16 @@ def main():
     def run(label, command):
         if len(command)>1 and command[0]==compiler and command[1] in ("cc", "c++") and "-c" not in command and "-fsyntax-only" not in command:
             command = command + ["-lwinmm"]
+            response = write_response_file(output / (label + ".rsp"), command[2:])
+            with report_lock:
+                manifest.setdefault("response_files", []).append(response)
+            command = command[:2] + ["@" + response["path"]]
         started = time.monotonic()
-        result = subprocess.run([str(item) for item in command], cwd=PROJECT, env=env,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+        try:
+            result = subprocess.run([str(item) for item in command], cwd=PROJECT, env=env,
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+        except OSError as error:
+            result = subprocess.CompletedProcess(command, 1, "Compiler launch failed: " + str(error))
         log = logs / (label + ".log")
         log.write_text(result.stdout, encoding="utf-8")
         step = {"name": label, "command": [str(item) for item in command], "returncode": result.returncode,
@@ -131,6 +139,9 @@ def main():
                ("game_player_frame", "src/core/game_player_frame.c"),
                ("game_player_targets", "src/core/game_player_targets.c"),
                ("game_player_idle_input", "src/core/game_player_idle_input.c"),
+               ("game_player_walk", "src/core/game_player_walk.c"),
+               ("game_player_run", "src/core/game_player_run.c"),
+               ("game_player_root_delta", "src/core/game_player_root_delta.c"),
                ("game_effect_create", "src/core/game_effect_create.c"),
                ("game_player_post_state", "src/core/game_player_post_state.c"),
                ("game_collision_solid_step", "src/core/game_collision_solid_step.c"),
@@ -143,13 +154,28 @@ def main():
                ("game_object_opacity", "src/core/game_object_opacity.c"),
                ("game_effects_frame", "src/core/game_effects_frame.c"),
                ("game_esp_create", "src/core/game_esp_create.c"),
+               ("game_effect_exp", "src/core/game_effect_exp.c"),
+               ("game_effect_node", "src/core/game_effect_node.c"),
+               ("game_esp_update", "src/core/game_esp_update.c"),
+               ("game_effects_trans", "src/core/game_effects_trans.c"),
                ("game_actor_model_trans", "src/core/game_actor_model_trans.c"),
                ("game_actor_shadow_draw", "src/core/game_actor_shadow_draw.c"),
                ("game_actor_model_draw", "src/core/game_actor_model_draw.c"),
                ("game_actor_model_material", "src/core/game_actor_model_material.c"),
                ("game_actor_model_program2", "src/core/game_actor_model_program2.c"),
+               ("game_actor_model_program30", "src/core/game_actor_model_program30.c"),
                ("skinned_mesh_transform2", "src/assets/skinned_mesh_transform2.c"),
+               ("skinned_mesh_transform30", "src/assets/skinned_mesh_transform30.c"),
                ("game_actor_render", "src/core/game_actor_render.c"),
+               ("game_actor_aux", "src/core/game_actor_aux.c"),
+               ("game_actor_model_light", "src/core/game_actor_model_light.c"),
+               ("game_actor_light_normalize", "src/core/game_actor_light_normalize.c"),
+               ("game_actor_light_attachment", "src/core/game_actor_light_attachment.c"),
+               ("game_actor_light_globals", "src/core/game_actor_light_globals.c"),
+               ("game_actor_light_ambient", "src/core/game_actor_light_ambient.c"),
+               ("game_scene_visibility", "src/core/game_scene_visibility.c"),
+               ("game_scene_box_visibility", "src/core/game_scene_box_visibility.c"),
+               ("id_tick", "src/core/id_tick.c"),
                ("shadow_world_packet", "src/platform/shadow_world_packet.c"),
                ("actor_world_queue", "src/platform/actor_world_queue.c"),
                ("game_object_live_trans", "src/core/game_object_live_trans.c"),
@@ -471,6 +497,8 @@ def main():
         ("game-player-frame", "tests/core/test_game_player_frame.c", "elf"),
         ("game-player-targets", "tests/core/test_game_player_targets.c", "both"),
         ("game-player-idle-input", "tests/core/test_game_player_idle_input.c", "iso"),
+        ("game-player-walk", "tests/core/test_game_player_walk.c", "iso"),
+        ("game-player-run", "tests/core/test_game_player_run.c", "iso"),
         ("game-player-post-state", "tests/core/test_game_player_post_state.c", "none"),
         ("game-collision-solid-step", "tests/core/test_game_collision_solid_step.c", "both"),
         ("game-player-terrain", "tests/core/test_game_player_terrain.c", "iso"),
@@ -482,13 +510,34 @@ def main():
         ("game-om-damage-frame", "tests/core/test_game_om_damage_frame.c", "iso"),
         ("game-object-opacity", "tests/core/test_game_object_opacity.c", "none"),
         ("game-effects-frame", "tests/core/test_game_effects_frame.c", "both"),
+        ("game-effect-exp", "tests/core/test_game_effect_exp.c", "none"),
+        ("game-effect-node", "tests/core/test_game_effect_node.c", "both"),
+        ("game-esp-update", "tests/core/test_game_esp_update.c", "both"),
+        ("game-effects-trans", "tests/core/test_game_effects_trans.c", "both"),
+        ("static-mesh-signed-w", "tests/assets/test_static_mesh_signed_w.c", "iso"),
+        ("game-esp-1a", "tests/core/test_game_esp_1a.c", "both"),
         ("game-actor-model-trans", "tests/core/test_game_actor_model_trans.c", "iso"),
         ("game-actor-shadow-draw", "tests/core/test_game_actor_shadow_draw.c", "iso"),
         ("game-actor-model-draw", "tests/core/test_game_actor_model_draw.c", "iso"),
         ("game-actor-model-material", "tests/core/test_game_actor_model_material.c", "iso"),
         ("game-actor-model-program2", "tests/core/test_game_actor_model_program2.c", "iso"),
+        ("game-actor-model-program30", "tests/core/test_game_actor_model_program30.c", "iso"),
         ("skinned-mesh-transform2", "tests/assets/test_skinned_mesh_transform2.c", "iso"),
+        ("skinned-mesh-transform30", "tests/assets/test_skinned_mesh_transform30.c", "iso"),
         ("game-actor-render", "tests/core/test_game_actor_render.c", "iso"),
+        ("game-actor-aux", "tests/core/test_game_actor_aux.c", "iso"),
+        ("game-actor-model-light", "tests/core/test_game_actor_model_light.c", "iso"),
+        ("game-actor-light-normalize", "tests/core/test_game_actor_light_normalize.c", "none"),
+        ("game-actor-node-unlit", "tests/core/test_game_actor_node_unlit.c", "iso"),
+        ("game-actor-light-ambient", "tests/core/test_game_actor_light_ambient.c", "none"),
+        ("game-scene-visibility", "tests/core/test_game_scene_visibility.c", "iso"),
+        ("game-scene-box-visibility", "tests/core/test_game_scene_box_visibility.c", "iso"),
+        ("id-tick", "tests/core/test_id_tick.c", "none"),
+        ("game-cockpit-gameplay", "tests/core/test_game_cockpit_gameplay.c", "iso"),
+        ("game-cockpit-heat", "tests/core/test_game_cockpit_heat.c", "iso"),
+        ("game-cockpit-widgets", "tests/core/test_game_cockpit_widgets.c", "iso"),
+        ("skinned-mesh-clip", "tests/assets/test_skinned_mesh_clip.c", "iso"),
+        ("game-actor-model-draw-queue", "tests/core/test_game_actor_model_draw_queue.c", "iso"),
         ("shadow-world-packet", "tests/platform/test_shadow_world_packet.c", "none"),
         ("game-stage-shadow", "tests/core/test_game_stage_shadow.c", "iso"),
         ("actor-world-queue", "tests/platform/test_actor_world_queue.c", "iso"),
@@ -570,7 +619,7 @@ def main():
         manifest.update(status="failed", error=str(error))
         report.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         raise SystemExit(str(error))
-    source_inputs = {"tools/build-native.py", "tools/test_contracts.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
+    source_inputs = {"tools/build-native.py", "tools/test_contracts.py", "tools/compiler_response.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
                      "tests/platform/test_memory.c", "tests/core/test_tasks.c",
                      "tests/platform/test_task_threads.c", "tests/assets/test_tim2.c", "tools/decode-tim2.c",

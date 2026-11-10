@@ -32,7 +32,20 @@ struct Vertex{int4 xyzd;float4 stq;uint4 rgba;};
 Texture2D<uint4> image:register(t0);StructuredBuffer<Vertex> vertices:register(t1);StructuredBuffer<uint> indices:register(t2);
 RWTexture2D<uint4> colorTarget:register(u0);RWTexture2D<uint> depthTarget:register(u1);
 cbuffer Parameters:register(b0){uint4 surface;uint4 state;uint4 blend;uint4 dimensions;};
-int edge(int2 a,int2 b,int2 p){int2 d=b-a,v=p-a;return d.x*v.y-d.y*v.x;}
+// PackedXY-offset is at most16 bits in magnitude; pixel differences are
+// below73728 on this512x448 surface. The16-bit partial products therefore
+// have no unsigned intermediate overflow. Keep exact signed64 coverage using
+// two32-bit words, without requiring shader-model6/int64 or doubles.
+uint2 wide_negate(uint2 v){uint low=0u-v.x;return uint2(low,~v.y+(low==0?1u:0u));}
+uint2 wide_product(int a,int b){
+ uint ua=uint(abs(a)),ub=uint(abs(b));uint low=(ua&65535u)*(ub&65535u);
+ uint middle=(ua>>16)*(ub&65535u)+(ub>>16)*(ua&65535u),extra=middle<<16;
+ uint result=low+extra,high=(ua>>16)*(ub>>16)+(middle>>16)+(result<low?1u:0u);
+ uint2 value=uint2(result,high);return (a<0)!=(b<0)?wide_negate(value):value;
+}
+uint2 edge(int2 a,int2 b,int2 p){int2 d=b-a,v=p-a;uint2 x=wide_product(d.x,v.y),y=wide_product(d.y,v.x);return uint2(x.x-y.x,x.y-y.y-(x.x<y.x?1u:0u));}
+bool wide_zero(uint2 v){return v.x==0&&v.y==0;}
+bool wide_negative(uint2 v){return (v.y&0x80000000u)!=0;}
 bool inclusive(int2 a,int2 b){int2 d=b-a;return d.y<0||(d.y==0&&d.x>0);}
 float interpolate(float a,float b,float c,float3 w){precise float x=(b-a)*w.y;precise float y=(c-a)*w.z;precise float v=a+x;v=v+y;return v;}
 int4 texel(int x,int y){return int4(image.Load(int3(x&int(dimensions.x-1),y&int(dimensions.y-1),0)));}
@@ -52,11 +65,14 @@ int3 select_color(uint selector,int3 source,int3 destination){return selector==0
  uint2 p=tid.xy;if(p.x>=surface.x||p.y>=surface.y)return;int2 pixelPosition=int2(p)*16;
  uint4 destination=colorTarget[p];uint oldZ=depthTarget[p];
  [loop]for(uint i=0;i<surface.z;i+=3){Vertex a=vertices[indices[i]],b=vertices[indices[i+1]],c=vertices[indices[i+2]];
-  int area=edge(a.xyzd.xy,b.xyzd.xy,c.xyzd.xy);if(area==0)continue;
-  if(area<0){Vertex tmp=b;b=c;c=tmp;area=-area;}
-  int3 e=int3(edge(b.xyzd.xy,c.xyzd.xy,pixelPosition),edge(c.xyzd.xy,a.xyzd.xy,pixelPosition),edge(a.xyzd.xy,b.xyzd.xy,pixelPosition));
-  if(any(e<0)||(e.x==0&&!inclusive(b.xyzd.xy,c.xyzd.xy))||(e.y==0&&!inclusive(c.xyzd.xy,a.xyzd.xy))||(e.z==0&&!inclusive(a.xyzd.xy,b.xyzd.xy)))continue;
-  precise float3 w=float3(e)/float(area);
+  uint2 area=edge(a.xyzd.xy,b.xyzd.xy,c.xyzd.xy);if(wide_zero(area))continue;
+  if(wide_negative(area)){Vertex tmp=b;b=c;c=tmp;area=wide_negate(area);}
+  uint2 e0=edge(b.xyzd.xy,c.xyzd.xy,pixelPosition),e1=edge(c.xyzd.xy,a.xyzd.xy,pixelPosition),e2=edge(a.xyzd.xy,b.xyzd.xy,pixelPosition);
+  if(wide_negative(e0)||wide_negative(e1)||wide_negative(e2)||(wide_zero(e0)&&!inclusive(b.xyzd.xy,c.xyzd.xy))||(wide_zero(e1)&&!inclusive(c.xyzd.xy,a.xyzd.xy))||(wide_zero(e2)&&!inclusive(a.xyzd.xy,b.xyzd.xy)))continue;
+  // A triangle in a65535x65535 box has area below2^32. For an inside
+  // sample each edge is in[0,area], so its high word is also zero. Convert
+  // the exact unsigned low words once, preserving the existing float profile.
+  precise float3 w=float3(e0.x,e1.x,e2.x)/float(area.x);
   uint z=uint(interpolate(float(a.xyzd.z),float(b.xyzd.z),float(c.xyzd.z),w));
   uint zmode=(state.x>>17)&3;
   if((state.x&65536)!=0&&(zmode==0||(zmode==2&&z<oldZ)||(zmode==3&&z<=oldZ)))continue;
@@ -66,7 +82,9 @@ int3 select_color(uint selector,int3 source,int3 destination){return selector==0
   precise float t=interpolate(a.stq.y,b.stq.y,c.stq.y,w)/q;
   int4 tex=filtered_texel(s,t),tint;
   [unroll]for(uint channel=0;channel<4;channel++)tint[channel]=int(interpolate(float(a.rgba[channel]),float(b.rgba[channel]),float(c.rgba[channel]),w));
-  int4 source=min(int4(255,255,255,255),(tex*tint)>>7);
+  int4 source;
+  if(((state.w>>16)&3)==3){source.rgb=min(int3(255,255,255),((tex.rgb*tint.rgb)>>7)+tint.a);source.a=tex.a;}
+  else source=min(int4(255,255,255,255),(tex*tint)>>7);
   bool alpha_ok=alpha_pass(uint(source.a));uint afail=(state.x>>12)&3;
   if(!alpha_ok&&afail==0)continue;bool writeColor=alpha_ok||afail!=2,writeZ=(alpha_ok||afail==2)&&state.y!=0;
   if(writeColor){
@@ -107,7 +125,7 @@ extern "C" gh_model_gpu_error gh_model_renderer_create(unsigned width,unsigned h
 extern "C" void gh_model_renderer_reset_resources(gh_model_renderer*r){if(r&&r->thread==GetCurrentThreadId())r->materials.clear();}
 extern "C" gh_model_gpu_error gh_model_renderer_upload(gh_model_renderer*r,const gh_stage_material*m,uint32_t*out){
  if(!r||!m||!out||r->thread!=GetCurrentThreadId()||!m->source||!m->rgba_gs||!m->cache_id)return GH_MODEL_GPU_ARGUMENT;
- unsigned w=m->width,h=m->height;if(!w||!h||w>512||h>512||(w&(w-1))||(h&(h-1))||m->rgba_bytes!=(size_t)w*h*4||m->draw_tcc!=1||m->draw_tfx!=0||(m->psm!=19&&m->psm!=20))return GH_MODEL_GPU_UNSUPPORTED;
+ unsigned w=m->width,h=m->height;if(!w||!h||w>512||h>512||(w&(w-1))||(h&(h-1))||m->rgba_bytes!=(size_t)w*h*4||m->draw_tcc!=1||(m->draw_tfx!=0&&m->draw_tfx!=3)||(m->psm!=19&&m->psm!=20))return GH_MODEL_GPU_UNSUPPORTED;
  for(size_t i=0;i<r->materials.size();i++)if(r->materials[i]->identity==m->cache_id){*out=(uint32_t)i+1;return GH_MODEL_GPU_OK;}
  if(r->materials.size()>=UINT32_MAX)return GH_MODEL_GPU_MEMORY;
  auto material=std::unique_ptr<Material>(new(std::nothrow)Material);if(!material)return GH_MODEL_GPU_MEMORY;material->identity=m->cache_id;material->width=w;material->height=h;
@@ -126,24 +144,28 @@ static gh_model_gpu_error structured(gh_model_renderer*r,const void*data,UINT st
 }
 extern "C" gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer*r,const gh_model_draw_state*s,uint32_t texture,const gh_static_gs_vertex*input,size_t count,const uint32_t*indices,size_t n){
  if(!r||!s||!input||!indices||!r->begun||r->thread!=GetCurrentThreadId()||!texture||texture>r->materials.size()||count>1024||n>4096||!count||n%3)return GH_MODEL_GPU_ARGUMENT;
- unsigned prim=s->primitive&7;if((prim!=3&&prim!=4&&prim!=5)||!(s->primitive&8)||!(s->primitive&16)||(s->primitive&~0x7fu)||!s->native_float_reference||s->frame_psm||s->zbuf_psm!=58||s->dthe||s->colclamp!=1||s->clamp||s->fba>1||s->pabe>1||s->z_write>1||s->xy_offset_x16>65535||s->xy_offset_y16>65535)return GH_MODEL_GPU_UNSUPPORTED;
+ unsigned prim=s->primitive&7;if((prim!=3&&prim!=4&&prim!=5)||!(s->primitive&8)||!(s->primitive&16)||(s->primitive&~0x7fu)||!s->native_float_reference||s->frame_psm||s->zbuf_psm!=58||s->dthe||s->colclamp!=1||s->clamp||s->fba>1||s->pabe>1||s->z_write>1||s->xy_offset_x16>65535||s->xy_offset_y16>65535||(s->texture_function!=0&&s->texture_function!=3))return GH_MODEL_GPU_UNSUPPORTED;
  unsigned mag=(unsigned)((s->tex1>>5)&1),min=(unsigned)((s->tex1>>6)&7);
  bool same_filter=mag?(min==1||min==4||min==5):(min==0||min==2||min==3);
  /* MXL0 clamps all mip choices to level0. Only equal base min/mag filters
   * are supported, so no missing LOD-dependent filter switch is concealed. */
  if(((s->tex1>>2)&7)!=0||!same_filter||(s->test&~UINT64_C(0x7ffff))||((s->alpha>>0)&3)>2||((s->alpha>>2)&3)>2||((s->alpha>>4)&3)>2||((s->alpha>>6)&3)>2)return GH_MODEL_GPU_UNSUPPORTED;
+ std::vector<uint8_t> referenced;try{referenced.resize(count,0);}catch(const std::bad_alloc&){return GH_MODEL_GPU_MEMORY;}
+ for(size_t i=0;i<n;i++){if(indices[i]>=count)return GH_MODEL_GPU_ARGUMENT;referenced[indices[i]]=1;}if(!n)return GH_MODEL_GPU_OK;
  std::vector<Vertex> vertices;try{vertices.resize(count);}catch(const std::bad_alloc&){return GH_MODEL_GPU_MEMORY;}
  for(size_t i=0;i<count;i++){const auto&v=input[i];auto&out=vertices[i];
+  // ADC/CLIP can leave unused carry vertices in a real batch. Their Q/XYZ
+  // values do not enter any raster primitive, so do not consume them.
+  if(!referenced[i])continue;
   out.xyzd[0]=(int32_t)((uint32_t)v.xyz_fixed4[0]&65535)-(int32_t)s->xy_offset_x16;out.xyzd[1]=(int32_t)((uint32_t)v.xyz_fixed4[1]&65535)-(int32_t)s->xy_offset_y16;
-  uint32_t z=((uint32_t)v.xyz_fixed4[2]>>4)&0xffffff;if(z>65535||out.xyzd[0]<-4096||out.xyzd[0]>12288||out.xyzd[1]<-4096||out.xyzd[1]>12288)return GH_MODEL_GPU_UNSUPPORTED;
+  uint32_t z=((uint32_t)v.xyz_fixed4[2]>>4)&0xffffff;if(z>65535)return GH_MODEL_GPU_UNSUPPORTED;
   out.xyzd[2]=(int32_t)z;out.xyzd[3]=(v.fog_fixed4>>4)&255;
   if(!std::isfinite(v.stq[2])||v.stq[2]<0.000001f||v.stq[2]>1000000)return GH_MODEL_GPU_UNSUPPORTED;
   for(unsigned c=0;c<3;c++){if(!std::isfinite(v.stq[c])||(c<2&&std::fabs((double)v.stq[c]/v.stq[2])>16))return GH_MODEL_GPU_UNSUPPORTED;out.stq[c]=v.stq[c];}
   for(unsigned c=0;c<4;c++){if(v.rgba[c]>255)return GH_MODEL_GPU_UNSUPPORTED;out.rgba[c]=v.rgba[c];}
  }
- for(size_t i=0;i<n;i++)if(indices[i]>=count)return GH_MODEL_GPU_ARGUMENT;if(!n)return GH_MODEL_GPU_OK;
  Owned<ID3D11Buffer> vb,ib;Owned<ID3D11ShaderResourceView> vv,iv;gh_model_gpu_error e=structured(r,vertices.data(),sizeof(Vertex),(UINT)count,vb,vv);if(e)return e;e=structured(r,indices,4,(UINT)n,ib,iv);if(e)return e;
- const Material&m=*r->materials[texture-1];Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)},
+ const Material&m=*r->materials[texture-1];Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)},
   {(uint32_t)s->alpha&3,((uint32_t)s->alpha>>2)&3,((uint32_t)s->alpha>>4)&3,((uint32_t)s->alpha>>6)&3},{m.width,m.height,(uint32_t)((s->tex1>>5)&1),(uint32_t)(s->alpha>>32)&255}};
  r->context.p->UpdateSubresource(r->parameters.p,0,nullptr,&p,0,0);ID3D11Buffer*constant=r->parameters.p;ID3D11ShaderResourceView*views[]={m.view.p,vv.p,iv.p};ID3D11UnorderedAccessView*targets[]={r->color_target.p,r->depth_target.p};
  r->context.p->CSSetShader(r->shader.p,nullptr,0);r->context.p->CSSetConstantBuffers(0,1,&constant);r->context.p->CSSetShaderResources(0,3,views);r->context.p->CSSetUnorderedAccessViews(0,2,targets,nullptr);r->context.p->Dispatch((r->width+7)/8,(r->height+7)/8,1);

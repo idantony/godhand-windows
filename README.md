@@ -9,17 +9,20 @@ and assets, and replace platform dependencies with native Windows implementation
 This follows OpenGOAL's source recovery/platform adaptation method. God Hand was
 not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
-**Early development. No playable original game scene has been verified.**
-A hidden, muted synthetic New Game run completes 489 ticks and reaches R100 /
-Main state4. One original player update, one child update and 73 original object
-updates complete: all 69 cold OMS objects and four runtime tutorial objects
-from `3EB`. Hardware-muted audio, movie decoding and the full independent ADX
-comparison are enabled. The next actual frontier is `0x00308BC0` inside the
-model-hide/reset call at `0x00307B28`, SceneStage22.
+**Early development; not playable yet.** The original R100 world layer now
+renders natively from the user's ISO: Gene, the street/buildings, textures and
+shadows have been visually inspected before UI composition. One complete
+original scene update/render cycle submits 1,858 world packets without renderer,
+GPU or window errors. The final displayed frame is still covered by the
+original opaque opening fade.
 
-The run begins at startup task `0x0030D358` and submits zero world packets.
-Earlier boot, a complete scene frame, continuous animation and gameplay remain
-unfinished. The QA counters describe completed calls, not a playable scene.
+The hidden, muted synthetic New Game run reaches R100 / Main state4 and stops
+at `0x00188190` in an original `304` object state on the next tick (490 ticks).
+It presents 370 scene frames: the earlier 369 title UI frames and one R100 cycle.
+Counters include the partial second tick: one player update, two child updates
+and 81 object updates. Continuous animation, physical gameplay controls, combat,
+transitions and save/load remain unfinished. The run starts at task `0x0030D358`;
+earlier boot and complete platform behavior are still outside this slice.
 
 ### Verified progress
 
@@ -51,7 +54,7 @@ unfinished. The QA counters describe completed calls, not a playable scene.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters (bank3; no active ESP slots). This is not continuous
   animation or gameplay acceptance.
-- 270 C modules pass 295 checks with hardware-muted audio, movie decoding and
+- 288 C modules pass 318 checks with hardware-muted audio, movie decoding and
   the full independent ADX comparison enabled.
   The earlier foundation also passes in an independent clean source snapshot.
   Restricted GPU pixels match separate CPU equations. The recovered OT traversal
@@ -61,11 +64,14 @@ unfinished. The QA counters describe completed calls, not a playable scene.
   not console traces.
 
 Native encrypted title BGM matches every sample from independent vgmstream
-output. Real-resource tests also cover attached ADPCM voices with original random
-pitch. The integrated run completes player, child and 73 object updates, then stops
-at 0x00308BC0 inside model-hide/reset 0x00307B28 (SceneStage22). It submits zero
-world packets; no world scene frame, playable scene, continuous animation or combat
-has been verified. Complete audio and save/load still need implementation.
+output. Real-resource tests cover attached ADPCM voices with original random
+pitch. Native world rendering preserves the original shared OT order, material
+state and packed coordinates; exact wide integer coverage is independently
+checked across the full 16-bit XY range. Original walk/run states and their
+PL00 animation/root displacement pass focused tests, while platform analog
+input is still being connected. The first R100 world layer is verified beneath
+the opening fade; the next object state, continuous frames and full game
+behavior still require recovery. No human playtest or playable build is claimed.
 
 Project evidence tools verify actual instruction bytes, calls, imports and
 static memory sites. Their generated reports remain private; see
@@ -140,9 +146,8 @@ logs stay under `G:\middle_thing\godhand_windows`. Scripts accept external
 scratch/compiler paths. Original game data remains read-only. Attribution:
 [NOTICE.md](NOTICE.md).
 
-Next: R100 scenario/Event scripts, the first original world frame, continuous
-animation, combat, transitions
-and save/load acceptance. Local commits retain rollback points; public pushes
+Next: continue original object states beyond the opening fade, connect physical
+input, and verify continuous animation, combat, transitions and save/load. Local commits retain rollback points; public pushes
 mark substantial milestones.
 
 ## 简体中文
@@ -151,10 +156,15 @@ mark substantial milestones.
 平台依赖。采用 OpenGOAL 的源码恢复与平台移植方法；本作不是 GOAL 程序，不能直接
 使用 Jak 专用反编译器。
 
-**仍处于早期开发，尚未验证可玩的原游戏场景。** 一次隐藏、静音的合成“新游戏”运行完成489个tick，进入R100／Main state4。实际完成玩家更新1次、附属子模型更新1次、原物件更新73次：包括全部69个冷启动OMS物件和来自3EB的4个运行时教程物件。硬件静音音频、片头解码和完整独立ADX对照均已启用。下一实际边界是SceneStage22中，模型隐藏／重置调用0x00307B28内的0x00308BC0。
+**仍处于早期开发，尚不可玩。** 已从用户 ISO 原生绘制并检查 R100 世界层：
+角色、街道建筑、纹理和阴影均已出现。一次完整的原场景更新／绘制提交了 1858 个世界包，
+渲染器、GPU 和窗口错误均为 0；最终显示帧仍被原流程的不透明淡入遮罩覆盖。
 
-程序从原启动任务 `0x0030D358` 开始，世界绘制包仍为 0。前置启动、完整场景首帧、
-连续动画和玩法尚未完成；更新计数不代表可玩场景。
+隐藏、静音的合成“新游戏”运行进入 R100／Main state4，在下一 tick 的原 304 物件状态
+`0x00188190` 停止，共 490 ticks。已提交 370 个场景帧，其中前 369 个是标题界面，
+随后一个是 R100 场景周期。累计计数包含第二 tick 的部分进度：玩家更新 1 次、附属模型
+更新 2 次、物件更新 81 次。连续动画、物理输入操作、战斗、切换和存读档仍待完成。
+程序从原启动任务 `0x0030D358` 开始；更早的启动和完整平台行为尚未全部恢复。
 
 ### 已验证的进展
 
@@ -177,7 +187,7 @@ mark substantial milestones.
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始FX调用0x30F228完成，并创建4个环境发射器
   （bank3；ESP 活动槽为 0）。这不代表连续动画或玩法验收。
-- 启用硬件静音音频、片头解码和完整独立ADX对照后，270个C模块通过295项检查，
+- 启用硬件静音音频、片头解码和完整独立ADX对照后，288个C模块通过318项检查，
   在固定源码副本验证。受限 GPU 像素与独立 CPU 方程一致；绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
@@ -202,10 +212,10 @@ Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音
 自制源码核验工具见 [证据工具说明](docs/EVIDENCE_TOOLS.md)。
 独立 [PS2 移植 skill](skill/ps2-source-port/SKILL.md) 随开发维护。
 
-原加密标题BGM已逐样本匹配独立vgmstream输出；真实资源测试也覆盖附属ADPCM音效及原随机
-音高。整合运行完成玩家、子模型及73次原物件更新，停在SceneStage22中模型隐藏／重置
-0x00307B28内的0x00308BC0。世界绘制包为0，尚未验证世界场景首帧、可玩场景、连续动画
-或战斗。完整音频和存档读写仍需继续。
+原加密标题 BGM 已逐样本匹配独立 vgmstream 输出；真实资源测试也覆盖附属 ADPCM
+音效与原随机音高。世界绘制保留原共享 OT 顺序、材质和打包坐标，完整 16 位 XY 覆盖
+通过独立逐像素检查。原行走／跑步状态及 PL00 动画根位移已通过分项测试，平台模拟量
+输入仍在接线。世界层已在开场遮罩之前验证；尚未进行真人游玩或可玩版本验收。
 
-接下来继续首关 Scenario／Event 脚本、首个原游戏画面、连续动画、战斗、场景切换与
-存档验收。本地提交保留回退，大节点才推送。当前状态见 [进展数据](docs/progress.json)。
+接下来继续原物件状态，推进至淡入结束，接通物理输入，并验证连续动画、战斗、
+场景切换和存读档。本地提交保留回退，大节点才推送。当前状态见 [进展数据](docs/progress.json)。

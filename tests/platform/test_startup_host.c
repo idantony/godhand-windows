@@ -20,6 +20,67 @@ static VOID WINAPI foreign_call(void *context)
 typedef struct frame_fixture {unsigned begins,jobs;} frame_fixture;
 static gh_id_error fixture_begin(void *context){frame_fixture *f=context;++f->begins;return GH_ID_OK;}
 static gh_id_error fixture_draw(void *context,const gh_id_draw_job *job){frame_fixture *f=context;CHECK(job && job->entry);++f->jobs;return GH_ID_OK;}
+typedef struct fade_publication_fixture {
+    gh_startup_host *host;
+    unsigned begins,jobs,covers,fans,visible_calls;
+    gh_startup_snapshot at_failure;
+} fade_publication_fixture;
+static gh_id_error fade_scene_begin(void *context,uint32_t *frontier)
+{fade_publication_fixture *f=context;(void)frontier;++f->begins;return GH_ID_OK;}
+static gh_id_error fade_scene_draw(void *context,const gh_id_base *base,const gh_id_draw_job *job,uint32_t *frontier)
+{fade_publication_fixture *f=context;(void)frontier;CHECK(base&&job&&job->entry&&job->entry_index<base->entry_count);++f->jobs;return GH_ID_OK;}
+static gh_id_error fade_scene_cover(void *context,const gh_child_cover_quad *quad,uint32_t *frontier)
+{fade_publication_fixture *f=context;(void)frontier;CHECK(quad&&quad->bank==6&&quad->depth==5);++f->covers;return GH_ID_OK;}
+static gh_id_error fade_scene_fan(void *context,const gh_cockpit_fan *fan,uint32_t *frontier)
+{fade_publication_fixture *f=context;(void)frontier;CHECK(fan&&fan->ready);++f->fans;return GH_ID_OK;}
+static gh_id_error fail_second_visible_fade(void *context,const gh_fade_draw *draw)
+{
+    fade_publication_fixture *f=context;
+    CHECK(draw&&draw->visible&&draw->w&&draw->h);
+    ++f->visible_calls;
+    if(f->visible_calls!=2)return GH_ID_OK;
+    CHECK(gh_startup_host_snapshot(f->host,&f->at_failure)==GH_HOST_OK);
+    return GH_ID_UNSUPPORTED;
+}
+static void fade_publication_regression(const char *iso)
+{
+    gh_startup_host *host=NULL;gh_startup_snapshot before={0},after={0};
+    gh_startup_continuation continuation={1,1,GH_SE_DSP_NATIVE_LINEAR_REFERENCE,NULL,NULL,NULL};
+    fade_publication_fixture fixture={0};
+    gh_host_scene_ui_callbacks callbacks={&fixture,fade_scene_begin,fade_scene_draw,fade_scene_fan,fade_scene_cover};
+    /* The original negative startup branch reaches actual R020 Init/Move
+     * without a Movie codec. These are scheduling/fault fixtures only:
+     * successful collectors do not claim GPU rendering or gameplay success.
+     * All resources, title state, shared Fade and muted device audio are real.
+     * No snapshot const pointer is cast away to manufacture an active Fade. */
+    CHECK(gh_startup_host_create(iso,1,0x80000000u,64*1024*1024,&host)==GH_HOST_OK);
+    fixture.host=host;
+    CHECK(gh_startup_host_set_continuation(host,&continuation)==GH_HOST_OK);
+    CHECK(gh_startup_host_set_scene_ui_consumers(host,&callbacks)==GH_HOST_OK);
+    CHECK(gh_startup_host_set_fade_consumer(host,fail_second_visible_fade,&fixture)==GH_HOST_OK);
+    for(unsigned tick=0;tick<300;++tick){
+        gh_native_input_snapshot input={0};input.connected=1;input.focused=1;
+        CHECK(gh_startup_host_set_input(host,&input)==GH_HOST_OK);
+        CHECK(gh_startup_host_snapshot(host,&before)==GH_HOST_OK);
+        if(gh_startup_host_tick(host)!=GH_HOST_RUNNING)break;
+    }
+    CHECK(gh_startup_host_snapshot(host,&after)==GH_HOST_OK);
+    if(after.unavailable_entry!=0x307388)fprintf(stderr,"Fade regression actual frontier %08X phase%d title%u/%u scene%u\n",after.unavailable_entry,after.phase,after.title_mode,after.title_phase,after.scene_stage);
+    CHECK(after.phase==GH_HOST_FRONTIER&&after.error==GH_HOST_ENTRY_UNAVAILABLE&&after.unavailable_entry==0x307388);
+    CHECK(fixture.visible_calls==2&&fixture.begins>=2&&fixture.covers);
+    /* First visible Fade was accepted and its complete frame was published.
+     * The second consumer failed AFTER task work and before publication. */
+    CHECK(before.scene_frame_ready&&before.scene_frame_serial>0&&before.fade_draw_serial==1);
+    CHECK(!after.scene_frame_ready&&after.scene_frame_serial==before.scene_frame_serial);
+    CHECK(after.fade_draw_serial==before.fade_draw_serial&&after.ui_resource_epoch==before.ui_resource_epoch);
+    CHECK(!fixture.at_failure.scene_frame_ready&&fixture.at_failure.scene_frame_serial==before.scene_frame_serial);
+    CHECK(fixture.at_failure.fade_draw_serial==before.fade_draw_serial);
+    CHECK(after.mc_frame_serial==before.mc_frame_serial&&after.mc_frame_ready==before.mc_frame_ready);
+    CHECK(gh_startup_host_tick(host)==GH_HOST_FRONTIER);
+    CHECK(gh_startup_host_snapshot(host,&before)==GH_HOST_OK&&before.ticks==after.ticks&&before.scene_frame_serial==after.scene_frame_serial&&!before.scene_frame_ready&&fixture.visible_calls==2);
+    CHECK(gh_startup_host_destroy(host)==GH_HOST_OK);
+    puts("PASS actual R020 visible Fade failure retains prior complete frame serial, suppresses ready/publication and latches307388");
+}
 int main(int argc,char **argv)
 {
     gh_startup_host *h=0;gh_startup_snapshot s;gh_font_glyph glyph;unsigned i;
@@ -101,6 +162,7 @@ int main(int argc,char **argv)
          * fiber necessarily finishes. This is not the full Windows fixture. */
         CHECK(s.unavailable_entry==0x15b880 && s.game_state==4);
         CHECK(gh_startup_host_destroy(h)==GH_HOST_OK);
+        fade_publication_regression(argv[1]);
     }
     /* Tear down a real suspended startup C stack with live allocations. */
     CHECK(gh_startup_host_create(argv[1],1,0,4*1024*1024,&h)==GH_HOST_OK);

@@ -117,6 +117,12 @@ oracle outside production; passing it is neither console nor whole-game
 validation. Compile/run actual native tests before recording passes. Keep
 commands, compiler versions, hashes and reports reproducible.
 
+As native module counts grow, Windows process argument limits can fail linking
+before the compiler starts. Use compiler response files with tested path/token
+encoding instead of shortening evidence paths or dropping inputs. Fingerprint
+the response writer and record response-file hashes; retain process-launch
+errors as failed steps. Exercise an actual long link with spaced Unicode paths.
+
 Read-only asset indexing describes the game input: commands may still create
 indexes, reports, caches and build outputs. Respect a request prohibiting those
 writes or test execution instead of assuming every verification command is a read.

@@ -5,6 +5,23 @@ progress/authorization belongs in [resume.md](resume.md).
 
 ## Parallel verification and precise stopping
 
+The first R100 world surface was nonblack and visibly recognizable while its
+final composed frame was entirely black under the original opening Fade.
+Capture and hash both layers from the same executable/frame before diagnosing
+a renderer failure or claiming a visible game window. Preserve the original
+fade and advance the original object states instead of removing an overlay to
+make a screenshot. Publish frame-ready only after the same-OT Fade consumer
+succeeds; a real failing consumer reproduced the old premature publication.
+
+Full packed16 XY minus a shared16-bit offset can exceed a conservative native
+viewport guard. A65535-square triangle has area4294836225, so signed32 edge
+arithmetic can reverse its winding. Exact paired-u32 signed coverage preserves
+the original coordinates/top-left rule. After the inside test, area and each
+positive edge are below2^32; convert the unsigned low word once for the chosen
+native floating interpolation profile. This is not proof of every GS raster
+precision detail. Analytic full-surface coverage and prior RGBA/Z regressions
+must accompany the wider domain.
+
 Use immutable authored-source snapshots when workers continue changing shared
 headers. Fingerprint every real input, build/test the copy, and stage its exact
 verified bytes without overwriting newer working files. A passing copy does not

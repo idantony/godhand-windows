@@ -3,6 +3,8 @@
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
+#include <float.h>
+#include <limits.h>
 static float mul(float a,float b){volatile float n=a*b;return n;}
 static float add(float a,float b){volatile float n=a+b;return n;}
 static float sub(float a,float b){volatile float n=a-b;return n;}
@@ -10,11 +12,17 @@ static float divide(float a,float b){volatile float n=a/b;return n;}
 static int finite(const float*p,size_t n){for(size_t i=0;i<n;i++)if(!isfinite(p[i]))return 0;return 1;}
 static gh_static_mesh_status bad(gh_static_transform_frontier*f,uint32_t pc){if(f){f->ee_entry=0x154e98;f->vu_byte_pc=pc;}return GH_STATIC_UNSUPPORTED;}
 static void transform(const float*m,const float*p,float*out){for(unsigned r=0;r<4;r++){float n=mul(m[r],p[0]);n=add(n,mul(m[4+r],p[1]));n=add(n,mul(m[8+r],p[2]));out[r]=add(n,m[12+r]);}}
-static int fixed(float n,int32_t*out){n=mul(n,16);if(!isfinite(n)||n< -2147483648.0f||n>=2147483648.0f)return 0;*out=(int32_t)n;return 1;}
+/* VU FTOI4 saturates before the host integer conversion. A projected
+ * multiply that overflows to signedInf has the same known integer result
+ * whether the VU FMAC overflow mode preservesInf or clampsfiniteMax. */
+static int fixed(float n,int32_t*out){if(isnan(n))return 0;if(n>=134217728.0f){*out=INT32_MAX;return 1;}if(n<=-134217728.0f){*out=INT32_MIN;return 1;}n=mul(n,16);*out=(int32_t)n;return 1;}
 static int negative(float n){uint32_t bits;memcpy(&bits,&n,4);return (int)(bits>>31);}
-static uint8_t clip_flags(const float*p){uint8_t bits=0;float w=fabsf(p[3]);for(unsigned k=0;k<3;k++){if(p[k]>w)bits|=(uint8_t)(1u<<(k*2));if(p[k]< -w)bits|=(uint8_t)(2u<<(k*2));}return bits;}
+/* Finite VU CLIP treats a zero/subnormal W as an exponent-zero boundary:
+ * only a normal-magnitude XYZ component lies outside. Ordinary abs comparisons
+ * would wrongly clip tiny denormal XYZ against zero. */
+static uint8_t clip_flags(const float*p){uint8_t bits=0;float w=fabsf(p[3]);int tiny=w==0||fpclassify(w)==FP_SUBNORMAL;for(unsigned k=0;k<3;k++){int outside=tiny?fpclassify(p[k])==FP_NORMAL:fabsf(p[k])>w;if(outside)bits|=(uint8_t)(1u<<(k*2+(signbit(p[k])?1:0)));}return bits;}
 static gh_static_mesh_status calculate(const gh_skinned_mesh_stream*s,const gh_skinned_mesh_batch*b,const gh_skinned_program2_inputs*in,gh_static_gs_vertex*out,uint32_t*indices,gh_static_geometry_result*result,gh_static_transform_frontier*f){
- float history[26][3],palette[42][16];size_t triangles=0;memcpy(palette,in->palette,in->part_count*64);
+ float history[26][3],palette[42][16];uint8_t history_finite[26];size_t triangles=0;memcpy(palette,in->palette,in->part_count*64);
  for(size_t i=0;i<b->logical_vertices;i++){
   gh_skinned_mesh_vertex raw;gh_static_mesh_status e=gh_skinned_mesh_vertex_at(s,b->first_vertex+i,&raw);if(e)return e;
   gh_skinned_blend_result blended;uint32_t pc=0;e=gh_skinned_mesh_blend_program2(&raw,palette,in->part_count,GH_STATIC_BINARY32_REFERENCE,&blended,&pc);if(e){if(f){f->ee_entry=0x154e98;f->vu_byte_pc=pc;}return e;}
@@ -23,9 +31,13 @@ static gh_static_mesh_status calculate(const gh_skinned_mesh_stream*s,const gh_s
   const float *position=blended.position,*skin_normal=blended.normal;
   float screen[4],clip[4];transform(in->screen,position,screen);transform(in->clip,position,clip);
   if(!finite(screen,4)||!finite(clip,4)||!finite(skin_normal,3))return bad(f,0x290);
-  if(!(screen[3]>0))return bad(f,0x290);float q=divide(1,screen[3]);if(!isfinite(q))return bad(f,0x290);
+  /* No positive-W branch exists in either source program. DIV uses1/W.
+   * Zero denominator yields signedfiniteMax in the pinned VU reference.
+   * Subnormal/other overflow division domains remain explicit boundaries. */
+  if(fpclassify(screen[3])==FP_SUBNORMAL)return bad(f,0x290);
+  float q=screen[3]==0?copysignf(FLT_MAX,screen[3]):divide(1,screen[3]);if(!isfinite(q)||fpclassify(q)==FP_SUBNORMAL)return bad(f,0x290);
   gh_static_gs_vertex vertex={0};vertex.raw_control=(uint16_t)raw.raw_control;vertex.clip_flags=clip_flags(clip);vertex.adc=(vertex.raw_control&0x8000u)!=0;
-  for(unsigned k=0;k<3;k++){history[i][k]=mul(screen[k],q);if(!fixed(history[i][k],vertex.xyz_fixed4+k))return bad(f,0x418);}
+  history_finite[i]=1;for(unsigned k=0;k<3;k++){history[i][k]=mul(screen[k],q);if(k<2&&!isfinite(history[i][k]))history_finite[i]=0;if(!fixed(history[i][k],vertex.xyz_fixed4+k))return bad(f,0x418);}
   for(unsigned k=0;k<2;k++){vertex.stq[k]=mul(add(divide((float)raw.uv[k],4096),in->uv[k]),q);if(!isfinite(vertex.stq[k]))return bad(f,0x460);}vertex.stq[2]=q;
   float response[4]={0,0,0,1};for(unsigned r=0;r<3;r++){float n=mul(in->normal_light[r],skin_normal[0]);n=add(n,mul(in->normal_light[4+r],skin_normal[1]));response[r]=add(n,mul(in->normal_light[8+r],skin_normal[2]));if(response[r]<0)response[r]=0;}
   float light[4];transform(in->light_color,response,light);
@@ -35,7 +47,16 @@ static gh_static_mesh_status calculate(const gh_skinned_mesh_stream*s,const gh_s
    if(!isfinite(color)||color<0)return bad(f,0x458);if(color>255)color=255;vertex.rgba[k]=(uint32_t)color;
   }
   int32_t fog;if(!fixed(in->fog,&fog)||fog<0||fog>4080)return bad(f,0x418);vertex.fog_fixed4=(uint16_t)fog;
-  if(i>=2){vertex.triangle_tested=1;float a[2],c[2];for(unsigned k=0;k<2;k++){a[k]=sub(history[i-2][k],history[i-1][k]);c[k]=sub(history[i][k],history[i-1][k]);}float area=(vertex.raw_control&0x7fffu)?sub(mul(c[0],a[1]),mul(c[1],a[0])):sub(mul(a[0],c[1]),mul(a[1],c[0]));if(!isfinite(area))return bad(f,0x490);if(negative(area)||vertex.clip_flags||out[i-1].clip_flags||out[i-2].clip_flags)vertex.adc=1;
+  if(i>=2){vertex.triangle_tested=1;
+   /* FCAND combines all last3 CLIP results. RawADC or anyclip already
+    * proves no GS triangle kick; its projected-cross sign cannot alter
+    * that result and is not carried into the next triangle's new MACz. */
+   if(vertex.adc||vertex.clip_flags||out[i-1].clip_flags||out[i-2].clip_flags)vertex.adc=1;
+   else {
+    if(!history_finite[i]||!history_finite[i-1]||!history_finite[i-2])return bad(f,(vertex.raw_control&0x7fffu)?0x4a8:0x490);
+    float a[2],c[2];for(unsigned k=0;k<2;k++){a[k]=sub(history[i-2][k],history[i-1][k]);c[k]=sub(history[i][k],history[i-1][k]);}
+    float area=(vertex.raw_control&0x7fffu)?sub(mul(c[0],a[1]),mul(c[1],a[0])):sub(mul(a[0],c[1]),mul(a[1],c[0]));if(!isfinite(area))return bad(f,(vertex.raw_control&0x7fffu)?0x4a8:0x490);if(negative(area))vertex.adc=1;
+   }
    if(!vertex.adc){uint32_t first=(uint32_t)i-2,second=(uint32_t)i-1;if(i&1u){uint32_t swap=first;first=second;second=swap;}indices[triangles*3]=first;indices[triangles*3+1]=second;indices[triangles*3+2]=(uint32_t)i;triangles++;}
   }
   out[i]=vertex;

@@ -3,6 +3,7 @@ from pathlib import Path
 import struct
 import sys
 import unittest
+sys.dont_write_bytecode=True
 TOOLS=Path(__file__).resolve().parents[2]/"tools"
 sys.path.insert(0,str(TOOLS))
 spec=importlib.util.spec_from_file_location("effect_source",TOOLS/"inspect-effect-source.py")

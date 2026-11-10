@@ -3,6 +3,7 @@
  * not an alias to program14. Clipping/fan branches retain an exact frontier.
  * Evidence: analysis/static-mesh-program10-evidence.json. */
 #include "static_mesh_program10.h"
+#include "static_mesh_vu_numeric.h"
 #include <fenv.h>
 #include <math.h>
 #include <string.h>
@@ -25,16 +26,6 @@ static int transform(const float matrix[16],const float p[3],float out[4]){
  }
  return finite_vector(out,4);
 }
-static uint8_t clip_flags(const float p[4]){
- float w=fabsf(p[3]);uint8_t flags=0;
- for(unsigned i=0;i<3;i++){if(p[i]>w)flags|=(uint8_t)(1u<<(2*i));if(p[i]<-w)flags|=(uint8_t)(2u<<(2*i));}
- return flags;
-}
-static int fixed4(float x,int32_t*out){
- float scaled=mul(x,16.0f);
- if(!isfinite(scaled)||scaled < -2147483648.0f||scaled >=2147483648.0f)return 0;
- *out=(int32_t)scaled;return 1; /* Original FTOI truncates towardzero. */
-}
 static int sign_bit(float x){uint32_t bits;memcpy(&bits,&x,4);return (int)(bits>>31);}
 
 static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t flags,
@@ -49,9 +40,8 @@ static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t fla
   float p[3],screen[4],clip[4];
   for(unsigned j=0;j<3;j++)p[j]=mul((float)raw.position[j],0.01f); /* VU0138/0158 */
   if(!transform(in->screen_matrix,p,screen)||!transform(in->clip_matrix,p,clip))return unsupported(f,0x0190);
-  if(!(screen[3]>0.0f))return unsupported(f,0x01b0);
-  float q=divide(1.0f,screen[3]);if(!isfinite(q))return unsupported(f,0x01b0);
-  gh_static_gs_vertex v={0};v.raw_control=raw.raw_w;v.clip_flags=clip_flags(clip);
+  float q;if(!gh_static_vu_reciprocal(screen[3],&q))return unsupported(f,0x01b0);
+  gh_static_gs_vertex v={0};v.raw_control=raw.raw_w;v.clip_flags=gh_static_vu_clip_flags(clip);
   /* Program10's 0308 IBGTZ enters polygon processing0368 when accumulated
    * clip flags are positive; unlike14 it must not discard those triangles.
    * This first bounded domain requires every input vertex inside allplanes.
@@ -60,7 +50,7 @@ static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t fla
   if(v.clip_flags)return unsupported(f,0x0308);
   for(unsigned j=0;j<3;j++){
    screen_history[i][j]=mul(screen[j],q);
-   if(!fixed4(screen_history[i][j],v.xyz_fixed4+j))return unsupported(f,0x0290);
+   if(!gh_static_vu_ftoi4(screen_history[i][j],v.xyz_fixed4+j))return unsupported(f,0x0290);
   }
   for(unsigned j=0;j<2;j++){
    float uv=add(divide((float)raw.uv[j],4096.0f),in->uv_offset[j]);
@@ -77,7 +67,7 @@ static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t fla
   float fog=add(in->fog[0],mul(in->fog[1],screen[3]));
   if(!isfinite(fog))return unsupported(f,0x0228);
   if(fog>255.0f)fog=255.0f;if(fog<0.0f)fog=0.0f;
-  int32_t fog_fixed; if(!fixed4(fog,&fog_fixed))return unsupported(f,0x0290);
+  int32_t fog_fixed; if(!gh_static_vu_ftoi4(fog,&fog_fixed))return unsupported(f,0x0290);
   v.fog_fixed4=(uint16_t)fog_fixed;
   v.adc=(raw.raw_w&0x8000u)!=0;
   if(i>=2){
@@ -85,6 +75,7 @@ static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t fla
    /* Program10 0298..02C0 OPMULA/OPMSUB and02D8 FMAND0x20:
     * negative projected cross sets ADC at0430. Lowcontrol bits reverse
     * operands. Clip tests are zero by the separately checked domain. */
+   if(!v.adc){
    float a[2],c[2];for(unsigned j=0;j<2;j++){
     a[j]=sub(screen_history[i-2][j],screen_history[i-1][j]);
     c[j]=sub(screen_history[i][j],screen_history[i-1][j]);
@@ -92,6 +83,7 @@ static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t fla
    float area=(raw.raw_w&0x7fffu)?sub(mul(c[0],a[1]),mul(c[1],a[0])):sub(mul(a[0],c[1]),mul(a[1],c[0]));
    if(!isfinite(area))return unsupported(f,0x02b8);
    if(sign_bit(area))v.adc=1;
+   }
    if(!v.adc){
     uint32_t first=(uint32_t)(i-2),second=(uint32_t)(i-1);
     if(i&1u){uint32_t swap=first;first=second;second=swap;}
@@ -117,7 +109,7 @@ gh_static_mesh_status gh_static_mesh_transform_program10_batch(const gh_scene_me
  if(status){if(f)f->ee_entry=ee;return status;}
  if(capacity<b.logical_vertices||index_capacity<(b.logical_vertices>2?(b.logical_vertices-2)*3:0))return GH_STATIC_BOUNDS;
  gh_static_gs_vertex temporary[38];uint32_t temporary_indices[108];gh_static_geometry_result temporary_result;
- fenv_t saved;if(fegetenv(&saved)||fesetround(FE_TONEAREST))return unsupported(f,0x0138);
+ fenv_t saved;if(feholdexcept(&saved)||fesetround(FE_TONEAREST))return unsupported(f,0x0138);
  status=calculate(s,flags,&b,in,temporary,temporary_indices,&temporary_result,f);
  int restored=fesetenv(&saved);if(restored)return unsupported(f,0x0138);if(status)return status;
  memcpy(vertices,temporary,b.logical_vertices*sizeof(*vertices));memcpy(indices,temporary_indices,temporary_result.triangles*3*sizeof(*indices));*result=temporary_result;

@@ -4,7 +4,43 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
-## Current milestone: SceneStage22 model-hide/reset frontier
+## Current milestone: native R100 world layer beneath the opening fade
+
+An immutable source copy passes **288 C modules / 318 checks**, with muted real
+audio, movie decoding, full independent ADX comparison and both same-DLL RNG
+checks enabled. A matching actual New Game run reaches 490 ticks / R100 Main4.
+The first original scene update/render cycle completes and submits 1,858 native
+world geometry packets, with renderer/GPU/window errors all zero.
+
+The world surface before UI was read back and visually inspected: Gene, R100's
+street/buildings, sky, textures and shadows are present (228,967 nonblack pixels,
+31,463 RGB colors at 512x448). The final composed frame is opaque black because
+the original opening Fade is visible with RGBA `FF000000`; no visible interactive
+window or continuous gameplay is claimed. The prior 369 title UI frames plus
+this one R100 cycle give 370 presented scene frames. Image/resource buffers stay
+private; public source contains no original game assets.
+
+The next tick stops at original OM304 state1 `0x00188190`, SceneStage13. Counters
+include that partial tick: player1 / child2 / OM81, four ambient emitters and
+zero ESP slots. The first cycle included all69 cold objects and four runtime
+3EB tutorial objects. Native walk/run animation and root displacement, original
+ESP update/dispatch/lifetime, unlit material constants, signed-W clipping and
+full packed16 XY raster coverage now have focused tests. Physical analog input,
+positive effect postpasses, continuing actor/combat states and progression remain
+active work; independent numerical profiles are not PS2 hardware traces.
+
+固定源码副本通过 **288 个 C 模块／318 项检查**，含真实静音设备、片头解码、完整 ADX
+独立对照和同 DLL 两组随机数验证。匹配运行进入 R100，完成一次原场景更新／绘制，
+提交 1858 个世界包；渲染、GPU、窗口错误均为 0。合成前世界层已实际读回并检查，角色、
+首关街道建筑、天空、纹理和阴影均已出现。最终帧仍被原开场 `FF000000` 淡入遮罩覆盖。
+
+运行共 490 ticks，370 场景帧包括 369 个标题帧和一个 R100 周期；下一 tick 停在原物件
+304 状态1 `0x00188190`。累计玩家／子模型／物件更新为 1／2／81，包含第二 tick 的部分
+进度。尚不可玩，未验收连续动画、物理输入、战斗、切换和存读档；图像和游戏数据仍保留
+本地私有，不进入公共 Git。原行走／跑步根位移、粒子生命周期、共享材质参数、裁剪和
+完整 16 位坐标覆盖已有分项验证，不将这些数值参考称为 PS2 实机逐位证明。
+
+## Previous milestone: SceneStage22 model-hide/reset frontier
 
 An immutable source snapshot passes 270 C modules / 295 checks with hardware-muted
 audio, movie decoding and the full independent ADX comparison enabled. The hidden,

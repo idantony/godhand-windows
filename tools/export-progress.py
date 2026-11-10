@@ -12,10 +12,50 @@ def read(name):
     return json.loads((ROOT / "analysis" / name).read_text(encoding="utf-8-sig"))
 
 
+def world_layer_summary(path, source_root, execution, window_build):
+    """Validate private observed pixels, exporting only a few public facts."""
+    if path is None:
+        return None
+    observation = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    if Path(observation["snapshot"]).resolve() != source_root or not observation.get("native_whole_verified"):
+        raise ValueError("World observation must match the fully verified source snapshot")
+    files = observation["files"]
+    for name, fact in files.items():
+        data = Path(name).read_bytes()
+        if len(data) != fact["bytes"] or hashlib.sha256(data).hexdigest() != fact["sha256"]:
+            raise ValueError("World observation file changed: " + name)
+    raw = [Path(n) for n in files if n.endswith(".world.rgba")]
+    composite = [Path(n) for n in files if n.endswith(".rgba") and not n.endswith(".world.rgba")]
+    process = [Path(n) for n in files if n.endswith("startup-process.json")]
+    if len(raw) != 1 or len(composite) != 1 or len(process) != 1:
+        raise ValueError("World observation needs one raw world surface and launch receipt")
+    launch = json.loads(process[0].read_text(encoding="utf-8-sig"))
+    if (Path(launch["command"][0]).resolve() != Path(window_build["executable"]).resolve()
+            or launch.get("executable_sha256_before") != window_build["executable_sha256"]):
+        raise ValueError("World observation comes from another executable")
+    pixels = raw[0].read_bytes()
+    final = composite[0].read_bytes()
+    nonblack = sum(pixels[i:i+3] != b"\0\0\0" for i in range(0, len(pixels), 4))
+    final_nonblack = sum(final[i:i+3] != b"\0\0\0" for i in range(0, len(final), 4))
+    if (len(pixels) != 512*448*4 or len(final) != len(pixels) or not nonblack or observation["packet_count"] <= 0
+            or observation["packet_count"] != execution.get("world_packets_submitted")
+            or observation["capture_metadata"]["scene_serial"] != execution.get("scene_frame_serial")
+            or any(execution.get(k) != 0 for k in ("renderer_error", "world_gpu_error", "window_error"))):
+        raise ValueError("World pixels/counters do not establish a matching error-free world layer")
+    return {"scope": "original R100 world layer before UI/opening fade; not playable gameplay",
+            "frame_serial": observation["capture_metadata"]["scene_serial"],
+            "nonblack_world_pixels": nonblack,
+            "nonblack_composite_pixels": final_nonblack,
+            "opening_fade_rgba": observation["capture_metadata"]["fade_rgba"],
+            "final_composite": "opaque opening fade; continuous scene frames remain unfinished" if not final_nonblack and observation["capture_metadata"].get("fade_visible") == 1 and observation["capture_metadata"]["fade_rgba"] == "FF000000" else "world-layer evidence only; final display requires separate visual verification"}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verified-source-root", type=Path,
                         help="Validate a recorded immutable source copy while workers continue editing")
+    parser.add_argument("--world-layer-proof", type=Path,
+                        help="Private hash-linked world-layer observation; exports no local images/paths")
     args = parser.parse_args()
     source_root = args.verified_source_root.resolve() if args.verified_source_root else ROOT
     frozen = source_root != ROOT
@@ -50,12 +90,15 @@ def main():
     current_dll = Path(differential["native_dll"])
     if hashlib.sha256(current_dll.read_bytes()).hexdigest() != differential["native_sha256"]:
         raise SystemExit("RNG differential report is stale for the rebuilt DLL")
+    world_layer = world_layer_summary(args.world_layer_proof, source_root, window["execution"], window_build)
     progress = {
         "schema_version": 1,
         "verified_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "stage": "native-windows-R100-object-updates" if window["execution"].get("room")=="0100" and window["execution"].get("om_updates_completed",0)>0 else ("native-windows-R100-player-child-update" if window["execution"].get("player_updates_completed", 0) > 0 and window["execution"].get("child_updates_completed", 0) > 0 else ("native-windows-R100-update-entry" if window["execution"].get("game_state") == 4 else "native-windows-new-game-R100-construction") if window["execution"].get("room") == "0100" else "native-windows-original-title-scene"),
         "playable": False,
         "original_game_scene_observed_in_native_port": False,
+        "original_world_layer_observed_before_UI": world_layer is not None,
+        "world_layer_observation": world_layer,
         "original_title_UI_scene_observed_in_native_port": window["execution"].get("scene_frames_presented", 0) > 0,
         "source_verification": "immutable authored source copy" if frozen else "current authored source",
         "strategy": "Recover readable original logic and implement native platform dependencies",
@@ -136,11 +179,13 @@ def main():
                   "passed_steps": [step["name"] for step in native["steps"] if step["name"].startswith("test-") and step["returncode"] == 0],
                   "rng_differential": {"distinct_seeds": differential["distinct_seeds"], "calls_compared": differential["function_calls_compared"],
                                        "comparison": differential["comparison"], "hardware_capture": False}},
-        "remaining": ["Finish first-frame model visibility and drawing; execute original R100 Scenario/Event flows", "Earlier subsystem initialization and full main-loop integration", "Continuous dynamic animation and actor behavior",
+        "remaining": ["Advance original object states and continuous frames beyond the opening fade; execute R100 Scenario/Event flows" if world_layer else "Finish first-frame model visibility and drawing; execute original R100 Scenario/Event flows", "Earlier subsystem initialization and full main-loop integration", "Continuous dynamic animation and actor behavior",
                       "Native rendering, audio, input and save adapters", "Full game progression and timing validation"],
         "progress_policy": "Upstream PS2 matching coverage is not native port coverage; no synthetic completion percentage",
         "sources": {"upstream": "https://github.com/LucasPicoli/god-hand-decomp", "upstream_commit": "eaae18d0dfab1f9a0df276ae5ca1581ad326faf3",
                     "method": "https://opengoal.dev/docs/developing/decompiling/getting_started/"}}
+    if world_layer:
+        progress["stage"] = "native-windows-R100-world-layer-opening-fade"
     target = ROOT / "docs" / "progress.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(progress, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

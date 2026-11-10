@@ -26,6 +26,8 @@ int main(int argc,char**argv){
  uint32_t pcf=0;C(!gh_actor_palette_0014c7e8(&model,&camera,GH_STATIC_BINARY32_REFERENCE,&pcf));uint8_t *first;C(!gh_actor_model_object_span(&model,packet->palette_offset[0]+16,64,&first));C(value(first+48)==0&&value(first+52)==6&&value(first+56)==13);for(unsigned k=0;k<64;k++)C(other[k]==0x7d);
  uint32_t parity=1;memcpy((uint8_t*)&work+0x210,&parity,4);C(!gh_actor_palette_0014c7e8(&model,&camera,GH_STATIC_BINARY32_REFERENCE,&pcf)&&!memcmp(first,other,64));parity=0;memcpy((uint8_t*)&work+0x210,&parity,4);
  gh_actor_model copy=model;C(gh_actor_model_object_span(&copy,0,1,&span)==GH_ACTOR_MODEL_ARGUMENT);
+ /* A nonfinite direction exercises retry; exact zero is now supported. */
+ putf(light->scalar+0x161a0,NAN);
  C(!fesetround(FE_TONEAREST));uint32_t pc;gh_actor_draw_call call={0};gh_actor_draw_bindings b={.camera=&camera,.light=light,.policy=GH_STATIC_BINARY32_REFERENCE};C(gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED);C(pc==0x30a370&&call.phase==2&&call.node_index==0);
  for(unsigned i=0;i<3;i++)putf(light->scalar+0x161a0+i*16+i*4,-1);putf(light->scalar+0x16154,100);for(unsigned i=0;i<4;i++)for(unsigned k=0;k<4;k++)putf(light->scalar+(i<3?0x161d0+i*16:0x40)+k*4,(float)(i+1)*.2f);
  gh_actor_model_status er=gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc);C(er==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x14b4d0&&call.phase==4);

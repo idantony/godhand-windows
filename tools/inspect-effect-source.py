@@ -7,6 +7,8 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import sys
+sys.dont_write_bytecode=True
 from inspect_disc import Iso9660, SECTOR
 from inspect_assets import parse_fst
 
@@ -54,7 +56,7 @@ def est_row(ssd, group_id, row):
         for name, start in vector_offsets.items():
             width = 2 if name in ("scale", "scale_variation") else 3
             vectors[name] = [struct.unpack("<f", span(source, start + axis * 4, 4))[0] for axis in range(width)]
-        return dict(ordinal=index,group_id=group_id,row=row,row_count=rows,est_offset=est,source_sha256=hashlib.sha256(source).hexdigest(),flags=f"{word(source,0):08X}",flags4=f"{word(source,4):08X}",emitter_type=source[0x128],esp_type=source[0x133],part=struct.unpack("b",source[0xBE:0xBF])[0],seed=source[0x28E],direction_mode=source[0x28F],scale_mode=source[0x290],position_mode=source[0x291],euler_mode=source[0x292],vectors=vectors,motion_float_fields={f"{offset:X}":struct.unpack("<f",span(source,offset,4))[0] for offset in range(0xA0,0xBC,4)},colour_mode=source[0x293])
+        return dict(ordinal=index,group_id=group_id,row=row,row_count=rows,est_offset=est,source_sha256=hashlib.sha256(source).hexdigest(),flags=f"{word(source,0):08X}",flags4=f"{word(source,4):08X}",emitter_type=source[0x128],esp_type=source[0x133],part=struct.unpack("b",source[0xBE:0xBF])[0],seed=source[0x28E],direction_mode=source[0x28F],scale_mode=source[0x290],position_mode=source[0x291],euler_mode=source[0x292],vectors=vectors,motion_float_fields={f"{offset:X}":struct.unpack("<f",span(source,offset,4))[0] for offset in range(0xA0,0xBC,4)},colour_mode=source[0x293],detach_delay_bf=struct.unpack("b",source[0xBF:0xC0])[0],type6_parameters={"field16C":word(source,0x16C),"count170":word(source,0x170),"radius13C":struct.unpack("<f",span(source,0x13C,4))[0],"spacing140":struct.unpack("<f",span(source,0x140,4))[0]})
     raise ValueError("group not present")
 
 def main():

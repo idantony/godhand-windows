@@ -13,14 +13,15 @@ gh_player_ground_status gh_player_ground_globals_from_elf(gh_player_ground_globa
  if(!g||!raw)return GH_GROUND_ARGUMENT;if(g->loaded)return GH_GROUND_BUSY;const uint8_t*b=raw;
  if(bytes<52||memcmp(b,"\177ELF\1\1\1",7)||half(b+18)!=8)return GH_GROUND_ARGUMENT;
  uint32_t table=word(b+28);unsigned stride=half(b+42),count=half(b+44);if(stride<32||count>128||table>bytes||count>(bytes-table)/stride)return GH_GROUND_BOUNDS;
- unsigned found=0;float value=0;
+ unsigned found=0;float values[6]={0};
  for(unsigned i=0;i<count;i++){
   const uint8_t*p=b+table+(size_t)i*stride;if(word(p)!=1)continue;
   uint32_t offset=word(p+4),base=word(p+8),files=word(p+16),memory=word(p+20);
   if(files>memory||offset>bytes||files>bytes-offset||(uint64_t)base+memory>UINT64_C(0x100000000))return GH_GROUND_BOUNDS;
-  if(base<=0x3bd470&&(uint64_t)0x3bd474<=(uint64_t)base+files){if(found++)return GH_GROUND_ARGUMENT;value=number(b+offset+(0x3bd470-base));}
+  if(base<=0x3bd470&&(uint64_t)0x3bd488<=(uint64_t)base+files){if(found++)return GH_GROUND_ARGUMENT;memcpy(values,b+offset+(0x3bd470-base),sizeof(values));}
  }
- if(found!=1)return GH_GROUND_BOUNDS;if(!isfinite(value))return GH_GROUND_NUMERIC;g->tilt=value;g->loaded=1;return GH_GROUND_OK;
+ if(found!=1)return GH_GROUND_BOUNDS;for(unsigned i=0;i<6;i++)if(!isfinite(values[i]))return GH_GROUND_NUMERIC;
+ g->tilt=values[0];g->idle_turn_cap=values[1];g->walk_turn_cap=values[2];g->idle_turn_speed=values[3];g->walk_turn_speed=values[4];g->run_turn_speed=values[5];g->loaded=1;g->tuning_loaded=1;return GH_GROUND_OK;
 }
 static gh_player_ground_status body(gh_player_ground_pose_call*c,const gh_title_player_view*v){
  uint8_t*p=v->bytes;
