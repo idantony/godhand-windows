@@ -2,6 +2,8 @@
 #include "game_action_buttons.h"
 void gh_game_action_buttons_reset_001f72c0(gh_game_action_buttons*s){
  if(!s)return;
+ s->native_identity=s;s->links_ready=1;for(unsigned i=0;i<16;i++)s->heads[i]=(gh_action_link){i?GH_ACTION_LINK_HEADER:GH_ACTION_LINK_END,i?i-1:0};
+ for(unsigned i=0;i<8;i++)s->prompt_next[i]=(gh_action_link){GH_ACTION_LINK_UNKNOWN,0};
  for(unsigned i=16;i>1;i--){s->pool[i-1].previous=s->pool+i-2;s->pool[i-1].flags=0;}
  s->pool[0].previous=0;s->pool[0].flags=0;
  for(unsigned i=0;i<8;i++){

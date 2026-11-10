@@ -34,6 +34,10 @@
 #include "../core/game_enemy_resources.h"
 #include "../core/game_event_player_reset.h"
 #include "../core/game_player_frame.h"
+#include "../core/game_player_idle_input.h"
+#include "../core/game_effect_create.h"
+#include "../core/game_player_door_probe.h"
+#include "../core/game_action_button_set.h"
 #include <stdlib.h>
 #include <string.h>
 struct gh_game_services {
@@ -73,6 +77,9 @@ struct gh_game_services {
  gh_actor_motion player_motion;
  gh_actor_motion_call player_motion_call;
  gh_game_player_frame player_frame;gh_effect_release_bindings player_frame_effects;
+ gh_player_idle_input player_idle_input;gh_player_idle_input_bindings player_idle_bindings;
+ gh_effect_create_call player_effect_create;
+ gh_player_door_probe player_door;gh_player_door_bindings player_door_bindings;gh_bundle player_door_room;
  gh_motion_solve player_motion_solve;
  uint64_t ui_resource_epoch;
  gh_game_door door;uint8_t system_menu_enabled;uint32_t room_texture_channel;int room_texture_ready;
@@ -205,10 +212,13 @@ static gh_title_player_status player_child_initialize(void*p,gh_game_player_chil
  if(frontier)*frontier=child->frontier;
  return e;
 }
+static gh_effect_release_bindings player_effect_storage(gh_game_services*s){
+ return (gh_effect_release_bindings){.effects=&s->effects,.esp=s->scene_buffer_a,.emitters=s->scene_buffer_b,
+  .esp_bytes=sizeof(s->scene_buffer_a),.emitter_bytes=sizeof(s->scene_buffer_b),.actor_match=gh_effect_create_actor_match,.context=&s->effects};
+}
 static gh_actor_motion_status player_motion_effect(void*p,const gh_title_player_view*actor,int32_t kind,uint32_t mode,uint32_t*frontier){
  gh_game_services*s=p;if(!actor||actor->bytes!=s->title_player.view.bytes)return GH_ACTOR_MOTION_ARGUMENT;
- gh_effect_release_bindings b={.effects=&s->effects,.esp=s->scene_buffer_a,.emitters=s->scene_buffer_b,
-  .esp_bytes=sizeof(s->scene_buffer_a),.emitter_bytes=sizeof(s->scene_buffer_b)};unsigned slot=0;
+ gh_effect_release_bindings b=player_effect_storage(s);unsigned slot=0;
  gh_effect_status e=gh_game_effect_release_00306200(&b,actor,kind,mode,frontier,&slot);
  return !e?GH_ACTOR_MOTION_OK:e==GH_EFFECT_UNSUPPORTED?GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_CALLEE;
 }
@@ -219,7 +229,7 @@ static int player_motion_request_matches(gh_game_services*s,const gh_player_moti
 static gh_player_init_status player_motion_initialize(void*p,const gh_player_motion_request*r,uint32_t*frontier){
  gh_game_services*s=p;if(!player_motion_request_matches(s,r))return GH_PLAYER_INIT_ARGUMENT;
  gh_actor_motion_bindings b={.model=r->model,.resource=r->resource,.resource_bytes=r->resource_bytes,.work=r->work,
-  .effect=player_motion_effect,.context=s,.ik_globals=s->b.motion_ik_globals};
+   .effect=player_motion_effect,.context=s,.ik_globals=s->b.motion_ik_globals,.save=s->b.save,.save_binding_known=1};
   gh_actor_motion_status e;gh_actor_motion_call *call=&s->player_motion_call;
   if(call->active&&!call->complete){
    /* Retry the same original invocation after a late native frontier. */
@@ -742,7 +752,10 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  /* Native shutdown owns this unfinished construction prefix; this is not the
   * original scene-exit destructor for initialized world actors. */
  gh_scene_nearcheck_release(&s->step.nearcheck);
- if(gh_r100_init_release(&s->r100))return fail(s,GH_SERVICES_ASSET,0x208,0);
+  /* Native destruction detaches effect companions before borrowed actors and
+   * models. It neither acknowledges original Kill nor clears live masks. */
+  gh_effect_create_forget_on_owner_destroy(&s->effects);
+  if(gh_r100_init_release(&s->r100))return fail(s,GH_SERVICES_ASSET,0x208,0);
  if(gh_scene_at_units_release(&s->scene_at))return fail(s,GH_SERVICES_ASSET,0x2c1270,0);
  gh_scene_dynamic_cancel_update(&s->dynamic_objects);
  if(gh_om_factory_release(&s->om_factory))return fail(s,GH_SERVICES_ASSET,0x30f8b0,0);
@@ -793,13 +806,52 @@ gh_game_services_status gh_game_services_actor_view(gh_game_services*s,uint32_t 
  gh_scene_placement_status e=gh_om_factory_object_view(&s->om_factory,handle,out);
  return !e?GH_SERVICES_OK:e==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
 }
+static gh_player_target_status player_target_view(void*p,uint32_t handle,gh_title_player_view*v,uint32_t*f){
+ gh_game_services*s=p;gh_game_services_status e=gh_game_services_actor_view(s,handle,v);if(e&&f)*f=0x30f16c;
+ return !e?GH_PLAYER_TARGET_OK:e==GH_SERVICES_FRONTIER?GH_PLAYER_TARGET_UNSUPPORTED:GH_PLAYER_TARGET_CALLEE;
+}
+static gh_player_frame_status player_frame_effect_create(void*p,const gh_player_frame_effect_request*r,uint32_t*f){
+ gh_game_services*s=p;if(!r||!r->actor||!f)return GH_PLAYER_FRAME_ARGUMENT;*f=0;
+ if(r->actor->bytes!=s->title_player.view.bytes||r->argument3){*f=0x306528;return GH_PLAYER_FRAME_UNSUPPORTED;}
+ int32_t mode;memcpy(&mode,&r->mode,4);
+ gh_effect_create_request request={.bank=r->parameter_bits,.index=(uint32_t)r->kind,.actor=r->actor,.mode=mode,.selector=r->selector};
+ gh_effect_create_call*c=&s->player_effect_create;gh_effect_status e;
+ if(!c->active||c->complete){e=gh_effect_create_begin(c,&request);if(e)return GH_PLAYER_FRAME_ARGUMENT;}
+ else if(c->request.bank!=request.bank||c->request.index!=request.index||c->request.actor!=request.actor||c->request.mode!=request.mode||c->request.selector!=request.selector)return GH_PLAYER_FRAME_BUSY;
+ gh_effect_create_bindings b={.storage=player_effect_storage(s),.work=s->b.work,.random=&s->b.init->random,.model=&s->player_model};
+ e=gh_game_effect_create_00306528(c,&b);*f=c->frontier;
+ if(e)return e==GH_EFFECT_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+ /* The original caller ignores the bool, including genuine pool-full return0. */
+ return c->complete?GH_PLAYER_FRAME_OK:GH_PLAYER_FRAME_ARGUMENT;
+}
+static gh_player_door_status player_door_publish(void*p,const gh_player_door_action*r,uint32_t*f){
+ gh_game_services*s=p;if(!r||!f||!r->player||r->player->bytes!=s->title_player.view.bytes)return GH_PLAYER_DOOR_ARGUMENT;
+ if(r->argument){*f=0x1f7858;return GH_PLAYER_DOOR_UNSUPPORTED;}
+ gh_action_set_request request={.priority=r->priority,.life=r->life,.unknown20=r->unknown20,.callback_id=r->callback_entry,.argument=NULL,.kind=r->kind};
+ int emitted;unsigned index;gh_action_set_status e=gh_action_button_set_001f7858(&s->action_buttons,&request,&emitted,&index,f);
+ /* Original voidSet genuinely does nothing when all8 entries are occupied. */
+ return !e?GH_PLAYER_DOOR_OK:e==GH_ACTION_SET_UNSUPPORTED?GH_PLAYER_DOOR_UNSUPPORTED:GH_PLAYER_DOOR_CALLEE;
+}
+static gh_player_frame_status player_frame_door_probe(void*p,const gh_title_player_view*v,uint32_t*f){
+ gh_game_services*s=p;if(!v||!f||v->bytes!=s->title_player.view.bytes||v->size!=s->title_player.view.size)return GH_PLAYER_FRAME_ARGUMENT;
+ if(!s->player_door.active||s->player_door.complete){
+  if(gh_game_room_pack_bundle(&s->room_pack,&s->player_door_room)){*f=0x31ccf0;return GH_PLAYER_FRAME_CALLEE;}
+  s->player_door_bindings=(gh_player_door_bindings){.player=&s->title_player.view,.current_player=&s->title_player.view,.init=s->b.init,
+   .scene_at=&s->scene_at,.room=&s->player_door_room,.work=s->b.work,.actors=&s->scene_tables,.numeric_policy=GH_CAMERA_NATIVE_BINARY32_REFERENCE,
+   .publish=player_door_publish,.context=s};
+  if(gh_player_door_probe_begin(&s->player_door)){*f=0x2dc920;return GH_PLAYER_FRAME_ARGUMENT;}
+ }
+ gh_player_door_status e=gh_player_door_probe_002dc920_002dcad8(&s->player_door,&s->player_door_bindings);*f=s->player_door.frontier;
+ if(e)return e==GH_PLAYER_DOOR_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:e==GH_PLAYER_DOOR_NUMERIC?GH_PLAYER_FRAME_NUMERIC:GH_PLAYER_FRAME_CALLEE;
+ return s->player_door.complete?GH_PLAYER_FRAME_OK:GH_PLAYER_FRAME_ARGUMENT;
+}
 gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t handle,uint32_t entry,int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,uint32_t*f){
  if(f)*f=0;if(!s||!v||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
  const gh_title_player_view*canonical=NULL;
  if(gh_game_player_factory_scalar_view(&s->player_factory,handle,&canonical)||canonical->bytes!=v->bytes||canonical->size!=v->size){*f=entry;return GH_SERVICES_FRONTIER;}
  if(entry!=0x108ab0||delta){*f=entry;return GH_SERVICES_FRONTIER;}
  if(!s->player_tail.complete||!s->player_model.ready){*f=0x107f58;return GH_SERVICES_FRONTIER;}
- s->player_frame_effects=(gh_effect_release_bindings){.effects=&s->effects,.esp=s->scene_buffer_a,.emitters=s->scene_buffer_b,.esp_bytes=sizeof(s->scene_buffer_a),.emitter_bytes=sizeof(s->scene_buffer_b)};
+ s->player_frame_effects=player_effect_storage(s);
  gh_player_frame_bindings b={.player=&s->title_player,.work=s->b.work,.init=s->b.init,.camera=&s->camera,.save=s->b.save,
   .scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario},.effects=&s->player_frame_effects,
   .current_player=&s->title_player.view,.elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes,.numeric_policy=GH_CAMERA_NATIVE_BINARY32_REFERENCE,
@@ -809,7 +861,11 @@ gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t 
   .initialize_motion=player_motion_initialize,.advance_motion=player_frame_motion_advance,.motion_context=s,
   /* Original107E40 explicitly wrote698/6A0=NULL; no later recovered writer
      has published either. The frame also rejects any changed raw token. */
-  .auxiliary_bindings_known=1};
+   .auxiliary_bindings_known=1,.effect_create=player_frame_effect_create,.effect_context=s,
+   .idle_input=&s->player_idle_input,.idle_input_bindings=&s->player_idle_bindings,.node_cache=&s->player_tail.node_cache,
+   .door_probe=player_frame_door_probe,.door_context=s};
+ if(!s->player_frame.bound)s->player_idle_bindings=(gh_player_idle_input_bindings){.frame=b,
+  .targets={.pools=&s->pools,.actors=&s->scene_tables,.player=&s->title_player.view,.resolve=player_target_view,.context=s,.elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes}};
  gh_player_frame_status e=gh_game_player_frame_00108ab0(&s->player_frame,&b);*f=s->player_frame.frontier;
  return !e?GH_SERVICES_OK:e==GH_PLAYER_FRAME_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
 }

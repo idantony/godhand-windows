@@ -1,4 +1,5 @@
 #include "game_scene_step.h"
+#include "game_action_button_set.h"
 #include "game_scene_dynamic_geometry.h"
 #include "game_camera.h"
 #include "game_collision_pair_shapes.h"
@@ -116,8 +117,17 @@ static gh_scene_step_status at_before(gh_game_scene_step*s,const gh_game_scene_s
 static gh_scene_step_status action_empty(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){const uint8_t*raw=(const uint8_t*)b->work;gh_game_action_buttons*a=b->action_buttons;
  if(!(w(raw+0x5e0)&0x100000)&&(w(raw+0x5d8)&0x400000))return GH_SCENE_STEP_OK;
  if(!a||!b->cockpit_action_flags_1414)return fail(s,0x1f75b0,GH_SCENE_STEP_ARGUMENT,0);*b->cockpit_action_flags_1414&=0xfe;
- if(!(w(raw+0x5e0)&0x100000)){gh_action_pool_link*link=a->pool+15;unsigned steps=0;uintptr_t base=(uintptr_t)a->pool;
-  while(link){uintptr_t p=(uintptr_t)link;if(p<base||p-base>=sizeof(a->pool)||(p-base)%sizeof(*link)||++steps>16)return fail(s,0x1f7360,GH_SCENE_STEP_BOUNDS,0);if(link->flags==1)return fail(s,0x1f7360,GH_SCENE_STEP_UNSUPPORTED,(int)(link-a->pool));link=link->previous;}
+  if(!(w(raw+0x5e0)&0x100000)){
+   if(a->links_ready){gh_action_link link;gh_action_set_status e=gh_action_button_first(a,&link);unsigned steps=0;
+    if(e)return fail(s,0x1f7360,GH_SCENE_STEP_ARGUMENT,e);
+    while(link.kind!=GH_ACTION_LINK_END){if(++steps>24)return fail(s,0x1f7360,GH_SCENE_STEP_BOUNDS,0);
+     if(link.kind==GH_ACTION_LINK_HEADER){if(a->pool[link.index].flags==1)return fail(s,0x1f7360,GH_SCENE_STEP_UNSUPPORTED,(int)link.index);}
+     else{const gh_action_prompt*prompt=NULL;e=gh_action_button_prompt(a,link,&prompt);if(e)return fail(s,0x1f7360,GH_SCENE_STEP_BOUNDS,e);if(prompt->state0c==1&&prompt->life!=31)return fail(s,0x1f7360,GH_SCENE_STEP_UNSUPPORTED,(int)link.index);}
+     e=gh_action_button_next(a,link,&link);if(e)return fail(s,0x1f7360,GH_SCENE_STEP_BOUNDS,e);
+    }
+   }else{gh_action_pool_link*link=a->pool+15;unsigned steps=0;uintptr_t base=(uintptr_t)a->pool;
+    while(link){uintptr_t p=(uintptr_t)link;if(p<base||p-base>=sizeof(a->pool)||(p-base)%sizeof(*link)||++steps>16)return fail(s,0x1f7360,GH_SCENE_STEP_BOUNDS,0);if(link->flags==1)return fail(s,0x1f7360,GH_SCENE_STEP_UNSUPPORTED,(int)(link-a->pool));link=link->previous;}
+   }
  }
  for(unsigned i=0;i<8;i++)if((a->entries[i].flags&0x201)==1)return fail(s,a->entries[i].kind==3?0x1f6f58:0x1f7228,GH_SCENE_STEP_UNSUPPORTED,(int)i);return GH_SCENE_STEP_OK;
 }

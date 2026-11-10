@@ -48,7 +48,7 @@ gh_actor_motion_status gh_actor_motion_begin_parameters_002a8578(gh_actor_motion
   if(sequence!=SIZE_MAX&&!span(b->resource_bytes,sequence,4))return GH_ACTOR_MOTION_BOUNDS;
   int sequence_valid=sequence!=SIZE_MAX&&!memcmp(b->resource+sequence,"SEQ\0",4);
   if(sequence_valid&&!span(b->resource_bytes,sequence,0x18))return GH_ACTOR_MOTION_BOUNDS;
-  s->b=*b;s->motion=view;s->sequence_offset=sequence;s->flags=flags;s->start_frame_bits=start_frame_bits;s->blend_frames=blend_frames;s->step_stage=0;s->sequence_valid=(uint8_t)sequence_valid;s->bound=1;
+  s->b=*b;s->motion=view;s->sequence_offset=sequence;s->flags=flags;s->start_frame_bits=start_frame_bits;s->blend_frames=blend_frames;s->step_stage=0;s->sequence_stage=0;s->sequence_pending=0;s->sequence_valid=(uint8_t)sequence_valid;s->bound=1;
  }
  if(s->complete)return GH_ACTOR_MOTION_OK;
  if(!s->stage){int kind=(int16_t)half(p+0x570);if(kind!=-1){gh_actor_motion_status e=effect(s,kind,rd(p+0x574));if(e)return e;}

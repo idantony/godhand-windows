@@ -14,7 +14,14 @@ typedef struct gh_action_prompt {uint32_t flags;struct gh_action_prompt *next;
 } gh_action_prompt;
 typedef struct gh_action_pool_link {uint32_t unknown0;struct gh_action_pool_link *previous;
  uint32_t unknown8,flags;} gh_action_pool_link;
-typedef struct {uint32_t unknown00;gh_action_pool_link pool[16];gh_action_prompt entries[8];} gh_game_action_buttons;
+typedef enum {GH_ACTION_LINK_END,GH_ACTION_LINK_HEADER,GH_ACTION_LINK_PROMPT,GH_ACTION_LINK_UNKNOWN} gh_action_link_kind;
+typedef struct {gh_action_link_kind kind;uint32_t index;} gh_action_link;
+typedef struct gh_game_action_buttons {uint32_t unknown00;gh_action_pool_link pool[16];gh_action_prompt entries[8];
+ /* SAME original pointer graph, typed to support mixed header/prompt nodes.
+  * Legacy previous/next pointers are compatibility header-only views; after
+  * publication consumers MUST traverse these authoritative typed links. */
+ gh_action_link heads[16],prompt_next[8];const struct gh_game_action_buttons *native_identity;uint8_t links_ready;
+} gh_game_action_buttons;
 /* Actual1F72C0->1F77D0. Rebuildprevlinkchain andreset8promptfields, preserving
  * allunspecifiedbytes/references. Doesnotfreeforeignobjects orclaimUIrender. */
 void gh_game_action_buttons_reset_001f72c0(gh_game_action_buttons *);

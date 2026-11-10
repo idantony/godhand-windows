@@ -8,7 +8,7 @@ static int span(size_t n,size_t o,size_t z){return o<=n&&z<=n-o;}
 static gh_actor_motion_status fail(gh_actor_motion_call*s,uint32_t pc,gh_actor_motion_status e){s->frontier=pc;return e;}
 gh_actor_motion_status gh_actor_motion_call_open_parameters_002a8578(gh_actor_motion_call*s,gh_actor_motion*current,const gh_actor_motion_bindings*b,size_t motion,size_t candidate,uint32_t start_frame_bits,uint32_t blend_frames,uint16_t flags,int release_previous){
  if(!s||!current||!b||!b->model||!b->work||!b->resource)return GH_ACTOR_MOTION_ARGUMENT;
- if((s->active&&!s->complete)||!current->bound||!current->complete||current->step_stage)return GH_ACTOR_MOTION_BUSY;
+ if((s->active&&!s->complete)||!current->bound||!current->complete||current->step_stage||current->sequence_stage)return GH_ACTOR_MOTION_BUSY;
  if(current->b.model!=b->model||current->b.work!=b->work)return GH_ACTOR_MOTION_ARGUMENT;
  if(release_previous!=0&&release_previous!=1)return GH_ACTOR_MOTION_ARGUMENT;
  if(flags||start_frame_bits)return fail(s,0x157568,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -42,7 +42,7 @@ gh_actor_motion_status gh_actor_motion_call_step_002a8578(gh_actor_motion_call*s
   /* ONLY after genuine2A84A8 completed, prepare the SAME owner for157568.
    * stage1 skips the alreadycompleted570 release in constructor-onlybegin;
    * oldSEQ was not forgotten/reset before itsrequired306200 calls. */
-  m->bound=0;m->complete=0;m->stage=1;m->frontier=0;m->detail=0;m->release_index=0;m->sequence_valid=0;m->step_stage=0;memset(m->caches,0,sizeof(m->caches));s->stage=3;
+  m->bound=0;m->complete=0;m->stage=1;m->frontier=0;m->detail=0;m->release_index=0;m->sequence_valid=0;m->step_stage=0;m->sequence_stage=0;m->sequence_pending=0;memset(m->caches,0,sizeof(m->caches));s->stage=3;
  }
  gh_actor_motion_status e=gh_actor_motion_begin_parameters_002a8578(m,&s->next,s->motion_offset,s->candidate_offset,s->start_frame_bits,s->blend_frames,s->flags);if(e){s->frontier=m->frontier;return e;}
  s->complete=1;s->frontier=0;return GH_ACTOR_MOTION_OK;

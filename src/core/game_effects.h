@@ -10,10 +10,11 @@ typedef struct {const uint8_t *bytes;size_t size;} gh_effect_view;
 typedef struct {int32_t kind;gh_effect_view tbl1,tbl0;uint32_t references;} gh_effect_resource;
 typedef struct {int32_t previous,next;uint8_t in_use,flag9;uint16_t flags_a;
  uint32_t vector_start;uint16_t units,field12;uint32_t unknown14;} gh_effect_pool_node;
+struct gh_effect_native;
 typedef struct {gh_effect_resource resources[64];gh_effect_view emd_tables[1250],emitter_entries[64];
  gh_effect_view ssd,ear;uint32_t cached408,cached40c,field414;uint8_t active;
  uint32_t vectors[1000][4];gh_effect_pool_node nodes[32],head;uint32_t pool_words[32];
- uint8_t ready;uint32_t frontier;int detail;} gh_game_effects;
+ uint8_t ready;uint32_t frontier;int detail;struct gh_effect_native *native;} gh_game_effects;
 typedef enum {GH_EFFECT_OK,GH_EFFECT_ARGUMENT,GH_EFFECT_BOUNDS,GH_EFFECT_UNSUPPORTED} gh_effect_status;
 /* Borrow exactcanonicalbuffers alreadyreset by2FAA20/3003F0. Live slots need
  * realoriginalkillconsumers, currently explicitunsupported302918/2FBE50.

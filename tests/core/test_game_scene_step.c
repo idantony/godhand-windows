@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "../../src/core/game_scene_step.h"
+#include "../../src/core/game_action_button_set.h"
 #include "../../src/platform/disc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +44,13 @@ int main(int argc,char**argv){gh_disc*d;size_t index,elfn;gh_disc_entry asset;ui
  C(init->world_time==1&&step.cooldown_1b0==14&&!step.completed_frames);
  gh_game_scene_step_construct(&step,0,15);put(collision.records.pointer,0x200);put((uint8_t*)collision.records.pointer+GH_COLLISION_RECORD_BYTES,0x400);
  C(gh_game_scene_step_002a6690(&step,&b)==GH_SCENE_STEP_UNSUPPORTED&&step.frontier==0x2bac98&&step.collision_cursor==1&&step.detail==1);C(get(collision.records.pointer)==0x600);C(gh_game_scene_step_002a6690(&step,&b)==GH_SCENE_STEP_UNSUPPORTED&&step.frontier==0x2bac98&&step.detail==1&&step.collision_cursor==1&&get(collision.records.pointer)==0x600); /* same pausedframe must not revisit firstrow as a new sweep */
+ /* A linked retired201 prompt remains visible to the original state0C walk.
+  * Looking only at active flags or the header-only compatibility chain loses it. */
+ gh_game_scene_step action_step={.scenario_before_stage=3};gh_action_set_request request={.priority=4,.life=8,.callback_id=0x2dca58};int emitted;unsigned prompt_index;uint32_t action_frontier;
+ C(!gh_action_button_set_001f7858(&buttons,&request,&emitted,&prompt_index,&action_frontier)&&emitted);buttons.entries[prompt_index].flags|=0x200;buttons.entries[prompt_index].state0c=1;
+ C(gh_game_scene_scenario_before_002c3500(&action_step,&b)==GH_SCENE_STEP_UNSUPPORTED&&action_step.frontier==0x1f7360&&action_step.scenario_before_stage==3);
+ buttons.entries[prompt_index].state0c=0;C(!gh_game_scene_scenario_before_002c3500(&action_step,&b)&&!action_step.scenario_before_stage);
+ action_step.scenario_before_stage=3;buttons.prompt_next[prompt_index]=(gh_action_link){GH_ACTION_LINK_PROMPT,prompt_index};C(gh_game_scene_scenario_before_002c3500(&action_step,&b)==GH_SCENE_STEP_BOUNDS&&action_step.frontier==0x1f7360);gh_game_action_buttons_reset_001f72c0(&buttons);
  C(gh_collision_pairs_release(&collision)==GH_COLLISION_OK&&gh_heap_destroy(heap)==GH_MEM_OK);free(init);free(data);free(elf);test_fibers(0);test_fibers(1);test_fibers(2);
  puts("PASS actualR020 state4 orderedprefix to30F090, realELFevent/AT/action emptydomains, camera mode4 frontier, independentMainNearCheck, noreplay failureprefix andScenario16 nativefibers +parentSleep/revisit");return 0;
 }

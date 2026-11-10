@@ -39,4 +39,5 @@ gh_actor_model_status gh_actor_model_release_nodes(gh_actor_model*s){if(!s)retur
 
 gh_actor_model_status gh_actor_model_object_packet(const gh_actor_model*s,const gh_actor_object_packets**out){if(!s||!out||!s->nodes)return GH_ACTOR_MODEL_ARGUMENT;*out=&s->nodes->object;return GH_ACTOR_MODEL_OK;}
 
-gh_actor_model_status gh_actor_model_node_or_flags(gh_actor_model*s,unsigned i,uint16_t offset,uint32_t value){if(!s||!s->bound)return GH_ACTOR_MODEL_ARGUMENT;if(offset!=0x380&&offset!=0x410)return GH_ACTOR_MODEL_ARGUMENT;if(!s->ready||!s->nodes)return GH_ACTOR_MODEL_BUSY;if(i>=s->nodes->complete)return GH_ACTOR_MODEL_BOUNDS;uint8_t*p=s->nodes->entries[i].bytes;put(p,offset,w(p+offset)|value);return GH_ACTOR_MODEL_OK;}
+gh_actor_model_status gh_actor_model_node_mask_flags(gh_actor_model*s,unsigned i,uint16_t offset,uint32_t and_mask,uint32_t or_mask){if(!s||!s->bound)return GH_ACTOR_MODEL_ARGUMENT;if(offset!=0x380&&offset!=0x410)return GH_ACTOR_MODEL_ARGUMENT;if(!s->ready||!s->nodes)return GH_ACTOR_MODEL_BUSY;if(i>=s->nodes->complete)return GH_ACTOR_MODEL_BOUNDS;uint8_t*p=s->nodes->entries[i].bytes;put(p,offset,(w(p+offset)&and_mask)|or_mask);return GH_ACTOR_MODEL_OK;}
+gh_actor_model_status gh_actor_model_node_or_flags(gh_actor_model*s,unsigned i,uint16_t offset,uint32_t value){return gh_actor_model_node_mask_flags(s,i,offset,UINT32_MAX,value);}

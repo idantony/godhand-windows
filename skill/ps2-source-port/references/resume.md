@@ -3,7 +3,78 @@
 Updated 2026-11-10. Read Git and live worker ownership before editing. This is
 an ongoing authorized source port, not a playable Windows game yet.
 
-Latest fully verified integration is room-transition-59, an immutable G: source
+NEWEST LOCAL fullyverified integration is room-transition-62:228C/244checks,
+allhardware/codec/fullADX andmatchingDLL RNG20544/20534 PASS. Actual hidden/
+muted489ticks/R100/Main4 nowcompletes BOTH12BFB8 Door probes (sameSceneAt/JMP/
+realray), trueActionButton_set publisher, 12BB38 ordinaryeffectgate,1236E8 real
+cachedmesh visibility,123908 exactmodeAND andpreviousworldpositioncapture.
+Strictfrontier now1348E8 solidcollisionquery. worldpackets0, allrenderer/window/
+worlderrors0, normalcleanup/exit4. Private analysis/room-transition-62-
+verification.json; immutable/scratch G room-transition-62. NOTpushed, standard
+Ereports/bilingualpublicdocs stay59/8b3c033; latestprivatepushreviewstill59.
+62 derives61 byONLYcorrecting Door test CLI mode fromboth toiso(argc2).
+61 nativeactuallyfailedthatcommand afterothernewtests passed; notfullyverified.
+AStopProcessguard rejected twoPython launcherPIDs before anykill, then61 ended
+naturally; do not inventcancellation or restartbecause ofobservationtimeout.
+
+Root62 source changes: NEWgame_player_post_state +narrowexistingnodes mask API
+(380/410 only; legacyor wrapper). Frame appends same node_cache/postcursor,
+changesidle completion toactual commonpoststate, savesaliasF0 before1348E8.
+12BB38 pendingrelease doesnot getlost afteroriginalbit40 clear; state601positive
+306900 remainsstrict.1236E8 resolvesrealnodes[0,2..9] fromsameinitTail cache,
+neverraw0absence; 1574 isgenuinelyunread.149AD8 mapping remainsstrictwhenneeded.
+ActualPL00 verifiesall16 selectorpairs, flags/padding/foreignrawtokenrepair;
+newfixture confirmsretired201mixedActionprompt stillneeds1F7360state0C walk.
+Root62 onlyintegratesplayer-door-probe130521 +action-button-set131146;
+newaction-button-step132838 realHUD/cleanupconsumer isfrozen NOTyetintegrated.
+
+Liveownership/nextcriticalpath:
+- opengoal_method nowactual1348E8 NEWcollision_solid_step, withapprovedsolids.h
+  tailcontacts08[32] +reset.c sync, sameunit/sphereowner. Retainoriginalduplicates/
+  32cap/bounds seeding, updatesourcecenters once, no re-pushonretry. Rootdoesnot
+  touchsolids.h/c orunits.c/h untilworkerproposal. Capsulepairs remainstrict.
+- Rootnext132DA0/1329C0 terrainqueries andActionStep/enemyintegration. Actualraw
+  analysis/player-physics-62-ghidra-private.json/context covers1348E8/132DA0/
+  1329C0. solid-frame-62-* coversSphere133AA8, inclusiveAABB135250,134CB0,1346C8;
+  actual41D7E0+18delta0/+1C133AA8. 134CB0 usesXZradiusdistance but FULLXYZ SDK
+  normalization forpush; sourcekind5, otherkindcompares thenother.boundfactor;
+  onlyactoraliasF0 X/Z move, sourcecachedcenters/bounds not recomputed perhit.
+  player-terrain-62-* covers1321D8/12ED60/30A370/1F7E28, allfunction-context raw
+  verificationPASS. Noimplementation/wholequery claim fromtheseprobes alone.
+- skill_forward_test ownsapprovedse_voice.h/c same64pool typedattachedrequest,
+  model.h/c sound_borrowers +releaseguard and motion.h request.model const->
+  mutablepointer forborrow API (layoutunchanged). ALLWIPnotin62; do notreadE
+  headers intofrozenobjects. Completednativevoice/EOS/drop/abort mustdetach,
+  pendingreservation retiresbefore samepending_soundaddress usednext event.
+- godhand_upstream continuescomplete104010 cloth. NewimmutableNOTin62:
+  cloth-templates01/geometry, cloth-runtime01, child-move-gate01, child-move01,
+  cloth-forces01, cloth-axis01, cloth-angles01, cloth-collision01. Trueactive
+  childMove currentlystrict10430C/forces10497C/angles104EC8 dependingchained
+  prefixes; nofullchildframeyet. Childglobalowners persistoutsidechild, no
+  peractorreset. Whole20moduleenemycomplete19 stillNOTintegrated.
+
+Previous verified local60 follows (superseded by62):
+Verified local60 is room-transition-60:224C/241checks,allhardware/
+codec/fullADX andmatchingDLL RNG20544/20534 PASS. Actual hidden/muted489ticks
+R100/Main4 nowcompletes123938 idleinput/targetselection andsameowner2E effect
+producer, stops at2C2B58 in12BFB8 cleanup. worldpackets0/errors0/normalexit4.
+Private analysis/room-transition-60-verification.json; matchingfrozen/scratch
+G paths room-transition-60. NOTpushed, standardEreports/publicdocs remain59.
+60 derives59 +targets01/frame04/effect-create124345/motionblend02 (hashaudited
+withterminalnewline-only dependencydifferences), Rootsamepersistentidlebindings,
+effectcall/releaseactor_match/lifetimecleanup andsameSave onmotion. Complete
+freshABI cohort compiled; noWIP sharedheaders. CurrentEhas theseRootchanges.
+Rootnextplayerpoststate12BB38->1236E8/123908 andphysicsafteractualidlecallee;
+readactual player-frame-40-ghidra-private.json, verifyrawranges beforeimport.
+Workeropengoal ownsNEW SceneAtJump/DoorProbe; actual2C2B58 nowitspriority.
+1F7858 meansActionButton_set (NOTScenario taskregistration): mixedslot/prompt
+links needtypedvariant, requiredpublisher untilrealnativeconsumer recovered.
+Othernewimmutablebatches NOTin60: enemycomplete19; cloth-templates01; child-
+move-gate01. CurrentactualWork5D8=0, soR100child101 likelyACTIVE104010, not
+TitleF00C6000 earlyreturn. Clothworker continuesrealactiveprefix withONE4615F0/
+461600 mutableglobalowner. motionworker nowactualattachedSE2CBA48 nativeconsumer.
+
+Latest public fully verified integration is room-transition-59, an immutable G: source
 copy: 221C / 237checks, hardware/codec/full independentADX and matchingDLL
 RNG20544/20534 PASS. Matching hidden/muted Windows executes489ticks, R100/Main4,
 6MC/90Movie/369UI. Actual NearCheck, lighting, positiveHitArea sort/filter/LOS/
@@ -14,9 +85,11 @@ cleanup/exit4. No complete player frame, original3D frame or gameplay yet.
 Private analysis/room-transition-59-verification.json is authoritative. Standard
 localreports and bilingualdocs nowdescribe59. Source-staging/publication must
 still be verified from liveGit; do not infer a successful push from this note.
-Formal review AFTER a meaningful push uses analysis/project-review.json. Last
-confirmed public milestone before preparing59 was44/f03ff947580df365fc8963bdffa0bad65fb52cb2.
-Local rollback51/1d2c3c1 andtoolv1/ef6c4d8 remain inhistory.
+Formal review AFTER a meaningful push uses analysis/project-review.json. Public
+main8b3c033 was pushed andremoteSHAverified on59. Privateworkloadestimate is
+onlyinignoredanalysis/chat, neverGitHub. Local rollback51/1d2c3c1 andtoolv1/
+ef6c4d8 remaininhistory. CurrentE cancontainnewerworkerWIP thanpublic59;
+useimmutablecohort whenintegrating.
 
 59 derives58 plus one obsolete fixture correction: recoveredSEQ timing means
 count>0 alone is not unsupported; test now supplies an actual unresolved418
