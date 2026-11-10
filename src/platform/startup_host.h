@@ -17,6 +17,7 @@
 #include "../core/display_state.h"
 #include "../core/cockpit_fan.h"
 #include "../core/game_children.h"
+#include "../core/game_object_step.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -119,6 +120,9 @@ gh_host_error gh_startup_host_set_fade_consumer(gh_startup_host *,gh_host_fade_c
  * state4 traversal is required before scene_frame_ready; partial queues at a
  * world/render frontier are never reported as complete scene frames. */
 gh_host_error gh_startup_host_set_scene_ui_consumers(gh_startup_host *,const gh_host_scene_ui_callbacks *);
+/* Original static-model packet groups join the SAME frame's OT as UI. The
+ * callback must build the real native packet inputs; no empty draw ack. */
+gh_host_error gh_startup_host_set_world_consumer(gh_startup_host *,gh_object_static_emit,void *);
 /* Owner-fiber only, normally once before each timed engine tick. Writes raw
  * 32-bit and logical64-bit original work fields via memcpy, no host-long casts.
  * Does not invent physical input, replay, analog or pad-lock policy. */

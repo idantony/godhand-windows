@@ -7,6 +7,11 @@
 #include "../core/game_room_pools.h"
 #include "../core/game_camera.h"
 #include "../rooms/r100.h"
+#include "../rooms/r100_init.h"
+#include "../core/scene_at_units.h"
+#include "../core/game_om_factory.h"
+#include "../core/game_player_factory.h"
+#include "../core/game_actor_scroll_links.h"
 #include <stdlib.h>
 #include <string.h>
 struct gh_game_services {
@@ -23,19 +28,23 @@ struct gh_game_services {
  gh_em_scene_placements em_placements;gh_om_scene_placements om_placements;gh_acd_scene_binding acd;
  gh_game_scene_step step;gh_r020_title*title;gh_scene_hook scenario_exit,scenario_callback104;
  gh_scene_meshes meshes;
+ gh_r100_init r100;
+ gh_om_factory om_factory;
+ gh_game_player_factory player_factory;
+ gh_object_resource_bindings object_resources;
  uint64_t ui_resource_epoch;
  gh_game_door door;uint8_t system_menu_enabled;uint32_t room_texture_channel;int room_texture_ready;
  gh_stage_object_init old_children,old_cockpit;void *old_context;
  int owns_children,owns_textures,owns_skills,stage_attempted;
  gh_game_children *created_children;gh_stage_textures *created_textures;
  uint32_t cockpit_pool_end,cockpit_jobs_end;int cockpit_snapshot;
- uint32_t frontier;int detail,frontier_is_r020;gh_game_services_status status;uint32_t main_word4;
+ uint32_t frontier;int detail,frontier_module_code;gh_game_services_status status;uint32_t main_word4;
  gh_game_main_record main_records[32];
  uint8_t scene_buffer_a[0x100180],scene_buffer_b[0x26060];
 };
 static uint32_t u32(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w32(uint8_t*p,uint32_t n){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(n>>(8*i));}
-static gh_game_services_status fail(gh_game_services*s,gh_game_services_status e,uint32_t entry,int detail){if(s->frontier!=entry)s->frontier_is_r020=0;s->frontier=entry;s->detail=detail;s->status=e;return e;}
+static gh_game_services_status fail(gh_game_services*s,gh_game_services_status e,uint32_t entry,int detail){if(s->frontier!=entry)s->frontier_module_code=0;s->frontier=entry;s->detail=detail;s->status=e;return e;}
 static int in_pack(const void*p,uintptr_t base,size_t bytes){uintptr_t v=(uintptr_t)p;return p&&v>=base&&v-base<bytes;}
 static int detach_bundle(gh_bundle_entry*e,uintptr_t base,size_t bytes){if(!in_pack(e->bytes,base,bytes))return 0;*e=(gh_bundle_entry){0};return 1;}
 static void detach_table(gh_scene_table_view*v,uintptr_t base,size_t bytes){if(in_pack(v->bytes,base,bytes))*v=(gh_scene_table_view){0};}
@@ -94,12 +103,12 @@ static gh_scene_status room_init_native(void*p,uint32_t*frontier){
   .bgm=s->b.bgm_requests,.fade=s->b.fade,.threads=s->b.threads,
   .room_jump={s->b.assets->room_jump.pointer,s->b.assets->room_jump_size,0},.scenario_exit=&s->scenario_exit,
   .display=s->b.display,.reference_profile=s->b.title_reference_profile};
- gh_r020_status e=gh_r020_title_init(&b,&s->title);if(e){gh_r020_title_view v;if(s->title&&!gh_r020_title_inspect(s->title,&v)){if(frontier)*frontier=v.frontier;s->frontier=v.frontier;s->frontier_is_r020=v.frontier_relative;}else {if(frontier)*frontier=0x1a0;s->frontier=0x1a0;s->frontier_is_r020=1;}return e==GH_R020_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE;}if(frontier)*frontier=0;return GH_SCENE_OK;
+ gh_r020_status e=gh_r020_title_init(&b,&s->title);if(e){gh_r020_title_view v;if(s->title&&!gh_r020_title_inspect(s->title,&v)){if(frontier)*frontier=v.frontier;s->frontier=v.frontier;s->frontier_module_code=v.frontier_relative;}else {if(frontier)*frontier=0x1a0;s->frontier=0x1a0;s->frontier_module_code=1;}return e==GH_R020_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE;}if(frontier)*frontier=0;return GH_SCENE_OK;
 }
 static gh_scene_status room_move_native(void*p,uint32_t*frontier){
  gh_game_services*s=p;if(!s->title){if(frontier)*frontier=0x220;return GH_SCENE_UNSUPPORTED;}
  gh_r020_status e=gh_r020_title_move(s->title,&s->b.title_callbacks);gh_r020_title_view v;
- if(!gh_r020_title_inspect(s->title,&v)){if(frontier)*frontier=v.frontier;s->frontier=v.frontier;s->frontier_is_r020=v.frontier_relative;}else {if(frontier)*frontier=0x650;s->frontier=0x650;s->frontier_is_r020=1;}
+ if(!gh_r020_title_inspect(s->title,&v)){if(frontier)*frontier=v.frontier;s->frontier=v.frontier;s->frontier_module_code=v.frontier_relative;}else {if(frontier)*frontier=0x650;s->frontier=0x650;s->frontier_module_code=1;}
  return e?(e==GH_R020_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE):GH_SCENE_OK;
 }
 static gh_scene_status room_r100_preinit(void*p,uint32_t*frontier){
@@ -108,6 +117,30 @@ static gh_scene_status room_r100_preinit(void*p,uint32_t*frontier){
 }
 static gh_scene_status room_r100_move(void*p,uint32_t*frontier){
  (void)p;if(frontier)*frontier=0;return gh_r100_move_00000740();
+}
+static gh_r100_init_status room_r100_om_view(void*p,uint32_t handle,gh_r100_om_view*out,uint32_t*frontier){
+ gh_game_services*s=p;gh_title_player_view v;const gh_title_player_view *player=NULL;
+ /* Original shared OM registry also contains ID100. Let SearchOM read and
+  * reject its real ID before considering the name, rather than failing a
+  * class cast simply because the first canonical entry is the player. */
+ if(gh_game_player_factory_scalar_view(&s->player_factory,handle,&player)==GH_PLAYER_OK){
+  *out=(gh_r100_om_view){player->bytes,player->size,player->bytes};return GH_R100_INIT_OK;
+ }
+ gh_scene_placement_status e=gh_om_factory_object_view(&s->om_factory,handle,&v);
+ if(e){if(frontier)*frontier=0x14fd98;return GH_R100_INIT_UNSUPPORTED;}
+ *out=(gh_r100_om_view){v.bytes,v.size,v.bytes};return GH_R100_INIT_OK;
+}
+static gh_scene_status room_r100_init(void*p,uint32_t*frontier){
+ gh_game_services*s=p;
+ gh_r100_init_bindings b={.work=s->b.work,.room_state=&s->room_state,.at=&s->scene_at,
+  .pools=&s->pools,.meshes=&s->meshes,.default_heap=s->b.assets->heap,.actor_tables=&s->scene_tables,
+  .object_view=room_r100_om_view,.context=s};
+ /* Positive OM lookup and Scenario scripts still require their real typed
+  * implementations. Missing providers preserve the original call frontier. */
+ gh_r100_init_status e=gh_r100_initialize_00000208(&s->r100,&b);
+ if(frontier)*frontier=s->r100.frontier;
+ s->frontier=s->r100.frontier;s->frontier_module_code=s->r100.frontier_relative?2:0;
+ return e?(e==GH_R100_INIT_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE):GH_SCENE_OK;
 }
 static int initialize_children(void*context,gh_stage_case1*stage){
  gh_game_services*s=context;gh_child_status e;(void)stage;
@@ -131,6 +164,7 @@ gh_game_services_status gh_game_services_create(const gh_game_services_bindings*
  if(!out)return GH_SERVICES_ARGUMENT;*out=NULL;if(!valid_bindings(b))return GH_SERVICES_ARGUMENT;
  if(b->stage->global_slots.configured||b->stage->room_slots.configured||b->stage->skills.image)return GH_SERVICES_BUSY;
  s=calloc(1,sizeof(*s));if(!s)return GH_SERVICES_MEMORY;s->b=*b;
+ s->object_resources=(gh_object_resource_bindings){.dvd=b->assets->dvd,.heap=b->assets->heap,.threads=b->threads};
  s->meshes.factory_serial=b->factory_serial;
  s->old_context=b->stage->context;s->old_children=b->stage->init_children_15fd98;s->old_cockpit=b->stage->init_cockpit_140c88;
  oe=gh_game_objects_create(&b->stage->global_slots,0,&s->objects);if(oe)goto create_failure;
@@ -184,7 +218,7 @@ gh_game_services_status gh_game_services_state2(gh_game_services*s){
  if(e)return fail(s,GH_SERVICES_ASSET,0x2a5d40,e);
  /* Native continuation cursor belongs to one original case3 invocation.
   * The canonical services/owners persist when state2 prepares another room. */
- s->case3_stage=0;s->frontier_is_r020=0;
+ s->case3_stage=0;s->frontier_module_code=0;
  s->frontier=0;s->detail=0;s->status=GH_SERVICES_OK;return GH_SERVICES_OK;
 }
 gh_game_services_status gh_game_services_state3(gh_game_services*s){
@@ -302,12 +336,29 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
    gh_scene_mesh_status me=gh_scene_meshes_construct_0031d1b0(&s->meshes,&s->scene_tables,work,&bundle,&s->pools,s->b.assets->heap);
    if(me)return fail(s,me==GH_MESH_UNSUPPORTED?GH_SERVICES_FRONTIER:me==GH_MESH_MEMORY?GH_SERVICES_MEMORY:GH_SERVICES_ASSET,s->meshes.frontier?s->meshes.frontier:0x31d1b0,me);s->case3_stage=14;}
   if(s->case3_stage==14){te=gh_scene_actors_0012e670(&s->scene_tables,&bundle);if(te)return fail(s,te==GH_TABLE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_tables.frontier,te);s->case3_stage=15;}
-  if(s->case3_stage==15){te=gh_scene_actor_scroll_links_00307a60(&s->scene_tables);if(te)return fail(s,te==GH_TABLE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_tables.frontier,te);s->case3_stage=16;}
+  if(s->case3_stage==15){te=gh_scene_actor_scroll_links_native_00307a60(&s->scene_tables,&s->pools,&s->meshes);if(te)return fail(s,te==GH_TABLE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_tables.frontier,te);s->case3_stage=16;}
  }
  if(s->case3_stage==16){
-  const gh_title_memory_profile memory={GH_TITLE_MEMORY_ZERO_REFERENCE,NULL,0}; /*explicitRootapprovedhostinitial-memoryadaptation*/
-  gh_title_player_status pe=gh_game_title_player_create_reference_0031c4e0(&s->title_player,s->b.assets->heap,work,&memory);
-  if(pe)return fail(s,pe==GH_PLAYER_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->title_player.frontier?s->title_player.frontier:0x31c4e0,pe);s->case3_stage=17;
+  if(work->room==0x20){
+   const gh_title_memory_profile memory={GH_TITLE_MEMORY_ZERO_REFERENCE,NULL,0}; /*explicitRootapprovedhostinitial-memoryadaptation*/
+   gh_title_player_status pe=gh_game_title_player_create_reference_0031c4e0(&s->title_player,s->b.assets->heap,work,&memory);
+   if(pe)return fail(s,pe==GH_PLAYER_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->title_player.frontier?s->title_player.frontier:0x31c4e0,pe);
+  }else{
+   while(!(work->flags&0x10000))if(gh_task_threads_sleep(s->b.threads,1)!=GH_THREAD_OK)return fail(s,GH_SERVICES_THREAD,0x2d5aa0,0);
+   if(s->title_player.allocation.pointer&&s->title_player.allocation_domain==GH_PLAYER_ALLOCATION_DEFAULT_HEAP){
+    if(u32(raw+0x5f4))return fail(s,GH_SERVICES_BUSY,0x31c4e0,0);
+    /* Main3 already overwrote the old R020 global with NULL. Explicit native
+     * unreachable-owner cleanup, not a recovered original player destructor. */
+    gh_title_player_status pe=gh_game_title_player_release(&s->title_player);if(pe)return fail(s,GH_SERVICES_ASSET,0x31c4e0,pe);
+   }
+   gh_player_factory_bindings pb={&s->title_player,&s->pools,s->objects,s->room_objects,work,s->b.assets->dvd->disc,s->b.save,s->b.factory_serial};int original_nonnull=0;
+   gh_title_player_status pe=gh_game_player_factory_create_0030fa98(&s->player_factory,&pb,&original_nonnull);
+   if(pe)return fail(s,pe==GH_PLAYER_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->player_factory.frontier?s->player_factory.frontier:0x30fa98,pe);
+   if(!original_nonnull)return fail(s,GH_SERVICES_FRONTIER,0x31c4e0,0);
+   /* Canonical typed Work.player is the SAME factory wrapper, never a
+    * truncated guest pointer. Publication does not complete virtualInit44. */
+   return fail(s,GH_SERVICES_FRONTIER,0x107f58,0);
+  }s->case3_stage=17;
  }
  gh_bundle room;if(gh_game_room_pack_bundle(&s->room_pack,&room))return fail(s,GH_SERVICES_ASSET,0x31ccf0,0);
  if(s->case3_stage==17){
@@ -329,10 +380,10 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
  /*299860 isactualjrra/nop, notanemptyrendererreplacement. */
  if(s->case3_stage==20){gh_scene_ui_status ue=gh_scene_font_bind_002a4c38(s->b.font,&room,work->language);if(ue)return fail(s,ue==GH_SCENE_UI_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,0x2a4c38,ue);s->case3_stage=21;}
  if(s->case3_stage==21){gh_scene_ui_status ue=gh_scene_message_initialize_002aea18(&s->scene_ui,s->b.menu,&room,work->language);if(ue)return fail(s,GH_SERVICES_ASSET,s->scene_ui.frontier?s->scene_ui.frontier:0x2aea18,ue);s->case3_stage=22;}
- if(s->case3_stage==22){gh_scene_at_status ae=gh_scene_at_initialize_002c0f90(&s->scene_at,&room);if(ae)return fail(s,ae==GH_AT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_at.frontier?s->scene_at.frontier:0x2c0f90,ae);s->case3_stage=23;}
+ if(s->case3_stage==22){gh_scene_at_status ae=gh_scene_at_initialize_units_002c0f90(&s->scene_at,&room,s->b.assets->heap,(uint16_t)work->room,1);if(ae)return fail(s,ae==GH_AT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_at.frontier?s->scene_at.frontier:0x2c0f90,ae);s->case3_stage=23;}
  if(s->case3_stage==23){gh_game_action_buttons_reset_001f72c0(&s->action_buttons);s->case3_stage=24;}
  if(s->case3_stage==24){gh_door_status de=gh_game_door_reset_001ffe08(&s->door);if(de)return fail(s,GH_SERVICES_ASSET,0x1ffe08,de);s->case3_stage=25;}
- if(s->case3_stage==25){if(work->room!=0x20)return fail(s,GH_SERVICES_FRONTIER,0x290230,0);s->case3_stage=26;}
+ if(s->case3_stage==25){if(work->room!=0x20){gh_init_status ie=gh_game_enemy_reset_00290230(s->b.init);if(ie)return fail(s,GH_SERVICES_ASSET,0x290230,ie);}s->case3_stage=26;}
  if(s->case3_stage==26){gh_saved_item_spawn pending;gh_saved_item_spawn_status se=gh_core_save_spawn_items_001fb330(s->b.save,(uint16_t)work->room,&pending,&frontier);if(se)return fail(s,se==GH_SPAWN_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,frontier?frontier:0x1fb330,se);s->case3_stage=27;}
  if(s->case3_stage==27){
   if(!(u32(raw+0x590)&0x10000000)){
@@ -343,12 +394,22 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
   }s->case3_stage=28;
  }
  if(s->case3_stage==28){
-  if(!(u32(raw+0x590)&0x8000000)){gh_bundle_entry oms={0};gh_bundle_error be=gh_bundle_find(&room,"OMS",0,&oms);if(be&&be!=GH_BUNDLE_NOT_FOUND)return fail(s,GH_SERVICES_ASSET,0x31ccf0,be);int result;gh_scene_placement_status pe=gh_om_scene_bind_001c3cb8(&s->om_placements,&oms,&result);if(pe)return fail(s,pe==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->om_placements.frontier?s->om_placements.frontier:0x1c3cb8,pe);}s->case3_stage=29;
+  if(!(u32(raw+0x590)&0x8000000)){
+   gh_bundle_entry oms={0};gh_bundle_error be=gh_bundle_find(&room,"OMS",0,&oms);if(be&&be!=GH_BUNDLE_NOT_FOUND)return fail(s,GH_SERVICES_ASSET,0x31ccf0,be);
+   int result;gh_scene_placement_status pe=GH_PLACE_OK;
+   if(!s->om_placements.native_bound)pe=gh_om_scene_bind_001c3cb8(&s->om_placements,&oms,&result);
+   if(pe==GH_PLACE_UNSUPPORTED||s->om_placements.native_bound){
+    if(!s->om_factory.bound){gh_om_factory_bindings ob={.pools=&s->pools,.work=work,.room_state=&s->room_state,.objects=s->objects,.room_objects=s->room_objects,.factory_serial=s->b.factory_serial,.resources=&s->object_resources};
+     pe=gh_om_factory_bind(&s->om_factory,&ob,s->om_placements.count);if(pe)return fail(s,GH_SERVICES_ASSET,0x30fb70,pe);}
+    pe=gh_om_scene_bind_native_001c3cb8(&s->om_placements,&oms,&s->om_factory,&result);
+   }
+   if(pe)return fail(s,pe==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->om_placements.frontier?s->om_placements.frontier:0x1c3cb8,pe);
+  }s->case3_stage=29;
  }
  if(s->case3_stage==29){gh_bundle_entry acd={0};gh_bundle_error be=gh_bundle_find(&room,"ACD",0,&acd);if(be&&be!=GH_BUNDLE_NOT_FOUND)return fail(s,GH_SERVICES_ASSET,0x31ccf0,be);int result;gh_scene_placement_status pe=gh_acd_scene_bind_00137ae8(&s->acd,&acd,&result);if(pe)return fail(s,pe==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->acd.frontier?s->acd.frontier:0x137ae8,pe);s->case3_stage=30;}
  if(s->case3_stage==30){
-  if(!s->module.bound||work->room!=0x20)return fail(s,GH_SERVICES_FRONTIER,0x2c3440,GH_SCENE_UNSUPPORTED);
-  s->module.hook8=(gh_scene_hook){GH_SCENE_HOOK_NATIVE,room_init_native,s};s->module.hook12=(gh_scene_hook){GH_SCENE_HOOK_NATIVE,room_move_native,s};
+  if(!s->module.bound||(work->room!=0x20&&work->room!=0x100))return fail(s,GH_SERVICES_FRONTIER,0x2c3440,GH_SCENE_UNSUPPORTED);
+  s->module.hook8=(gh_scene_hook){GH_SCENE_HOOK_NATIVE,work->room==0x20?room_init_native:room_r100_init,s};s->module.hook12=(gh_scene_hook){GH_SCENE_HOOK_NATIVE,work->room==0x20?room_move_native:room_r100_move,s};
   s->scenario_exit=(gh_scene_hook){.kind=GH_SCENE_HOOK_ABSENT};s->scenario_callback104=(gh_scene_hook){.kind=GH_SCENE_HOOK_ABSENT};
   gh_scene_scenario_view sv={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};gh_scene_status se=gh_scene_initialize_room_002c3440(sv,work,s->module.hook8,&frontier);
   if(se)return fail(s,se==GH_SCENE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,frontier?frontier:0x2c3440,se);s->case3_stage=31;
@@ -360,7 +421,11 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
  if(s->case3_stage==32){*s->b.rate=.5f;raw[0x569]=2;s->b.loop->game_state[0]=4;
   if(!(work->flags&0x110))gh_scene_system_menu_enable_002b65f0(&s->system_menu_enabled);work->flags&=~0x110u;s->case3_stage=33;
  }
- if(s->case3_stage==33){gh_light_status le=gh_scene_world_light_select_002d8408(&s->world_light,0);if(le)return fail(s,le==GH_LIGHT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->world_light.frontier?s->world_light.frontier:0x2d8408,le);s->case3_stage=34;}
+ if(s->case3_stage==33){
+  /* Static light records can select now. Any real player attachment still
+   * requires the actual initialized model-parts owner, never invented parts0. */
+  gh_light_status le=gh_game_world_light_select_002d8408(&s->world_light,0,NULL);if(le)return fail(s,le==GH_LIGHT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->world_light.frontier?s->world_light.frontier:0x2d8408,le);s->case3_stage=34;
+ }
  if(s->case3_stage==34){if(!s->b.bgm_requests)return fail(s,GH_SERVICES_FRONTIER,0x2d0850,0);gh_bgm_status be=gh_bgm_requests_scene_begin_002d0850(s->b.bgm_requests,work,*s->b.children,s->b.init);if(be)return fail(s,be==GH_BGM_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,gh_bgm_requests_frontier(s->b.bgm_requests),be);s->case3_stage=35;}
  if(s->case3_stage==35){gh_game_scene_step_case3_cooldown(&s->step);if(work->room!=0x20)return fail(s,GH_SERVICES_FRONTIER,0x2db6b0,0);
   if((u32(raw+0x594)&0x800)&&(work->flags&0x200)){size_t n;uint8_t*p=(uint8_t*)(void*)gh_game_cockpit_fields(s->cockpit,&n);if(n<0x460)return fail(s,GH_SERVICES_ASSET,0x2a65ec,0);p[0x45e]=p[0x45f]=255;}
@@ -372,12 +437,12 @@ void gh_game_services_inspect(const gh_game_services*s,gh_game_services_snapshot
  if(!out)return;memset(out,0,sizeof(*out));if(!s)return;
  out->frontier=s->frontier;out->detail=s->detail;out->state=s->b.loop->game_state[0];out->cockpit_ready=gh_game_cockpit_ready(s->cockpit);
  out->id_entries=s->b.id->pool_used;out->id_runs=s->b.id->job_count;out->room_loaded=s->room_pack.loaded;out->room_pools_ready=s->pools.initialized;
- out->frontier_is_r020=s->frontier_is_r020;
+ out->frontier_is_r020=s->frontier_module_code==1;
  for(unsigned i=0;i<16;i++)out->scenario_active+=s->scenario_records[i].running!=0;
 }
 uint32_t gh_game_services_frontier(const gh_game_services*s){return s?s->frontier:0;}
 int gh_game_services_detail(const gh_game_services*s){return s?s->detail:0;}
-const char *gh_game_services_frontier_module(const gh_game_services*s){return s&&s->frontier_is_r020?"r020.rel":NULL;}
+const char *gh_game_services_frontier_module(const gh_game_services*s){return s?(s->frontier_module_code==1?"r020.rel":s->frontier_module_code==2?"r100.rel":NULL):NULL;}
 gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  if(!s)return GH_SERVICES_ARGUMENT;
  if((s->owns_children&&*s->b.children!=s->created_children)||(s->owns_textures&&s->b.stage->textures!=s->created_textures))return fail(s,GH_SERVICES_BUSY,0x2a5bb8,0);
@@ -391,6 +456,11 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  if(s->cockpit_snapshot&&(s->b.id->pool_used!=s->cockpit_pool_end||s->b.id->job_count!=s->cockpit_jobs_end))return fail(s,GH_SERVICES_BUSY,0x2aa078,GH_ID_BUSY);
  /* Native shutdown owns this unfinished construction prefix; this is not the
   * original scene-exit destructor for initialized world actors. */
+ if(gh_r100_init_release(&s->r100))return fail(s,GH_SERVICES_ASSET,0x208,0);
+ if(gh_scene_at_units_release(&s->scene_at))return fail(s,GH_SERVICES_ASSET,0x2c1270,0);
+ if(gh_om_factory_release(&s->om_factory))return fail(s,GH_SERVICES_ASSET,0x30f8b0,0);
+ if(gh_game_player_factory_release_prefix(&s->player_factory))return fail(s,GH_SERVICES_ASSET,0x30f8b0,0);
+ gh_scene_actor_scroll_links_release(&s->scene_tables);
  if(s->meshes.descriptors||s->meshes.first.allocation.pointer){gh_scene_mesh_status me=gh_scene_meshes_release_prefix(&s->meshes);
   if(me)return fail(s,GH_SERVICES_BUSY,0x30f8b0,me);}
  if(gh_game_title_player_release(&s->title_player))return fail(s,GH_SERVICES_ASSET,0x31c4e0,0);
@@ -439,6 +509,6 @@ gh_game_services_status gh_game_services_get_scene_view(gh_game_services*s,gh_ga
 }
 gh_game_services_status gh_game_services_begin_next_room(gh_game_services*s){
  if(!s||(s->b.loop->game_state[0]!=2&&s->b.loop->game_state[0]!=3))return GH_SERVICES_ARGUMENT;
- s->case3_stage=0;s->frontier_is_r020=0;s->frontier=0;s->detail=0;s->status=GH_SERVICES_OK;return GH_SERVICES_OK;
+ s->case3_stage=0;s->frontier_module_code=0;s->frontier=0;s->detail=0;s->status=GH_SERVICES_OK;return GH_SERVICES_OK;
 }
 uint64_t gh_game_services_ui_resource_epoch(const gh_game_services*s){return s?s->ui_resource_epoch:0;}

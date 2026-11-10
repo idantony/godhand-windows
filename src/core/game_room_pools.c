@@ -34,7 +34,7 @@ gh_room_pool_status gh_game_room_pools_initialize_002a5d80(gh_room_pools*s,const
  /*3127B0 makes four emptyvector/reserves; payloads stayuninitialized. */
  for(unsigned i=0;i<4;i++){s->vectors[i].count=0;s->vectors[i].capacity=counts[i];if(counts[i]){e=alloc(s,(size_t)counts[i]*4,16,&s->vectors[i].allocation,0x3127b0);if(e)return e;}}
  for(unsigned i=0;i<3;i++){
-  gh_room_arena*p=&s->arenas[i];e=alloc(s,sizes[i],16,&p->allocation,0x30ee08);if(e)return e;
+  gh_room_arena*p=&s->arenas[i];p->native_owner=s;e=alloc(s,sizes[i],16,&p->allocation,0x30ee08);if(e)return e;
   p->bytes=sizes[i];p->free_payload=sizes[i]-0x20;p->first_offset=0x20;
   /*2A9498->2A94F0. Ownerpointer becomesnativearenaidentityi+1. */
   uint8_t*raw=p->allocation.pointer;w32(raw,i+1);w32(raw+4,0);w32(raw+8,0);w32(raw+12,p->free_payload);w32(raw+16,0x20);
@@ -61,11 +61,12 @@ gh_room_pool_status gh_room_block_put_002a9800(gh_room_block_pool*p,uint32_t h){
 gh_room_pool_status gh_game_room_pools_release(gh_room_pools*s){
  if(!s||!s->heap)return GH_POOL_ARGUMENT;
  for(size_t i=0;i<s->object_slots;i++)if(s->objects[i].object){s->failed_entry=0x30f8b0;return GH_POOL_UNSUPPORTED;}
+ for(unsigned i=0;i<3;i++)if(s->arenas[i].live_allocations){s->failed_entry=0x2a9680;return GH_POOL_UNSUPPORTED;}
  for(unsigned i=0;i<2;i++)if(s->blocks[i].used_count){s->failed_entry=i?0x149378:0x150418;return GH_POOL_UNSUPPORTED;}
  for(unsigned i=0;i<2;i++){if(s->blocks[i].allocation.pointer&&gh_heap_release(s->heap,s->blocks[i].allocation)!=GH_MEM_OK)return GH_POOL_MEMORY;free(s->blocks[i].active);memset(&s->blocks[i],0,sizeof(s->blocks[i]));}
- for(unsigned i=0;i<3;i++){if(s->arenas[i].allocation.pointer&&gh_heap_release(s->heap,s->arenas[i].allocation)!=GH_MEM_OK)return GH_POOL_MEMORY;memset(&s->arenas[i],0,sizeof(s->arenas[i]));}
+ for(unsigned i=0;i<3;i++){if(gh_room_arena_dispose_metadata(&s->arenas[i]))return GH_POOL_BUSY;if(s->arenas[i].allocation.pointer&&gh_heap_release(s->heap,s->arenas[i].allocation)!=GH_MEM_OK)return GH_POOL_MEMORY;memset(&s->arenas[i],0,sizeof(s->arenas[i]));}
  for(unsigned i=0;i<4;i++){if(s->vectors[i].allocation.pointer&&gh_heap_release(s->heap,s->vectors[i].allocation)!=GH_MEM_OK)return GH_POOL_MEMORY;memset(&s->vectors[i],0,sizeof(s->vectors[i]));}
- free(s->objects);s->objects=NULL;s->object_slots=s->object_capacity=0;s->next_object_handle=0;
+ free(s->objects);s->objects=NULL;s->object_slots=s->object_capacity=0;s->next_object_handle=0;s->next_arena_handle=0;
  s->initialized=0;s->failed_entry=0;s->detail=0;return GH_POOL_OK;
 }
 
@@ -138,7 +139,7 @@ gh_room_pool_status gh_room_arena_clear_002a9528(gh_room_pools*s,uint32_t addres
  /* Original two manager pointers become NULL. Native bounded backing is
   * individually owned rather than a suballocation of original roomheap;
   * relinquish that SAME backing at the proven end of manager lifetime. */
- gh_room_arena*p=&s->arenas[i];if(p->allocation.pointer&&gh_heap_release(s->heap,p->allocation)!=GH_MEM_OK){s->failed_entry=0x2a9528;return GH_POOL_MEMORY;}memset(p,0,sizeof(*p));exit_metadata(s);return GH_POOL_OK;
+ gh_room_arena*p=&s->arenas[i];if(p->live_allocations){s->failed_entry=0x2a9680;return GH_POOL_UNSUPPORTED;}if(gh_room_arena_dispose_metadata(p))return GH_POOL_BUSY;if(p->allocation.pointer&&gh_heap_release(s->heap,p->allocation)!=GH_MEM_OK){s->failed_entry=0x2a9528;return GH_POOL_MEMORY;}memset(p,0,sizeof(*p));exit_metadata(s);return GH_POOL_OK;
 }
 gh_room_pool_status gh_room_registries_release_0030f5f0(gh_room_pools*s){
  if(!s||!s->heap)return GH_POOL_ARGUMENT;

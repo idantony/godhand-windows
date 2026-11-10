@@ -48,6 +48,12 @@ calling conventions into a 64-bit host without explicit ABI adaptation. Resolve
 guest addresses through an explicit mapping before native dereferences; verify
 bounds and lifetime for any intentional fixed mapping.
 
+Treat a typed pointer companion as the current value of an original field,
+not an append-only history of assignments. Repeated writes to the same owner
+offset must replace that slot while preserving other fields. Exercise scene
+reentry: a first room can pass while repeated initialization exhausts a host
+cache that the original fixed-field assignment could never exhaust.
+
 Resolve dynamic-module relocations before classifying zero/unknown calls.
 A literal jump target0 may be an unbound import patched by the original loader,
 not logging or an empty function. Trace the relocation type, symbol index/name

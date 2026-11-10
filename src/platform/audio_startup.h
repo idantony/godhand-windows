@@ -20,6 +20,12 @@ void gh_audio_registry_destroy(gh_audio_registry *);
  * Failed replacement preserves prior generation and bank. */
 gh_audio_status gh_audio_commit_se(gh_audio_registry *,int16_t bank,
  const void *ses,size_t bytes,gh_audio_token *);
+/* Actual CheckImage->2CFBC0/322A68 external AFS-index path as a native
+ * synchronous local-disc timing adaptation. Deep-copy/validate SES plus real
+ * bounded AFS directory/memberlinks BEFORE atomic publication. Failure keeps
+ * previous bank/generation; no decoder/voice/RPC completion is invented. */
+gh_audio_status gh_audio_commit_se_with_external_index(gh_audio_registry *,int16_t bank,
+ const void *ses,size_t bytes,gh_disc *,gh_audio_token *);
 int gh_audio_token_complete(const gh_audio_registry *,gh_audio_token);
 gh_audio_status gh_audio_release_bank(gh_audio_registry *,int16_t bank);
 /* SdeIssTblGet374CB8 / event-table375AB0: selected 48-byte descriptor copied,

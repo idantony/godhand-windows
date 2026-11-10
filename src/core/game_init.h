@@ -46,6 +46,9 @@ gh_init_status gh_game_object_pool_reset_001fdea8(gh_game_init_state *);
 /* Actual room-exit1FDFA8 only the160/256 object records; it first visits
  * each damage chain before clearing that record. Unknown live nodes stop. */
 gh_init_status gh_game_object_pool_release_001fdfa8(gh_game_init_state *,uint32_t *frontier);
+/* Actual290230->290110 sameEmManage reset usedincase0. ConsumesONE
+ * original31CFE0 MTresult and unsignedDIVU5, not a secondnativeRNG. */
+gh_init_status gh_game_enemy_reset_00290230(gh_game_init_state *);
 /* Actual case0 task handler2A5B18; these dependencies are native concrete
  * writes/list reset/RNG/save operations, no successful empty callbacks. */
 gh_init_status gh_game_init_002a5b18(gh_game_init_state *,gh_boot_work *,

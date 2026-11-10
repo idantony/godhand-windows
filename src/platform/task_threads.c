@@ -66,6 +66,7 @@ static VOID WINAPI enter_task(void *parameter)
     /* Completed fibers are deleted, never resumed. */
     abort();
 }
+gh_task_manager *gh_task_threads_manager(const gh_task_threads *s){return s&&s->thread_id==GetCurrentThreadId()?s->manager:NULL;}
 gh_thread_status gh_task_threads_create(gh_task_manager *m,gh_task_threads **out)
 {
     gh_task_threads *b;

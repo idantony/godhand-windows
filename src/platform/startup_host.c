@@ -84,6 +84,7 @@ struct gh_startup_host {
     gh_game_children *game_children;
     gh_mc_control_state mc_control;
     gh_mc_draw_consumer mc_draw;
+    gh_object_static_emit world_emit;void *world_context;
     gh_id_post_message mc_post;
     void *mc_draw_context,*mc_post_context;
     gh_startup_continuation continuation;
@@ -216,10 +217,17 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         int original_return;gh_scene_at_status e=gh_scene_at_step_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,&original_return,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x30f090){
+        if(!h->object_step.static_bound){
+            gh_object_static_bindings b={.meshes=s.meshes,.scene_at=s.scene_at,.camera=s.pl_camera,
+                .player=&s.title_player->view,.textures=h->game_stage.textures,.world_light=s.world_light,
+                .projection=&h->render_projection,.emit=h->world_emit,.context=h->world_context};
+            gh_object_step_status e=gh_game_object_step_bind_static(&h->object_step,&b,h->boot_reference,h->boot_reference_bytes);
+            if(e){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
+        }
         gh_object_step_status e=gh_game_move_objects_0030f090(&h->object_step,s.pools,&h->work,scene_profile_clock,h,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x30f650){
-        gh_object_step_status e=gh_game_objects_trans_0030f650(s.pools,frontier);
+        gh_object_step_status e=gh_game_objects_trans_static_0030f650(&h->object_step,s.pools,&h->work,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x1601d8){
         gh_child_status e=gh_game_children_move_001601d8(h->game_children,&h->work,frontier);
@@ -487,7 +495,14 @@ static int service_state(gh_startup_host *h,unsigned state)
         gh_id_error id=gh_game_cockpit_bind_frame_elf(s.cockpit,h->boot_reference,h->boot_reference_bytes);
         if(id)return failure(h,GH_HOST_ASSET,id);h->cockpit_frame_bound=1;
     }
-    return e?failure(h,GH_HOST_ASSET,(int)e):0;
+    if(e){
+        /* Preserve the actual failed callee for asset/ownership errors too;
+         * only an unrecovered implementation is a FRONTIER phase. */
+        h->unavailable_entry=gh_game_services_frontier(h->services);
+        h->frontier_module=gh_game_services_frontier_module(h->services);
+        return failure(h,GH_HOST_ASSET,gh_game_services_detail(h->services));
+    }
+    return 0;
 }
 static int initialize_state2(void *context,gh_game_loop *loop)
 {gh_startup_host *h=context;(void)loop;return service_state(h,2);}
@@ -915,6 +930,12 @@ gh_host_error gh_startup_host_set_scene_ui_consumers(gh_startup_host *h,const gh
 {
     if(!h||!callbacks||h->ticks||h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
     if(!on_owner(h))return GH_HOST_THREADS;h->scene_ui=*callbacks;return GH_HOST_OK;
+}
+gh_host_error gh_startup_host_set_world_consumer(gh_startup_host *h,gh_object_static_emit emit,void *context)
+{
+    if(!h||h->ticks||h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
+    if(!on_owner(h))return GH_HOST_THREADS;
+    h->world_emit=emit;h->world_context=context;return GH_HOST_OK;
 }
 gh_host_phase gh_startup_host_tick(gh_startup_host *h)
 {

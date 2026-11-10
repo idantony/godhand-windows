@@ -25,7 +25,7 @@ int main(int argc,char **argv){
   uint32_t id=i<2?0x100+i:u32(table+(i-2)*8);unsigned slot=i<2?i:u32(table+(i-2)*8+4);char path[12];size_t index;gh_disc_entry e;
   CHECK(slot<43 && gh_game_object_path(id,path)==GH_GAME_OK);
   CHECK(gh_disc_find(disc,path,&index)==GH_DISC_OK&&gh_disc_entry_at(disc,index,&e)==GH_DISC_OK);
-  assets.objects[slot].pointer=malloc((size_t)e.size);assets.object_sizes[slot]=(size_t)e.size;CHECK(assets.objects[slot].pointer);
+  assets.objects[slot].pointer=malloc((size_t)e.size);assets.object_sizes[slot]=(size_t)e.size;assets.object_file_sizes[slot]=(size_t)e.size;CHECK(assets.objects[slot].pointer);
   CHECK(gh_disc_read(disc,index,0,assets.objects[slot].pointer,(size_t)e.size)==GH_DISC_OK);
  }
  CHECK(u32(table+41*8)==0xffff);work.flags=0x400;
@@ -36,7 +36,7 @@ int main(int argc,char **argv){
  CHECK(gh_game_objects_register_startup(m,&assets)==GH_OBJECT_OK && (work.flags&0x80));
  for(unsigned i=0;i<43;i++){
   uint32_t id=i<2?0x100+i:u32(table+(i-2)*8);unsigned slot=i<2?i:u32(table+(i-2)*8+4);
-  CHECK(gh_game_objects_find(m,id,&view)==GH_OBJECT_OK && view.bytes==assets.objects[slot].pointer && view.size==assets.object_sizes[slot]);
+  CHECK(gh_game_objects_find(m,id,&view)==GH_OBJECT_OK && view.bytes==assets.objects[slot].pointer && view.size==assets.object_sizes[slot]&&view.file_extent_known&&view.file_extent==assets.object_file_sizes[slot]);
   CHECK(view.state==2 && view.use_count==-100 && view.kind==id && view.file_kind==(id|0x40000000));
   CHECK(u32(slots.records+i*0x5c+0x20)==id && u32(slots.records+i*0x5c+0x10)==i+1);
  }

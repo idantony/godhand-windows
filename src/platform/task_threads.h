@@ -5,6 +5,9 @@
 extern "C" {
 #endif
 typedef struct gh_task_threads gh_task_threads;
+/* Borrowed canonical identity on its owner OS thread, otherwiseNULL.
+ * Never a manager copy; no execution or mutation. */
+gh_task_manager *gh_task_threads_manager(const gh_task_threads *);
 typedef void (*gh_native_task_entry)(void *context, int32_t argument);
 typedef enum gh_thread_status {
     GH_THREAD_OK, GH_THREAD_INVALID, GH_THREAD_NO_MEMORY,

@@ -13,6 +13,8 @@ typedef struct gh_game_assets {
  size_t core_size,room_jump_size,object_sizes[43];
  void *sound_context;int (*sound_startup)(void *);
  gh_game_status error;uint32_t failed_entry;int detail;
+ /* Hostmetadata: actualFST bytes distinct from fixed player capacities. */
+ size_t object_file_sizes[43];
 } gh_game_assets;
 /* Original30D5C8 task body using real queue/fiber waits. Caller drives DVDpump
  * between task visits and supplies costume number from original save state.

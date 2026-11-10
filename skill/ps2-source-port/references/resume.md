@@ -28,7 +28,56 @@ instruction-translated final runtime. No playable original scene verified yet.
   at a module/push, pause without instruction, or stop after this resume.
 - These historical permissions do not transfer to another game/read-only task.
 
-## Latest local room-transition checkpoint (2026-11-10)
+## Current integration work (2026-11-10)
+
+Public main remains d4fad08. Local checkpoint372e13d restores the original New
+Game transition; later working changes must not be swept into that proof. The
+old local c02adc6 hash was amended before publication only for documentation.
+
+- Immutable room-transition-10:126C/133checks PASS with hardware/codec/full ADX
+  opt-ins. Native NewGame still fails at470ticks in room0100/Main3, before any
+  world draw. Its old host lost the exact callee on ASSET errors; a diagnostic
+  fix is being verified. Private room-transition-10-verification.json is scoped
+  to that source. It is not the latest standard public verification report.
+- Root new D3D11 model renderer passed actualGPU independent full512448RGBA/Z
+  comparison, realTM3member37 upload, filtering/fog256/blend/alpha/depth/atomic
+  failure. Its alphaMax47 makes actualGREATER127 reject it; positive numeric
+  fixtures are explicit. This is native interpolation/surface reference, not
+  a real world frame or EE/VU/GS hardware equivalence.
+- Later immutable room-transition-14:129C/138checks PASS, all opt-ins; RNG
+  20544/20534 exact comparisons. Matching NewGame completes all156 staticR100
+  constructors and actors, then reaches193positive actor-scroll links at
+  2C5420. Matching fresh world-qa/model-qa GPU tests PASS. Private complete
+  receipt is room-transition-14-verification.json; standard public reports
+  still identify Title04. No world packet was drawn in the actual Main flow.
+- Actual140DE0 failure was a native pointer-cache adaptation bug: assignment
+  to a fixed owner offset appended refs until capacity160. Fixed overwrite by
+  offset; actualISO8room reset/quit cycles preserve405entries39runs/identity.
+  New actor-scroll API then independently binds147/193 records to canonical
+  handles, preserving46 original misses; waits for next coherent integration.
+- New static_world_queue transforms selected10 or14 into ordered original
+  postVU packets and preserves TWO groups/setup LIFO in the ONEglobalOT. Root
+  main integration is under review; CPU queue tests are not GPU completion.
+  World/UI composition only admits world-before-UI ordering, with current UI
+  ZTST ALWAYS. Native initial CT32/Z16S/FBA0/no-dither profile is explicit.
+- Player worker froze SAMEarena754C10 allocate/free and real312F00 zero1690
+  ->existing107E40 constructor. Original-factory-zero provenance differs from
+  the Title initial-memory reference. Common30FE68 postfactory/serial/resource
+  association/registration and virtualInit44 remain separate required steps.
+- Root connected positive SceneAt, enemy reset and orderedR100Init prefix, but
+  actual earlier dependencies may block them. OM worker recovers69actualOMS
+  records/firstdoor300 using SAMEroom_state.active RoomSave flags; do not make
+  another global5E8658 activation table. Player/object resources and Event
+  module still require their actual consumers, never dummy successful hooks.
+- Windows builder now compiles independent C modules in parallel. New freezer
+  --base-snapshot G:/... --overlay path (repeatable) combines immutable prior
+  inputs with explicit authored E: changes; it validates the base receipt and
+  records every overlay. Use this to avoid capturing incomplete worker batches.
+  room-transition-11 was an unfinished arena link failure and remains failed;
+  room-transition-12 and13-diagnostic are provisional Windows execution copies,
+  not full suite passes. Never modify existing immutable snapshot source.
+
+## Earlier local room-transition checkpoint (2026-11-10)
 
 Public main remains d4fad08, Title milestone105C/111checks; subjective work
 estimates belong only in private analysis/chat. Do not push every local step. Goal remains ACTIVE/unbounded;

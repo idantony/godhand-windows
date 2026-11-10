@@ -19,13 +19,14 @@ typedef struct {
  uint8_t hit_kind180,mode181;
  uint64_t native_queries;
 } gh_scene_ray_state;
+struct gh_scene_actor_scroll_state;
 typedef struct {gh_scene_table_view environment,scroll_texture;
  uint32_t scroll_pairs[32][2],scroll_words[32],scroll_link_words[32];
  gh_bundle_entry akt,akg;gh_scene_actor_link actor_links[8];
  uint32_t actor_vec30[3],actor_vec40[3],actor_vec50[3],actor_count60,actor_count64,actor_count68;
  void *pending_actor_head;uint32_t pending_actor_count;uint8_t actors_ready;
- uint32_t frontier;int detail;gh_scene_ray_state ray;} gh_game_scene_tables;
-typedef enum {GH_TABLE_OK,GH_TABLE_ARGUMENT,GH_TABLE_BOUNDS,GH_TABLE_UNSUPPORTED} gh_scene_table_status;
+ uint32_t frontier;int detail;gh_scene_ray_state ray;struct gh_scene_actor_scroll_state *actor_scroll_native;} gh_game_scene_tables;
+typedef enum {GH_TABLE_OK,GH_TABLE_ARGUMENT,GH_TABLE_BOUNDS,GH_TABLE_UNSUPPORTED,GH_TABLE_MEMORY} gh_scene_table_status;
 /* Work608 is a canonical typed environment view plus native opaque handle1,
  * never a truncated host pointer. 2A71B0 only binds SearchData("ENV",0);
  * actual texture/lighting consumption belongs to later operations.
@@ -46,3 +47,5 @@ gh_scene_table_status gh_scene_actor_scroll_links_00307a60(gh_game_scene_tables 
 }
 #endif
 #endif
+
+

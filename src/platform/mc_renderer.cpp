@@ -300,14 +300,16 @@ static gh_id_error draw_fade(gh_mc_renderer*r,const gh_fade_draw&draw,const gh_u
     gh_id_error e=gpu==GH_UI_OK?GH_ID_OK:GH_ID_UNSUPPORTED;if(e==GH_ID_OK){r->frame.swap(r->next);++r->status.jobs;}else r->status.frontier=0x15c928;
     r->status.id_error=e;r->status.gpu_error=(unsigned)gpu;return e;
 }
-extern "C" gh_id_error gh_mc_renderer_flush_queued(gh_mc_renderer *r,const size_t *order,size_t count,uint32_t clear_rgb)
+static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t count,uint32_t clear_rgb,const uint8_t *background,size_t background_bytes)
 {
     if(!r||!r->begun||(!order&&count)||count!=r->queued.size())return GH_ID_ARGUMENT;
+    if((background&&background_bytes!=r->frame.size())||(!background&&background_bytes))return GH_ID_ARGUMENT;
     if(r->flushing||r->queue_failed)return GH_ID_BUSY;
     try {
         std::vector<unsigned char> seen(count,0);
         for(size_t i=0;i<count;++i){if(order[i]>=count||seen[order[i]])return GH_ID_ARGUMENT;seen[order[i]]=1;}
-        for(size_t i=0;i<r->frame.size();i+=4){
+        if(background)std::copy(background,background+background_bytes,r->frame.begin());
+        else for(size_t i=0;i<r->frame.size();i+=4){
             r->frame[i]=(unsigned char)clear_rgb;r->frame[i+1]=(unsigned char)(clear_rgb>>8);
             r->frame[i+2]=(unsigned char)(clear_rgb>>16);r->frame[i+3]=0;
         }
@@ -326,6 +328,10 @@ extern "C" gh_id_error gh_mc_renderer_flush_queued(gh_mc_renderer *r,const size_
         r->flushing=false;r->queued.clear();return GH_ID_OK;
     }catch(const std::bad_alloc&){r->flushing=false;r->queue_failed=true;return GH_ID_MEMORY;}
 }
+extern "C" gh_id_error gh_mc_renderer_flush_queued(gh_mc_renderer *r,const size_t *order,size_t count,uint32_t clear_rgb)
+{return flush_queued(r,order,count,clear_rgb,nullptr,0);}
+extern "C" gh_id_error gh_mc_renderer_flush_queued_on_background(gh_mc_renderer *r,const size_t *order,size_t count,const uint8_t *rgba,size_t bytes)
+{if(!rgba)return GH_ID_ARGUMENT;return flush_queued(r,order,count,0,rgba,bytes);}
 extern "C" gh_id_error gh_mc_renderer_draw(gh_mc_renderer *r,const gh_startup_snapshot *s,const gh_id_draw_job *job)
 {
     if(!s)return GH_ID_ARGUMENT;

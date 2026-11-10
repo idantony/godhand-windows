@@ -7,7 +7,9 @@ extern "C" {
 #endif
 typedef enum {GH_POOL_OK,GH_POOL_ARGUMENT,GH_POOL_BOUNDS,GH_POOL_MEMORY,GH_POOL_BUSY,GH_POOL_UNSUPPORTED} gh_room_pool_status;
 typedef struct {gh_r207_allocation allocation;uint32_t count,capacity;} gh_room_vector;
-typedef struct {gh_r207_allocation allocation;uint32_t bytes,free_payload,first_offset;} gh_room_arena;
+struct gh_room_arena_native;
+typedef struct {gh_r207_allocation allocation;uint32_t bytes,free_payload,first_offset;
+ struct gh_room_arena_native *native;const void *native_owner;uint32_t live_allocations;} gh_room_arena;
 typedef struct {
  gh_r207_allocation allocation;uint32_t payload_bytes,stride,count,free_head,used_head,used_count;
  uint32_t bytes20,remaining18,remaining1c,limit24;uint8_t *active;
@@ -15,13 +17,21 @@ typedef struct {
 typedef struct {
  void *object;const void *owner;uint32_t kind,handle;
 } gh_room_object_binding;
-typedef struct {
+typedef struct gh_room_pools {
  gh_heap *heap;gh_room_vector vectors[4];gh_room_arena arenas[3];gh_room_block_pool blocks[2];
  int initialized;uint32_t failed_entry;int detail;
  /* Host-only shared namespace. Original four-byte vectors contain handles,
   * never truncated native pointers. Handles are not recycled while live. */
- gh_room_object_binding *objects;size_t object_slots,object_capacity;uint32_t next_object_handle;
+ gh_room_object_binding *objects;size_t object_slots,object_capacity;uint32_t next_object_handle,next_arena_handle;
 } gh_room_pools;
+typedef struct {gh_room_pools *pools;void *pointer;uint32_t original_global,handle,bytes;} gh_room_arena_allocation;
+/* Actual2A9538 gap allocator, bounded within SAME RHT arena backing. Typed
+ * host links replace guest headerpointers; nativepayload alignment follows
+ * actualhost address. Work594bit80000/size0/full returnoriginalNULL. */
+gh_room_pool_status gh_room_arena_allocate_002a9538(gh_room_pools *,uint32_t original_global,uint32_t work594,uint32_t bytes,uint32_t alignment,gh_room_arena_allocation *);
+gh_room_pool_status gh_room_arena_free_002a9680(gh_room_pools *,gh_room_arena_allocation);
+/* Native bookkeeping only; refuses live allocations, doesnot freebacking. */
+gh_room_pool_status gh_room_arena_dispose_metadata(gh_room_arena *);
 /* Actual2A5D80 using realRHT. Caller zero-inits; three arenas and both concrete
  * fixed block pools own actual native storage. STL metadata is typed hoststate,
  * four-byte element capacity/payload is original. No guest pointer truncation.

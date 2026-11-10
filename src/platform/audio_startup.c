@@ -149,6 +149,27 @@ static int afd_links_valid(gh_sound_span afd,const directory *dir){
  }
  return 1;
 }
+gh_audio_status gh_audio_commit_se_with_external_index(gh_audio_registry*r,int16_t id,
+ const void*ses,size_t bytes,gh_disc*disc,gh_audio_token*token){
+ if(token)*token=(gh_audio_token){.bank=-1};
+ if(!r||!ses||!disc||!token||!valid_id(id))return GH_AUDIO_ARGUMENT;
+ /* Build with the ordinary exact same validator in an isolated unpublished
+  * registry. Its temporary owner/token never escape. Publication increments
+  * the real serial exactly once, only after the externalindex is ready. */
+ gh_audio_registry temporary={0};temporary.next=r->next;gh_audio_token unpublished;
+ gh_audio_status e=gh_audio_commit_se(&temporary,id,ses,bytes,&unpublished);if(e)return e;
+ bank candidate=temporary.banks[id];
+ if(candidate.view.external_afs){
+  directory dir={0};e=read_directory(disc,candidate.view.external_afs,&dir);
+  if(e){free(candidate.bytes);return e;}
+  if(!afd_links_valid(candidate.view.sections[1],&dir)){free(dir.pairs);free(candidate.bytes);return GH_AUDIO_BOUNDS;}
+  candidate.afs=dir;
+ }
+ candidate.flags|=8;
+ free(r->banks[id].bytes);free(r->banks[id].afs.pairs);r->banks[id]=candidate;r->next=temporary.next;
+ token->bank=id;token->generation=candidate.generation;token->owner=r;return GH_AUDIO_OK;
+}
+
 gh_audio_status gh_audio_startup_load(gh_audio_registry *r,gh_disc *disc){
  gh_audio_status e;uint8_t *bytes;size_t size;gh_audio_token token;
  if(!r || !disc)return GH_AUDIO_ARGUMENT;

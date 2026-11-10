@@ -96,18 +96,11 @@ gh_init_status gh_game_object_pool_reset_001fdea8(gh_game_init_state*s){
 
 gh_init_status gh_game_init_002a5b18(gh_game_init_state *s,gh_boot_work *work,
  uint8_t *started,float *rate,gh_core_save_view save){
- uint32_t random;gh_init_status e;uint8_t *em;
+ gh_init_status e;
  if(!s || !work || !started || !rate || !save_valid(save))return GH_INIT_ARGUMENT;
  s->world_time=0;work->flags|=0x10;
  if(s->camera.mode!=1 && s->camera.mode!=16){s->camera.previous_mode=s->camera.mode;s->camera.previous=s->active_camera;s->active_camera=&s->camera;s->camera.mode=1;}
- *started=1;em=s->enemies;
- for(unsigned i=0;i<64;i++){size_t off=(size_t)i*20;w32(em,off,0);w32(em,off+4,0);w32(em,off+8,0);w32(em,off+12,0xffffffffu);em[off+16]=0;s->enemy_actors[i]=0;}
- s->enemy_top=s->enemy_last=0;memset(s->enemy_kept,0,sizeof(s->enemy_kept));
- for(unsigned off=0x500;off<=0x50c;off+=4)w32(em,off,0);w32(em,0x55c,0);w32(em,0x548,0x3f800000);
- e=gh_game_mt_next_0030f348(&s->random,&random);if(e)return e;
- em[0x53e]=em[0x540]=em[0x541]=0;em[0x53f]=(uint8_t)(random%5);
- memset(em+0x560,0,0x14);memset(em+0x588,0,0x10);memset(em+0x5ac,0,8);memset(em+0x574,0,20);
- em[0x518]=0;s->side_counter[4]=0;w32(s->side_counter,8,0);w32(s->side_counter,12,0);em[0x5b5]=0;
+ *started=1;e=gh_game_enemy_reset_00290230(s);if(e)return e;
  e=gh_game_object_pool_reset_001fdea8(s);if(e)return e;
  /* Heat reset precedes CoreSave gameInit and therefore reads persistent
   * tension upgrades, with the original cheat-side effect. All conversions
@@ -126,4 +119,18 @@ gh_init_status gh_game_object_pool_release_001fdfa8(gh_game_init_state*s,uint32_
   if(s->object_links[i]||b[0x3c]||b[0x3d]||b[0x3e]||b[0x3f]){if(f)*f=0x1fd580;return GH_INIT_LINKS;}
   gh_init_status e=pool_record(b,&s->object_links[i],i<160?1:2);if(e)return e;
  }return GH_INIT_OK;
+}
+
+
+gh_init_status gh_game_enemy_reset_00290230(gh_game_init_state*s){
+ if(!s)return GH_INIT_ARGUMENT;
+ uint8_t*em=s->enemies;uint32_t random;gh_init_status e;
+ for(unsigned i=0;i<64;i++){size_t off=(size_t)i*20;w32(em,off,0);w32(em,off+4,0);w32(em,off+8,0);w32(em,off+12,0xffffffffu);em[off+16]=0;s->enemy_actors[i]=0;}
+ s->enemy_top=s->enemy_last=0;memset(s->enemy_kept,0,sizeof(s->enemy_kept));
+ for(unsigned off=0x500;off<=0x50c;off+=4)w32(em,off,0);w32(em,0x55c,0);w32(em,0x548,0x3f800000);
+ e=gh_game_mt_next_0030f348(&s->random,&random);if(e)return e;
+ em[0x53e]=em[0x540]=em[0x541]=0;em[0x53f]=(uint8_t)(random%5);
+ memset(em+0x560,0,0x14);memset(em+0x588,0,0x10);memset(em+0x5ac,0,8);memset(em+0x574,0,20);
+ em[0x518]=0;s->side_counter[4]=0;w32(s->side_counter,8,0);w32(s->side_counter,12,0);em[0x5b5]=0;
+ return GH_INIT_OK;
 }

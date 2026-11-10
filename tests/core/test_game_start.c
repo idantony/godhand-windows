@@ -84,6 +84,8 @@ int main(int argc,char **argv){
    }
    CHECK(returned && result==GH_GAME_OK);
    compare(disc,model[costume],assets.objects[0],assets.object_sizes[0]);
+   {size_t entry;gh_disc_entry file;CHECK(!gh_disc_find(disc,model[costume],&entry)&&!gh_disc_entry_at(disc,entry,&file));CHECK(assets.object_file_sizes[0]==file.size&&assets.object_file_sizes[0]<=assets.object_sizes[0]);
+    CHECK(!gh_disc_find(disc,motion[costume],&entry)&&!gh_disc_entry_at(disc,entry,&file));CHECK(assets.object_file_sizes[1]==file.size&&assets.object_file_sizes[1]<=assets.object_sizes[1]);}
    compare(disc,motion[costume],assets.objects[1],assets.object_sizes[1]);
    CHECK(gh_game_assets_release(&assets)==GH_GAME_OK && gh_heap_used(heap)==0);
   }

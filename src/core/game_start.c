@@ -37,6 +37,7 @@ static gh_game_status load_fixed(gh_game_assets *s,uint32_t object,unsigned slot
   return error(s,GH_GAME_DISC,0x200b88,GH_DVD_NOT_FOUND);
  bytes=(e.size+2047)&~UINT64_C(2047);
  if(!s->objects[slot].pointer || bytes>s->object_sizes[slot])return error(s,GH_GAME_BOUNDS,0x200b88,0);
+ s->object_file_sizes[slot]=(size_t)e.size;
  if(gh_disc_read_blocks(s->dvd->disc,index,0,s->objects[slot].pointer,(size_t)(bytes>>11))!=GH_DISC_OK)
   return error(s,GH_GAME_DISC,0x200b88,GH_DVD_IO);
  if(!*job){++s->dvd->id_counter;if(!s->dvd->id_counter)s->dvd->id_counter=1;*job=s->dvd->id_counter;}
@@ -71,7 +72,7 @@ gh_game_status gh_game_assets_0030d5c8(gh_game_assets *s,uint8_t costume){
  if(!(flags&0x400)){
   for(unsigned i=0;i<sizeof(ids)/sizeof(ids[0]);i++){
    TRY(wait_job(s,job));TRY(gh_game_object_path(ids[i],path));
-   TRY(load(s,path,&s->objects[slots[i]],&s->object_sizes[slots[i]],&job));
+   TRY(load(s,path,&s->objects[slots[i]],&s->object_sizes[slots[i]],&job));s->object_file_sizes[slots[i]]=s->object_sizes[slots[i]];
   }
   TRY(wait_job(s,job));
  }
@@ -100,7 +101,7 @@ gh_game_status gh_game_assets_release(gh_game_assets *s){
  s->core=(gh_r207_allocation){0};
  if(s->room_jump.pointer && gh_heap_release(s->heap,s->room_jump)!=GH_MEM_OK)return GH_GAME_MEMORY;
  s->room_jump=(gh_r207_allocation){0};
- for(unsigned i=0;i<43;i++){if(s->objects[i].pointer && gh_heap_release(s->heap,s->objects[i])!=GH_MEM_OK)return GH_GAME_MEMORY;s->objects[i]=(gh_r207_allocation){0};}
+ for(unsigned i=0;i<43;i++){if(s->objects[i].pointer && gh_heap_release(s->heap,s->objects[i])!=GH_MEM_OK)return GH_GAME_MEMORY;s->objects[i]=(gh_r207_allocation){0};s->object_file_sizes[i]=0;}
  return GH_GAME_OK;
 }
 static gh_game_status loop_call(gh_game_loop *s,const gh_game_platform *p,gh_game_operation fn,uint32_t entry){

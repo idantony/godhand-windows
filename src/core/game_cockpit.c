@@ -44,7 +44,12 @@ static gh_id_error init(gh_game_cockpit *s,unsigned o,int id){
 }
 static gh_id_error work(gh_game_cockpit *s,unsigned o,int id,unsigned field,gh_id_entry **out){
  int dummy;gh_id_error e=gh_id_base_get_work_002aa410(s->runtime,base(s,o),id,out,&dummy);
- if(e)return e;if(field){if(s->ref_count>=160)return GH_ID_CAPACITY;s->refs[s->ref_count].offset=field;s->refs[s->ref_count++].entry=*out;}return GH_ID_OK;
+ if(e)return e;if(field){
+  /* Original writes a pointer at self+field. The native pointer sidecar is
+   * keyed by that field, not a history of stores across room resets. */
+  for(unsigned i=0;i<s->ref_count;i++)if(s->refs[i].offset==field){s->refs[i].entry=*out;return GH_ID_OK;}
+  if(s->ref_count>=160)return GH_ID_CAPACITY;s->refs[s->ref_count].offset=field;s->refs[s->ref_count++].entry=*out;
+ }return GH_ID_OK;
 }
 static gh_id_error hide(gh_game_cockpit *s,unsigned o,int id){return gh_id_base_set_family_display(s->runtime,base(s,o),id,0);}
 static gh_id_error restart(gh_game_cockpit *s,unsigned o){return gh_id_base_restart_anim(base(s,o),rnd,s->random);}

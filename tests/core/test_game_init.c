@@ -83,5 +83,7 @@ int main(void){
  CHECK(s->object_pool[0x48]==4&&s->object_pool[0x49]==1&&s->object_pool[0x3c48]==4&&s->object_pool[0x3c49]==2&&s->object_pool[0x1c]==0xa5);
  for(unsigned i=0;i<160;i++)CHECK(r16(s->records_a[i],0x2c)==i&&s->records_a[i][0x2e]==0xa5);
  for(unsigned i=0;i<512;i++)CHECK(r16(s->records_b[i],0x2c)==i&&s->records_b[i][0x2e]==0xa5);free(snapshot);
+ gh_game_init_state_initialize(s);memset(s->enemies,0xa5,sizeof(s->enemies));memset(s->object_pool,0x7b,sizeof(s->object_pool));memset(s->heat,0x6c,sizeof(s->heat));memset(s->side_counter,0x35,sizeof(s->side_counter));for(unsigned i=0;i<64;i++)s->enemy_actors[i]=&target;
+ CHECK(!gh_game_enemy_reset_00290230(s)&&s->enemies[0x53f]==2);CHECK(!gh_game_mt_next_0030f348(&s->random,&number)&&number==581869302u);for(unsigned i=0;i<64;i++)CHECK(!s->enemy_actors[i]&&r32(s->enemies,i*20+12)==0xffffffff);CHECK(!s->enemy_top&&!s->enemy_last&&s->object_pool[0]==0x7b&&s->heat[0]==0x6c&&s->side_counter[0]==0x35&&!s->side_counter[4]&&s->enemies[0x53d]==0xa5&&r32(s->enemies,0x548)==0x3f800000);CHECK(gh_game_enemy_reset_00290230(NULL)==GH_INIT_ARGUMENT);
  free(s);puts("PASS actual case0 manager fields, pool counts/handles, MT vectors and persistent CoreSave reset branches");return 0;
 }

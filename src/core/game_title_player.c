@@ -43,7 +43,7 @@ gh_title_player_status gh_title_player_construct_00107e40(void*raw,size_t n,gh_t
  *out=(gh_title_player_view){p,n,p+0x30,p+0xb0,0x41d220,0x41b800,GH_TITLE_MEMORY_UNSPECIFIED};return GH_PLAYER_OK;
 }
 static gh_title_player_status create(gh_game_title_player*s,gh_heap*h0,const gh_boot_work*w0,const gh_title_memory_profile*profile){
- if(!s||!h0||!w0)return GH_PLAYER_ARGUMENT;if(s->allocation.pointer)return GH_PLAYER_BUSY;
+ if(!s||!h0||!w0)return GH_PLAYER_ARGUMENT;if(s->allocation.pointer||s->arena_allocation.pointer)return GH_PLAYER_BUSY;
  if(profile){
   if(profile->policy==GH_TITLE_MEMORY_PROVIDED_BYTES){if(!profile->bytes||profile->size<GH_TITLE_PLAYER_BYTES)return GH_PLAYER_ARGUMENT;}
   else if(profile->policy==GH_TITLE_MEMORY_ZERO_REFERENCE){if(profile->bytes||profile->size)return GH_PLAYER_ARGUMENT;}
@@ -59,7 +59,9 @@ static gh_title_player_status create(gh_game_title_player*s,gh_heap*h0,const gh_
 }
 gh_title_player_status gh_game_title_player_release(gh_game_title_player*s){
  if(!s)return GH_PLAYER_ARGUMENT;
- if(s->allocation.pointer&&(!s->heap||gh_heap_release(s->heap,s->allocation)!=GH_MEM_OK))return GH_PLAYER_MEMORY;
+ if(s->allocation_domain==GH_PLAYER_ALLOCATION_ROOM_ARENA){if(s->arena_allocation.pointer&&gh_room_arena_free_002a9680(s->arena_allocation.pools,s->arena_allocation)!=GH_POOL_OK)return GH_PLAYER_MEMORY;}
+ else if(s->allocation_domain==GH_PLAYER_ALLOCATION_DEFAULT_HEAP){if(s->allocation.pointer&&(!s->heap||gh_heap_release(s->heap,s->allocation)!=GH_MEM_OK))return GH_PLAYER_MEMORY;}
+ else return GH_PLAYER_ARGUMENT;
  *s=(gh_game_title_player){0};return GH_PLAYER_OK;
 }
 
@@ -68,6 +70,21 @@ gh_title_player_status gh_game_title_player_create_reference_0031c4e0(gh_game_ti
 gh_title_player_status gh_title_player_read_vitality(const gh_title_player_view*v,int16_t*out,uint32_t*f){
  if(f)*f=0;if(!v||!v->bytes||v->size<GH_TITLE_PLAYER_BYTES||!out)return GH_PLAYER_ARGUMENT;
  if(v->initial_memory==GH_TITLE_MEMORY_UNSPECIFIED){if(f)*f=0x1f9bec;return GH_PLAYER_UNSUPPORTED;}
- if(v->initial_memory!=GH_TITLE_MEMORY_PROVIDED_BYTES&&v->initial_memory!=GH_TITLE_MEMORY_ZERO_REFERENCE)return GH_PLAYER_ARGUMENT;
+ if(v->initial_memory!=GH_TITLE_MEMORY_PROVIDED_BYTES&&v->initial_memory!=GH_TITLE_MEMORY_ZERO_REFERENCE&&v->initial_memory!=GH_TITLE_MEMORY_ORIGINAL_FACTORY_ZERO)return GH_PLAYER_ARGUMENT;
  unsigned n=v->bytes[0x54a]|(unsigned)v->bytes[0x54b]<<8;*out=(int16_t)(n<32768?(int)n:(int)n-65536);return GH_PLAYER_OK;
+}
+
+
+gh_title_player_status gh_game_player_construct_00312f00(gh_game_title_player*s,gh_room_pools*pools,const gh_boot_work*work,int*original){
+ if(!s||!pools||!work||!original)return GH_PLAYER_ARGUMENT;*original=0;if(s->allocation.pointer||s->arena_allocation.pointer)return GH_PLAYER_BUSY;
+ const uint8_t*raw=(const uint8_t*)work;uint32_t flags;memcpy(&flags,raw+0x594,4);if(flags&0x10000)return GH_PLAYER_OK;
+ gh_room_arena_allocation allocation;gh_room_pool_status e=gh_room_arena_allocate_002a9538(pools,0x754c10,flags,GH_TITLE_PLAYER_BYTES,16,&allocation);if(e){s->frontier=0x2a9538;return GH_PLAYER_MEMORY;}if(!allocation.pointer)return GH_PLAYER_OK;
+ s->arena_allocation=allocation;s->allocation=(gh_r207_allocation){allocation.pointer,&pools->arenas[2]};s->allocation_domain=GH_PLAYER_ALLOCATION_ROOM_ARENA;s->heap=pools->heap;
+ memset(allocation.pointer,0,GH_TITLE_PLAYER_BYTES);gh_title_player_status result=gh_title_player_construct_00107e40(allocation.pointer,GH_TITLE_PLAYER_BYTES,&s->view);if(result)return result;
+ s->view.initial_memory=GH_TITLE_MEMORY_ORIGINAL_FACTORY_ZERO;s->ready=1;s->frontier=0;*original=1;return GH_PLAYER_OK;
+}
+
+
+gh_title_player_status gh_game_object_construct_002a7338(void*data,size_t bytes,gh_title_player_view*out){
+ if(!data||!out)return GH_PLAYER_ARGUMENT;if(bytes<0x5b0)return GH_PLAYER_BOUNDS;uint8_t*p=data;game_object_002a7338(p);*out=(gh_title_player_view){p,bytes,p+0x30,p+0xb0,0x44ae28,0x44adf0,GH_TITLE_MEMORY_UNSPECIFIED};return GH_PLAYER_OK;
 }

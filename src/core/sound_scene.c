@@ -31,7 +31,7 @@ gh_sound_scene_status gh_sound_scene_initialize_002cabe8(gh_sound_scene*s,
  be=gh_bundle_find(b,"SEH",0,&e);if(be==GH_BUNDLE_OK)s->seh=e;else if(be!=GH_BUNDLE_NOT_FOUND)return fail(s,0x31ccf0,be,GH_SOUND_SCENE_ASSET);
  if(s->seh.bytes||s->bmh.bytes)return fail(s,s->seh.bytes?0x2ca390:0x2d2cf0,0,GH_SOUND_SCENE_UNSUPPORTED);
  if(s->sound_group130!=0)return fail(s,0x2ca390,0,GH_SOUND_SCENE_UNSUPPORTED);
- /* Firstboot only: replacing an already occupied bank requires its original
+ /* An already occupied bank requires its original
   * release/update path; preserve registry generation rather than guessing. */
  ar=gh_audio_bank_views(s->registry,2,&programs,&sys,&samples,&afd);
  if(ar!=GH_AUDIO_NOT_FOUND)return fail(s,0x2cf600,ar,GH_SOUND_SCENE_UNSUPPORTED);
@@ -48,12 +48,15 @@ gh_sound_scene_status gh_sound_scene_initialize_002cabe8(gh_sound_scene*s,
  dr=gh_dvd_check_wait_frame(d,s->job,t);if(dr)return fail(s,0x2cb778,dr,GH_SOUND_SCENE_ASSET);
  {gh_sound_bank bank;
   if(gh_sound_bank_open(s->loading.pointer,s->file_bytes,&bank)!=GH_SOUND_OK)return fail(s,0x2cf600,0,GH_SOUND_SCENE_ASSET);
-  if(bank.external_afs)return fail(s,0x2cf258,0,GH_SOUND_SCENE_UNSUPPORTED);
+  /* External index is loaded and validated below through the same registry. */
   if(bank.sections[3].size>s->sample_budget)return fail(s,0x2cd7c8,0,GH_SOUND_SCENE_ASSET);
  }
- ar=gh_audio_commit_se(s->registry,2,s->loading.pointer,s->file_bytes,&s->bank2);
- if(ar)return fail(s,0x374b70,ar,GH_SOUND_SCENE_ASSET);
+ ar=gh_audio_commit_se_with_external_index(s->registry,2,s->loading.pointer,s->file_bytes,d->disc,&s->bank2);
+ if(ar)return fail(s,0x2cfbc0,ar,GH_SOUND_SCENE_ASSET);
  if(!gh_audio_token_complete(s->registry,s->bank2))return fail(s,0x2cb778,0,GH_SOUND_SCENE_ASSET);
+ /* Native SPU-allocation replacement now owns a fresh room bank; keep the
+  * SAME heap companion/registry identity and generation, not a cold reset. */
+ s->control->room_heaps[1].closed=0;
  be=gh_bundle_find(b,"TS",0,&e);if(be==GH_BUNDLE_OK){s->ts=e;return fail(s,0x2cb080,0,GH_SOUND_SCENE_UNSUPPORTED);}
  if(be!=GH_BUNDLE_NOT_FOUND)return fail(s,0x31ccf0,be,GH_SOUND_SCENE_ASSET);
  /* Empty2CB080 still clears Work+5E4 bit800 and native list is truly empty. */

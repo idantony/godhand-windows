@@ -137,12 +137,27 @@ def main():
                ("game_scene_meshes_finish", "src/core/game_scene_meshes_finish.c"),
                ("static_mesh", "src/assets/static_mesh.c"),
                ("static_mesh_transform", "src/assets/static_mesh_transform.c"),
+               ("static_model_constants", "src/assets/static_model_constants.c"),
+               ("static_mesh_program10", "src/assets/static_mesh_program10.c"),
+               ("static_mesh_clip10", "src/assets/static_mesh_clip10.c"),
+               ("static_mesh_program10_packets", "src/assets/static_mesh_program10_packets.c"),
+               ("game_object_static", "src/core/game_object_static.c"),
+               ("scene_at_units", "src/core/scene_at_units.c"),
+               ("game_collision_scroll", "src/core/game_collision_scroll.c"),
+               ("game_scenario_exec", "src/core/game_scenario_exec.c"),
+               ("game_scenario_soft_event", "src/core/game_scenario_soft_event.c"),
+               ("r100_init", "src/rooms/r100_init.c"),
                ("game_object_sound", "src/core/game_object_sound.c"),
                ("game_scene_exit_leaves", "src/core/game_scene_exit_leaves.c"),
                ("game_world_light_select", "src/core/game_world_light_select.c"),
                ("game_world_light_step", "src/core/game_world_light_step.c"),
                ("tm3", "src/assets/tm3.c"),
                ("game_scene_meshes_material", "src/core/game_scene_meshes_material.c"),
+               ("game_room_arena", "src/core/game_room_arena.c"),
+               ("static_world_queue", "src/platform/static_world_queue.c"),
+               ("game_om_factory", "src/core/game_om_factory.c"),
+               ("game_player_factory", "src/core/game_player_factory.c"),
+               ("game_actor_scroll_links", "src/core/game_actor_scroll_links.c"),
                ("id_entry_reset", "src/core/id_entry_reset.c"), ("id_layout_rotation", "src/core/id_layout_rotation.c"),
                ("id_animation", "src/core/id_animation.c"), ("id_texture_polygon", "src/core/id_texture_polygon.c"),
                ("r020_title", "src/rooms/r020_title.c"), ("r100", "src/rooms/r100.c")]
@@ -157,6 +172,13 @@ def main():
         ("game-room-state", "tests/core/test_game_room_state.c", "elf"),
         ("game-room-pack", "tests/core/test_game_room_pack.c", "iso"),
         ("game-room-pools", "tests/core/test_game_room_pools.c", "iso"),
+        ("game-room-arena", "tests/core/test_game_room_arena.c", "iso"),
+        ("game-player-factory", "tests/core/test_game_player_factory.c", "iso"),
+        ("game-player-postfactory", "tests/core/test_game_player_postfactory.c", "iso"),
+        ("game-om-factory", "tests/core/test_game_om_factory.c", "iso"),
+        ("game-object-acquire", "tests/core/test_game_object_acquire.c", "none"),
+        ("game-object-resources", "tests/core/test_game_object_resources.c", "iso"),
+        ("game-actor-scroll-links", "tests/core/test_game_actor_scroll_links.c", "iso"),
         ("movie-task", "tests/core/test_movie_task.c", "none"),
         ("game-camera", "tests/core/test_game_camera.c", "elf"),
         ("game-movie-pool", "tests/core/test_game_movie_pool.c", "none"),
@@ -227,6 +249,17 @@ def main():
         ("static-mesh", "tests/assets/test_static_mesh.c", "iso"),
         ("tm3", "tests/assets/test_tm3.c", "iso"),
         ("static-mesh-transform", "tests/assets/test_static_mesh_transform.c", "iso"),
+        ("static-model-constants", "tests/assets/test_static_model_constants.c", "none"),
+        ("static-mesh-program10", "tests/assets/test_static_mesh_program10.c", "iso"),
+        ("static-mesh-clip10", "tests/assets/test_static_mesh_clip10.c", "none"),
+        ("static-mesh-program10-packets", "tests/assets/test_static_mesh_program10_packets.c", "iso"),
+        ("game-object-static", "tests/core/test_game_object_static.c", "iso"),
+        ("scene-at-units", "tests/core/test_scene_at_units.c", "iso"),
+        ("game-collision-scroll", "tests/core/test_game_collision_scroll.c", "iso"),
+        ("game-scenario-exec", "tests/core/test_game_scenario_exec.c", "none"),
+        ("game-scenario-soft-event", "tests/core/test_game_scenario_soft_event.c", "none"),
+        ("r100-init", "tests/rooms/test_r100_init.c", "iso"),
+        ("static-world-queue", "tests/platform/test_static_world_queue.c", "iso"),
         ("game-object-sound", "tests/core/test_game_object_sound.c", "iso"),
         ("sound-scene-exit", "tests/core/test_sound_scene_exit.c", "iso"),
         ("id-entry-reset", "tests/core/test_id_entry_reset.c", "iso"),
@@ -252,11 +285,17 @@ def main():
                      "tests/core/test_mc_task.c", "tests/core/test_id_jobs.c", "tests/core/test_id_texture.c",
                      "tests/core/test_mc_control.c", "tests/core/test_game_stage.c", "tests/core/test_game_children.c",
                      "tests/core/test_id_text.c"}
-    shared_headers = {"id_jobs_texture": "src/core/id_jobs.h", "id_jobs_primitive": "src/core/id_jobs.h",
+    shared_headers = {"game_room_arena": "src/core/game_room_pools.h","game_object_static": "src/core/game_object_step.h","id_jobs_texture": "src/core/id_jobs.h", "id_jobs_primitive": "src/core/id_jobs.h",
                       "game_scene_meshes_finish": "src/core/game_scene_meshes.h",
                       "game_world_light_select": "src/core/game_world_light.h",
                       "game_scene_meshes_material": "src/core/game_scene_meshes.h"}
     source_inputs.update(source for _, source, _ in extra_tests)
+    # Capture transitive/shared ABI inputs too: a module's public header can
+    # borrow a second owner's layout without sharing its source filename.
+    source_inputs.update(path.relative_to(PROJECT).as_posix() for path in (PROJECT / "src").rglob("*.h"))
+    source_inputs.update({"tests/assets/oracle_static_mesh_transform.py",
+                          "tests/assets/oracle_static_mesh_program10.py",
+                          "tests/assets/oracle_static_mesh_clip10.py"})
     for name, source in modules:
         source_inputs.add(source)
         source_inputs.add(shared_headers.get(name, str(Path(source).with_suffix(".h")).replace("\\", "/")))
@@ -309,7 +348,7 @@ def main():
     run("compile-id-text-tests", common + [objects["id_text"], objects["font_draw"], objects["packed_message"]] + id_objects + ["tests/core/test_id_text.c", "-o", output / "test_id_text.exe"])
     def compile_extra_test(test):
         name, source, _ = test
-        run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms"] + list(objects.values()) + [source, "-o", output / ("test_" + name.replace("-", "_") + ".exe")])
+        run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms", "-Isrc/assets"] + list(objects.values()) + [source, "-o", output / ("test_" + name.replace("-", "_") + ".exe")])
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as workers:
         list(workers.map(compile_extra_test, extra_tests))
     run("compile-core-dll", common + ["-shared", "-Wl,--export-all-symbols"] + list(objects.values()) + ["-o", output / "godhand_core.dll"])

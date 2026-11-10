@@ -33,12 +33,32 @@ int main(int argc,char**argv){gh_disc*d;gh_audio_registry*r;gh_sound_control con
  CHECK(gh_audio_bank_views(r,2,&prog,&sys,&samples,&afd)==GH_AUDIO_OK&&!afd.data&&!afd.size);
  CHECK(prog.size==original.sections[0].size&&!memcmp(prog.data,original.sections[0].data,prog.size));CHECK(samples.size==original.sections[3].size&&!memcmp(samples.data,original.sections[3].data,samples.size));free(ses);
  CHECK(gh_audio_startup_ready(r,0,0,0));CHECK(gh_sound_scene_initialize_002cabe8(&scene,&bundle,&w,&dvd,h,t)==GH_SOUND_SCENE_BUSY);
- /* Actual fallback r100 has externalAFS: real read, exact unsupported boundary,
-  * no replacement published. This is not a pretend successful audio map. */
- CHECK(gh_audio_release_bank(r,2)==GH_AUDIO_OK);scene=(gh_sound_scene){0};CHECK(gh_sound_scene_from_startup(&scene,&control,r)==GH_SOUND_SCENE_OK);w.room=-1;c.returned=0;c.status=GH_SOUND_SCENE_OK;visits=0;
+ /* Same canonical registry survives real room-bank release/reload. */
+ gh_audio_token old=scene.bank2;gh_sound_span core0,core3,bgm;
+ CHECK(gh_audio_bank_views(r,0,&core0,&sys,&samples,&afd)==GH_AUDIO_OK);
+ CHECK(gh_audio_bank_views(r,3,&core3,&sys,&samples,&afd)==GH_AUDIO_OK);
+ CHECK(gh_audio_bgm0_table(r,&bgm)==GH_AUDIO_OK);
+ CHECK(gh_audio_release_bank(r,2)==GH_AUDIO_OK&&!gh_audio_token_complete(r,old));
+ control.room_heaps[1].closed=1;scene=(gh_sound_scene){0};
+ CHECK(gh_sound_scene_from_startup(&scene,&control,r)==GH_SOUND_SCENE_OK);
+ free(pack);pack=read_file(d,"st1/r100.dat",&n);CHECK(gh_bundle_open(pack,n,&bundle)==GH_BUNDLE_OK);
+ w.room=0x100;c.returned=0;c.status=GH_SOUND_SCENE_OK;visits=0;
  CHECK(gh_task_threads_start(t,2,load,&c,0,&slot)==GH_THREAD_OK);
  while(!c.returned&&visits++<12){CHECK(gh_tasks_run_matching_002d52a0(&m).status==GH_TASK_OK);CHECK(gh_dvd_pump(&dvd)==GH_DVD_OK);}
- CHECK(c.returned&&c.status==GH_SOUND_SCENE_UNSUPPORTED&&scene.frontier==0x2cf258&&!scene.ready&&scene.loading.pointer);
- CHECK(gh_audio_bank_views(r,2,&prog,&sys,&samples,&afd)==GH_AUDIO_NOT_FOUND);CHECK(gh_sound_scene_release_loading(&scene,&dvd,h)==GH_SOUND_SCENE_OK);
+ CHECK(c.returned&&c.status==GH_SOUND_SCENE_OK&&scene.ready&&!scene.loading.pointer);
+ CHECK(scene.bank2.owner==r&&scene.bank2.generation>old.generation&&gh_audio_token_complete(r,scene.bank2));
+ CHECK(!control.room_heaps[1].closed&&gh_heap_used(h)==0);
+ CHECK(gh_audio_bank_views(r,0,&prog,&sys,&samples,&afd)==GH_AUDIO_OK&&prog.data==core0.data);
+ CHECK(gh_audio_bank_views(r,3,&prog,&sys,&samples,&afd)==GH_AUDIO_OK&&prog.data==core3.data);
+ CHECK(gh_audio_bgm0_table(r,&prog)==GH_AUDIO_OK&&prog.data==bgm.data);
+ CHECK(gh_audio_bank_views(r,2,&prog,&sys,&samples,&afd)==GH_AUDIO_OK&&afd.size==432);
+ for(unsigned i=0;i<13;i++){gh_sound_span row;uint64_t off,bytes;uint8_t pair[8];size_t entry;
+  CHECK(gh_audio_external_sample(r,2,i,&row,&off,&bytes)==GH_AUDIO_OK);
+  unsigned member=(unsigned)row.data[2]|(unsigned)row.data[3]<<8;
+  CHECK(gh_disc_find(d,"se/r100.afs",&entry)==GH_DISC_OK);
+  CHECK(gh_disc_read(d,entry,8+(uint64_t)member*8,pair,8)==GH_DISC_OK);
+  uint32_t expected_off,expected_bytes;memcpy(&expected_off,pair,4);memcpy(&expected_bytes,pair+4,4);
+  CHECK(off==expected_off&&bytes==expected_bytes);
+ }
  CHECK(gh_task_threads_destroy(t)==GH_THREAD_OK&&gh_heap_destroy(h)==GH_MEM_OK);free(pack);gh_audio_registry_destroy(r);gh_disc_close(d);
- puts("PASS soundscene realR020/DVD/fiber/ownedbank2/defaults and realr100 unsupported fallback");return 0;}
+ puts("PASS soundscene realR020/DVD/fiber/ownedbank2/defaults and same-owner R100 external AFS reload");return 0;}

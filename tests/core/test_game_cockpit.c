@@ -77,7 +77,17 @@ CHECK(gh_disc_open(argv[1],&d)==GH_DISC_OK);
  CHECK(fields[0x460+0x17c]==0&&fields[0x15c0+0x33c]==255&&fields[0x15c0+0x343]==255);
  CHECK(gh_game_cockpit_entry_at(c,0x6e0+0x4a0,&entry)==GH_ID_OK&&entry);
  CHECK(gh_game_cockpit_room_reset_00140de0(c,sv,&work_state,heat)==GH_ID_BUSY);
+ /* Same global owner survives TitleExit into R100 and later rooms. Original
+  * fixed-offset pointer-cache stores overwrite fields; never allocate ID runs. */
+ gh_id_entry *cached=entry;gh_id_base *global_base;CHECK(!gh_game_cockpit_base(c,0x6e0,&global_base));gh_id_entry *global_entries=global_base->entries;
+ for(unsigned room=0;room<8;room++){
+  CHECK(!gh_game_cockpit_room_quit_00141628(c,sv,heat));
+  result=gh_game_cockpit_room_reset_00140de0(c,sv,&work_state,heat);
+  if(result)fprintf(stderr,"repeat room%u reset%d frontier%08X\n",room,result,gh_game_cockpit_frontier(c));
+  CHECK(!result&&m->pool_used==405&&m->job_count==39&&global_base->entries==global_entries);
+  CHECK(!gh_game_cockpit_entry_at(c,0x6e0+0x4a0,&entry)&&entry==cached);
+ }
  CHECK(gh_game_cockpit_destroy(c)==GH_ID_OK && m->pool_used==0 && m->job_count==0);
  CHECK(gh_id_runtime_destroy(r)==GH_ID_OK);free(m);free(b);free(elf);gh_disc_close(d);
- puts("PASS actual USA Cockpit11 widget initialization, native entries/gauge layout, ownership cleanup");return 0;
+ puts("PASS actual USA Cockpit11 widget init/reset, eight quit-reset room lifecycles preserve global405entries39runs/cacheidentity, exhausted-pool cleanup");return 0;
 }

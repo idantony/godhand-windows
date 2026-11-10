@@ -66,6 +66,12 @@ gh_id_error gh_mc_renderer_queue_view_groups(gh_mc_renderer *,const gh_id_render
  * alpha0, explicit native FBA0 reference. This does not itself implement the
  * outer-loop previous-parity submission or recover all earlier GS state. */
 gh_id_error gh_mc_renderer_flush_queued(gh_mc_renderer *,const size_t *order,size_t count,uint32_t clear_rgb);
+/* Same ordered UI consumer over a completed native world color surface.
+ * Caller must prove every world OT group precedes these UI groups. Current
+ * recovered UI TEST uses ZTST ALWAYS; later UI/world interleaving needs a
+ * common depth surface and remains outside this bounded composition API. */
+gh_id_error gh_mc_renderer_flush_queued_on_background(gh_mc_renderer *,const size_t *order,size_t count,
+ const uint8_t *rgba,size_t bytes);
 gh_id_error gh_mc_renderer_draw(gh_mc_renderer *,const gh_startup_snapshot *,const gh_id_draw_job *);
 const unsigned char *gh_mc_renderer_pixels(const gh_mc_renderer *,size_t *bytes);
 void gh_mc_renderer_inspect(const gh_mc_renderer *,gh_mc_render_status *);

@@ -113,6 +113,23 @@ int main(int argc,char **argv){
   CHECK(gh_audio_startup_load(r,disc)==GH_AUDIO_OK && gh_audio_startup_ready(r,0,0,0));
   CHECK(gh_audio_release_bank(r,3)==GH_AUDIO_OK && !gh_audio_startup_ready(r,0,0,0));
  }
+ {size_t n;uint8_t *ses=read_file(disc,"se/r100.ses",&n);gh_audio_token first,next,bad;
+  CHECK(gh_audio_commit_se_with_external_index(r,2,ses,n,disc,&first)==GH_AUDIO_OK);
+  gh_sound_span original,after,x,y,z;CHECK(gh_audio_bank_views(r,2,&original,&x,&y,&z)==GH_AUDIO_OK);
+  gh_sound_bank view;CHECK(gh_sound_bank_open(ses,n,&view)==GH_SOUND_OK);
+  size_t offset=(size_t)(view.sections[1].data-ses)+18;
+  uint8_t saved[2]={ses[offset],ses[offset+1]};ses[offset]=255;ses[offset+1]=255;
+  CHECK(gh_audio_commit_se_with_external_index(r,2,ses,n,disc,&bad)==GH_AUDIO_BOUNDS);
+  CHECK(!bad.owner&&gh_audio_token_complete(r,first));
+  CHECK(gh_audio_bank_views(r,2,&after,&x,&y,&z)==GH_AUDIO_OK&&after.data==original.data);
+  ses[offset]=saved[0];ses[offset+1]=saved[1];
+  size_t path_offset=(size_t)((const uint8_t*)view.external_afs-ses);uint8_t path_first=ses[path_offset];ses[path_offset]='x';
+  CHECK(gh_audio_commit_se_with_external_index(r,2,ses,n,disc,&bad)!=GH_AUDIO_OK);
+  CHECK(!bad.owner&&gh_audio_token_complete(r,first));ses[path_offset]=path_first;
+  CHECK(gh_audio_release_bank(r,2)==GH_AUDIO_OK&&!gh_audio_token_complete(r,first));
+  CHECK(gh_audio_commit_se_with_external_index(r,2,ses,n,disc,&next)==GH_AUDIO_OK);
+  CHECK(next.generation==first.generation+1&&next.owner==first.owner);free(ses);
+ }
  gh_audio_registry_destroy(r);gh_disc_close(disc);
  puts("PASS actual core/pl00 native bank commit, program queries, owned sample copies, generation tokens and failed replacement");return 0;
 }
