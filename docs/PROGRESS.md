@@ -4,25 +4,28 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
-## Current milestone: New Game and first-room construction
+## Current milestone: original player and first-room objects
 
-An immutable source copy passes151 C modules/159checks with muted hardware,
+An immutable source copy passes 196 C modules / 207 checks with muted hardware,
 codec and full independent ADX verification. Matching hidden Windows QA executes
-the original Title/NewGame transition into R100/Main3:470updates,6MC/90movie/
-351title-menu frames, actual156static constructors and actor-scroll links.
-The original parent32parts/26nodes and child41parts/2nodes finish149738,
-followed by child hierarchy/40springs, attachment17, shadow templates, solid
-unit/sphere and HP initialization. The next actual call is001FE218.
+the original Title/New Game transition into R100/Main3: 487 updates, 6 MC,
+90 movie and 368 title/menu frames. All 69 original OMS object initializers
+complete after 156 static constructors, full player/child construction, initial
+motion sampling, terrain IK, matrix recovery, spawn and camera binding.
 
-No world packet is submitted in this runtime. Separate renderer/geometry
-fixtures do not establish a first world frame, dynamic skinning or gameplay.
-Static terrain rays and positive SceneAt processing have scoped native tests;
-live dynamic-shape collision still retains an explicit unsupported boundary.
+The next actual call is the R100 roof task at `r100.rel+0x2F30`. No world packet
+is submitted, so there is still no original 3D game frame or playable game.
+Separate palette/geometry tests transform 9573 original vertices with canonical
+part matrices; this does not establish lighting, clipping or a rendered frame.
+Collision dispatch and unequal cylinder argument regressions now inspect the
+actual ELF call table. Positive queries outside the recovered domain stop.
+Numerical reference profiles and modeled checks are not PS2 hardware captures.
 
-固定源码通过151个C模块、159项检查；匹配的隐藏静音Windows验收实际从标题／新游戏
-进入R100，完成156个静态对象和父子模型构造，以及子模型40条弹性骨骼、绑定、阴影和
-实体形状前缀，停在001FE218。实际世界绘制包仍为0，尚不可玩。数值参考与独立方程
-检查均有范围限制，不代表PS2实机一致性或完整游戏验收。
+固定源码副本通过 196 个 C 模块／207 项检查；匹配的隐藏静音 Windows 程序完成
+487 次更新，显示 6 帧存储卡、90 帧片头和 368 帧标题／菜单。实际运行完成玩家及
+子模型、初始动作采样、地面 IK、矩阵回写、出生／摄像机绑定，以及 156 个静态对象
+和全部 69 个 OMS 物件初始化。下一边界为屋顶任务 `r100.rel+0x2F30`。
+世界绘制包仍为 0，尚无首关 3D 画面；独立骨骼矩阵／几何检查不能代替实际绘制。
 
 ## Previous milestone: integrated original title scene
 

@@ -5,13 +5,14 @@
 #include "game_hitarea_objects.h"
 #include "game_hitarea_shapes.h"
 #include "game_om_door_geometry.h"
+#include "game_collision_solid_units.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef struct gh_om_initializer_bindings {gh_boot_work *work;gh_heap *packet_heap;const void *fog_rgb;
  gh_game_init_state *init;const gh_hitarea_shape_bindings *shapes;
  gh_scene_dynamic_owner *dynamic;const gh_om_door_shared *door_shared;
- const gh_title_player_view *player;} gh_om_initializer_bindings;
+ const gh_title_player_view *player;gh_game_collision_solids *solids;} gh_om_initializer_bindings;
 typedef struct gh_om_init_state {gh_actor_model model;gh_bundle_entry geometry,texture;
  gh_hitarea_object hitarea;gh_om_door_geometry geometry_state;uint8_t *door_segments;gh_om_object *object;const gh_om_initializer_bindings *bindings;
  uint32_t stage,texture_mode,frontier;int model_return;uint8_t hitarea_created;} gh_om_init_state;

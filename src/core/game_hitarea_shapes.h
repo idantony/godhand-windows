@@ -9,7 +9,8 @@ typedef struct {gh_collision_pairs *pairs;const gh_game_math_globals *math;gh_st
  * nativepairshape constructor +attribute1 +originalnode/Unit listlink.
  * Originalnegative/full/fallback returns-1 withoutfakinganactive shape. */
 gh_hitarea_status gh_hitarea_add_sphere_001fdaf0(const gh_hitarea_object *,const gh_hitarea_shape_bindings *,const uint8_t matrix[64],const uint32_t offset_xyz[3],uint32_t radius_bits,int *original_index,uint32_t *frontier);
-gh_hitarea_status gh_hitarea_add_cylinder_001fdc00(const gh_hitarea_object *,const gh_hitarea_shape_bindings *,const uint8_t matrix[64],const uint32_t offset_xyz[3],const uint32_t rotation_xyz[3],uint32_t radius_bits,uint32_t height_bits,int *original_index,uint32_t *frontier);
+/* Kind2 originalf12=height(+110), f13=radius(+114), order unchanged. */
+gh_hitarea_status gh_hitarea_add_cylinder_001fdc00(const gh_hitarea_object *,const gh_hitarea_shape_bindings *,const uint8_t matrix[64],const uint32_t offset_xyz[3],const uint32_t rotation_xyz[3],uint32_t height_f12_bits,uint32_t radius_f13_bits,int *original_index,uint32_t *frontier);
 gh_hitarea_status gh_hitarea_add_box_001fd9d8(const gh_hitarea_object *,const gh_hitarea_shape_bindings *,const uint8_t matrix[64],const uint32_t offset_xyz[3],const uint32_t rotation_xyz[3],const uint32_t full_size_xyz[3],int *original_index,uint32_t *frontier);
 gh_hitarea_status gh_hitarea_object_set_active_001fd668(const gh_hitarea_object *,int enabled,uint32_t *frontier);
 gh_hitarea_status gh_hitarea_node_at(const gh_hitarea_object *,unsigned ordinal,const uint8_t **record64,gh_collision_pair_shape *);

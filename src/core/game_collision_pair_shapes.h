@@ -14,6 +14,9 @@ typedef struct {const uint8_t *matrix;uint32_t offset_xyz[3],rotation_xyz[3];
  uint8_t global_identity_matrix;gh_static_transform_policy policy;} gh_collision_shape_inputs;
 /* Actual2B9DF0 sphere/2B9EF0 cylinder/2BA020 box. Same400*270 recordstorage, typedlist,
  * typedmatrix/current-positionaliases andattribute1 DamageUnit identity.
+ * Compatibility scalar names radius_bits/height_bits retain original f12/f13
+ * order. For kind2 these store HEIGHT at110 and RADIUS at114 respectively;
+ * they are not semantic radius/height names for that class.
  * Explicit sharedSDK147728 reference for boundedEuler[-pi,pi]; no libc trig.
  * Does not advance shape/world update or claim pairquery/ChkHit. */
 gh_pair_shape_status gh_collision_pair_sphere_002b9df0(gh_collision_pairs *,const gh_collision_shape_inputs *,gh_collision_pair_shape *,int *original_nonnull,uint32_t *frontier);
@@ -30,6 +33,10 @@ gh_pair_shape_status gh_collision_pair_shape_abort(gh_collision_pair_shape *,uin
  * unlink active row and preserve original flags|200 until later pool update. */
 gh_pair_shape_status gh_collision_pair_shape_remove_001fcba0(gh_collision_pair_shape *,const gh_hitarea_object *,uint32_t *frontier);
 
+/* Actual2B8F48's 7kind dispatch. case0 is false, cases1/7 are true;
+ * other cases name the real directcallee after virtual-argument extraction. */
+typedef struct {uint32_t entry;uint8_t case_id,swapped;} gh_collision_pair_dispatch;
+gh_pair_shape_status gh_collision_pair_dispatch_002b8f48(unsigned source_kind,unsigned target_kind,gh_collision_pair_dispatch *);
 /* Typed replacement for original +38 hit-pointer array; distance is squared. */
 gh_pair_shape_status gh_collision_pair_shape_hit_at(const gh_collision_pair_shape *,unsigned ordinal,gh_collision_pair_shape *other,uint32_t *distance_bits);
 /* A paused original frame is not a new frame. Keep this companion stable

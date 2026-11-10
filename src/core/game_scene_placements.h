@@ -19,6 +19,22 @@ gh_scene_placement_status gh_em_scene_room_init_00294b38(gh_em_scene_placements 
 /* Actual294C68/294B98 emptyEMS path using canonicalroom.active. Positive
  * entries/alreadyloadedsetEmAll remain preciseunsupported, never fakeactors. */
 gh_scene_placement_status gh_em_scene_bind_00294c68(gh_em_scene_placements *,gh_room_state *,const gh_bundle_entry *ems,int *original_load_return);
+/* Explicit native numerical reference for original MUL.S/CVT.W.S. EXACT
+ * refuses unverified fresh-positive conversion; this is not hardware proof. */
+typedef enum {GH_EM_NUMERIC_EXACT=0,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE=1} gh_em_numeric_policy;
+/* Actual2BEDE8: reserved64*24B RoomSave span, byte8count. Host bound/policy
+ * errors preserve page; floats8/9 and bytes28..2B copy without conversion. */
+gh_scene_placement_status gh_em_room_table_write_002bede8(gh_room_state *,uint32_t count,const gh_bundle_entry *records,gh_em_numeric_policy,uint32_t *frontier);
+/* Integer-significand reference; angle selects factor57.295776(42652EE0),
+ * otherwise20(41A00000). Bounded |exactproduct|<2^24; output is originalSH low16. */
+gh_scene_placement_status gh_em_quantize_chopzero_reference(uint32_t source_bits,int angle,uint16_t *out,uint32_t *frontier);
+/* Actual295600 only; does not clear file/source views (294B38 does). */
+gh_scene_placement_status gh_em_scene_reset_room_00295600(gh_em_scene_placements *,const gh_boot_work *,uint8_t scenario14);
+/* Actual294B98 table-load primitive; original bool separated from status. */
+gh_scene_placement_status gh_em_scene_load_native_00294b98(gh_em_scene_placements *,gh_room_state *,const gh_bundle_entry *,const gh_boot_work *,uint8_t scenario14,gh_em_numeric_policy,int *original_return);
+/* Actual294C68 always invokes294CA0 after load bool1, including FRESH positive.
+ * Only stop_flag==1 clear is restored; spawning path remains precise294CA0. */
+gh_scene_placement_status gh_em_scene_bind_native_00294c68(gh_em_scene_placements *,gh_room_state *,const gh_bundle_entry *,const gh_boot_work *,uint8_t scenario14,gh_em_numeric_policy,int *original_load_return);
 void gh_om_scene_construct_002a7308(gh_om_scene_placements *);
 /* Actual1C3CB8/1C3C58 missing/invalid/emptyOMS; originalreturn0 is explicit. */
 gh_scene_placement_status gh_om_scene_bind_001c3cb8(gh_om_scene_placements *,const gh_bundle_entry *oms,int *original_return);

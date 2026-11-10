@@ -22,9 +22,9 @@ static gh_pair_shape_status create(gh_collision_pairs*m,const gh_collision_shape
  uint32_t rotation[3];if(kind==0)memcpy(rotation,in->math->zero_vector,12);else memcpy(rotation,in->rotation_xyz,12);
  for(unsigned k=0;k<3;k++)if(!isfinite(value(in->offset_xyz[k])))return fail(f,0x147728,GH_PAIR_SHAPE_UNSUPPORTED);
  float angles[3],local_matrix[16];for(unsigned k=0;k<3;k++)angles[k]=value(rotation[k]);uint32_t math_frontier=0;if(gh_actor_matrix_rotation_00147728(angles,0,local_matrix,in->policy,&math_frontier))return fail(f,math_frontier?math_frontier:0x147728,GH_PAIR_SHAPE_UNSUPPORTED);
- if((kind!=4&&!isfinite(value(in->radius_bits)))||(kind==2&&!isfinite(value(in->height_bits))))return fail(f,0x2ba540,GH_PAIR_SHAPE_UNSUPPORTED);
+ if(kind!=4&&!isfinite(value(in->radius_bits)))return fail(f,kind==2?0x2ba788:0x2ba540,GH_PAIR_SHAPE_UNSUPPORTED);if(kind==2&&!isfinite(value(in->height_bits)))return fail(f,0x2ba750,GH_PAIR_SHAPE_UNSUPPORTED);
  if(kind==4)for(unsigned k=0;k<3;k++)if(!isfinite(value(in->size_xyz[k])))return fail(f,0x2baaa8,GH_PAIR_SHAPE_UNSUPPORTED);
- uint32_t bounding=in->radius_bits;if(kind==2||kind==4){fenv_t env;if(feholdexcept(&env))return fail(f,0x2ba7b8,GH_PAIR_SHAPE_UNSUPPORTED);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(f,0x2ba7b8,GH_PAIR_SHAPE_UNSUPPORTED);}if(kind==2){volatile float sum=value(in->radius_bits)+value(in->height_bits);bounding=bits(sum);}else{volatile float x=value(in->size_xyz[0])*0.5f,y=value(in->size_xyz[1])*0.5f,z=value(in->size_xyz[2])*0.5f;volatile float xx=x*x,yy=y*y,zz=z*z,xy=xx+yy,n=xy+zz;volatile float length=sqrtf(n);bounding=bits(length);}if(fesetenv(&env))return fail(f,0x2ba7b8,GH_PAIR_SHAPE_UNSUPPORTED);if(!isfinite(value(bounding)))return fail(f,0x2ba7b8,GH_PAIR_SHAPE_UNSUPPORTED);}
+ uint32_t bounding=in->radius_bits,bounding_pc=kind==4?0x2bab30:0x2ba7b8;if(kind==2||kind==4){fenv_t env;if(feholdexcept(&env))return fail(f,bounding_pc,GH_PAIR_SHAPE_UNSUPPORTED);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(f,bounding_pc,GH_PAIR_SHAPE_UNSUPPORTED);}if(kind==2){volatile float sum=value(in->radius_bits)+value(in->height_bits);bounding=bits(sum);}else{volatile float x=value(in->size_xyz[0])*0.5f,y=value(in->size_xyz[1])*0.5f,z=value(in->size_xyz[2])*0.5f;volatile float xx=x*x,yy=y*y,zz=z*z,xy=xx+yy,n=xy+zz;volatile float length=sqrtf(n);bounding=bits(length);}if(fesetenv(&env))return fail(f,bounding_pc,GH_PAIR_SHAPE_UNSUPPORTED);if(!isfinite(value(bounding)))return fail(f,bounding_pc,GH_PAIR_SHAPE_UNSUPPORTED);}
  int offset=0;{fenv_t env;if(feholdexcept(&env))return fail(f,0x2bb2d8,GH_PAIR_SHAPE_UNSUPPORTED);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(f,0x2bb2d8,GH_PAIR_SHAPE_UNSUPPORTED);}volatile float sums[2]={0,0};for(unsigned j=0;j<2;j++){const uint32_t*input=j?rotation:in->offset_xyz;volatile float x=value(input[0])*value(input[0]),y=value(input[1])*value(input[1]),z=value(input[2])*value(input[2]);volatile float xy=x+y;sums[j]=xy+z;}offset=sums[0]!=0||sums[1]!=0;if(fesetenv(&env))return fail(f,0x2bb2d8,GH_PAIR_SHAPE_UNSUPPORTED);}
  if(m->native_shapes&&m->native_shapes->owner!=m)return GH_PAIR_SHAPE_ARGUMENT;
  if(!m->native_shapes){m->native_shapes=calloc(1,sizeof(*m->native_shapes));if(!m->native_shapes)return fail(f,0x2ba300,GH_PAIR_SHAPE_MEMORY);m->native_shapes->owner=m;}
@@ -36,7 +36,7 @@ static gh_pair_shape_status create(gh_collision_pairs*m,const gh_collision_shape
  uint8_t*p=r+0xe0;ww(p+0x100,0x44bed0);p[4]=(uint8_t)(in->global_identity_matrix?0:2);vf0(p+0x50);vf0(p+0x60);vf0(p+0xd0);vf0(p+0xf0);ww(p+8,0);for(unsigned k=0;k<3;k++){ww(p+0x50+k*4,in->offset_xyz[k]);ww(p+0x60+k*4,rotation[k]);}
  
  if(offset){p[4]|=1;row->matrix=p+(in->global_identity_matrix?0x10:0x80);row->position=p+(in->global_identity_matrix?0x40:0xb0);}else{p[4]&=0xfe;row->matrix=in->matrix;row->position=in->matrix+0x30;}
- ww(p+0x70,0);ww(p+0xc0,0);memcpy(p+0x10,local_matrix,64);for(unsigned k=0;k<3;k++)ww(p+0x40+k*4,in->offset_xyz[k]);ww(p+0x100,kind==0?0x44bd60:kind==2?0x44bca0:0x44bb20);ww(p,kind);if(kind==4){vf0(p+0x110);vf0(p+0x120);for(unsigned k=0;k<3;k++)ww(p+0x110+k*4,in->size_xyz[k]);}else ww(p+0x110,in->radius_bits);
+ ww(p+0x70,0);ww(p+0xc0,0);memcpy(p+0x10,local_matrix,64);for(unsigned k=0;k<3;k++)ww(p+0x40+k*4,in->offset_xyz[k]);ww(p+0x100,kind==0?0x44bd60:kind==2?0x44bca0:0x44bb20);ww(p,kind);if(kind==4){vf0(p+0x110);vf0(p+0x120);for(unsigned k=0;k<3;k++)ww(p+0x110+k*4,in->size_xyz[k]);}else ww(p+0x110,in->radius_bits);/* kind2 compatibilityfield carries originalf12 HEIGHT; 114 carriesf13 RADIUS. */
  ww(p+0xe4,bounding);if(kind==2)ww(p+0x114,in->height_bits);
  ww(r+0x34,0);/* Nativeattr1 holds copiedDamageUnit view, not truncatedpointer. */ww(r+0x14,1);ww(r+0x18,0);*out=(gh_collision_pair_shape){m,r,index,row->serial};*original=1;return GH_PAIR_SHAPE_OK;
 }
@@ -86,7 +86,7 @@ static gh_pair_shape_status geometry_update(gh_collision_pairs*m,unsigned i,unsi
  for(unsigned k=0;k<3;k++){float n=reference_mul(matrix[k],0);n=reference_add(n,reference_mul(matrix[4+k],half));n=reference_add(n,reference_mul(matrix[8+k],0));out[k]=reference_add(n,reference_mul(matrix[12+k],1));if(!reference_normal(out[k]))return fail(f,0x30a2b0,GH_PAIR_SHAPE_UNSUPPORTED);}memcpy(g+0x120,out,12);return GH_PAIR_SHAPE_OK;
 }
 static void register_hit(gh_collision_pairs*m,unsigned a,unsigned b,float distance){
- uint8_t*p=(uint8_t*)m->records.pointer+(size_t)a*GH_COLLISION_RECORD_BYTES;if(p[0xd]&1)return;unsigned n=w(p+0xd8),slot=20;if(n<20){slot=n;ww(p+0xd8,n+1);}else for(unsigned k=0;k<20;k++)if(distance<value(w(p+0x88+k*4))){slot=k;break;}
+ uint8_t*p=(uint8_t*)m->records.pointer+(size_t)a*GH_COLLISION_RECORD_BYTES;const uint8_t*other=(uint8_t*)m->records.pointer+(size_t)b*GH_COLLISION_RECORD_BYTES;if(other[0xd]&1)return;unsigned n=w(p+0xd8),slot=20;if(n<20){slot=n;ww(p+0xd8,n+1);}else for(unsigned k=0;k<20;k++)if(distance<value(w(p+0x88+k*4))){slot=k;break;}
  if(slot<20){shape_row*r=&m->native_shapes->rows[a];r->hit_indices[slot]=b;r->hit_serials[slot]=m->native_shapes->rows[b].serial;ww(p+0x38+slot*4,0);ww(p+0x88+slot*4,bits(distance));}
 }
 static gh_pair_shape_status pair_process_one(gh_collision_pairs*m,uint32_t a,uint32_t b,uint32_t*f){
@@ -94,8 +94,15 @@ static gh_pair_shape_status pair_process_one(gh_collision_pairs*m,uint32_t a,uin
  uint8_t*q=(uint8_t*)m->records.pointer+(size_t)(b-1)*GH_COLLISION_RECORD_BYTES;if((w(q)&0x203)!=3||q[0xc]!=0)return GH_PAIR_SHAPE_OK;uint32_t source=w(p+0x10),target=w(q+0x10);if(source>=32)return fail(f,0x2b8f48,GH_PAIR_SHAPE_UNSUPPORTED);if(!(m->pair_masks[source]&(UINT32_C(1)<<(target&31))))return GH_PAIR_SHAPE_OK;
  const uint8_t*ap=w(p+0xe0)==4?p+0xe0+0x120:r->rows[a-1].position;const uint8_t*bp=w(q+0xe0)==4?q+0xe0+0x120:r->rows[b-1].position;float squared=0;for(unsigned k=0;k<3;k++){float x=value(w(bp+k*4)),y=value(w(ap+k*4));if(!reference_normal(x)||!reference_normal(y))return fail(f,0x2bb3f0,GH_PAIR_SHAPE_UNSUPPORTED);volatile float d=x-y;float term=reference_mul(d,d);squared=k?reference_add(squared,term):term;}
  float sum=reference_add(value(w(p+0x1c4)),value(w(q+0x1c4))),bound=reference_mul(sum,sum);if(!reference_normal(squared)||!reference_normal(bound))return fail(f,0x2bb3f0,GH_PAIR_SHAPE_UNSUPPORTED);if(!(squared<bound))return GH_PAIR_SHAPE_OK;
- unsigned x=w(p+0xe0),y=w(q+0xe0);if((x==0&&y==2)||(x==2&&y==0)){uint8_t*sphere=x==0?p:q;uint8_t*cylinder=x==2?p:q;shape_row*sr=&r->rows[(x==0?a:b)-1];shape_row*cr=&r->rows[(x==2?a:b)-1];int hit;uint32_t distance,pc=0;if(gh_collision_query_sphere_cylinder_002bb670(sr->position,w(sphere+0x1f0),cr->matrix,w(cylinder+0x1f0),w(cylinder+0x1f4),sr->inputs.policy,&hit,&distance,&pc))return fail(f,pc?pc:0x2bb670,GH_PAIR_SHAPE_UNSUPPORTED);if(!hit)return GH_PAIR_SHAPE_OK;}else if(x!=0||y!=0){uint32_t pc=(x==0||y==0)?((x==2||y==2)?0x2bb670:0x2bbba0):(x==2&&y==2)?0x2bc470:(x==4&&y==4)?0x2bd6a8:0x2bcb80;return fail(f,pc,GH_PAIR_SHAPE_UNSUPPORTED);}
- register_hit(m,a-1,b-1,squared);register_hit(m,b-1,a-1,squared);return GH_PAIR_SHAPE_OK;
+ unsigned x=w(p+0xe0),y=w(q+0xe0);gh_collision_pair_dispatch dispatch;if(gh_collision_pair_dispatch_002b8f48(x,y,&dispatch))return fail(f,0x2b8f48,GH_PAIR_SHAPE_UNSUPPORTED);if(!dispatch.case_id)return GH_PAIR_SHAPE_OK;
+ if(dispatch.case_id==3){uint8_t*sphere=x==0?p:q;uint8_t*cylinder=x==2?p:q;shape_row*sr=&r->rows[(x==0?a:b)-1];shape_row*cr=&r->rows[(x==2?a:b)-1];int hit;uint32_t distance,pc=0;
+ /* Kind2 VT+14=114(radius) ->f13; VT+24=110(height) ->f14. */
+ if(gh_collision_query_sphere_cylinder_002bb670(sr->position,w(sphere+0x1f0),cr->matrix,w(cylinder+0x1f4),w(cylinder+0x1f0),sr->inputs.policy,&hit,&distance,&pc))return fail(f,pc?pc:0x2bb670,GH_PAIR_SHAPE_UNSUPPORTED);if(!hit)return GH_PAIR_SHAPE_OK;
+ }else if(dispatch.case_id==5){uint8_t*sphere=x==0?p:q;uint8_t*box=x==4?p:q;shape_row*sr=&r->rows[(x==0?a:b)-1];shape_row*br=&r->rows[(x==4?a:b)-1];uint32_t size[3]={w(box+0x1f0),w(box+0x1f4),w(box+0x1f8)},pc=0;int hit;if(gh_collision_query_sphere_box_002bbba0(sr->position,w(sphere+0x1f0),br->matrix,size,sr->inputs.policy,&hit,&pc))return fail(f,pc?pc:0x2bbba0,GH_PAIR_SHAPE_UNSUPPORTED);if(!hit)return GH_PAIR_SHAPE_OK;
+ }else if(dispatch.case_id!=1&&dispatch.case_id!=7)return fail(f,dispatch.entry?dispatch.entry:0x2b8f48,GH_PAIR_SHAPE_UNSUPPORTED);
+ /* Original hit ranking reads the two C0 origins, not box broadphase120. */
+ float origin_distance=0;for(unsigned k=0;k<3;k++){float av=value(w(r->rows[a-1].position+k*4)),bv=value(w(r->rows[b-1].position+k*4));if(!reference_normal(av)||!reference_normal(bv))return fail(f,0x1f7e28,GH_PAIR_SHAPE_UNSUPPORTED);volatile float d=av-bv;float term=reference_mul(d,d);origin_distance=k?reference_add(origin_distance,term):term;}if(!reference_normal(origin_distance))return fail(f,0x1f7e28,GH_PAIR_SHAPE_UNSUPPORTED);
+ register_hit(m,a-1,b-1,origin_distance);register_hit(m,b-1,a-1,origin_distance);return GH_PAIR_SHAPE_OK;
 }
 static gh_pair_shape_status validate_list(gh_collision_pairs*m,uint32_t*f){
  if(m->used)return fail(f,0x2b8aa8,GH_PAIR_SHAPE_UNSUPPORTED);
@@ -116,4 +123,10 @@ gh_pair_shape_status gh_collision_pairs_step_002b9d58(gh_collision_pairs*m,gh_st
 
 gh_pair_shape_status gh_collision_pair_shape_hit_at(const gh_collision_pair_shape*v,unsigned ordinal,gh_collision_pair_shape*other,uint32_t*distance){
  if(!valid(v)||!other||!distance)return GH_PAIR_SHAPE_ARGUMENT;unsigned count=w(v->record+0xd8);if(count>20||ordinal>=count)return GH_PAIR_SHAPE_ARGUMENT;shape_row*r=&v->manager->native_shapes->rows[v->index];unsigned index=r->hit_indices[ordinal];if(index>=v->manager->count)return GH_PAIR_SHAPE_ARGUMENT;shape_row*t=&v->manager->native_shapes->rows[index];if(!t->bound||t->serial!=r->hit_serials[ordinal])return GH_PAIR_SHAPE_ARGUMENT;*other=(gh_collision_pair_shape){v->manager,(uint8_t*)v->manager->records.pointer+(size_t)index*GH_COLLISION_RECORD_BYTES,index,t->serial};*distance=w(v->record+0x88+ordinal*4);return GH_PAIR_SHAPE_OK;
+}
+
+gh_pair_shape_status gh_collision_pair_dispatch_002b8f48(unsigned a,unsigned b,gh_collision_pair_dispatch*out){
+ static const uint8_t cases[7][7]={{1,2,3,4,5,6,7},{2,8,9,10,11,12,13},{3,9,14,15,16,17,18},{4,10,15,19,20,21,22},{5,11,16,20,23,24,25},{6,12,17,21,24,0,0},{7,13,18,22,25,0,0}};
+ static const uint32_t entries[26]={0,0,0x2bb488,0x2bb670,0x2bb760,0x2bbba0,0x2bbce0,0,0x2bbdb8,0x2bc470,0x2bc6c8,0x2bcb80,0x2bccc0,0x2bcd58,0x2bcf28,0x2bd078,0x2bd200,0x2bd340,0x2bd3d8,0x2bd4b0,0x2bd6a8,0x2bd7e8,0x2bd7f8,0x2bd828,0x2bda10,0x2bda20};
+ if(!out||a>=7||b>=7)return GH_PAIR_SHAPE_ARGUMENT;unsigned c=cases[a][b];*out=(gh_collision_pair_dispatch){entries[c],(uint8_t)c,(uint8_t)(c&&b<a)};return GH_PAIR_SHAPE_OK;
 }

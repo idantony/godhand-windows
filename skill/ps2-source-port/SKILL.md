@@ -126,6 +126,9 @@ it does not by itself verify original blending or a rendered game scene.
 Recover attribute signedness and scale from actual upload commands and math.
 Do not assume byte weights divide by255, sum normalization is required, or
 normals are renormalized merely because those are familiar graphics conventions.
+Trace actual runtime type selectors to their dispatched query and arguments.
+Use unequal dimensions to expose swapped radius/height roles; equal-value
+fixtures can pass while the original caller binding is wrong.
 Keep a recovered geometry leaf separate from palette production, lighting,
 projection, clipping and observed native rendering.
 

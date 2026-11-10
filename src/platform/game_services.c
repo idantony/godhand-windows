@@ -500,7 +500,7 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
    gh_scene_placement_status pe=gh_em_scene_room_init_00294b38(&s->em_placements,work,s->scenario_scalar[0x14]);if(pe)return fail(s,GH_SERVICES_ASSET,s->em_placements.frontier?s->em_placements.frontier:0x294b38,pe);
    if((u32(s->b.save.bytes+0x14)&0x4000000)&&((uint16_t)work->room==0x4e||(uint16_t)work->room==0x4f))return fail(s,GH_SERVICES_FRONTIER,0x294c68,GH_PLACE_UNSUPPORTED);
    gh_bundle_entry ems={0};gh_bundle_error be=gh_bundle_find(&room,"EMS",0,&ems);if(be&&be!=GH_BUNDLE_NOT_FOUND)return fail(s,GH_SERVICES_ASSET,0x31ccf0,be);int result;
-   pe=gh_em_scene_bind_00294c68(&s->em_placements,&s->room_state,&ems,&result);if(pe)return fail(s,pe==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->em_placements.frontier?s->em_placements.frontier:0x294c68,pe);
+   pe=gh_em_scene_bind_native_00294c68(&s->em_placements,&s->room_state,&ems,work,s->scenario_scalar[0x14],GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,&result);if(pe)return fail(s,pe==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->em_placements.frontier?s->em_placements.frontier:0x294c68,pe);
   }s->case3_stage=28;
  }
  if(s->case3_stage==28){
@@ -514,7 +514,7 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
      if(de)return fail(s,GH_SERVICES_ASSET,0x12ead8,de);
      s->om_shapes=(gh_hitarea_shape_bindings){.pairs=&s->collision_pairs,.math=s->b.math_globals,.policy=GH_STATIC_BINARY32_REFERENCE};
      s->om_initializer=(gh_om_initializer_bindings){.work=work,.packet_heap=s->b.assets->heap,.fog_rgb=s->world_light.scalar+4,.init=s->b.init,
-      .shapes=&s->om_shapes,.dynamic=&s->dynamic_objects,.door_shared=s->b.door_shared,.player=&s->title_player.view};
+      .shapes=&s->om_shapes,.dynamic=&s->dynamic_objects,.door_shared=s->b.door_shared,.player=&s->title_player.view,.solids=&s->collision_solids};
      gh_om_factory_bindings ob={.pools=&s->pools,.work=work,.room_state=&s->room_state,.objects=s->objects,.room_objects=s->room_objects,.factory_serial=s->b.factory_serial,.resources=&s->object_resources,.initializer=&s->om_initializer};
      pe=gh_om_factory_bind(&s->om_factory,&ob,s->om_placements.count);if(pe)return fail(s,GH_SERVICES_ASSET,0x30fb70,pe);}
     pe=gh_om_scene_bind_native_001c3cb8(&s->om_placements,&oms,&s->om_factory,&result);
@@ -587,8 +587,8 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
   * original scene-exit destructor for initialized world actors. */
  if(gh_r100_init_release(&s->r100))return fail(s,GH_SERVICES_ASSET,0x208,0);
  if(gh_scene_at_units_release(&s->scene_at))return fail(s,GH_SERVICES_ASSET,0x2c1270,0);
- {uint32_t f=0;gh_solid_unit_status se=gh_collision_solid_units_shutdown(&s->collision_solids,&f);if(se)return fail(s,GH_SERVICES_ASSET,f?f:0x1347e8,se);}
  if(gh_om_factory_release(&s->om_factory))return fail(s,GH_SERVICES_ASSET,0x30f8b0,0);
+ {uint32_t f=0;gh_solid_unit_status se=gh_collision_solid_units_shutdown(&s->collision_solids,&f);if(se)return fail(s,GH_SERVICES_ASSET,f?f:0x1347e8,se);}
  if(gh_scene_dynamic_release(&s->dynamic_objects))return fail(s,GH_SERVICES_ASSET,0x12ecf0,0);
  {uint32_t f=0;gh_hitarea_status he=gh_hitarea_shapes_abort(s->b.init,&f);
   if(he)return fail(s,GH_SERVICES_ASSET,f?f:0x1fd580,he);
