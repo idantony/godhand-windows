@@ -36,6 +36,8 @@ typedef struct gh_game_init_state {
  uint8_t records_a[160][0x40],records_b[512][0x40];
  uint8_t heat[0x18],input[0x14];
  gh_game_mt random;
+ /* Native replacements for enemy slot prev/next guest pointers; SAME64 slots. */
+ uint8_t enemy_prev[64],enemy_next[64];
  struct gh_hitarea_native *hitarea_native;uint32_t hitarea_generation;uint8_t hitarea_cold_constructed;
 } gh_game_init_state;
 /* Host storage initialization, not the earlier complete PS2 boot. Existing

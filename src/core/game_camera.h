@@ -8,7 +8,9 @@ typedef enum {GH_CAMERA_EXACT_UNAVAILABLE=0,GH_CAMERA_NATIVE_BINARY32_REFERENCE=
 typedef enum {GH_CAMERA_OK,GH_CAMERA_ARGUMENT,GH_CAMERA_BUSY,GH_CAMERA_UNSUPPORTED,GH_CAMERA_NUMERIC} gh_camera_status;
 typedef struct {gh_game_camera *identity;uint8_t fields[0x530];gh_camera_numeric_policy policy;
  int constructed;uint32_t failed_entry;} gh_game_pl_camera;
-/* Cold original139BC8 prefix construction, not the whole CamManager (0x1030 bytes).
+/* Shared original1F8180 polynomial, explicit finite binary32 reference.
+ * No libc atan or angle reduction. Output atomic and caller FEnv preserved. */
+gh_camera_status gh_game_angle_001f8180(float y,float x,float *out,gh_camera_numeric_policy,uint32_t *frontier);/* Cold original139BC8 prefix construction, not the whole CamManager (0x1030 bytes).
  * identity is the EXISTING game_init.camera handle atoriginal463050; mode,
  * previousmode and previous/active identity stay canonical in game_init. */
 gh_camera_status gh_game_camera_construct_pl_00139bc8(gh_game_pl_camera *,gh_game_camera *identity,gh_camera_numeric_policy);

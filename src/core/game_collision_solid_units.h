@@ -15,6 +15,7 @@ typedef struct gh_collision_solid_unit {struct gh_collision_solid_unit *next;gh_
  * typed metadata replaces list/object/matrix pointers, preserves unknownbytes. */
 gh_solid_unit_status gh_collision_solid_create_unit_001346f8(gh_game_collision_solids *,gh_heap *,gh_title_player_view *,uint32_t type,uint32_t bound_radius_bits,gh_collision_solid_unit **,uint32_t *frontier);
 gh_solid_unit_status gh_collision_solid_create_sphere_00134880(gh_game_collision_solids *,gh_title_player_view *,const uint8_t matrix[64],const uint32_t local_xyz[3],uint32_t radius_bits,gh_collision_native_sphere **,uint32_t *frontier);
+gh_solid_unit_status gh_collision_solid_set_enabled_001351d8(gh_game_collision_solids *,gh_title_player_view *,int enabled,uint32_t *frontier);
 /* Actual1347E8 unlink→1344A0 sphere dtor/free→unitfree, preserves otherunits.
  * LookupNULL/missingobject is originalno-op. No query/ChkHit successimplied. */
 gh_solid_unit_status gh_collision_solid_release_unit_001347e8(gh_game_collision_solids *,gh_title_player_view *,uint32_t *frontier);

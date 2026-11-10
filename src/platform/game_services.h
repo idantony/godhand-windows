@@ -124,6 +124,10 @@ typedef struct {
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services *,gh_game_services_scene_view *);
 /* Resolve actual canonical actor identity before caller-specific ID filtering. */
 gh_game_services_status gh_game_services_actor_view(gh_game_services *,uint32_t handle,gh_title_player_view *);
+/* Dispatches a verified original Move descriptor on the SAME canonical actor.
+ * Unknown methods/this-adjustments retain their exact original entry frontier. */
+gh_game_services_status gh_game_services_move_actor(gh_game_services *,uint32_t handle,uint32_t original_entry,
+ int16_t this_delta,const gh_title_player_view *,const gh_boot_work *,uint32_t *frontier);
 /* Inspect native script errors immediately after a real Scenario visit. */
 gh_scene_step_status gh_game_services_task_status(gh_game_services *,uint32_t *frontier);
 /* Actual12C418 on SAME player/model/motion, with one invocation cursor. */

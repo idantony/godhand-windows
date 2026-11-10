@@ -1,6 +1,8 @@
 #include "game_hitarea_shapes.h"
 #include "game_hitarea_internal.h"
 #include <string.h>
+#include <math.h>
+#include <fenv.h>
 static uint32_t w(const uint8_t*p){uint32_t v;memcpy(&v,p,4);return v;}
 static void ww(uint8_t*p,uint32_t v){memcpy(p,&v,4);}
 static gh_hitarea_status fail(uint32_t*f,uint32_t pc,gh_hitarea_status e){if(f)*f=pc;return e;}
@@ -53,3 +55,8 @@ gh_hitarea_status gh_hitarea_pool_slot_clear_001fd580(gh_game_init_state*s,unsig
  gh_hitarea_object o={s,b,group==1?0x60:0x70,s->hitarea_generation,(uint16_t)slot,(uint8_t)group,0,s->hitarea_native->serials[slot]};int original;
  return gh_hitarea_object_clear_shapes_001fd580(&o,&original,f);
 }
+/* Validate original Unit+3C chain against SAME native node registrations. */
+static gh_hitarea_status selected_node(const gh_hitarea_object*o,int16_t index,gh_native_hitarea_node**out,uint32_t*f){*out=NULL;gh_title_player_view*actor;if(gh_hitarea_object_actor(o,&actor))return GH_HITAREA_ARGUMENT;if(o->fallback)return GH_HITAREA_OK;gh_game_init_state*s=o->state;if(w(o->bytes+0x3c)&&!s->object_links[o->index])return fail(f,0x1fd610,GH_HITAREA_UNSUPPORTED);size_t guard=0;for(gh_game_damage_link*link=s->object_links[o->index];link;link=link->next){if(++guard>672||!s->hitarea_native)return fail(f,0x1fd610,GH_HITAREA_UNSUPPORTED);gh_native_hitarea_node*node=NULL;for(unsigned i=0;i<672;i++){gh_native_hitarea_node*n=&s->hitarea_native->nodes[i];if(n->associated&&&n->link==link&&n->object.index==o->index&&n->object.serial==o->serial&&n->object.generation==o->generation){node=n;break;}}if(!node)return fail(f,0x1fd610,GH_HITAREA_UNSUPPORTED);uint16_t original_index;memcpy(&original_index,node->record+0x2c,2);if(!*out&&original_index==(uint16_t)index)*out=node;}return GH_HITAREA_OK;}
+gh_hitarea_status gh_hitarea_object_set_node_active_001fd610(const gh_hitarea_object*o,int16_t index,int enabled,uint32_t*f){if(f)*f=0;if(!o)return GH_HITAREA_ARGUMENT;gh_native_hitarea_node*n;gh_hitarea_status e=selected_node(o,index,&n,f);if(e||!n)return e;uint32_t flags=w(n->shape.record);ww(n->shape.record,enabled==1?flags|2u:flags&~2u);return GH_HITAREA_OK;}
+gh_hitarea_status gh_hitarea_object_set_node_scalar_001fd7b0(const gh_hitarea_object*o,int16_t index,uint32_t scalar,uint32_t*f){if(f)*f=0;if(!o)return GH_HITAREA_ARGUMENT;gh_native_hitarea_node*n;gh_hitarea_status e=selected_node(o,index,&n,f);if(e||!n)return e;uint8_t*g=n->shape.record+0xe0;uint32_t kind=w(g),vt=w(g+0x100);float value;memcpy(&value,&scalar,4);if(kind==4&&vt==0x44bb20)return GH_HITAREA_OK; /*actualbase2BA468 jrra*/
+ if(!isfinite(value))return fail(f,0x1fd7b0,GH_HITAREA_UNSUPPORTED);if(kind==0&&vt==0x44bd60){ww(g+0x110,scalar);ww(g+0xe4,scalar);return GH_HITAREA_OK;}if(kind!=2||vt!=0x44bca0)return fail(f,0x1fd7b0,GH_HITAREA_UNSUPPORTED);float height;uint32_t hb=w(g+0x110);memcpy(&height,&hb,4);if(!isfinite(height))return fail(f,0x2ba7b8,GH_HITAREA_UNSUPPORTED);fenv_t env;if(feholdexcept(&env))return GH_HITAREA_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_HITAREA_UNSUPPORTED;}volatile float sum=height+value;float bound=sum;uint32_t result;memcpy(&result,&bound,4);int valid=isfinite(bound);if(fesetenv(&env)||!valid)return fail(f,0x2ba7b8,GH_HITAREA_UNSUPPORTED);ww(g+0x114,scalar);ww(g+0xe4,result);return GH_HITAREA_OK;}

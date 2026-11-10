@@ -28,6 +28,13 @@ typedef struct {
  gh_stage_textures *textures;const gh_game_world_light *world_light;
  const gh_game_render_projection *projection;gh_object_static_emit emit;void *context;
 } gh_object_static_bindings;
+/* Original descriptor identity is read from the user's ELF; the address is
+ * diagnostic and dispatches only through an explicitly recovered native body.
+ * actor aliases borrow the SAME scalar allocation, never a copied actor. */
+typedef struct {uint32_t handle,original_entry;int16_t this_delta;gh_title_player_view actor;} gh_object_move_request;
+typedef gh_object_step_status (*gh_object_move_resolve)(void *,uint32_t,gh_title_player_view *,uint32_t *);
+typedef gh_object_step_status (*gh_object_move_invoke)(void *,const gh_object_move_request *,const gh_boot_work *,uint32_t *);
+typedef struct {gh_object_move_resolve resolve;gh_object_move_invoke invoke;void *context;const void *elf;size_t elf_bytes;} gh_object_move_bindings;
 typedef struct {gh_game_init_state *init;uint32_t ratio10_bits,profile_752cf8;uint8_t constructed;
  gh_object_static_bindings static_objects;uint32_t moved_objects_5caffc;
  uint64_t alpha_presets[8];
@@ -35,6 +42,9 @@ typedef struct {gh_game_init_state *init;uint32_t ratio10_bits,profile_752cf8;ui
  size_t move_index,move_count,trans_index,trans_material;
  const gh_room_pools *move_pools,*trans_pools;const gh_boot_work *move_work,*trans_work;
  gh_object_static_command pending;
+ gh_object_move_bindings live_objects;gh_object_move_request move_request;
+ gh_scene_mesh_object *move_static_object;
+ uint8_t live_bound,move_native_phase,move_skip;
 } gh_game_object_step;
 
 typedef uint32_t (*gh_object_profile_counter)(void *);
@@ -55,6 +65,7 @@ gh_object_step_status gh_game_objects_trans_0030f650(const gh_room_pools *,uint3
 /* Cold5CAFFC via actualELF PT_LOAD/BSS once; OT+B58 via actual31A0E8
  * SBzero leaf. Rebinding never resets either scalar. Borrow canonicalowners. */
 gh_object_step_status gh_game_object_step_bind_static(gh_game_object_step *,const gh_object_static_bindings *,const void *elf,size_t);
+gh_object_step_status gh_game_object_step_bind_live(gh_game_object_step *,const gh_object_move_bindings *);
 /* Extended entry retains the strict empty-list compatibility API above. */
 gh_object_step_status gh_game_objects_trans_static_0030f650(gh_game_object_step *,const gh_room_pools *,const gh_boot_work *,uint32_t *);
 #ifdef __cplusplus

@@ -13,7 +13,11 @@ gh_hitarea_status gh_hitarea_add_sphere_001fdaf0(const gh_hitarea_object *,const
 gh_hitarea_status gh_hitarea_add_cylinder_001fdc00(const gh_hitarea_object *,const gh_hitarea_shape_bindings *,const uint8_t matrix[64],const uint32_t offset_xyz[3],const uint32_t rotation_xyz[3],uint32_t height_f12_bits,uint32_t radius_f13_bits,int *original_index,uint32_t *frontier);
 gh_hitarea_status gh_hitarea_add_box_001fd9d8(const gh_hitarea_object *,const gh_hitarea_shape_bindings *,const uint8_t matrix[64],const uint32_t offset_xyz[3],const uint32_t rotation_xyz[3],const uint32_t full_size_xyz[3],int *original_index,uint32_t *frontier);
 gh_hitarea_status gh_hitarea_object_set_active_001fd668(const gh_hitarea_object *,int enabled,uint32_t *frontier);
-gh_hitarea_status gh_hitarea_node_at(const gh_hitarea_object *,unsigned ordinal,const uint8_t **record64,gh_collision_pair_shape *);
+/* Original selected-node bit2 enable and virtual+1C scalar setter. Sphere
+ * radius110; kind2 radius114 +height110 bound; box base2BA468 is genuineempty.
+ * Missing original signed index is a no-op, never a pointer conversion. */
+gh_hitarea_status gh_hitarea_object_set_node_active_001fd610(const gh_hitarea_object *,int16_t original_index,int enabled,uint32_t *frontier);
+gh_hitarea_status gh_hitarea_object_set_node_scalar_001fd7b0(const gh_hitarea_object *,int16_t original_index,uint32_t scalar_bits,uint32_t *frontier);gh_hitarea_status gh_hitarea_node_at(const gh_hitarea_object *,unsigned ordinal,const uint8_t **record64,gh_collision_pair_shape *);
 /* Actual1FD580: ordered1FCBA0 pair removal, linked-node unlink and
  * 1FC7F8 exact reset. Mode2 leaves deferred pair record flags intact. */
 gh_hitarea_status gh_hitarea_object_clear_shapes_001fd580(gh_hitarea_object *,int *original_return,uint32_t *frontier);

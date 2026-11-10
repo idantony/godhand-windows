@@ -225,8 +225,66 @@ def candidates(project: Path, va: int, names: list[str], limit: int):
             "policy": "candidate locations only; not verified source/prototypes"}
 
 
+# Independently decoded R5900 I-type facts, not inferred object fields.
+_GPR = "zero at v0 v1 a0 a1 a2 a3 t0 t1 t2 t3 t4 t5 t6 t7 s0 s1 s2 s3 s4 s5 s6 s7 t8 t9 k0 k1 gp sp s8 ra".split()
+_MEMORY = dict((op, (name, width)) for op,name,width in [
+    (32,"LB",1),(36,"LBU",1),(33,"LH",2),(37,"LHU",2),(35,"LW",4),(39,"LWU",4),(55,"LD",8),(30,"LQ",16),
+    (40,"SB",1),(41,"SH",2),(43,"SW",4),(63,"SD",8),(31,"SQ",16),
+    (26,"LDL",8),(27,"LDR",8),(34,"LWL",4),(38,"LWR",4),(44,"SDL",8),(45,"SDR",8),(42,"SWL",4),(46,"SWR",4),
+    (49,"LWC1",4),(57,"SWC1",4),(54,"LQC2",16),(62,"SQC2",16)])
+
+
+def decode_memory_word(word, pc):
+    if not isinstance(word, int) or not 0 <= word <= 0xffffffff:
+        raise EvidenceError("instruction word outside unsigned32")
+    if not isinstance(pc, int) or not 0 <= pc <= 0xfffffffc or pc % 4:
+        raise EvidenceError("instruction PC outside aligned unsigned32")
+    op, rs, rt, imm = word >> 26, (word >> 21) & 31, (word >> 16) & 31, word & 65535
+    if op in (47,51):
+        return {"kind":"hint", "mnemonic":"CACHE" if op == 47 else "PREF", "pc":hx(pc)}
+    if op not in _MEMORY:
+        return {"kind":"unknown_memory_opcode", "opcode":op, "pc":hx(pc)} if op >= 32 else None
+    name,width = _MEMORY[op]
+    return {"kind":"access", "rs":rs, "rs_alias":_GPR[rs], "offset_signed16":imm if imm < 32768 else imm-65536,
+        "offset_encoded16":imm, "operation":"load" if name.startswith("L") else "store", "nominal_width_bytes":width,
+        "access_shape":"partial_merge" if name in ("LDL","LDR","LWL","LWR","SDL","SDR","SWL","SWR") else "ordinary",
+        "data_register_bank":"fpr" if op in (49,57) else "vf" if op in (54,62) else "gpr",
+        "data_register":rt, "mnemonic":name, "pc":hx(pc)}
+
+
+def observed_memory(instructions, elf, site_limit=3):
+    if not isinstance(site_limit,int) or not 1 <= site_limit <= 16:
+        raise EvidenceError("memory site limit must be 1..16")
+    groups,hints,unknown = {},[],[]
+    for pc in sorted(instructions):
+        item = decode_memory_word(struct.unpack("<I",elf.read(pc,4))[0],pc)
+        if item is None:
+            continue
+        if item["kind"] != "access":
+            (hints if item["kind"] == "hint" else unknown).append(item)
+            continue
+        key = tuple(item[k] for k in ("rs","offset_signed16","operation","nominal_width_bytes","access_shape","data_register_bank"))
+        if key not in groups:
+            groups[key] = {k:v for k,v in item.items() if k not in ("kind","pc","mnemonic","data_register")}
+            groups[key].update(static_site_count=0,mnemonics={},pc_examples=[],data_registers=[])
+        g=groups[key];g["static_site_count"]+=1
+        g["mnemonics"][item["mnemonic"]]=g["mnemonics"].get(item["mnemonic"],0)+1
+        if len(g["pc_examples"]) < site_limit:
+            g["pc_examples"].append(item["pc"])
+        if item["data_register"] not in g["data_registers"]:
+            g["data_registers"].append(item["data_register"])
+    result=list(groups.values())
+    for g in result:
+        g["pc_examples_truncated"]=len(g["pc_examples"]) < g["static_site_count"]
+    return {"scope":"static verified EE I-type instructions only; register addressing, not class fields, effective addresses, aliases or execution counts",
+        "partial_merge_policy":"nominal container width only; bytes touched depend on runtime address",
+        "static_site_count":sum(g["static_site_count"] for g in result),"group_count":len(result),"groups":result,
+        "hints":{"count":len(hints),"examples":hints[:site_limit]},
+        "unknown_memory_opcodes":{"count":len(unknown),"examples":unknown[:site_limit]}}
+
+
 def function_evidence(function: dict, elf: Elf, tables: list[Snr2], related: list[Snr2],
-                      project: Path, known: dict, search: bool, decompile_limit: int):
+                      project: Path, known: dict, search: bool, decompile_limit: int, memory_site_limit=3):
     if not function.get("mapped") or not function.get("entry"):
         raise EvidenceError(f"requested {function.get('requestedAddress')}: report function not mapped")
     entry, requested = address(function["entry"]), address(function["requestedAddress"])
@@ -305,6 +363,7 @@ def function_evidence(function: dict, elf: Elf, tables: list[Snr2], related: lis
             "requested_in_verified_body": requested in instructions, "report_name": function.get("name"),
             "body_bytes_reported": function.get("bodyAddresses"), "verified_instruction_bytes": len(instructions) * 4,
             "body_count_matches_verified_bytes": function.get("bodyAddresses") == len(instructions) * 4,
+            "observed_memory": observed_memory(instructions, elf, memory_site_limit),
             "ranges": ranges, "range_policy": "only verified report instructions; gaps excluded, not assumed full function",
             "raw_ordered_sha256": digest(b"".join(elf.read(va, 4) for va in ordered)),
             "calls": calls, "direct_callees": list(direct.values()),
@@ -316,7 +375,7 @@ def function_evidence(function: dict, elf: Elf, tables: list[Snr2], related: lis
 
 
 def build_context(report_path: Path, elf_path: Path, addresses: list[int], project: Path,
-                  rel_paths=(), search=True, decompile_limit=10000, wrapper_manifest: Path | None = None):
+                  rel_paths=(), search=True, decompile_limit=10000, wrapper_manifest: Path | None = None, memory_site_limit=3):
     report_bytes, binary = report_path.read_bytes(), elf_path.read_bytes()
     report = json.loads(report_bytes)
     actual = digest(binary)
@@ -369,7 +428,7 @@ def build_context(report_path: Path, elf_path: Path, addresses: list[int], proje
     if not selected:
         raise EvidenceError("report contains no selected functions")
     known = vendor_names(project)
-    functions = [function_evidence(f, elf, tables, related, project, known, search, decompile_limit) for f in selected]
+    functions = [function_evidence(f, elf, tables, related, project, known, search, decompile_limit, memory_site_limit) for f in selected]
     if wrapper:
         for function in functions:
             ranges = function["ranges"]
@@ -379,7 +438,7 @@ def build_context(report_path: Path, elf_path: Path, addresses: list[int], proje
                     for item in ranges]
             else:
                 function["original_rel_ranges"] = None
-    return {"schema": 1, "tool": "godhand-function-context", "input": {"elf": str(elf_path.resolve()),
+    return {"schema": 1, "tool": "godhand-function-context", "tool_version": 2, "input": {"elf": str(elf_path.resolve()),
             "sha256": actual, "bytes": len(binary), "image_base": hx(elf.image_base),
             "report": str(report_path.resolve()), "report_sha256": digest(report_bytes),
             "declared_program": report.get("program"), "declared_path": report.get("executablePath"),
@@ -400,6 +459,7 @@ def main(argv=None):
     parser.add_argument("--rel", type=Path, action="append", default=[])
     parser.add_argument("--wrapper-manifest", type=Path)
     parser.add_argument("--decompile-limit", type=int, default=10000, help="0 includes complete decompile")
+    parser.add_argument("--memory-sites", type=int, default=3, help="PC examples per memory group, 1..16")
     parser.add_argument("--no-search", action="store_true")
     parser.add_argument("--force", action="store_true", help="overwrite this explicitly selected generated private output")
     args = parser.parse_args(argv)
@@ -413,7 +473,7 @@ def main(argv=None):
             raise EvidenceError("output exists; use a new name or explicit --force")
         wanted = [address(item) for group in args.address for item in group.split(",")]
         context = build_context(args.report, args.elf, wanted, args.project, args.rel,
-                                not args.no_search, args.decompile_limit, args.wrapper_manifest)
+                                not args.no_search, args.decompile_limit, args.wrapper_manifest, args.memory_sites)
         output.parent.mkdir(parents=True, exist_ok=True)
         # Validate all input evidence before touching the output; no temp files on E:.
         with output.open("w" if args.force else "x", encoding="utf-8", newline="\n") as stream:

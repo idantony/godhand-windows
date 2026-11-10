@@ -235,6 +235,23 @@ static gh_game_event_status event_object_view(void *context,uint32_t handle,gh_t
     if(e&&frontier)*frontier=0x14fd98;
     return !e?GH_EVENT_OK:e==GH_SERVICES_FRONTIER?GH_EVENT_UNSUPPORTED:GH_EVENT_CALLEE;
 }
+static gh_light_status light_actor_view(void *context,uint32_t handle,gh_title_player_view*out,uint32_t*frontier)
+{
+    gh_startup_host*h=context;gh_game_services_status e=gh_game_services_actor_view(h->services,handle,out);
+    if(e&&frontier)*frontier=0x2d74b8;
+    return !e?GH_LIGHT_OK:e==GH_SERVICES_FRONTIER?GH_LIGHT_UNSUPPORTED:GH_LIGHT_BOUNDS;
+}
+static gh_object_step_status move_actor_view(void *context,uint32_t handle,gh_title_player_view*out,uint32_t*frontier)
+{
+    gh_startup_host*h=context;gh_game_services_status e=gh_game_services_actor_view(h->services,handle,out);
+    if(e&&frontier)*frontier=0x30f138;
+    return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
+}
+static gh_object_step_status move_actor_invoke(void *context,const gh_object_move_request*r,const gh_boot_work*work,uint32_t*frontier)
+{
+    gh_startup_host*h=context;gh_game_services_status e=gh_game_services_move_actor(h->services,r->handle,r->original_entry,r->this_delta,&r->actor,work,frontier);
+    return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
+}
 static gh_game_event_status event_loading_menu(void *context,uint32_t *frontier)
 {
     gh_game_services_status e=scene_start_loading_menu(context,frontier);
@@ -284,6 +301,11 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         int original_return;gh_scene_at_status e=gh_scene_at_step_native_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,&h->work,NULL,&original_return,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x30f090){
+        if(!h->object_step.live_bound){
+            gh_object_move_bindings b={move_actor_view,move_actor_invoke,h,h->boot_reference,h->boot_reference_bytes};
+            gh_object_step_status e=gh_game_object_step_bind_live(&h->object_step,&b);
+            if(e){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
+        }
         if(!h->object_step.static_bound){
             gh_object_static_bindings b={.meshes=s.meshes,.scene_at=s.scene_at,.camera=s.pl_camera,
                 .player=&s.title_player->view,.textures=h->game_stage.textures,.world_light=s.world_light,
@@ -315,7 +337,8 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_object_status e=gh_game_objects_update_001fe748(objects,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2d7560){
-        gh_light_status e=gh_game_world_light_move_002d7560(s.world_light,&h->work,s.pools,GH_CAMERA_NATIVE_BINARY32_REFERENCE);
+        gh_light_move_bindings bindings={s.scene_at,light_actor_view,h};
+        gh_light_status e=gh_game_world_light_move_native_002d7560(s.world_light,&h->work,s.pools,&bindings,GH_CAMERA_NATIVE_BINARY32_REFERENCE);
         if(e&&frontier)*frontier=s.world_light->frontier?s.world_light->frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2ca518){

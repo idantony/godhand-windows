@@ -32,6 +32,7 @@
 #include "../core/game_om3eb.h"
 #include "../core/game_enemy_resources.h"
 #include "../core/game_event_player_reset.h"
+#include "../core/game_player_frame.h"
 #include <stdlib.h>
 #include <string.h>
 struct gh_game_services {
@@ -69,6 +70,7 @@ struct gh_game_services {
  gh_player_child_tail child_tail;gh_game_player_child *work5f8;
  gh_game_player_spawn player_spawn;
  gh_actor_motion player_motion;
+ gh_game_player_frame player_frame;gh_effect_release_bindings player_frame_effects;
  gh_motion_solve player_motion_solve;
  uint64_t ui_resource_epoch;
  gh_game_door door;uint8_t system_menu_enabled;uint32_t room_texture_channel;int room_texture_ready;
@@ -121,7 +123,7 @@ static gh_game_services_status finalize_room_lifetime(gh_game_services*s){
  detach_bundle(&s->em_placements.file,base,bytes);detach_bundle(&s->em_placements.source_entries,base,bytes);
  detach_bundle(&s->om_placements.file,base,bytes);detach_bundle(&s->om_placements.entries,base,bytes);
  if(in_pack(s->acd.records,base,bytes)){s->acd.records=NULL;s->acd.record_bytes=0;}
- detach_table(&s->step.nearcheck.pairs,base,bytes);detach_table(&s->step.nearcheck.vertices,base,bytes);detach_table(&s->step.nearcheck.indices,base,bytes);
+ gh_scene_nearcheck_release(&s->step.nearcheck);
  changed=detach_effect(&s->effects.ear,base,bytes)|detach_effect(&s->effects.ssd,base,bytes);
  for(unsigned i=0;i<64;i++){changed|=detach_effect(&s->effects.resources[i].tbl0,base,bytes);changed|=detach_effect(&s->effects.resources[i].tbl1,base,bytes);changed|=detach_effect(&s->effects.emitter_entries[i],base,bytes);}
  for(unsigned i=0;i<1250;i++)changed|=detach_effect(&s->effects.emd_tables[i],base,bytes);if(changed)s->effects.ready=0;
@@ -225,6 +227,11 @@ static gh_player_init_status player_motion_advance(void*p,const gh_player_motion
  gh_game_services*s=p;if(!player_motion_request_matches(s,r)||!r->rate)return GH_PLAYER_INIT_ARGUMENT;
  int ended=0;gh_actor_motion_status e=gh_actor_motion_step_00157c18(&s->player_motion,*r->rate,GH_STATIC_BINARY32_REFERENCE,&ended,frontier);
  return !e?GH_PLAYER_INIT_OK:e==GH_ACTOR_MOTION_UNSUPPORTED?GH_PLAYER_INIT_UNSUPPORTED:e==GH_ACTOR_MOTION_BOUNDS?GH_PLAYER_INIT_BOUNDS:GH_PLAYER_INIT_CALLEE;
+}
+static gh_player_frame_status player_frame_motion_advance(void*p,const gh_player_motion_request*r,int*ended,uint32_t*frontier){
+ gh_game_services*s=p;if(!ended||!player_motion_request_matches(s,r)||!r->rate)return GH_PLAYER_FRAME_ARGUMENT;
+ gh_actor_motion_status e=gh_actor_motion_step_00157c18(&s->player_motion,*r->rate,GH_STATIC_BINARY32_REFERENCE,ended,frontier);
+ return !e?GH_PLAYER_FRAME_OK:e==GH_ACTOR_MOTION_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
 }
 static gh_player_init_status player_motion_solve(void*p,const gh_player_motion_request*r,uint32_t*frontier){
  gh_game_services*s=p;if(!player_motion_request_matches(s,r)||!s->player_motion.complete)return GH_PLAYER_INIT_ARGUMENT;
@@ -718,6 +725,7 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  if(s->cockpit_snapshot&&(s->b.id->pool_used!=s->cockpit_pool_end||s->b.id->job_count!=s->cockpit_jobs_end))return fail(s,GH_SERVICES_BUSY,0x2aa078,GH_ID_BUSY);
  /* Native shutdown owns this unfinished construction prefix; this is not the
   * original scene-exit destructor for initialized world actors. */
+ gh_scene_nearcheck_release(&s->step.nearcheck);
  if(gh_r100_init_release(&s->r100))return fail(s,GH_SERVICES_ASSET,0x208,0);
  if(gh_scene_at_units_release(&s->scene_at))return fail(s,GH_SERVICES_ASSET,0x2c1270,0);
  gh_scene_dynamic_cancel_update(&s->dynamic_objects);
@@ -768,6 +776,26 @@ gh_game_services_status gh_game_services_actor_view(gh_game_services*s,uint32_t 
  if(s->player_child.handle==handle&&s->player_child.complete){*out=s->player_child.object.view;return GH_SERVICES_OK;}
  gh_scene_placement_status e=gh_om_factory_object_view(&s->om_factory,handle,out);
  return !e?GH_SERVICES_OK:e==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+}
+gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t handle,uint32_t entry,int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,uint32_t*f){
+ if(f)*f=0;if(!s||!v||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
+ const gh_title_player_view*canonical=NULL;
+ if(gh_game_player_factory_scalar_view(&s->player_factory,handle,&canonical)||canonical->bytes!=v->bytes||canonical->size!=v->size){*f=entry;return GH_SERVICES_FRONTIER;}
+ if(entry!=0x108ab0||delta){*f=entry;return GH_SERVICES_FRONTIER;}
+ if(!s->player_tail.complete||!s->player_model.ready){*f=0x107f58;return GH_SERVICES_FRONTIER;}
+ s->player_frame_effects=(gh_effect_release_bindings){.effects=&s->effects,.esp=s->scene_buffer_a,.emitters=s->scene_buffer_b,.esp_bytes=sizeof(s->scene_buffer_a),.emitter_bytes=sizeof(s->scene_buffer_b)};
+ gh_player_frame_bindings b={.player=&s->title_player,.work=s->b.work,.init=s->b.init,.camera=&s->camera,.save=s->b.save,
+  .scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario},.effects=&s->player_frame_effects,
+  .current_player=&s->title_player.view,.elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes,.numeric_policy=GH_CAMERA_NATIVE_BINARY32_REFERENCE,
+  .scene_at=&s->scene_at,.take_object=&s->player_tail.take_object,.give_objects=s->player_tail.give_objects,.solids=&s->collision_solids,
+  .take_binding_known=1,.give_binding_known=1,.give_present_mask=31,
+  .model=&s->player_model,.resource=s->player_factory.resource.bytes,.resource_bytes=s->player_factory.file_bytes,.rate=s->b.rate,
+  .initialize_motion=player_motion_initialize,.advance_motion=player_frame_motion_advance,.motion_context=s,
+  /* Original107E40 explicitly wrote698/6A0=NULL; no later recovered writer
+     has published either. The frame also rejects any changed raw token. */
+  .auxiliary_bindings_known=1};
+ gh_player_frame_status e=gh_game_player_frame_00108ab0(&s->player_frame,&b);*f=s->player_frame.frontier;
+ return !e?GH_SERVICES_OK:e==GH_PLAYER_FRAME_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
 }
 gh_scene_step_status gh_game_services_task_status(gh_game_services*s,uint32_t*frontier){
  if(!s||!frontier)return GH_SCENE_STEP_ARGUMENT;*frontier=0;

@@ -191,3 +191,21 @@ The four canonical754C30/38/50/58 object-pointer registries are already the
 four vectors in game_room_pools, created by actual2A5D80→3127B0 from RHT.
 They are distinct from global80/room32 asset holders. Use gh_room_registry_view
 on the existing initialized pools; do not create fresh empty list companions.
+
+The decompiler can misgroup computed switch targets even when the instruction
+bytes are verified. Enemy20A behavior2064FC is a concrete case: actual table
+42E8C0[index8] selects20654C, whose branch/delay slot writes17B9=0; generatedC
+had grouped20A with a value3 case. Verify the local table base/index/value and
+target raw control flow before importing a selector. The bounded offline trace
+records opaque callee assumptions and is not whole-method native verification.
+
+NearCheck2A6FF8 precedes dynamic-box12E840. Constructor12D970 defines zero
+bounds/corners; original130700 tests AABB and face masks/exclusions BEFORE
+consuming corner geometry. Requiring hostworld_ready before those earlyouts
+caused a false12DCB8 frontier. Surviving faces must still require actual geometry;
+neither force an early update nor default an unknown query to a miss.
+
+MoveObj30F090 caches its iteration gate/end, calls the original descriptor,
+then reloads the current registry slot at30F16C before clearing2F0 lowtwo bits.
+Native continuations need a separate completed-call/post-call phase: an error
+resolving that reloaded slot must not execute the completed Move again.

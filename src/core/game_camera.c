@@ -19,7 +19,9 @@ static float atan_original(float y,float x){
  for(unsigned i=1;i<8;i++){power=mul(power,r2);result=add(result,mul(power,f(c[i])));}
  result=add(result,f(0x3f490fdb));return x<0?(y<0?add(result,-pi):add(pi,-result)):(y<0?-result:result);
 }
-/* SDK30A7B8->30A5D0 finiteYrotation; sinpolynomial3C3C90 then
+gh_camera_status gh_game_angle_001f8180(float y,float x,float*out,gh_camera_numeric_policy policy,uint32_t*frontier){
+ if(frontier)*frontier=0;if(!out)return GH_CAMERA_ARGUMENT;if(policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE){if(frontier)*frontier=0x1f8180;return GH_CAMERA_UNSUPPORTED;}if(!isfinite(x)||!isfinite(y)){if(frontier)*frontier=0x1f8180;return GH_CAMERA_NUMERIC;}fenv_t env;if(feholdexcept(&env))return GH_CAMERA_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_CAMERA_NUMERIC;}float result=atan_original(y,x);int valid=isfinite(result);if(fesetenv(&env)||!valid){if(frontier)*frontier=0x1f8180;return GH_CAMERA_NUMERIC;}*out=result;return GH_CAMERA_OK;
+}/* SDK30A7B8->30A5D0 finiteYrotation; sinpolynomial3C3C90 then
  * signed sqrt(1-sin^2), matching the originalinstructionflow. */
 static void y_sincos(float angle,float *sn,float *cs){
  static const uint32_t c[]={0x362e9c14,0xb94fb21f,0x3c08873e,0xbe2aaaa4};

@@ -88,6 +88,51 @@ class ContextTests(unittest.TestCase):
     def build(self, **kwargs):
         return fc.build_context(self.report, self.elf, [0x100000], self.root, search=False, **kwargs)
 
+    def test_memory_encoding_extremes_banks_and_partial(self):
+        def d(op, rs=31, imm=0x8000):
+            return fc.decode_memory_word((op<<26)|(rs<<21)|(7<<16)|imm, 0xfffffffc)
+        self.assertEqual(d(35)["offset_signed16"], -32768)
+        self.assertEqual(d(39,0,32767)["offset_signed16"],32767)
+        self.assertEqual(d(35)["rs_alias"],"ra")
+        for op,bank,width in [(30,"gpr",16),(31,"gpr",16),(49,"fpr",4),(57,"fpr",4),(54,"vf",16),(62,"vf",16)]:
+            self.assertEqual((d(op)["data_register_bank"],d(op)["nominal_width_bytes"]),(bank,width))
+        for op in (26,27,34,38,44,45,42,46):
+            self.assertEqual(d(op)["access_shape"],"partial_merge")
+        for op in (47,51):
+            self.assertEqual(d(op)["kind"],"hint")
+        self.assertEqual(d(48)["kind"],"unknown_memory_opcode")
+        self.assertIsNone(fc.decode_memory_word(0,0))
+
+    def test_memory_bounds_and_static_grouping(self):
+        for word,pc in [(-1,0),(1<<32,0),(0,-4),(0,2),(0,1<<32)]:
+            with self.assertRaises(fc.EvidenceError):fc.decode_memory_word(word,pc)
+        words=[(35<<26)|(4<<21)|0xffff,(39<<26)|(4<<21)|0xffff,
+               (43<<26)|(4<<21)|0xffff,(35<<26)|(5<<21)|0xffff]
+        class Reader:
+            def read(self,pc,n):return struct.pack("<I",words[pc//4])
+        result=fc.observed_memory(dict.fromkeys(range(0,16,4)),Reader(),1)
+        self.assertEqual((result["static_site_count"],result["group_count"]),(4,3))
+        first=result["groups"][0]
+        self.assertEqual(first["mnemonics"],{"LW":1,"LWU":1})
+        self.assertEqual(first["pc_examples"],["00000000"])
+        self.assertTrue(first["pc_examples_truncated"])
+        self.assertEqual(first["offset_signed16"],-1)
+        for limit in (0,17,-1):
+            with self.assertRaises(fc.EvidenceError):fc.observed_memory({},Reader(),limit)
+
+    def test_memory_summary_uses_verified_binary_not_mnemonic(self):
+        words=[(35<<26)|(29<<21)|0xfffc,(57<<26)|(4<<21)|4,0x03e00008,0]
+        b=bytearray(self.binary);struct.pack_into("<4I",b,0x100,*words);self.binary=bytes(b)
+        f=self.document["functions"][0];f["outgoingCalls"]=[]
+        for item,word in zip(f["rawInstructions"],words):
+            item.update(bytesLittleEndian=struct.pack("<I",word).hex(),wordHex=hex(word),instruction="FAKE misleading mnemonic",flowTargets=[])
+        self.save();result=self.build()["functions"][0]["observed_memory"]
+        self.assertEqual(result["static_site_count"],2)
+        self.assertEqual(result["groups"][0]["rs_alias"],"sp")
+        self.assertEqual(result["groups"][1]["data_register_bank"],"fpr")
+        f["rawInstructions"][0]["bytesLittleEndian"]="00000000";self.save()
+        with self.assertRaises(fc.EvidenceError):self.build()
+
     def test_real_hash_ranges_and_explicit_unknown_import(self):
         result = self.build()
         f = result["functions"][0]

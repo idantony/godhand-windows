@@ -3,6 +3,8 @@
 Updated 2026-11-10. Read Git and live worker ownership before editing. This is
 an ongoing authorized source port, not a playable Windows game yet.
 
+Latest public commit f03ff947580df365fc8963bdffa0bad65fb52cb2 was pushed and
+remote main verified; formalpostpush review is analysis/project-review.json.
 Current verified milestone is room-transition-44:212C/228checks, fullhardware/
 codec/independentADX opt-ins, matchingDLL RNG20544/20534 PASS. Matching Windows
 QA489ticks/R100/Main4,6MC/90Movie/369UI, actualNearCheck131E10,worldpackets0,
@@ -10,8 +12,97 @@ renderer/window/world/cleanup0,exit4. R100Init completes,69OMS+4runtime3EB;
 Main4 dispatch actuallystarts but stops at firstpositivePFD NearCheckquery.
 roof/9B0 Scenario registered but notvisited, no originalworldframe/gameplay.
 Private44 report authoritative; standard Eanalysis/bilingualdocs exported44.
-Prior publicmilestone34/787f26e; localrollback37/587dc93. Consult liveGit for
-44 publication rather than inferring it from this resumable status file.
+Prior publicmilestone34/787f26e; localrollback37/587dc93. Public44 adds only
+terminalblankline normalization in10files after exactsnapshotstaging; allother
+source bytes unchanged (private normalizationreceipt); frozen44 untouched.
+Consult liveGit before trusting historical publication state.
+
+NEWEST LOCAL fully VERIFIED integration is room-transition-51:216C/235checks,
+allhardware/codec/independentADX and matchingDLL RNG20544/20534 PASS. Actual
+hidden/muted Windows489ticks/R100/Main4 now passes2D7560 worldlight and stops
+at realPOSITIVE hit1FC810 in1FDFD8 HitArea update. worldpackets0, renderer/
+window/worlderrors0, normalcleanup/processexit4. Private51 report authoritative.
+Public/standard E reports remain44. Do NOT claim playerMove visited: earlier
+positivehit blocks beforeMoveObj. Root newtyped MoveObj/player108AB0 wiring
+andprotocol retry/reload tests passed in51 but are not actualgameplay proof.
+
+51 derives50 +genuine empty/pause no-numeric-policy pool path correction,
+Root typed MoveObj/services/playerFrame integration, exactframe01/02/03 and
+sdk-and-enemy-sidecar-from-batch10-delta-01. Everything compiled fresh with one
+sharedheader cohort. Model light plans preserve2D74B8 class100..600/FF01/FF02,
+originalLAR reverse/no-break (lowestmatchingindexwins), sameactor250/2CC;
+positiveSceneAt68 is a POINTER, remainsstrict2C3190 withouttypedmaskbacking.
+MoveObj descriptor comes from actualELF214+50/+54, onlynative typedprovider;
+cachedinvocation gate, persistentcall/post-call phases, actualslotreload before
+clearing2F0 low2bits. Latepost-callresolvererror doesnotinvokeMoveagain.
+Sameplayer/model/resource/rate/MT/TakeGive/Solid/Scenario/effects; constructor
+explicit698/6A0 NULL provenance, changedtokens stillstrict. SDK30A5D0 real
+sqrt(abs(1-poly²)) replaces wrongIDhelper; pairedGameInit64prev/next appended.
+Usefulproof analysis/root-world-update-51-evidence-private.json.
+
+50 compiled Windows andexploratory actualQA reached1FC810, butfullnative
+failed oldSceneStep empty-pool/no-numeric-policy domain.51 fixes that actual
+integer-only branch, fullsuitepassed. Never export50 asfullyverified.
+HitArea110004 copied/retested after bad105750 freeze; 105750/INVALID.txt marks
+itunusable. Root took110004 only. Itrecoversfouroriginalpasses/realTake+Give,
+cooldown/countdown/noreplay butpositivehits stillstrict1FC810. Worker now
+restorespositive1FC810/1FCF20 (realstartupneed), theneffect306528 producer.
+RootrequestedadditionalstrictNULLcompanion/raw30-token boundsfix; awaitdelta.
+
+Liveagents: godhand_upstream enemy01..16 frozen; actualraw20A switch table
+corrects GhidraC17B9=3 to actual0 innew16. Prior20A selectors audited with
+scoped OFFLINE controltrace, notwholemethod/nativeproof; no priorcorrection
+needed. NextsameHitArea creation. skill_forward_test targets01 frozen NEW
+game_player_targets, notin51; continues123938 actualinput/Heat/prompts, noWIP
+frame04imports. opengoal_method positiveHitArea thenFX. Root next actual
+positivehit integration, then reachesprepared MoveObj/player firstupdate.
+
+Latest LOCAL verified integration is room-transition-47:212C/229checks with
+all hardware/codec/fullADX opt-ins and matchingDLL RNG20544/20534 PASS. Actual
+Windows489ticks/R100/Main4 now executes NearCheck and stops at12DCB8 in the
+dynamic-ray geometry readiness guard; worldpackets0, renderer/window/world
+errors0, normalcleanup/exit4. Private analysis/room-transition-47-verification.json
+is authoritative; standard E/publicreports remain44. Pair rows have one owned
+mutable copy; sourcePFD stays read-only. Two-iteration continuation, signed
+ADDIU32 wrap/remainder, lower31 flagbits and release/rebind/reset tested.
+
+Latest LOCAL integration49 is now fully VERIFIED212C/229checks, allhardware/
+codec/fullADX andmatchingDLL RNG20544/20534 PASS. Actual Windows489ticks/Main4
+now reaches world-light model registry3 frontier2D74B8. NearCheck, collision
+pairs, actual12E840 geometry, Eventemptyupdate, ScenarioBefore ATaging,
+cameraBefore and emptyenemy manager have really executed. worldpackets0,
+renderer/window/worlderrors0, cleanup/exit4. Private49 report authoritative;
+standard E/public still44.49 moves hostworld_ready/corner guards AFTER actual
+AABB/face-mask/exclusion earlyouts, preserving strict12DCB8 for surviving
+faces.48 native failed an older blanket-frontier fixture;49 adjusts two
+fixtures to actually span the defined constructorzeroAABB and also proves
+staticfloor hit survives a genuine dynamic earlymiss. No update was reordered.
+
+Self-built tools/function-context.py v1 is frozen at function-context-v1-
+20261110-102907 (receipt includes two public authored files and private proof).
+8synthetic tests +5real cases PASS; Root independently reran8tests and used
+NearCheck +130700 reports against actualELF. Checks report/image hashes, all
+reported instruction words/bytes/calls, ranges and SNR2/REL import identities.
+Unknown calls remain unknown; rg output only source candidates. Generated
+evidence stays privateanalysis; temporarytests G via GH_TEST_SCRATCH/default.
+Use --report FILE --elf reference/SLUS_215.03 --address HEX --output analysis/
+NAME-private.json. v1 localrollback ef6c4d8, NOTpushed. v2 frozen function-
+context-v2-20261110-105016 adds verifiedraw memory summaries (register+signed
+offset+nominalwidth, no guessed classes/fields/addresses/aliases).11tests PASS
+bothworker+Root. NearCheck39sites/32groups, playerframe334/199, independent
+opcodehistogram matches. Default3PCexamples; --memory-sites1..16. Not yet
+committed. opengoal_method now owns NEW game_hitarea_frame fourpasses below.
+
+Live worker updates supersede older assignments below: enemy batches01..12
+frozen (through real pose/IK/shadow, next204B4C). playerframe01..03 frozen
+(through state0 idle exactblend10 request/ongoing-phase sample, next123938).
+These are NOT integrated in49. Root owns shared MoveObj/services/manifests.
+opengoal_method restoring actual1FDFD8 on SAMEobject_pool/records/typednodes:
+Afirst1FCEB0,Bfirst1FD448,Aquery1FCF20+countdown1FD770,B-NOP1FD528+countdown.
+Canonical AC D0 is init.object_pool+ACD0, not SceneStep.object_wait shadow.
+Positive hits unsupported until truly recovered; emptyhit leaf1FC810 is real
+earlyout. Root generated hitarea-frame-49-ghidra-private.json and worker
+has1FC810/1FCCC0 evidence; no shared shapes/objects edits needed currently.
 
 42 passed211C/227checks butactual13F238 was DISCONNECTED-CONTROLLER modal,
 NOT collision. Root had briefly mislabeled it and corrected the userupdate.
@@ -28,13 +119,12 @@ samepersistent children/init inexisting scene_begin, countdown3 first. New
 scene_exit audio matches BANK atnode08 (oldbugusedprogram), realhighprogram
 muted testsPASS.40 integrationdetails below, allrequiredsource frozen.
 
-Next Root: recover2A6FF8 actualtwoqueries, mask1/flags40/straight131E10 and
-pair+8 highbit mutation, preserving inputPFD source and pausediterationcursor.
-Evidence game-scene-step-inner-ghidra-private.json hasfull2A6FF8 (not older
-nearcheck reports, those only31BE78/31C1D0/31C238). Needtypedmutable flags owner
-and genuine cleanup beforeoldroompack expires. BewareNearCheck runs BEFORE
-12E840: dynamicquery originalAABB/attribute earlyouts mustbe faithful; do not
-forceupdate earlier, fakeworld_ready, or defaultmiss.
+Next Root: actualworld-light2D7560 positive SAME modelregistry754C58. New
+analysis/world-light-live-49-ghidra-private.json has2D74B8 (justclass predicate:
+100..1FF,200..300,300..500,500..600,FF01/FF02), full2D7560/2D8FF8/2D8EB0/
+2D8C60/156488. Existingworld_light_move is emptyregistryonly; needtyped
+scalar/model resolver before originalLAR/lighting writes, never skipregistry.
+NearCheck is now recovered andpassed49; keep its original pre12E840 order.
 Then actualpositivephysics/AT/camera/MoveObj, firstworld packets; no gameplay
 remake/generictranslation. Root had planned nonstaticMoveObj typeddispatch but
 hasNOT implementedit. OriginalVTplayer41D220+50delta0/+54=108AB0, tutorial

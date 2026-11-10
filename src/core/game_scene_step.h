@@ -10,6 +10,7 @@
 #include "game_event.h"
 #include "game_scene_at.h"
 #include "game_scene_at_age.h"
+#include "game_hitarea_frame.h"
 #include "game_action_buttons.h"
 #include "display_state.h"
 #include "../platform/task_threads.h"
@@ -21,14 +22,19 @@ typedef enum {GH_SCENE_STEP_OK,GH_SCENE_STEP_ARGUMENT,GH_SCENE_STEP_BOUNDS,
 /* Separate actual Main+18C NearCheck, NOT Main+0C's32 registrationrecords.
  * Serializedrelativeindices remain immutable/bounded, never hostpointers. */
 typedef struct {gh_scene_table_view pairs,vertices,indices;uint32_t pair_count,
- vertex_count,index_count;int32_t cursor;uint8_t copy_mode;} gh_scene_nearcheck;
+ vertex_count,index_count;int32_t cursor;uint8_t copy_mode;
+ /* Native mutable copy of actual pair records; all consumers use pairs above.
+  * Read-only PFD source/relative vertex-index data remain borrowed. */
+ uint8_t *owned_pairs;size_t owned_pair_bytes;const uint8_t *source;size_t source_bytes;
+ uint32_t active_pair_count;uint8_t active,iteration;
+} gh_scene_nearcheck;
 typedef struct {
  gh_scene_nearcheck nearcheck;int16_t cooldown_1b0;
  uint32_t profile_752cf0,profile_752cfc,profile_752d44,word_5caff4;
  uint32_t stage,frontier,collision_cursor,scenario_task_cursor;int detail;uint64_t completed_frames;
  uint8_t scenario_stage,scenario_before_stage,death_callback_pending,enemy_stage,scenario_status_pending;
  gh_collision_pair_frame collision_frame;
- uint32_t object_wait_acd0; /*previouslyunrepresented574380+ACD0scalar*/
+ gh_hitarea_frame hitarea_frame; /*pause scalar belongs to SAME init.object_pool+ACD0*/
  gh_scene_at_age at_frame_age;
 } gh_game_scene_step;
 /* Required semantic boundaries for as-yet-unported world/render consumers.
@@ -65,6 +71,10 @@ void gh_game_scene_step_construct(gh_game_scene_step*,int32_t scan_cursor,int16_
 /* Actual31BE78 resets threecounts only, preservingviews/cursor/copy_mode. */
 void gh_scene_nearcheck_reset_0031be78(gh_scene_nearcheck*);
 gh_scene_step_status gh_scene_nearcheck_bind_0031c1d0(gh_scene_nearcheck*,const gh_bundle_entry*);
+gh_scene_step_status gh_scene_nearcheck_step_002a6ff8(gh_scene_nearcheck*,const gh_boot_work*,gh_game_scene_tables*,uint32_t *frontier);
+/* Native lifetime end after Main stops, before the borrowed room source frees.
+ * Preserves original Main1A8 cursor and copy-mode scalar across rooms. */
+void gh_scene_nearcheck_release(gh_scene_nearcheck*);
 /* Only the originalcase3tail's Main+1B0=15 write. Caller invokes atits genuine
  * position after roomInit/PFD preparation, not before a failedroomInit. */
 void gh_game_scene_step_case3_cooldown(gh_game_scene_step*);

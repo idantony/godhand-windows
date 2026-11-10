@@ -135,6 +135,7 @@ gh_init_status gh_game_enemy_reset_00290230(gh_game_init_state*s){
  if(!s)return GH_INIT_ARGUMENT;
  uint8_t*em=s->enemies;uint32_t random;gh_init_status e;
  for(unsigned i=0;i<64;i++){size_t off=(size_t)i*20;w32(em,off,0);w32(em,off+4,0);w32(em,off+8,0);w32(em,off+12,0xffffffffu);em[off+16]=0;s->enemy_actors[i]=0;}
+ memset(s->enemy_prev,255,sizeof(s->enemy_prev));memset(s->enemy_next,255,sizeof(s->enemy_next));
  s->enemy_top=s->enemy_last=0;memset(s->enemy_kept,0,sizeof(s->enemy_kept));
  for(unsigned off=0x500;off<=0x50c;off+=4)w32(em,off,0);w32(em,0x55c,0);w32(em,0x548,0x3f800000);
  e=gh_game_mt_next_0030f348(&s->random,&random);if(e)return e;

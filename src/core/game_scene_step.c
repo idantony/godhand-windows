@@ -2,9 +2,11 @@
 #include "game_scene_dynamic_geometry.h"
 #include "game_camera.h"
 #include "game_collision_pair_shapes.h"
+#include "game_ray_query.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
+#include <stdlib.h>
 static uint16_t h(const uint8_t*p){return (uint16_t)(p[0]|p[1]<<8);}
 static uint32_t w(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void p16(uint8_t*p,uint16_t n){p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);}
@@ -14,20 +16,41 @@ static gh_scene_step_status call(gh_game_scene_step*s,const gh_game_scene_step_b
 void gh_game_scene_step_construct(gh_game_scene_step*s,int32_t cursor,int16_t cooldown){if(s){*s=(gh_game_scene_step){0};s->nearcheck.cursor=cursor;s->cooldown_1b0=cooldown;}}
 void gh_scene_nearcheck_reset_0031be78(gh_scene_nearcheck*s){if(s)s->pair_count=s->vertex_count=s->index_count=0;}
 static int span(const gh_bundle_entry*e,uint32_t offset,uint32_t count,size_t stride,gh_scene_table_view*out){if(offset>e->size||e->size-offset<32||(size_t)count>(e->size-32-offset)/stride)return 0;out->bytes=e->bytes+32+offset;out->size=(size_t)count*stride;return 1;}
-gh_scene_step_status gh_scene_nearcheck_bind_0031c1d0(gh_scene_nearcheck*s,const gh_bundle_entry*e){gh_scene_nearcheck n;if(!s)return GH_SCENE_STEP_ARGUMENT;if(!e||!e->bytes)return GH_SCENE_STEP_OK;if(e->size<4)return GH_SCENE_STEP_BOUNDS;if(memcmp(e->bytes,"PFD2",4))return GH_SCENE_STEP_OK;if(e->size<32)return GH_SCENE_STEP_BOUNDS;if(s->copy_mode)return GH_SCENE_STEP_UNSUPPORTED;n=*s;n.vertex_count=w(e->bytes+4);n.pair_count=w(e->bytes+12);n.index_count=w(e->bytes+20);
+gh_scene_step_status gh_scene_nearcheck_bind_0031c1d0(gh_scene_nearcheck*s,const gh_bundle_entry*e){gh_scene_nearcheck n;if(!s)return GH_SCENE_STEP_ARGUMENT;if(!e||!e->bytes)return GH_SCENE_STEP_OK;if(e->size<4)return GH_SCENE_STEP_BOUNDS;if(memcmp(e->bytes,"PFD2",4))return GH_SCENE_STEP_OK;if(e->size<32)return GH_SCENE_STEP_BOUNDS;if(s->copy_mode)return GH_SCENE_STEP_UNSUPPORTED;if(s->active)return GH_SCENE_STEP_ARGUMENT;n=*s;n.vertex_count=w(e->bytes+4);n.pair_count=w(e->bytes+12);n.index_count=w(e->bytes+20);
  if(!span(e,w(e->bytes+8),n.vertex_count,32,&n.vertices)||!span(e,w(e->bytes+16),n.pair_count,12,&n.pairs)||!span(e,w(e->bytes+24),n.index_count,2,&n.indices))return GH_SCENE_STEP_BOUNDS;
- /* Originalmutatesvertex+10 into a guestindexpointer. Typedindices view retains
-  * thatassociation without changing gamebytes; actualquery remains frontier. */
+ if(s->source==e->bytes&&s->source_bytes==e->size&&s->owned_pair_bytes==n.pairs.size){
+  if(n.pairs.size&&!s->owned_pairs)return GH_SCENE_STEP_ARGUMENT;n.pairs.bytes=s->owned_pairs;
+ }else{
+  uint8_t*copy=NULL;if(n.pairs.size){copy=malloc(n.pairs.size);if(!copy)return GH_SCENE_STEP_CALLEE;memcpy(copy,n.pairs.bytes,n.pairs.size);}
+  free(s->owned_pairs);n.owned_pairs=copy;n.owned_pair_bytes=n.pairs.size;n.pairs.bytes=copy;n.source=e->bytes;n.source_bytes=e->size;
+ }
+ /* Original vertex+10 indexpointer uses bounded relative typedindices; pair
+  * +8 flags mutate in this sole native copy, never the immutable PFD source. */
  *s=n;return GH_SCENE_STEP_OK;
 }
+void gh_scene_nearcheck_release(gh_scene_nearcheck*n){if(!n)return;int32_t cursor=n->cursor;uint8_t mode=n->copy_mode;free(n->owned_pairs);*n=(gh_scene_nearcheck){.cursor=cursor,.copy_mode=mode};}
 void gh_game_scene_step_case3_cooldown(gh_game_scene_step*s){if(s)s->cooldown_1b0=15;}
 static int valid(const gh_game_scene_step_bindings*b){return b&&b->work&&b->init&&b->prepare&&b->collision&&b->actors&&b->scenario.bytes&&b->scenario.size>=0x114&&b->scenario.manager;}
-static gh_scene_step_status nearcheck(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){gh_scene_nearcheck*n=&s->nearcheck;const uint8_t*raw=(const uint8_t*)b->work;
- if((w(raw+0x598)&0x80000)||!n->pair_count)return GH_SCENE_STEP_OK;
- if(n->pair_count>INT32_MAX||n->pairs.size<(size_t)n->pair_count*12)return fail(s,0x2a6ff8,GH_SCENE_STEP_BOUNDS,0);
- for(unsigned iteration=0;iteration<2;iteration++){if(n->cursor>=0&&(uint32_t)n->cursor<n->pair_count){const uint8_t*p=n->pairs.bytes+(size_t)n->cursor*12;if(h(p)!=0xffff&&h(p+2)!=0xffff)return fail(s,0x131e10,GH_SCENE_STEP_UNSUPPORTED,0);}
-  n->cursor=(int32_t)(((int64_t)n->cursor+1)%(int32_t)n->pair_count);
- }return GH_SCENE_STEP_OK;
+gh_scene_step_status gh_scene_nearcheck_step_002a6ff8(gh_scene_nearcheck*n,const gh_boot_work*work,gh_game_scene_tables*actors,uint32_t*f){
+ if(f)*f=0;if(!n||!work||!actors)return GH_SCENE_STEP_ARGUMENT;
+ if(!n->active){if((w((const uint8_t*)work+0x598)&0x80000)||!n->pair_count)return GH_SCENE_STEP_OK;n->active=1;n->iteration=0;n->active_pair_count=n->pair_count;}
+ if(!n->pair_count||n->iteration>=2||n->pair_count!=n->active_pair_count||n->pair_count>INT32_MAX||!n->owned_pairs||n->pairs.bytes!=n->owned_pairs||n->pairs.size<(size_t)n->pair_count*12||n->owned_pair_bytes!=n->pairs.size){if(f)*f=0x2a6ff8;return GH_SCENE_STEP_BOUNDS;}
+ while(n->iteration<2){
+  if(n->cursor>=0&&(uint32_t)n->cursor<n->pair_count){uint8_t*p=n->owned_pairs+(size_t)n->cursor*12;uint16_t a=h(p),b=h(p+2);
+   if(a!=0xffff&&b!=0xffff){
+    if(a>=n->vertex_count||b>=n->vertex_count||!n->vertices.bytes||n->vertices.size<(size_t)n->vertex_count*32){if(f)*f=0x131e10;return GH_SCENE_STEP_BOUNDS;}
+    gh_scene_ray_request request={.mask=1,.flags=0x40,.segmented=0};memcpy(request.from,n->vertices.bytes+(size_t)a*32,16);memcpy(request.to,n->vertices.bytes+(size_t)b*32,16);
+    int hit=0;uint32_t pc=0;gh_scene_ray_status e=gh_scene_ray_query_00131e10(actors,&request,&hit,&pc);
+    if(e){if(f)*f=pc?pc:0x131e10;return e==GH_RAY_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE;}
+    p32(p+8,(w(p+8)&0x7fffffffu)|(hit?0x80000000u:0));
+   }
+  }
+  uint32_t next=(uint32_t)n->cursor+1u;int32_t signed_next=next<=INT32_MAX?(int32_t)next:(int32_t)((int64_t)next-INT64_C(4294967296));
+  n->cursor=signed_next%(int32_t)n->pair_count;n->iteration++;
+ }
+ n->active=0;n->iteration=0;return GH_SCENE_STEP_OK;
+}
+static gh_scene_step_status nearcheck(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){uint32_t f=0;gh_scene_step_status e=gh_scene_nearcheck_step_002a6ff8(&s->nearcheck,b->work,b->actors,&f);return !e?GH_SCENE_STEP_OK:fail(s,f?f:0x2a6ff8,e,s->nearcheck.cursor);
 }
 static gh_scene_step_status collision(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){gh_collision_pairs*c=b->collision;
  uint32_t frontier=0;gh_pair_shape_status e=gh_collision_pairs_step_resume_002b9d58(c,&s->collision_frame,GH_STATIC_BINARY32_REFERENCE,&frontier);
@@ -70,9 +93,18 @@ static gh_scene_step_status enemies(gh_game_scene_step*s,const gh_game_scene_ste
  uint32_t flags=w(b->save.bytes+0x14);if((int32_t)flags<0||e[0x518])return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);if(!(flags&0x40000000)&&(w(raw+0x5e4)&0x20000000))e[0x518]=0;
  s->enemy_stage=0;return GH_SCENE_STEP_OK;
 }
-static gh_scene_step_status object_pool(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){if(s->object_wait_acd0){s->object_wait_acd0--;return GH_SCENE_STEP_OK;}const uint8_t*p=b->init->object_pool;
- for(unsigned i=0;i<160;i++)if(p[(size_t)i*0x60+0x4a])return fail(s,0x1fceb0,GH_SCENE_STEP_UNSUPPORTED,(int)i);
- for(unsigned i=0;i<256;i++)if(p[0x3c00+(size_t)i*0x70+0x4a])return fail(s,0x1fd448,GH_SCENE_STEP_UNSUPPORTED,(int)i);return GH_SCENE_STEP_OK;
+static gh_scene_step_status object_pool(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){
+ if(!b->binary32_reference){
+  if(s->hitarea_frame.active)return fail(s,0x1fdfd8,GH_SCENE_STEP_UNSUPPORTED,0);
+  uint8_t*p=b->init->object_pool;uint32_t pause=w(p+0xacd0);if(pause){p32(p+0xacd0,pause-1);return GH_SCENE_STEP_OK;}
+  /* The original empty/pause paths perform no floating-point operation. */
+  for(unsigned i=0;i<160;i++)if(p[(size_t)i*0x60+0x4a])return fail(s,0x1fdfd8,GH_SCENE_STEP_UNSUPPORTED,(int)i);
+  for(unsigned i=0;i<256;i++)if(p[0x3c00+(size_t)i*0x70+0x4a])return fail(s,0x1fdfd8,GH_SCENE_STEP_UNSUPPORTED,(int)i);
+  return GH_SCENE_STEP_OK;
+ }
+ float rate;memcpy(&rate,(const uint8_t*)b->work+0x574,4);uint32_t f=0;
+ gh_hitarea_status e=gh_hitarea_frame_resume_001fdfd8(b->init,b->work,rate,GH_STATIC_BINARY32_REFERENCE,&s->hitarea_frame,&f);
+ return !e?GH_SCENE_STEP_OK:fail(s,f?f:0x1fdfd8,e==GH_HITAREA_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE,e);
 }
 static int scenario_gate(const gh_game_scene_step_bindings*b){const uint8_t*r=(const uint8_t*)b->work;return (int32_t)w(r+0x58c)>=0&&!(w(r+0x5e4)&0x8000000)&&!(w(r+0x584)&8)&&!(w(r+0x5d8)&0x10000)&&!(w(r+0x590)&1);}
 static gh_scene_step_status at_before(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){gh_scene_at_manager*a=b->scene_at;if(!a||!a->ready)return fail(s,0x2c1540,GH_SCENE_STEP_ARGUMENT,0);
