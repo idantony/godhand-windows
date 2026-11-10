@@ -26,7 +26,7 @@ gh_tm3_error gh_tm3_member(const gh_tm3_bundle*t,unsigned index,gh_tm3_picture*o
  uint64_t tex0=u64(p+24);unsigned tw=(unsigned)(tex0>>26)&15,th=(unsigned)(tex0>>30)&15;
  if(((tex0>>20)&63)!=20||((tex0>>51)&63)||((tex0>>56)&31)||(1u<<tw)!=w||(1u<<th)!=h)return GH_TM3_UNSUPPORTED;
  if(b[5]==0){if((w!=32&&w!=64&&w!=128)||(h!=16&&h!=32&&h!=64))return GH_TM3_UNSUPPORTED;}
- else if((w!=128&&w!=256)||(h!=128&&h!=256))return GH_TM3_UNSUPPORTED;
+ else if((w!=128&&w!=256)||(h!=128&&h!=256&&h!=512))return GH_TM3_UNSUPPORTED;
  *out=(gh_tm3_picture){b,p+head,p+head+image,end-off,image,clut,w,h,tex0,b[5]};return GH_TM3_OK;
 }
 static size_t addr4(unsigned x,unsigned y,unsigned pitch){
@@ -44,7 +44,7 @@ gh_tm3_error gh_tm3_rgba_gs(const gh_tm3_picture*p,void*raw,size_t capacity){
  for(unsigned y=0;y<p->height;y++)for(unsigned x=0;x<p->width;x++){
   size_t nibble=(size_t)y*p->width+x;
   if(p->transfer_kind==6){
-   if((p->width!=128&&p->width!=256)||(p->height!=128&&p->height!=256))return GH_TM3_UNSUPPORTED;
+   if((p->width!=128&&p->width!=256)||(p->height!=128&&p->height!=256&&p->height!=512))return GH_TM3_UNSUPPORTED;
    size_t a=addr4(x,y,p->width/128),word=a/8,page=word/2048;unsigned pitch=p->width/128;
    unsigned ux=bit(word,0)|(bit(word,2)<<1)|(bit(word,3)<<2)|(bit(word,6)<<3)|(bit(word,8)<<4)|(bit(word,10)<<5);
    unsigned uy=bit(word,1)|(bit(word,4)<<1)|(bit(word,5)<<2)|(bit(word,7)<<3)|(bit(word,9)<<4);

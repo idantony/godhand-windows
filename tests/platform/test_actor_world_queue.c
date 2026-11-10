@@ -1,0 +1,87 @@
+#define main original_actor_nodes_test
+#include "../core/test_game_actor_model_nodes.c"
+#undef main
+#include "game_actor_model_draw.h"
+#include "../assets/tm3.h"
+#include "ui_order.h"
+#include "actor_world_queue.h"
+static void putf(void*p,float x){memcpy(p,&x,4);}
+typedef struct {gh_actor_draw_command commands[64];size_t count;unsigned failures;gh_actor_world_queue *native;} queue_fixture;
+static gh_actor_model_status capture(void *ctx,const gh_actor_draw_command *command,uint32_t *frontier){queue_fixture *q=ctx;if(q->failures){q->failures--;*frontier=0x31a650;return GH_ACTOR_MODEL_UNSUPPORTED;}C(q->count<64&&command->packet_group);size_t index=SIZE_MAX;gh_static_transform_frontier f;gh_actor_world_status e=gh_actor_world_queue_append(q->native,command,&index,&f);if(e){*frontier=f.ee_entry?f.ee_entry:0x31a650;return GH_ACTOR_MODEL_UNSUPPORTED;}C(index==q->count);q->commands[q->count++]=*command;return GH_ACTOR_MODEL_OK;}
+static void put(void*p,uint32_t x){memcpy(p,&x,4);}
+static unsigned bit(size_t a,unsigned n){return (unsigned)(a>>n)&1u;}
+/* Independent transfer-forward / sample-inverse oracle. Production directly
+ * combines the opposite transformations and never constructs this VRAM view. */
+static void oracle(const gh_tm3_picture*p,unsigned char*out){
+ size_t pixels=(size_t)p->width*p->height;unsigned char*vram=calloc(pixels/2,1),*seen=calloc(pixels,1);C(vram&&seen);
+ unsigned pitch=p->width/128;
+ if(p->transfer_kind==6){unsigned uw=p->width/2,uh=p->height/4;
+  for(unsigned y=0;y<uh;y++)for(unsigned x=0;x<uw;x++){
+   unsigned bx=(x%64)/8,by=(y%32)/8,cx=x%8,cy=y%8;
+   unsigned block=bx%2+2*(by%2)+4*((bx/2)%2)+8*(by/2)+16*(bx/4);
+   unsigned column=cx%2+2*(cy%2)+4*((cx/2)%2)+8*(cx/4)+16*((cy/2)%2)+32*(cy/4);
+   size_t a=(((size_t)(y/32)*pitch+x/64)*2048+block*64+column)*4;C(a+4<=pixels/2);memcpy(vram+a,p->image+((size_t)y*uw+x)*4,4);
+  }
+  for(size_t a=0;a<pixels;a++){
+   unsigned x=bit(a,3)|(bit(a,5)<<1)|((bit(a,6)^bit(a,0)^bit(a,7))<<2)|(bit(a,1)<<3)|(bit(a,2)<<4)|(bit(a,10)<<5)|(bit(a,12)<<6);
+   unsigned y=bit(a,4)|(bit(a,0)<<1)|(bit(a,7)<<2)|(bit(a,8)<<3)|(bit(a,9)<<4)|(bit(a,11)<<5)|(bit(a,13)<<6);
+   x+=(unsigned)((a/16384)%pitch)*128;y+=(unsigned)((a/16384)/pitch)*128;C(x<p->width&&y<p->height&&!seen[(size_t)y*p->width+x]);seen[(size_t)y*p->width+x]=1;
+   unsigned index=vram[a/2]>>((a&1)*4)&15;memcpy(out+((size_t)y*p->width+x)*4,p->clut+index*4,4);
+  }
+ }else for(size_t i=0;i<pixels;i++){unsigned index=p->image[i/2]>>(i%2?4:0)&15;memcpy(out+i*4,p->clut+index*4,4);}
+ free(seen);free(vram);
+}
+int main(int argc,char**argv){
+ C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t size;uint8_t*room=load(d,"st1/r100.dat",&size);gh_bundle rb;C(!gh_bundle_open(room,size,&rb));size_t es=(size_t)gh_disc_boot_elf_size(d);uint8_t*elf=malloc(es);C(elf&&!gh_disc_read_boot_elf(d,0,elf,es));uint8_t*data=load(d,"pl/pl00.dat",&size);gh_disc_close(d);gh_bundle bundle;gh_bundle_entry md,texture;C(!gh_bundle_open(data,size,&bundle)&&!gh_bundle_find(&bundle,"MD",0,&md)&&!gh_bundle_find(&bundle,"TM3",0,&texture));gh_heap*heap;gh_room_pools pools={0};C(!gh_heap_create(32*1024*1024,&heap)&&!gh_game_room_pools_initialize_002a5d80(&pools,&rb,heap));
+ _Alignas(16)uint8_t bytes[GH_TITLE_PLAYER_BYTES]={0};gh_title_player_view view;C(!gh_title_player_construct_00107e40(bytes,sizeof(bytes),&view));gh_boot_work work={0};gh_actor_model model={0};uint32_t fog=0;int original;C(!gh_actor_model_bind_packet_inputs(&model,heap,&fog)&&!gh_actor_model_initialize_00149738(&model,&view,&work,&pools,&md,&texture,0,0,GH_STATIC_BINARY32_REFERENCE,&original)&&original&&model.ready);
+ gh_game_pl_camera camera={.constructed=1};for(unsigned k=0;k<4;k++){putf(camera.fields+k*20,1);putf(camera.fields+0x80+k*20,k==3?1:.1f);}uint8_t shift=0;gh_game_world_light*light=calloc(1,sizeof(*light));C(light);light->constructed=light->ready=1;putf(light->scalar+0x14,1000);/* Explicitnumericpose/lightfixture, notoriginalbootglobals. */
+ gh_player_shadow shadow={0};C(!gh_game_player_shadow_initialize_0014ef50(&shadow,&view));
+ (void)shift;(void)shadow;
+
+ gh_stage_textures *textures;C(!gh_stage_textures_create(&textures));gh_tm3_bundle tm3;C(!gh_tm3_open(texture.bytes,texture.size,&tm3));
+ size_t total=0;uint32_t pc=0;for(unsigned node_index=0;node_index<bytes[0x2b1];node_index++){
+  const gh_actor_node_packets *packet;C(!gh_actor_model_packet_at(&model,node_index,&packet));gh_actor_materials result={0};gh_actor_model_status e=gh_actor_materials_0014b4d0(&model,node_index,textures,&result,&pc);if(e)fprintf(stderr,"node%u error%u pc%08x\n",node_index,e,pc);C(!e&&result.ready&&result.count==packet->stream_count);
+  for(size_t i=0;i<result.count;i++){const gh_actor_stream_material *entry=result.streams+i;C(entry->written&&entry->source_member==packet->streams[i].input.material&&entry->selected_member==entry->source_member);gh_tm3_picture picture;C(!gh_tm3_member(&tm3,entry->selected_member,&picture));C(entry->material->source==picture.source&&entry->material->rgba_bytes==(size_t)picture.width*picture.height*4);uint64_t expected=(picture.tex0&~(UINT64_C(3)<<35))|UINT64_C(0x2000000400000000)|((uint64_t)(node_index==24?3:0)<<35);C(entry->tex0==expected);size_t pixels=(size_t)picture.width*picture.height*4;uint8_t *oracle_pixels=malloc(pixels);C(oracle_pixels);oracle(&picture,oracle_pixels);C(!memcmp(oracle_pixels,entry->material->rgba_gs,pixels));free(oracle_pixels);uint64_t stored;memcpy(&stored,(uint8_t*)packet->allocation.pointer+packet->streams[i].frame_offset[0]+0x20,8);C(stored==expected);total++;}
+  gh_actor_materials again={0};C(!gh_actor_materials_0014b4d0(&model,node_index,textures,&again,&pc));for(size_t i=0;i<result.count;i++)C(result.streams[i].material==again.streams[i].material);
+ }
+ C(total>26);const uint8_t *raw;size_t mesh;C(!gh_actor_model_node_at(&model,0,&raw,&mesh));uint8_t *node=(uint8_t*)raw;gh_actor_materials result={0};node[0x387]=1;C(gh_actor_materials_0014b4d0(&model,0,textures,&result,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x148690&&!result.ready);node[0x387]=0;
+ put(bytes+0x254,w(bytes+0x254)|0x10000000);memset(bytes+0x2d4,255,256);bytes[0x2d4+0]=1;C(!gh_actor_materials_0014b4d0(&model,0,textures,&result,&pc));for(size_t i=0;i<result.count;i++)if(result.streams[i].source_member==0)C(result.streams[i].selected_member==1);put(bytes+0x254,w(bytes+0x254)&~0x10000000u);
+ for(unsigned i=0;i<3;i++)putf(light->scalar+0x161a0+i*16+i*4,-1);putf(light->scalar+0x16154,100);
+ gh_actor_draw_bindings b={.camera=&camera,.light=light,.policy=GH_STATIC_BINARY32_REFERENCE,.textures=textures};gh_actor_draw_call call={0};C(gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x31a650&&call.phase==7&&call.materials.ready);
+
+ /* Source draw call completes actual enqueue only. Then the independently
+  * owned fixture applies real OT order and executes every CPU geometry batch;
+  * no collector is described as a GPU/frame result. */
+ bytes[0x2b6]=128;gh_actor_world_queue *world;C(!gh_actor_world_queue_create(&world));queue_fixture queued={.failures=1,.native=world};b.emit=capture;b.emit_context=&queued;
+ call=(gh_actor_draw_call){0};C(gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x31a650&&call.phase==7&&!queued.count);
+ gh_actor_draw_call copied=call;C(gh_actor_model_draw_0014ac90(&copied,&model,10,0,&b,&pc)==GH_ACTOR_MODEL_BUSY);uint32_t counter=1;memcpy((uint8_t*)&work+0x210,&counter,4);C(gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)==GH_ACTOR_MODEL_BUSY&&!queued.count);counter=0;memcpy((uint8_t*)&work+0x210,&counter,4);C(!gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)&&call.complete&&queued.count==27);
+ C(queued.commands[26].kind==GH_ACTOR_DRAW_SETUP&&queued.commands[26].bank==2&&queued.commands[26].depth==10);
+ gh_ui_order_group groups[64];for(size_t i=0;i<queued.count;i++)groups[i]=(gh_ui_order_group){queued.commands[i].bank,queued.commands[i].depth,i};size_t order[64],written,omitted;C(!gh_ui_order_indices(groups,queued.count,0,0,order,64,&written,&omitted)&&written==27&&!omitted&&order[0]==26);
+ size_t batches_executed=0,vertices_executed=0;for(size_t i=1;i<written;i++){gh_actor_world_group group;C(!gh_actor_world_queue_group_at(world,order[i],&group));C(group.command.kind==GH_ACTOR_DRAW_GEOMETRY&&group.command.node_index==26-i&&group.command.selected_program==2);for(size_t p=0;p<group.packets;p++){gh_actor_world_packet packet;C(!gh_actor_world_queue_packet_at(world,order[i],p,&packet)&&packet.vertices&&packet.indices&&packet.material&&packet.primitive==0x7c&&((packet.tex0>>34)&1));for(size_t t=0;t<packet.triangles*3;t++)C(packet.indices[t]<packet.vertex_count);batches_executed++;vertices_executed+=packet.vertex_count;}}
+ C(batches_executed>300&&vertices_executed==9009);gh_actor_world_group setup;C(!gh_actor_world_queue_group_at(world,26,&setup)&&!setup.packets&&setup.command.kind==GH_ACTOR_DRAW_SETUP);
+ /* A late stream failure must roll back already-converted batches. */
+ gh_actor_draw_command bad=queued.commands[13];C(bad.materials.count>1);bad.materials.streams[1].tex0|=UINT64_C(3)<<35;size_t sentinel=777;gh_static_transform_frontier deep;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_UNSUPPORTED&&deep.ee_entry==0x148690&&sentinel==777&&gh_actor_world_queue_count(world)==27);
+ bad=queued.commands[0];bad.selected_program=30;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_UNSUPPORTED&&deep.ee_entry==0x155ae8&&sentinel==777&&gh_actor_world_queue_count(world)==27);
+ bad=queued.commands[0];bad.inputs.palette=(const uint8_t*)1;C(gh_actor_world_queue_append(world,&bad,&sentinel,&deep)==GH_ACTOR_WORLD_ARGUMENT&&sentinel==777&&gh_actor_world_queue_count(world)==27);
+ gh_actor_world_packet saved;C(!gh_actor_world_queue_packet_at(world,0,0,&saved));uint64_t before=0;const uint8_t *bits=(const uint8_t*)saved.vertices;for(size_t i=0;i<saved.vertex_count*sizeof(*saved.vertices);i++)before=before*131+bits[i];memset((void*)queued.commands[0].inputs.palette,0,queued.commands[0].inputs.palette_bytes);uint64_t after=0;for(size_t i=0;i<saved.vertex_count*sizeof(*saved.vertices);i++)after=after*131+bits[i];C(before==after);
+
+ uint32_t selector;C(!gh_actor_model_node_program_get(&model,0,0,&selector)&&selector==0x80000002u);C(gh_actor_model_node_program_set(&model,0,0,0x40000002)==GH_ACTOR_MODEL_UNSUPPORTED);uint32_t unchanged;C(!gh_actor_model_node_program_get(&model,0,0,&unchanged)&&selector==unchanged);
+ C(!gh_actor_model_node_program_set(&model,0,1,0x8000001eu)&&!gh_actor_model_node_program_get(&model,0,1,&selector)&&selector==0x8000001eu);C(!gh_actor_model_node_program_set(&model,0,1,30)&&!gh_actor_model_node_program_get(&model,0,1,&selector)&&selector==30);
+ const gh_actor_object_packets *object;C(!gh_actor_model_object_packet(&model,&object)&&object->object_program[0]==0x80000000u);
+ /* Two real model owners share ONE Work/pools/texture/light context. Real
+  * bank selection can put A.geometry after B.SETUP, so a frontend must keep
+  * one FOGCOL state rather than enforce model-matching setup ownership. */
+ gh_actor_world_queue_reset(world);queued=(queue_fixture){.native=world};
+ C(!gh_actor_model_node_mask_flags(&model,1,0x380,~0x4080u,0));
+ putf(light->scalar+0x16158,10);putf(light->scalar+0x1615c,20);putf(light->scalar+0x16160,30);
+ call=(gh_actor_draw_call){0};C(!gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc));
+ uint8_t *second_bytes=calloc(1,GH_TITLE_PLAYER_BYTES);C(second_bytes);gh_title_player_view second_view;C(!gh_title_player_construct_00107e40(second_bytes,GH_TITLE_PLAYER_BYTES,&second_view));gh_actor_model second={0};C(!gh_actor_model_bind_packet_inputs(&second,heap,&fog)&&!gh_actor_model_initialize_00149738(&second,&second_view,&work,&pools,&md,&texture,0,0,GH_STATIC_BINARY32_REFERENCE,&original)&&original);
+ second_bytes[0x2b6]=128;C(!gh_actor_model_node_mask_flags(&second,0,0x380,~0x4080u,0));putf(light->scalar+0x16158,40);putf(light->scalar+0x1615c,50);putf(light->scalar+0x16160,60);
+ gh_actor_draw_call second_call={0};C(!gh_actor_model_draw_0014ac90(&second_call,&second,20,0,&b,&pc)&&queued.count==54);
+ for(size_t i=0;i<queued.count;i++)groups[i]=(gh_ui_order_group){queued.commands[i].bank,queued.commands[i].depth,i};C(!gh_ui_order_indices(groups,queued.count,0,0,order,64,&written,&omitted)&&written==54&&!omitted);
+ uint32_t global_fog=0;int crossed=0;for(size_t i=0;i<written;i++){gh_actor_world_group group;C(!gh_actor_world_queue_group_at(world,order[i],&group));if(group.command.kind==GH_ACTOR_DRAW_SETUP)global_fog=group.command.fog_rgb;else if(group.command.model==&model&&group.command.node_index==1){C(global_fog==0x3c3228);crossed=1;}}
+ C(crossed);gh_actor_world_queue_reset(world);C(!gh_actor_model_release(&second));free(second_bytes);
+ /* A real program30 material stays strict; it is never routed toprogram2. */
+ bytes[0x2b6]=255;gh_actor_world_queue_reset(world);queued=(queue_fixture){.native=world};call=(gh_actor_draw_call){0};C(gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x155ae8&&call.selected_program==30&&!call.complete);
+ gh_actor_world_queue_reset(world);C(!gh_actor_world_queue_count(world)&&gh_actor_world_queue_group_at(world,0,&setup)==GH_ACTOR_WORLD_BOUNDS);gh_actor_world_queue_destroy(world);gh_stage_textures_destroy(textures);C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(light);free(data);free(elf);free(room);printf("PASS actual PL00 %zu material streams/26nodes, direct TM3 source/TEX0 oracle, cache identity/remap/CBP-bias strict, actual27groups owned GS queue/setup-first/reverse26nodes, programselectors/full9009vertices/late rollback and palette-value capture/cross-model globalFOGCOL; no GPU/frame ack\n",total);return 0;
+}

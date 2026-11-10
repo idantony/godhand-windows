@@ -1,3 +1,110 @@
+Verified milestone74 (2026-11-11 local):
+
+FULL private74 passed270C/295checks, muted device audio/movie/full independent
+ADX and sameDLL RNG20544/20534. Actual489ticks R100/Main4: player1/child1/OM73
+(69cold OMS+4runtime3EB); originalFX first30F228 completes,4ambient emitters
+bank3/kind1,esp0. Next308BC0 inside307B28 model-hide/reset,scene_stage22.
+World0/renderer0/GPU0/window0/normalunfinishedexit4. No worldframe/playable claim.
+G snapshot/scratch room-transition-74 and E analysis/room-transition-74-
+verification-private.json hold exact proof. CanonicalEreports+publicdocs now74;
+Git push status must be checked using git/remote (previous confirmed506085f).
+
+RootE beyond74 is WIP, excluded from that verified source copy: actualSDK
+HIGHLIGHT2/TCC1 backend passes standalonehardware modelQA full512x448 RGBA/Z
+against independent analytic/rational oracle (model-highlight2-proof-01,
+analysis/model-highlight2-gpu-verification-private.json); this is numericfixture,
+not scene. PureCPU30 +actor-world-program30-020939 ready, not integrated74.
+Aux01 defaultunknown/explicitfactoryconstructor witness+zero-count trueNULL
+callee ready; Rootexplicitbinding wiredinE. NEW scene_visibility worker restores
+actual308BC0/307B28, Rootalreadyprewiredsame actor/model node callbacks and
+persistent per-room continuation. Wait immutablevisibility/FX07 batches before
+next full snapshot; do not select mutableE worker source.
+
+Public docs intentionally contain no subjective workload percentage. Formal
+review/estimate follow meaningful GitHub push, not a local test cohort.
+
+Current continuation (2026-11-11 local, after private70/73):
+
+Public HEAD remains506085f (milestone67,254C/273checks); standard E reports,
+README and public docs still describe67. No new push/formal review/percentage.
+Latest FULL private70:259C/282checks +hardware/codec/fullADX +bothsameDLL RNG
+20544/20534. G snapshots/verification room-transition-70; useful aggregate
+analysis/room-transition-70-verification-private.json. Actual489ticks R100/Main4:
+player1/child1/OM66; precise1AEDB0 kind35D/handle225. world0/errors0/exit4.
+
+Private73 Windows startup-QA build and actual hidden/muted run pass scoped
+execution: player1/child1/OM69, next1BF518 runtime3EB/handle228, world0/errors0/
+exit4. All69 coldOMS Move finish; four runtime tutorial3EB still need original
+Move. Native73 is NOT whole-pass: new Root stage-shadow test assumed first16
+linearCLUT cells; actual transfer is16x16/1024B. G diagnostic all256sourcecells
+passes and preserves rawGSalpha. E fixture corrected, needs next full run.
+All other new render/packet/material/program2 focused checks in73 passed before
+that assertion; tests after it have NOT run. Both73 processhandles collected.
+
+Retain failed71-root (WinSDK far macro erasedfields),71 (Zig syntax-only smoke
+flag),72 (standalone services.h missing object-step include). E fixes allthree:
+far_mode compatibility delta, real compile-only SDK-first C++ ABI preflight,
+services.h direct include. Windows QA also compiles ordinary native driver so
+QA-only diagnostics cannot leak into non-QA main. No immutable sources changed.
+
+RootE work beyond73: stage-shadow fixture correction; preparing native actor
+emit bridge and sameONE OT globalFOGCOL. Existing shadow path captures actual
+PACKED XYZ2, integerZ converted explicitly into raster fixed4 carrier only for
+0..65535; zero-area strips retain ONE OTgroup. Same stage corechannel0 physical
+TEX0: shadowTBW8 vsregisteredTBW1 is allowed only after ALL sample addresses
+match; rawGSalpha and canonicalcache/lifetime preserved, no fallback texture.
+These paths have not yet rendered an actual original world frame.
+
+Workers: godhand_upstream freezing om-frame10 for four actualruntime3EB Moves,
+09 contains303 realthree-tick reaction (cold5E4=0/5F4=FFFF actualproducers; positive
+FX/SE remainstrict). opengoal_method now NEW platform actor_world_queue h/c/test,
+Rootowns main/services/startup/manifest. skill_forward_test FX07 originalSDK exp
+andrealtype6 Init; Root73 includes immutableFX06, sameeffects globals/buffers/MT.
+Do not combine mutableE headers with oldobjects. Compose frozen bundles only.
+
+Key immutable inputs now used in73 (see analysis/source-snapshot.json ancestry):
+om05/06 damage/07 factorygetter/08 35D/09 reaction; effects-frame06 fullcohort
+supersedes01..05; trans000736/shadow005431/palette011858/material012444/
+CPUprogram2-013436/farcompat014305/drawOT014513. Actor-render bridge still lacks
+emit in73; exact31A650 is intended until Root actorqueue is really wired.
+Other trans tail auxiliary31A600 and program20/30/32 remain strict.
+14EA50 was previously misnamed3EB Trans from a guessed VT offset; actualprobe
+proves it is an actor2F5 state handler, not a verified Trans entry. No fake draw/audio ack. Same init.heat[10] owns5CB010; constructor/setter
+audit is analysis/heat-flag-audit-private.json, no independent shadowglobal.
+
+Latest continuation (2026-11-11 local):
+
+- FULL private68 passed256C/275checks, hardware/codec/fullADX and sameDLL
+  RNG20544/20534; analysis/room-transition-68-verification-private.json.
+  G snapshot/scratch room-transition-68. Actual489ticks R100/Main4:
+  player1/child1/OM3 complete; next187C18 handle162 (303wrapper).
+  world0/errors0/normalexit4. All Work58C/594/598/5D8/5E0/5E4 are0.
+  Actual emitter_active0/esp_active0, noEmitter samples; earlier positive2E/21
+  producer fixtures must NOT become an actualfirstframe creation claim.
+- Public remains67/506085f, canonicalEreports/docs describe67; formalreview
+  analysis/project-review-67-private.json. No newpublicpercentage beforepush.
+- RootE nowpreparing69: service OMframe binding uses sameinit/&s.camera/
+  sameplayer view via gh_om_frame_bind_environment. Manifest adds
+  game_object_opacity +none test and om-fragments-frame ISO test. Not frozen yet.
+  Base68 +complete om-frame-02-delta, then03 and pending04; do notimportE workerWIP.
+  02 supports13 fragments,03 adds10 of304,04 extends37moretruewait objects;
+  those are focusedfixtures until matching69actualQA.
+- Root owns service/startup/main/manifest; per-OM states indexedby existing
+  factoryobject, persist634 across calls, freebeforefactory onhostabort.
+  68 added first3door nativeMove and frozen object-live-trans233618 (no actual
+  modelDraw yet). AllRoot68exec handles terminal/collected; no liveRootbuild now.
+- opengoal: frozen actor-model-trans-prefix000736 NEWC/h/test notin68.
+  Continues real14EFA8 shadow/14AC90. Shadow up borrows existingcamera_follow
+  up_globalXYZ (Wnotconsumed), not a secondwritable3BD8B0 owner; newtemplate
+  owneronlypattern64B. WorldLight.scalar16220/16230 andexisting3BD880 areborrowed.
+- skill_forward: new effectframe/741DC0global owner. Actualfirstframeempty
+  domain priority, complete300628→EAR/SSD/emptyPool→2FB0E8→factor741DC0=1;
+  missingpositive calls precise. Do not confuse factor741DC0 with existing
+  object_step.ratio10_bits754C48. Future292F38 writesboth +Em548. Rootapproved
+  narroweffectemitter writableview +puretwo_bone matrix→Euler export.
+
+Older67 milestone details and history below remain useful;68status takesprecedence.
+
 # Current God Hand state — verified local67
 
 Read Git before assuming a push. Current full verified source is
@@ -5,8 +112,9 @@ G:/middle_thing/godhand_windows/snapshots/room-transition-67; matching scratch
 G:/middle_thing/godhand_windows/verification/room-transition-67.
 254 C modules /273 checks, all hardware/codec/full independent ADX and same-DLL
 RNG20544/20534 PASS. Private proof: analysis/room-transition-67-verification-private.json.
-Standard E reports and bilingual public summaries now describe67, prepared for
-publication; latest verified remote is still59/8b3c033 until Git confirms a push.
+Public67 commit506085f05bfce5fbd1215f4964bce98c1c1bb36b was pushed and exact
+remoteSHA verified. StandardEreports/bilingual summaries match67. Private
+post-push formalreview is analysis/project-review-67-private.json.
 Local66 rollback is822a641; no formal overall review is due merely for that commit.
 
 Actual hidden/muted synthetic NewGame:489ticks,6MC/90Movie/369UI, R100/Main4.

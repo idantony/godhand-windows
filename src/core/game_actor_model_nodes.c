@@ -41,3 +41,30 @@ gh_actor_model_status gh_actor_model_object_packet(const gh_actor_model*s,const 
 
 gh_actor_model_status gh_actor_model_node_mask_flags(gh_actor_model*s,unsigned i,uint16_t offset,uint32_t and_mask,uint32_t or_mask){if(!s||!s->bound)return GH_ACTOR_MODEL_ARGUMENT;if(offset!=0x380&&offset!=0x410)return GH_ACTOR_MODEL_ARGUMENT;if(!s->ready||!s->nodes)return GH_ACTOR_MODEL_BUSY;if(i>=s->nodes->complete)return GH_ACTOR_MODEL_BOUNDS;uint8_t*p=s->nodes->entries[i].bytes;put(p,offset,(w(p+offset)&and_mask)|or_mask);return GH_ACTOR_MODEL_OK;}
 gh_actor_model_status gh_actor_model_node_or_flags(gh_actor_model*s,unsigned i,uint16_t offset,uint32_t value){return gh_actor_model_node_mask_flags(s,i,offset,UINT32_MAX,value);}
+
+gh_actor_model_status gh_actor_model_object_span(gh_actor_model*s,size_t offset,size_t bytes,uint8_t**out){
+ if(!s||!out||!s->bound||s->native_identity!=s)return GH_ACTOR_MODEL_ARGUMENT;
+ if(!s->ready||!s->nodes||!s->nodes->object_ready)return GH_ACTOR_MODEL_BUSY;
+ struct gh_actor_model_nodes*n=s->nodes;
+ if(!s->packet_heap||!n->object_allocation.pointer||n->object_allocation.owner!=s->packet_heap||n->object.bytes!=n->object_bytes)return GH_ACTOR_MODEL_BOUNDS;
+ if(offset>n->object_bytes||bytes>n->object_bytes-offset)return GH_ACTOR_MODEL_BOUNDS;
+ *out=(uint8_t*)n->object_allocation.pointer+offset;return GH_ACTOR_MODEL_OK;
+}
+
+gh_actor_model_status gh_actor_model_node_program_get(const gh_actor_model*s,unsigned index,unsigned parity,uint32_t*out){
+ if(!s||!out||s->native_identity!=s||parity>1)return GH_ACTOR_MODEL_ARGUMENT;
+ if(!s->ready||!s->nodes||index>=s->nodes->complete)return GH_ACTOR_MODEL_BOUNDS;
+ *out=s->nodes->entries[index].program[parity];return GH_ACTOR_MODEL_OK;
+}
+gh_actor_model_status gh_actor_model_node_program_set(gh_actor_model*s,unsigned index,unsigned parity,uint32_t selector){
+ if(!s||s->native_identity!=s||parity>1)return GH_ACTOR_MODEL_ARGUMENT;
+ if(!s->ready||!s->nodes||index>=s->nodes->complete)return GH_ACTOR_MODEL_BOUNDS;
+ unsigned program=selector&255u;
+ if((selector&~UINT32_C(0x800000ff))||(program!=2&&program!=20&&program!=30&&program!=32))return GH_ACTOR_MODEL_UNSUPPORTED;
+ s->nodes->entries[index].program[parity]=selector;return GH_ACTOR_MODEL_OK;
+}
+gh_actor_model_status gh_actor_model_object_program_reset(gh_actor_model*s,unsigned parity){
+ if(!s||s->native_identity!=s||parity>1)return GH_ACTOR_MODEL_ARGUMENT;
+ if(!s->ready||!s->nodes||!s->nodes->object_ready)return GH_ACTOR_MODEL_BUSY;
+ s->nodes->object.object_program[parity]=UINT32_C(0x80000000);return GH_ACTOR_MODEL_OK;
+}

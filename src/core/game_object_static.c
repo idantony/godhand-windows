@@ -1,6 +1,7 @@
 /* Actual static type0 virtual Move318B58 and dispatch helpers. All borrowed
  * storage is canonical; numerical policy is finite binary32 nearest reference. */
 #include "game_object_step.h"
+#include "game_object_live_trans.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -198,11 +199,15 @@ gh_object_step_status gh_game_objects_trans_static_0030f650(gh_game_object_step*
  else if(s->trans_pools!=pools||s->trans_work!=work)return GH_OBJSTEP_ARGUMENT;
  for(;s->trans_index<list->count;){
   uint32_t handle=w((uint8_t*)list->allocation.pointer+s->trans_index*4);gh_scene_mesh_object*o;size_t index;
-  gh_object_step_status e=gh_object_static_lookup(s,pools,handle,&o,&index,f,0x30f69c);if(e)return e;
+  gh_object_step_status e;
+  if((s->trans_phase&&s->pending.handle!=handle)||(s->trans_live_phase&&s->trans_live_handle!=handle))return stop(f,0x30f69c,GH_OBJSTEP_POOLS);
+  if(gh_object_live_trans_handle(pools,handle)){if(s->trans_phase)return stop(f,0x30f69c,GH_OBJSTEP_POOLS);int erased=0;e=gh_object_live_trans_one_0030f650(s,pools,work,handle,&erased,f);if(e)return e;if(!erased)s->trans_index++;continue;}
+  if(s->trans_live_phase)return stop(f,0x30f69c,GH_OBJSTEP_POOLS);
+  e=gh_object_static_lookup(s,pools,handle,&o,&index,f,0x30f69c);if(e)return e;
   uint8_t*p=o->allocation.pointer;const gh_object_static_bindings*b=&s->static_objects;
   if(s->trans_phase==5)return stop(f,0x31a018,GH_OBJSTEP_UNSUPPORTED);
   if(!s->trans_phase){uint32_t flags=w(p+0x250);
-   if(flags&0x80000000u){if(flags&0x20000000u){e=detach_static_before_destructor(s,o,f);if(e)return e;s->trans_phase=5;return stop(f,0x31a018,GH_OBJSTEP_UNSUPPORTED);}ww(p+0x250,flags|((flags&0x40000000u)?0x20000000u:0x40000000u));s->trans_index++;continue;}
+   if(flags&0x80000000u){if(flags&0x20000000u){e=detach_static_before_destructor(s,o,f);if(e)return e;s->pending.object=o;s->pending.handle=handle;s->trans_phase=5;return stop(f,0x31a018,GH_OBJSTEP_UNSUPPORTED);}ww(p+0x250,flags|((flags&0x40000000u)?0x20000000u:0x40000000u));s->trans_index++;continue;}
    if(flags&0x8000u){s->trans_index++;continue;}
    ww(p+0x250,flags|0x200000u);
    if(flags&0x80000u)return stop(f,0x14a910,GH_OBJSTEP_UNSUPPORTED);
@@ -243,5 +248,6 @@ gh_object_step_status gh_game_objects_trans_static_0030f650(gh_game_object_step*
    s->trans_index++;s->trans_phase=0;
   }
  }
+ if(s->trans_phase||s->trans_live_phase)return stop(f,0x30f69c,GH_OBJSTEP_POOLS);
  s->trans_stage=0;return GH_OBJSTEP_OK;
 }

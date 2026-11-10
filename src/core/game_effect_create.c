@@ -5,8 +5,9 @@
 #include <fenv.h>
 typedef struct {const gh_title_player_view *actor,*selector;const gh_actor_model *model;uint32_t part_index,part_handle;
  const uint8_t *record;uint32_t serial;uint8_t associated,initialized;} emitter_metadata;
+typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t associated,initialized,type;} esp_metadata;
 struct gh_effect_native {gh_game_effects *owner;uint8_t *esp,*emitters;uint32_t serial;
- emitter_metadata slots[256];};
+ emitter_metadata slots[256];esp_metadata esps[1024];};
 static uint32_t w(const uint8_t*p){uint32_t v;memcpy(&v,p,4);return v;}
 static void ww(uint8_t*p,uint32_t v){memcpy(p,&v,4);}
 static void half(uint8_t*p,uint16_t v){memcpy(p,&v,2);}
@@ -21,6 +22,16 @@ static void construct_type0(uint8_t*p){
  ww(p+0xf0,0x44fd58);for(unsigned i=0;i<4;i++){ww(p+0x1a0+4*i,0x3f800000);ww(p+0x1d0+4*i,0x3f800000);}vf0(p+0x1b0);vf0(p+0x1c0);ww(p+0x1e0,0x3f800000);p[0x1ec]=p[0x1ef]=0xff;vf0(p+0x200);ww(p+0x22c,0x3f800000);p[0x190]=0;
 }
 gh_effect_status gh_effect_create_begin(gh_effect_create_call*c,const gh_effect_create_request*r){if(!c||!r||(c->active&&!c->complete))return GH_EFFECT_ARGUMENT;*c=(gh_effect_create_call){.identity=c,.request=*r,.active=1};return GH_EFFECT_OK;}
+gh_effect_status gh_effect_create_ambient_begin_00305e88(gh_effect_create_call*c,uint32_t index){if(!c)return GH_EFFECT_ARGUMENT;uint32_t bits=index+0x2200u;int32_t mode;memcpy(&mode,&bits,4);gh_effect_create_request request={.bank=3,.index=index,.actor=NULL,.mode=mode,.selector=-1};gh_effect_status e=gh_effect_create_begin(c,&request);if(!e)c->configuration_305e88=1;return e;}
+/* Actual305FB0: locate group in SSD's first relative table, then choose the
+ * same ordinal from its second table. Views stay within the owned SSD. */
+static gh_effect_status ambient_est(gh_effect_create_call*c){
+ gh_effect_view ssd=c->owner->ssd;if(!ssd.bytes){if(ssd.size)return fail(c,0x305fb0,GH_EFFECT_BOUNDS);c->original_return=0;c->complete=1;return GH_EFFECT_OK;}if(ssd.size<24)return fail(c,0x305fb0,GH_EFFECT_BOUNDS);
+ uint64_t group=(uint64_t)w(ssd.bytes+16)+16,est=(uint64_t)w(ssd.bytes+20)+16;if(group>ssd.size||16>ssd.size-group||est>ssd.size||16>ssd.size-est)return fail(c,0x305fb0,GH_EFFECT_BOUNDS);uint32_t count=w(ssd.bytes+(size_t)group+4);if(count>(ssd.size-(size_t)group-16)/4||count>(ssd.size-(size_t)est-16)/4)return fail(c,0x305fb0,GH_EFFECT_BOUNDS);
+ for(unsigned i=0;i<count;i++){uint64_t row=group+w(ssd.bytes+(size_t)group+16+(size_t)i*4)+16;if(row>ssd.size||2>ssd.size-row)return fail(c,0x305fb0,GH_EFFECT_BOUNDS);if((uint32_t)(ssd.bytes[row]|(unsigned)ssd.bytes[row+1]<<8)!=c->request.index)continue;uint64_t start=est+w(ssd.bytes+(size_t)est+16+(size_t)i*4)+16;if(start>ssd.size||16>ssd.size-start)return fail(c,0x305fb0,GH_EFFECT_BOUNDS);size_t end=ssd.size;for(unsigned j=0;j<count;j++){uint64_t next=est+w(ssd.bytes+(size_t)est+16+(size_t)j*4)+16;if(next>start&&next<end)end=(size_t)next;}if(w(ssd.bytes+(size_t)start)!=0x545345){c->original_return=0;c->complete=1;return GH_EFFECT_OK;}c->est=(gh_effect_view){ssd.bytes+(size_t)start,end-(size_t)start};c->count=w(c->est.bytes+4);if(c->count>(c->est.size-16)/0x2f0)return fail(c,0x3066d0,GH_EFFECT_BOUNDS);c->config_flags=0x40;c->stage=1;return GH_EFFECT_OK;
+ }
+ c->original_return=0;c->complete=1;return GH_EFFECT_OK;
+}
 static gh_effect_status storage(gh_effect_create_call*c,const gh_effect_create_bindings*b){
  const gh_effect_release_bindings*s=&b->storage;gh_game_effects*e=s->effects;if(!e||!e->ready||!s->esp||s->esp_bytes<0x100180||!s->emitters||s->emitter_bytes<0x26060)return GH_EFFECT_ARGUMENT;
  if(c->owner&&c->owner!=e)return GH_EFFECT_ARGUMENT;c->owner=e;
@@ -29,7 +40,7 @@ static gh_effect_status storage(gh_effect_create_call*c,const gh_effect_create_b
 }
 static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_create_bindings*b){
  uint32_t flags=w((const uint8_t*)b->work+0x5d8);if((flags&0x10000000u)||(!c->request.index&&c->request.bank!=3)){c->original_return=1;c->complete=1;return GH_EFFECT_OK;}
- if(c->request.bank==3)return fail(c,0x305fb0,GH_EFFECT_UNSUPPORTED);
+ if(c->request.bank==3){if(!c->configuration_305e88||c->request.actor||c->request.selector!=-1)return fail(c,0x305fb0,GH_EFFECT_UNSUPPORTED);return ambient_est(c);}
  gh_effect_resource*r=NULL;for(unsigned i=0;i<64;i++)if(c->owner->resources[i].kind==(int32_t)c->request.bank){r=&c->owner->resources[i];break;}
  if(!r||!r->tbl1.bytes||r->tbl1.size<4){c->original_return=0;c->complete=1;return GH_EFFECT_OK;}
  gh_effect_view table=r->tbl1;uint32_t count=w(table.bytes),index=c->request.index;if(count>(table.size-4)/4)return fail(c,0x306030,GH_EFFECT_BOUNDS);if(index>count){c->original_return=0;c->complete=1;return GH_EFFECT_OK;}
@@ -55,7 +66,7 @@ static gh_effect_status initialize_prefix(gh_effect_create_call*c,const gh_effec
  if(!m->associated||m->serial!=c->serial||m->record!=r)return GH_EFFECT_ARGUMENT;
  if(c->request.selector!=-1)return fail(c,0x303a30,GH_EFFECT_UNSUPPORTED);
  ww(p+0x110,(uint32_t)c->request.mode);half(p+0x18c,(uint16_t)c->request.bank);half(p+0x18e,(uint16_t)c->request.index);
- ww(p+0x118,c->config_flags);
+ ww(p+0x118,c->config_flags&~8u);/*303EFC/303F00 copies distinct config+48 verbatim.*/ww(p+0x1e8,c->config_flags);
  if(!r[0x28e]){if(!b->random)return fail(c,0x31cfe0,GH_EFFECT_UNSUPPORTED);if(c->random_identity&&c->random_identity!=b->random)return GH_EFFECT_ARGUMENT;c->random_identity=b->random;uint32_t seed;if(gh_game_mt_next_0030f348(b->random,&seed))return fail(c,0x31cfe0,GH_EFFECT_ARGUMENT);ww(p+0x220,seed);}else ww(p+0x220,r[0x28e]);c->stage=3;return GH_EFFECT_OK;
 }
 static gh_effect_status initialize_record(gh_effect_create_call*c,const gh_effect_create_bindings*b,const uint8_t*r){
@@ -98,7 +109,7 @@ gh_effect_status gh_game_effect_create_00306528(gh_effect_create_call*c,const gh
  c->complete=1;c->original_return=1;return GH_EFFECT_OK;
 }
 gh_effect_status gh_effect_create_actor_match(void*raw,int emitter,unsigned slot,const gh_title_player_view*a,int*match,uint32_t*f){
- gh_game_effects*e=raw;if(f)*f=0;if(!e||!match||!f||slot>=(emitter?256u:1024u))return GH_EFFECT_ARGUMENT;if(!emitter){*f=0x2feb80;return GH_EFFECT_UNSUPPORTED;}if(!e->native){*f=0x3039e8;return GH_EFFECT_UNSUPPORTED;}if(e->native->owner!=e)return GH_EFFECT_ARGUMENT;emitter_metadata*m=&e->native->slots[slot];if(!m->associated){*f=0x3039e8;return GH_EFFECT_UNSUPPORTED;}*match=(!a&&!m->actor)||(a&&m->actor&&a->bytes==m->actor->bytes);return GH_EFFECT_OK;
+ gh_game_effects*e=raw;if(f)*f=0;if(!e||!match||!f||slot>=(emitter?256u:1024u))return GH_EFFECT_ARGUMENT;if(!emitter){gh_effect_esp_view v;gh_effect_status status=gh_effect_create_esp_at(e,slot,&v);if(status){*f=0x2feb80;return GH_EFFECT_UNSUPPORTED;}if(w(v.payload+0x108)){*f=0x2feb80;return GH_EFFECT_UNSUPPORTED;}*match=(!a&&!v.selector)||(a&&v.selector&&a->bytes==v.selector->bytes);return GH_EFFECT_OK;}if(!e->native){*f=0x3039e8;return GH_EFFECT_UNSUPPORTED;}if(e->native->owner!=e)return GH_EFFECT_ARGUMENT;emitter_metadata*m=&e->native->slots[slot];if(!m->associated){*f=0x3039e8;return GH_EFFECT_UNSUPPORTED;}*match=(!a&&!m->actor)||(a&&m->actor&&a->bytes==m->actor->bytes);return GH_EFFECT_OK;
 }
 void gh_effect_create_forget_on_owner_destroy(gh_game_effects*s){if(!s||!s->native)return;if(s->native->owner!=s)return;free(s->native);s->native=NULL;}
 
@@ -106,5 +117,28 @@ gh_effect_status gh_effect_create_emitter_at(const gh_game_effects*s,unsigned sl
  if(!s||!out||slot>=256||!s->native||s->native->owner!=s)return GH_EFFECT_ARGUMENT;
  const struct gh_effect_native*n=s->native;const emitter_metadata*m=&n->slots[slot];uint32_t mask=0x80000000u>>(slot&31);if(!m->associated||!(w(n->emitters+0x26000+(slot>>5)*4)&mask))return GH_EFFECT_UNSUPPORTED;
  const gh_actor_part*part=NULL;if(m->model){if(gh_actor_model_part_at(m->model,m->part_index,&part)||part->handle!=m->part_handle)return GH_EFFECT_UNSUPPORTED;}
- *out=(gh_effect_emitter_view){.record={m->record,0x2f0},.actor=m->actor,.selector=m->selector,.model=m->model,.part=part,.serial=m->serial,.initialized=m->initialized};return GH_EFFECT_OK;
+ *out=(gh_effect_emitter_view){.record={m->record,0x2f0},.actor=m->actor,.selector=m->selector,.model=m->model,.part=part,.serial=m->serial,.initialized=m->initialized,.payload=n->emitters+(size_t)slot*0x260,.payload_size=0x260};return GH_EFFECT_OK;
 }
+
+static void construct_esp_type6(uint8_t*p){
+ /* 2FFBD0 ->2E81D8 ->2FBCC8 ->2FBD98 ->2B5C20(NULL). */
+ for(unsigned i=0;i<4;i++)ww(p+0x20+i*4,0x3f800000);vf0(p+0x30);ww(p+0x34,0x80000000u);vf0(p+0x40);vf0(p+0xa0);identity(p+0x50);identity(p+0xb0);
+ const unsigned unit[]={0x188,0x18c,0x190,0x194,0x1f8,0x1fc,0x200,0x204,0x210,0x240};for(unsigned i=0;i<sizeof(unit)/sizeof(unit[0]);i++)ww(p+unit[i],0x3f800000);
+ half(p+0x238,0xffff);p[0x246]=p[0x23e]=p[0x23f]=p[0x245]=1;vf0(p+0x280);vf0(p+0x290);ww(p+0x11c,0x06000000);ww(p+0xf0,0x44e6d8);p[0x102]=6;
+}
+gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_bindings*b,unsigned source_slot,uint32_t source_serial,unsigned*slot,uint32_t*serial,int*allocated,uint32_t*f){
+ if(!b||!slot||!serial||!allocated||!f)return GH_EFFECT_ARGUMENT;*f=0;*allocated=0;*slot=0;*serial=0;
+ gh_game_effects*e=b->effects;if(!e||!e->native||e->native->owner!=e||e->native->esp!=b->esp||e->native->emitters!=b->emitters||b->esp_bytes<0x100180||b->emitter_bytes<0x26060)return GH_EFFECT_ARGUMENT;
+ gh_effect_emitter_view source;gh_effect_status status=gh_effect_create_emitter_at(e,source_slot,&source);if(status||source.serial!=source_serial||!source.initialized)return GH_EFFECT_ARGUMENT;
+ if(source.actor||source.selector||source.model||source.part){*f=0x2faa88;return GH_EFFECT_UNSUPPORTED;}
+ unsigned i;for(i=0;i<1024;i++)if(!(w(b->esp+0x100000+(i>>5)*4)&(UINT32_C(0x80000000)>>(i&31))))break;if(i==1024)return GH_EFFECT_OK;
+ if(source.record.bytes[0x133]!=6){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}if(e->native->serial==UINT32_MAX){*f=0x2faa88;return GH_EFFECT_UNSUPPORTED;}
+ uint8_t*p=b->esp+(size_t)i*0x400;memset(p,0,0x400);construct_esp_type6(p);uint32_t id=++e->native->serial;esp_metadata*m=&e->native->esps[i];*m=(esp_metadata){.record=source.record,.actor=source.actor,.selector=source.selector,.serial=id,.emitter_serial=source_serial,.emitter_slot=source_slot,.associated=1,.type=6};unsigned off=(i>>5)*4;uint32_t mask=UINT32_C(0x80000000)>>(i&31);ww(b->esp+0x100000+off,w(b->esp+0x100000+off)|mask);ww(b->esp+0x100080+off,w(b->esp+0x100080+off)&~mask);ww(b->esp+0x100100+off,w(b->esp+0x100100+off)&~mask);*slot=i;*serial=id;*allocated=1;return GH_EFFECT_OK;
+}
+gh_effect_status gh_effect_create_esp_at(const gh_game_effects*e,unsigned slot,gh_effect_esp_view*out){
+ if(!e||!out||slot>=1024||!e->native||e->native->owner!=e)return GH_EFFECT_ARGUMENT;const esp_metadata*m=&e->native->esps[slot];if(!m->associated||!(w(e->native->esp+0x100000+(slot>>5)*4)&(UINT32_C(0x80000000)>>(slot&31))))return GH_EFFECT_UNSUPPORTED;
+ *out=(gh_effect_esp_view){.record=m->record,.texture=m->texture,.secondary_texture=m->secondary_texture,.actor=m->actor,.selector=m->selector,.payload=e->native->esp+(size_t)slot*0x400,.payload_size=0x400,.serial=m->serial,.emitter_serial=m->emitter_serial,.emitter_slot=m->emitter_slot,.initialized=m->initialized,.type=m->type};return GH_EFFECT_OK;
+}
+gh_effect_status gh_effect_create_esp_bind_textures(gh_game_effects*e,unsigned slot,uint32_t serial,gh_effect_view texture,gh_effect_view secondary){gh_effect_esp_view v;gh_effect_status status=gh_effect_create_esp_at(e,slot,&v);if(status||v.serial!=serial)return GH_EFFECT_ARGUMENT;e->native->esps[slot].texture=texture;e->native->esps[slot].secondary_texture=secondary;return GH_EFFECT_OK;}
+
+gh_effect_status gh_effect_create_esp_abort_partial(gh_game_effects*e,unsigned slot,uint32_t serial){gh_effect_esp_view v;gh_effect_status status=gh_effect_create_esp_at(e,slot,&v);if(status||v.serial!=serial||v.initialized||v.actor||v.selector)return GH_EFFECT_ARGUMENT;unsigned off=(slot>>5)*4;uint32_t keep=~(UINT32_C(0x80000000)>>(slot&31));for(unsigned bank=0;bank<3;bank++)ww(e->native->esp+0x100000+bank*0x80+off,w(e->native->esp+0x100000+bank*0x80+off)&keep);e->native->esps[slot]=(esp_metadata){0};return GH_EFFECT_OK;}

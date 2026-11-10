@@ -53,6 +53,8 @@
 #include "../core/packed_message.h"
 #include "../core/game_event_clear.h"
 #include "../core/game_cloth_runtime.h"
+#include "../core/game_actor_render.h"
+#include "../core/game_object_step.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -129,9 +131,11 @@ typedef struct {
 } gh_game_services_scene_view;
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services *,gh_game_services_scene_view *);
 /* Read-only native execution diagnostics; counters are not game state. */
-typedef struct {uint64_t player_updates_completed,child_updates_completed;
+typedef struct {uint64_t player_updates_completed,child_updates_completed,om_updates_completed;
  uint32_t last_move_handle,last_move_entry,player_stage,player_frontier,child_stage,child_frontier;
  uint32_t child_forces_complete,child_angles_complete,child_distances_complete,child_finish_complete;
+ uint32_t emitter_active,esp_active,emitter_samples;
+ uint32_t emitter_slots[4],emitter_banks[4],emitter_kinds[4],emitter_flags[4],emitter_known[4],emitter_types[4];
 } gh_game_update_diagnostic;
 gh_game_services_status gh_game_services_update_diagnostic(const gh_game_services *,gh_game_update_diagnostic *);
 
@@ -141,6 +145,14 @@ gh_game_services_status gh_game_services_actor_view(gh_game_services *,uint32_t 
  * Unknown methods/this-adjustments retain their exact original entry frontier. */
 gh_game_services_status gh_game_services_move_actor(gh_game_services *,uint32_t handle,uint32_t original_entry,
  int16_t this_delta,const gh_title_player_view *,const gh_boot_work *,uint32_t *frontier);
+typedef struct {const uint8_t *depth_shift;const gh_shadow_templates *shadow_templates;
+ gh_shadow_emit shadow_emit;void *shadow_context;
+ gh_actor_draw_emit actor_emit;void *actor_context;} gh_game_actor_render_provider;
+/* Actual nonstatic Trans descriptor on the SAME registered model. Draw
+ * continuations live with that model; unsupported alternate/destructor bodies
+ * retain their exact original entry. The provider borrows Root's one OT. */
+gh_game_services_status gh_game_services_trans_actor(gh_game_services *,const gh_object_trans_request *,
+ const gh_boot_work *,const gh_game_actor_render_provider *,uint32_t *frontier);
 /* Inspect native script errors immediately after a real Scenario visit. */
 gh_scene_step_status gh_game_services_task_status(gh_game_services *,uint32_t *frontier);
 /* Actual12C418 on SAME player/model/motion, with one invocation cursor. */

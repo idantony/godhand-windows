@@ -14,6 +14,7 @@
 #include "../core/game_event.h"
 #include "../core/display_state.h"
 #include "../core/game_scene_aux.h"
+#include "../core/game_effects_frame.h"
 #include "../core/game_camera_projection.h"
 #include "../core/game_camera_follow.h"
 #include "../core/game_camera_envelope.h"
@@ -27,6 +28,7 @@
 #include "../core/enemy_se_banks.h"
 #include "../core/game_camera_shake.h"
 #include "../core/game_object_step.h"
+#include "../core/game_object_live_trans.h"
 #include "../core/game_render_projection.h"
 #include "../core/game_render_steps.h"
 #include "../core/game_scene_at_step.h"
@@ -96,6 +98,8 @@ struct gh_startup_host {
     gh_mc_control_state mc_control;
     gh_mc_draw_consumer mc_draw;
     gh_object_static_emit world_emit;void *world_context;
+    gh_shadow_emit shadow_emit;void *shadow_context;gh_shadow_templates shadow_templates;
+    gh_actor_draw_emit actor_emit;void *actor_context;
     gh_id_post_message mc_post;
     void *mc_draw_context,*mc_post_context;
     gh_startup_continuation continuation;
@@ -128,6 +132,7 @@ struct gh_startup_host {
     gh_event_clear_state event_clear;
     gh_display_state display;
     gh_game_scene_aux scene_aux;
+    gh_game_effects_frame effects_frame;gh_effects_frame_globals effects_globals;
     gh_game_object_step object_step;
     gh_game_render_projection render_projection;
     gh_camera_follow camera_follow;gh_camera_envelope camera_envelope;
@@ -258,6 +263,14 @@ static gh_object_step_status move_actor_invoke(void *context,const gh_object_mov
     gh_startup_host*h=context;gh_game_services_status e=gh_game_services_move_actor(h->services,r->handle,r->original_entry,r->this_delta,&r->actor,work,frontier);
     return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
 }
+static gh_object_step_status trans_actor_invoke(void *context,const gh_object_trans_request*r,const gh_boot_work*work,uint32_t*frontier)
+{
+    gh_startup_host*h=context;
+    gh_game_actor_render_provider provider={.depth_shift=&h->object_step.depth_shift,.shadow_templates=&h->shadow_templates,
+        .shadow_emit=h->shadow_emit,.shadow_context=h->shadow_context,.actor_emit=h->actor_emit,.actor_context=h->actor_context};
+    gh_game_services_status e=gh_game_services_trans_actor(h->services,r,work,&provider,frontier);
+    return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
+}
 static gh_game_event_status event_loading_menu(void *context,uint32_t *frontier)
 {
     gh_game_services_status e=scene_start_loading_menu(context,frontier);
@@ -322,6 +335,11 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_object_step_status e=gh_game_move_objects_0030f090(&h->object_step,s.pools,&h->work,scene_profile_clock,h,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x30f650){
+        if(!h->object_step.trans_live.invoke){
+            gh_object_trans_bindings b={.invoke=trans_actor_invoke,.context=h,.scene_at=s.scene_at};
+            gh_object_step_status e=gh_game_object_step_bind_trans(&h->object_step,&b);
+            if(e){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
+        }
         gh_object_step_status e=gh_game_objects_trans_static_0030f650(&h->object_step,s.pools,&h->work,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x1601d8){
@@ -377,7 +395,15 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_child_status e=gh_game_children_draw_00160b90(h->game_children,&h->work,&h->draw_env,scene_menu_cover,h,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2bf2d0)aux=gh_scene_cursor_step_002bf2d0(&h->scene_aux,&h->work,s.prepare->fields);
-    else if(address==0x30f228)aux=gh_scene_effects_step_0030f228(&h->scene_aux,&h->work,scene_profile_clock,h);
+    else if(address==0x30f228){
+        gh_effects_frame_bindings b={.storage={.effects=s.effects,.esp=s.scene_buffer_a,.esp_bytes=s.scene_buffer_a_size,
+            .emitters=s.scene_buffer_b,.emitter_bytes=s.scene_buffer_b_size,.actor_match=gh_effect_create_actor_match,.context=s.effects},
+            .work=&h->work,.init=&h->game_init,.current_player=&s.title_player->view,.globals=&h->effects_globals,
+            .profile=&h->scene_aux,.clock=scene_profile_clock,.clock_context=h,.atan_coeff=h->camera_envelope.atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE};
+        gh_effect_status e=gh_game_effects_frame_update_0030f228(&h->effects_frame,&b);
+        if(e&&frontier)*frontier=h->effects_frame.frontier?h->effects_frame.frontier:address;
+        return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
+    }
     else if(address==0x1ffe10){
         gh_game_door_bindings b=scene_door_bindings(h,&s);gh_door_status e=gh_game_door_step_001ffe10(s.door,&b);
         if(e&&frontier)*frontier=s.door->frontier;return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -434,6 +460,8 @@ static int initialize_native_bgm(gh_startup_host *h)
     gh_scene_placement_status door_shared_status=gh_om_door_shared_from_elf(&h->door_shared,elf,(size_t)bytes);
     gh_player_nodes_status node_names_status=gh_player_node_names_from_elf(&h->player_node_names,elf,(size_t)bytes);
     gh_actor_motion_status motion_globals_status=gh_motion_ik_globals_from_elf(&h->motion_ik_globals,elf,(size_t)bytes);
+    gh_effect_status effects_status=gh_effects_frame_globals_from_elf(&h->effects_globals,elf,(size_t)bytes);
+    gh_actor_model_status shadow_status=gh_shadow_templates_from_elf(&h->shadow_templates,elf,(size_t)bytes);
     gh_player_ground_status ground_status=gh_player_ground_globals_from_elf(&h->player_ground_globals,elf,(size_t)bytes);
     gh_player_opacity_status opacity_status=gh_player_opacity_globals_from_elf(&h->player_opacity_globals,elf,(size_t)bytes);
     gh_math_globals_status math_status=gh_game_math_globals_from_elf(&h->math_globals,elf,(size_t)bytes);
@@ -459,6 +487,8 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(motion_globals_status)return failure(h,GH_HOST_ASSET,motion_globals_status);
     if(math_status)return failure(h,GH_HOST_ASSET,math_status);
     if(ground_status)return failure(h,GH_HOST_ASSET,ground_status);
+    if(effects_status)return failure(h,GH_HOST_ASSET,effects_status);
+    if(shadow_status)return failure(h,GH_HOST_ASSET,shadow_status);
     if(opacity_status)return failure(h,GH_HOST_ASSET,opacity_status);
     if(corner_status)return failure(h,GH_HOST_ASSET,corner_status);
     if(templates_status)return failure(h,GH_HOST_ASSET,templates_status);
@@ -1094,6 +1124,25 @@ gh_host_error gh_startup_host_set_world_consumer(gh_startup_host *h,gh_object_st
     if(!on_owner(h))return GH_HOST_THREADS;
     h->world_emit=emit;h->world_context=context;return GH_HOST_OK;
 }
+gh_host_error gh_startup_host_set_shadow_consumer(gh_startup_host *h,gh_shadow_emit emit,void *context)
+{
+    if(!h||h->ticks||h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
+    if(!on_owner(h))return GH_HOST_THREADS;
+    h->shadow_emit=emit;h->shadow_context=context;return GH_HOST_OK;
+}
+gh_host_error gh_startup_host_resolve_tex0(gh_startup_host *h,uint64_t tex0,const gh_stage_material **material)
+{
+    if(!h||!material)return GH_HOST_ARGUMENT;
+    if(GetCurrentThreadId()!=h->owner_thread)return GH_HOST_THREADS;
+    gh_stage_status e=gh_stage_tex0_material(h->game_stage.textures,tex0,material);
+    return !e?GH_HOST_OK:e==GH_STAGE_MEMORY?GH_HOST_MEMORY:GH_HOST_ASSET;
+}
+gh_host_error gh_startup_host_set_actor_consumer(gh_startup_host *h,gh_actor_draw_emit emit,void *context)
+{
+    if(!h||h->ticks||h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
+    if(!on_owner(h))return GH_HOST_THREADS;
+    h->actor_emit=emit;h->actor_context=context;return GH_HOST_OK;
+}
 gh_host_phase gh_startup_host_tick(gh_startup_host *h)
 {
     gh_task_run_result r;gh_dvd_error e;unsigned i;int active=0;
@@ -1211,16 +1260,43 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->ui_resource_epoch=gh_game_services_ui_resource_epoch(h->services);
     out->current_room=(uint16_t)h->work.room;memcpy(&out->next_room,(const uint8_t*)&h->work+0x5b4,2);
     if(h->services){gh_game_update_diagnostic d={0};if(!gh_game_services_update_diagnostic(h->services,&d)){
-        out->player_updates_completed=d.player_updates_completed;out->child_updates_completed=d.child_updates_completed;
+        out->player_updates_completed=d.player_updates_completed;out->child_updates_completed=d.child_updates_completed;out->om_updates_completed=d.om_updates_completed;
         out->last_move_handle=d.last_move_handle;out->last_move_entry=d.last_move_entry;out->player_update_stage=d.player_stage;out->child_update_stage=d.child_stage;
         out->child_update_frontier=d.child_frontier;out->child_forces_complete=d.child_forces_complete;out->child_angles_complete=d.child_angles_complete;
-        out->child_distances_complete=d.child_distances_complete;out->child_finish_complete=d.child_finish_complete;}
+        out->child_distances_complete=d.child_distances_complete;out->child_finish_complete=d.child_finish_complete;
+        out->emitter_active=d.emitter_active;out->esp_active=d.esp_active;out->emitter_samples=d.emitter_samples;
+        memcpy(out->emitter_slots,d.emitter_slots,sizeof(d.emitter_slots));memcpy(out->emitter_banks,d.emitter_banks,sizeof(d.emitter_banks));
+        memcpy(out->emitter_kinds,d.emitter_kinds,sizeof(d.emitter_kinds));memcpy(out->emitter_flags,d.emitter_flags,sizeof(d.emitter_flags));
+        memcpy(out->emitter_known,d.emitter_known,sizeof(d.emitter_known));memcpy(out->emitter_types,d.emitter_types,sizeof(d.emitter_types));}
     }
     if(h->services){gh_game_services_scene_view scene={0};
         if(!gh_game_services_get_scene_view(h->services,&scene)){
             const gh_hitarea_frame*c=&scene.step->hitarea_frame;
             out->scene_stage=scene.step->stage;out->hitarea_phase=c->phase;out->hitarea_slot=c->slot;out->hitarea_node=c->node;
             const struct gh_hitarea_native*n=h->game_init.hitarea_native;
+            gh_title_player_view current={0};
+            if(n&&n->owner==&h->game_init&&!gh_game_services_actor_view(h->services,out->last_move_handle,&current)&&current.bytes&&current.size>=0x5cc){
+                const uint8_t*p=current.bytes;out->current_actor_ready=1;out->current_actor_kind=(uint32_t)p[0x2fe]|(uint32_t)p[0x2ff]<<8;
+                memcpy(&out->current_actor_flags,p+0x250,4);out->current_actor_state=(uint32_t)p[0x2f4]|(uint32_t)p[0x2f5]<<8;
+                memcpy(&out->current_actor_5b0,p+0x5b0,4);memcpy(&out->current_actor_5b4,p+0x5b4,4);memcpy(&out->current_actor_5b8,p+0x5b8,4);
+                out->current_actor_hp548=(uint32_t)p[0x548]|(uint32_t)p[0x549]<<8;out->current_actor_hp54a=(uint32_t)p[0x54a]|(uint32_t)p[0x54b]<<8;
+                memcpy(&out->current_actor_54c,p+0x54c,4);memcpy(out->current_actor_5c0,p+0x5c0,12);
+                for(unsigned j=0;j<672&&out->current_b_samples<4;j++){
+                    const gh_native_hitarea_node*t=&n->nodes[j];unsigned index=t->object.index;
+                    if(!t->associated||t->object.state!=&h->game_init||t->object.generation!=h->game_init.hitarea_generation||index<160||index>=416||
+                       t->object.serial!=n->serials[index]||t->object.size<0x70||t->object.bytes!=diagnostic_hitarea_slot(&h->game_init,index))continue;
+                    gh_title_player_view*owner=NULL;if(gh_hitarea_object_actor(&t->object,&owner)||!owner||owner->bytes!=current.bytes)continue;
+                    unsigned at=out->current_b_samples;int duplicate=0;for(unsigned k=0;k<at;k++)if(out->current_b_index[k]==index)duplicate=1;if(duplicate)continue;
+                    out->current_b_samples++;out->current_b_index[at]=index;out->current_b_group[at]=t->object.group;out->current_b_generation[at]=t->object.generation;out->current_b_serial[at]=t->object.serial;
+                    memcpy(out->current_b_words[at],t->object.bytes,0x70);const gh_title_player_view*last=n->last_hit_actors[index];out->current_b_source_present[at]=last!=NULL;
+                    if(last)for(unsigned q=0;q<672;q++){
+                        const gh_native_hitarea_node*v=&n->nodes[q];unsigned other=v->object.index;
+                        if(!v->associated||v->object.state!=&h->game_init||v->object.generation!=h->game_init.hitarea_generation||other>=416||v->object.serial!=n->serials[other]||
+                           v->object.bytes!=diagnostic_hitarea_slot(&h->game_init,other))continue;
+                        gh_title_player_view*source=NULL;if(!gh_hitarea_object_actor(&v->object,&source)&&source==last&&source->bytes&&source->size>=0x300){out->current_b_source_known[at]=1;out->current_b_source_kind[at]=(uint32_t)source->bytes[0x2fe]|(uint32_t)source->bytes[0x2ff]<<8;break;}
+                    }
+                }
+            }
             if(c->active&&c->node&&c->node<=672&&n&&n->owner==&h->game_init){
                 const gh_native_hitarea_node*node=&n->nodes[c->node-1];const uint8_t*position;
                 if(node->associated&&node->object.state==&h->game_init&&node->object.generation==h->game_init.hitarea_generation&&

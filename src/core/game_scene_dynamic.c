@@ -54,3 +54,10 @@ gh_scene_dynamic_status gh_scene_dynamic_quad_create_0012e990(gh_scene_dynamic_o
  memcpy(p+0x60,a->alias_f0,12);memcpy(p+0x70,offset,12);memcpy(p+0x80,a->bytes+0x100,12);memcpy(p+0x90,rotation,12);if(width<0)width=-width;if(height<0)height=-height;memcpy(p+0xa0,&width,4);memcpy(p+0xa4,&height,4);memcpy(p+0xa8,attributes,16);uint16_t sentinel=0xffff;memcpy(p+0xb0,&sentinel,2);p[0xb2]=p[0xb3]=0;put(p,8,5);
  if(s->tables->pending_actor_head){struct gh_scene_dynamic_box*tail=s->tables->pending_actor_head;while(tail->next)tail=tail->next;tail->next=b;}else s->tables->pending_actor_head=b;s->tables->pending_actor_count++;s->allocations[s->allocation_count++]=b;*out=b;*original=1;return GH_DYNAMIC_OK;
 }
+
+gh_scene_dynamic_status gh_scene_dynamic_contacts_clear_001bd430(gh_scene_dynamic_owner*s,struct gh_scene_dynamic_box*b){
+ gh_scene_dynamic_status e=gh_scene_dynamic_validate_owner(s);if(e)return e;
+ if(!b||!known(s,b)||b->owner!=s)return GH_DYNAMIC_ARGUMENT;
+ memset((uint8_t*)b->allocation.pointer+0x34,0,0x24);
+ memset(b->sphere_contacts,0,sizeof(b->sphere_contacts));memset(b->sphere_contact_known,0,sizeof(b->sphere_contact_known));return GH_DYNAMIC_OK;
+}

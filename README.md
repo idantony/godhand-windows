@@ -10,12 +10,12 @@ This follows OpenGOAL's source recovery/platform adaptation method. God Hand was
 not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
 **Early development. No playable original game scene has been verified.**
-The native Windows program connects the original memory-card interface, Clover
-movie, title and New Game transition into room R100. A hidden, muted synthetic
-run completes one original player update, including motion/blend sampling,
-interaction, collision, terrain IK, opacity and Save/Heat updates. Its attached
-child also completes the original spring simulation and bone update. The next
-unresolved call is the first door's Move method `0x00186928`.
+A hidden, muted synthetic New Game run completes 489 ticks and reaches R100 /
+Main state4. One original player update, one child update and 73 original object
+updates complete: all 69 cold OMS objects and four runtime tutorial objects
+from `3EB`. Hardware-muted audio, movie decoding and the full independent ADX
+comparison are enabled. The next actual frontier is `0x00308BC0` inside the
+model-hide/reset call at `0x00307B28`, SceneStage22.
 
 The run begins at startup task `0x0030D358` and submits zero world packets.
 Earlier boot, a complete scene frame, continuous animation and gameplay remain
@@ -32,34 +32,40 @@ unfinished. The QA counters describe completed calls, not a playable scene.
 - Actual MC prompts, text, window and TIM2 cursor draw through restricted D3D11
   backends. Absent-card and empty-profile paths execute original Control,
   digital input mapping, limited real SFX and normal resource cleanup.
-- One hidden, muted native Windows QA run waits for video EOF and real audio
-  completion, executes Title/New Game and completes the first player/child updates in R100/GameMain state4.
-  Its keys are an explicitly labeled synthetic fixture; no human playtest is claimed.
+- One hidden, muted native Windows synthetic New Game run completes 489 ticks
+  in R100/Main state4. It completes one player update, one child update and 73
+  object updates: 69 cold OMS objects plus four runtime tutorial objects from
+  3EB. Hardware-muted audio, movie decoding and the full independent ADX
+  comparison are enabled. Synthetic keys are not a human playtest.
 - Limited MC ADPCM voices use real XAudio2. Movie0 uses an explicit native
   FFmpeg codec process and Windows audio. Reference DSP/GS numerical profiles
   are documented; they are not PS2 hardware-equivalence claims or complete audio.
 - Original case0 initialization, HUD setup, room state, camera reset and room
   allocation operate on shared native owners. Asset descriptors are distinct
   from completed model/animation rendering or gameplay.
-- Actual first-room construction creates 156 static objects and all 69 OMS
-  objects. Parent PL00 and child PL01 share original parts/nodes, child springs
-  and attachment. Original player initialization executes initial motion binding,
-  bone sampling, terrain IK and matrix recovery, followed by spawn and camera
-  binding. Four runtime tutorial objects also use the same original factory
-  and registries. This is not a continuous animation or gameplay acceptance test.
-- 254 C modules pass 273 checks with hardware/codec checks and an independent
-  ADX reference WAV enabled.
+- Actual first-room construction creates 156 static objects and all 69 cold
+  OMS objects. Parent PL00 and child PL01 share original parts/nodes, child
+  springs and attachment. Original player initialization executes initial motion
+  binding, bone sampling, terrain IK and matrix recovery, followed by spawn and
+  camera binding. Four runtime tutorial objects from 3EB use the original
+  factory and registries. The first original FX call 0x30F228 completes and
+  creates four ambient emitters (bank3, kind1; esp0). This is not continuous
+  animation or gameplay acceptance.
+- 270 C modules pass 295 checks with hardware-muted audio, movie decoding and
+  the full independent ADX comparison enabled.
   The earlier foundation also passes in an independent clean source snapshot.
   Restricted GPU pixels match separate CPU equations. The recovered OT traversal
   preserves bank order, bucket depth, LIFO packet groups and previous-frame presentation.
-- Two RNG routines pass 20544 exact state/float-bit comparisons across 10272
-  seeds against a restricted actual-instruction model, not console traces.
+- The two RNG routines in the same DLL pass 20544 exact state/float-bit
+  comparisons across 10272 seeds against a restricted actual-instruction model,
+  not console traces.
 
 Native encrypted title BGM matches every sample from independent vgmstream
-output. Real-resource tests also cover attached ADPCM voices with original
-random pitch. The integrated run completes player and child updates, then stops
-at the first door. It submits zero world packets; world rendering, continuous
-animation, combat, complete audio and save/load still need implementation.
+output. Real-resource tests also cover attached ADPCM voices with original random
+pitch. The integrated run completes player, child and 73 object updates, then stops
+at 0x00308BC0 inside model-hide/reset 0x00307B28 (SceneStage22). It submits zero
+world packets; no world scene frame, playable scene, continuous animation or combat
+has been verified. Complete audio and save/load still need implementation.
 
 Project evidence tools verify actual instruction bytes, calls, imports and
 static memory sites. Their generated reports remain private; see
@@ -145,11 +151,7 @@ mark substantial milestones.
 平台依赖。采用 OpenGOAL 的源码恢复与平台移植方法；本作不是 GOAL 程序，不能直接
 使用 Jak 专用反编译器。
 
-**仍处于早期开发，尚未验证可玩的原游戏场景。** 原生 Windows 程序已串联原版
-存储卡界面、Clover 片头、标题和“新游戏”到 R100 的转换。隐藏、静音的合成输入
-验收已完成玩家的一次完整更新，包含动作过渡／采样、交互、碰撞、地面 IK、透明度
-和 Save／Heat 收尾；附属子模型也完成原弹性骨骼及部件更新。下一调用是首扇门的
-Move 方法 `0x00186928`。
+**仍处于早期开发，尚未验证可玩的原游戏场景。** 一次隐藏、静音的合成“新游戏”运行完成489个tick，进入R100／Main state4。实际完成玩家更新1次、附属子模型更新1次、原物件更新73次：包括全部69个冷启动OMS物件和来自3EB的4个运行时教程物件。硬件静音音频、片头解码和完整独立ADX对照均已启用。下一实际边界是SceneStage22中，模型隐藏／重置调用0x00307B28内的0x00308BC0。
 
 程序从原启动任务 `0x0030D358` 开始，世界绘制包仍为 0。前置启动、完整场景首帧、
 连续动画和玩法尚未完成；更新计数不代表可玩场景。
@@ -162,21 +164,23 @@ Move 方法 `0x00186928`。
   真实 ISO，保留排序、扇区补齐和原等待逻辑。
 - 存储卡提示文字、窗口和原 TIM2 光标已实际绘制。无卡和空目录分支执行原 Control、
   按键映射、有限真实音效及正常资源释放；完整存档读写尚未实现。
-- 一次隐藏、静音的 Windows 原生验收显示了 6 帧存储卡界面和全部 90 帧 Clover
-  片头，等待视频及音频设备完成，进入 R100／Main state4 并完成玩家和附属子模型各一次更新。
-  确认按键由明确标注的合成测试输入提供，不冒充玩家实测。
+- 一次隐藏、静音的Windows原生合成“新游戏”运行完成489个tick，进入
+  R100／Main state4；完成玩家更新1次、子模型更新1次和原物件更新73次，
+  其中包括全部69个冷启动OMS物件及来自3EB的4个运行时教程物件。启用硬件
+  静音音频、片头解码和完整独立ADX对照。合成按键不代表玩家实测。
 - 存储卡 ADPCM 音效通过真实 XAudio2 处理；片头通过原生 FFmpeg 进程及 Windows
   音频设备播放。数值参考策略有明确范围，不声称完整音频或 PS2 实机位精确。
 - 原系统、HUD、房间、相机和内存池初始化共用真实原生状态；描述解析不代表模型、
   动画、战斗或游戏场景已经完成。
-- 首房间实际创建 156 个静态对象和全部 69 个 OMS 物件。玩家与子模型共用原版部件、
-  节点、弹性骨骼和绑定；原玩家初始化执行初始动作绑定、骨骼采样、地面 IK 与矩阵回写，
-  随后完成出生位置和摄像机绑定；4 个运行时教程物件共用原工厂和对象列表。
-  尚未提交世界绘制包，未验证连续动画或可玩场景。
-- 启用硬件/解码器检查后，254 个 C 模块通过 273 项检查（包含独立 ADX 参考 WAV），
+- 首房间实际创建156个静态对象和全部69个冷启动OMS物件。玩家与子模型
+  共用原版部件、节点、弹性骨骼和绑定；玩家初始化执行初始动作绑定、骨骼采样、
+  地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
+  物件使用原工厂和注册表。首个原始FX调用0x30F228完成，并创建4个环境发射器
+  （bank3，kind1；esp0）。这不代表连续动画或玩法验收。
+- 启用硬件静音音频、片头解码和完整独立ADX对照后，270个C模块通过295项检查，
   在固定源码副本验证。受限 GPU 像素与独立 CPU 方程一致；绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
-- 两个 RNG 对 10272 个种子完成 20544 次精确比较，依据实际指令的受限模型验证；
+- 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
   这不是 PS2 实机验证。上游匹配比例也不是本项目的移植完成比例。
 
 ### 构建与运行
@@ -198,10 +202,10 @@ Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音
 自制源码核验工具见 [证据工具说明](docs/EVIDENCE_TOOLS.md)。
 独立 [PS2 移植 skill](skill/ps2-source-port/SKILL.md) 随开发维护。
 
-原加密标题 BGM 已逐样本匹配独立 vgmstream 输出；原警告、Logo 和标题画面已接入
-完整的当前原生启动流程。合成“新游戏”输入已进入首关并执行原玩家／物件初始化，
-当前已执行玩家首次待机动作绑定和采样，停在输入／交互 `0x00123938`。
-首个世界画面、连续动画、战斗、完整音频和存档读写仍需继续。
+原加密标题BGM已逐样本匹配独立vgmstream输出；真实资源测试也覆盖附属ADPCM音效及原随机
+音高。整合运行完成玩家、子模型及73次原物件更新，停在SceneStage22中模型隐藏／重置
+0x00307B28内的0x00308BC0。世界绘制包为0，尚未验证世界场景首帧、可玩场景、连续动画
+或战斗。完整音频和存档读写仍需继续。
 
 接下来继续首关 Scenario／Event 脚本、首个原游戏画面、连续动画、战斗、场景切换与
 存档验收。本地提交保留回退，大节点才推送。当前状态见 [进展数据](docs/progress.json)。

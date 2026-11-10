@@ -35,6 +35,14 @@ typedef struct {uint32_t handle,original_entry;int16_t this_delta;gh_title_playe
 typedef gh_object_step_status (*gh_object_move_resolve)(void *,uint32_t,gh_title_player_view *,uint32_t *);
 typedef gh_object_step_status (*gh_object_move_invoke)(void *,const gh_object_move_request *,const gh_boot_work *,uint32_t *);
 typedef struct {gh_object_move_resolve resolve;gh_object_move_invoke invoke;void *context;const void *elf;size_t elf_bytes;} gh_object_move_bindings;
+typedef enum {GH_OBJECT_TRANS_NORMAL,GH_OBJECT_TRANS_ALTERNATE,GH_OBJECT_TRANS_DESTROY} gh_object_trans_kind;
+typedef struct {gh_object_trans_kind kind;uint32_t handle,original_entry,original_vtable,argument;
+ int16_t this_delta;gh_title_player_view actor;} gh_object_trans_request;
+typedef gh_object_step_status (*gh_object_trans_invoke)(void *,const gh_object_trans_request *,const gh_boot_work *,uint32_t *);
+typedef gh_object_step_status (*gh_object_trans_layer)(void *,const gh_scene_at_manager *,uint8_t,int *visible,uint32_t *);
+typedef struct {gh_object_trans_invoke invoke;gh_object_trans_layer layer;void *context;
+ const gh_scene_at_manager *scene_at;} gh_object_trans_bindings;
+
 typedef struct {gh_game_init_state *init;uint32_t ratio10_bits,profile_752cf8;uint8_t constructed;
  gh_object_static_bindings static_objects;uint32_t moved_objects_5caffc;
  uint64_t alpha_presets[8];
@@ -45,6 +53,8 @@ typedef struct {gh_game_init_state *init;uint32_t ratio10_bits,profile_752cf8;ui
  gh_object_move_bindings live_objects;gh_object_move_request move_request;
  gh_scene_mesh_object *move_static_object;
  uint8_t live_bound,move_native_phase,move_skip;
+ gh_object_trans_bindings trans_live;gh_object_trans_request trans_live_request;
+ uint32_t trans_live_phase,trans_live_handle;const void *trans_live_owner;
 } gh_game_object_step;
 
 typedef uint32_t (*gh_object_profile_counter)(void *);

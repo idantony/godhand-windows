@@ -18,6 +18,8 @@
 #include "../core/cockpit_fan.h"
 #include "../core/game_children.h"
 #include "../core/game_object_step.h"
+#include "../core/game_actor_shadow_draw.h"
+#include "../core/game_actor_model_draw.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -87,9 +89,15 @@ typedef struct gh_startup_snapshot {
     uint16_t current_room,next_room;
     /* Read-only developer frontier diagnostics; no actor pointers escape. */
     uint32_t scene_stage,hitarea_phase,hitarea_slot,hitarea_node;
-    uint64_t player_updates_completed,child_updates_completed;
+    uint64_t player_updates_completed,child_updates_completed,om_updates_completed;
     uint32_t last_move_handle,last_move_entry,player_update_stage,child_update_stage;
     uint32_t child_update_frontier,child_forces_complete,child_angles_complete,child_distances_complete,child_finish_complete;
+    uint32_t emitter_active,esp_active,emitter_samples;
+    uint32_t emitter_slots[4],emitter_banks[4],emitter_kinds[4],emitter_flags[4],emitter_known[4],emitter_types[4];
+    uint32_t current_actor_ready,current_actor_kind,current_actor_flags,current_actor_state;
+    uint32_t current_actor_5b0,current_actor_5b4,current_actor_5b8,current_actor_hp548,current_actor_hp54a,current_actor_54c,current_actor_5c0[3];
+    uint32_t current_b_samples,current_b_index[4],current_b_group[4],current_b_generation[4],current_b_serial[4];
+    uint32_t current_b_source_present[4],current_b_source_known[4],current_b_source_kind[4],current_b_words[4][28];
     uint32_t hitarea_shape_index,hitarea_shape_flags,hitarea_shape_kind;
     int32_t hitarea_hit_count;uint8_t hitarea_diagnostic_ready,hitarea_hit_samples;
     uint32_t hitarea_hit_indices[4],hitarea_hit_kinds[4],hitarea_hit_distance_bits[4];
@@ -135,6 +143,15 @@ gh_host_error gh_startup_host_set_scene_ui_consumers(gh_startup_host *,const gh_
 /* Original static-model packet groups join the SAME frame's OT as UI. The
  * callback must build the real native packet inputs; no empty draw ack. */
 gh_host_error gh_startup_host_set_world_consumer(gh_startup_host *,gh_object_static_emit,void *);
+/* Recovered actor shadows join that same frame's OT. An absent consumer
+ * retains31A600; a collector alone is not a complete rendered frame. */
+gh_host_error gh_startup_host_set_shadow_consumer(gh_startup_host *,gh_shadow_emit,void *);
+/* Recovered dynamic-model node/setup groups use the same single frame OT. */
+gh_host_error gh_startup_host_set_actor_consumer(gh_startup_host *,gh_actor_draw_emit,void *);
+/* Same-thread rendering callback only; borrow the canonical texture manager's
+ * material view until its resource epoch/cache expires. Never creates a second
+ * manager, reads the disc or acknowledges a GPU operation. */
+gh_host_error gh_startup_host_resolve_tex0(gh_startup_host *,uint64_t,const gh_stage_material **);
 /* Owner-fiber only, normally once before each timed engine tick. Writes raw
  * 32-bit and logical64-bit original work fields via memcpy, no host-long casts.
  * Does not invent physical input, replay, analog or pad-lock policy. */

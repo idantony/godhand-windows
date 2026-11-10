@@ -48,6 +48,11 @@ calling conventions into a 64-bit host without explicit ABI adaptation. Resolve
 guest addresses through an explicit mapping before native dereferences; verify
 bounds and lifetime for any intentional fixed mapping.
 
+Compile public interfaces with the actual host SDK included first. Legacy
+Windows macros such as far/near can erase apparently valid field names; catch
+this with an early C/C++ interface check, and keep QA-only driver code guarded
+so it also compiles in the ordinary native target.
+
 Trace both caller arguments and callee validation before assigning pointer
 types. Two arguments may intentionally alias. A callee can accept a resource
 candidate and return NULL when its magic differs; rejecting that candidate as

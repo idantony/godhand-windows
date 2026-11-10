@@ -10,6 +10,14 @@ typedef struct {size_t header_offset[2],constants_offset[2],palette_offset[2],pa
  uint32_t flush,direct,mscnt;const gh_actor_part *parts;size_t part_count;uint8_t ready;
 } gh_actor_object_packets;
 gh_actor_model_status gh_actor_model_object_packet(const gh_actor_model *,const gh_actor_object_packets **);
+/* SAME object packet allocation; returned span is borrowed until model release.
+ * Does not allocate, resolve guest pointers, or acknowledge DMA execution. */
+gh_actor_model_status gh_actor_model_object_span(gh_actor_model *,size_t offset,size_t bytes,uint8_t **);
+/* Same node program-ref owner. HIGH80000000 suppresses the MPG upload,
+ * independently of the low8 program identity. This never executes a kernel. */
+gh_actor_model_status gh_actor_model_node_program_get(const gh_actor_model *,unsigned,unsigned parity,uint32_t *);
+gh_actor_model_status gh_actor_model_node_program_set(gh_actor_model *,unsigned,unsigned parity,uint32_t);
+gh_actor_model_status gh_actor_model_object_program_reset(gh_actor_model *,unsigned parity);
 /* Narrow originalconsumer flag writes, onlynode380/410, SAMEreadyowner. */
 gh_actor_model_status gh_actor_model_node_or_flags(gh_actor_model *,unsigned index,uint16_t offset,uint32_t value);
 /* Same bounded node owner, for original visibility bit set/clear consumers. */

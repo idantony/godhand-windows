@@ -5,9 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 #define VRAM_BYTES (4u*1024u*1024u)
-typedef struct stage_material_node {gh_stage_material view;uint8_t *pixels;struct stage_material_node *next;} stage_material_node;
+typedef struct stage_material_node {gh_stage_material view;uint8_t *pixels;uint64_t vram_generation;struct stage_material_node *next;} stage_material_node;
 struct gh_stage_textures {uint8_t *vram;gh_stage_channel channel[256];gh_stage_texture_cursor cursor;
- stage_material_node *materials;size_t material_count;uint64_t next_material_id;};
+ stage_material_node *materials;size_t material_count;uint64_t next_material_id,vram_generation;size_t channel_bytes[256];};
 static uint16_t u16(const uint8_t *p){return (uint16_t)((unsigned)p[0]|(unsigned)p[1]<<8);}
 static uint32_t u32(const uint8_t *p){return (uint32_t)u16(p)|(uint32_t)u16(p+2)<<16;}
 static uint64_t u64(const uint8_t *p){return (uint64_t)u32(p)|(uint64_t)u32(p+4)<<32;}
@@ -70,6 +70,7 @@ gh_stage_status gh_stage_texture_load(gh_stage_textures *s,const void *data,size
  uint32_t count,relative,allocated,palette_count;uint64_t tex0;gh_stage_status e;
  if(!s || !b || !out)return GH_STAGE_ARGUMENT;*out=UINT32_MAX;
  for(unsigned i=0;i<256;i++)if(s->channel[i].valid && s->channel[i].source==b){*out=i;return GH_STAGE_OK;}
+ if(s->vram_generation==UINT64_MAX)return GH_STAGE_MEMORY;
  if(bytes<48)return GH_STAGE_BOUNDS;
  count=u32(b);if(count!=1)return GH_STAGE_UNSUPPORTED;
  relative=u32(b+24);if(relative || s->cursor.next_channel>=256)return GH_STAGE_UNSUPPORTED;
@@ -98,7 +99,7 @@ gh_stage_status gh_stage_texture_load(gh_stage_textures *s,const void *data,size
   e=transfer(candidate,&t,base);if(e){free(candidate);return e;}
  }
  free(s->vram);s->vram=candidate;*out=s->cursor.next_channel;
- s->channel[*out]=channel;s->cursor.count++;s->cursor.next_channel++;
+ s->channel[*out]=channel;s->channel_bytes[*out]=bytes;s->vram_generation++;s->cursor.count++;s->cursor.next_channel++;
  s->cursor.image_base+=allocated;s->cursor.clut_index+=palette_count;return GH_STAGE_OK;
 }
 gh_stage_status gh_stage_core_textures(gh_stage_textures *s,const void *data,size_t bytes){
@@ -139,10 +140,10 @@ static uint64_t address4(unsigned x,unsigned y,unsigned pitch){
  unsigned col=((cx&1)<<3)^((cx&2)<<4)^((cx&4)<<4)^((cx&8)>>2)^((cx&16)>>2)^((cy&1)<<4)^((cy&2)?65:0)^((cy&4)?192:0)^((cy&8)<<5);
  return ((uint64_t)x/128+(uint64_t)(y/128)*pitch)*16384+block*512+col;
 }
-gh_stage_status gh_stage_texture_rgba(const gh_stage_textures *s,uint32_t n,
- void *buffer,size_t capacity){
- gh_stage_channel c;uint8_t *out=buffer;unsigned pitch;gh_stage_status e;
- if(!buffer)return GH_STAGE_ARGUMENT;e=gh_stage_texture_channel(s,n,&c);if(e)return e;
+static gh_stage_status channel_rgba(const gh_stage_textures *s,gh_stage_channel c,
+ void *buffer,size_t capacity,int raw_alpha){
+ uint8_t *out=buffer;unsigned pitch;
+ if(!s||!buffer)return GH_STAGE_ARGUMENT;
  if((c.psm!=19 && c.psm!=20) || ((c.tex0>>51)&15) || ((c.tex0>>55)&1) || ((c.tex0>>56)&31))return GH_STAGE_UNSUPPORTED;
  if(capacity<(size_t)c.width*c.height*4)return GH_STAGE_BOUNDS;
  pitch=(unsigned)((c.tex0>>14)&63)/2;
@@ -158,9 +159,45 @@ gh_stage_status gh_stage_texture_rgba(const gh_stage_textures *s,uint32_t n,
   pixel=u32(s->vram+(size_t)color);
   {size_t dst=((size_t)y*c.width+x)*4;unsigned alpha=pixel>>24;
    out[dst]=(uint8_t)pixel;out[dst+1]=(uint8_t)(pixel>>8);out[dst+2]=(uint8_t)(pixel>>16);
-   out[dst+3]=(uint8_t)(alpha>=128?255:alpha*2);}
+   out[dst+3]=raw_alpha?(uint8_t)alpha:(uint8_t)(alpha>=128?255:alpha*2);}
  }
  return GH_STAGE_OK;
+}
+
+gh_stage_status gh_stage_texture_rgba(const gh_stage_textures *s,uint32_t n,
+ void *buffer,size_t capacity){
+ if(!buffer)return GH_STAGE_ARGUMENT;
+ gh_stage_channel c;gh_stage_status e=gh_stage_texture_channel(s,n,&c);if(e)return e;
+ return channel_rgba(s,c,buffer,capacity,0);
+}
+
+gh_stage_status gh_stage_tex0_material(gh_stage_textures *s,uint64_t tex0,const gh_stage_material **out){
+ if(!s||!out)return GH_STAGE_ARGUMENT;*out=NULL;
+ /* CLD changes palette-load commands, not the already loaded native VRAM.
+  * TBW is compared by actual sampled addresses below, never ignored blindly. */
+ const uint64_t ignored=(UINT64_C(7)<<61)|(UINT64_C(63)<<14);
+ unsigned found=256;
+ for(unsigned i=0;i<256;i++){
+  const gh_stage_channel*c=s->channel+i;if(!c->valid||(c->tex0&~ignored)!=(tex0&~ignored))continue;
+  if(c->psm!=19&&c->psm!=20)continue;
+  unsigned a=(unsigned)((c->tex0>>14)&63)/2,b=(unsigned)((tex0>>14)&63)/2;int same_addresses=1;
+  for(unsigned y=0;y<c->height&&same_addresses;y++)for(unsigned x=0;x<c->width;x++){
+   uint64_t first=c->psm==19?address8(x,y,a):address4(x,y,a);
+   uint64_t second=c->psm==19?address8(x,y,b):address4(x,y,b);
+   if(first!=second){same_addresses=0;break;}
+  }
+  if(!same_addresses)continue;if(found!=256)return GH_STAGE_UNSUPPORTED;found=i;
+ }
+ if(found==256)return GH_STAGE_UNAVAILABLE;
+ gh_stage_channel channel=s->channel[found];
+ for(stage_material_node*p=s->materials;p;p=p->next)if(p->view.cache_pool==3&&p->view.source==channel.source&&p->view.source_tex0==tex0&&p->vram_generation==s->vram_generation){*out=&p->view;return GH_STAGE_OK;}
+ if(s->material_count>=1024||s->next_material_id==UINT64_MAX)return GH_STAGE_MEMORY;
+ stage_material_node*p=calloc(1,sizeof(*p));if(!p)return GH_STAGE_MEMORY;
+ size_t bytes=(size_t)channel.width*channel.height*4;p->pixels=malloc(bytes);if(!p->pixels){free(p);return GH_STAGE_MEMORY;}
+ channel.tex0=tex0;gh_stage_status e=channel_rgba(s,channel,p->pixels,bytes,1);
+ if(e){free(p->pixels);free(p);return e;}
+ p->view=(gh_stage_material){channel.source,p->pixels,s->channel_bytes[found],bytes,++s->next_material_id,tex0,channel.width,channel.height,0,3,channel.psm,(uint8_t)((tex0>>34)&1),(uint8_t)((tex0>>35)&3)};
+ p->vram_generation=s->vram_generation;p->next=s->materials;s->materials=p;s->material_count++;*out=&p->view;return GH_STAGE_OK;
 }
 
 static int signed_priority(const uint8_t *record){unsigned n=u16(record+20);return n<32768?(int)n:(int)n-65536;}

@@ -70,6 +70,8 @@ def main():
     else:
         cpp_sources += ["tools/probe-mc-frame.cpp"]
     inputs = {"tools/build-native.py", "tools/build-windows.py", *cpp_sources, *(s for _, s in modules)}
+    if args.target in ("native","startup-qa"):
+        inputs.add("tests/test_cpp_abi.cpp")
     # Fingerprint actual project include dependencies. Unrelated headers being
     # written by another worker are not inputs to this executable.
     pending = list(inputs)
@@ -115,6 +117,13 @@ def main():
         print(name + ": PASS", flush=True)
     flags = ["-target", "x86_64-windows-gnu", "-O2", "-Wall", "-Wextra", "-Werror", "-ffp-contract=off",
              "-fno-fast-math", "-D_CRT_SECURE_NO_WARNINGS"]
+    if args.target in ("native","startup-qa"):
+        run("check-windows-public-headers", [compiler,"c++","-std=c++17",*flags,"-c","tests/test_cpp_abi.cpp",
+            "-o",build/"windows-public-headers.o"])
+    if args.target=="startup-qa":
+        # QA-only diagnostics must not break the ordinary native executable.
+        run("check-native-driver", [compiler,"c++","-std=c++17",*flags,"-c","src/main.cpp",
+            "-o",build/"native-driver-check.o"])
     def compile_module(module):
         name, source = module
         obj = build / (name + ".o")

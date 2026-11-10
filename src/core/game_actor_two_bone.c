@@ -61,12 +61,17 @@ static gh_actor_motion_status rebuild_body(gh_actor_model*m,unsigned i,gh_static
  uint8_t*p=m->parts[i].bytes;float angle[4],wrapped[4],scale[3],position[3],matrix[16];for(unsigned j=0;j<3;j++)angle[j]=add(rf(p+0x100+j*4),rf(p+0x130+j*4));angle[3]=1;memcpy(scale,p+0x110,12);memcpy(position,m->parts[i].alias_d0,12);
  if(gh_actor_euler_adjust_001f7da0(angle,wrapped,policy,f)||gh_actor_matrix_compose_00147a48(position,wrapped,scale,0,matrix,policy,f))return GH_ACTOR_MOTION_UNSUPPORTED;memcpy(p,matrix,64);return GH_ACTOR_MOTION_OK;
 }
-static gh_actor_motion_status extract_body(gh_actor_model*m,unsigned index,const float*coeff,gh_static_transform_policy policy,uint32_t*f){
- if(!m||!coeff||!f||index>=m->part_count||!m->parts[index].bytes)return GH_ACTOR_MOTION_ARGUMENT;*f=0;if(policy!=GH_STATIC_BINARY32_REFERENCE){*f=0x147c88;return GH_ACTOR_MOTION_UNSUPPORTED;}
- uint8_t*p=m->parts[index].bytes;float scale[3];for(unsigned col=0;col<3;col++){float v[]={rf(p+col*16),rf(p+col*16+4),rf(p+col*16+8),1};scale[col]=length3(v);if(!(scale[col]>0)||!isfinite(scale[col])){*f=0x148160;return GH_ACTOR_MOTION_UNSUPPORTED;}}
- float y=divide(-rf(p+8),scale[0]);float angle[3];angle[0]=atan_original(divide(rf(p+24),scale[1]),divide(rf(p+40),scale[2]),coeff);angle[1]=y<= -1?bits(0xbfc90fdb):y>=1?bits(0x3fc90fdb):asin_original(y);angle[2]=atan_original(divide(rf(p+4),scale[0]),divide(rf(p),scale[0]),coeff);
- for(unsigned j=0;j<3;j++)if(!isfinite(angle[j])){*f=0x3a1b78;return GH_ACTOR_MOTION_UNSUPPORTED;}memcpy(p+0x100,angle,12);return rebuild_body(m,index,policy,f);
+static gh_actor_motion_status extract_angles(const uint8_t*p,const float*coeff,float angle[3],gh_static_transform_policy policy,uint32_t*f){
+ *f=0;if(policy!=GH_STATIC_BINARY32_REFERENCE){*f=0x147c88;return GH_ACTOR_MOTION_UNSUPPORTED;}
+ float scale[3];for(unsigned col=0;col<3;col++){float v[]={rf(p+col*16),rf(p+col*16+4),rf(p+col*16+8),1};scale[col]=length3(v);if(!(scale[col]>0)||!isfinite(scale[col])){*f=0x148160;return GH_ACTOR_MOTION_UNSUPPORTED;}}
+ float y=divide(-rf(p+8),scale[0]);angle[0]=atan_original(divide(rf(p+24),scale[1]),divide(rf(p+40),scale[2]),coeff);angle[1]=y<= -1?bits(0xbfc90fdb):y>=1?bits(0x3fc90fdb):asin_original(y);angle[2]=atan_original(divide(rf(p+4),scale[0]),divide(rf(p),scale[0]),coeff);
+ for(unsigned j=0;j<3;j++)if(!isfinite(angle[j])){*f=0x3a1b78;return GH_ACTOR_MOTION_UNSUPPORTED;}return GH_ACTOR_MOTION_OK;
 }
+static gh_actor_motion_status extract_body(gh_actor_model*m,unsigned index,const float*coeff,gh_static_transform_policy policy,uint32_t*f){
+ if(!m||!coeff||!f||index>=m->part_count||!m->parts[index].bytes)return GH_ACTOR_MOTION_ARGUMENT;float angle[3];gh_actor_motion_status e=extract_angles(m->parts[index].bytes,coeff,angle,policy,f);if(e)return e;memcpy(m->parts[index].bytes+0x100,angle,12);return rebuild_body(m,index,policy,f);
+}
+
+gh_actor_motion_status gh_actor_matrix_extract_euler_00147c88(const float*m,const float*c,float*out,gh_static_transform_policy policy,uint32_t*f){if(!m||!c||!out||!f)return GH_ACTOR_MOTION_ARGUMENT;*f=0;fenv_t env;if(feholdexcept(&env))return GH_ACTOR_MOTION_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_ACTOR_MOTION_UNSUPPORTED;}float angle[3];gh_actor_motion_status e=extract_angles((const uint8_t*)m,c,angle,policy,f);if(fesetenv(&env))return GH_ACTOR_MOTION_UNSUPPORTED;if(!e)memcpy(out,angle,12);return e;}
 gh_actor_motion_status gh_actor_part_rebuild_00150138(gh_actor_model*m,unsigned i,gh_static_transform_policy policy,uint32_t*f){if(!f)return GH_ACTOR_MOTION_ARGUMENT;fenv_t env;if(fegetenv(&env)||fesetround(FE_TONEAREST))return GH_ACTOR_MOTION_UNSUPPORTED;gh_actor_motion_status e=rebuild_body(m,i,policy,f);if(fesetenv(&env))return GH_ACTOR_MOTION_UNSUPPORTED;return e;}
 gh_actor_motion_status gh_actor_part_extract_rebuild_00147c88(gh_actor_model*m,unsigned i,const float*c,gh_static_transform_policy policy,uint32_t*f){if(!f)return GH_ACTOR_MOTION_ARGUMENT;fenv_t env;if(fegetenv(&env)||fesetround(FE_TONEAREST))return GH_ACTOR_MOTION_UNSUPPORTED;gh_actor_motion_status e=extract_body(m,i,c,policy,f);if(fesetenv(&env))return GH_ACTOR_MOTION_UNSUPPORTED;return e;}
 

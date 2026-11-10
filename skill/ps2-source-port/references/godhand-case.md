@@ -240,3 +240,20 @@ clamp the dot input, change game thresholds, own FCR31 or claim hardware bits.
 The same-snapshot independent oracle, actual parent/child call counters and
 normal67 Windows run verify the correction. Do not generalize this CPU rule
 to every PS2/VU instruction or copy diagnostic-only G sources into production.
+
+
+Shadow packets use PACKED XYZ2 with integer Z, unlike the static VU path's
+XYZF2 fixed4 carrier. Decode the actual packed words (including sign-extended
+LW packing) before adaptation; never shift an XYZ2 Z as though it were XYZF2.
+The bounded native Z16S adapter admits0..65535 and explicitly multiplies by16
+for the existing raster interface. Proved zero-area primitives can omit raster
+samples while preserving their ONE original OT group; this is not a visible
+world-frame claim. Actor setup14C5A0 changes only FOGCOL on the GS side after
+CPU palette/vertex consumption. Across models/banks, use the current ONE OT
+FOGCOL rather than requiring the last setup to belong to the geometry's model.
+
+Original constructor1495A0 really clears the four auxiliary references28C..298.
+Generic model input containing rawzero does not prove that constructor ran.
+The native metadata defaults unknown; a verified factory explicitly records
+constructor-empty provenance on the same model packet owner. Positive/unknown
+references remain strict and cannot be cleared then re-certified as empty.

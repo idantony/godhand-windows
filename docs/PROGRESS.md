@@ -4,7 +4,34 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
-## Current milestone: complete first player and child updates
+## Current milestone: SceneStage22 model-hide/reset frontier
+
+An immutable source snapshot passes 270 C modules / 295 checks with hardware-muted
+audio, movie decoding and the full independent ADX comparison enabled. The hidden,
+muted synthetic New Game run completes 489 ticks and reaches R100/Main state4.
+It completes one original player update, one child update and 73 original object
+updates: all 69 cold OMS objects and four runtime tutorial objects from 3EB.
+The first original FX call 0x30F228 completes and creates four ambient emitters
+(bank3, kind1; esp0). Two RNG routines in the same DLL pass 20544 exact
+state/float-bit comparisons across 10272 seeds against a restricted model of
+the actual instructions.
+
+The next actual frontier is 0x00308BC0 inside model-hide/reset call 0x00307B28,
+SceneStage22. The run submits zero world packets. No world scene frame, playable
+scene, continuous animation or combat has been verified. Hardware/device and
+decoder checks are enabled; exit code 4 remains a normal unfinished frontier.
+
+固定源码快照通过270个C模块／295项检查，启用硬件静音音频、片头解码和完整独立ADX对照。
+隐藏、静音的合成“新游戏”运行完成489个tick，进入R100／Main state4。实际完成玩家更新1次、
+子模型更新1次和原物件更新73次：包括全部69个冷启动OMS物件及来自3EB的4个运行时教程物件。
+首个原始FX调用0x30F228完成，并创建4个环境发射器（bank3，kind1；esp0）。同一DLL中的两个
+RNG函数对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证。
+
+下一实际边界为SceneStage22中模型隐藏／重置调用0x00307B28内的0x00308BC0。运行提交的世界
+绘制包为0；尚未验证世界场景首帧、可玩场景、连续动画或战斗。已启用硬件／设备和解码器检查；
+退出码4仍表示正常停在未完成边界。
+
+## Previous milestone 67: complete first player and child updates
 
 The immutable source copy passes 254 C modules / 273 checks, including real
 muted audio, movie decoding and the full independent ADX comparison. Its

@@ -54,7 +54,7 @@ def main():
     report_lock = threading.Lock()
 
     def run(label, command):
-        if len(command)>1 and command[0]==compiler and command[1] in ("cc", "c++") and "-c" not in command:
+        if len(command)>1 and command[0]==compiler and command[1] in ("cc", "c++") and "-c" not in command and "-fsyntax-only" not in command:
             command = command + ["-lwinmm"]
         started = time.monotonic()
         result = subprocess.run([str(item) for item in command], cwd=PROJECT, env=env,
@@ -137,6 +137,22 @@ def main():
                ("game_player_terrain", "src/core/game_player_terrain.c"),
                ("game_player_ground_pose", "src/core/game_player_ground_pose.c"),
                ("game_ee_acos", "src/core/game_ee_acos.c"),
+               ("game_om_frame", "src/core/game_om_frame.c"),
+               ("game_om_damage", "src/core/game_om_damage.c"),
+               ("game_om_reaction", "src/core/game_om_reaction.c"),
+               ("game_object_opacity", "src/core/game_object_opacity.c"),
+               ("game_effects_frame", "src/core/game_effects_frame.c"),
+               ("game_esp_create", "src/core/game_esp_create.c"),
+               ("game_actor_model_trans", "src/core/game_actor_model_trans.c"),
+               ("game_actor_shadow_draw", "src/core/game_actor_shadow_draw.c"),
+               ("game_actor_model_draw", "src/core/game_actor_model_draw.c"),
+               ("game_actor_model_material", "src/core/game_actor_model_material.c"),
+               ("game_actor_model_program2", "src/core/game_actor_model_program2.c"),
+               ("skinned_mesh_transform2", "src/assets/skinned_mesh_transform2.c"),
+               ("game_actor_render", "src/core/game_actor_render.c"),
+               ("shadow_world_packet", "src/platform/shadow_world_packet.c"),
+               ("actor_world_queue", "src/platform/actor_world_queue.c"),
+               ("game_object_live_trans", "src/core/game_object_live_trans.c"),
                ("game_player_opacity", "src/core/game_player_opacity.c"),
                ("game_player_frame_tail", "src/core/game_player_frame_tail.c"),
                ("game_cloth_wind", "src/core/game_cloth_wind.c"),
@@ -460,6 +476,28 @@ def main():
         ("game-player-terrain", "tests/core/test_game_player_terrain.c", "iso"),
         ("game-player-ground-pose", "tests/core/test_game_player_ground_pose.c", "elf"),
         ("game-ee-acos", "tests/core/test_game_ee_acos.c", "none"),
+        ("game-om-frame", "tests/core/test_game_om_frame.c", "iso"),
+        ("game-om-damage", "tests/core/test_game_om_damage.c", "none"),
+        ("game-om-reaction", "tests/core/test_game_om_reaction.c", "none"),
+        ("game-om-damage-frame", "tests/core/test_game_om_damage_frame.c", "iso"),
+        ("game-object-opacity", "tests/core/test_game_object_opacity.c", "none"),
+        ("game-effects-frame", "tests/core/test_game_effects_frame.c", "both"),
+        ("game-actor-model-trans", "tests/core/test_game_actor_model_trans.c", "iso"),
+        ("game-actor-shadow-draw", "tests/core/test_game_actor_shadow_draw.c", "iso"),
+        ("game-actor-model-draw", "tests/core/test_game_actor_model_draw.c", "iso"),
+        ("game-actor-model-material", "tests/core/test_game_actor_model_material.c", "iso"),
+        ("game-actor-model-program2", "tests/core/test_game_actor_model_program2.c", "iso"),
+        ("skinned-mesh-transform2", "tests/assets/test_skinned_mesh_transform2.c", "iso"),
+        ("game-actor-render", "tests/core/test_game_actor_render.c", "iso"),
+        ("shadow-world-packet", "tests/platform/test_shadow_world_packet.c", "none"),
+        ("game-stage-shadow", "tests/core/test_game_stage_shadow.c", "iso"),
+        ("actor-world-queue", "tests/platform/test_actor_world_queue.c", "iso"),
+        ("game-om-fragments-frame", "tests/core/test_game_om_fragments_frame.c", "iso"),
+        ("game-om-wait-frame", "tests/core/test_game_om_wait_frame.c", "iso"),
+        ("game-om-segments-frame", "tests/core/test_game_om_segments_frame.c", "iso"),
+        ("game-om35d-frame", "tests/core/test_game_om35d_frame.c", "iso"),
+        ("game-om3eb-frame", "tests/core/test_game_om3eb_frame.c", "iso"),
+        ("game-object-live-trans", "tests/core/test_game_object_live_trans.c", "iso"),
         ("game-player-opacity", "tests/core/test_game_player_opacity.c", "iso"),
         ("game-player-frame-tail", "tests/core/test_game_player_frame_tail.c", "none"),
         ("game-cloth-wind", "tests/core/test_game_cloth_wind.c", "both"),
@@ -566,6 +604,11 @@ def main():
         source_inputs.add(source)
         source_inputs.add(shared_headers.get(name, str(Path(source).with_suffix(".h")).replace("\\", "/")))
     initial_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
+    # Host headers must also parse when the real Windows SDK was included
+    # first. Its legacy far/near macros previously erased new actor fields.
+    run("check-windows-public-headers", [compiler,"c++","-target","x86_64-windows-gnu",
+        "-std=c++17","-Wall","-Wextra","-Werror","-c","tests/test_cpp_abi.cpp",
+        "-o",output/"windows-public-headers.o"])
     def compile_module(module):
         name, source = module
         target = output / (name + ".o")

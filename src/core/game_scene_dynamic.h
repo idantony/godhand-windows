@@ -35,6 +35,9 @@ gh_scene_dynamic_status gh_scene_dynamic_box_abort(gh_scene_dynamic_owner *,stru
  * Detach clears typed references only; original count/order are preserved. */
 gh_scene_dynamic_status gh_scene_dynamic_sphere_contact_001311a0(gh_scene_dynamic_owner *,struct gh_scene_dynamic_box *,const gh_title_player_view *,int *inserted);
 gh_scene_dynamic_status gh_scene_dynamic_sphere_contact_at(const gh_scene_dynamic_owner *,const struct gh_scene_dynamic_box *,unsigned,const gh_title_player_view **);
+/* Actual1BD430 callsite only: clear original34[8]/54 AND these SAME
+ * typed contacts after the caller has consumed them. Not a frame reset. */
+gh_scene_dynamic_status gh_scene_dynamic_contacts_clear_001bd430(gh_scene_dynamic_owner *,struct gh_scene_dynamic_box *);
 void gh_scene_dynamic_forget_sphere_actor(gh_scene_dynamic_owner *,const gh_title_player_view *);
 /* Host frame cancellation only, before native abort/whole shutdown; not an
  * original update or destructor acknowledgment. */

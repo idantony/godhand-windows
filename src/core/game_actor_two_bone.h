@@ -14,6 +14,9 @@ extern "C" {
 gh_actor_motion_status gh_actor_sine_small_003a19f8(float,float *,gh_static_transform_policy,uint32_t *frontier);
 gh_actor_motion_status gh_actor_quaternion_matrix_001478a8(const float quaternion[4],float matrix[16],gh_static_transform_policy,uint32_t *frontier);
 gh_actor_motion_status gh_actor_part_extract_rebuild_00147c88(gh_actor_model *,unsigned,const float atan_coeff[8],gh_static_transform_policy,uint32_t *frontier);
+/* Pure original147C88 mode0 extraction; reuses the exact part helper kernel,
+ * no actor/part mutation, finite atomic output and caller FEnv preserved. */
+gh_actor_motion_status gh_actor_matrix_extract_euler_00147c88(const float matrix[16],const float atan_coeff[8],float out_xyz[3],gh_static_transform_policy,uint32_t *frontier);
 gh_actor_motion_status gh_actor_part_rebuild_00150138(gh_actor_model *,unsigned,gh_static_transform_policy,uint32_t *frontier);
 gh_actor_motion_status gh_actor_two_bone_00153158(gh_actor_model *,unsigned first_part,const gh_boot_work *,const gh_motion_ik_globals *,const float atan_coeff[8],gh_static_transform_policy,uint32_t *frontier);
 #ifdef __cplusplus
