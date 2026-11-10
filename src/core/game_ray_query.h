@@ -27,6 +27,8 @@ typedef enum {GH_RAY_OK,GH_RAY_ARGUMENT,GH_RAY_NUMERIC,GH_RAY_UNSUPPORTED,GH_RAY
  * report storage is unsupported only when an actual write would be required;
  * native_reports carries real bounded attribute identities instead.
  * Numeric policy is explicit native binary32 nearest, not EE/VU hardware bits. */
+/* Original direct12ED60 entry, including its mode181 nearest-hit shortening. */
+gh_scene_ray_status gh_scene_ray_query_direct_0012ed60(gh_game_scene_tables *,const gh_scene_ray_request *,uint8_t mode181,int *original_hit,uint32_t *frontier);
 gh_scene_ray_status gh_scene_ray_query_00131e10(gh_game_scene_tables *,const gh_scene_ray_request *,int *original_hit,uint32_t *frontier);
 #ifdef __cplusplus
 }

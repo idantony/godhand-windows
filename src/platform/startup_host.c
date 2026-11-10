@@ -133,6 +133,11 @@ struct gh_startup_host {
     gh_camera_follow camera_follow;gh_camera_envelope camera_envelope;
     gh_player_shared_vector player_shared_vector;
     gh_game_math_globals math_globals;
+    gh_player_ground_globals player_ground_globals;
+    gh_player_opacity_globals player_opacity_globals;
+    gh_cloth_templates cloth_templates;
+    gh_cloth_runtime_globals cloth_globals;
+    gh_action_step_bindings action_bindings;
     gh_om_door_shared door_shared;
     gh_player_node_names player_node_names;gh_motion_ik_globals motion_ik_globals;
     gh_dynamic_corner_tables dynamic_corners;
@@ -429,10 +434,19 @@ static int initialize_native_bgm(gh_startup_host *h)
     gh_scene_placement_status door_shared_status=gh_om_door_shared_from_elf(&h->door_shared,elf,(size_t)bytes);
     gh_player_nodes_status node_names_status=gh_player_node_names_from_elf(&h->player_node_names,elf,(size_t)bytes);
     gh_actor_motion_status motion_globals_status=gh_motion_ik_globals_from_elf(&h->motion_ik_globals,elf,(size_t)bytes);
+    gh_player_ground_status ground_status=gh_player_ground_globals_from_elf(&h->player_ground_globals,elf,(size_t)bytes);
+    gh_player_opacity_status opacity_status=gh_player_opacity_globals_from_elf(&h->player_opacity_globals,elf,(size_t)bytes);
     gh_math_globals_status math_status=gh_game_math_globals_from_elf(&h->math_globals,elf,(size_t)bytes);
     if(!math_status)math_status=gh_game_math_static_initialize_003079c8(&h->math_globals,&h->work,1,0xffff);
     gh_dynamic_corner_status corner_status=gh_dynamic_corners_from_elf(&h->dynamic_corners,elf,(size_t)bytes);
     if(!corner_status)corner_status=gh_dynamic_corners_initialize_00133670(&h->dynamic_corners,1,0xffff);
+    /* Actual constructor table3FC884/888 orders101E98->100FB8 before
+     *107E20->107DE0. These persistent native owners are initialized once,
+     * never rebuilt when a room or child model is created. */
+    gh_cloth_status templates_status=gh_cloth_templates_from_elf(&h->cloth_templates,elf,(size_t)bytes);
+    if(!templates_status)templates_status=gh_cloth_templates_initialize_00100fb8(&h->cloth_templates,1,0xffff);
+    gh_cloth_status cloth_status=gh_cloth_runtime_from_elf(&h->cloth_globals,elf,(size_t)bytes);
+    if(!cloth_status)cloth_status=gh_cloth_runtime_initialize_00107de0(&h->cloth_globals,1,0xffff);
     if(decoded)return failure(h,GH_HOST_AUDIO,decoded);
     if(event_status)return failure(h,GH_HOST_ASSET,event_status);
     if(display_status)return failure(h,GH_HOST_ASSET,display_status);
@@ -444,7 +458,11 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(node_names_status)return failure(h,GH_HOST_ASSET,node_names_status);
     if(motion_globals_status)return failure(h,GH_HOST_ASSET,motion_globals_status);
     if(math_status)return failure(h,GH_HOST_ASSET,math_status);
+    if(ground_status)return failure(h,GH_HOST_ASSET,ground_status);
+    if(opacity_status)return failure(h,GH_HOST_ASSET,opacity_status);
     if(corner_status)return failure(h,GH_HOST_ASSET,corner_status);
+    if(templates_status)return failure(h,GH_HOST_ASSET,templates_status);
+    if(cloth_status)return failure(h,GH_HOST_ASSET,cloth_status);
     status=gh_bgm_requests_create(h->audio,&h->sound_control,h->disc,h->heap,&h->bgm);
     if(!status)status=gh_bgm_requests_enable_native(h->bgm,&key,h->continuation.muted,GH_BGM_GAIN_NATIVE_DB_REFERENCE);
     return status?failure(h,GH_HOST_AUDIO,status):0;
@@ -470,6 +488,7 @@ static int sound_startup(void *context)
         se=gh_audio_output_set_gain(h->audio_output,h->continuation.muted?0.0f:1.0f);
         if(!se)se=gh_se_mix_boot_defaults_002c9e78(&mix,h->work.flags,h->continuation.audio_dsp_policy);
         if(!se)se=gh_se_voice_create(h->audio,h->audio_output,&mix,&h->voices);
+        if(!se)se=gh_se_voice_bind_pitch_reference(h->voices,h->disc);
         if(se)return failure(h,GH_HOST_AUDIO,se);
         if(initialize_native_bgm(h))return (int)h->error;
     }
@@ -613,11 +632,12 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.camera_follow=&h->camera_follow;
         b.camera_envelope=&h->camera_envelope;
         b.player_shared_vector=&h->player_shared_vector;
-        b.math_globals=&h->math_globals;
+        b.math_globals=&h->math_globals;b.player_ground_globals=&h->player_ground_globals;b.player_opacity_globals=&h->player_opacity_globals;b.voices=h->voices;
         b.door_shared=&h->door_shared;
         b.player_node_names=&h->player_node_names;b.motion_ik_globals=&h->motion_ik_globals;
         b.event_config=&h->event_config;b.packed=&h->mc_messages;
         b.enemy_banks=h->enemy_banks;
+        b.cloth_templates=&h->cloth_templates;b.cloth_globals=&h->cloth_globals;
         e=gh_game_services_create(&b,&h->services);
         if(e)return failure(h,GH_HOST_ASSET,e);
     }
@@ -649,6 +669,9 @@ static int update_state4(void *context,gh_game_loop *loop)
 {
     gh_startup_host *h=context;gh_game_services_scene_view s;(void)loop;
     if(!h->services||gh_game_services_get_scene_view(h->services,&s))return entry_frontier(h,0x2a6690,0,GH_SCENE_STEP_ARGUMENT);
+    if(!s.step->action_frame.active||s.step->action_frame.complete)h->action_bindings=(gh_action_step_bindings){
+        .buttons=s.action_buttons,.work=&h->work,.cockpit=s.cockpit,.current_player=&s.title_player->view,
+        .init=&h->game_init,.auxiliary_binding_known=1};
     gh_game_scene_step_bindings b={.work=&h->work,.init=&h->game_init,.prepare=s.prepare,
         .save={h->save_bytes,sizeof(h->save_bytes)},.collision=s.collision_pairs,.actors=s.scene_tables,
         .scenario={s.scenario_bytes,s.scenario_bytes_size,s.scenario},.main_threads=h->threads,
@@ -657,7 +680,8 @@ static int update_state4(void *context,gh_game_loop *loop)
         .cockpit_action_flags_1414=gh_game_cockpit_action_flags_1414(s.cockpit),.binary32_reference=1,
         .scenario_callback104=s.scenario_callback104,.external=scene_consumer,.external_context=h,
         .profile_counter=scene_profile_clock,.profile_context=h,.scenario_status=scene_scenario_status,.scenario_status_context=h,
-        .dynamic_corners=&h->dynamic_corners,.boot_elf=h->boot_reference,.boot_elf_bytes=h->boot_reference_bytes};
+        .dynamic_corners=&h->dynamic_corners,.boot_elf=h->boot_reference,.boot_elf_bytes=h->boot_reference_bytes,
+        .action_native=&h->action_bindings};
     gh_scene_step_status e=gh_game_scene_step_002a6690(s.step,&b);
     if(e)return entry_frontier(h,s.step->frontier?s.step->frontier:0x2a6690,
         gh_game_services_frontier_module(h->services),s.step->detail?s.step->detail:(int)e);

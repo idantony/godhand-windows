@@ -1,0 +1,10 @@
+#include "game_cloth_point.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <fenv.h>
+#define C(x) do{if(!(x)){fprintf(stderr,"line%d %s\n",__LINE__,#x);exit(1);}}while(0)
+static void radius(gh_cloth_geometry*g,float r){memcpy(g->records[0]+0xb0,&r,4);}
+int main(void){/* Explicit numeric fixture, not a claim of startup.data load. */gh_player_shared_vector pivot={0};uint32_t one=0x3f800000;memcpy(pivot.bytes+12,&one,4);pivot.initialized=1;gh_cloth_geometry g={0};g.count=1;radius(&g,1);const float anchor[3]={0,-2,0};const int modes[4]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};float exact[3];for(unsigned i=0;i<4;i++){float p[3]={.5f,-.5f,0};int hit;uint32_t f;C(!fesetround(modes[i])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_INVALID));C(!gh_cloth_point_body_001067b8(&g,p,anchor,&pivot,GH_STATIC_BINARY32_REFERENCE,&hit,&f)&&hit&&!f&&fegetround()==modes[i]&&fetestexcept(FE_ALL_EXCEPT)==FE_INVALID);if(!i)memcpy(exact,p,12);else C(!memcmp(exact,p,12));C(!fesetround(FE_TONEAREST));/* Independent intersection of circles: anchor radius sqrt(2.5), body radius1. */C(fabsl(p[0]-sqrtl(.609375L))<.00002L&&fabsl(p[1]+.625L)<.00002L&&fabsl(p[2])<.00002L);}
+ radius(&g,.500001f);float p[3]={0,-.5f,0};int hit;uint32_t f;C(!gh_cloth_point_body_001067b8(&g,p,anchor,&pivot,GH_STATIC_BINARY32_REFERENCE,&hit,&f)&&hit&&fabsf(p[1]-1.500001f)<.000001f);uint32_t flags=0x1234;memcpy(g.records[0],&flags,4);radius(&g,1);p[0]=.5f;p[1]=-.5f;p[2]=0;C(!gh_cloth_point_body_001067b8(&g,p,anchor,&pivot,GH_STATIC_BINARY32_REFERENCE,&hit,&f)&&hit&&!memcmp(p,exact,12));g.count=2;float nan=NAN;memcpy(g.records[1]+0xb0,&nan,4);float before[3]={.5f,-.5f,0};memcpy(p,before,12);C(gh_cloth_point_body_001067b8(&g,p,anchor,&pivot,GH_STATIC_BINARY32_REFERENCE,&hit,&f)==GH_CLOTH_NUMERIC&&!hit&&!memcmp(p,before,12));C(!gh_cloth_point_body_001067b8(NULL,p,anchor,NULL,(gh_static_transform_policy)0,&hit,&f)&&!hit);puts("PASS actual1067B8 pointanchoredsphere/independentcircleintersection/radius+1fallback/ignoreflags/4FEnv+exceptions/laterspherefailureatomic/NULLbranch; explicitnumericfixtures");return 0;}

@@ -115,6 +115,14 @@ static gh_scene_step_status at_before(gh_game_scene_step*s,const gh_game_scene_s
  return !e?GH_SCENE_STEP_OK:fail(s,f?f:0x2c1540,e==GH_AT_BOUNDS?GH_SCENE_STEP_BOUNDS:e==GH_AT_ARGUMENT?GH_SCENE_STEP_ARGUMENT:GH_SCENE_STEP_CALLEE,e);
 }
 static gh_scene_step_status action_empty(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){const uint8_t*raw=(const uint8_t*)b->work;gh_game_action_buttons*a=b->action_buttons;
+ if(b->action_native){const gh_action_step_bindings*n=b->action_native;
+  if(n->buttons!=a||n->work!=b->work||n->init!=b->init||gh_game_cockpit_action_flags_1414(n->cockpit)!=b->cockpit_action_flags_1414)return fail(s,0x1f7360,GH_SCENE_STEP_ARGUMENT,0);
+  if(!s->action_frame.active||s->action_frame.complete){gh_action_step_status e=gh_action_button_frame_begin(&s->action_frame);if(e)return fail(s,0x1f7360,GH_SCENE_STEP_ARGUMENT,e);}
+  gh_action_step_status e=gh_action_button_step_001f7360(&s->action_frame,n);
+  if(e)return fail(s,s->action_frame.frontier?s->action_frame.frontier:0x1f7360,e==GH_ACTION_STEP_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:e==GH_ACTION_STEP_BOUNDS?GH_SCENE_STEP_BOUNDS:GH_SCENE_STEP_CALLEE,e);
+  return s->action_frame.complete?GH_SCENE_STEP_OK:fail(s,0x1f7360,GH_SCENE_STEP_ARGUMENT,0);
+ }
+
  if(!(w(raw+0x5e0)&0x100000)&&(w(raw+0x5d8)&0x400000))return GH_SCENE_STEP_OK;
  if(!a||!b->cockpit_action_flags_1414)return fail(s,0x1f75b0,GH_SCENE_STEP_ARGUMENT,0);*b->cockpit_action_flags_1414&=0xfe;
   if(!(w(raw+0x5e0)&0x100000)){

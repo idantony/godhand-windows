@@ -111,3 +111,37 @@ gh_scene_ray_status gh_scene_ray_static_overlap(gh_game_scene_tables*s,const gh_
  if(r->dynamic_reports&&r->dynamic_reports->count){if(identities&&dynamic_count)memcpy(r->dynamic_reports->object_identities,identities,(size_t)dynamic_count*sizeof(*identities));*r->dynamic_reports->count=dynamic_count;}
 out:free(identities);free(reports);if(fesetenv(&env))return GH_RAY_NUMERIC;return e;
 }
+
+/* Sphere queries share these original grid/visited operations with ray queries.
+ * No arbitrary flags setter is exposed. Caller owns binary32/FEnv scope. */
+gh_scene_ray_status gh_scene_query_grid_0012f288(gh_game_scene_tables*s,const float*minimum,const float*maximum,int*overlap,uint32_t*f){
+ if(!s||!minimum||!maximum||!overlap)return GH_RAY_ARGUMENT;*overlap=0;
+ uint32_t counts[3]={s->actor_count60,s->actor_count64,s->actor_count68};
+ for(unsigned k=0;k<3;k++){s->ray.bounds_min90[k]=bits(minimum[k]);s->ray.bounds_maxa0[k]=bits(maximum[k]);}
+ for(unsigned k=0;k<3;k++){
+  float lo=from_bits(s->actor_vec30[k]),hi=from_bits(s->actor_vec40[k]),size=from_bits(s->actor_vec50[k]);
+  if(!isfinite(minimum[k])||!isfinite(maximum[k])||!isfinite(lo)||!isfinite(hi)||minimum[k]>maximum[k])return GH_RAY_NUMERIC;
+  if(maximum[k]<lo||minimum[k]>hi)return GH_RAY_OK;
+  if(!isfinite(size)||!(size>0)||!counts[k])return stop(f,0x12f318,GH_RAY_NUMERIC);
+  float n=divf(sub(minimum[k],lo),size);if(!isfinite(n)||n<=-2147483648.0f||n>=2147483648.0f)return stop(f,0x12f318,GH_RAY_NUMERIC);
+  int32_t low=(int32_t)n;s->ray.grid_min6c[k]=low<0?0:(uint32_t)low;
+  n=divf(sub(maximum[k],lo),size);if(!isfinite(n)||n<=-2147483648.0f||n>=2147483648.0f)return stop(f,0x12f318,GH_RAY_NUMERIC);
+  uint32_t high=(uint32_t)(int32_t)n;s->ray.grid_max78[k]=high>counts[k]-1?counts[k]-1:high;
+  if(s->ray.grid_min6c[k]>=counts[k])return GH_RAY_OK;
+ }
+ *overlap=1;return marks(s);
+}
+gh_scene_ray_status gh_scene_query_clear_0012f4c8(gh_game_scene_tables*s,uint32_t mask,uint32_t*f){
+ if(!s)return GH_RAY_ARGUMENT;
+ uint32_t counts[3]={s->actor_count60,s->actor_count64,s->actor_count68};uint64_t cells=1;
+ for(unsigned k=0;k<3;k++){if(!counts[k]||s->ray.grid_min6c[k]>s->ray.grid_max78[k]||s->ray.grid_max78[k]>=counts[k]||cells>UINT64_MAX/counts[k])return stop(f,0x12f4c8,GH_RAY_BOUNDS);cells*=counts[k];}
+ if(cells>s->actor_links[5].view.size/8)return stop(f,0x12f4c8,GH_RAY_BOUNDS);
+ gh_scene_ray_status e=marks(s);if(e)return e;gh_scene_ray_request r={0};r.mask=mask;
+ for(uint32_t x=s->ray.grid_min6c[0];x<=s->ray.grid_max78[0];x++)for(uint32_t y=s->ray.grid_min6c[1];y<=s->ray.grid_max78[1];y++)for(uint32_t z=s->ray.grid_min6c[2];z<=s->ray.grid_max78[2];z++){e=cell(s,&r,x,y,z,1,f);if(e)return e;}
+ return GH_RAY_OK;
+}
+gh_scene_ray_status gh_scene_query_visit_0012fc20(gh_game_scene_tables*s,uint16_t id,int*skip,uint32_t*flags,uint32_t*f){
+ if(!s||!skip||!flags)return GH_RAY_ARGUMENT;gh_scene_ray_status e=marks(s);if(e)return e;
+ e=gh_scene_ray_triangle_flags(s,id,flags);if(e)return stop(f,0x12fc20,e);*skip=(*flags&6)!=0;
+ if(!*skip){s->ray.triangle_state->visited[id]=1;*flags|=4;}return GH_RAY_OK;
+}

@@ -22,6 +22,8 @@ typedef struct {
   * Bit2 remains in the SAME mutable actor_links[4] flags view. */
  uint32_t grid_min6c[3],grid_max78[3],hit_position120[3],hit_normal130[3];
  struct gh_ray_triangle_state *triangle_state;
+ /* Original1321D8 sphere scratch in SAME query owner, not a second manager. */
+ uint32_t sphere_center100[3],sphere_radius110;
 } gh_scene_ray_state;
 struct gh_scene_actor_scroll_state;
 struct gh_scene_dynamic_owner;

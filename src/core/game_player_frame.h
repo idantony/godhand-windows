@@ -9,6 +9,13 @@
 #include "game_collision_solid_units.h"
 #include "game_player_init_tail.h"
 #include "game_player_post_state.h"
+#include "game_collision_solid_step.h"
+#include "game_terrain_sphere.h"
+#include "game_player_ground_pose.h"
+#include "game_actor_motion_solve.h"
+#include "game_actor_finish_model.h"
+#include "game_player_opacity.h"
+#include "game_player_frame_tail.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,12 +43,22 @@ typedef struct {gh_game_title_player *player;gh_boot_work *work;gh_game_init_sta
  struct gh_player_idle_input *idle_input;const struct gh_player_idle_input_bindings *idle_input_bindings;
  const gh_game_player_node_cache *node_cache;
  gh_player_frame_door_probe door_probe;void *door_context;
+ gh_game_scene_tables *actors; /* SAME canonical AKG/dynamic owner */
+ gh_player_ground_globals *ground_globals;const struct gh_motion_ik_globals *ik_globals;const float *atan_coeff;
+ gh_player_opacity_globals *opacity_globals;const gh_title_player_view *aux_68c;uint8_t auxiliary_68c_binding_known;
+ gh_player_tail_target_slot *target_644;uint8_t *cockpit_flags_1ca0;
 } gh_player_frame_bindings;
 /* Native continuation only; all actual mutable fields live in borrowed owners.
  * Each source-prefix stage commits once. Error retry requires same bindings;
+ * Legacy149EB8 errors latch until a fresh runtime to avoid prefix replay.
  * no input snapshot copy or shadow controller. Early original gates returnOK
  * without mutation. Complete ordinary frame will reset cursor for next call. */
-typedef struct {gh_player_frame_bindings b;uint32_t stage,frontier;uint8_t bound,effect_pending;float previous_left,previous_right;int16_t left_x,left_y,right_x,right_y;uint8_t heat_stage,heat_ready;gh_player_frame_effect_request pending_effect;uint8_t damage_stage,damage_region_hit,give_index,give_phase;int32_t pending_damage;uint16_t pending_damage_kind;uint32_t state_entry;uint8_t idle_phase;size_t idle_motion_word,idle_sequence_word;gh_player_motion_request pending_motion;int motion_ended;uint8_t motion_step_complete,idle_end_prefix_done,idle_end_needs_random,input_started,post_take_index;int input_result;gh_game_player_post_state post_state;float previous_world_position[3];} gh_game_player_frame;
+typedef struct {gh_player_frame_bindings b;uint32_t stage,frontier;uint8_t bound,effect_pending;float previous_left,previous_right;int16_t left_x,left_y,right_x,right_y;uint8_t heat_stage,heat_ready;gh_player_frame_effect_request pending_effect;uint8_t damage_stage,damage_region_hit,give_index,give_phase;int32_t pending_damage;uint16_t pending_damage_kind;uint32_t state_entry;uint8_t idle_phase;size_t idle_motion_word,idle_sequence_word;gh_player_motion_request pending_motion;int motion_ended;uint8_t motion_step_complete,idle_end_prefix_done,idle_end_needs_random,input_started,post_take_index;int input_result;gh_game_player_post_state post_state;float previous_world_position[3];gh_collision_solid_frame solid_frame;
+ gh_player_terrain_call wall_call,floor_call;gh_terrain_sphere_call sphere_call;
+ gh_scene_ray_report wall_report,floor_report;float terrain_position[3],terrain_normal[3],floor_height;
+ gh_player_ground_pose_call ground_pose;gh_motion_solve pose_solve;uint8_t model_failure_latched;gh_player_frame_status model_failure_status;uint32_t sequence_effect_index;
+ gh_player_opacity_call opacity_call;gh_game_player_frame_tail tail;gh_actor_finish_model_call finish_model;
+} gh_game_player_frame;
 gh_player_frame_status gh_game_player_frame_00108ab0(gh_game_player_frame *,const gh_player_frame_bindings *);
 /* Actual126820 +five-entry button history leaves1268B0/1268F0. */
 gh_player_frame_status gh_game_player_button_history_00126820(gh_title_player_view *,const gh_boot_work *);

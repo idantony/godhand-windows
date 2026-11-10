@@ -6,12 +6,21 @@
 extern "C" {
 #endif
 typedef struct gh_se_voice_engine gh_se_voice_engine;
+/* Optional once-only native sound SDK table/RNG setup, before any live voices.
+ * Reads user's libsd through SAME disc, no executable module loading. */
+gh_voice_status gh_se_voice_bind_pitch_reference(gh_se_voice_engine *,gh_disc *);
+gh_voice_status gh_se_voice_pitch_state(const gh_se_voice_engine *,uint16_t *state);
+struct gh_actor_model;
+typedef struct {uint32_t system_flags_5e4,game_flags_5d8,gain64_bits;int32_t debug58c;uint16_t se_level_q8;uint8_t output_mode,reverb;} gh_se_attached_environment;
+typedef gh_voice_status (*gh_se_attached_probe)(void *,const float position[4],int check_seh,gh_se_attached_environment *,uint32_t *frontier);
+typedef gh_voice_status (*gh_se_attached_random)(void *,uint32_t *word,uint32_t *frontier);
 typedef enum gh_se_dsp_policy {GH_SE_DSP_NATIVE_LINEAR_REFERENCE=1} gh_se_dsp_policy;
 typedef struct gh_se_mix {uint16_t se_level_q8;uint8_t output_mode;uint32_t system_flags;gh_se_dsp_policy dsp_policy;} gh_se_mix;
 /* Scalar mixer portion of actual boot settings2C9E78→375630: stereo and
  * SFX90/127 of master127. Does not claim the original global frame/RPC calls. */
 gh_voice_status gh_se_mix_boot_defaults_002c9e78(gh_se_mix *,uint32_t system_flags,gh_se_dsp_policy);
-typedef struct gh_se_voice_info {uint32_t original_handle,native_voice,sample_slot,frames,rate;uint16_t pitch_q12,adsr1,adsr2,level_q14;int16_t program,bank;uint8_t pending,channel;int16_t stop_current,stop_step;uint16_t stop_count;uint8_t stopping,retiring;} gh_se_voice_info;
+typedef struct gh_se_voice_info {uint32_t original_handle,native_voice,sample_slot,frames,rate;uint16_t pitch_q12,adsr1,adsr2,level_q14;int16_t program,bank;uint8_t pending,channel;int16_t stop_current,stop_step;uint16_t stop_count;uint8_t stopping,retiring;
+ const struct gh_actor_model *attached_model;int32_t attached_part;float source_position[4];uint8_t attached,position_mode;} gh_se_voice_info;
 /* Narrow real origin MC event path: core bank0 programs2D/15E/160/161 and R020 bank2 programs0/10/11/12, original
  * default args(-1,-1,0,0), stereo/mono and explicit original SFX master level.
  * Caller supplies real registry/device; no emulated device or empty command
@@ -29,6 +38,18 @@ void gh_se_voice_destroy(gh_se_voice_engine *);
  * Unsupported data returns exact first_unported; no command is queued. */
 gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *,int16_t bank,int16_t program,
  int16_t arg3,int16_t arg4,uint32_t flags,int32_t delay,uint32_t *original_handle);
+/* Actual2CBA48/2CDD18 actor binding into SAME64EEpool. request_key identifies
+ * ONLY an unfinished invocation; completion releaseskey, sameaddressreuse is
+ * a NEWoriginalcall. owner/probecontext must live untilabort orallvoicesEOS.
+ * Current finite mode0/bootmix/one-shot DSP profile; unknownspatial/flags retain
+ * their exactfrontier. MT runs onlyAFTER firstfreeslot andonlyonce percall. */
+gh_voice_status gh_se_voice_request_attached(gh_se_voice_engine *,const void *owner,const void *request_key,struct gh_actor_model *,int32_t part_index,int16_t bank,int16_t program,uint32_t flags,int32_t delay,gh_se_attached_probe,void *probe_context,gh_se_attached_random,void *random_context,uint32_t *original_handle);
+/* Actual2CE488 clearsactor/part refs, keepsvoice/PCM; no modeldtor claim. */
+gh_voice_status gh_se_voice_detach_actor_002ce488(gh_se_voice_engine *,struct gh_actor_model *);
+/* Explicit native shutdown abort (NOT originalDetach/Stop). Dropsonlyowner's
+ * reservations/voices, balancesborrow, stopsrealdevice sourceifissued. */
+gh_voice_status gh_se_voice_abort_attached_owner(gh_se_voice_engine *,const void *owner);
+unsigned gh_se_voice_attached_reservations(const gh_se_voice_engine *);
 /* Original active-list (newest first), descriptor-selected channel groups0..4 and15..16, priority/oldest
  * replacement semantics for audited MC/logo records. Starts real
  * XAudio2 voices. Call from original sound update boundary once per frame. */

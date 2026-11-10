@@ -36,6 +36,10 @@ gh_disc_error gh_disc_read_blocks(gh_disc *disc, size_t index,
  * never executed or treated as native pointers. No extraction is required. */
 uint64_t gh_disc_boot_elf_size(const gh_disc *);
 gh_disc_error gh_disc_read_boot_elf(gh_disc *,uint64_t offset,void *,size_t bytes);
+/* Root ISO9660 files (e.g. MODULES/IRX.IMS), separate from the FST/AFS index.
+ * Read-only, same disc owner, bounded regular files; no extraction. */
+gh_disc_error gh_disc_iso_file_size(gh_disc *,const char *path,uint64_t *size);
+gh_disc_error gh_disc_read_iso_file(gh_disc *,const char *path,uint64_t offset,void *,size_t bytes);
 const char *gh_disc_error_string(gh_disc_error error);
 #ifdef __cplusplus
 }

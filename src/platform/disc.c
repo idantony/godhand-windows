@@ -224,6 +224,37 @@ gh_disc_error gh_disc_read_boot_elf(gh_disc *d,uint64_t offset,void *buffer,size
     if(!fits(offset,bytes,d->boot_size))return GH_DISC_BOUNDS;
     return bytes?read_at(d,d->boot_offset+offset,buffer,bytes):GH_DISC_OK;
 }
+
+static gh_disc_error iso_regular_file(gh_disc*d,const char*path,uint64_t*out_off,uint64_t*out_size){
+    unsigned char pvd[2048];if(!d||!out_off||!out_size)return GH_DISC_ARGUMENT;
+    if(!safe_path(path))return GH_DISC_UNSAFE_PATH;
+    gh_disc_error err=read_at(d,16*2048,pvd,sizeof(pvd));if(err)return err;
+    if(pvd[0]!=1||memcmp(pvd+1,"CD001",5)||pvd[6]!=1||pvd[156]<34)return GH_DISC_FORMAT;
+    uint64_t off=(uint64_t)le32(pvd+158)*2048;uint32_t bytes=le32(pvd+166);
+    if(le32(pvd+158)!=be32(pvd+162)||bytes!=be32(pvd+170))return GH_DISC_FORMAT;
+    const char*part=path;unsigned depth=0;
+    for(;;){
+        const char*end=part;while(*end&&*end!='/'&&*end!='\\')end++;size_t length=(size_t)(end-part);
+        if(length>255||++depth>32)return GH_DISC_BOUNDS;
+        if(!bytes||bytes>32*1024*1024||!fits(off,bytes,d->size))return GH_DISC_BOUNDS;
+        unsigned char*dir=malloc(bytes);if(!dir)return GH_DISC_MEMORY;err=read_at(d,off,dir,bytes);if(err){free(dir);return err;}
+        int found=0;uint64_t next_off=0;uint32_t next_size=0;unsigned flags=0;
+        for(size_t pos=0;pos<bytes;){unsigned n=dir[pos];if(!n){pos=(pos/2048+1)*2048;continue;}const unsigned char*r=dir+pos;
+            if(n<34||!fits(pos,n,bytes)||n>2048-pos%2048||r[32]>n-33){err=GH_DISC_FORMAT;break;}
+            uint32_t lba=le32(r+2),size=le32(r+10);if(lba!=be32(r+6)||size!=be32(r+14)){err=GH_DISC_FORMAT;break;}
+            if(!fits((uint64_t)lba*2048,size,d->size)){err=GH_DISC_BOUNDS;break;}
+            unsigned name_size=r[32];if(name_size&&r[33]>1){for(unsigned j=0;j<name_size;j++)if(r[33+j]==';'){name_size=j;break;}
+                if(name_size==length){size_t j;for(j=0;j<length&&canon(r[33+j])==canon((unsigned char)part[j]);j++){}
+                    if(j==length){if(found){err=GH_DISC_FORMAT;break;}found=1;next_off=(uint64_t)lba*2048;next_size=size;flags=r[25];}}
+            }pos+=n;
+        }
+        free(dir);if(err)return err;if(!found)return GH_DISC_NOT_FOUND;if(flags&0x80)return GH_DISC_FORMAT;
+        if(!*end){if(flags&2)return GH_DISC_NOT_FOUND;*out_off=next_off;*out_size=next_size;return GH_DISC_OK;}
+        if(!(flags&2))return GH_DISC_NOT_FOUND;off=next_off;bytes=next_size;part=end+1;
+    }
+}
+gh_disc_error gh_disc_iso_file_size(gh_disc*d,const char*path,uint64_t*size){uint64_t off,n;if(!size)return GH_DISC_ARGUMENT;gh_disc_error e=iso_regular_file(d,path,&off,&n);if(!e)*size=n;return e;}
+gh_disc_error gh_disc_read_iso_file(gh_disc*d,const char*path,uint64_t offset,void*buffer,size_t bytes){if(!buffer&&bytes)return GH_DISC_ARGUMENT;uint64_t off,n;gh_disc_error e=iso_regular_file(d,path,&off,&n);if(e)return e;if(!fits(offset,bytes,n))return GH_DISC_BOUNDS;return bytes?read_at(d,off+offset,buffer,bytes):GH_DISC_OK;}
 gh_disc_error gh_disc_entry_at(const gh_disc *d,size_t i,gh_disc_entry *out) {
     if(!d||!out)return GH_DISC_ARGUMENT;
     if(i>=d->count)return GH_DISC_BOUNDS;

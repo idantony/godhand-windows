@@ -9,7 +9,7 @@ extern "C" {
 typedef enum {GH_ACTOR_MOTION_OK,GH_ACTOR_MOTION_ARGUMENT,GH_ACTOR_MOTION_BOUNDS,GH_ACTOR_MOTION_BUSY,GH_ACTOR_MOTION_UNSUPPORTED,GH_ACTOR_MOTION_CALLEE} gh_actor_motion_status;
 typedef gh_actor_motion_status (*gh_motion_effect_consumer)(void *,const gh_title_player_view *,int32_t kind,uint32_t mode,uint32_t *frontier);
 struct gh_motion_ik_globals;
-typedef struct {const gh_actor_model *model;const gh_title_player_view *actor,*other_actor;const gh_actor_part *part;int16_t bank,program;uint32_t argument7,argument8;} gh_motion_sound_request;
+typedef struct {gh_actor_model *model;const gh_title_player_view *actor,*other_actor;const gh_actor_part *part;int16_t bank,program;uint32_t argument7,argument8;} gh_motion_sound_request;
 /* Actual2CBA48 actor-attached path; Originalhandle0(poolfull) isdistinct from
  * unsupported. Provider must reallyown/queue the voice; originisnotasubstitute. */
 typedef gh_actor_motion_status (*gh_motion_sound_consumer)(void *,const gh_motion_sound_request *,uint32_t *original_handle,uint32_t *frontier);

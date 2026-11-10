@@ -19,3 +19,10 @@ gh_action_set_status gh_action_button_set_001f7858(gh_game_action_buttons*s,cons
   * fields untouched rather than fabricate cross-typed pointer casts. */
  *emitted=1;*index=selected;return GH_ACTION_SET_OK;
 }
+
+static void assign(gh_game_action_buttons*s,gh_action_link node,gh_action_link next){if(node.kind==GH_ACTION_LINK_HEADER)s->heads[node.index]=next;else s->prompt_next[node.index]=next;}
+gh_action_set_status gh_action_button_reset_entry_001f7228(gh_game_action_buttons*s,unsigned index,uint32_t*f){
+ if(f)*f=0;if(!owner(s)||index>=8||!f)return GH_ACTION_SET_ARGUMENT;gh_action_link previous={GH_ACTION_LINK_HEADER,15},current;gh_action_set_status e=gh_action_button_next(s,previous,&current);if(e){*f=0x1f7820;return e;}unsigned visited=0;
+ while(current.kind!=GH_ACTION_LINK_END){if(++visited>24){*f=0x1f7820;return GH_ACTION_SET_BOUNDS;}if(current.kind==GH_ACTION_LINK_PROMPT&&current.index==index){gh_action_link next;e=gh_action_button_next(s,current,&next);if(e){*f=0x1f7820;return e;}assign(s,previous,next);s->prompt_next[index]=(gh_action_link){GH_ACTION_LINK_END,0};s->entries[index].next=NULL;break;}previous=current;e=gh_action_button_next(s,current,&current);if(e){*f=0x1f7820;return e;}}
+ gh_action_prompt*p=s->entries+index;p->flags&=~1u;p->state0c=1;p->life=0x31;p->unknown2c=0x1f;p->argument_table=NULL;p->callback_id10=0;p->callback_argument=NULL;p->priority=0;p->kind=0;p->unknown20=0;p->matrix=NULL;p->unknown30=0;p->command_count=0;p->unknown35=0;p->unknown32=0;p->unknown36=0;p->command_table=NULL;p->id_table=NULL;return GH_ACTION_SET_OK;
+}

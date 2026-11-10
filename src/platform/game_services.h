@@ -44,12 +44,15 @@
 #include "../core/game_camera_envelope.h"
 #include "../core/game_player_child_tail.h"
 #include "../core/game_math_globals.h"
+#include "../core/game_player_ground_pose.h"
+#include "../core/game_player_opacity.h"
 #include "../core/game_om_door_geometry.h"
 #include "../core/game_player_node_cache.h"
 #include "../core/game_actor_motion_ik.h"
 #include "../core/game_event_environment.h"
 #include "../core/packed_message.h"
 #include "../core/game_event_clear.h"
+#include "../core/game_cloth_runtime.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -87,6 +90,9 @@ typedef struct {
  gh_game_event_config *event_config; /*same Root586B30, not a room copy*/
  gh_packed_message_state *packed; /*same Root packed/font state*/
  struct gh_enemy_se_banks *enemy_banks; /*same Root sound-control bank owner*/
+ gh_cloth_templates *cloth_templates;gh_cloth_runtime_globals *cloth_globals; /*Rootpersistent ctor owners*/
+ gh_player_ground_globals *player_ground_globals; /*RootONE original.data3BD470*/
+ gh_player_opacity_globals *player_opacity_globals;gh_se_voice_engine *voices; /*borrow RootONE owners*/
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;

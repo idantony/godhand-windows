@@ -1,6 +1,7 @@
 #ifndef GH_GAME_COLLISION_SOLIDS_H
 #define GH_GAME_COLLISION_SOLIDS_H
 #include <stdint.h>
+#include "game_title_player.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -9,7 +10,10 @@ extern "C" {
  * Reset doesnotdestroy referenced objects orclaimcollisionqueries. */
 struct gh_collision_solid_unit;
 typedef struct {void *unit_head;uint32_t unit_count,words08[32],field88;
- uint32_t global_00460d18;struct gh_collision_solid_unit *native_units;} gh_game_collision_solids;
+ uint32_t global_00460d18;struct gh_collision_solid_unit *native_units;
+ /* Original words08 are guest pointers. This SAME-owner companion retains
+  * ordered/repeated typedcontacts without pointer truncation. */
+ const gh_title_player_view *contacts08[32];} gh_game_collision_solids;
 /* Actual134690, explicitsharedowner, noallocation or emptyplatformcallback. */
 void gh_game_collision_solids_reset_00134690(gh_game_collision_solids *);
 #ifdef __cplusplus

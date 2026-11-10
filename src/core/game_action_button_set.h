@@ -16,6 +16,8 @@ gh_action_set_status gh_action_button_set_001f7858(gh_game_action_buttons *,cons
 gh_action_set_status gh_action_button_first(const gh_game_action_buttons *,gh_action_link *);
 gh_action_set_status gh_action_button_next(const gh_game_action_buttons *,gh_action_link,gh_action_link *);
 gh_action_set_status gh_action_button_prompt(const gh_game_action_buttons *,gh_action_link,const gh_action_prompt **);
+/* Actual1F7820 unlink, then1F7228 reset. No reset-all/listclear shortcut. */
+gh_action_set_status gh_action_button_reset_entry_001f7228(gh_game_action_buttons *,unsigned,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

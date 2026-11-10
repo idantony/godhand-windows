@@ -32,6 +32,8 @@ uint32_t gh_game_cockpit_frontier(const gh_game_cockpit *);
 int gh_game_cockpit_ready(const gh_game_cockpit *);
 /* Canonicalscalarborrow for actual1F75B0, not a mutablewholeclasscast. */
 uint8_t *gh_game_cockpit_action_flags_1414(gh_game_cockpit *);
+/* Same global3BD6E8 widget1AE0+1C0; actual108AB0 tail writes this byte. */
+uint8_t *gh_game_cockpit_auxiliary_flags_1ca0(gh_game_cockpit *);
 /* Same SystemMenu widget atCockpit+3A0: typed Base and original+90..BF
  * scalar-only span. No guest/native pointer fields are exposed as bytes. */
 typedef struct {gh_id_base *base;uint8_t *scalars90;size_t size;} gh_cockpit_system_menu_view;
@@ -66,6 +68,10 @@ typedef struct {
 gh_id_error gh_game_cockpit_bind_frame_elf(gh_game_cockpit *,const void *,size_t);
 gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);
 gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);
+/* Borrowed SAME original1414..1467 fields for actual1F75B0/1F7680.
+ * Byte pointers avoid inventing pointer-bearing guest layout/alignment. */
+typedef struct {uint8_t *flags,*icon,*screen_x,*screen_y,*message;const void *identity;} gh_cockpit_action_view;
+gh_id_error gh_game_cockpit_action_view_001f7680(gh_game_cockpit *,gh_cockpit_action_view *);
 #ifdef __cplusplus
 }
 #endif

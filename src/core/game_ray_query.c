@@ -40,6 +40,9 @@ static gh_scene_ray_status straight(gh_game_scene_tables*s,const gh_scene_ray_re
  for(unsigned i=0;i<3;++i)if(maximum[i]<number(s->actor_vec30[i])||minimum[i]>number(s->actor_vec40[i]))return GH_RAY_OK;
  return gh_scene_ray_static_overlap(s,r,hit,f);
 }
+gh_scene_ray_status gh_scene_ray_query_direct_0012ed60(gh_game_scene_tables*s,const gh_scene_ray_request*r,uint8_t mode,int*hit,uint32_t*f){
+ if(mode>1)return GH_RAY_ARGUMENT;return straight(s,r,hit,f,mode);
+}
 gh_scene_ray_status gh_scene_ray_query_00131e10(gh_game_scene_tables*s,const gh_scene_ray_request*r,int*hit,uint32_t*f){
  if(f)*f=0;if(!s||!r||!hit)return GH_RAY_ARGUMENT;*hit=0;
  if(!r->segmented)return straight(s,r,hit,f,0);

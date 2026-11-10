@@ -208,6 +208,7 @@ const uint8_t *gh_game_cockpit_fields(const gh_game_cockpit *s,size_t *n){if(n)*
 uint32_t gh_game_cockpit_frontier(const gh_game_cockpit *s){return s?s->frontier:0;}
 int gh_game_cockpit_ready(const gh_game_cockpit *s){return s&&s->ready;}
 uint8_t *gh_game_cockpit_action_flags_1414(gh_game_cockpit*s){return s?s->fields+0x1414:NULL;}
+uint8_t *gh_game_cockpit_auxiliary_flags_1ca0(gh_game_cockpit*s){return s?s->fields+0x1ca0:NULL;}
 static gh_id_error frame_stop(gh_game_cockpit*s,uint32_t f){s->frontier=f;return GH_ID_UNSUPPORTED;}
 static const uint8_t *frame_elf(const uint8_t*e,size_t z,uint32_t va,size_t n){
  if(z<52||memcmp(e,"\177ELF\1\1\1",7)||e[18]!=8||e[19])return NULL;
@@ -364,3 +365,5 @@ gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit*s,gh_core_save_vi
  if(u32(s->fields+0x460+0x80)!=0x41e620){s->frontier=0x1434a8;return GH_ID_UNSUPPORTED;}
  TRY(room_heat_reset_00141ce8(s,save,heat));s->room_begun=s->room_ready=0;s->update_stage=s->draw_stage=s->radar_stage=s->heat_stage=0;return GH_ID_OK;
 }
+
+gh_id_error gh_game_cockpit_action_view_001f7680(gh_game_cockpit*s,gh_cockpit_action_view*out){if(!s||!out||!s->ready)return GH_ID_ARGUMENT;*out=(gh_cockpit_action_view){s->fields+0x1414,s->fields+0x1415,s->fields+0x1420,s->fields+0x1424,s->fields+0x1464,s};return GH_ID_OK;}

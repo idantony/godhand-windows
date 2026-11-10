@@ -12,6 +12,7 @@
 #include "game_scene_at_age.h"
 #include "game_hitarea_frame.h"
 #include "game_action_buttons.h"
+#include "game_action_button_step.h"
 #include "display_state.h"
 #include "../platform/task_threads.h"
 #ifdef __cplusplus
@@ -36,6 +37,7 @@ typedef struct {
  gh_collision_pair_frame collision_frame;
  gh_hitarea_frame hitarea_frame; /*pause scalar belongs to SAME init.object_pool+ACD0*/
  gh_scene_at_age at_frame_age;
+ gh_action_button_frame action_frame;
 } gh_game_scene_step;
 /* Required semantic boundaries for as-yet-unported world/render consumers.
  * The address/argument identify original operations, NEVER callable guestcode.
@@ -65,6 +67,7 @@ typedef struct {
  gh_scenario_task_status scenario_status;void *scenario_status_context;
  const struct gh_dynamic_corner_tables *dynamic_corners; /*RootONE static globals*/
  const uint8_t *boot_elf;size_t boot_elf_bytes; /*borrow descriptor identities for HitArea LOS*/
+ const gh_action_step_bindings *action_native;
 } gh_game_scene_step_bindings;
 /* Explicit cold host companion init: caller supplies original Main1A8 seed;
  * ignored whilePFD absent. Does not invent the earlier complete Mainctor. */

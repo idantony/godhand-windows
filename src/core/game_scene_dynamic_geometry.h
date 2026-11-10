@@ -10,6 +10,7 @@ extern "C" {
  * Writes real8worldcorners/AABB only after complete finite-reference work;
  * preserves originalflags/attributes/Wlanes and marks hostworld_ready. */
 gh_scene_dynamic_status gh_scene_dynamic_box_update_0012dcb8(gh_scene_dynamic_owner *,struct gh_scene_dynamic_box *,const gh_dynamic_corner_tables *,gh_static_transform_policy,uint32_t *frontier);
+gh_scene_dynamic_status gh_scene_dynamic_quad_update_0012d1a8(gh_scene_dynamic_owner *,struct gh_scene_dynamic_box *,const gh_dynamic_corner_tables *,gh_static_transform_policy,uint32_t *frontier);
 /* Original12E840 update traversal with persistent per-owner native cursor.
  * Work594 debug branch remains exact2DB6B0 frontier; retry doesnotreplay
  * completed earlierboxes. Complete success alone starts a new nextframe. */

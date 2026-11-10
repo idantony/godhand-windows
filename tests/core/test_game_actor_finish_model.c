@@ -16,6 +16,52 @@
 static uint32_t rd(const uint8_t*p){uint32_t x;memcpy(&x,p,4);return x;}
 static void wr(uint8_t*p,uint32_t x){memcpy(p,&x,4);}
 static uint8_t*load(gh_disc*d,const char*path,size_t*n){size_t i;gh_disc_entry e;C(!gh_disc_find(d,path,&i)&&!gh_disc_entry_at(d,i,&e));*n=(size_t)e.size;uint8_t*b=malloc(*n);C(b&&!gh_disc_read(d,i,0,b,*n));return b;}
+static void matrix_fixture(uint8_t*p,float sx,float sy,float sz,float x,float y,float z){float m[16]={sx,0,0,0,0,sy,0,0,0,0,sz,0,x,y,z,1};memcpy(p,m,64);}
+static void blend_fixture(gh_actor_model*m,float amount,const uint32_t*flags){
+ uint8_t*r=m->root.bytes;wr(r+0x250,0x02000820);memcpy(r+0x27c,&amount,4);matrix_fixture(r+0x80,2,2,2,8,-4,2);
+ for(unsigned i=0;i<m->part_count;i++){uint8_t*p=m->parts[i].bytes;matrix_fixture(p,1,2,4,2,-1,.5f);matrix_fixture(p+0x40,3,4,2,6,3,1.5f);matrix_fixture(p+0x80,1,1,1,(float)(100+i),3,-2);uint32_t f=flags[i]&~(16u|0x800u|0x100000u);if(i==0)f|=0x100000;if(i==1)f|=16;wr(p+0x154,f);}
+}
+static void active_blend_checks(gh_actor_model*m,const gh_motion_ik_globals*g){
+ size_t root_bytes=m->root.size;uint8_t*saved_root=malloc(root_bytes);C(saved_root);memcpy(saved_root,m->root.bytes,root_bytes);uint8_t saved_parts[255][0x220];uint32_t flags[255];for(unsigned i=0;i<m->part_count;i++){memcpy(saved_parts[i],m->parts[i].bytes,0x220);flags[i]=rd(m->parts[i].bytes+0x154);}const gh_motion_ik_globals*old_globals=m->blend_globals;fenv_t original_env;C(!fegetenv(&original_env));const float amounts[]={.25f,.5f,1};const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};
+ for(unsigned sample=0;sample<3;sample++){uint8_t golden_local[255][64],golden_world[255][64];for(unsigned mode=0;mode<4;mode++){
+  blend_fixture(m,amounts[sample],flags);m->blend_globals=g;C(!fesetround(modes[mode])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_INVALID));C(!gh_actor_finish_model_0014a038(m,GH_STATIC_BINARY32_REFERENCE)&&!m->frontier&&rd(m->root.bytes+0x250)==0x02000820&&fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_INVALID);C(!fesetround(FE_TONEAREST));
+  long double world[255][16],root[16]={2,0,0,0,0,2,0,0,0,0,2,0,8,-4,2,1};
+  for(unsigned i=0;i<m->part_count;i++){uint8_t*p=m->parts[i].bytes;long double t=i<2?0:amounts[sample],local[16]={1+2*t,0,0,0,0,2+2*t,0,0,0,0,4-2*t,0,2+4*t,-1+4*t,.5L+t,1};float captured[16]={3,0,0,0,0,4,0,0,0,0,2,0,6,3,1.5f,1};C(!memcmp(p+0x40,captured,64));for(unsigned k=0;k<16;k++){float v;memcpy(&v,p+4*k,4);C(fabsl((long double)v-local[k])<.000002L);}
+   if(i==1){long double unchanged[16]={1,0,0,0,0,1,0,0,0,0,1,0,101,3,-2,1};memcpy(world[i],unchanged,sizeof(unchanged));}
+   else{const long double*parent=m->parts[i].parent_is_model?root:world[m->parts[i].parent];for(unsigned col=0;col<4;col++)for(unsigned row=0;row<4;row++){world[i][col*4+row]=0;for(unsigned k=0;k<4;k++)world[i][col*4+row]+=parent[k*4+row]*local[col*4+k];}}
+   for(unsigned k=0;k<16;k++){float value;memcpy(&value,p+0x80+4*k,4);C(fabsl((long double)value-world[i][k])<.0002L);}if(!mode){memcpy(golden_local[i],p,64);memcpy(golden_world[i],p+0x80,64);}else C(!memcmp(golden_local[i],p,64)&&!memcmp(golden_world[i],p+0x80,64));
+  }
+ }}
+ C(!fesetround(FE_TONEAREST));blend_fixture(m,.5f,flags);m->blend_globals=NULL;uint8_t before[64];memcpy(before,m->parts[2].bytes,64);C(gh_actor_finish_model_0014a038(m,GH_STATIC_BINARY32_REFERENCE)==GH_ACTOR_MODEL_UNSUPPORTED&&m->frontier==0x156d70&&m->detail==2&&!memcmp(before,m->parts[2].bytes,64));
+ /* Every100000 part skips BOTH inverse/scratch/blend even with missingglobals
+  * and invalidcapturedOld. Worldproduct still really executes. */
+ blend_fixture(m,.5f,flags);for(unsigned i=0;i<m->part_count;i++){wr(m->parts[i].bytes+0x154,0x100000);for(unsigned k=0;k<16;k++)wr(m->parts[i].bytes+0x40+4*k,0x7fc12345);}C(!gh_actor_finish_model_0014a038(m,GH_STATIC_BINARY32_REFERENCE));for(unsigned i=0;i<m->part_count;i++){float expected[16]={1,0,0,0,0,2,0,0,0,0,4,0,2,-1,.5f,1};C(!memcmp(expected,m->parts[i].bytes,64));}
+ blend_fixture(m,.5f,flags);m->blend_globals=g;wr(m->parts[0].bytes+0x154,0);wr(m->root.bytes+0x80,0x7fc12345);memcpy(before,m->parts[0].bytes,64);C(gh_actor_finish_model_0014a038(m,GH_STATIC_BINARY32_REFERENCE)==GH_ACTOR_MODEL_UNSUPPORTED&&m->frontier==0x147568&&!m->detail&&!memcmp(before,m->parts[0].bytes,64));
+ /* Singularparent follows real147568 identity-return; unusedscratch is still
+  * computed, but must not replaceLOCAL: blendedscale/translationstayknown. */
+ blend_fixture(m,.5f,flags);matrix_fixture(m->root.bytes+0x80,0,0,0,8,-4,2);C(!gh_actor_finish_model_0014a038(m,GH_STATIC_BINARY32_REFERENCE));float expectedLocal[16]={2,0,0,0,0,3,0,0,0,0,3,0,4,1,1,1};C(!memcmp(expectedLocal,m->parts[2].bytes,64));
+ blend_fixture(m,.5f,flags);wr(m->parts[2].bytes+0x154,rd(m->parts[2].bytes+0x154)|0x800);C(gh_actor_finish_model_0014a038(m,GH_STATIC_BINARY32_REFERENCE)==GH_ACTOR_MODEL_UNSUPPORTED&&m->frontier==0x159fc8&&m->detail==2&&!memcmp(expectedLocal,m->parts[2].bytes,64));float current[16]={1,0,0,0,0,2,0,0,0,0,4,0,2,-1,.5f,1};C(!memcmp(current,m->parts[3].bytes,64));
+ /* 14A038 must NOT149EB8-setrootflag4 toavoid the40000specialbranch. */
+ blend_fixture(m,.5f,flags);wr(m->root.bytes+0x250,0x40820);wr(m->parts[0].bytes+0x154,0);uint8_t beforeWorld[64];memcpy(beforeWorld,m->parts[0].bytes+0x80,64);C(gh_actor_finish_model_0014a038(m,GH_STATIC_BINARY32_REFERENCE)==GH_ACTOR_MODEL_UNSUPPORTED&&m->frontier==0x1501d0&&!m->detail&&rd(m->root.bytes+0x250)==0x40820&&!memcmp(expectedLocal,m->parts[0].bytes,64)&&!memcmp(beforeWorld,m->parts[0].bytes+0x80,64));
+ /* A stopped invocation must not apply blend twice to earlier parts.
+  * Independently compare resumed output with one uninterrupted invocation. */
+ for(unsigned host=0;host<4;host++){
+  uint8_t expected[255][0x220],prefix[255][0x220],oldLate[64];
+  blend_fixture(m,.5f,flags);m->blend_globals=g;for(unsigned i=0;i<m->part_count;i++)wr(m->parts[i].bytes+0x154,rd(m->parts[i].bytes+0x154)&~(16u|0x100000u));
+  C(!gh_actor_finish_model_0014a038(m,GH_STATIC_BINARY32_REFERENCE));for(unsigned i=0;i<m->part_count;i++)memcpy(expected[i],m->parts[i].bytes,0x220);
+  blend_fixture(m,.5f,flags);for(unsigned i=0;i<m->part_count;i++)wr(m->parts[i].bytes+0x154,rd(m->parts[i].bytes+0x154)&~(16u|0x100000u));memcpy(oldLate,m->parts[2].bytes+0x40,64);wr(m->parts[2].bytes+0x40,0x7fc12345);
+  gh_actor_finish_model_call continuation={0};C(!fesetround(modes[host])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_INVALID));
+  C(gh_actor_finish_model_resume_0014a038(&continuation,m,GH_STATIC_BINARY32_REFERENCE)==GH_ACTOR_MODEL_UNSUPPORTED&&continuation.part_index==2&&continuation.stage==2);
+  for(unsigned i=0;i<2;i++)memcpy(prefix[i],m->parts[i].bytes,0x220);memcpy(m->parts[2].bytes+0x40,oldLate,64);
+  C(!gh_actor_finish_model_resume_0014a038(&continuation,m,GH_STATIC_BINARY32_REFERENCE)&&continuation.stage==5&&continuation.part_index==m->part_count&&fegetround()==modes[host]&&fetestexcept(FE_ALL_EXCEPT)==FE_INVALID);
+  for(unsigned i=0;i<m->part_count;i++)C(!memcmp(expected[i],m->parts[i].bytes,0x220));for(unsigned i=0;i<2;i++)C(!memcmp(prefix[i],m->parts[i].bytes,0x220));
+  C(!gh_actor_finish_model_resume_0014a038(&continuation,m,GH_STATIC_BINARY32_REFERENCE));for(unsigned i=0;i<m->part_count;i++)C(!memcmp(expected[i],m->parts[i].bytes,0x220));
+  C(!fesetround(FE_TONEAREST));blend_fixture(m,.5f,flags);wr(m->parts[2].bytes+0x154,rd(m->parts[2].bytes+0x154)|0x800);continuation=(gh_actor_finish_model_call){0};
+  C(gh_actor_finish_model_resume_0014a038(&continuation,m,GH_STATIC_BINARY32_REFERENCE)==GH_ACTOR_MODEL_UNSUPPORTED&&continuation.stage==4&&continuation.part_index==2&&m->frontier==0x159fc8);for(unsigned i=0;i<m->part_count;i++)memcpy(prefix[i],m->parts[i].bytes,0x220);
+  for(unsigned retry=0;retry<3;retry++){C(gh_actor_finish_model_resume_0014a038(&continuation,m,GH_STATIC_BINARY32_REFERENCE)==GH_ACTOR_MODEL_UNSUPPORTED&&m->frontier==0x159fc8);for(unsigned i=0;i<m->part_count;i++)C(!memcmp(prefix[i],m->parts[i].bytes,0x220));}
+ }
+ memcpy(m->root.bytes,saved_root,root_bytes);for(unsigned i=0;i<m->part_count;i++)memcpy(m->parts[i].bytes,saved_parts[i],0x220);m->blend_globals=old_globals;free(saved_root);C(!fesetenv(&original_env));
+}
 int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t rn,n;uint8_t*r=load(d,"st1/r100.dat",&rn),*data=load(d,"pl/pl00.dat",&n);size_t elfsize=(size_t)gh_disc_boot_elf_size(d);uint8_t*elf=malloc(elfsize);C(elf&&!gh_disc_read_boot_elf(d,0,elf,elfsize));gh_disc_close(d);gh_bundle room,bundle;gh_bundle_entry md,texture;C(!gh_bundle_open(r,rn,&room)&&!gh_bundle_open(data,n,&bundle)&&!gh_bundle_find(&bundle,"MD",0,&md)&&!gh_bundle_find(&bundle,"TM3",0,&texture));
  gh_heap*heap;C(!gh_heap_create(16*1024*1024,&heap));gh_room_pools pools={0};C(!gh_game_room_pools_initialize_002a5d80(&pools,&room,heap));uint8_t raw[GH_TITLE_PLAYER_BYTES]={0};gh_title_player_view view;C(!gh_title_player_construct_00107e40(raw,sizeof(raw),&view));gh_boot_work work={0};gh_actor_model model={0};int original;
  C(gh_actor_model_initialize_00149738(&model,&view,&work,&pools,&md,&texture,0,0,GH_STATIC_BINARY32_REFERENCE,&original)==GH_ACTOR_MODEL_UNSUPPORTED&&model.parts_ready&&model.part_count==32); /* realmodel constructor prefix, not animation */
@@ -95,4 +141,4 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
   for(unsigned col=0;col<4;col++)for(unsigned row=0;row<4;row++){long double expected=0;for(unsigned k=0;k<4;k++){float x,y;memcpy(&x,parent+0x80+(k*4+row)*4,4);memcpy(&y,part->bytes+(col*4+k)*4,4);expected+=(long double)x*y;}float value;memcpy(&value,part->bytes+0x80+(col*4+row)*4,4);C(fabsl(value-expected)<.00002L);}}
  uint32_t rootflags=rd(raw+0x250);wr(raw+0x250,rootflags&~0x20u);uint8_t root_before[64];memcpy(root_before,raw+0x80,64);C(!gh_actor_finish_model_0014a038(&model,GH_STATIC_BINARY32_REFERENCE)&&!memcmp(root_before,raw+0x80,64));wr(raw+0x250,rootflags);
  uint32_t partflags=rd(model.parts[1].bytes+0x154);wr(model.parts[1].bytes+0x154,partflags|16);memset(model.parts[1].bytes+0x80,0x15,64);C(!gh_actor_finish_model_0014a038(&model,GH_STATIC_BINARY32_REFERENCE));for(unsigned j=0;j<64;j++)C(model.parts[1].bytes[0x80+j]==0x15);wr(model.parts[1].bytes+0x154,partflags);C(!gh_actor_finish_model_0014a038(&model,GH_STATIC_BINARY32_REFERENCE));
- wr(raw+0x27c,0x3f000000);C(gh_actor_finish_model_0014a038(&model,GH_STATIC_BINARY32_REFERENCE)==GH_ACTOR_MODEL_UNSUPPORTED&&model.frontier==0x147568);wr(raw+0x27c,0); C(!gh_scene_actors_reset_0012e800(&actors)); free(elf); C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(r);free(data);puts("PASS actualsampled/IKsolvedPL00 14A038 positive32parts worldupdate, LOCAL matrices preserved, independentlongdouble orderedproductoracle,4FEnv, root20 earlyreturn/part16skip/activeblend strictfrontier");return 0;}
+ active_blend_checks(&model,&globals); C(!gh_scene_actors_reset_0012e800(&actors)); free(elf); C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(r);free(data);puts("PASS actualsampled/IKsolvedPL00 14A038 positive32parts worldupdate, LOCAL matrices preserved, independentlongdouble orderedproductoracle,4FEnv, root20 earlyreturn/part16skip/positiveblend25/50/100 inverse+unusedscratch/LOCALvsOld independentoracle/4FEnv/resumableLateBlend+800NoReplay/missingglobals/100000/singular/special+800prefix");return 0;}

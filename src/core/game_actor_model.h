@@ -24,6 +24,7 @@ typedef struct gh_actor_model {gh_title_player_view root;gh_boot_work *work;gh_r
  struct gh_actor_model *native_identity,*external_parent;const void *external_owner;
  const uint8_t *external_parent_bytes;uint32_t external_parent_index,external_parent_handle,external_child_handle,external_borrowers;
  const struct gh_motion_ik_globals *blend_globals; /* borrowed SAME motion setup */
+ uint32_t sound_borrowers; /* hostlifetime only, notguestfield */
 } gh_actor_model;
 /* Real149738 prefix and149C20 skeletalbind initialization. Current finite
  * zero-rotation/unit-scale reference domain reproduces initialPL00/OM00 pose.
@@ -48,6 +49,10 @@ gh_actor_model_status gh_actor_model_part_at(const gh_actor_model *,unsigned,con
 /* Nativeabort constructorprefix only. Releases ownblock handles and clears
  * associated modelcount/list metadata; no virtualmodel destructoracknowledged. */
 gh_actor_model_status gh_actor_model_release(gh_actor_model *);
+/* Native strongborrow for actualattachedEEvoice references. Return before
+ * modelrelease via originalDetach/EOS or explicit hostabort. */
+gh_actor_model_status gh_actor_model_sound_borrow(gh_actor_model *);
+gh_actor_model_status gh_actor_model_sound_return(gh_actor_model *);
 #ifdef __cplusplus
 }
 #endif

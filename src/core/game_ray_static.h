@@ -9,6 +9,11 @@ extern "C" {
  * dynamic boxes. Stages both attribute/actor outputs until all traversal
  * succeeds; geometry must already be updated by original12E840. No fake no-hit. */
 gh_scene_ray_status gh_scene_ray_static_overlap(gh_game_scene_tables *,const gh_scene_ray_request *,int *,uint32_t *);
+/* Shared1321D8 traversal primitives: caller supplies its original AABB;
+ * visited mutation is restricted to clear-selected-range and test-and-visit. */
+gh_scene_ray_status gh_scene_query_grid_0012f288(gh_game_scene_tables *,const float minimum[3],const float maximum[3],int *overlap,uint32_t *frontier);
+gh_scene_ray_status gh_scene_query_clear_0012f4c8(gh_game_scene_tables *,uint32_t mask,uint32_t *frontier);
+gh_scene_ray_status gh_scene_query_visit_0012fc20(gh_game_scene_tables *,uint16_t,int *skip,uint32_t *flags,uint32_t *frontier);
 void gh_scene_ray_triangle_state_release(gh_game_scene_tables *);
 gh_scene_ray_status gh_scene_ray_triangle_flags(const gh_game_scene_tables *,uint16_t,uint32_t *);
 /* Shared original1365B8 quad primitive. Caller owns the binary32/FEnv scope
