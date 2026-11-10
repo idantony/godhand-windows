@@ -11,10 +11,10 @@ not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
 **Early development. No playable original game scene has been verified.**
 A native Windows execution now connects the original memory-card interface,
-normal exit, Clover movie and GameMain initialization. It loads the actual title
-room resources and stops explicitly at the next checkpoint operation,
-`0x002BF8F8`. It begins at startup task `0x0030D358`; earlier boot and the full
-game loop remain unfinished.
+normal exit, Clover movie, GameMain initialization and the original title scene.
+A bounded run completes 600 updates and presents 481 title scene frames,
+including the original GOD HAND / PRESS START screen. It begins at startup task
+`0x0030D358`; earlier boot, the first world scene and gameplay remain unfinished.
 
 ### Verified progress
 
@@ -29,7 +29,7 @@ game loop remain unfinished.
   digital input mapping, limited real SFX and normal resource cleanup.
 - One hidden, muted native Windows QA run presents 6 MC frames and all 90 Clover
   movie frames, waits for video EOF and real audio completion, then reaches
-  GameMain state3 with real startup assets and the title room loaded. Its keys
+  GameMain state4 with real startup assets and the title room running. Its keys
   are an explicitly labeled synthetic fixture; no human playtest is claimed.
 - Limited MC ADPCM voices use real XAudio2. Movie0 uses an explicit native
   FFmpeg codec process and Windows audio. Reference DSP/GS numerical profiles
@@ -37,18 +37,19 @@ game loop remain unfinished.
 - Original case0 initialization, HUD setup, room state, camera reset and room
   allocation operate on shared native owners. Asset descriptors are distinct
   from completed model/animation rendering or gameplay.
-- 84 C modules pass 85 checks with hardware/codec checks and an independent
+- 105 C modules pass 111 checks with hardware/codec checks and an independent
   ADX reference WAV enabled.
   The earlier foundation also passes in an independent clean source snapshot.
-  Restricted GPU pixels match separate CPU equations; the first MC frame stays
-  byte-identical after renderer reuse.
+  Restricted GPU pixels match separate CPU equations. The recovered OT traversal
+  preserves bank order, bucket depth, LIFO packet groups and previous-frame presentation.
 - Two RNG routines pass 20544 exact state/float-bit comparisons across 10272
   seeds against a restricted actual-instruction model, not console traces.
 
 Native encrypted title BGM decoding now matches every sample from independent
-vgmstream output. A separate direct R020 Init/Move GPU fixture renders the
-original warning screen. This fixture does not establish full scene execution
-or final OT composition order.
+vgmstream output. The original warning, logos and title screen now execute in
+the integrated native scene. A separate synthetic New Game run reaches the
+difficulty menu; the next real boundary is its bank2 sound request. World models,
+animation, combat, complete audio and save/load still need implementation.
 
 Current boundaries: [docs/progress.json](docs/progress.json).
 Milestone history: [docs/PROGRESS.md](docs/PROGRESS.md).
@@ -119,8 +120,8 @@ logs stay under `G:\middle_thing\godhand_windows`. Scripts accept external
 scratch/compiler paths. Original game data remains read-only. Attribution:
 [NOTICE.md](NOTICE.md).
 
-Next: native r020 title logic and its actual graphics consumers, remaining
-scene/model/animation loading, complete frame integration, combat, transitions
+Next: the original New Game room transition, world model/animation loading,
+complete frame integration, combat, transitions
 and save/load acceptance. Local commits retain rollback points; public pushes
 mark substantial milestones.
 
@@ -131,9 +132,9 @@ mark substantial milestones.
 使用 Jak 专用反编译器。
 
 **仍处于早期开发，尚未验证可玩的原游戏场景。** 同一个 Windows 原生程序已串联
-原版存储卡界面、正常退出、Clover 片头和 GameMain 初始化，加载真实标题房间资源后，
-明确停在下一处检查点操作入口 `0x002BF8F8`。执行从原启动任务 `0x0030D358`
-开始，前置启动和完整游戏主循环仍未完成。
+原版存储卡界面、正常退出、Clover 片头、GameMain 初始化和真实标题场景。一次有界
+运行完成 600 次更新，实际显示 481 帧标题场景，包括原始 GOD HAND / PRESS START
+画面。执行从原启动任务 `0x0030D358` 开始，前置启动、第一关和玩法仍未完成。
 
 ### 已验证的进展
 
@@ -144,14 +145,15 @@ mark substantial milestones.
 - 存储卡提示文字、窗口和原 TIM2 光标已实际绘制。无卡和空目录分支执行原 Control、
   按键映射、有限真实音效及正常资源释放；完整存档读写尚未实现。
 - 一次隐藏、静音的 Windows 原生验收显示了 6 帧存储卡界面和全部 90 帧 Clover
-  片头，确实等待视频结束及音频设备完成，再到达 GameMain 的 state3 和真实标题房间。
+  片头，确实等待视频结束及音频设备完成，再进入 GameMain 的 state4 和真实标题场景。
   确认按键由明确标注的合成测试输入提供，不冒充玩家实测。
 - 存储卡 ADPCM 音效通过真实 XAudio2 处理；片头通过原生 FFmpeg 进程及 Windows
   音频设备播放。数值参考策略有明确范围，不声称完整音频或 PS2 实机位精确。
 - 原系统、HUD、房间、相机和内存池初始化共用真实原生状态；描述解析不代表模型、
   动画、战斗或游戏场景已经完成。
-- 启用硬件/解码器检查后，84 个 C 模块通过 85 项检查（包含独立 ADX 参考 WAV）；基础模块另经独立干净源码副本
-  验证。受限 GPU 像素与独立 CPU 方程一致，复用渲染器后首帧字节保持一致。
+- 启用硬件/解码器检查后，105 个 C 模块通过 111 项检查（包含独立 ADX 参考 WAV），
+  在固定源码副本验证。受限 GPU 像素与独立 CPU 方程一致；绘制保留原 OT 的层级、
+  深度、同桶后进先出和上一帧提交顺序。
 - 两个 RNG 对 10272 个种子完成 20544 次精确比较，依据实际指令的受限模型验证；
   这不是 PS2 实机验证。上游匹配比例也不是本项目的移植完成比例。
 
@@ -173,8 +175,9 @@ Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音
 `G:\middle_thing\godhand_windows`。原镜像始终只读，私有恢复证据和工具不进 Git。
 独立 [PS2 移植 skill](skill/ps2-source-port/SKILL.md) 随开发维护。
 
-原加密标题 BGM 已逐样本匹配独立 vgmstream 输出；单独的 R020 Init/Move GPU 验证
-能绘制原始警告首屏。这仍不代表完整场景流程或最终 OT 合成顺序已验证。
+原加密标题 BGM 已逐样本匹配独立 vgmstream 输出；原警告、Logo 和标题画面已接入
+完整的当前原生启动流程。另一组合成“新游戏”输入已到难度菜单，下一处真实边界是
+bank2 音效请求。世界模型、动画、战斗、完整音频和存档读写仍需继续。
 
-接下来继续原 r020 标题逻辑和实际图形调用、场景/模型/动画、完整帧流程、战斗、切换与
+接下来继续原“新游戏”换房、场景/模型/动画、完整帧流程、战斗、切换与
 存档验收。本地提交保留回退，大节点才推送。当前状态见 [进展数据](docs/progress.json)。

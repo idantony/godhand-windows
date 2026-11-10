@@ -3,6 +3,7 @@
 #include "game_children.h"
 #include <stdlib.h>
 #include <string.h>
+_Static_assert(offsetof(gh_boot_work,system_flags)==0x58c,"747A2C Work58C");
 struct gh_game_children {uint8_t bytes[0xf18];const void *room_jump;
  gh_game_child_view pairs[9];gh_id_base bases[18];uint32_t count;};
 static void w16(uint8_t *p,size_t o,uint16_t v){p[o]=(uint8_t)v;p[o+1]=(uint8_t)(v>>8);}
@@ -62,4 +63,82 @@ gh_child_status gh_game_children_id_base(gh_game_children *s,uint32_t offset,gh_
  if(!s || !out)return GH_CHILD_ARGUMENT;*out=0;
  for(unsigned i=0;i<18;i++)if(base_offsets[i]==offset){*out=&s->bases[i];return GH_CHILD_OK;}
  return GH_CHILD_BOUNDS;
+}
+
+static uint32_t r32(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
+static uint16_t r16(const uint8_t*p){return (uint16_t)(p[0]|(unsigned)p[1]<<8);}
+static gh_child_status child_stop(uint32_t*f,uint32_t pc,gh_child_status e){if(f)*f=pc;return e;}
+gh_child_status gh_game_children_active_00161288(const gh_game_children*s,const gh_game_child_view**out){
+ if(!s||!out)return GH_CHILD_ARGUMENT;*out=NULL;if(s->count!=9)return GH_CHILD_BOUNDS;
+ uint32_t kind=r32(s->bytes+0x48);if(kind==UINT32_MAX)return GH_CHILD_OK;
+ for(unsigned i=0;i<s->count;i++)if(s->pairs[i].kind==kind){*out=&s->pairs[i];break;}return GH_CHILD_OK;
+}
+gh_child_status gh_game_children_alpha_step_00160c48(gh_game_children*s,uint32_t*f){
+ if(f)*f=0;if(!s)return GH_CHILD_ARGUMENT;uint8_t*p=s->bytes;unsigned phase=p[0xed4];
+ if(phase==0||phase==1)return GH_CHILD_OK;
+ uint32_t count=r32(p+0xed8);
+ if(phase==2||phase==3){
+  if(count>4)return child_stop(f,0x160c48,GH_CHILD_UNSUPPORTED);
+  uint32_t alpha=phase==2?count*32:128-count*32;
+  w32(p,0xed0,(r32(p+0xed0)&0x00ffffffu)|(alpha<<24));
+  if(count==4)p[0xed4]=(uint8_t)(phase==2?0:1);
+ }
+ w32(p,0xed8,count+1);return GH_CHILD_OK;
+}
+gh_child_status gh_game_children_move_001601d8(gh_game_children*s,gh_boot_work*work,uint32_t*f){
+ const gh_game_child_view*active=NULL;if(f)*f=0;if(!s||!work)return GH_CHILD_ARGUMENT;
+ uint8_t*raw=(uint8_t*)work,*p=s->bytes;
+ /* ActualLW747A2C = Work+58C, distinctfromflags584/systemflags5D8. */
+ if(work->system_flags&0x80000000u)return GH_CHILD_OK;
+ gh_child_status e=gh_game_children_active_00161288(s,&active);if(e)return e;
+ if(active&&active->bytes[0x58])return GH_CHILD_OK;
+ uint16_t state=r16(p+0x50);
+ switch(state){
+ case 0:break;
+ case 2:if(active)return child_stop(f,0x1601d8,GH_CHILD_UNSUPPORTED);w16(p,0x50,3);break;
+ case 3:w16(p,0x50,4);break;
+ case 5:
+  if(!(r32(raw+0x5dc)&0x100000u)&&active)return child_stop(f,0x1601d8,GH_CHILD_UNSUPPORTED);
+  break;
+ case 7:
+  if(r32(p+0x4c)==0xb)work->flags|=0x8000;
+  if(active)return child_stop(f,0x1601d8,GH_CHILD_UNSUPPORTED);
+  w32(p,0x48,r32(p+0x4c));break;
+ case 9:
+  if(active)return child_stop(f,0x1601d8,GH_CHILD_UNSUPPORTED);
+  w32(raw,0x5e0,r32(p+0xee4));w32(p,0x48,UINT32_MAX);w16(p,0x50,0x15);break;
+ default:
+  if(state<0x16)return child_stop(f,0x1601d8,GH_CHILD_UNSUPPORTED);
+  break; /* actualout-of-range state also visits160C48 */
+ }
+ e=gh_game_children_alpha_step_00160c48(s,f);if(e)return e;
+ if(work->flags&0x20000u)return child_stop(f,0x2c7850,GH_CHILD_UNSUPPORTED);
+ return GH_CHILD_OK;
+}
+
+gh_child_status gh_game_children_cover_00160d50(const gh_game_children*s,gh_render_draw_env*env,gh_child_cover_submit submit,void*context,uint32_t*f){
+ if(f)*f=0;if(!s||!env)return GH_CHILD_ARGUMENT;
+ if(!env->ready)return child_stop(f,0x2c54e8,GH_CHILD_UNSUPPORTED);
+ if(!submit)return child_stop(f,0x15b880,GH_CHILD_UNSUPPORTED);
+ const gh_child_cover_quad quad={{{-1,-1,0,1},{513,-1,0,1},{-1,449,0,1},{513,449,0,1}},r32(s->bytes+0xed0),1,6,5,1,UINT64_C(0x8000000044),UINT64_C(0x3001d)};
+ int emitted=-1;uint32_t pc=0;gh_child_status e=submit(context,&quad,&emitted,&pc);
+ if(e)return child_stop(f,pc?pc:0x15b880,e);
+ if(emitted!=0&&emitted!=1)return GH_CHILD_ARGUMENT;
+ if(gh_render_draw_init_002c54e8(env)!=GH_RENDER_STEP_OK)return child_stop(f,0x2c54e8,GH_CHILD_UNSUPPORTED);
+ env->scalar.bank=7;env->scalar.depth=1;return GH_CHILD_OK;
+}
+gh_child_status gh_game_children_draw_00160b90(const gh_game_children*s,const gh_boot_work*w,gh_render_draw_env*env,gh_child_cover_submit submit,void*context,uint32_t*f){
+ if(f)*f=0;if(!s||!w)return GH_CHILD_ARGUMENT;
+ if((w->system_flags&0x80000000u)||(r32((const uint8_t*)w+0x5dc)&0x100000u))return GH_CHILD_OK;
+ gh_child_status e=gh_game_children_cover_00160d50(s,env,submit,context,f);if(e)return e;
+ const gh_game_child_view*active=NULL;e=gh_game_children_active_00161288(s,&active);if(e)return e;
+ if(!active||active->bytes[0x59])return GH_CHILD_OK;
+ uint16_t state=r16(s->bytes+0x50);
+ if(state==4||state==5||state==6||state==8||state==10||state==14||state==17){
+  if(r32(active->bytes+0x70)!=active->vtable_address)return child_stop(f,0x160c20,GH_CHILD_UNSUPPORTED);
+  static const uint32_t targets[]={0x165e88,0x16dc18,0x162278,0x1640e8,0x166b60,0x1678b8,0x1682a8,0x16acd0,0x161970};
+  for(unsigned i=0;i<s->count;i++)if(active==&s->pairs[i])return child_stop(f,targets[i],GH_CHILD_UNSUPPORTED);
+  return child_stop(f,0x160c20,GH_CHILD_UNSUPPORTED);
+ }
+ return GH_CHILD_OK;
 }

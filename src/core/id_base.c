@@ -255,3 +255,13 @@ gh_id_error gh_id_base_restart_anim(gh_id_base *o,gh_id_random_u32 random,void *
     error=reset_anim(o,random,context);if(error)return error;
     o->playing=1;return GH_ID_OK;
 }
+
+gh_id_error gh_id_entry_restore_source_002aa2d0(gh_id_base*o,gh_id_entry*e){
+ if(!o||!e||!o->entries||!o->source_records.bytes)return GH_ID_ARGUMENT;
+ uintptr_t address=(uintptr_t)e,first=(uintptr_t)o->entries,records=(uintptr_t)o->source_records.bytes;
+ if(address<first||(address-first)%sizeof(*e)||(address-first)/sizeof(*e)>=o->entry_count)return GH_ID_ARGUMENT;
+ uintptr_t source=(uintptr_t)e->source;
+ if(source<records||source-records>o->source_records.size||SOURCE_SIZE>o->source_records.size-(source-records)||(source-records)%SOURCE_SIZE)return GH_ID_BOUNDS;
+ if((source-records)/SOURCE_SIZE!=e->source_index)return GH_ID_BOUNDS;
+ init_entry(e,e->source,e->source_index);return GH_ID_OK;
+}

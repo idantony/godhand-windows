@@ -28,6 +28,10 @@ gh_voice_status gh_audio_output_play(gh_audio_output *,const gh_adpcm_pcm *,
 gh_voice_status gh_audio_output_play_q12(gh_audio_output *,const gh_adpcm_pcm *,
  uint16_t pitch_q12,float left,float right,uint32_t *voice);
 gh_voice_status gh_audio_output_active(gh_audio_output *,uint32_t voice,int *active,uint64_t *played);
+/* Absolute native per-source output matrix; does not touch master mute.
+ * Original integer gain computation stays in core, transport accepts0..1. */
+gh_voice_status gh_audio_output_voice_gain(gh_audio_output *,uint32_t voice,float left,float right);
+gh_voice_status gh_audio_output_voice_gain_query(gh_audio_output *,uint32_t voice,float *left,float *right);
 gh_voice_status gh_audio_output_stop(gh_audio_output *,uint32_t voice);
 void gh_audio_output_reap(gh_audio_output *);
 #ifdef __cplusplus

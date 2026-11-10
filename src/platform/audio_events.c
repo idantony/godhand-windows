@@ -107,3 +107,12 @@ gh_voice_status gh_audio_output_stop(gh_audio_output *s,uint32_t id)
  }
  return GH_VOICE_BOUNDS;
 }
+
+gh_voice_status gh_audio_output_voice_gain(gh_audio_output*s,uint32_t id,float left,float right){
+ if(!s||!id||!(left>=0&&left<=1&&right>=0&&right<=1))return GH_VOICE_ARGUMENT;
+ for(unsigned i=0;i<64;i++)if(s->voices[i].id==id){float values[2]={left,right};return SUCCEEDED(IXAudio2SourceVoice_SetOutputMatrix(s->voices[i].source,(IXAudio2Voice*)s->master,1,2,values,0))?GH_VOICE_OK:GH_VOICE_PLATFORM;}return GH_VOICE_BOUNDS;
+}
+gh_voice_status gh_audio_output_voice_gain_query(gh_audio_output*s,uint32_t id,float*left,float*right){
+ if(!s||!id||!left||!right)return GH_VOICE_ARGUMENT;
+ for(unsigned i=0;i<64;i++)if(s->voices[i].id==id){float values[2];IXAudio2SourceVoice_GetOutputMatrix(s->voices[i].source,(IXAudio2Voice*)s->master,1,2,values);*left=values[0];*right=values[1];return GH_VOICE_OK;}return GH_VOICE_BOUNDS;
+}

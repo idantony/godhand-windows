@@ -2,6 +2,7 @@
 #define GH_UI_POLYGON_RENDERER_H
 #include "ui_sprite_renderer.h"
 #include "../core/id_texture_polygon.h"
+#include "../core/cockpit_fan.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -21,6 +22,16 @@ gh_ui_error gh_ui_polygon_upload(gh_ui_polygon_renderer*,const gh_id_texture*,
  * validated before any submission; ordered composition onto actual background. */
 gh_ui_error gh_ui_polygon_batch(gh_ui_polygon_renderer*,const gh_ui_sprite_state*,
  const gh_ui_polygon_item*,size_t,const unsigned char*,unsigned char*,size_t);
+/* Separate actual1430E8/15C410 profile:16x16indexed4TIM2 and one33vertex
+ * triangle-fan packet. Bank/depth group ordering remains caller's OT job.
+ * Same manual GS fragment arithmetic, PRIM55 (fan), no generic D3D blend. */
+gh_ui_error gh_ui_polygon_upload_fan16(gh_ui_polygon_renderer*,const gh_id_texture*,
+ const unsigned char*,size_t,uint32_t*);
+/* Actual numeric4x4 glyph atlas,128x128 TIM2/PSMT4 or T32/PSMT8 only. */
+gh_ui_error gh_ui_polygon_upload_number128(gh_ui_polygon_renderer*,const gh_id_texture*,
+ const unsigned char*,size_t,uint32_t*);
+gh_ui_error gh_ui_polygon_fan(gh_ui_polygon_renderer*,const gh_ui_sprite_state*,
+ uint32_t texture,const gh_cockpit_fan*,const unsigned char*,unsigned char*,size_t);
 #ifdef __cplusplus
 }
 #endif

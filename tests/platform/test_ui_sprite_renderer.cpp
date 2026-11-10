@@ -63,9 +63,15 @@ int main(int argc,char**argv){
  std::vector<unsigned char> logo_rgba(512*512*4);C(gh_id_texture_rgba(&logo.quad.texture,logo_rgba.data(),logo_rgba.size())==GH_ID_OK);C(gh_ui_sprite_upload(renderer,&logo.quad.texture,logo_rgba.data(),logo_rgba.size(),&logo.texture)==GH_UI_OK);
  auto logo_expected=back;oracle(logo_expected,512,448,logo.quad,logo_rgba);C(gh_ui_sprite_batch(renderer,&state,&logo,1,back.data(),output.data(),output.size())==GH_UI_OK&&output==logo_expected);
  auto invalid_logo=logo.quad.texture;invalid_logo.tex0|=UINT64_C(1)<<56;C(gh_ui_sprite_upload(renderer,&invalid_logo,logo_rgba.data(),logo_rgba.size(),&invalid_handle)==GH_UI_UNSUPPORTED);output=previous;
+ // Observed realMain TitleLevel firstfade-in entry36@tick292: originalasset
+ // and captured native scalar state, not a newmenu/layout or wholeframeclaim.
+ gh_ui_sprite_item level={};C(!gh_id_texture_open(manager.get(),2,11,&level.quad.texture));C(level.quad.texture.width==256&&level.quad.texture.height==128);
+ level.quad.x0=445-(124*.6f)*.5f;level.quad.x1=445+(124*.6f)*.5f;level.quad.y0=395-(40*.800000191f)*.5f;level.quad.y1=395+(40*.800000191f)*.5f;
+ level.quad.u0=.000117192685f;level.quad.v0=.267812282f;level.quad.u1=.487695187f;level.quad.v1=.591581762f;level.quad.color=0x02808080;level.quad.color_mode=6;level.quad.font_mode=5;
+ std::vector<unsigned char> level_rgba(256*128*4);C(!gh_id_texture_rgba(&level.quad.texture,level_rgba.data(),level_rgba.size())&&!gh_ui_sprite_upload(renderer,&level.quad.texture,level_rgba.data(),level_rgba.size(),&level.texture));auto level_expected=back;oracle(level_expected,512,448,level.quad,level_rgba);C(!gh_ui_sprite_batch(renderer,&state,&level,1,back.data(),output.data(),output.size())&&output==level_expected&&output!=back);output=previous;
  auto saved=textures[0][3];textures[0][3]=3;uint32_t bad;C(gh_ui_sprite_upload(renderer,&items[0].quad.texture,textures[0].data(),textures[0].size(),&bad)==GH_UI_UNSUPPORTED);textures[0][3]=saved;
  state.tex1=0;C(gh_ui_sprite_batch(renderer,&state,items,2,back.data(),output.data(),output.size())==GH_UI_UNSUPPORTED);
  if(argc==3){FILE*f=std::fopen(argv[2],"wbx");C(f);C(std::fwrite(output.data(),1,output.size(),f)==output.size());C(std::fclose(f)==0);}
  gh_ui_sprite_destroy(renderer);C(gh_id_base_release_002aa078(runtime,&object,&original,&reclaimed)==GH_ID_OK);C(gh_id_runtime_destroy(runtime)==GH_ID_OK);
- std::puts("PASS hardware MC T32 scaled1.4Y, real32x32TIM2cursor andTitleT32PSMT4Logo: GS4bitbilinear/modulate/test/blend; each229376pixels match independentCPU; invalidTIM2extent/LogoCSA rejected");return 0;
+ std::puts("PASS hardware MC T32 scaled1.4Y, real32x32TIM2cursor,TitlePSMT4Logo+actual256x128Level: each229376pixels exactindependentCPU; invalidTIM2extent/LogoCSA rejected");return 0;
 }

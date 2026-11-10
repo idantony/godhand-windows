@@ -40,6 +40,13 @@ int main(int argc,char **argv){
   CHECK(view.state==2 && view.use_count==-100 && view.kind==id && view.file_kind==(id|0x40000000));
   CHECK(u32(slots.records+i*0x5c+0x20)==id && u32(slots.records+i*0x5c+0x10)==i+1);
  }
+ /* Actuallate1FE748 defaultstate2 mustnotpretendmodelinitialization.
+  * All43actual pinnedpayload/holderbytes androomemptyrecords stayunchanged. */
+ {uint8_t snapshot[80*0x5c],room_snapshot[32*0x5c];uint32_t frontier;
+  memcpy(snapshot,slots.records,sizeof(snapshot));memcpy(room_snapshot,room.records,sizeof(room_snapshot));
+  CHECK(gh_game_objects_update_001fe748(m,&frontier)==GH_OBJECT_OK&&!frontier&&!memcmp(snapshot,slots.records,sizeof(snapshot)));
+  CHECK(gh_game_objects_update_001fe748(rm,&frontier)==GH_OBJECT_OK&&!frontier&&!memcmp(room_snapshot,room.records,sizeof(room_snapshot)));
+ }
  /* Replacement frees the old kind then uses the actual first free slot. */
  int original=0;CHECK(gh_game_objects_add_pinned_001fece0(m,0x100,assets.objects[1].pointer,assets.object_sizes[1],&original)==GH_OBJECT_OK&&original==1);
  CHECK(gh_game_objects_find(m,0x100,&view)==GH_OBJECT_OK && view.bytes==assets.objects[1].pointer);

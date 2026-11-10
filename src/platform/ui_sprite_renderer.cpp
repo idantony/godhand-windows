@@ -67,7 +67,8 @@ extern "C" gh_ui_error gh_ui_sprite_create(unsigned w,unsigned h,gh_ui_sprite_re
 extern "C" gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *r,const gh_id_texture *t,const unsigned char *rgba,size_t bytes,uint32_t *handle){
  if(!r||!t||!rgba||!handle||GetCurrentThreadId()!=r->thread)return GH_UI_ARGUMENT;
  // T32 template may have TCC0. Actual15BE44..15BE54 forces TCC1 before draw.
- bool t32=t->width==512&&(t->height==256||t->height==512)&&((t->tex0>>20)&63)==19;
+ bool level=t->width==256&&t->height==128&&t->tex0==UINT64_C(0x20000001e1310000);
+ bool t32=(t->width==512&&(t->height==256||t->height==512)&&((t->tex0>>20)&63)==19)||level;
  bool logo=t->width==512&&t->height==512&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==9&&((t->tex0>>30)&15)==9&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  bool cursor=t->width==32&&t->height==32&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==5&&((t->tex0>>30)&15)==5&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  if((!t32&&!cursor&&!logo)||bytes!=(size_t)t->width*t->height*4||((t->tex0>>35)&3)!=0)return GH_UI_UNSUPPORTED;

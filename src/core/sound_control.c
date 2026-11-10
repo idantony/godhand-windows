@@ -22,16 +22,29 @@ static gh_voice_status initial_word(gh_disc *d,uint32_t address,uint32_t *value)
 }
 gh_voice_status gh_sound_control_from_startup(gh_sound_control *s,gh_disc *d,const gh_audio_registry *registry)
 {
- gh_sound_control candidate={0};uint32_t bgm;gh_voice_status error;
+ gh_sound_control candidate={0};uint32_t bgm,ts_token;gh_voice_status error;
  if(!s || !d || !registry)return GH_VOICE_ARGUMENT;if(s->initialized)return GH_VOICE_UNSUPPORTED;
  if(!gh_audio_startup_ready(registry,0,0,0))return GH_VOICE_UNSUPPORTED;
+ error=initial_word(d,0x5feea4,&candidate.unload_a4);if(error)return error;
  error=initial_word(d,0x5feeac,&candidate.flags_ac);if(error)return error;
  error=initial_word(d,0x5feeb0,&candidate.flags_b0);if(error)return error;
  error=initial_word(d,0x5fef3c,&bgm);if(error)return error;
+ error=initial_word(d,0x5fee54,&candidate.previous_mask54);if(error)return error;
+ error=initial_word(d,0x5fee2c,&ts_token);if(error)return error;
+ if(ts_token)return GH_VOICE_UNSUPPORTED; /* no nativeTSnode maybeforgedfromguesttoken */
+ /* Global heap ctor2CD9E8 invokes CloseAll(1,FFFF); all3 self380
+  * originate in actual PT_LOAD BSS. Registry-backed sample allocation is the
+  * explicit native replacement; no guest pointers or heap freelist copied. */
+ {const uint32_t globals[3]={0x602f80,0x603310,0x6036a0};
+  for(unsigned i=0;i<3;i++){uint32_t self;error=initial_word(d,globals[i]+0x380,&self);if(error)return error;if(self)return GH_VOICE_UNSUPPORTED;}
+  candidate.room_heaps[0]=(gh_sound_heap_registry_owner){registry,0x6036a0,1,0};
+  candidate.room_heaps[1]=(gh_sound_heap_registry_owner){registry,0x603310,1,0};
+ }
  /* Validate decisive actualboot instructions before applying postconstructor
   * values that differ from ELF BSS. Constants are primarycode signatures,
   * not a guestinstruction runtime or an invented successfulRPC reply. */
  {static const uint32_t checks[][2]={
+  {0x2cd9ec,0x24040001},{0x2cd9f4,0x0c0b3668},{0x2cd9f8,0x3405ffff},
   {0x2c9e88,0x0c0dd5c0},{0x2c9e8c,0x24040001},
   {0x2c9e90,0x2402007f},{0x2c9e94,0x2403005a},
   {0x2c9e98,0xa7a30008},{0x2c9ea4,0xa7a20000},
@@ -41,13 +54,20 @@ gh_voice_status gh_sound_control_from_startup(gh_sound_control *s,gh_disc *d,con
   {0x2c9f20,0xe6020008},{0x2c9f24,0xe6030014},
   {0x2c9f28,0xe6000004},{0x2c9f2c,0xe6010010},
   {0x2c9f30,0xe6020000},{0x2c9f38,0xe603000c},
-  {0x2c9f84,0x3c078000},{0x2c9fb8,0xae070050}};
+  {0x2c9f84,0x3c078000},{0x2c9fb8,0xae070050},
+  {0x2c9f5c,0x44800000},{0x2c9f70,0x3c013f80},{0x2c9f74,0x44810800},
+  {0x2c9fc0,0xe60000c0},{0x2c9fc4,0xe60100cc},
+  {0x2c9fc8,0xae07005c},{0x2c9fcc,0xae070058},
+  {0x2c9fd0,0xe60000c8},{0x2c9fd4,0x0c0c2968},
+  {0x2c9fd8,0xe60000c4},{0x2c9fdc,0xae000110}};
   for(unsigned i=0;i<sizeof(checks)/sizeof(checks[0]);i++){
    uint32_t code;error=initial_word(d,checks[i][0],&code);if(error)return error;
    if(code!=checks[i][1])return GH_VOICE_UNSUPPORTED;
   }
  }
- candidate.event_mask50=0x80000000u;candidate.output_mode=1;
+ candidate.event_mask50=candidate.event_mask58=candidate.base_mask5c=0x80000000u;candidate.output_mode=1;
+ candidate.listener_position_c0[3]=0x3f800000;
+ for(unsigned i=0;i<4;i++)candidate.listener_matrix_d0[i*5]=0x3f800000;
  candidate.gain_bits[0]=candidate.gain_bits[1]=candidate.gain_bits[2]=0x42fe0000;
  candidate.gain_bits[3]=candidate.gain_bits[5]=0x42b40000;
  candidate.gain_bits[4]=0x42fe0000;

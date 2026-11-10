@@ -36,16 +36,19 @@ int main(int argc,char **argv)
     gh_disc *disc=nullptr;gh_audio_registry *audio=nullptr;gh_heap *heap=nullptr;
     gh_bgm_requests *bgm=nullptr;gh_id_runtime *runtime=nullptr;gh_r020_title *title=nullptr;
     gh_sound_control control={};gh_dvd_jobs dvd={};gh_screen_fade fade={};Probe p;
+    gh_display_state display={};
     gh_boot_work work={};work.language=1;work.room=0x20;
     gh_game_mt random={};gh_game_mt_seed_0030f2b0(&random,1);
     unsigned char save_bytes[GH_CORE_SAVE_BYTES];gh_core_save_view save={save_bytes,sizeof(save_bytes)};
     gh_scene_hook exit_hook={};std::vector<unsigned char> elf,language,jump;
+    const gh_r020_reference_profile reference={GH_R020_MEMORY_ZERO_REFERENCE,nullptr,0,1};
     gh_r020_title_view final={};gh_r020_status error=GH_R020_OK;int result=1;
     do {
         if(gh_disc_open(argv[1],&disc)||gh_audio_registry_create(&audio)||gh_heap_create(24*1024*1024,&heap))break;
         if(gh_audio_startup_load(audio,disc)||gh_sound_control_from_startup(&control,disc,audio))break;
         elf.resize((size_t)gh_disc_boot_elf_size(disc));
         if(elf.empty()||gh_disc_read_boot_elf(disc,0,elf.data(),elf.size()))break;
+        if(gh_display_state_from_elf(&display,elf.data(),elf.size())||gh_display_static_initialize_002a48a8(&display,1,0xffff))break;
         gh_adx_key key={};if(gh_adx_key_from_elf(elf.data(),elf.size(),&key))break;
         if(gh_bgm_requests_create(audio,&control,disc,heap,&bgm)||
            gh_bgm_requests_enable_native(bgm,&key,1,GH_BGM_GAIN_NATIVE_DB_REFERENCE))break;
@@ -58,9 +61,10 @@ int main(int argc,char **argv)
         gh_dvd_jobs_init(&dvd,disc);
         gh_r020_title_bindings bindings={};bindings.work=&work;bindings.save=save;bindings.random=&random;
         bindings.dvd=&dvd;bindings.room_heap=heap;bindings.id=p.id;bindings.runtime=runtime;
-        bindings.bgm=bgm;bindings.fade=&fade;bindings.room_jump={jump.data(),jump.size(),0};bindings.scenario_exit=&exit_hook;
+        bindings.bgm=bgm;bindings.fade=&fade;bindings.room_jump={jump.data(),jump.size(),0};bindings.scenario_exit=&exit_hook;bindings.display=&display;
+        bindings.reference_profile=&reference;
         if((error=gh_r020_title_init(&bindings,&title))!=GH_R020_OK)break;
-        gh_r020_move_callbacks callbacks={&p,begin,draw,nullptr};
+        gh_r020_move_callbacks callbacks={};callbacks.context=&p;callbacks.begin_frame=begin;callbacks.draw_entry=draw;
         for(unsigned frame=0;frame<100;++frame){
             unsigned previous=p.draws;error=gh_r020_title_move(title,&callbacks);
             if(gh_r020_title_inspect(title,&final)||error)break;

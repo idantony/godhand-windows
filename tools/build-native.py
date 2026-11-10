@@ -1,5 +1,6 @@
 """Build and run the native source-port modules; all intermediates stay on G:."""
 import argparse
+import concurrent.futures
 import datetime
 import hashlib
 import json
@@ -8,6 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import threading
 
 PROJECT = Path(__file__).resolve().parents[1]
 SCRATCH = Path(r"G:\middle_thing\godhand_windows")
@@ -16,12 +18,15 @@ SCRATCH = Path(r"G:\middle_thing\godhand_windows")
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-tests", action="store_true")
+    parser.add_argument("--jobs", type=int, default=4, help="Independent compiler processes (1..16); device tests remain serial")
     parser.add_argument("--hardware-audio", action="store_true", help="Run muted real-device voice, ADX, BGM and scene-flow checks")
     parser.add_argument("--adx-reference-wave", type=Path, help="Independent vgmstream WAV for the full native ADX sample comparison")
     parser.add_argument("--movie-codec", type=Path, help="Also run the muted Movie0 native codec/device check")
     parser.add_argument("--compiler", type=Path, default=PROJECT / ".tools" / "zig-x86_64-windows-0.17.1" / "zig.exe", help="Zig executable; permits reusing an installed toolchain")
     parser.add_argument("--scratch", type=Path, default=SCRATCH, help="External build/cache root")
     args = parser.parse_args()
+    if not 1 <= args.jobs <= 16:
+        parser.error("--jobs must be in 1..16")
     compiler, scratch = args.compiler.resolve(), args.scratch.resolve()
     try:
         scratch.relative_to(PROJECT)
@@ -45,6 +50,8 @@ def main():
                 "is_playable_game": False, "purpose": "Verify recovered game functions and native original-disc resource access"}
     report = PROJECT / "analysis" / "native-verification.json"
 
+    report_lock = threading.Lock()
+
     def run(label, command):
         if len(command)>1 and command[0]==compiler and command[1] in ("cc", "c++") and "-c" not in command:
             command = command + ["-lwinmm"]
@@ -55,12 +62,13 @@ def main():
         log.write_text(result.stdout, encoding="utf-8")
         step = {"name": label, "command": [str(item) for item in command], "returncode": result.returncode,
                 "seconds": round(time.monotonic() - started, 3), "log": str(log), "output": result.stdout[-8000:]}
-        manifest["steps"].append(step)
-        report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        print(label + ": " + ("PASS" if result.returncode == 0 else "FAIL"), flush=True)
-        if result.returncode:
-            manifest["status"] = "failed"
+        with report_lock:
+            manifest["steps"].append(step)
+            if result.returncode:
+                manifest["status"] = "failed"
             report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            print(label + ": " + ("PASS" if result.returncode == 0 else "FAIL"), flush=True)
+        if result.returncode:
             print(result.stdout, flush=True)
             raise SystemExit(result.returncode)
 
@@ -106,6 +114,25 @@ def main():
                ("game_scene_at", "src/core/game_scene_at.c"), ("game_action_buttons", "src/core/game_action_buttons.c"),
                ("game_scene_spawns", "src/core/game_scene_spawns.c"), ("game_scene_placements", "src/core/game_scene_placements.c"),
                ("game_scene_ui", "src/core/game_scene_ui.c"), ("game_event", "src/core/game_event.c"),
+               ("display_state", "src/core/display_state.c"),
+               ("game_camera_step", "src/core/game_camera_step.c"),
+               ("game_camera_projection", "src/core/game_camera_projection.c"),
+               ("game_scene_finish", "src/core/game_scene_finish.c"),
+               ("game_scene_step", "src/core/game_scene_step.c"),
+               ("game_scene_aux", "src/core/game_scene_aux.c"), ("ui_order", "src/core/ui_order.c"),
+               ("game_object_step", "src/core/game_object_step.c"),
+               ("game_render_projection", "src/core/game_render_projection.c"),
+               ("game_render_steps", "src/core/game_render_steps.c"),
+               ("game_ray_query", "src/core/game_ray_query.c"),
+               ("game_scene_at_step", "src/core/game_scene_at_step.c"),
+               ("game_scene_post", "src/core/game_scene_post.c"), ("cockpit_fan", "src/core/cockpit_fan.c"),
+               ("id_number", "src/core/id_number.c"),
+               ("game_door", "src/core/game_door.c"),
+               ("game_message_step", "src/core/game_message_step.c"),
+               ("sound_spatial_step", "src/core/sound_spatial_step.c"),
+               ("game_system_menu", "src/core/game_system_menu.c"),
+               ("game_scene_exit", "src/core/game_scene_exit.c"),
+               ("sound_scene_exit", "src/core/sound_scene_exit.c"),
                ("id_entry_reset", "src/core/id_entry_reset.c"), ("id_layout_rotation", "src/core/id_layout_rotation.c"),
                ("id_animation", "src/core/id_animation.c"), ("id_texture_polygon", "src/core/id_texture_polygon.c"),
                ("r020_title", "src/rooms/r020_title.c")]
@@ -149,6 +176,8 @@ def main():
         ("game-model-packets", "tests/core/test_game_model_packets.c", "none"),
         ("game-collision-solids", "tests/core/test_game_collision_solids.c", "none"),
         ("game-scene-tables", "tests/core/test_game_scene_tables.c", "iso"),
+        ("game-environment", "tests/core/test_game_environment.c", "iso"),
+        ("title-level-texture", "tests/core/test_title_level_texture.c", "iso"),
         ("game-title-player", "tests/core/test_game_title_player.c", "none"),
         ("game-checkpoint", "tests/core/test_game_checkpoint.c", "none"),
         ("game-scene-at", "tests/core/test_game_scene_at.c", "iso"),
@@ -157,9 +186,33 @@ def main():
         ("game-scene-placements", "tests/core/test_game_scene_placements.c", "iso"),
         ("game-scene-ui", "tests/core/test_game_scene_ui.c", "iso"),
         ("game-event", "tests/core/test_game_event.c", "elf"),
+        ("display-state", "tests/core/test_display_state.c", "elf"),
+        ("game-camera-step", "tests/core/test_game_camera_step.c", "iso"),
+        ("game-camera-projection", "tests/core/test_game_camera_projection.c", "both"),
+        ("game-scene-finish", "tests/core/test_game_scene_finish.c", "iso"),
+        ("game-scene-step", "tests/core/test_game_scene_step.c", "iso"),
+        ("game-scene-aux", "tests/core/test_game_scene_aux.c", "none"),
+        ("ui-order", "tests/core/test_ui_order.c", "none"),
+        ("game-object-step", "tests/core/test_game_object_step.c", "iso"),
+        ("game-render-projection", "tests/core/test_game_render_projection.c", "iso"),
+        ("game-render-steps", "tests/core/test_game_render_steps.c", "iso"),
+        ("game-children-step", "tests/core/test_game_children_step.c", "none"),
+        ("game-children-draw", "tests/core/test_game_children_draw.c", "none"),
+        ("game-ray-query", "tests/core/test_game_ray_query.c", "iso"),
+        ("game-scene-at-step", "tests/core/test_game_scene_at_step.c", "iso"),
+        ("game-scene-post", "tests/core/test_game_scene_post.c", "iso"),
+        ("game-cockpit-frame", "tests/core/test_game_cockpit_frame.c", "iso"),
+        ("game-door", "tests/core/test_game_door.c", "iso"),
+        ("game-message-step", "tests/core/test_game_message_step.c", "iso"),
+        ("game-objects-update", "tests/core/test_game_objects_update.c", "none"),
+        ("sound-spatial-step", "tests/core/test_sound_spatial_step.c", "iso"),
+        ("game-system-menu", "tests/core/test_game_system_menu.c", "iso"),
+        ("game-scene-exit", "tests/core/test_game_scene_exit.c", "iso"),
+        ("sound-scene-exit", "tests/core/test_sound_scene_exit.c", "iso"),
         ("id-entry-reset", "tests/core/test_id_entry_reset.c", "iso"),
         ("id-layout-rotation", "tests/core/test_id_layout_rotation.c", "iso"),
         ("id-animation", "tests/core/test_id_animation.c", "iso"),
+        ("id-number", "tests/core/test_id_number.c", "iso"),
         ("r020-title", "tests/rooms/test_r020_title.c", "iso"),
     ]
     source_inputs = {"tools/build-native.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
@@ -183,10 +236,13 @@ def main():
         source_inputs.add(source)
         source_inputs.add(shared_headers.get(name, str(Path(source).with_suffix(".h")).replace("\\", "/")))
     initial_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
-    objects = {}
-    for name, source in modules:
-        objects[name] = output / (name + ".o")
-        run("compile-" + name, common + ["-c", source, "-o", objects[name]])
+    def compile_module(module):
+        name, source = module
+        target = output / (name + ".o")
+        run("compile-" + name, common + ["-c", source, "-o", target])
+        return name, target
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as workers:
+        objects = dict(workers.map(compile_module, modules))
     run("compile-rng-tests", common + ["-Isrc/core", objects["rng"], "tests/core/test_rng.c", "-o", output / "test_rng.exe"])
     run("compile-disc-tests", common + [objects["disc"], "tests/platform/test_disc.c", "-o", output / "test_disc.exe"])
     run("compile-boot-tests", common + ["-Isrc/core", objects["boot"], "tests/core/test_boot.c", "-o", output / "test_boot.exe"])
@@ -224,10 +280,13 @@ def main():
     run("compile-id-texture-tests", common + id_objects + ["tests/core/test_id_texture.c", "-o", output / "test_id_texture.exe"])
     run("compile-mc-control-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_control.c", "-o", output / "test_mc_control.exe"])
     run("compile-game-stage-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_game_stage.c", "-o", output / "test_game_stage.exe"])
-    run("compile-game-children-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_children", "id_base", "id_path", "core_bundle")] + ["tests/core/test_game_children.c", "-o", output / "test_game_children.exe"])
+    run("compile-game-children-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_children", "game_render_steps", "id_base", "id_path", "core_bundle")] + ["tests/core/test_game_children.c", "-o", output / "test_game_children.exe"])
     run("compile-id-text-tests", common + [objects["id_text"], objects["font_draw"], objects["packed_message"]] + id_objects + ["tests/core/test_id_text.c", "-o", output / "test_id_text.exe"])
-    for name, source, _ in extra_tests:
+    def compile_extra_test(test):
+        name, source, _ = test
         run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms"] + list(objects.values()) + [source, "-o", output / ("test_" + name.replace("-", "_") + ".exe")])
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as workers:
+        list(workers.map(compile_extra_test, extra_tests))
     run("compile-core-dll", common + ["-shared", "-Wl,--export-all-symbols"] + list(objects.values()) + ["-o", output / "godhand_core.dll"])
     cpp = [compiler, "c++", "-target", "x86_64-windows-gnu", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror"]
     run("compile-cpp-abi", cpp + list(objects.values()) + ["tests/test_cpp_abi.cpp", "-o", output / "test_cpp_abi.exe"])
@@ -268,7 +327,7 @@ def main():
         run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
         run("test-id-text", [output / "test_id_text.exe", baseline["source_iso"]["path"]])
         for name, _, inputs in extra_tests:
-            if ((name in ("se-voice", "mc-control-flow", "bgm-requests", "adx-stream", "r020-title") and not args.hardware_audio)
+            if ((name in ("se-voice", "mc-control-flow", "bgm-requests", "adx-stream", "r020-title", "game-services", "game-scene-exit", "sound-scene-exit") and not args.hardware_audio)
                     or (inputs == "movie" and not args.movie_codec)
                     or (inputs == "adx-reference" and not args.adx_reference_wave)):
                 manifest.setdefault("skipped_checks", []).append({"name": "test-" + name, "reason": "Explicit hardware/codec opt-in not supplied"})

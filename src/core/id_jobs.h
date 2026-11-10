@@ -33,7 +33,7 @@ gh_id_error gh_id_jobs_collect_visible(gh_id_base *,gh_id_draw_job *,size_t capa
  size_t *count,gh_id_frontier *);
 typedef struct {gh_id_view source;uint16_t width,height;uint64_t tex0;} gh_id_texture;
 /* Actual2ACDC8 TBL1 lookup, one-based. Restricted original T32/PSMT8 views,
- * actual512x512T32/PSMT4titlelogo,
+ * actual512x512T32/PSMT4titlelogo and256x128T32/PSMT8TitleLevel,
  * andverifiedlanguage32x32indexed4TIM2 confirmationcursor. */
 gh_id_error gh_id_texture_open(const gh_id_state *,uint32_t slot,uint32_t one_based,gh_id_texture *);
 gh_id_error gh_id_texture_rgba(const gh_id_texture *,void *rgba,size_t capacity);

@@ -8,7 +8,8 @@ static gh_scene_table_status fail(gh_game_scene_tables*s,uint32_t f,int d,gh_sce
 gh_scene_table_status gh_scene_environment_002a71b0(gh_game_scene_tables*s,gh_boot_work*w,const gh_bundle*b){
  if(!s||!w||!b)return GH_TABLE_ARGUMENT;gh_bundle_entry e;s->frontier=0;
  gh_bundle_error r=gh_bundle_find(b,"ENV",0,&e);
- if(r==GH_BUNDLE_OK)return fail(s,0x2a71b0,0,GH_TABLE_UNSUPPORTED);
+ if(r==GH_BUNDLE_OK){s->environment=(gh_scene_table_view){e.bytes,e.size};
+  work32(w,0x608,GH_SCENE_ENVIRONMENT_NATIVE_HANDLE);return GH_TABLE_OK;}
  if(r!=GH_BUNDLE_NOT_FOUND)return fail(s,0x31ccf0,r,GH_TABLE_BOUNDS);
  s->environment=(gh_scene_table_view){0};work32(w,0x608,0);return GH_TABLE_OK;
 }

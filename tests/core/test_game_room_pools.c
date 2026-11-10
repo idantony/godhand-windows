@@ -17,6 +17,14 @@ int main(int argc,char**argv){
   CHECK(gh_game_room_pools_initialize_002a5d80(&pools,&bundle,heap)==GH_POOL_OK&&pools.initialized);
   uint32_t caps[]={u16(rht.bytes)+u16(rht.bytes+2),u16(rht.bytes),128,u16(rht.bytes+2)};
   size_t total=0;for(unsigned i=0;i<4;i++){CHECK(pools.vectors[i].capacity==caps[i]&&!pools.vectors[i].count&&pools.vectors[i].allocation.pointer);total+=caps[i]*4;}
+  {
+   const uint32_t globals[]={0x754c30,0x754c38,0x754c50,0x754c58};const gh_room_vector *view=NULL;
+   for(unsigned i=0;i<4;++i)CHECK(gh_room_registry_view(&pools,globals[i],&view)==GH_POOL_OK&&view==&pools.vectors[i]&&!view->count&&view->capacity==caps[i]);
+   CHECK(gh_room_registry_view(&pools,0x754c20,&view)==GH_POOL_ARGUMENT&&!view);
+   pools.vectors[3].count=pools.vectors[3].capacity+1;
+   CHECK(gh_room_registry_view(&pools,0x754c58,&view)==GH_POOL_BOUNDS&&!view);pools.vectors[3].count=0;
+   gh_room_pools absent={0};CHECK(gh_room_registry_view(&absent,0x754c30,&view)==GH_POOL_BUSY&&!view);
+  }
   uint32_t sizes[]={u16(rht.bytes)*0x380u+0x20,u32(rht.bytes+12),u32(rht.bytes+4)};
   for(unsigned i=0;i<3;i++){
    gh_room_arena*a=&pools.arenas[i];const uint8_t *header=a->allocation.pointer;

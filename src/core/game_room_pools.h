@@ -28,6 +28,11 @@ gh_room_pool_status gh_game_room_pools_release(gh_room_pools *);
  * originalNULL (includingpoolfull). Nativehandles are one-based indices. */
 gh_room_pool_status gh_room_block_take_002a97a0(gh_room_block_pool *,uint32_t work594,uint32_t *handle,void **payload);
 gh_room_pool_status gh_room_block_put_002a9800(gh_room_block_pool *,uint32_t handle);
+/* Canonical object-pointer registries allocated by the SAME 2A5D80 call.
+ * These addresses name original globals for semantic selection only; no guest
+ * memory is dereferenced. Positive elements still require typed native actors.
+ * An initialized empty vector is distinct from an absent pool constructor. */
+gh_room_pool_status gh_room_registry_view(const gh_room_pools *,uint32_t original_global,const gh_room_vector **);
 #ifdef __cplusplus
 }
 #endif

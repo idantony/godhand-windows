@@ -1,4 +1,5 @@
 """Publish an allowlisted progress summary, without local data or code dumps."""
+import argparse
 import datetime
 import hashlib
 import json
@@ -12,6 +13,16 @@ def read(name):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--verified-source-root", type=Path,
+                        help="Validate a recorded immutable source copy while workers continue editing")
+    args = parser.parse_args()
+    source_root = args.verified_source_root.resolve() if args.verified_source_root else ROOT
+    frozen = source_root != ROOT
+    if frozen:
+        receipt = json.loads((source_root / "analysis/source-snapshot.json").read_text(encoding="utf-8"))
+        if Path(receipt["source_project"]).resolve() != ROOT or Path(receipt["snapshot"]).resolve() != source_root:
+            raise SystemExit("Source snapshot receipt does not identify this project and copy")
     native = read("native-verification.json")
     differential = read("rng-differential.json")
     assets = read("asset-layout.json")
@@ -23,13 +34,17 @@ def main():
     if not native.get("source_sha256"):
         raise SystemExit("Rebuild native modules to record source fingerprints before exporting progress")
     for name, expected in native["source_sha256"].items():
-        if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != expected:
+        if hashlib.sha256((source_root / name).read_bytes()).hexdigest() != expected:
             raise SystemExit("Native verification is stale for changed source: " + name)
+        if frozen and receipt["source_sha256"].get(name) != expected:
+            raise SystemExit("Native input is not in the original immutable copy: " + name)
     if window["status"] != "passed" or hashlib.sha256((ROOT / "analysis" / window["build_report"]).read_bytes()).hexdigest() != window["build_report_sha256"]:
         raise SystemExit("Native window execution proof does not match its build")
     for name, expected in window_build["source_sha256"].items():
-        if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != expected:
+        if hashlib.sha256((source_root / name).read_bytes()).hexdigest() != expected:
             raise SystemExit("Window verification is stale for changed source: " + name)
+        if frozen and receipt["source_sha256"].get(name) != expected:
+            raise SystemExit("Window input is not in the original immutable copy: " + name)
     if hashlib.sha256(Path(window_build["executable"]).read_bytes()).hexdigest() != window["executable_sha256"]:
         raise SystemExit("Window execution binary changed after verification")
     current_dll = Path(differential["native_dll"])
@@ -38,9 +53,11 @@ def main():
     progress = {
         "schema_version": 1,
         "verified_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "stage": "native-windows-startup-mc-movie-main-integration",
+        "stage": "native-windows-original-title-scene",
         "playable": False,
         "original_game_scene_observed_in_native_port": False,
+        "original_title_UI_scene_observed_in_native_port": window["execution"].get("scene_frames_presented", 0) > 0,
+        "source_verification": "immutable authored source copy" if frozen else "current authored source",
         "strategy": "Recover readable original logic and implement native platform dependencies",
         "input": {"serial": "SLUS-21503", "version": "1.00", "region": "NTSC-U",
                   "variant": "User-provided Uncensor Patch v1.0",
@@ -63,7 +80,7 @@ def main():
             "startup_task": {"original_function": "0x0030D358", "real_native_backends_connected": True,
                              "scope": "Sound-bank commit, core/language DVD reads, font/menu/ID initialization",
                              "normal_path_next_entry": "0x002AE8A8", "next_entry_available": True,
-                             "current_frontier": {"module": "main ELF", "address": window["execution"]["frontier"], "operation": "Next original scene initialization callee"},
+                             "current_frontier": {"module": "main ELF", "address": window["execution"]["frontier"], "operation": "Bounded running title scene" if window["execution"]["frontier"] == "00000000" else "Original unresolved consumer"},
                              "alternate_original_branch": {"GameMain_case0_and_parallel_asset_loader_tested": True,
                                                            "full_native_services_tested": True,
                                                            "next_unavailable_entry": "0x" + window["execution"]["frontier"]},
@@ -97,13 +114,15 @@ def main():
             "video_EOF_and_audio_done": window["execution"]["movie_complete"],
             "original_GameMain_state": window["execution"]["game_state"],
             "assets_loaded": window["execution"]["assets_loaded"],
+            "original_title_scene_frames_presented": window["execution"].get("scene_frames_presented", 0),
+            "bounded_execution_running": window["execution"]["host_phase"] == 0,
             "frontier": window["execution"]["frontier"], "full_game_scene_or_gameplay_observed": False},
         "tests": {"native_build": native["status"],
                   "built_modules": native["module_names"],
                   "passed_steps": [step["name"] for step in native["steps"] if step["name"].startswith("test-") and step["returncode"] == 0],
                   "rng_differential": {"distinct_seeds": differential["distinct_seeds"], "calls_compared": differential["function_calls_compared"],
                                        "comparison": differential["comparison"], "hardware_capture": False}},
-        "remaining": ["Original r020 title overlay binding and logic", "Earlier subsystem initialization and full main-loop integration", "Asset object/model/animation loading",
+        "remaining": ["New Game transition into the first world scene", "Earlier subsystem initialization and full main-loop integration", "Asset object/model/animation loading",
                       "Native rendering, audio, input and save adapters", "Full game progression and timing validation"],
         "progress_policy": "Upstream PS2 matching coverage is not native port coverage; no synthetic completion percentage",
         "sources": {"upstream": "https://github.com/LucasPicoli/god-hand-decomp", "upstream_commit": "eaae18d0dfab1f9a0df276ae5ca1581ad326faf3",

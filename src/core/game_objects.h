@@ -6,7 +6,7 @@ extern "C" {
 #endif
 typedef struct gh_game_objects gh_game_objects;
 typedef enum {GH_OBJECT_OK,GH_OBJECT_ARGUMENT,GH_OBJECT_MEMORY,GH_OBJECT_BOUNDS,
- GH_OBJECT_CAPACITY,GH_OBJECT_NOT_READY,GH_OBJECT_MISSING} gh_object_status;
+ GH_OBJECT_CAPACITY,GH_OBJECT_NOT_READY,GH_OBJECT_MISSING,GH_OBJECT_UNSUPPORTED} gh_object_status;
 typedef struct {const uint8_t *bytes;size_t size;uint32_t kind,state,flags,file_kind;int32_t use_count;} gh_object_view;
 /* Actual1FF780(global80)/28FF80(room32) array bindings. Configures the existing
  * canonical stage slot manager; no shadow scalar records. Constructor does not
@@ -23,6 +23,11 @@ gh_object_status gh_game_objects_find(const gh_game_objects *,uint32_t kind,gh_o
  * order. Caller performs originalroom/flags gating and fiber wait before this
  * primitive; flags400 is required, flags80 set only after concrete bindings. */
 gh_object_status gh_game_objects_register_startup(gh_game_objects *,gh_game_assets *);
+/* Actual1FE748 descending holder updates, not model readiness/GPU work.
+ * Switchdefault state2 leaves real pinned sources untouched. States5/6 and
+ * scalar dependency removal are recovered. IOstate1/releasestate7 or an
+ * actualresource-free cascade fail preflight atomically atoriginalcallee. */
+gh_object_status gh_game_objects_update_001fe748(gh_game_objects *,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

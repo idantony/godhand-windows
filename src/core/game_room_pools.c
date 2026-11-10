@@ -66,3 +66,16 @@ gh_room_pool_status gh_game_room_pools_release(gh_room_pools*s){
  for(unsigned i=0;i<4;i++){if(s->vectors[i].allocation.pointer&&gh_heap_release(s->heap,s->vectors[i].allocation)!=GH_MEM_OK)return GH_POOL_MEMORY;memset(&s->vectors[i],0,sizeof(s->vectors[i]));}
  s->initialized=0;s->failed_entry=0;s->detail=0;return GH_POOL_OK;
 }
+
+gh_room_pool_status gh_room_registry_view(const gh_room_pools*s,uint32_t address,const gh_room_vector**out){
+ static const uint32_t globals[]={0x754c30,0x754c38,0x754c50,0x754c58};
+ if(!out)return GH_POOL_ARGUMENT;*out=NULL;
+ if(!s)return GH_POOL_ARGUMENT;
+ if(!s->initialized)return GH_POOL_BUSY;
+ for(unsigned i=0;i<4;++i)if(address==globals[i]){
+  const gh_room_vector*v=&s->vectors[i];
+  if(v->count>v->capacity||(v->capacity&&!v->allocation.pointer))return GH_POOL_BOUNDS;
+  *out=v;return GH_POOL_OK;
+ }
+ return GH_POOL_ARGUMENT;
+}

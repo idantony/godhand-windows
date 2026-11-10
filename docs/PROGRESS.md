@@ -4,6 +4,32 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Current milestone: integrated original title scene
+
+An immutable source copy passes 105 C modules and 111 checks, including muted
+device/codec execution and the full independent ADX comparison. Its matching
+Windows QA binary completes 600 updates: 6 MC frames, all90 Clover frames,
+then481 original title scene frames with no unresolved consumer. A captured
+frame shows GOD HAND / PRESS START. Original timers advance the logos; title
+input is not injected in this bounded acceptance run.
+
+The actual OT traversal now orders logical banks, depth buckets and LIFO packet
+groups. Text stays one packet group; each numeric digit is separate. Completed
+pixels are presented on the following update, before borrowed resources expire.
+Canonical cameras, display state, object registries, scene updates and HUD
+consumers share their owners. Explicit zero-memory and binary32 reference
+policies remain separate from PS2 hardware validation.
+
+A separate New Game QA reaches the difficulty menu and then the actual bank2
+sound boundary2CB8A0. State5/SystemMenu/TitleEnd and sound release are covered by
+bounded original-owner tests; the integrated first world scene is still pending.
+No original combat, player animation, full progression or save/load is claimed.
+
+当前固定源码副本通过105个C模块/111项检查；匹配的Windows程序完成600次更新，
+显示6帧存储卡界面、90帧片头和481帧原标题场景。已捕获PRESS START画面。
+另一“新游戏”验证到达难度菜单后停在真实bank2音效入口；第一关和可玩玩法仍未完成。
+以下条目保留历史节点，最新范围以本节及progress.json为准。
+
 ## Milestone 1: original input and native foundation
 
 - Indexed the user's patched NTSC-U disc: 1445 resources and 81 dynamic modules.

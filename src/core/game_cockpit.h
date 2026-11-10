@@ -2,6 +2,7 @@
 #define GH_GAME_COCKPIT_H
 #include "id_jobs.h"
 #include "game_init.h"
+#include "cockpit_fan.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,6 +27,28 @@ gh_id_error gh_game_cockpit_entry_at(const gh_game_cockpit *,uint32_t original_p
 const uint8_t *gh_game_cockpit_fields(const gh_game_cockpit *,size_t *);
 uint32_t gh_game_cockpit_frontier(const gh_game_cockpit *);
 int gh_game_cockpit_ready(const gh_game_cockpit *);
+/* Canonicalscalarborrow for actual1F75B0, not a mutablewholeclasscast. */
+uint8_t *gh_game_cockpit_action_flags_1414(gh_game_cockpit *);
+/* Same SystemMenu widget atCockpit+3A0: typed Base and original+90..BF
+ * scalar-only span. No guest/native pointer fields are exposed as bytes. */
+typedef struct {gh_id_base *base;uint8_t *scalars90;size_t size;} gh_cockpit_system_menu_view;
+gh_id_error gh_game_cockpit_get_system_menu(gh_game_cockpit *,gh_cockpit_system_menu_view *);
+/* Actual frame consumers, same explicit nativebinary32/seed0 reference policy
+ * as room reset, not EE/VU bit identity. Successful IDTrans callback must queue/execute real
+ * entries, never acknowledge unknown consumers. Pointer stays owned here. */
+typedef struct {
+ void *context;
+ gh_id_error (*trans)(void *,gh_id_base *,uint32_t *frontier);
+ gh_id_error (*set_draw_order)(void *,uint32_t bank,uint32_t depth,uint32_t *frontier);
+ gh_id_post_message post;void *post_context;
+ gh_core_save_view save;
+ gh_id_error (*fan)(void *,const gh_cockpit_fan *,uint32_t *frontier);
+} gh_cockpit_frame_callbacks;
+/* Loads original immutable radar curves41E780/41E7A8 and scalar3BD6F4.
+ * One canonical Cockpit owner retains its original global pulse companion. */
+gh_id_error gh_game_cockpit_bind_frame_elf(gh_game_cockpit *,const void *,size_t);
+gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);
+gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);
 #ifdef __cplusplus
 }
 #endif

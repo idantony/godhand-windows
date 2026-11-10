@@ -3,6 +3,20 @@
 This is one modified title/release, not a universal PS2 specification. Current
 progress/authorization belongs in [resume.md](resume.md).
 
+## Parallel verification and precise stopping
+
+Use immutable authored-source snapshots when workers continue changing shared
+headers. Fingerprint every real input, build/test the copy, and stage its exact
+verified bytes without overwriting newer working files. A passing copy does not
+prove the current working tree. Do not repeatedly invalidate whole long checks
+because an unrelated worker is writing another header.
+
+Stop the native developer host immediately on its first unsupported task. An
+old host waited for unrelated live fibers to finish before surfacing failure;
+this accidentally made asset-completion/tick-count tests pass. Assert the true
+frontier and canonical state; verify real asset completion separately in the
+integrated frontend run. Never retain a synthetic delay just to satisfy a test.
+
 ## Baseline and upstream
 
 Project: E:/godhand_windows. User ISO: God Hand (USA)(Uncensor Patch v1.0).iso.
@@ -164,3 +178,16 @@ Immediate ID consumer submission order is not yet proof of final GS display
 order. Final OT insertion/traversal can change composition. Keep the palette
 and submission evidence, audit 0031A338/0014FE78/0014FF60/0015FBA8, and do not
 reorder or brighten the MC window based on appearance alone.
+
+
+Resolve every global flag address against the actual Work base007474A0 before
+naming a field:00747A24 is +584,00747A78 is +5D8,00747A80 is +5E0. Upstream's
+phrase "system flags" is not a sufficient offset. The camera139C88/MoveObj
+D_00747A78 gate is distinct from the startup/Main flags584 word. R020's real
+5D8 OR F00C6000 is relevant to that gate; do not bind an invented tracked-player
+pose merely to get past a mistaken flag offset. Recheck raw loads before use.
+
+The four canonical754C30/38/50/58 object-pointer registries are already the
+four vectors in game_room_pools, created by actual2A5D80→3127B0 from RHT.
+They are distinct from global80/room32 asset holders. Use gh_room_registry_view
+on the existing initialized pools; do not create fresh empty list companions.

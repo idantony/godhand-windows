@@ -27,6 +27,41 @@ instruction-translated final runtime. No playable original scene verified yet.
   at a module/push, pause without instruction, or stop after this resume.
 - These historical permissions do not transfer to another game/read-only task.
 
+## Latest verified title checkpoint (2026-11-10)
+
+- Immutable source: G:/middle_thing/godhand_windows/snapshots/title-native-04.
+  Build/cache/output: G:/middle_thing/godhand_windows/verification/title-native-04.
+  105 C modules/111 checks PASS, all hardware/codec/full ADX opt-ins, no skips.
+  Fresh DLL RNG checks:20544/20534 exact comparisons respectively.
+- Matching Windows startup-QA:600ticks,6MC/90Movie/481Title frames, state4,
+  no frontier/error. Original logos advance by timers; actual title remains at
+  PRESS START. Private capture reference/render/native-title-verified04-frame350.
+  Earlier boot/world scene/combat/animation/save are NOT verified.
+- Current analysis/native-verification.json and window proof refer to THIS
+  copied source, not whatever workers now edit. Use export-progress.py
+  --verified-source-root with the snapshot; stage exact verified source blobs
+  from its source fingerprints, leaving later working edits intact.
+- tools/freeze-source.py copies authored files consistently into NEW G: folders;
+  read-only-used .tools/reference junctions borrow E: inputs. Never modify a
+  finished copy. Build with --scratch outside that source directory. The native
+  runner compiles independent modules/tests with4 compiler workers; device
+  tests remain serial. Source guard detects in-run changes.
+- Root host owns scene frame lifecycle BEFORE all GlobalTask traversal. Loading
+  SystemMenu can run before Main; beginning only inside state5 erases its jobs.
+  Resource views expire each begin; completed pixels, not borrowed ID jobs, are
+  presented on the next update. TitleEnd must preserve SystemMenu resource1.
+- First no-frontend frontier is now15B880. Immediate host stop precedes the
+  independent asset fiber's completion; tests must not require its old
+  >90tick/assets-loaded side effect. Full Windows execution verifies assets.
+- Root wired state5/SoundExit/SystemMenu owners; the verified integrated
+  NewGame boundary was2CB8A0 bank2 sound. Audio worker subsequently FROZE real
+  bank2 programs0/10/11/12, Stop10 integer ramps and source gains; these newer
+  bytes require a NEW fresh build, cannot inherit title-native-04's proof.
+- Workers: opengoal_method owns new game_scene_meshes/canonical pool handles;
+  godhand_upstream owns native static-mesh streams/transform research;
+  skill_forward_test owns exact scene-exit cleanup and next-room lifecycle.
+  Root owns host/services/Main integration, GPU backend and coherent proof.
+
 ## Baseline
 
 God Hand (USA)(Uncensor Patch v1.0).iso, SLUS-21503, NTSC-U1.00. The patched
@@ -172,3 +207,27 @@ services must borrow it. New game_scene_step is not in the above84-module suite.
 Preserve explicit path-distance and title-player allocation memory profiles.
 Last pushed milestone is still4578b62; subjective percentage belongs only in
 chat/private review and was8. Keep working until the full playable port goal.
+
+
+Latest committed local checkpoint is b25aa28 (not pushed). Source after it is
+in progress. Root added a canonical display_state module (ELF scalars and real
+2A48A8 static leaf, isolated test passed), semantic room registry views, and a
+bounded renderer UI group queue (strict compile only, not GPU-verified yet).
+The latter captures entry/base scalars and borrows resource/font/menu owners
+until same-frame flush; a full permutation is required. Original OT ordering
+worker will provide indices. Existing immediate path remains the old reference.
+
+Important new primary OT finding: actual14FF00 head-inserts groups (LIFO),
+31A650 bucket=count-min(depth,count), bucket traversal ascending. Supported MC
+textures use bank6/depth5; an entire text message is ONE bank6/depth2 group
+(keep glyph order inside it). Therefore final original OT draws windows before
+text; old immediate Trans order/text-before-window was not final composition.
+Previous MC hash only proved a stable submission-order reference. Actual outer
+loop submits previous parity before increment/reset; full presentation and
+clear policy need integration. Do not claim old MC composition as original OT.
+
+Canonical camera gate139C88 reads D747A78=Work+5D8, not +584. ActualR020 Init
+sets F00C6000 there, so follow-player logic really skips. The unfrozen draft
+prefix used the wrong flags word; worker corrected source/tests/evidence before
+integration and now restores projection138740 with borrowed Root display state.
+Never manufacture tracked pose=Work.player to bypass this issue.

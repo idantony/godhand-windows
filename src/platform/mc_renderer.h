@@ -1,6 +1,9 @@
 #ifndef GH_MC_RENDERER_H
 #define GH_MC_RENDERER_H
 #include "startup_host.h"
+#include "ui_fade_renderer.h"
+#include "../core/cockpit_fan.h"
+#include "../core/game_children.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,6 +39,33 @@ void gh_mc_renderer_begin(gh_mc_renderer *);
  * Resource/font/message views must be the actual caller's canonical views.
  * The MC convenience wrapper below selects the live MC owner from a snapshot. */
 gh_id_error gh_mc_renderer_draw_view(gh_mc_renderer *,const gh_id_render_view *,const gh_id_draw_job *);
+typedef struct {uint32_t bank;int32_t depth;size_t index;} gh_ui_ot_tag;
+/* Bounded native UI packet groups: capture entry/base scalar values now,
+ * borrow source/font/menu owners until the SAME frame's flush. Text is one
+ * group with its internal glyph order intact. Does not claim GPU completion.
+ * Begin expires old groups; flush requires a complete permutation produced
+ * by the recovered original OT traversal, never a visual preference.
+ * A genuine original NULL-texture return emits no packet: returnsOK with
+ * tag.index=SIZE_MAX; caller MUST NOT append that tag to its OT groups. */
+gh_id_error gh_mc_renderer_queue_view(gh_mc_renderer *,const gh_id_render_view *,const gh_id_draw_job *,gh_ui_ot_tag *);
+/* Each captures ONE original OT group. Fan owns primitive scalar arrays and
+ * borrows its immutable texture bytes until same-frame flush. Fade copies its
+ * complete scalar/context data. Only visible Fade draws emit a packet group. */
+gh_id_error gh_mc_renderer_queue_fan(gh_mc_renderer *,const gh_cockpit_fan *,gh_ui_ot_tag *);
+gh_id_error gh_mc_renderer_queue_fade(gh_mc_renderer *,const gh_fade_draw *,const gh_ui_fade_context *,gh_ui_ot_tag *);
+/* Actual160D50 cover packet, TEST3001D. Alpha0/1 is a genuine GREATER1
+ * discard (including Z), retained as ONE packet group, never NULL sentinel.
+ * Positive alpha currently remains explicit15B880 frontier. */
+gh_id_error gh_mc_renderer_queue_cover(gh_mc_renderer *,const gh_child_cover_quad *,gh_ui_ot_tag *);
+/* Plural original packet groups: numeric digits each get their own tag,
+ * genuine NULL texture returns count0, font/ordinary ID returns count1.
+ * Capacity/memory failures leave queue, tags and count unchanged. */
+gh_id_error gh_mc_renderer_queue_view_groups(gh_mc_renderer *,const gh_id_render_view *,
+ const gh_id_draw_job *,gh_ui_ot_tag *,size_t capacity,size_t *count);
+/* CT32 opaque clear before the ordered groups: RGB is Work+60C low24,
+ * alpha0, explicit native FBA0 reference. This does not itself implement the
+ * outer-loop previous-parity submission or recover all earlier GS state. */
+gh_id_error gh_mc_renderer_flush_queued(gh_mc_renderer *,const size_t *order,size_t count,uint32_t clear_rgb);
 gh_id_error gh_mc_renderer_draw(gh_mc_renderer *,const gh_startup_snapshot *,const gh_id_draw_job *);
 const unsigned char *gh_mc_renderer_pixels(const gh_mc_renderer *,size_t *bytes);
 void gh_mc_renderer_inspect(const gh_mc_renderer *,gh_mc_render_status *);

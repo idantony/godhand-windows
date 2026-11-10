@@ -5,8 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #define NONE 255
-struct voice {gh_se_voice_info info;gh_adpcm_pcm pcm;uint32_t age,ee_age;int next;uint8_t used,priority,group_first,group_count,replace_equal;};
-struct gh_se_voice_engine {const gh_audio_registry *registry;gh_audio_output *output;gh_se_mix mix;struct voice voices[64];int channels[51],head;uint32_t serial,frontier;const void *origin_seh;size_t origin_seh_size;uint8_t origin_scene_bound;};
+struct voice {gh_se_voice_info info;gh_adpcm_pcm pcm;uint32_t age,ee_age;uint16_t base_gain;int next;uint8_t used,priority,group_first,group_count,replace_equal;};
+struct gh_se_voice_engine {const gh_audio_registry *registry;gh_audio_output *output;gh_se_mix mix;struct voice voices[64];int channels[51],head;uint32_t serial,frontier;const void *origin_seh;size_t origin_seh_size;uint8_t origin_scene_bound;struct {uint32_t handle;int16_t ticks;} stops[48];unsigned stop_count;};
 static unsigned h(const uint8_t *p){return (unsigned)p[0]|(unsigned)p[1]<<8;}
 static uint32_t w(const uint8_t *p){return (uint32_t)h(p)|(uint32_t)h(p+2)<<16;}
 static int32_t floor_shift(int64_t n,unsigned shift){int64_t d=INT64_C(1)<<shift;return (int32_t)(n>=0?n/d:-((-n+d-1)/d));}
@@ -61,20 +61,25 @@ gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *s,int16_t bank,in
 {
  uint8_t p[48];gh_sound_span descriptor,tail;gh_voice_status result;unsigned i,slot,rate,level;struct voice candidate={0};
  if(!s || !handle)return GH_VOICE_ARGUMENT;*handle=0;s->frontier=0;
- if(bank || (program!=0x2d && program!=0x15e && program!=0x160 && program!=0x161) || arg3!=-1 || arg4!=-1 || flags || delay)return unsupported(s,0x2cb8a0);
+ int title=bank==2&&(program==0||(program>=10&&program<=12));
+ if((!title&&(bank || (program!=0x2d && program!=0x15e && program!=0x160 && program!=0x161))) || arg3!=-1 || arg4!=-1 || flags || delay)return unsupported(s,0x2cb8a0);
  if(s->mix.system_flags&0x08000040)return unsupported(s,0x2ce588);
  if(gh_audio_get_program(s->registry,bank,program,0,p)!=GH_AUDIO_OK)return unsupported(s,0x374cb8);
  /* Exact audited subsets; +21 controls random variants, +22 duplicate age
   * window. +09 is origin/output selection, not variant count. */
- if(program==0x2d){
-  if(p[6]!=15 || p[7]!=1 || p[8]!=104 || p[9]!=2 || h(p+0xe)!=0x21 || w(p+0x20)!=0x00030005 || h(p+0x10)!=90)return unsupported(s,0x2cdff0);
-  if(!s->origin_scene_bound || s->origin_seh || s->origin_seh_size)return unsupported(s,0x2cae10);
-  /* 2CBF78 mode2 selects the youngest matching EE voice whose update age
-   * is <=descriptor+22. Equal origin positions/delay reject even pending.
-   * Once all same-program ages exceed3, another request is permitted. */
-  for(int j=s->head;j!=-1;j=s->voices[j].next)if(s->voices[j].info.program==program && (s->voices[j].ee_age<=p[0x22] || s->voices[j].ee_age>=UINT32_C(0x80000000)))return GH_VOICE_OK;
- }else if(p[6] || p[7]!=4 || p[8]!=120 || p[9] || h(p+0xe)!=0x23 || w(p+0x20))return unsupported(s,0x2cdff0);
- if(h(p+0x10)!=h(p+0x12) || h(p+0x14)!=64 || h(p+0x16)!=90 || w(p+0x18) || h(p+0x1c) || h(p+0x1e)!=255 || w(p+0x24) || h(p+0x28)!=65535 || h(p+0x2a) || w(p+0x2c))return unsupported(s,0x2cdff0);
+ if(title){
+  if(!s->origin_scene_bound||s->origin_seh||s->origin_seh_size)return unsupported(s,0x2cae10);
+  if(program==0){if(p[6]!=10||p[7]!=4||p[8]!=120||p[9]||h(p+0xe)!=0x20||h(p+0x10)!=90||w(p+0x20)!=0x30000||w(p+0x24)!=0x300||h(p+0x1e))return unsupported(s,0x2cdff0);}
+  else if(p[6]!=20||p[7]!=4||p[8]!=122||p[9]||h(p+0xe)!=0x23||h(p+0x10)!=120||w(p+0x20)||w(p+0x24)||h(p+0x1e)!=255)return unsupported(s,0x2cdff0);
+ }else if(program==0x2d){
+  if(p[6]!=15||p[7]!=1||p[8]!=104||p[9]!=2||h(p+0xe)!=0x21||w(p+0x20)!=0x00030005||h(p+0x10)!=90)return unsupported(s,0x2cdff0);
+  if(!s->origin_scene_bound||s->origin_seh||s->origin_seh_size)return unsupported(s,0x2cae10);
+ }else if(p[6]||p[7]!=4||p[8]!=120||p[9]||h(p+0xe)!=0x23||w(p+0x20))return unsupported(s,0x2cdff0);
+ if(h(p+0x10)!=h(p+0x12)||h(p+0x14)!=64||h(p+0x16)!=90||w(p+0x18)||h(p+0x1c)||h(p+0x28)!=65535||h(p+0x2a)||w(p+0x2c))return unsupported(s,0x2cdff0);
+ if(!title&&(h(p+0x1e)!=255||w(p+0x24)))return unsupported(s,0x2cdff0);
+ /* Actual2CBF78 compares bank AND program; duplicate-age suppression for
+  * equal-origin zero-delay is shared by logo and room confirmation0. */
+ if(p[0x22])for(int j=s->head;j!=-1;j=s->voices[j].next)if(s->voices[j].info.bank==bank&&s->voices[j].info.program==program&&(s->voices[j].ee_age<=p[0x22]||s->voices[j].ee_age>=UINT32_C(0x80000000)))return GH_VOICE_OK;
  for(i=0;i<64 && s->voices[i].used;++i){}if(i==64)return GH_VOICE_OK;
  slot=h(p+4);if(gh_audio_sample_at(s->registry,bank,slot,&descriptor,&tail)!=GH_AUDIO_OK)return unsupported(s,0x35fc);
  if(descriptor.size!=16 || h(descriptor.data+8)!=0x80ff || h(descriptor.data+10)!=0x5fc0 || w(descriptor.data+12))return unsupported(s,0x35fc);
@@ -83,14 +88,15 @@ gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *s,int16_t bank,in
  result=gh_audio_decode_ps_adpcm(tail.data,tail.size,&candidate.pcm);if(result){s->frontier=0x35fc;return result;}
  result=render(&candidate.pcm,candidate.info.pitch_q12);if(result){gh_audio_pcm_release(&candidate.pcm);return result;}
  level=(unsigned)((uint64_t)s->mix.se_level_q8*(h(p+0x10)<<8)/0x7f00);
- level=(unsigned)((uint64_t)level*32767/0x7f00)/2;
+ candidate.base_gain=(uint16_t)level;level/=2;
+ candidate.info.stop_current=0x7f00;
  candidate.info.level_q14=(uint16_t)level;candidate.info.rate=rate;candidate.info.sample_slot=slot;candidate.info.frames=(uint32_t)candidate.pcm.frames;
- candidate.info.adsr1=0x80ff;candidate.info.adsr2=0x5fc0;candidate.info.program=program;candidate.info.pending=1;candidate.info.channel=NONE;
+ candidate.info.adsr1=0x80ff;candidate.info.adsr2=0x5fc0;candidate.info.program=program;candidate.info.bank=bank;candidate.info.pending=1;candidate.info.channel=NONE;
  if(!++s->serial)++s->serial;candidate.info.original_handle=s->serial;candidate.next=s->head;candidate.used=1;candidate.priority=p[8];candidate.group_first=p[6];candidate.group_count=p[7]+1;candidate.replace_equal=(p[0xe]&0x20)!=0;s->voices[i]=candidate;s->head=(int)i;*handle=s->serial;return GH_VOICE_OK;
 }
 gh_voice_status gh_se_voice_update(gh_se_voice_engine *s)
 {
- int i;unsigned issued=0;if(!s)return GH_VOICE_ARGUMENT;s->frontier=0;i=s->head;
+ int i;unsigned issued=s?s->stop_count:0;if(!s)return GH_VOICE_ARGUMENT;s->frontier=0;i=s->head;
  /* 375380 ages existing links before37BE98 consumes this frame's queue.
   * Newly constructed37C160 links start at0 and must stay0 this visit. */
  for(unsigned c=0;c<51;++c)if(s->channels[c]!=-1){struct voice *old=s->voices+s->channels[c];if(old->age!=UINT32_MAX)++old->age;}
@@ -117,6 +123,29 @@ gh_voice_status gh_se_voice_update(gh_se_voice_engine *s)
   if(v->used)++v->ee_age; /* actual EE+24 ADDIU/SW, modulo2^32 */
   i=next;
  }
+ /* QueueStop is consumed before the per-node ramp scan, matching
+  *375F68/37BE98 before37CAE0. SamplesPlayed is the explicit native busy
+  * acknowledgement replacing asynchronous IOP feedback, not an EE oracle. */
+ for(unsigned q=0;q<s->stop_count;q++)for(int j=s->head;j!=-1;j=s->voices[j].next){struct voice*v=s->voices+j;
+  if(v->info.original_handle!=s->stops[q].handle||!v->info.native_voice)continue;
+  int active;uint64_t played;gh_voice_status e=gh_audio_output_active(s->output,v->info.native_voice,&active,&played);if(e)return e;
+  int ticks=s->stops[q].ticks;
+  if(ticks<=0||!played){e=gh_audio_output_stop(s->output,v->info.native_voice);if(e&&e!=GH_VOICE_BOUNDS)return e;
+   if(v->info.channel<51&&s->channels[v->info.channel]==j)s->channels[v->info.channel]=-1;
+   v->info.channel=NONE;v->info.native_voice=0;v->info.retiring=1;v->info.stopping=0;
+  }else if(v->info.stop_current){int step=-(int)v->info.stop_current/ticks;v->info.stop_step=(int16_t)(step?step:-1);v->info.stop_count=0;v->info.stopping=1;}
+  break;
+ }
+ s->stop_count=0;
+ for(int j=s->head;j!=-1;j=s->voices[j].next){struct voice*v=s->voices+j;if(!v->info.stopping||!v->info.native_voice)continue;
+  if(!v->info.stop_current){gh_voice_status e=gh_audio_output_stop(s->output,v->info.native_voice);if(e&&e!=GH_VOICE_BOUNDS)return e;
+   if(v->info.channel<51&&s->channels[v->info.channel]==j)s->channels[v->info.channel]=-1;
+   v->info.channel=NONE;v->info.native_voice=0;v->info.retiring=1;v->info.stopping=0;
+  }else{int next=v->info.stop_current+v->info.stop_step;if(next<0)next=0;v->info.stop_current=(int16_t)next;v->info.stop_count++;
+   v->info.level_q14=(uint16_t)(((uint32_t)v->base_gain*(unsigned)next/0x7f00)/2);
+   float gain=(float)v->info.level_q14/16384.0f;gh_voice_status e=gh_audio_output_voice_gain(s->output,v->info.native_voice,gain,gain);if(e)return e;
+  }
+ }
  return GH_VOICE_OK;
 }
 gh_voice_status gh_se_voice_query(const gh_se_voice_engine *s,uint32_t handle,gh_se_voice_info *out)
@@ -130,4 +159,29 @@ gh_voice_status gh_se_voice_pcm_view(const gh_se_voice_engine *s,uint32_t handle
   *samples=s->voices[i].pcm.samples;*frames=s->voices[i].pcm.frames;return GH_VOICE_OK;
  }
  return GH_VOICE_BOUNDS;
+}
+
+unsigned gh_se_voice_active_nodes(const gh_se_voice_engine*s){unsigned n=0;if(s)for(unsigned i=0;i<64;i++)n+=s->voices[i].used!=0;return n;}
+gh_voice_status gh_se_voice_request_stop_00375050(gh_se_voice_engine*s,uint32_t handle,int16_t ticks,int*accepted){
+ if(!s||!handle||!accepted)return GH_VOICE_ARGUMENT;*accepted=0;s->frontier=0;
+ if(ticks < -1)return unsupported(s,0x378020);
+ if(s->stop_count==48)return GH_VOICE_OK;
+ s->stops[s->stop_count].handle=handle;s->stops[s->stop_count].ticks=ticks;s->stop_count++;*accepted=1;return GH_VOICE_OK;
+}
+gh_voice_status gh_se_voice_scene_exit_begin(gh_se_voice_engine*s){
+ if(!s)return GH_VOICE_ARGUMENT;s->frontier=0;
+ for(int program=0;program<52;program++)for(int i=s->head;i!=-1;){struct voice*v=s->voices+i;int next=v->next;
+  if(v->info.program==program){if(v->info.native_voice||v->info.retiring){int accepted;gh_voice_status e=gh_se_voice_request_stop_00375050(s,v->info.original_handle,10,&accepted);if(e)return e;/* original ignores queue-full */}
+   else drop(s,i,0);}i=next;}
+ for(int i=s->head;i!=-1;){struct voice*v=s->voices+i;int next=v->next;if(!v->info.native_voice&&!v->info.retiring)drop(s,i,0);i=next;}
+ return GH_VOICE_OK;
+}
+
+int gh_se_voice_uses_registry(const gh_se_voice_engine*s,const gh_audio_registry*r){return s&&r&&s->registry==r;}
+
+gh_voice_status gh_se_voice_stop_bank_002cbe68(gh_se_voice_engine*s,int16_t bank,int16_t ticks){
+ if(!s)return GH_VOICE_ARGUMENT;s->frontier=0;
+ for(int i=s->head;i!=-1;){struct voice*v=s->voices+i;int next=v->next;
+  if(v->info.bank==bank){if(v->info.native_voice||v->info.retiring){int accepted;gh_voice_status e=gh_se_voice_request_stop_00375050(s,v->info.original_handle,ticks,&accepted);if(e)return e;}else drop(s,i,0);}i=next;
+ }return GH_VOICE_OK;
 }

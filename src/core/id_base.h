@@ -76,6 +76,9 @@ gh_id_error gh_id_base_release_002aa078(gh_id_runtime *,gh_id_base *,int *origin
 gh_id_error gh_id_base_get_work_002aa410(gh_id_runtime *,gh_id_base *,int32_t id,gh_id_entry **,int *fallback);
 /* Original family call modifies parents/children, not the selected entry. */
 gh_id_error gh_id_base_set_family_display(gh_id_runtime *,gh_id_base *,int32_t id,int show);
+/* Actual2AA2D0 source initializer only. Entry and full source record must
+ * belong to this base; preserves parent/texture/jitters and invokes no RNG. */
+gh_id_error gh_id_entry_restore_source_002aa2d0(gh_id_base *,gh_id_entry *);
 gh_id_error gh_id_base_restart_anim(gh_id_base *,gh_id_random_u32,void *context);
 #ifdef __cplusplus
 }

@@ -4,6 +4,8 @@
 #include "boot.h"
 #include "../platform/memory.h"
 #include "../platform/adx_stream.h"
+#include "game_children.h"
+#include "game_init.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -39,13 +41,30 @@ gh_bgm_status gh_bgm_requests_enable_native(gh_bgm_requests *,const gh_adx_key *
 /* Full immediate mode5 R020event0 path, including realnativeprepare,original
  * update andlistinsert. Doesnotstartplayback untiloriginalflagsrequest it. */
 gh_bgm_status gh_bgm_event_set_002d15a8(gh_bgm_requests *,uint32_t event,int16_t arg3,int16_t arg4);
-/* Actual existingprepared-request Start path. Missing/unprepared request's
- * different2CC900/373298 constructor path remains preciseunsupported. */
+/* Existing prepared Start and missing-request2CC900/373298 path for verified
+ * R020 event0/zeroargs. Fresh requests own a separate encoded/workbuffer and
+ * actually start native PCM after the original immediate gain update (explicit
+ * asynchronous SDK-to-native timing adaptation). Set itself never autoplays. */
 gh_bgm_status gh_bgm_event_start_002d1610(gh_bgm_requests *,uint32_t event,int16_t arg3,int16_t arg4);
+/* Event-specific2D1768: current R020 negative initial-factor branch, without
+ * Stop's controller flag changes. Missing event is the original void no-op. */
+gh_bgm_status gh_bgm_event_fade_002d1768(gh_bgm_requests *,uint32_t event,float frames,float target,float initial_factor);
 gh_bgm_status gh_bgm_event_stop_002d1800(gh_bgm_requests *,int preserve_mode5);
 /* Original2D0938 activeBGM update only, not the entire2CAF28 soundsystemtick.
  * Unknownactivebranches stop at exactcallee; no discardedBGM request. */
 gh_bgm_status gh_bgm_requests_update_002d0938(gh_bgm_requests *,const gh_boot_work *);
+/* Actualcase3tail2D0850/2D0D70. Readsoriginal44rowroommap fromuserELF;
+ * borrows canonicalchildren/Heat/enemyhead, no defaultroom->trackguess.
+ * Activeenemy/specialdoor override consumers remainpreciseunsupported. */
+gh_bgm_status gh_bgm_requests_scene_begin_002d0850(gh_bgm_requests *,const gh_boot_work *,const gh_game_children *,const gh_game_init_state *);
+/* Actual2CAA00 BGM pass and2CAB58 BGM predicate. Does not advance audio
+ * time; caller retains ordinary2D0938/frame pump. Preserved requests fade to
+ * .01 then pause after original20->...->-1 countdown. */
+int gh_bgm_requests_uses_owners(const gh_bgm_requests *,const gh_audio_registry *,const gh_sound_control *);
+gh_bgm_status gh_bgm_requests_scene_exit_begin(gh_bgm_requests *);
+gh_bgm_status gh_bgm_requests_scene_exit_ready(const gh_bgm_requests *,int *);
+gh_bgm_status gh_bgm_requests_scene_exit_finalize(gh_bgm_requests *);
+int gh_bgm_requests_scene_event(const gh_bgm_requests *,int32_t *);
 unsigned gh_bgm_requests_pending(const gh_bgm_requests *);
 unsigned gh_bgm_requests_active(const gh_bgm_requests *);
 uint32_t gh_bgm_requests_frontier(const gh_bgm_requests *);

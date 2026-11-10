@@ -14,12 +14,22 @@
 #include "../core/game_movie_pool.h"
 #include "../core/screen_fade.h"
 #include "../core/bgm_requests.h"
+#include "../core/display_state.h"
+#include "../core/cockpit_fan.h"
+#include "../core/game_children.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef struct gh_startup_host gh_startup_host;
 typedef gh_id_error (*gh_host_mc_frame_begin)(void *);
 typedef gh_id_error (*gh_host_fade_consumer)(void *,const gh_fade_draw *);
+typedef struct {
+ void *context;
+ gh_id_error (*begin)(void *,uint32_t *frontier);
+ gh_id_error (*draw)(void *,const gh_id_base *,const gh_id_draw_job *,uint32_t *frontier);
+ gh_id_error (*fan)(void *,const gh_cockpit_fan *,uint32_t *frontier);
+ gh_id_error (*cover)(void *,const gh_child_cover_quad *,uint32_t *frontier);
+} gh_host_scene_ui_callbacks;
 typedef struct gh_startup_continuation {
     int enabled;
     int muted; /* QA/user master mute, never simulated audio completion */
@@ -67,6 +77,11 @@ typedef struct gh_startup_snapshot {
     const gh_screen_fade *fade;
     uint64_t fade_draw_serial;
     const gh_bgm_requests *bgm;
+    const gh_display_state *display;
+    uint64_t scene_frame_serial;int scene_frame_ready;
+    uint8_t title_live,title_mode,title_phase,title_subphase;
+    uint32_t title_timer,title_game_selection,title_level;
+    uint64_t title_move_serial;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization
@@ -98,6 +113,10 @@ gh_host_error gh_startup_host_set_mc_frame_begin(gh_startup_host *,gh_host_mc_fr
 /* Actual307388 runs after task traversal and before DVD/audio. A visible fade
  * requires a real native draw consumer; status queries never advance time. */
 gh_host_error gh_startup_host_set_fade_consumer(gh_startup_host *,gh_host_fade_consumer,void *);
+/* Optional native scene packet builders, before tick0. A completed original
+ * state4 traversal is required before scene_frame_ready; partial queues at a
+ * world/render frontier are never reported as complete scene frames. */
+gh_host_error gh_startup_host_set_scene_ui_consumers(gh_startup_host *,const gh_host_scene_ui_callbacks *);
 /* Owner-fiber only, normally once before each timed engine tick. Writes raw
  * 32-bit and logical64-bit original work fields via memcpy, no host-long casts.
  * Does not invent physical input, replay, analog or pad-lock policy. */

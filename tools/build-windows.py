@@ -5,6 +5,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -43,20 +44,38 @@ def main():
     modules = next(ast.literal_eval(n.value) for n in ast.walk(tree) if isinstance(n, ast.Assign)
                    and any(isinstance(t, ast.Name) and t.id == "modules" for t in n.targets))
     cpp_sources = ["src/platform/ui_text_renderer.cpp", "src/platform/ui_sprite_renderer.cpp",
-                   "src/platform/ui_polygon_renderer.cpp", "src/platform/mc_renderer.cpp"]
+                   "src/platform/ui_polygon_renderer.cpp", "src/platform/ui_fade_renderer.cpp", "src/platform/mc_renderer.cpp"]
     if args.target in ("native", "startup-qa"):
         for source in ("src/platform/native_input.c", "src/platform/video_player.c", "src/platform/audio_events.c",
                        "src/core/se_voice.c", "src/core/sound_control.c", "src/core/mc_exit.c",
                        "src/core/game_camera.c", "src/core/game_movie_pool.c", "src/platform/game_services.c"):
             if source not in {s for _, s in modules}:
                 modules.append((Path(source).stem, source))
-        cpp_sources += ["src/platform/window_host.cpp", "src/platform/ui_fade_renderer.cpp", "src/main.cpp"]
+        cpp_sources += ["src/platform/window_host.cpp", "src/main.cpp"]
     elif args.target == "title-ui":
         cpp_sources += ["tools/probe-title-ui.cpp"]
     else:
         cpp_sources += ["tools/probe-mc-frame.cpp"]
     inputs = {"tools/build-native.py", "tools/build-windows.py", *cpp_sources, *(s for _, s in modules)}
-    inputs.update(str(p.relative_to(PROJECT)).replace("\\", "/") for p in (PROJECT / "src").rglob("*.h"))
+    # Fingerprint actual project include dependencies. Unrelated headers being
+    # written by another worker are not inputs to this executable.
+    pending = list(inputs)
+    while pending:
+        name = pending.pop()
+        source = PROJECT / name
+        if source.suffix not in (".c", ".cpp", ".h"):
+            continue
+        for include in re.findall(r'^\s*#\s*include\s*"([^"\r\n]+)"', source.read_text(encoding="utf-8"), re.MULTILINE):
+            header = (source.parent / include).resolve()
+            if not header.is_file():
+                raise SystemExit("Unresolved project include: " + name + " -> " + include)
+            try:
+                dependency = header.relative_to(PROJECT).as_posix()
+            except ValueError:
+                raise SystemExit("Project include escaped source tree: " + name + " -> " + include)
+            if dependency not in inputs:
+                inputs.add(dependency)
+                pending.append(dependency)
     def hashes():
         return {p: hashlib.sha256((PROJECT / p).read_bytes()).hexdigest() for p in sorted(inputs)}
     initial = hashes()

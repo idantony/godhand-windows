@@ -14,7 +14,7 @@ int main(int argc,char **argv){
  gh_se_mix defaults;C(gh_se_mix_boot_defaults_002c9e78(&defaults,0x4000,GH_SE_DSP_NATIVE_LINEAR_REFERENCE)==GH_VOICE_OK && defaults.se_level_q8==0x5a00 && defaults.output_mode==1 && defaults.system_flags==0x4000);
  C(gh_se_voice_create(registry,output,&mix,&engine)==GH_VOICE_OK);
  C(gh_se_voice_request_origin(engine,0,0x160,-1,-1,0,0,&handle[0])==GH_VOICE_OK && handle[0]);
- C(gh_se_voice_query(engine,handle[0],&info)==GH_VOICE_OK && info.pending && !info.native_voice && info.sample_slot==172 && info.pitch_q12==1365 && info.rate==16000 && info.adsr1==0x80ff && info.adsr2==0x5fc0 && info.level_q14==16383);
+ C(gh_se_voice_query(engine,handle[0],&info)==GH_VOICE_OK && info.pending && !info.native_voice && info.sample_slot==172 && info.pitch_q12==1365 && info.rate==16000 && info.adsr1==0x80ff && info.adsr2==0x5fc0 && info.level_q14==16256);
  pcm(engine,handle[0],60915,UINT64_C(0xfb441e2ef9433f43));
  C(gh_se_voice_request_origin(engine,0,0x161,-1,-1,0,0,&handle[1])==GH_VOICE_OK);
  pcm(engine,handle[1],23053,UINT64_C(0xd4d01775af4b4818));
@@ -52,7 +52,7 @@ int main(int argc,char **argv){
  gh_se_voice_destroy(engine);
  C(gh_se_voice_create(registry,output,&defaults,&engine)==GH_VOICE_OK);
  C(gh_se_voice_request_origin(engine,0,0x160,-1,-1,0,0,&unknown)==GH_VOICE_OK && unknown);
- C(gh_se_voice_query(engine,unknown,&info)==GH_VOICE_OK && info.level_q14==11610);
+ C(gh_se_voice_query(engine,unknown,&info)==GH_VOICE_OK && info.level_q14==11520);
  uint32_t mc_handle=unknown;
  /* Actual R020 logo program2D: verified absent canonicalSEH is explicit;
   * nonempty/unknown environment cannot silently become a successful event. */
@@ -62,7 +62,7 @@ int main(int argc,char **argv){
  C(gh_se_voice_bind_origin_seh(engine,0,0)==GH_VOICE_OK);
  C(gh_se_voice_request_origin(engine,0,0x2d,-1,-1,0,0,&handle[0])==GH_VOICE_OK && handle[0]);
  pcm(engine,handle[0],71456,UINT64_C(0xc9dde56414a0a8b8));
- C(gh_se_voice_query(engine,handle[0],&info)==GH_VOICE_OK && info.sample_slot==34 && info.rate==18000 && info.pitch_q12==1536 && info.level_q14==8227);
+ C(gh_se_voice_query(engine,handle[0],&info)==GH_VOICE_OK && info.sample_slot==34 && info.rate==18000 && info.pitch_q12==1536 && info.level_q14==8163);
  C(gh_se_voice_request_origin(engine,0,0x2d,-1,-1,0,0,&unknown)==GH_VOICE_OK && !unknown);
  C(gh_se_voice_update(engine)==GH_VOICE_OK);
  C(gh_se_voice_query(engine,handle[0],&info)==GH_VOICE_OK && info.channel==15 && info.native_voice);

@@ -60,3 +60,25 @@ gh_object_status gh_game_objects_register_startup(gh_game_objects *s,gh_game_ass
  }
  assets->work->flags|=0x80;return GH_OBJECT_OK;
 }
+
+static int has_dependency(const uint8_t*p,uint32_t key){for(unsigned i=0;i<4;i++)if(u32(p+0x4c+i*4)==key)return 1;return 0;}
+/* Actual1FF710 counts pre-existingFFFF only; removedmatches donotcountasempty.
+ * Multiplematchingdependencies thereforedoNOTreturnlast-reference true. */
+static int remove_dependency(uint8_t*p,uint32_t key){unsigned empty=0;int found=0;for(unsigned i=0;i<4;i++){uint8_t*q=p+0x4c+i*4;uint32_t old=u32(q);if(old==key){w32(q,0xffff);found=1;}else if(old==0xffff)empty++;}return empty==3&&found;}
+gh_object_status gh_game_objects_update_001fe748(gh_game_objects*s,uint32_t*f){
+ if(f)*f=0;if(!manager_valid(s))return GH_OBJECT_ARGUMENT;
+ /* Onlypure scalarpaths commit. AnunknownIO/free consumer isdetectedbefore
+  * owner mutation; thisnativepreflight isnot anexecutedpartialoriginalcall. */
+ uint8_t plan[80][0x5c];memcpy(plan,s->slots->records,(size_t)s->slots->count*0x5c);
+ for(uint32_t n=s->slots->count;n;n--){uint8_t*p=plan[n-1];uint32_t state=u32(p);
+  if(state==1||state==7){if(f)*f=state==1?0x1ff238:0x1ff338;return GH_OBJECT_UNSUPPORTED;}
+  if(state==5)w32(p,6);else if(state==6)w32(p,7);
+  if(u32(p)==8&&has_dependency(p,0xfffe)){
+   uint32_t kind=u32(p+0x20);(void)remove_dependency(p,0xfffe);
+   for(uint32_t j=s->slots->count;j;j--){uint8_t*q=plan[j-1];int is_valid=u32(q+4)!=0||(!(u32(q+8)&4)&&u32(q+0x10)!=0);
+    if(is_valid&&has_dependency(q,kind)&&remove_dependency(q,kind)){if(f)*f=0x1ff2e0;return GH_OBJECT_UNSUPPORTED;}
+   }
+  }
+ }
+ memcpy(s->slots->records,plan,(size_t)s->slots->count*0x5c);return GH_OBJECT_OK;
+}

@@ -26,6 +26,19 @@
 #include "../core/game_collision_solids.h"
 #include "../core/game_scene_tables.h"
 #include "../core/game_title_player.h"
+#include "../core/game_checkpoint.h"
+#include "../core/game_scene_ui.h"
+#include "../core/game_scene_at.h"
+#include "../core/game_action_buttons.h"
+#include "../core/game_scene_spawns.h"
+#include "../core/game_scene_placements.h"
+#include "../core/game_scene_finish.h"
+#include "../core/game_scene_step.h"
+#include "../core/game_event.h"
+#include "../core/display_state.h"
+#include "../core/game_camera_step.h"
+#include "../core/game_door.h"
+#include "../rooms/r020_title.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -45,10 +58,15 @@ typedef struct {
  uint8_t *em_set_first_byte; /*canonical00586AB0fieldonly;notwholeEmconstructor*/
  gh_bgm_requests *bgm_requests; /*RootONEoriginal16requestpool,borrowed*/
  gh_sound_scene *sound_scene; /*RootONEearlycSndextraowner,borrowed*/
+ gh_game_event *event; /*RootONE586AF0fromactualmappedbootELF*/
+ gh_display_state *display; /*RootONEcanonicaldisplay/font/projectionglobals*/
+ gh_r020_move_callbacks title_callbacks; /*borrowRootfrontend/providercontext*/
+ const gh_r020_reference_profile *title_reference_profile; /*borrowuntilactualR020Initcopiesit*/
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;
  uint32_t id_entries,id_runs;int cockpit_ready,room_loaded,room_pools_ready;
+ int frontier_is_r020;
 } gh_game_services_snapshot;
 typedef struct {uint32_t kind;int32_t handle;uint32_t field;} gh_game_main_record;
 /* Borrowed canonicalowners for the next originalcase3 callee slice. No caller
@@ -66,6 +84,13 @@ typedef struct {
  gh_game_world_light *world_light;gh_game_model_packets *model_packets;
  gh_game_collision_solids *collision_solids;gh_game_scene_tables *scene_tables;
  gh_game_title_player *title_player; /*canonicaltypedWork.playerObj*/
+ gh_game_checkpoint *checkpoint;gh_game_scene_ui *scene_ui;
+ gh_scene_at_manager *scene_at;gh_game_action_buttons *action_buttons;
+ gh_em_scene_placements *em_placements;gh_om_scene_placements *om_placements;gh_acd_scene_binding *acd;
+ gh_game_scene_step *step;gh_game_event *event;gh_display_state *display;gh_r020_title *title;
+ gh_scene_hook *scenario_exit,*scenario_callback104;
+ gh_game_door *door;uint16_t *door_wait;uint8_t *system_menu_enabled;
+ uint32_t room_texture_channel;int room_texture_ready;
  uint32_t *main_word4;gh_game_main_record *main_records;size_t main_record_count;
  uint8_t *scene_buffer_a,*scene_buffer_b;size_t scene_buffer_a_size,scene_buffer_b_size;
 } gh_game_services_scene_view;
@@ -81,6 +106,9 @@ gh_game_services_status gh_game_services_state3(gh_game_services *);
 void gh_game_services_inspect(const gh_game_services *,gh_game_services_snapshot *);
 uint32_t gh_game_services_frontier(const gh_game_services *);
 int gh_game_services_detail(const gh_game_services *);
+/* NULL leavesexistingmainELF/driver resolver incharge; r020.rel explicitly
+ * identifiesREL-relativeWait/Title/Jump entries, never guessesfromlowaddress. */
+const char *gh_game_services_frontier_module(const gh_game_services *);
 /* Caller firstcancels/finishes Main usingthese bindings. Later externalIDruns
  * mustbereleasedbeforeCockpit; errorsretainownerforretry. DestroysScenario
  * beforeRootbackend, views beforeassets. Doesnotown/rootruntime,assets,save,
