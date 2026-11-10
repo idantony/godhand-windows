@@ -32,12 +32,12 @@ gh_effect_status gh_effect_create_emitter_at(const gh_game_effects *,unsigned,gh
  * slots stay strict, not assumed to have NULL actor. */
 gh_effect_status gh_effect_create_actor_match(void *effects,int emitter,unsigned slot,
  const gh_title_player_view *,int *match,uint32_t *frontier);
-/* Actual1024-slot ESP companion. Only verified type6 constructor is admitted;
+/* Actual1024-slot ESP companion. Verified type6/type1A constructors are admitted;
  * unknown actor domains remain strict before allocation. Serial binds the SAME
  * payload and source; initialized stays false until real virtualInit returns. */
 struct gh_effects_frame_globals;
 typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;
- uint8_t *payload;size_t payload_size;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t initialized,type;struct gh_effects_frame_globals *globals;gh_game_scene_tables *scene_actors;int32_t parent_emitter,previous,next;uint32_t parent_serial;} gh_effect_esp_view;
+ uint8_t *payload;size_t payload_size;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t initialized,type;struct gh_effects_frame_globals *globals;gh_game_scene_tables *scene_actors;int32_t parent_emitter,previous,next;uint32_t parent_serial;/* Snapshot of known300458-zeroed source218, not a removedtoken test. */uint8_t target120_known_null;} gh_effect_esp_view;
 gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_bindings *,unsigned emitter_slot,uint32_t emitter_serial,unsigned *slot,uint32_t *serial,int *allocated,uint32_t *frontier);
 gh_effect_status gh_effect_create_esp_at(const gh_game_effects *,unsigned,gh_effect_esp_view *);
 /* Native cancellation of only this unfinished original virtualInit. Never a

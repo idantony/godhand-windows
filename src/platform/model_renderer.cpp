@@ -80,8 +80,10 @@ int3 select_color(uint selector,int3 source,int3 destination){return selector==0
   precise float q=interpolate(a.stq.z,b.stq.z,c.stq.z,w);
   precise float s=interpolate(a.stq.x,b.stq.x,c.stq.x,w)/q;
   precise float t=interpolate(a.stq.y,b.stq.y,c.stq.y,w)/q;
-  int4 tex=filtered_texel(s,t),tint;
+ int4 tex=filtered_texel(s,t),tint=int4(a.rgba);
+ if((surface.w&8)!=0){
   [unroll]for(uint channel=0;channel<4;channel++)tint[channel]=int(interpolate(float(a.rgba[channel]),float(b.rgba[channel]),float(c.rgba[channel]),w));
+ }
   int4 source;
   if(((state.w>>16)&3)==3){source.rgb=min(int3(255,255,255),((tex.rgb*tint.rgb)>>7)+tint.a);source.a=tex.a;}
   else source=min(int4(255,255,255,255),(tex*tint)>>7);
@@ -97,7 +99,7 @@ int3 select_color(uint selector,int3 source,int3 destination){return selector==0
     int factor=blend.z==0?source.a:(blend.z==1?int(destination.a):int(dimensions.w));
     rgb=(((ca-cb)*factor)>>7)+select_color(blend.w,source.rgb,int3(destination.rgb));}
    destination.rgb=uint3(clamp(rgb,0,255));
-   if(alpha_ok||afail!=3)destination.a=uint(source.a)|((state.w>>1)&128);
+   if((state.w&0x01000000u)==0&&(alpha_ok||afail!=3))destination.a=uint(source.a)|((state.w>>1)&128);
   }
   if(writeZ)oldZ=z;
  }
@@ -144,7 +146,20 @@ static gh_model_gpu_error structured(gh_model_renderer*r,const void*data,UINT st
 }
 extern "C" gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer*r,const gh_model_draw_state*s,uint32_t texture,const gh_static_gs_vertex*input,size_t count,const uint32_t*indices,size_t n){
  if(!r||!s||!input||!indices||!r->begun||r->thread!=GetCurrentThreadId()||!texture||texture>r->materials.size()||count>1024||n>4096||!count||n%3)return GH_MODEL_GPU_ARGUMENT;
- unsigned prim=s->primitive&7;if((prim!=3&&prim!=4&&prim!=5)||!(s->primitive&8)||!(s->primitive&16)||(s->primitive&~0x7fu)||!s->native_float_reference||s->frame_psm||s->zbuf_psm!=58||s->dthe||s->colclamp!=1||s->clamp||s->fba>1||s->pabe>1||s->z_write>1||s->xy_offset_x16>65535||s->xy_offset_y16>65535||(s->texture_function!=0&&s->texture_function!=3))return GH_MODEL_GPU_UNSUPPORTED;
+ const bool flat_strip = s->primitive == 0x54;
+ unsigned prim=s->primitive&7;if((prim!=3&&prim!=4&&prim!=5)||(!(s->primitive&8)&&!flat_strip)||!(s->primitive&16)||(s->primitive&~0x7fu)||!s->native_float_reference||s->frame_psm||s->zbuf_psm!=58||s->dthe||s->colclamp!=1||s->clamp||s->fba>1||s->pabe>1||s->z_write>1||s->xy_offset_x16>65535||s->xy_offset_y16>65535||(s->texture_function!=0&&s->texture_function!=3))return GH_MODEL_GPU_UNSUPPORTED;
+ if(s->frame_mask && (!flat_strip || s->frame_mask != 0xff000000u))return GH_MODEL_GPU_UNSUPPORTED;
+ if (flat_strip) {
+  // The original packet is one four-vertex strip with the same RGBA on all
+  // vertices, so provoking-vertex selection cannot change its flat color.
+  if (count != 4 || n != 6 || indices[0] != 0 || indices[1] != 1 || indices[2] != 2 || indices[5] != 3 ||
+      !((indices[3] == 2 && indices[4] == 1) || (indices[3] == 1 && indices[4] == 2))) {
+   return GH_MODEL_GPU_UNSUPPORTED;
+  }
+  for (size_t vertex = 1; vertex < count; ++vertex) {
+   if (!std::equal(input[0].rgba, input[0].rgba + 4, input[vertex].rgba)) return GH_MODEL_GPU_UNSUPPORTED;
+  }
+ }
  unsigned mag=(unsigned)((s->tex1>>5)&1),min=(unsigned)((s->tex1>>6)&7);
  bool same_filter=mag?(min==1||min==4||min==5):(min==0||min==2||min==3);
  /* MXL0 clamps all mip choices to level0. Only equal base min/mag filters
@@ -165,7 +180,7 @@ extern "C" gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer*r,const g
   for(unsigned c=0;c<4;c++){if(v.rgba[c]>255)return GH_MODEL_GPU_UNSUPPORTED;out.rgba[c]=v.rgba[c];}
  }
  Owned<ID3D11Buffer> vb,ib;Owned<ID3D11ShaderResourceView> vv,iv;gh_model_gpu_error e=structured(r,vertices.data(),sizeof(Vertex),(UINT)count,vb,vv);if(e)return e;e=structured(r,indices,4,(UINT)n,ib,iv);if(e)return e;
- const Material&m=*r->materials[texture-1];Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)},
+ const Material&m=*r->materials[texture-1];Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)|(s->frame_mask?0x01000000u:0u)},
   {(uint32_t)s->alpha&3,((uint32_t)s->alpha>>2)&3,((uint32_t)s->alpha>>4)&3,((uint32_t)s->alpha>>6)&3},{m.width,m.height,(uint32_t)((s->tex1>>5)&1),(uint32_t)(s->alpha>>32)&255}};
  r->context.p->UpdateSubresource(r->parameters.p,0,nullptr,&p,0,0);ID3D11Buffer*constant=r->parameters.p;ID3D11ShaderResourceView*views[]={m.view.p,vv.p,iv.p};ID3D11UnorderedAccessView*targets[]={r->color_target.p,r->depth_target.p};
  r->context.p->CSSetShader(r->shader.p,nullptr,0);r->context.p->CSSetConstantBuffers(0,1,&constant);r->context.p->CSSetShaderResources(0,3,views);r->context.p->CSSetUnorderedAccessViews(0,2,targets,nullptr);r->context.p->Dispatch((r->width+7)/8,(r->height+7)/8,1);
@@ -178,4 +193,21 @@ extern "C" gh_model_gpu_error gh_model_renderer_readback(gh_model_renderer*r,uin
  if(z){r->context.p->CopyResource(r->depth_readback.p,r->depth.p);GPU(r->context.p->Map(r->depth_readback.p,0,D3D11_MAP_READ,0,&map));
   for(unsigned y=0;y<r->height;y++)std::memcpy(z+(size_t)y*r->width,(const uint8_t*)map.pData+(size_t)y*map.RowPitch,r->width*4);r->context.p->Unmap(r->depth_readback.p,0);}
  return GH_MODEL_GPU_OK;
+}
+
+extern "C" gh_model_gpu_error gh_model_renderer_replace_color(
+    gh_model_renderer *renderer, const uint8_t *rgba, size_t rgba_bytes) {
+    if (!renderer || !rgba || !renderer->begun || renderer->thread != GetCurrentThreadId()) {
+        return GH_MODEL_GPU_ARGUMENT;
+    }
+    const UINT row_bytes = renderer->width * 4u;
+    if (rgba_bytes != static_cast<size_t>(row_bytes) * renderer->height) {
+        return GH_MODEL_GPU_ARGUMENT;
+    }
+
+    // draw() unbinds its UAVs. The immediate context orders the upload after
+    // previous draws and before subsequent dispatches on the same texture.
+    renderer->context.p->UpdateSubresource(renderer->color.p, 0, nullptr, rgba, row_bytes, 0);
+    GPU(renderer->device.p->GetDeviceRemovedReason());
+    return GH_MODEL_GPU_OK;
 }

@@ -19,15 +19,32 @@ static uint8_t*load(gh_disc*d,const char*path,size_t*n){size_t i;gh_disc_entry e
 static uint32_t w(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}
 static void put(uint8_t*p,uint32_t n){memcpy(p,&n,4);}
 static uint32_t move_entry(unsigned kind){switch(kind){case 0x322:return 0x1965f8;case 0x323:return 0x197c20;case 0x346:return 0x1a13e8;default:return 0;}}
-static uint32_t next_entry(unsigned kind){switch(kind){case 0x322:return 0x196978;case 0x323:return 0x197fa0;case 0x346:return 0x1a1768;default:return 0;}}
+static uint32_t next_entry(unsigned kind){switch(kind){case 0x322:return 0x1969d8;case 0x323:return 0x198000;case 0x346:return 0x1a17c8;default:return 0;}}
 static void fragment_frames(gh_om_factory*f,gh_boot_work*work,gh_game_init_state*init,const gh_title_player_view*player){
  gh_game_pl_camera camera={0};C(!gh_game_camera_construct_pl_00139bc8(&camera,&init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));init->active_camera=&init->camera;float eye[3]={0,0,0},pp[3]={8,0,0};memcpy(camera.fields+0x210,eye,12);memcpy(player->alias_f0,pp,12);gh_object_opacity_environment env={init,&camera,player,1};unsigned visited=0;
  for(size_t i=0;i<f->count;i++){gh_om_object*o=f->objects+i;if(!move_entry(o->source.type))continue;visited++;uint32_t entry=move_entry(o->source.type);gh_object_move_request q={.handle=o->handle,.original_entry=entry,.actor=o->view};gh_om_frame_state state={0};uint8_t*p=o->view.bytes;uint32_t next_state=next_entry(o->source.type);uint32_t frontier;int rounding=fegetround(),flags=fetestexcept(FE_ALL_EXCEPT);
   C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&state.complete&&!state.opacity_complete);C(!gh_om_frame_next_call(&state));
   C(!gh_om_frame_bind_environment(&state,&env)&&!gh_om_frame_bind_environment(&state,&env));
   gh_object_step_status e=gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier);if(e)fprintf(stderr,"fragment%zu kind%X status%d frontier%08X phase%u\n",i,o->source.type,e,frontier,state.phase);C(!e&&state.complete&&!state.opacity_complete&&!frontier&&fegetround()==rounding&&fetestexcept(FE_ALL_EXCEPT)==flags);C(!memcmp(p+0x490,o->view.alias_f0,12)&&!memcmp(p+0x5d0,p+0x100,12));
-  C(!gh_om_frame_next_call(&state));p[0x2f4]=1;C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==next_state&&state.phase==2);C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==next_state);p[0x2f4]=0;C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));
+  C(!gh_om_frame_next_call(&state));p[0x2f4]=2;C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==next_state&&state.phase==2);C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==next_state);p[0x2f4]=0;C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));
   gh_om_init_state*c=o->source.type==0x322?&((gh_om322_state*)o->initialization)->common:o->source.type==0x323?&((gh_om323_state*)o->initialization)->common:&((gh_om346_state*)o->initialization)->common;gh_actor_model*out=NULL;C(!gh_om_frame_model_at(&state,&out)&&out==&c->model&&out->root.bytes==p);gh_actor_model marker={0};gh_om_frame_state foreign=state;foreign.handle^=0x80000000u;out=&marker;C(gh_om_frame_model_at(&foreign,&out)==GH_OBJSTEP_ARGUMENT&&out==&marker);gh_actor_model*identity=c->model.native_identity;c->model.native_identity=NULL;C(gh_om_frame_model_at(&state,&out)==GH_OBJSTEP_UNSUPPORTED&&out==&marker);c->model.native_identity=identity;
+  /* Original PMF state 1 counts down without entering the state-0 damage handler. */
+  const size_t timer_offset=o->source.type==0x346?0xd94:0x9d4;
+  C(o->view.size>=timer_offset+2 && c->hitarea_created);
+  uint32_t previous_hit=w(c->hitarea.bytes+0x60);
+  put(c->hitarea.bytes+0x60,previous_hit|1);
+  p[0x2f4]=1;p[0x2f5]=0;
+  for(unsigned tick=0;tick<15;tick++){
+   uint16_t remaining;
+   C(!gh_om_frame_next_call(&state));
+   C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&state.complete&&!frontier&&!state.hit_index);
+   memcpy(&remaining,p+timer_offset,sizeof(remaining));
+   C(remaining==14-tick&&p[0x2f4]==(tick<14?1:0));
+   C(w(c->hitarea.bytes+0x60)==(previous_hit|1));
+   C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));
+   uint16_t repeated;memcpy(&repeated,p+timer_offset,sizeof(repeated));C(repeated==remaining);
+  }
+  put(c->hitarea.bytes+0x60,previous_hit);
   if(c->hitarea_created){C(!gh_om_frame_next_call(&state));uint32_t old=w(c->hitarea.bytes+0x60);put(c->hitarea.bytes+0x60,old|1);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&state.complete&&state.hit_index>=1&&w(p+0x54c)==0x40400000);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));put(c->hitarea.bytes+0x60,old);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));p[0x2f4]=0;
 }
   if(o->source.type==0x346){gh_om346_state*d=(gh_om346_state*)o->initialization;C(!gh_om_frame_next_call(&state));uint32_t second=w(d->box_b2.bytes+0x60);put(d->box_b2.bytes+0x60,second|1);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&state.complete&&state.hit_index>=1&&w(p+0x54c)==0x40400000);put(d->box_b2.bytes+0x60,second);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));p[0x2f4]=0;}

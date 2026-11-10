@@ -142,7 +142,32 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
  if(s->phase==1&&s->object->source.type==0x35d){gh_object_step_status e=special35d(s,policy,f);if(e)return e;s->phase=4;}
  if(s->phase==1){if(fragments(s->object)){size_t timer_offset=s->object->source.type==0x304?0x602:0x610;unsigned timer=half(p+timer_offset);if(timer)sh(p+timer_offset,(uint16_t)(timer-1));}else if(door(s->object)&&!(word(p+0x5b0)&2)){gh_object_step_status e=gh_om_frame_contacts_001bd430(s,f);if(e)return e;}if(simple(s->object)&&(word(p+0x5b0)&4))return fail(s,0x1c7e30,f,GH_OBJSTEP_UNSUPPORTED);s->phase=2;}
  if(s->phase==2){
-  if(fragments(s->object)){if(s->object->source.type==0x303&&p[0x2f4]==1){gh_object_step_status e=gh_om_reaction_001c2c40(&s->object->view,f);if(e)return fail(s,f?*f:0x1c2c40,f,e);}else if(p[0x2f4]){uint32_t pc=s->object->source.type==0x304?(p[0x2f4]==1?0x188190:p[0x2f4]==2?0x1881f0:p[0x2f4]==3?0x188528:0x187fe8):(p[0x2f4]==1?0x1c2c40:p[0x2f4]==2?0x1c2da0:p[0x2f4]==3?0x1c3070:0x1c29d0);return fail(s,pc,f,GH_OBJSTEP_UNSUPPORTED);}}
+  if (p[0x2f4] == 1 && (fragments(s->object) || segments(s->object))) {
+   uint32_t entry = state_entry(s->object->source.type, 1);
+   uint32_t pc = 0;
+   gh_object_step_status status;
+   if (segments(s->object)) {
+    status = gh_om_segment_reaction(&s->object->view, entry, &pc);
+   } else if (s->object->source.type == 0x304) {
+    entry = 0x188190;
+    status = gh_om_reaction_00188190(&s->object->view, &pc);
+   } else {
+    entry = 0x1c2c40;
+    status = gh_om_reaction_001c2c40(&s->object->view, &pc);
+   }
+   if (status) return fail(s, pc ? pc : entry, f, status);
+   /* Damage belongs to the state-0 handler. Even a state-1 countdown
+    * that clears 2F4 does not dispatch another state in this call. */
+   s->phase = 4;
+  } else if (fragments(s->object) && p[0x2f4]) {
+   unsigned index = p[0x2f4];
+   uint32_t pc = s->object->source.type == 0x304
+                 ? (index == 2 ? 0x1881f0 : index == 3 ? 0x188528 : 0x187fe8)
+                 : (index == 2 ? 0x1c2da0 : index == 3 ? 0x1c3070 : 0x1c29d0);
+   return fail(s, pc, f, GH_OBJSTEP_UNSUPPORTED);
+  } else if (fragments(s->object)) {
+   s->phase = 3;
+  }
   else if(simple(s->object)||plain(s->object)||segments(s->object)||s->object->source.type==0x307){if(p[0x2f4]){uint32_t pc=state_entry(s->object->source.type,p[0x2f4]);return fail(s,pc?pc:s->entry,f,GH_OBJSTEP_UNSUPPORTED);}}
   else{
    if(p[0x2f4])return fail(s,p[0x2f4]==1?0x1bc6e8:p[0x2f4]==2?0x1bc748:p[0x2f4]==3?0x1bcb18:0x1bc0a0,f,GH_OBJSTEP_UNSUPPORTED);
@@ -150,7 +175,7 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
    if(word(p+0x620)&1)return fail(s,0x2db6b0,f,GH_OBJSTEP_UNSUPPORTED);
    unsigned rawcounter=half(p+0x630);int counter=rawcounter<32768?(int)rawcounter:(int)rawcounter-65536;if(s->contact634&&counter>4)return fail(s,0x1f7d48,f,GH_OBJSTEP_UNSUPPORTED);
   }
-  s->phase=3;
+  if (s->phase == 2) s->phase = 3;
  }
  if(s->phase==3){unsigned count=(s->object->source.type==0x307||s->object->source.type==0x346)?2:1;
   while(s->hit_index<count){unsigned i=s->hit_index;const gh_hitarea_object*hit=&c->hitarea;int present=c->hitarea_created;

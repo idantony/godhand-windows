@@ -13,4 +13,16 @@ int main(int argc,char**argv){C(argc==2||argc==3);std::vector<unsigned char>back
  C(gh_screen_fade_start_00307208(&s,&context,0,10,0,0,0x80808080,0)==GH_FADE_OK);C(gh_screen_fade_step_00307388(&s,&context,&d)==GH_FADE_OK&&gh_ui_fade_apply(r,&d,&render,back.data(),out.data(),out.size())==GH_UI_OK);for(unsigned char b:out)C(b==128);
  auto invalid=render;invalid.gs_y_scale=1;C(gh_ui_fade_apply(r,&d,&invalid,back.data(),out.data(),out.size())==GH_UI_UNSUPPORTED);C(gh_ui_fade_apply(r,&d,&render,back.data(),out.data(),out.size()+4)==GH_UI_ARGUMENT);invalid=render;invalid.width=640;C(gh_ui_fade_apply(r,&d,&invalid,back.data(),out.data(),out.size())==GH_UI_UNSUPPORTED);d.test=0x70000;C(gh_ui_fade_apply(r,&d,&render,back.data(),out.data(),out.size())==GH_UI_UNSUPPORTED);d.test=0x30000;
  if(argc==3){FILE*file=std::fopen(argv[2],"wbx");C(file&&std::fwrite(out.data(),1,out.size(),file)==out.size()&&!std::fclose(file));}
- gh_ui_fade_destroy(r);std::puts("PASS actualNTSCfadepacketgeometrycoversviewport;16frames each229376GPU/independentCPU GSalpha0..255 exact; actualLogo128gray/rawalpha andunsupporteddepth/globalsreject");return 0;}
+ // Actual R100 event stage0 ends the black hold with this zero-frame
+ // packet. GREATER preserves equal-depth pixels, including their alpha.
+ std::vector<uint32_t> z(512*448);
+ for(size_t i=0;i<z.size();i++)z[i]=i%3==0?65535:i%3==1?65534:0;
+ C(gh_screen_fade_start_00307208(&s,&context,0,8,0,0xff000000,0xff000000,0)==GH_FADE_OK);
+ C(gh_screen_fade_step_00307388(&s,&context,&d)==GH_FADE_OK&&d.visible&&d.test==0x70000&&!s.state);
+ C(gh_ui_fade_apply_with_depth(r,&d,&render,back.data(),out.data(),out.size(),z.data(),z.size())==GH_UI_OK);
+ for(size_t i=0;i<z.size();i++)for(unsigned c=0;c<4;c++)
+  C(out[i*4+c]==(z[i]==65535?back[i*4+c]:c==3?255:0));
+ C(gh_ui_fade_apply_with_depth(r,&d,&render,back.data(),out.data(),out.size(),z.data(),z.size()-1)==GH_UI_ARGUMENT);
+ z[0]=65536;C(gh_ui_fade_apply_with_depth(r,&d,&render,back.data(),out.data(),out.size(),z.data(),z.size())==GH_UI_UNSUPPORTED);
+ C(gh_screen_fade_step_00307388(&s,&context,&d)==GH_FADE_OK&&!d.visible);
+ gh_ui_fade_destroy(r);std::puts("PASS actualNTSCfadepacketgeometrycoversviewport;16frames each229376GPU/independentCPU GSalpha0..255 exact; actualLogo128gray/rawalpha andunsupporteddepth/globalsreject; R100 terminal GREATER fade compared against all229376 actual-size depth samples");return 0;}

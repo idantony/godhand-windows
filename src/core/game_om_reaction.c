@@ -16,3 +16,55 @@ gh_object_step_status gh_om_reaction_001c2c40(const gh_title_player_view*a,uint3
  if(!next||next>=0x8000)p[0x2f4]=p[0x2f5]=p[0x2f6]=p[0x2f7]=0;
  return GH_OBJSTEP_OK;
 }
+
+/* These four original methods differ only in the halfword offset. */
+static gh_object_step_status reaction_countdown15(const gh_title_player_view *actor,
+                                                  size_t timer_offset,
+                                                  uint32_t *frontier)
+{
+ if (frontier) *frontier = 0;
+ if (!actor || !actor->bytes || actor->size < timer_offset + 2)
+  return GH_OBJSTEP_ARGUMENT;
+ uint8_t *bytes = actor->bytes;
+ uint16_t timer;
+ switch (bytes[0x2f5]) {
+ case 0:
+  timer = 15;
+  bytes[0x2f5] = 1;
+  bytes[0x2f6] = 0;
+  bytes[0x2f7] = 0;
+  break;
+ case 1:
+  timer = (uint16_t)half(bytes + timer_offset);
+  break;
+ default:
+  return GH_OBJSTEP_OK;
+ }
+ timer = (uint16_t)(timer - 1u);
+ memcpy(bytes + timer_offset, &timer, sizeof(timer));
+ /* Original SLL16/BGTZ tests the stored halfword as signed. */
+ if (!timer || timer >= 0x8000) memset(bytes + 0x2f4, 0, 4);
+ return GH_OBJSTEP_OK;
+}
+
+gh_object_step_status gh_om_reaction_00188190(const gh_title_player_view *actor,
+                                             uint32_t *frontier)
+{
+ return reaction_countdown15(actor, 0x600, frontier);
+}
+
+gh_object_step_status gh_om_segment_reaction(const gh_title_player_view *actor,
+                                             uint32_t original_entry,
+                                             uint32_t *frontier)
+{
+ switch (original_entry) {
+ case 0x196978:
+ case 0x197fa0:
+  return reaction_countdown15(actor, 0x9d4, frontier);
+ case 0x1a1768:
+  return reaction_countdown15(actor, 0xd94, frontier);
+ default:
+  if (frontier) *frontier = original_entry;
+  return GH_OBJSTEP_UNSUPPORTED;
+ }
+}

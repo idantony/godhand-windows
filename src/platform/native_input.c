@@ -2,18 +2,79 @@
 #include <string.h>
 static uint32_t u32(const unsigned char*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static unsigned u16(const unsigned char*p){return p[0]|(unsigned)p[1]<<8;}
-void gh_native_input_defaults(gh_native_input_config*c){static const uint16_t keys[]={90,88,38,40,37,39,13,27},masks[]={0x1000,0x2000,1,2,4,8,0x10,0x8000};if(c){memcpy(c->virtual_key,keys,sizeof(keys));memcpy(c->xinput_mask,masks,sizeof(masks));c->repeat_multiplier=1;}}
+void gh_native_input_defaults(gh_native_input_config*c){
+ static const uint16_t keys[GH_INPUT_BUTTONS]={'Z','X',38,40,37,39,13,27,'C','Q','E','1','3','F','G',9};
+ static const uint16_t masks[GH_INPUT_BUTTONS]={0x1000,0x2000,1,2,4,8,0x10,0x8000,0x4000,0x100,0x200,0,0,0x40,0x80,0x20};
+ static const uint8_t stick[4][2]={{'A','D'},{'S','W'},{'J','L'},{'K','I'}};
+ if(c){memset(c,0,sizeof(*c));memcpy(c->virtual_key,keys,sizeof(keys));memcpy(c->xinput_mask,masks,sizeof(masks));
+  memcpy(c->stick_key,stick,sizeof(stick));c->walk_modifier=16;c->repeat_multiplier=1;}
+}
 int gh_native_input_map_from_elf(const void*data,size_t n,unsigned table,gh_native_input_map*out){const unsigned char*b=data;uint32_t ph;unsigned count,stride,i,target=table?0x3c3e50:0x3c3d50;if(!b||!out||table>1||n<52||memcmp(b,"\177ELF\1\1",6))return 0;ph=u32(b+28);stride=u16(b+42);count=u16(b+44);if(stride<32||ph>n||count>(n-ph)/stride)return 0;for(i=0;i<count;i++){const unsigned char*p=b+ph+(size_t)i*stride;uint32_t off=u32(p+4),v=u32(p+8),len=u32(p+16),delta;if(u32(p)!=1||v>target)continue;delta=target-v;if(delta>len||256>len-delta||off>n||len>n-off)continue;out->bytes=b+off+delta;out->size=256;return 1;}return 0;}
 int gh_native_input_init(gh_native_input*s,const gh_native_input_config*c,gh_native_input_map map){unsigned i;if(!s||!c||!map.bytes||map.size!=256||(c->repeat_multiplier!=1&&c->repeat_multiplier!=2))return 0;for(i=0;i<GH_INPUT_BUTTONS;i++)if(c->virtual_key[i]>255)return 0;memset(s,0,sizeof(*s));s->config=*c;s->map=map;s->snapshot.connected=1;return 1;}
-void gh_native_input_focus(gh_native_input*s,int focused){if(!s)return;if(!focused){int connected=s->snapshot.connected;s->keyboard=s->previous=0;memset(s->fast,0,sizeof(s->fast));memset(s->menu,0,sizeof(s->menu));memset(&s->snapshot,0,sizeof(s->snapshot));s->snapshot.connected=connected;}s->snapshot.focused=focused!=0;}
+void gh_native_input_focus(gh_native_input*s,int focused){if(!s)return;if(!focused){int connected=s->snapshot.connected;s->keyboard=s->previous=0;memset(s->keys,0,sizeof(s->keys));memset(s->fast,0,sizeof(s->fast));memset(s->menu,0,sizeof(s->menu));memset(&s->snapshot,0,sizeof(s->snapshot));s->snapshot.connected=connected;}s->snapshot.focused=focused!=0;}
 void gh_native_input_connected(gh_native_input*s,int connected){if(!s)return;if(!connected){int focused=s->snapshot.focused;gh_native_input_focus(s,0);s->snapshot.focused=focused;}s->snapshot.connected=connected!=0;}
-void gh_native_input_key(gh_native_input*s,unsigned key,int down){unsigned i;if(!s||key>255)return;for(i=0;i<GH_INPUT_BUTTONS;i++)if(s->config.virtual_key[i]==key){if(down&&s->snapshot.focused&&s->snapshot.connected)s->keyboard|=1u<<i;else s->keyboard&=~(1u<<i);}}
+void gh_native_input_key(gh_native_input*s,unsigned key,int down){
+ if(!s||!key||key>255)return;
+ s->keys[key]=(uint8_t)(down&&s->snapshot.focused&&s->snapshot.connected);
+ for(unsigned i=0;i<GH_INPUT_BUTTONS;i++)if(s->config.virtual_key[i]==key){
+  if(s->keys[key])s->keyboard|=1u<<i;else s->keyboard&=~(1u<<i);
+ }
+}
 static uint64_t mapped(const gh_native_input*s,uint32_t raw){unsigned i;uint64_t bits=0;for(i=0;i<64;i++)if(raw&u32(s->map.bytes+i*4))bits|=UINT64_C(1)<<i;return bits;}
-int gh_native_input_tick(gh_native_input*s,uint16_t buttons,gh_native_input_snapshot*out){static const uint32_t raw[]={0x40,0x20,0x1000,0x4000,0x8000,0x2000,0x800,0x10};uint32_t held=0,press,release,fast=0,menu=0;unsigned i,m;if(!s||!out)return 0;if(s->snapshot.focused&&s->snapshot.connected)for(i=0;i<GH_INPUT_BUTTONS;i++)if((s->keyboard&(1u<<i))||(buttons&s->config.xinput_mask[i]))held|=raw[i];press=held&~s->previous;release=s->previous&~held;m=s->config.repeat_multiplier;
+static uint32_t digital_raw(const gh_native_input*s,uint16_t buttons){
+ static const uint32_t raw[GH_INPUT_BUTTONS]={0x40,0x20,0x1000,0x4000,0x8000,0x2000,0x800,0x10,0x80,4,8,1,2,0x200,0x400,0x100};
+ uint32_t held=0;
+ for(unsigned i=0;i<GH_INPUT_BUTTONS;i++)if((s->keyboard&(1u<<i))||(buttons&s->config.xinput_mask[i]))held|=raw[i];
+ return held;
+}
+static int active(const gh_native_input*s){return s->snapshot.focused&&s->snapshot.connected;}
+static int publish_buttons(gh_native_input*s,uint32_t held,gh_native_input_snapshot*out){
+ uint32_t press=held&~s->previous,release=s->previous&~held,fast=0,menu=0;
+ unsigned i,m=s->config.repeat_multiplier;
  for(i=0;i<32;i++){uint32_t bit=1u<<i;if(press&bit){s->fast[i]=(uint8_t)(10*m);s->menu[i]=(uint8_t)(6*m);fast|=bit;menu|=bit;}else if(!(held&bit)){s->fast[i]=s->menu[i]=0;}else{if(!s->fast[i]){s->fast[i]=(uint8_t)(2*m);fast|=bit;}else s->fast[i]--;if(!s->menu[i]){s->menu[i]=(uint8_t)(2*m);menu|=bit;}else s->menu[i]--;}}
- s->previous=held;s->snapshot.raw_held=held;s->snapshot.raw_pressed=press;s->snapshot.raw_released=release;s->snapshot.raw_repeat_fast=fast;s->snapshot.raw_repeat_menu=menu;s->snapshot.held=mapped(s,held);s->snapshot.pressed=mapped(s,press);s->snapshot.released=mapped(s,release);s->snapshot.repeat_fast=mapped(s,fast);s->snapshot.repeat_menu=mapped(s,menu);*out=s->snapshot;return 1;}
+ s->previous=held;s->snapshot.raw_held=held;s->snapshot.raw_pressed=press;s->snapshot.raw_released=release;s->snapshot.raw_repeat_fast=fast;s->snapshot.raw_repeat_menu=menu;s->snapshot.held=mapped(s,held);s->snapshot.pressed=mapped(s,press);s->snapshot.released=mapped(s,release);s->snapshot.repeat_fast=mapped(s,fast);s->snapshot.repeat_menu=mapped(s,menu);memcpy(out,&s->snapshot,sizeof(*out));return 1;}
+int gh_native_input_tick(gh_native_input*s,uint16_t buttons,gh_native_input_snapshot*out){
+ if(!s||!out)return 0;
+ s->snapshot.analog_valid=0;memset(&s->snapshot.analog,0,sizeof(s->snapshot.analog));
+ return publish_buttons(s,active(s)?digital_raw(s,buttons):0,out);
+}
+static uint8_t wire_axis(int32_t value,int vertical){
+ if(vertical){value=-value;if(value>32767)value=32767;}
+ return (uint8_t)((value+32768)>>8);
+}
+int gh_native_input_tick_device(gh_native_input*s,const gh_boot_work*w,const gh_native_gamepad_sample*pad,gh_native_input_snapshot*out){
+ if(!s||!w||!pad||!out||pad->connected>1)return 0;
+ uint32_t digital=0;
+ uint8_t wire[4]={128,128,128,128};
+ if(active(s)){
+  const int present=pad->connected;
+  digital=digital_raw(s,present?pad->buttons:0);
+  // XInput's trigger threshold is host policy; the original receives digital L2/R2.
+  if(present&&pad->left_trigger>30)digital|=1;
+  if(present&&pad->right_trigger>30)digital|=2;
+  int32_t axes[4]={0,0,0,0};
+  if(present){axes[0]=pad->left_x;axes[1]=pad->left_y;axes[2]=pad->right_x;axes[3]=pad->right_y;}
+  int32_t tilt=s->keys[s->config.walk_modifier]?17408:32767;
+  for(unsigned i=0;i<4;i++){
+   int neg=s->keys[s->config.stick_key[i][0]],pos=s->keys[s->config.stick_key[i][1]];
+   if(neg||pos)axes[i]=(pos-neg)*tilt;
+  }
+  wire[0]=wire_axis(axes[2],0);wire[1]=wire_axis(axes[3],1);
+  wire[2]=wire_axis(axes[0],0);wire[3]=wire_axis(axes[1],1);
+ }
+ if(gh_pad_analog_evaluate_0031b560(w,wire,digital,&s->snapshot.analog)!=GH_PAD_ANALOG_OK)return 0;
+ s->snapshot.analog_valid=1;
+ // Inactive focus can still produce the original mode's previous-sample dpad.
+ // Commit its neutral axes and direction words, but release host-held buttons.
+ return publish_buttons(s,active(s)?s->snapshot.analog.raw_held:0,out);
+}
 int gh_native_input_store_work(gh_boot_work*w,const gh_native_input_snapshot*i){
- if(!w||!i||(i->connected!=0&&i->connected!=1))return 0;unsigned char*p=(unsigned char*)w;
+ if(!w||!i||(i->connected!=0&&i->connected!=1)||(i->focused!=0&&i->focused!=1)||i->analog_valid>1)return 0;
+ if(i->analog_valid){
+  if(i->raw_held!=(i->connected&&i->focused?i->analog.raw_held:0))return 0;
+  if(gh_pad_analog_commit_0031afe0(w,&i->analog)!=GH_PAD_ANALOG_OK)return 0;
+ }
+ unsigned char*p=(unsigned char*)w;
  memcpy(p,&i->raw_held,4);memcpy(p+8,&i->raw_pressed,4);memcpy(p+0xc,&i->raw_released,4);
  p[0x14]=(uint8_t)i->connected;memcpy(p+0x18,&i->raw_repeat_fast,4);memcpy(p+0x1c,&i->raw_repeat_menu,4);
  memcpy(p+0x190,&i->held,8);memcpy(p+0x1a0,&i->pressed,8);memcpy(p+0x1a8,&i->released,8);

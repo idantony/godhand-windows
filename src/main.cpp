@@ -8,6 +8,7 @@
 #include "platform/static_world_queue.h"
 #include "platform/shadow_world_packet.h"
 #include "platform/actor_world_queue.h"
+#include "platform/effect_postprocess_reference.h"
 #include "core/ui_order.h"
 #include <cstdio>
 #include <cstdlib>
@@ -29,6 +30,7 @@ struct NativeApp {
     std::vector<unsigned char> world_pixels;
     std::vector<gh_ui_order_group> groups;
     std::vector<ShadowEntry> shadow_queue;
+    std::vector<gh_effect_trans_packet> effect_queue;
     bool frame_building=false,display_pending=false,building_scene=false,pending_scene=false;
     uint64_t prepared_mc_serial=0,pending_mc_serial=0,pending_fade_serial=0;
     uint64_t prepared_scene_serial=0,presented_scene=0;
@@ -39,18 +41,20 @@ struct NativeApp {
     gh_window_error window_error=GH_WINDOW_OK;
     gh_model_gpu_error world_gpu_error=GH_MODEL_GPU_OK;
     uint32_t world_frontier=0,world_vu_pc=0;
-    uint64_t world_packets=0;
+    uint64_t world_packets=0,effect_post_packets=0,effect_sprite_packets=0;
+    gh_effect_post_status effect_post_error=GH_EFFECT_POST_OK;
     gh_fade_draw frame_fade={};bool frame_fade_seen=false;
 };
 static constexpr uint64_t world_identity=UINT64_C(1)<<63;
 static constexpr uint64_t shadow_identity=UINT64_C(1)<<62;
 static constexpr uint64_t actor_identity=UINT64_C(1)<<61;
+static constexpr uint64_t effect_identity=UINT64_C(1)<<60;
 static gh_id_error begin_mc(void *opaque)
 {
     auto &app=*(NativeApp*)opaque;gh_startup_snapshot s={};
     if(gh_startup_host_snapshot(app.host,&s)!=GH_HOST_OK)return GH_ID_ARGUMENT;
     if(s.mc_ui_epoch!=app.resource_epoch){gh_mc_renderer_reset_resources(app.renderer);app.resource_epoch=s.mc_ui_epoch;}
-    gh_mc_renderer_begin(app.renderer);gh_static_world_queue_reset(app.world_queue);gh_actor_world_queue_reset(app.actor_queue);app.shadow_queue.clear();app.groups.clear();app.frame_fade_seen=false;app.frame_building=true;app.building_scene=false;app.surface_kind=1;return GH_ID_OK;
+    gh_mc_renderer_begin(app.renderer);gh_static_world_queue_reset(app.world_queue);gh_actor_world_queue_reset(app.actor_queue);app.shadow_queue.clear();app.effect_queue.clear();app.groups.clear();app.world_pixels.clear();app.frame_fade_seen=false;app.frame_building=true;app.building_scene=false;app.surface_kind=1;return GH_ID_OK;
 }
 static gh_id_error begin_scene(void *opaque,uint32_t *)
 {
@@ -58,7 +62,7 @@ static gh_id_error begin_scene(void *opaque,uint32_t *)
     if(gh_startup_host_snapshot(app.host,&s)!=GH_HOST_OK)return GH_ID_ARGUMENT;
     if(s.mc_ui_epoch!=app.resource_epoch||s.ui_resource_epoch!=app.scene_resource_epoch){
         gh_mc_renderer_reset_resources(app.renderer);gh_model_renderer_reset_resources(app.world_renderer);app.resource_epoch=s.mc_ui_epoch;app.scene_resource_epoch=s.ui_resource_epoch;}
-    gh_mc_renderer_begin(app.renderer);gh_static_world_queue_reset(app.world_queue);gh_actor_world_queue_reset(app.actor_queue);app.shadow_queue.clear();app.groups.clear();app.frame_fade_seen=false;app.frame_building=true;app.building_scene=true;app.surface_kind=1;return GH_ID_OK;
+    gh_mc_renderer_begin(app.renderer);gh_static_world_queue_reset(app.world_queue);gh_actor_world_queue_reset(app.actor_queue);app.shadow_queue.clear();app.effect_queue.clear();app.groups.clear();app.world_pixels.clear();app.frame_fade_seen=false;app.frame_building=true;app.building_scene=true;app.surface_kind=1;return GH_ID_OK;
 }
 #ifdef GH_NATIVE_STARTUP_QA
 static void qa_float_bits(const char *name,const float *values,size_t count)
@@ -137,6 +141,20 @@ static gh_actor_model_status queue_actor(void *opaque,const gh_actor_draw_comman
         app.groups.push_back({command->bank,command->depth,world_identity|actor_identity|index});return GH_ACTOR_MODEL_OK;
     }catch(const std::bad_alloc&){return GH_ACTOR_MODEL_MEMORY;}
 }
+static gh_effect_status queue_effect(void *opaque,const gh_effect_trans_packet *packet)
+{
+    auto &app=*(NativeApp*)opaque;
+    if(!packet||!app.frame_building||!app.building_scene)return GH_EFFECT_ARGUMENT;
+    try {
+        // Reserve both before publishing either; retry owns one packet.
+        app.groups.reserve(app.groups.size()+1);
+        app.effect_queue.reserve(app.effect_queue.size()+1);
+        size_t index=app.effect_queue.size();
+        app.effect_queue.push_back(*packet);
+        app.groups.push_back({packet->order.bank,packet->order.depth,world_identity|effect_identity|index});
+        return GH_EFFECT_OK;
+    }catch(const std::bad_alloc&){return GH_EFFECT_BOUNDS;}
+}
 static gh_id_error draw_mc(void *opaque,const gh_id_draw_job *job)
 {
     auto &app=*(NativeApp*)opaque;gh_startup_snapshot s={};
@@ -152,7 +170,9 @@ static gh_id_error draw_scene(void *opaque,const gh_id_base *base,const gh_id_dr
     auto &app=*(NativeApp*)opaque;gh_startup_snapshot s={};
     if(gh_startup_host_snapshot(app.host,&s)!=GH_HOST_OK)return GH_ID_ARGUMENT;
     gh_id_render_view view={s.font,s.menu,s.id,base,nullptr};gh_ui_ot_tag tags[10];size_t count=0;
-    gh_id_error error=gh_mc_renderer_queue_view_groups(app.renderer,&view,job,tags,10,&count);
+    gh_id_error error=s.id_vertex_z_known?
+        gh_mc_renderer_queue_view_groups_at_z(app.renderer,&view,job,tags,10,&count,s.id_vertex_z):
+        gh_mc_renderer_queue_view_groups(app.renderer,&view,job,tags,10,&count);
     if(error==GH_ID_OK){try {for(size_t i=0;i<count;++i)app.groups.push_back({tags[i].bank,(uint32_t)tags[i].depth,(uint64_t)tags[i].index});}
         catch(const std::bad_alloc&){return GH_ID_MEMORY;}}
     else if(frontier){gh_mc_render_status status={};gh_mc_renderer_inspect(app.renderer,&status);*frontier=status.frontier?status.frontier:job->consumer_address;}
@@ -201,6 +221,89 @@ static gh_id_error draw_fade(void *opaque,const gh_fade_draw *draw)
         catch(const std::bad_alloc&){return GH_ID_MEMORY;}}
     return error;
 }
+// One context-1 sampler at this part of the original OT. We don't borrow a
+// previous frame across the still separate startup UI command consumer.
+struct WorldSampler {
+    uint64_t tex1=0,clamp=0;
+    bool tex1_known=false,clamp_known=false;
+    void write(uint64_t t,uint64_t c){tex1=t;clamp=c;tex1_known=clamp_known=true;}
+    bool known()const{return tex1_known&&clamp_known;}
+};
+struct PostFrame {
+    std::vector<uint8_t> pixels[4];
+    gh_effect_post_context context={};
+    unsigned cleared=0;
+    void initialize(uint32_t x,uint32_t y){
+        if(context.visible_width)return;
+        for(unsigned i=0;i<4;i++){
+            unsigned w=i?128:512,h=i?128:448;
+            pixels[i].resize((size_t)w*h*4);
+            context.surfaces[i]={pixels[i].data(),pixels[i].size(),(size_t)w*4,w,h};
+        }
+        context.xy_offset_x16=x;context.xy_offset_y16=y;
+        context.visible_width=512;context.visible_height=448;context.colclamp=1;
+    }
+};
+static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p,WorldSampler &sampler,
+    PostFrame &post,uint32_t x,uint32_t y)
+{
+    app.world_frontier=p.original_callee;
+    if(p.kind==GH_EFFECT_PASS_SPRITE){
+        // 2FEC38 writes CLAMP_1, but consumes the current TEX1_1.
+        if(!p.writes_clamp||p.clamp||!p.inherited_sampler||!p.writes_tex0||p.prim!=0x54||
+            p.source!=GH_EFFECT_SURFACE_MATERIAL||p.destination!=GH_EFFECT_SURFACE_SCENE_COLOR||
+            !p.material||p.tex0!=p.material->source_tex0||p.quad_count!=1||p.quads[0].vertex_count!=4||
+            !p.restores_scene_target||p.restore_frame_mask||p.restore_zbuf!=0x3a0000f8||
+            (p.zbuf!=0x3a0000f8&&p.zbuf!=UINT64_C(0x13a0000f8)))return GH_ID_UNSUPPORTED;
+        sampler.clamp=p.clamp;sampler.clamp_known=true;
+        if(!sampler.known())return GH_ID_UNSUPPORTED;
+        gh_static_gs_vertex vertices[4]={};
+        for(unsigned k=0;k<4;k++){
+            const auto &v=p.quads[0].vertices[k];auto &dest=vertices[k];
+            if(v.z>65535)return GH_ID_UNSUPPORTED;
+            dest.stq[0]=v.s;dest.stq[1]=v.t;dest.stq[2]=v.q;
+            dest.xyz_fixed4[0]=v.x12_4;dest.xyz_fixed4[1]=v.y12_4;dest.xyz_fixed4[2]=(int32_t)(v.z<<4);
+            for(unsigned c=0;c<4;c++)dest.rgba[c]=(v.rgba>>(8*c))&255;
+        }
+        gh_model_draw_state state={};state.test=p.test;state.alpha=p.alpha;
+        state.tex1=sampler.tex1;state.clamp=sampler.clamp;state.primitive=(uint16_t)p.prim;
+        state.xy_offset_x16=x;state.xy_offset_y16=y;state.frame_mask=p.frame_mask;
+        state.texture_function=(uint8_t)((p.tex0>>35)&3);
+        state.zbuf_psm=58;state.z_write=(uint8_t)((p.zbuf>>32)==0);state.colclamp=state.native_float_reference=1;
+        uint32_t texture=0;app.world_gpu_error=gh_model_renderer_upload(app.world_renderer,p.material,&texture);
+        if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+        static const uint32_t indices[]={0,1,2,2,1,3};
+        app.world_gpu_error=gh_model_renderer_draw(app.world_renderer,&state,texture,vertices,4,indices,6);
+        if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+        ++app.effect_sprite_packets;app.world_frontier=0;return GH_ID_OK;
+    }
+    if(p.writes_clamp||(unsigned)p.source>=4||(unsigned)p.destination>=4)return GH_ID_UNSUPPORTED;
+    post.initialize(x,y);
+    if(p.kind!=GH_EFFECT_PASS_CLEAR){
+        if((p.source&&!(post.cleared&(1u<<p.source)))||
+           (p.destination&&!(post.cleared&(1u<<p.destination))))return GH_ID_UNSUPPORTED;
+        if(p.source==GH_EFFECT_SURFACE_SCENE_COLOR||p.destination==GH_EFFECT_SURFACE_SCENE_COLOR){
+            auto &scene=post.pixels[0];
+            app.world_gpu_error=gh_model_renderer_readback(app.world_renderer,scene.data(),scene.size(),nullptr,0);
+            if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+        }
+    }
+    gh_effect_post_sampler current={sampler.tex1,sampler.clamp,(uint8_t)sampler.known(),GH_EFFECT_SAMPLE_NATIVE_SEPARABLE_4BIT};
+    gh_effect_post_receipt receipt={};
+    app.effect_post_error=gh_effect_postprocess_apply(&p,&current,&post.context,&receipt,&app.world_frontier);
+    if(app.effect_post_error!=GH_EFFECT_POST_OK)return GH_ID_UNSUPPORTED;
+    app.world_frontier=p.original_callee;
+    if(p.kind==GH_EFFECT_PASS_CLEAR){
+        if(receipt.covered_fragments!=128*128||receipt.color_writes!=128*128)return GH_ID_UNSUPPORTED;
+        post.cleared|=1u<<p.destination;
+    }
+    if(p.destination==GH_EFFECT_SURFACE_SCENE_COLOR){
+        const auto &scene=post.pixels[0];
+        app.world_gpu_error=gh_model_renderer_replace_color(app.world_renderer,scene.data(),scene.size());
+        if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+    }
+    ++app.effect_post_packets;app.world_frontier=0;return GH_ID_OK;
+}
 static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
 {
     try {
@@ -211,17 +314,31 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
         order.data(),order.size(),&written,&omitted)!=GH_UI_ORDER_OK||omitted||written!=order.size())return GH_ID_UNSUPPORTED;
     std::memcpy(&clear,(const unsigned char*)app.snapshot.work+0x60c,4);
     std::vector<size_t> ui_order,world_order;
+    std::vector<uint32_t> world_depth;
     bool ui_started=false;
     for(size_t i:order){const auto &g=app.groups[i];
-        if(g.identity&world_identity){if(ui_started)return GH_ID_UNSUPPORTED;world_order.push_back((size_t)(g.identity&~world_identity));}
+        if(g.identity&world_identity){
+            size_t encoded=(size_t)(g.identity&~world_identity);
+            if(ui_started){
+                size_t effect_index=encoded&~effect_identity;
+                if((encoded&effect_identity)&&effect_index<app.effect_queue.size())
+                    app.world_frontier=app.effect_queue[effect_index].original_callee;
+                return GH_ID_UNSUPPORTED;
+            }
+            world_order.push_back(encoded);
+        }
         else {ui_started=true;ui_order.push_back((size_t)g.identity);}}
-    if(world_order.size()!=gh_static_world_queue_count(app.world_queue)+app.shadow_queue.size()+gh_actor_world_queue_count(app.actor_queue))return GH_ID_ARGUMENT;
-    // The one original OT determines both domains. Current world banks1/2
-    // precede UI6/7; reject interleaving until shared depth/state is recovered.
-    std::vector<unsigned char> world_seen(gh_static_world_queue_count(app.world_queue),0),shadow_seen(app.shadow_queue.size(),0),actor_seen(gh_actor_world_queue_count(app.actor_queue),0),ui_seen(ui_order.size(),0);
+    if(world_order.size()!=gh_static_world_queue_count(app.world_queue)+app.shadow_queue.size()+
+       gh_actor_world_queue_count(app.actor_queue)+app.effect_queue.size())return GH_ID_ARGUMENT;
+    // ONEOT determines both domains. This bounded native path requires world
+    // and effects to precede UI; mixed UI/sprite depths remain strict.
+    std::vector<unsigned char> world_seen(gh_static_world_queue_count(app.world_queue),0),shadow_seen(app.shadow_queue.size(),0),
+        actor_seen(gh_actor_world_queue_count(app.actor_queue),0),effect_seen(app.effect_queue.size(),0),ui_seen(ui_order.size(),0);
     for(size_t encoded:world_order){
-        bool shadow=(encoded&shadow_identity)!=0,actor=(encoded&actor_identity)!=0;if(shadow&&actor)return GH_ID_ARGUMENT;
-        size_t i=encoded&~(shadow_identity|actor_identity);auto &seen=shadow?shadow_seen:actor?actor_seen:world_seen;
+        bool shadow=(encoded&shadow_identity)!=0,actor=(encoded&actor_identity)!=0,effect=(encoded&effect_identity)!=0;
+        if((unsigned)shadow+(unsigned)actor+(unsigned)effect>1)return GH_ID_ARGUMENT;
+        size_t i=encoded&~(shadow_identity|actor_identity|effect_identity);
+        auto &seen=shadow?shadow_seen:actor?actor_seen:effect?effect_seen:world_seen;
         if(i>=seen.size()||seen[i])return GH_ID_ARGUMENT;seen[i]=1;}
     for(size_t i:ui_order){if(i>=ui_seen.size()||ui_seen[i])return GH_ID_ARGUMENT;ui_seen[i]=1;}
     if(!world_order.empty()){
@@ -233,17 +350,24 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
         if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
         gh_static_world_group setup={};bool has_setup=false;
         uint32_t fog_rgb=0;bool fog_known=false;
+        WorldSampler sampler;PostFrame post;
+        const uint32_t x=(2048-display->screen_width/2)*16,y=display->gs_y_origin*16;
         for(size_t encoded:world_order){
+            if(encoded&effect_identity){
+                auto e=consume_effect(app,app.effect_queue[encoded&~effect_identity],sampler,post,x,y);
+                if(e)return e;
+                continue;
+            }
             if(encoded&shadow_identity){
                 const ShadowEntry &entry=app.shadow_queue[encoded&~shadow_identity];const auto &packet=entry.packet;const auto &g=packet.group;
-                // Even twelve disabled slots retain their original OT group.
-                // Only proved zero-area raster primitives have been removed.
+                // A zero-fragment shadow group still executes TEX1_1/CLAMP_1.
+                sampler.write(g.tex1,g.clamp);
                 if(!packet.triangles)continue;
                 uint32_t texture=0;app.world_gpu_error=gh_model_renderer_upload(app.world_renderer,entry.material,&texture);
                 if(app.world_gpu_error!=GH_MODEL_GPU_OK){app.world_frontier=0x151368;return GH_ID_UNSUPPORTED;}
                 gh_model_draw_state state={};state.test=g.test;state.alpha=g.alpha;state.tex1=g.tex1;state.clamp=g.clamp;state.primitive=g.primitive;
                 state.xy_offset_x16=(2048-display->screen_width/2)*16;state.xy_offset_y16=display->gs_y_origin*16;
-                // Original shadow ZBUF2=13A0000F8 disables Z writes; its
+                // Original shadow ZBUF_1=13A0000F8 disables Z writes; its
                 // trailing3A0000F8 restores them for subsequent groups.
                 state.zbuf_psm=58;state.z_write=0;state.colclamp=state.native_float_reference=1;
                 app.world_gpu_error=gh_model_renderer_draw(app.world_renderer,&state,texture,packet.vertices,packet.vertex_count,packet.indices,packet.triangles*3);
@@ -256,6 +380,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
                 // VIF/palette work already produced owned post-VU vertices.
                 // The original GS setup changes only the ONE current FOGCOL.
                 if(g.command.kind==GH_ACTOR_DRAW_SETUP){fog_rgb=g.command.fog_rgb;fog_known=true;continue;}
+                sampler.write(g.command.tex1,g.command.clamp);
                 for(size_t j=0;j<g.packets;j++){
                     gh_actor_world_packet packet={};
                     if(gh_actor_world_queue_packet_at(app.actor_queue,i,j,&packet)!=GH_ACTOR_WORLD_OK)return GH_ID_ARGUMENT;
@@ -280,12 +405,13 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
             if(gh_static_world_queue_group_at(app.world_queue,i,&g)!=GH_WORLD_OK)return GH_ID_ARGUMENT;
             if(g.command.kind==GH_OBJECT_SETUP){setup=g;has_setup=true;fog_rgb=g.captured_fog_rgb;fog_known=true;continue;}
             if(!has_setup||setup.command.handle!=g.command.handle||setup.command.object!=g.command.object){app.world_frontier=0x14c6b8;return GH_ID_UNSUPPORTED;}
+            sampler.write(g.command.tex1,g.command.clamp);
             for(size_t j=0;j<g.packets;j++){gh_static_world_packet packet={};
                 if(gh_static_world_queue_packet_at(app.world_queue,i,j,&packet)!=GH_WORLD_OK)return GH_ID_ARGUMENT;
                 uint32_t texture=0;app.world_gpu_error=gh_model_renderer_upload(app.world_renderer,packet.material,&texture);
                 if(app.world_gpu_error!=GH_MODEL_GPU_OK){app.world_frontier=0x151368;return GH_ID_UNSUPPORTED;}
                 gh_model_draw_state state={};state.test=setup.command.test;state.alpha=setup.command.alpha;
-                state.tex1=setup.command.tex1;state.clamp=setup.command.clamp;state.primitive=packet.primitive;
+                state.tex1=sampler.tex1;state.clamp=sampler.clamp;state.primitive=packet.primitive;
                 state.xy_offset_x16=(2048-display->screen_width/2)*16;state.xy_offset_y16=display->gs_y_origin*16;
                 state.fog_rgb=fog_rgb;
                 // Explicit native CT32/Z16S/FBA0 initial surface reference,
@@ -297,11 +423,22 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
             }
         }
         app.world_pixels.resize(512*448*4);
-        app.world_gpu_error=gh_model_renderer_readback(app.world_renderer,app.world_pixels.data(),app.world_pixels.size(),nullptr,0);
+        if(app.frame_fade_seen&&app.frame_fade.test==0x70000)world_depth.resize(512*448);
+        app.world_gpu_error=gh_model_renderer_readback(app.world_renderer,app.world_pixels.data(),app.world_pixels.size(),
+            world_depth.empty()?nullptr:world_depth.data(),world_depth.size());
         if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
     }
     gh_id_error error=world_order.empty()?gh_mc_renderer_flush_queued(app.renderer,ui_order.data(),ui_order.size(),clear):
-        gh_mc_renderer_flush_queued_on_background(app.renderer,ui_order.data(),ui_order.size(),app.world_pixels.data(),app.world_pixels.size());
+        world_depth.empty()?gh_mc_renderer_flush_queued_on_background(app.renderer,ui_order.data(),ui_order.size(),
+            app.world_pixels.data(),app.world_pixels.size()):
+        gh_mc_renderer_flush_queued_on_background_with_depth(app.renderer,ui_order.data(),ui_order.size(),
+            app.world_pixels.data(),app.world_pixels.size(),world_depth.data(),world_depth.size());
+#ifdef GH_NATIVE_STARTUP_QA
+    if(app.frame_fade_seen&&app.frame_fade.test==0x70000)
+        std::fprintf(stderr,"QA_FADE_DEPTH scene%llu state%02X test%05llX uiGroups%llu depthPixels%llu result%u\n",
+            (unsigned long long)app.snapshot.scene_frame_serial,(unsigned)(app.snapshot.fade?app.snapshot.fade->state:0),
+            (unsigned long long)app.frame_fade.test,(unsigned long long)ui_order.size(),(unsigned long long)world_depth.size(),(unsigned)error);
+#endif
     if(error!=GH_ID_OK)return error;
     size_t bytes=0;const unsigned char *base=gh_mc_renderer_pixels(app.renderer,&bytes);
     if(!base||bytes!=512*448*4)return GH_ID_UNSUPPORTED;
@@ -397,6 +534,8 @@ int main(int argc,char **argv)
         if(host_error!=GH_HOST_OK)break;
         host_error=gh_startup_host_set_actor_consumer(app.host,queue_actor,&app);
         if(host_error!=GH_HOST_OK)break;
+        host_error=gh_startup_host_set_effect_consumer(app.host,queue_effect,&app);
+        if(host_error!=GH_HOST_OK)break;
         if(!prefix){
             gh_startup_continuation config={};config.enabled=1;config.muted=muted;
             config.audio_dsp_policy=GH_SE_DSP_NATIVE_LINEAR_REFERENCE;
@@ -405,8 +544,9 @@ int main(int argc,char **argv)
             if(host_error!=GH_HOST_OK)break;
         }
         if(!gh_frame_clock_init(&clock,30000,1001))break;
+        host_error=gh_startup_host_snapshot(app.host,&app.snapshot);if(host_error!=GH_HOST_OK)break;
         for(;;){
-            gh_native_input_snapshot input={};app.window_error=gh_window_poll(app.window,&input);
+            gh_native_input_snapshot input={};app.window_error=gh_window_poll_device(app.window,app.snapshot.work,&input);
             if(app.window_error!=GH_WINDOW_OK){result=app.window_error==GH_WINDOW_CLOSED?0:1;break;}
             // The original outer loop submits the previous parity's OT before
             // updating tasks. Keep the completed bitmap, not borrowed resources.
@@ -431,7 +571,8 @@ int main(int argc,char **argv)
                         &&app.snapshot.title_subphase==1&&(app.snapshot.title_phase==1||app.snapshot.title_timer>=5)&&app.snapshot.ticks%6==0)key='Z';
                 }
                 gh_native_input_key(&qa_input,'Z',key=='Z');gh_native_input_key(&qa_input,39,key==39);
-                if(!gh_native_input_tick(&qa_input,0,&input))break;
+                const gh_native_gamepad_sample neutral={};
+                if(!gh_native_input_tick_device(&qa_input,app.snapshot.work,&neutral,&input))break;
             }
 #endif
             host_error=gh_startup_host_set_input(app.host,&input);if(host_error!=GH_HOST_OK)break;
@@ -496,7 +637,7 @@ int main(int argc,char **argv)
         "\"work_flags584\":\"%08X\",\"system_flags5d8\":\"%08X\","
         "\"work_flags58c\":\"%08X\",\"work_flags594\":\"%08X\",\"work_flags598\":\"%08X\",\"work_flags5e0\":\"%08X\",\"work_flags5e4\":\"%08X\","
         "\"scene_frames_presented\":%llu,\"scene_frame_serial\":%llu,"
-        "\"renderer_error\":%u,\"renderer_frontier\":\"%08X\",\"world_gpu_error\":%u,\"world_frontier\":\"%08X\",\"world_vu_pc\":\"%08X\",\"world_packets_submitted\":%llu,\"window_error\":%u,\"exit_code\":%d,"
+        "\"renderer_error\":%u,\"renderer_frontier\":\"%08X\",\"world_gpu_error\":%u,\"world_frontier\":\"%08X\",\"world_vu_pc\":\"%08X\",\"world_packets_submitted\":%llu,\"effect_post_packets\":%llu,\"effect_sprite_packets\":%llu,\"effect_post_error\":%u,\"window_error\":%u,\"exit_code\":%d,"
         "\"player_updates_completed\":%llu,\"child_updates_completed\":%llu,\"om_updates_completed\":%llu,\"last_move_handle\":%u,\"last_move_entry\":\"%08X\",\"player_update_stage\":%u,\"child_update_stage\":%u,"
         "\"child_update_frontier\":\"%08X\",\"child_forces_complete\":%u,\"child_angles_complete\":%u,\"child_distances_complete\":%u,\"child_finish_complete\":%u,"
         "\"emitter_active\":%u,\"esp_active\":%u,"
@@ -516,6 +657,7 @@ int main(int argc,char **argv)
         work_flags58c,work_flags594,work_flags598,work_flags5e0,work_flags5e4,
         (unsigned long long)app.presented_scene,(unsigned long long)app.snapshot.scene_frame_serial,(unsigned)renderer.id_error,renderer.frontier,
         (unsigned)app.world_gpu_error,app.world_frontier,app.world_vu_pc,(unsigned long long)app.world_packets,
+        (unsigned long long)app.effect_post_packets,(unsigned long long)app.effect_sprite_packets,(unsigned)app.effect_post_error,
         (unsigned)app.window_error,result,
         (unsigned long long)app.snapshot.player_updates_completed,(unsigned long long)app.snapshot.child_updates_completed,(unsigned long long)app.snapshot.om_updates_completed,
         app.snapshot.last_move_handle,app.snapshot.last_move_entry,app.snapshot.player_update_stage,app.snapshot.child_update_stage,

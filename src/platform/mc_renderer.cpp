@@ -17,6 +17,7 @@ struct QueuedID {
     gh_id_base base;
     gh_id_entry entry;
     uint32_t entry_index,consumer;
+    uint16_t z=0;bool z_known=false;
 };
 enum class CommandKind {ID,FAN,FADE,NUMBER,COVER};
 struct QueuedCommand {
@@ -139,7 +140,7 @@ extern "C" void gh_mc_renderer_begin(gh_mc_renderer *r)
     for(size_t i=3;i<r->frame.size();i+=4)r->frame[i]=128;
     r->status={};r->begun=true;r->queued.clear();r->queue_failed=false;
 }
-extern "C" gh_id_error gh_mc_renderer_draw_view(gh_mc_renderer *r,const gh_id_render_view *s,const gh_id_draw_job *job)
+static gh_id_error draw_view(gh_mc_renderer *r,const gh_id_render_view *s,const gh_id_draw_job *job,const gh_ui_depth_write *depth)
 {
     if(!r||!r->begun||!s||!job||!job->entry||!s->base||!s->manager)return GH_ID_ARGUMENT;
     if(!r->flushing&&!r->queued.empty())return GH_ID_BUSY;
@@ -183,7 +184,7 @@ extern "C" gh_id_error gh_mc_renderer_draw_view(gh_mc_renderer *r,const gh_id_re
                 if(error==GH_ID_OK&&gpu==GH_UI_OK){
                     gh_ui_sprite_state state={};state.alpha=UINT64_C(0x8000000044);state.test=0x3001d;
                     state.prim=0x54;state.tex1=0x60;state.colclamp=state.prmodecont=1;
-                    gpu=gh_ui_sprite_batch(r->sprite,&state,&item,1,r->frame.data(),r->next.data(),r->next.size());
+                    gpu=gh_ui_sprite_batch_with_depth(r->sprite,&state,&item,1,r->frame.data(),r->next.data(),r->next.size(),depth);
                 }
             }else if(error==GH_ID_UNSUPPORTED&&r->reference_polygons){
                 gh_ui_polygon_item polygon={};
@@ -201,7 +202,7 @@ extern "C" gh_id_error gh_mc_renderer_draw_view(gh_mc_renderer *r,const gh_id_re
                     if(error==GH_ID_OK&&gpu==GH_UI_OK){
                         gh_ui_sprite_state state={};state.alpha=UINT64_C(0x8000000044);state.test=0x3001d;
                         state.prim=0x54;state.tex1=0x60;state.colclamp=state.prmodecont=1;
-                        gpu=gh_ui_polygon_batch(r->polygon,&state,&polygon,1,r->frame.data(),r->next.data(),r->next.size());
+                        gpu=gh_ui_polygon_batch_with_depth(r->polygon,&state,&polygon,1,r->frame.data(),r->next.data(),r->next.size(),depth);
                     }
                 }
             }
@@ -216,6 +217,8 @@ extern "C" gh_id_error gh_mc_renderer_draw_view(gh_mc_renderer *r,const gh_id_re
 #endif
     return error;
 }
+extern "C" gh_id_error gh_mc_renderer_draw_view(gh_mc_renderer *r,const gh_id_render_view *s,const gh_id_draw_job *job)
+{return draw_view(r,s,job,nullptr);}
 extern "C" gh_id_error gh_mc_renderer_queue_view(gh_mc_renderer *r,const gh_id_render_view *view,const gh_id_draw_job *job,gh_ui_ot_tag *tag)
 {
     if(!r||!r->begun||!view||!view->base||!view->manager||!job||!job->entry||!tag)return GH_ID_ARGUMENT;
@@ -257,6 +260,18 @@ extern "C" gh_id_error gh_mc_renderer_queue_view_groups(gh_mc_renderer*r,const g
         for(size_t i=0;i<n;i++)tags[i]={digits[i].color_mode,digits[i].font_mode,first+i};*count=n;return GH_ID_OK;
     }catch(const std::bad_alloc&){return GH_ID_MEMORY;}
 }
+extern "C" gh_id_error gh_mc_renderer_queue_view_groups_at_z(gh_mc_renderer *r,const gh_id_render_view *view,
+ const gh_id_draw_job *job,gh_ui_ot_tag *tags,size_t capacity,size_t *count,uint16_t z)
+{
+    gh_id_error error=gh_mc_renderer_queue_view_groups(r,view,job,tags,capacity,count);
+    // SystemMenu's original 2AAEF0 -> 2C5EA8 -> 15BCF0 chain. Accept only
+    // the proved vertex Z=FFFF profile, bank6/depth5 and the same Cockpit ID2.
+    if(error==GH_ID_OK&&*count==1&&job->entry->kind==0&&view->base->id==2&&view->base->resource_number==1&&
+       job->consumer_address==0x2aaef0&&tags[0].bank==6&&tags[0].depth==5&&z==65535){
+        auto &id=r->queued[tags[0].index].id;id.z=z;id.z_known=true;
+    }
+    return error;
+}
 extern "C" gh_id_error gh_mc_renderer_queue_fade(gh_mc_renderer*r,const gh_fade_draw*draw,const gh_ui_fade_context*context,gh_ui_ot_tag*tag)
 {
     if(!r||!r->begun||!draw||!context||!tag||!draw->visible)return GH_ID_ARGUMENT;
@@ -293,45 +308,69 @@ static gh_id_error draw_fan(gh_mc_renderer*r,const gh_cockpit_fan&fan)
     }catch(const std::bad_alloc&){error=GH_ID_MEMORY;}
     r->status.id_error=error;r->status.gpu_error=(unsigned)gpu;if(error!=GH_ID_OK)r->status.frontier=0x15c410;return error;
 }
-static gh_id_error draw_fade(gh_mc_renderer*r,const gh_fade_draw&draw,const gh_ui_fade_context&context)
+static gh_id_error draw_fade(gh_mc_renderer*r,const gh_fade_draw&draw,const gh_ui_fade_context&context,
+ const uint32_t *z,size_t z_count)
 {
     gh_ui_error gpu=GH_UI_OK;r->status.consumer=0x307388;r->status.opcode=0;r->status.frontier=0;
-    if(!r->fade)gpu=gh_ui_fade_create(&r->fade);if(gpu==GH_UI_OK)gpu=gh_ui_fade_apply(r->fade,&draw,&context,r->frame.data(),r->next.data(),r->next.size());
+    if(!r->fade)gpu=gh_ui_fade_create(&r->fade);if(gpu==GH_UI_OK)gpu=gh_ui_fade_apply_with_depth(r->fade,&draw,&context,r->frame.data(),r->next.data(),r->next.size(),z,z_count);
     gh_id_error e=gpu==GH_UI_OK?GH_ID_OK:GH_ID_UNSUPPORTED;if(e==GH_ID_OK){r->frame.swap(r->next);++r->status.jobs;}else r->status.frontier=0x15c928;
     r->status.id_error=e;r->status.gpu_error=(unsigned)gpu;return e;
 }
-static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t count,uint32_t clear_rgb,const uint8_t *background,size_t background_bytes)
+static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t count,uint32_t clear_rgb,const uint8_t *background,size_t background_bytes,const uint32_t *depth,size_t depth_count)
 {
     if(!r||!r->begun||(!order&&count)||count!=r->queued.size())return GH_ID_ARGUMENT;
     if((background&&background_bytes!=r->frame.size())||(!background&&background_bytes))return GH_ID_ARGUMENT;
+    if(depth?(!background||depth_count!=r->frame.size()/4):depth_count!=0)return GH_ID_ARGUMENT;
     if(r->flushing||r->queue_failed)return GH_ID_BUSY;
     try {
         std::vector<unsigned char> seen(count,0);
         for(size_t i=0;i<count;++i){if(order[i]>=count||seen[order[i]])return GH_ID_ARGUMENT;seen[order[i]]=1;}
+#ifdef GH_NATIVE_STARTUP_QA
+        if(depth)for(size_t i=0;i<count;i++){
+            const auto &c=r->queued[order[i]];
+            std::fprintf(stderr,"QA_UI_DEPTH_PREFIX seq%llu type%u idKind%u resource%d entry%u consumer%08X bank%u depth%d test%llX\n",
+                (unsigned long long)i,(unsigned)c.kind,(unsigned)c.id.entry.kind,c.id.base.resource_number,c.id.entry_index,c.id.consumer,
+                (unsigned)c.id.entry.b8d,c.id.entry.h8e,(unsigned long long)c.fade.test);
+        }
+#endif
         if(background)std::copy(background,background+background_bytes,r->frame.begin());
         else for(size_t i=0;i<r->frame.size();i+=4){
             r->frame[i]=(unsigned char)clear_rgb;r->frame[i+1]=(unsigned char)(clear_rgb>>8);
             r->frame[i+2]=(unsigned char)(clear_rgb>>16);r->frame[i+3]=0;
         }
+        std::vector<uint32_t> depth_samples;
+        if(depth)depth_samples.assign(depth,depth+depth_count);
         r->flushing=true;
+        bool depth_known=depth!=nullptr;
         for(size_t i=0;i<count;++i){
             auto &command=r->queued[order[i]];gh_id_error error;
             if(command.kind==CommandKind::FAN)error=draw_fan(r,command.fan);
-            else if(command.kind==CommandKind::FADE)error=draw_fade(r,command.fade,command.fade_context);
+            else if(command.kind==CommandKind::FADE){
+                bool known_terminal=depth_known&&i+1==count;
+                error=draw_fade(r,command.fade,command.fade_context,known_terminal?depth_samples.data():nullptr,known_terminal?depth_samples.size():0);
+            }
             else if(command.kind==CommandKind::NUMBER){gh_ui_error gpu=GH_UI_OK;r->status.consumer=0x2aaff0;r->status.frontier=0;r->status.opcode=0;error=render_number(r,command.number,&gpu);r->status.id_error=error;r->status.gpu_error=(unsigned)gpu;
                 if(error==GH_ID_OK){r->frame.swap(r->next);++r->status.jobs;}else r->status.frontier=0x2c6d48;}
             else if(command.kind==CommandKind::COVER){r->status.consumer=0x160d50;r->status.frontier=0;r->status.opcode=0;r->status.id_error=GH_ID_OK;r->status.gpu_error=0;++r->status.jobs;error=GH_ID_OK;} /* alpha test KEEP discards color AND Z */
             else {auto view=command.id.view;view.base=&command.id.base;
-                gh_id_draw_job job={command.id.entry_index,&command.id.entry,command.id.consumer};error=gh_mc_renderer_draw_view(r,&view,&job);}
+                gh_id_draw_job job={command.id.entry_index,&command.id.entry,command.id.consumer};
+                gh_ui_depth_write plane={depth_samples.data(),depth_samples.size(),command.id.z};
+                error=draw_view(r,&view,&job,depth_known&&command.id.z_known?&plane:nullptr);}
             if(error!=GH_ID_OK){r->flushing=false;r->queue_failed=true;return error;}
+            // COVER always discards both writes. Each admitted SystemMenu
+            // batch returns the real depth writes from its color shader.
+            if(command.kind!=CommandKind::COVER&&!(command.kind==CommandKind::ID&&command.id.z_known))depth_known=false;
         }
         r->flushing=false;r->queued.clear();return GH_ID_OK;
     }catch(const std::bad_alloc&){r->flushing=false;r->queue_failed=true;return GH_ID_MEMORY;}
 }
 extern "C" gh_id_error gh_mc_renderer_flush_queued(gh_mc_renderer *r,const size_t *order,size_t count,uint32_t clear_rgb)
-{return flush_queued(r,order,count,clear_rgb,nullptr,0);}
+{return flush_queued(r,order,count,clear_rgb,nullptr,0,nullptr,0);}
 extern "C" gh_id_error gh_mc_renderer_flush_queued_on_background(gh_mc_renderer *r,const size_t *order,size_t count,const uint8_t *rgba,size_t bytes)
-{if(!rgba)return GH_ID_ARGUMENT;return flush_queued(r,order,count,0,rgba,bytes);}
+{if(!rgba)return GH_ID_ARGUMENT;return flush_queued(r,order,count,0,rgba,bytes,nullptr,0);}
+extern "C" gh_id_error gh_mc_renderer_flush_queued_on_background_with_depth(gh_mc_renderer*r,const size_t *order,size_t count,
+ const uint8_t *rgba,size_t bytes,const uint32_t *z,size_t z_count)
+{if(!rgba||!z)return GH_ID_ARGUMENT;return flush_queued(r,order,count,0,rgba,bytes,z,z_count);}
 extern "C" gh_id_error gh_mc_renderer_draw(gh_mc_renderer *r,const gh_startup_snapshot *s,const gh_id_draw_job *job)
 {
     if(!s)return GH_ID_ARGUMENT;

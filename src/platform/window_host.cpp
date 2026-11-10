@@ -26,7 +26,28 @@ extern "C" gh_window_error gh_window_create(const gh_window_config*c,gh_window_h
  WP<ID3DBlob>code,errors;WG(D3DCompile(shader,strlen(shader),nullptr,nullptr,nullptr,"main","cs_5_0",D3DCOMPILE_ENABLE_STRICTNESS,0,code.out(),errors.out()));WG(p->device.p->CreateComputeShader(code.p->GetBufferPointer(),code.p->GetBufferSize(),nullptr,p->shader.out()));D3D11_BUFFER_DESC bd={};bd.ByteWidth=32;bd.Usage=D3D11_USAGE_DEFAULT;bd.BindFlags=D3D11_BIND_CONSTANT_BUFFER;WG(p->device.p->CreateBuffer(&bd,nullptr,p->constants.out()));
  p->xinput=LoadLibraryExW(L"xinput1_4.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);if(p->xinput)p->get_state=(DWORD(WINAPI*)(DWORD,XINPUT_STATE*))GetProcAddress(p->xinput,"XInputGetState");if(c->show)ShowWindow(p->hwnd,SW_SHOW);*out=p.release();return GH_WINDOW_OK;
 }
-extern "C" gh_window_error gh_window_poll(gh_window_host*p,gh_native_input_snapshot*out){if(!owner(p)||!out)return GH_WINDOW_ARGUMENT;MSG message;while(PeekMessageW(&message,p->hwnd,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}if(p->closed)return GH_WINDOW_CLOSED;XINPUT_STATE state={};uint16_t buttons=0;if(p->controller>=0&&p->get_state&&p->get_state((DWORD)p->controller,&state)==ERROR_SUCCESS)buttons=state.Gamepad.wButtons;return gh_native_input_tick(&p->input,buttons,out)?GH_WINDOW_OK:GH_WINDOW_ARGUMENT;}
+static gh_window_error poll_gamepad(gh_window_host*p,gh_native_gamepad_sample&sample){
+ if(!owner(p))return GH_WINDOW_ARGUMENT;
+ MSG message;
+ while(PeekMessageW(&message,p->hwnd,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}
+ if(p->closed)return GH_WINDOW_CLOSED;
+ XINPUT_STATE state={};
+ if(p->controller>=0&&p->get_state&&p->get_state((DWORD)p->controller,&state)==ERROR_SUCCESS){
+  const auto&pad=state.Gamepad;
+  sample={pad.wButtons,pad.sThumbLX,pad.sThumbLY,pad.sThumbRX,pad.sThumbRY,pad.bLeftTrigger,pad.bRightTrigger,1};
+ }
+ return GH_WINDOW_OK;
+}
+extern "C" gh_window_error gh_window_poll(gh_window_host*p,gh_native_input_snapshot*out){
+ if(!out)return GH_WINDOW_ARGUMENT;
+ gh_native_gamepad_sample sample={};auto error=poll_gamepad(p,sample);if(error)return error;
+ return gh_native_input_tick(&p->input,sample.buttons,out)?GH_WINDOW_OK:GH_WINDOW_ARGUMENT;
+}
+extern "C" gh_window_error gh_window_poll_device(gh_window_host*p,const gh_boot_work*w,gh_native_input_snapshot*out){
+ if(!w||!out)return GH_WINDOW_ARGUMENT;
+ gh_native_gamepad_sample sample={};auto error=poll_gamepad(p,sample);if(error)return error;
+ return gh_native_input_tick_device(&p->input,w,&sample,out)?GH_WINDOW_OK:GH_WINDOW_ARGUMENT;
+}
 extern "C" gh_window_error gh_window_present(gh_window_host*p,const unsigned char*rgba,size_t bytes,unsigned sw,unsigned sh,unsigned an,unsigned ad){
  if(!owner(p)||!rgba||!sw||!sh||sw>4096||sh>4096||bytes<(size_t)sw*sh*4||!an||!ad||an>10000||ad>10000)return GH_WINDOW_ARGUMENT;if(p->closed)return GH_WINDOW_CLOSED;RECT r;if(!GetClientRect(p->hwnd,&r))return GH_WINDOW_SYSTEM;unsigned w=(unsigned)r.right,h=(unsigned)r.bottom;if(!w||!h)return GH_WINDOW_MINIMIZED;if(w>4096||h>4096)return GH_WINDOW_ARGUMENT;
  if(w!=p->width||h!=p->height){p->uav.reset();p->target.reset();p->staging.reset();WG(p->swap.p->ResizeBuffers(0,w,h,DXGI_FORMAT_UNKNOWN,0));D3D11_TEXTURE2D_DESC td={};td.Width=w;td.Height=h;td.MipLevels=td.ArraySize=1;td.Format=DXGI_FORMAT_R8G8B8A8_UNORM;td.SampleDesc.Count=1;td.Usage=D3D11_USAGE_DEFAULT;td.BindFlags=D3D11_BIND_UNORDERED_ACCESS;WG(p->device.p->CreateTexture2D(&td,nullptr,p->target.out()));WG(p->device.p->CreateUnorderedAccessView(p->target.p,nullptr,p->uav.out()));td.Usage=D3D11_USAGE_STAGING;td.BindFlags=0;td.CPUAccessFlags=D3D11_CPU_ACCESS_READ;WG(p->device.p->CreateTexture2D(&td,nullptr,p->staging.out()));p->width=w;p->height=h;}

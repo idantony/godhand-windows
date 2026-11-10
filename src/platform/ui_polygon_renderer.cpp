@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cstdio>
 #include "ui_polygon_renderer.h"
+#include "ui_depth_target.h"
 template<class T>struct SPtr{T*p=nullptr;~SPtr(){if(p)p->Release();}T**out(){return &p;}SPtr()=default;SPtr(const SPtr&)=delete;};
 struct PolygonTexture{SPtr<ID3D11Texture2D> image;SPtr<ID3D11ShaderResourceView> view;unsigned width,height;};
 struct gh_ui_polygon_renderer{
@@ -18,11 +19,12 @@ struct gh_ui_polygon_renderer{
  SPtr<ID3D11Buffer> constants;SPtr<ID3D11Texture2D> frame[2],readback;
  SPtr<ID3D11ShaderResourceView> frameview[2];SPtr<ID3D11UnorderedAccessView> target[2];
  std::vector<std::unique_ptr<PolygonTexture>> textures;
+ NativeUIDepthTarget depth;
 };
 struct PolygonParams{int xy[8];unsigned su[4],sv[4],info[4],dimensions[4];};
 #define SGPU(x) do{HRESULT result=(x);if(FAILED(result)){std::fprintf(stderr,"polygon GPU failure %d %08lx\n",__LINE__,(unsigned long)result);return GH_UI_GPU;}}while(0)
 static const char *polygon_shader=R"(
-Texture2D<uint4> sourceImage:register(t0);Texture2D<uint4> previous:register(t1);RWTexture2D<uint4> outputImage:register(u0);
+Texture2D<uint4> sourceImage:register(t0);Texture2D<uint4> previous:register(t1);RWTexture2D<uint4> outputImage:register(u0);RWTexture2D<uint> outputDepth:register(u1);
 cbuffer Parameters:register(b0){int4 xy01;int4 xy23;uint4 su;uint4 sv;uint4 info;uint4 dimensions;};
 uint2 multiply64(uint a,uint b){uint p0=(a&65535)*(b&65535),p1=(a&65535)*(b>>16),p2=(a>>16)*(b&65535),p3=(a>>16)*(b>>16);uint mid=(p0>>16)+(p1&65535)+(p2&65535);return uint2((p0&65535)|(mid<<16),p3+(p1>>16)+(p2>>16)+(mid>>16));}
 uint2 add64(uint2 a,uint2 b){uint lo=a.x+b.x;return uint2(lo,a.y+b.y+(lo<a.x?1:0));}
@@ -44,7 +46,7 @@ int4 lerp4(int4 a,int4 b,int f){return a+(((b-a)*f)>>4);}
  int bu=int(u)-32768,bv=int(v)-32768,x=bu>>16,y=bv>>16,fu=(bu>>12)&15,fv=(bv>>12)&15;
  int4 filtered=lerp4(lerp4(texel(x,y),texel(x+1,y),fu),lerp4(texel(x,y+1),texel(x+1,y+1),fu),fv);
  uint4 tint=uint4(info.x&255,(info.x>>8)&255,(info.x>>16)&255,info.x>>24);int alpha=min(255,(filtered.a*int(tint.a))>>7);
- if(alpha<=1){outputImage[p]=dst;return;}int3 src=min(int3(255,255,255),(filtered.rgb*int3(tint.rgb))>>7);int3 rgb=int3(dst.rgb)+(((src-int3(dst.rgb))*alpha)>>7);outputImage[p]=uint4(clamp(rgb,0,255),alpha);
+ if(alpha<=1){outputImage[p]=dst;return;}int3 src=min(int3(255,255,255),(filtered.rgb*int3(tint.rgb))>>7);int3 rgb=int3(dst.rgb)+(((src-int3(dst.rgb))*alpha)>>7);outputImage[p]=uint4(clamp(rgb,0,255),alpha);if(dimensions.z)outputDepth[p]=dimensions.w;
 })";
 extern "C" void gh_ui_polygon_destroy(gh_ui_polygon_renderer *r){delete r;}
 extern "C" gh_ui_error gh_ui_polygon_create(unsigned w,unsigned h,gh_ui_polygon_renderer **out){
@@ -89,18 +91,25 @@ static gh_ui_error parameters(const gh_ui_polygon_renderer*r,const gh_ui_polygon
  for(unsigned i=0;i<4;i++){unsigned a=order[i],b=order[(i+1)%4],c=order[(i+2)%4];int64_t dx=p->xy[b*2]-p->xy[a*2],dy=p->xy[b*2+1]-p->xy[a*2+1];int64_t cross=dx*(p->xy[c*2+1]-p->xy[a*2+1])-dy*(p->xy[c*2]-p->xy[a*2]);if(!cross||cross>INT32_MAX||cross< -INT32_MAX)return GH_UI_UNSUPPORTED;int next=cross<0?-1:1;if(sign&&sign!=next)return GH_UI_UNSUPPORTED;sign=next;}
  p->info[0]=q.color;p->info[1]=t.width;p->info[2]=t.height;p->info[3]=r->width;p->dimensions[0]=r->height;p->dimensions[1]=p->dimensions[2]=p->dimensions[3]=0;return GH_UI_OK;
 }
-extern "C" gh_ui_error gh_ui_polygon_batch(gh_ui_polygon_renderer *r,const gh_ui_sprite_state *s,const gh_ui_polygon_item *items,size_t count,const unsigned char *back,unsigned char *output,size_t bytes){
+extern "C" gh_ui_error gh_ui_polygon_batch_with_depth(gh_ui_polygon_renderer *r,const gh_ui_sprite_state *s,const gh_ui_polygon_item *items,size_t count,const unsigned char *back,unsigned char *output,size_t bytes,const gh_ui_depth_write *depth){
  if(!r||!s||(!items&&count)||!back||!output||GetCurrentThreadId()!=r->thread||bytes<(size_t)r->width*r->height*4||count>1024)return GH_UI_ARGUMENT;
  if(s->alpha!=UINT64_C(0x8000000044)||s->test!=0x3001d||s->prim!=0x54||s->tex1!=0x60||s->clamp||s->colclamp!=1||s->prmodecont!=1||s->pabe||s->fba||s->frame_mask)return GH_UI_UNSUPPORTED;
  for(size_t i=0;i<count;i++){PolygonParams p;gh_ui_error e=parameters(r,items[i],&p);if(e)return e;}
- auto *ctx=r->context.p;ctx->UpdateSubresource(r->frame[0].p,0,nullptr,back,r->width*4,0);unsigned previous=0;
+ auto *ctx=r->context.p;
+ if(depth){gh_ui_error e=r->depth.begin(r->device.p,ctx,r->width,r->height,*depth);if(e)return e;}
+ ctx->UpdateSubresource(r->frame[0].p,0,nullptr,back,r->width*4,0);unsigned previous=0;
  ctx->CSSetShader(r->shader.p,nullptr,0);ctx->CSSetConstantBuffers(0,1,&r->constants.p);
  for(size_t i=0;i<count;i++){
-  PolygonParams p;parameters(r,items[i],&p);unsigned next=previous^1;ctx->UpdateSubresource(r->constants.p,0,nullptr,&p,0,0);
-  ID3D11ShaderResourceView *views[]={r->textures[items[i].texture-1]->view.p,r->frameview[previous].p};ctx->CSSetShaderResources(0,2,views);ctx->CSSetUnorderedAccessViews(0,1,&r->target[next].p,nullptr);ctx->Dispatch((r->width+7)/8,(r->height+7)/8,1);
-  ID3D11ShaderResourceView *nullviews[2]={};ID3D11UnorderedAccessView *nulltarget=nullptr;ctx->CSSetShaderResources(0,2,nullviews);ctx->CSSetUnorderedAccessViews(0,1,&nulltarget,nullptr);previous=next;
+  PolygonParams p;parameters(r,items[i],&p);if(depth){p.dimensions[2]=1;p.dimensions[3]=depth->z;}unsigned next=previous^1;ctx->UpdateSubresource(r->constants.p,0,nullptr,&p,0,0);
+  ID3D11ShaderResourceView *views[]={r->textures[items[i].texture-1]->view.p,r->frameview[previous].p};ctx->CSSetShaderResources(0,2,views);ID3D11UnorderedAccessView *targets[]={r->target[next].p,depth?r->depth.view():nullptr};ctx->CSSetUnorderedAccessViews(0,2,targets,nullptr);ctx->Dispatch((r->width+7)/8,(r->height+7)/8,1);
+  ID3D11ShaderResourceView *nullviews[2]={};ID3D11UnorderedAccessView *nulltarget[2]={};ctx->CSSetShaderResources(0,2,nullviews);ctx->CSSetUnorderedAccessViews(0,2,nulltarget,nullptr);previous=next;
  }
- ctx->CopyResource(r->readback.p,r->frame[previous].p);D3D11_MAPPED_SUBRESOURCE map={};SGPU(ctx->Map(r->readback.p,0,D3D11_MAP_READ,0,&map));for(unsigned y=0;y<r->height;y++)memcpy(output+(size_t)y*r->width*4,(unsigned char*)map.pData+(size_t)y*map.RowPitch,(size_t)r->width*4);ctx->Unmap(r->readback.p,0);return GH_UI_OK;
+ ctx->CopyResource(r->readback.p,r->frame[previous].p);D3D11_MAPPED_SUBRESOURCE map={};SGPU(ctx->Map(r->readback.p,0,D3D11_MAP_READ,0,&map));for(unsigned y=0;y<r->height;y++)memcpy(output+(size_t)y*r->width*4,(unsigned char*)map.pData+(size_t)y*map.RowPitch,(size_t)r->width*4);ctx->Unmap(r->readback.p,0);
+ return depth?r->depth.finish(ctx,r->width,r->height,*depth):GH_UI_OK;
+}
+extern "C" gh_ui_error gh_ui_polygon_batch(gh_ui_polygon_renderer *r,const gh_ui_sprite_state *s,const gh_ui_polygon_item *items,
+ size_t count,const unsigned char *back,unsigned char *output,size_t bytes){
+ return gh_ui_polygon_batch_with_depth(r,s,items,count,back,output,bytes,nullptr);
 }
 extern "C" gh_ui_error gh_ui_polygon_fan(gh_ui_polygon_renderer*r,const gh_ui_sprite_state*s,uint32_t texture,const gh_cockpit_fan*fan,const unsigned char*back,unsigned char*output,size_t bytes){
  if(!r||!s||!fan||!fan->ready||!back||!output||GetCurrentThreadId()!=r->thread||bytes<(size_t)r->width*r->height*4||!texture||texture>r->textures.size())return GH_UI_ARGUMENT;

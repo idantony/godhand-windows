@@ -22,6 +22,8 @@
 #include "../core/game_event_environment.h"
 #include "../core/game_event_start.h"
 #include "../core/game_event_clear.h"
+#include "../core/game_event_create.h"
+#include "../core/game_event_link.h"
 #include "../core/game_hitarea_objects.h"
 #include "../core/game_hitarea_internal.h"
 #include "../core/game_dynamic_corners.h"
@@ -103,6 +105,7 @@ struct gh_startup_host {
     gh_object_static_emit world_emit;void *world_context;
     gh_shadow_emit shadow_emit;void *shadow_context;gh_shadow_templates shadow_templates;
     gh_actor_draw_emit actor_emit;void *actor_context;
+    gh_effect_trans_emit effect_emit;void *effect_context;
     gh_scene_visibility *visibility;uint64_t visibility_epoch;uint8_t visibility_completed;
     gh_id_post_message mc_post;
     void *mc_draw_context,*mc_post_context;
@@ -134,6 +137,11 @@ struct gh_startup_host {
     gh_game_event_config event_config;
     gh_event_start_state event_start;
     gh_event_clear_state event_clear;
+    gh_event_module event_module;
+    gh_event_resource event_resource;
+    gh_event_link event_link;
+    gh_event_create_state event_create;
+    int event_link_relative;
     gh_display_state display;
     gh_game_scene_aux scene_aux;
     gh_game_effects_frame effects_frame;gh_effects_frame_globals effects_globals;
@@ -313,6 +321,42 @@ static int event_start_stage(void *context,gh_game_event*event,int*done)
     return (int)e;
 }
 static gh_game_event_status event_player_clear(void *context,uint32_t*frontier);
+static gh_game_event_status event_module_link(void *context,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    gh_game_event_status status=gh_game_event_link_002be890(&h->event_link,
+        &h->event_module,h->boot_reference,h->boot_reference_bytes);
+    *frontier=h->event_link.frontier;
+    h->event_link_relative=status && h->event_link.frontier_relative && *frontier;
+    return status;
+}
+
+static int event_create_stage(void *context,gh_game_event *event,int *done)
+{
+    gh_startup_host *h=context;
+    if(event!=&h->event)return GH_EVENT_ARGUMENT;
+    h->event_link_relative=0;
+    const gh_event_create_bindings bindings={
+        .event=event,.work=&h->work,.module=&h->event_module,
+        .components=&h->event_link.components,.resource=&h->event_resource,
+        .dvd=&h->dvd,.heap=h->heap,.voices=h->voices,
+        .boot_elf=h->boot_reference,.boot_elf_bytes=h->boot_reference_bytes,
+        .module_link_002be890=event_module_link,.context=h
+    };
+    gh_game_event_status status=gh_game_event_create_00296958(&h->event_create,&bindings,done);
+    if(status)event->frontier=h->event_create.frontier?h->event_create.frontier:0x296958;
+    return status;
+}
+
+static gh_game_event_status event_abort_resources(gh_startup_host *h)
+{
+    gh_game_event_status status=gh_game_event_resource_abort(&h->event_resource);
+    if(status)return status;
+    /* Link symbol names borrow the module allocation. Drop those views first. */
+    memset(&h->event_link,0,sizeof(h->event_link));
+    return gh_game_event_module_abort(&h->event_module);
+}
+
 static int event_clear_stage(void *context,gh_game_event*event,int*done)
 {
     gh_startup_host*h=context;gh_game_services_scene_view s;
@@ -428,9 +472,8 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         }
         gh_effects_trans_bindings b={.storage={.effects=s.effects,.esp=s.scene_buffer_a,.esp_bytes=s.scene_buffer_a_size,
             .emitters=s.scene_buffer_b,.emitter_bytes=s.scene_buffer_b_size,.actor_match=gh_effect_create_actor_match,.context=s.effects},
-            .work=&h->work,.globals=&h->effects_globals,.display=&h->display,.policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE};
-        /* A positive original postpass requires the native ONE-OT provider;
-         * until it exists, this producer returns its precise consumer frontier. */
+            .work=&h->work,.globals=&h->effects_globals,.display=&h->display,.policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE,
+            .emit=h->effect_emit,.context=h->effect_context,.camera=s.pl_camera,.init=&h->game_init,.textures=h->game_stage.textures};
         gh_effect_status e=gh_game_effects_trans_002fb310(&h->effects_trans,&b);
         if(e&&frontier)*frontier=h->effects_trans.frontier?h->effects_trans.frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -494,6 +537,7 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(!event_status)event_status=gh_game_event_config_from_elf(&h->event_config,elf,(size_t)bytes);
     if(!event_status)event_status=gh_game_event_set_stage(&h->event,0,event_start_stage,h);
     if(!event_status)event_status=gh_game_event_set_stage(&h->event,1,event_clear_stage,h);
+    if(!event_status)event_status=gh_game_event_set_stage(&h->event,2,event_create_stage,h);
     gh_display_status display_status=gh_display_state_from_elf(&h->display,elf,(size_t)bytes);
     if(!display_status)display_status=gh_display_static_initialize_002a48a8(&h->display,1,0xffff);
     gh_render_step_status env_status=gh_render_draw_env_from_elf(&h->draw_env,elf,(size_t)bytes);
@@ -758,9 +802,14 @@ static int update_state4(void *context,gh_game_loop *loop)
         .profile_counter=scene_profile_clock,.profile_context=h,.scenario_status=scene_scenario_status,.scenario_status_context=h,
         .dynamic_corners=&h->dynamic_corners,.boot_elf=h->boot_reference,.boot_elf_bytes=h->boot_reference_bytes,
         .action_native=&h->action_bindings};
+    h->event_link_relative=0;
     gh_scene_step_status e=gh_game_scene_step_002a6690(s.step,&b);
-    if(e)return entry_frontier(h,s.step->frontier?s.step->frontier:0x2a6690,
-        gh_game_services_frontier_module(h->services),s.step->detail?s.step->detail:(int)e);
+    if(e){
+        const char *module=gh_game_services_frontier_module(h->services);
+        if(h->event_link_relative && s.step->frontier==h->event.frontier)module="event.rel";
+        return entry_frontier(h,s.step->frontier?s.step->frontier:0x2a6690,
+            module,s.step->detail?s.step->detail:(int)e);
+    }
     h->scene_frame_pending=1;
     return 0;
 }
@@ -1189,6 +1238,12 @@ gh_host_error gh_startup_host_set_actor_consumer(gh_startup_host *h,gh_actor_dra
     if(!on_owner(h))return GH_HOST_THREADS;
     h->actor_emit=emit;h->actor_context=context;return GH_HOST_OK;
 }
+gh_host_error gh_startup_host_set_effect_consumer(gh_startup_host *h,gh_effect_trans_emit emit,void *context)
+{
+    if(!h||h->ticks||h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
+    if(!on_owner(h))return GH_HOST_THREADS;
+    h->effect_emit=emit;h->effect_context=context;return GH_HOST_OK;
+}
 gh_host_phase gh_startup_host_tick(gh_startup_host *h)
 {
     gh_task_run_result r;gh_dvd_error e;unsigned i;int active=0;
@@ -1304,6 +1359,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->display=&h->display;
     out->scene_frame_serial=h->scene_frame_serial;out->scene_frame_ready=h->scene_frame_ready;
     out->ui_resource_epoch=gh_game_services_ui_resource_epoch(h->services);
+    out->id_vertex_z=h->draw_env.scalar.clip;out->id_vertex_z_known=h->draw_env.ready;
     out->current_room=(uint16_t)h->work.room;memcpy(&out->next_room,(const uint8_t*)&h->work+0x5b4,2);
     if(h->services){gh_game_update_diagnostic d={0};if(!gh_game_services_update_diagnostic(h->services,&d)){
         out->player_updates_completed=d.player_updates_completed;out->child_updates_completed=d.child_updates_completed;out->om_updates_completed=d.om_updates_completed;
@@ -1411,6 +1467,7 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
         if(gh_game_services_destroy(h->services)!=GH_SERVICES_OK)return GH_HOST_ASSET;
         h->services=0;
     }
+    if(event_abort_resources(h)!=GH_EVENT_OK)return GH_HOST_ASSET;
     /* Close actual BGM endpoints before encoded source/heap/registry owners. */
     if(h->bgm){gh_bgm_requests_destroy(h->bgm);h->bgm=0;}
     if(h->enemy_banks){if(gh_enemy_se_banks_destroy(h->enemy_banks)!=GH_ENEMY_SE_OK)return GH_HOST_AUDIO;h->enemy_banks=0;}

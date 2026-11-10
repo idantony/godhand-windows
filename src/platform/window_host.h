@@ -12,6 +12,7 @@ typedef struct {unsigned width,height;int show;const char*title;gh_native_input_
 gh_window_error gh_window_create(const gh_window_config*,gh_window_host**);
 void gh_window_destroy(gh_window_host*);
 gh_window_error gh_window_poll(gh_window_host*,gh_native_input_snapshot*);
+gh_window_error gh_window_poll_device(gh_window_host*,const gh_boot_work*,gh_native_input_snapshot*);
 /* RGBbytepreserving nearest presentation; alpha is alreadycomposited and
  * displayedopaque. Explicitdisplayaspect e.g4/3 independentofrawpixelaspect.
  * Aspectfit letterboxblack; no inferredGS/fade/gameframe rendering. */

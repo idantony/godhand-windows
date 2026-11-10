@@ -19,6 +19,9 @@ typedef struct {
  /* TEX0 TCC1 profile:0 MODULATE,3 HIGHLIGHT2. Other functions are strict.
   * The selector belongs to this draw, not the cached texture image. */
  uint8_t texture_function;
+ /* Original 0x54 same-color STQ strip admits FF000000 to preserve the
+  * destination alpha byte. The other supported primitives require zero. */
+ uint32_t frame_mask;
 } gh_model_draw_state;
 gh_model_gpu_error gh_model_renderer_create(unsigned width,unsigned height,gh_model_renderer **);
 void gh_model_renderer_destroy(gh_model_renderer *);
@@ -39,7 +42,13 @@ gh_model_gpu_error gh_model_renderer_begin(gh_model_renderer *,uint32_t clear_rg
  * integer edge tests preserve coverage for large/offscreen triangles. */
 gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer *,const gh_model_draw_state *,uint32_t texture,
  const gh_static_gs_vertex *,size_t vertex_count,const uint32_t *indices,size_t index_count);
+/* Packed RGBA8 in top-to-bottom row order. Pass NULL and zero for color-only readback. */
 gh_model_gpu_error gh_model_renderer_readback(gh_model_renderer *,uint8_t *rgba,size_t rgba_bytes,uint32_t *z,size_t z_count);
+/* Replace the active scene color with a complete packed RGBA8 image. All
+ * four channels are raw bytes, including GS alpha. Subsequent draws use the
+ * existing color UAV, depth, and cached material handles. Call after begin
+ * on the renderer's owning thread. */
+gh_model_gpu_error gh_model_renderer_replace_color(gh_model_renderer *,const uint8_t *rgba,size_t rgba_bytes);
 #ifdef __cplusplus
 }
 #endif

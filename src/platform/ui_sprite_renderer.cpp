@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cstdio>
 #include "ui_sprite_renderer.h"
+#include "ui_depth_target.h"
 template<class T>struct SPtr{T*p=nullptr;~SPtr(){if(p)p->Release();}T**out(){return &p;}SPtr()=default;SPtr(const SPtr&)=delete;};
 struct SpriteTexture{SPtr<ID3D11Texture2D> image;SPtr<ID3D11ShaderResourceView> view;unsigned width,height;};
 struct gh_ui_sprite_renderer{
@@ -18,12 +19,13 @@ struct gh_ui_sprite_renderer{
  SPtr<ID3D11Buffer> constants;SPtr<ID3D11Texture2D> frame[2],readback;
  SPtr<ID3D11ShaderResourceView> frameview[2];SPtr<ID3D11UnorderedAccessView> target[2];
  std::vector<std::unique_ptr<SpriteTexture>> textures;
+ NativeUIDepthTarget depth;
 };
 struct SpriteParams{int rectangle[4];unsigned st[4],info[4],dimensions[4];};
 #define SGPU(x) do{HRESULT result=(x);if(FAILED(result)){std::fprintf(stderr,"sprite GPU failure %d %08lx\n",__LINE__,(unsigned long)result);return GH_UI_GPU;}}while(0)
 static const char *sprite_shader=R"(
 Texture2D<uint4> sourceImage:register(t0);Texture2D<uint4> previous:register(t1);
-RWTexture2D<uint4> outputImage:register(u0);
+RWTexture2D<uint4> outputImage:register(u0);RWTexture2D<uint> outputDepth:register(u1);
 cbuffer Parameters:register(b0){int4 rectangle;uint4 st;uint4 info;uint4 dimensions;};
 uint rational(uint a,uint b,uint divisor){
  uint p0=(a&65535)*(b&65535),p1=(a&65535)*(b>>16),p2=(a>>16)*(b&65535),p3=(a>>16)*(b>>16);
@@ -52,7 +54,7 @@ int coordinate(int a,int b,uint numerator,uint denominator){
  int alpha=min(255,(filtered.a*int(tint.a))>>7);if(alpha<=1){outputImage[p]=destination;return;}
  int3 source=min(int3(255,255,255),(filtered.rgb*int3(tint.rgb))>>7);
  int3 rgb=int3(destination.rgb)+(((source-int3(destination.rgb))*alpha)>>7);
- outputImage[p]=uint4(clamp(rgb,0,255),alpha);
+ outputImage[p]=uint4(clamp(rgb,0,255),alpha);if(dimensions.z)outputDepth[p]=dimensions.w;
 })";
 extern "C" void gh_ui_sprite_destroy(gh_ui_sprite_renderer *r){delete r;}
 extern "C" gh_ui_error gh_ui_sprite_create(unsigned w,unsigned h,gh_ui_sprite_renderer **out){
@@ -95,16 +97,23 @@ static gh_ui_error parameters(const gh_ui_sprite_renderer *r,const gh_ui_sprite_
   int32_t fixed=(int32_t)(uv[i]*(float)(i&1?t.height:t.width)*65536.0f);p->st[i]=(uint32_t)fixed;}
  p->info[0]=q.color;p->info[1]=t.width;p->info[2]=t.height;p->info[3]=r->width;p->dimensions[0]=r->height;p->dimensions[1]=p->dimensions[2]=p->dimensions[3]=0;return GH_UI_OK;
 }
-extern "C" gh_ui_error gh_ui_sprite_batch(gh_ui_sprite_renderer *r,const gh_ui_sprite_state *s,const gh_ui_sprite_item *items,size_t count,const unsigned char *back,unsigned char *output,size_t bytes){
+extern "C" gh_ui_error gh_ui_sprite_batch_with_depth(gh_ui_sprite_renderer *r,const gh_ui_sprite_state *s,const gh_ui_sprite_item *items,size_t count,const unsigned char *back,unsigned char *output,size_t bytes,const gh_ui_depth_write *depth){
  if(!r||!s||(!items&&count)||!back||!output||GetCurrentThreadId()!=r->thread||bytes<(size_t)r->width*r->height*4||count>1024)return GH_UI_ARGUMENT;
  if(s->alpha!=UINT64_C(0x8000000044)||s->test!=0x3001d||s->prim!=0x54||s->tex1!=0x60||s->clamp||s->colclamp!=1||s->prmodecont!=1||s->pabe||s->fba||s->frame_mask)return GH_UI_UNSUPPORTED;
  for(size_t i=0;i<count;i++){SpriteParams p;gh_ui_error e=parameters(r,items[i],&p);if(e)return e;}
- auto *ctx=r->context.p;ctx->UpdateSubresource(r->frame[0].p,0,nullptr,back,r->width*4,0);unsigned previous=0;
+ auto *ctx=r->context.p;
+ if(depth){gh_ui_error e=r->depth.begin(r->device.p,ctx,r->width,r->height,*depth);if(e)return e;}
+ ctx->UpdateSubresource(r->frame[0].p,0,nullptr,back,r->width*4,0);unsigned previous=0;
  ctx->CSSetShader(r->shader.p,nullptr,0);ctx->CSSetConstantBuffers(0,1,&r->constants.p);
  for(size_t i=0;i<count;i++){
-  SpriteParams p;parameters(r,items[i],&p);unsigned next=previous^1;ctx->UpdateSubresource(r->constants.p,0,nullptr,&p,0,0);
-  ID3D11ShaderResourceView *views[]={r->textures[items[i].texture-1]->view.p,r->frameview[previous].p};ctx->CSSetShaderResources(0,2,views);ctx->CSSetUnorderedAccessViews(0,1,&r->target[next].p,nullptr);ctx->Dispatch((r->width+7)/8,(r->height+7)/8,1);
-  ID3D11ShaderResourceView *nullviews[2]={};ID3D11UnorderedAccessView *nulltarget=nullptr;ctx->CSSetShaderResources(0,2,nullviews);ctx->CSSetUnorderedAccessViews(0,1,&nulltarget,nullptr);previous=next;
+  SpriteParams p;parameters(r,items[i],&p);if(depth){p.dimensions[2]=1;p.dimensions[3]=depth->z;}unsigned next=previous^1;ctx->UpdateSubresource(r->constants.p,0,nullptr,&p,0,0);
+  ID3D11ShaderResourceView *views[]={r->textures[items[i].texture-1]->view.p,r->frameview[previous].p};ctx->CSSetShaderResources(0,2,views);ID3D11UnorderedAccessView *targets[]={r->target[next].p,depth?r->depth.view():nullptr};ctx->CSSetUnorderedAccessViews(0,2,targets,nullptr);ctx->Dispatch((r->width+7)/8,(r->height+7)/8,1);
+  ID3D11ShaderResourceView *nullviews[2]={};ID3D11UnorderedAccessView *nulltarget[2]={};ctx->CSSetShaderResources(0,2,nullviews);ctx->CSSetUnorderedAccessViews(0,2,nulltarget,nullptr);previous=next;
  }
- ctx->CopyResource(r->readback.p,r->frame[previous].p);D3D11_MAPPED_SUBRESOURCE map={};SGPU(ctx->Map(r->readback.p,0,D3D11_MAP_READ,0,&map));for(unsigned y=0;y<r->height;y++)memcpy(output+(size_t)y*r->width*4,(unsigned char*)map.pData+(size_t)y*map.RowPitch,(size_t)r->width*4);ctx->Unmap(r->readback.p,0);return GH_UI_OK;
+ ctx->CopyResource(r->readback.p,r->frame[previous].p);D3D11_MAPPED_SUBRESOURCE map={};SGPU(ctx->Map(r->readback.p,0,D3D11_MAP_READ,0,&map));for(unsigned y=0;y<r->height;y++)memcpy(output+(size_t)y*r->width*4,(unsigned char*)map.pData+(size_t)y*map.RowPitch,(size_t)r->width*4);ctx->Unmap(r->readback.p,0);
+ return depth?r->depth.finish(ctx,r->width,r->height,*depth):GH_UI_OK;
+}
+extern "C" gh_ui_error gh_ui_sprite_batch(gh_ui_sprite_renderer *r,const gh_ui_sprite_state *s,const gh_ui_sprite_item *items,
+ size_t count,const unsigned char *back,unsigned char *output,size_t bytes){
+ return gh_ui_sprite_batch_with_depth(r,s,items,count,back,output,bytes,nullptr);
 }

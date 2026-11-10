@@ -24,6 +24,13 @@ class SourceBounds(unittest.TestCase):
         report=module.est_row(source(),7,0)
         self.assertEqual((report["esp_type"],report["part"],report["scale_mode"]),(6,-1,2))
         self.assertEqual(report["vectors"]["direction"],[0,0,0])
+    def test_sprite_byte_halfword_fields(self):
+        raw=source();base=0x90
+        raw[base+0x129]=5;raw[base+0x12A]=254;raw[base+0x12C]=4;raw[base+0x12D]=2
+        struct.pack_into("<h",raw,base+0x28C,-1)
+        sprite=module.est_row(raw,7,0)["sprite_parameters"]
+        self.assertEqual((sprite["blend129"],sprite["class12a"],sprite["texture_bank28c"]),(5,-2,-1))
+        self.assertEqual((sprite["columns12c"],sprite["rows12d"]),(4,2))
     def test_group_missing(self):
         with self.assertRaises(ValueError):module.est_row(source(),8,0)
     def test_row_bounds(self):

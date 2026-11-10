@@ -20,6 +20,7 @@
 #include "../core/game_object_step.h"
 #include "../core/game_actor_shadow_draw.h"
 #include "../core/game_actor_model_draw.h"
+#include "../core/game_effects_trans.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -105,6 +106,8 @@ typedef struct gh_startup_snapshot {
     uint32_t hitarea_actor_flags,hitarea_actor_cooldown_bits,hitarea_source_unit_flags,hitarea_source_excluded_token,hitarea_source_is_player;
     uint32_t hitarea_hit_unit_known[4],hitarea_hit_unit_slots[4],hitarea_hit_actor_present[4],hitarea_hit_actor_kinds[4],hitarea_hit_actor_tokens[4];
     uint32_t hitarea_hit_actor_flags[4],hitarea_hit_actor_cooldown_bits[4],hitarea_hit_same_actor[4];
+    uint16_t id_vertex_z; /* draw env +30 used by original 2C5EA8 */
+    uint8_t id_vertex_z_known;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization
@@ -148,6 +151,7 @@ gh_host_error gh_startup_host_set_world_consumer(gh_startup_host *,gh_object_sta
 gh_host_error gh_startup_host_set_shadow_consumer(gh_startup_host *,gh_shadow_emit,void *);
 /* Recovered dynamic-model node/setup groups use the same single frame OT. */
 gh_host_error gh_startup_host_set_actor_consumer(gh_startup_host *,gh_actor_draw_emit,void *);
+gh_host_error gh_startup_host_set_effect_consumer(gh_startup_host *,gh_effect_trans_emit,void *);
 /* Same-thread rendering callback only; borrow the canonical texture manager's
  * material view until its resource epoch/cache expires. Never creates a second
  * manager, reads the disc or acknowledges a GPU operation. */

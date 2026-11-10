@@ -72,6 +72,12 @@ gh_id_error gh_mc_renderer_flush_queued(gh_mc_renderer *,const size_t *order,siz
  * common depth surface and remains outside this bounded composition API. */
 gh_id_error gh_mc_renderer_flush_queued_on_background(gh_mc_renderer *,const size_t *order,size_t count,
  const uint8_t *rgba,size_t bytes);
+/* Only a terminal depth-tested Fade can read this same world OT depth.
+ * Intervening UI with untracked depth mutations invalidates the prefix. */
+gh_id_error gh_mc_renderer_queue_view_groups_at_z(gh_mc_renderer *,const gh_id_render_view *,const gh_id_draw_job *,
+ gh_ui_ot_tag *,size_t capacity,size_t *count,uint16_t z);
+gh_id_error gh_mc_renderer_flush_queued_on_background_with_depth(gh_mc_renderer *,const size_t *order,size_t count,
+ const uint8_t *rgba,size_t bytes,const uint32_t *z,size_t z_count);
 gh_id_error gh_mc_renderer_draw(gh_mc_renderer *,const gh_startup_snapshot *,const gh_id_draw_job *);
 const unsigned char *gh_mc_renderer_pixels(const gh_mc_renderer *,size_t *bytes);
 void gh_mc_renderer_inspect(const gh_mc_renderer *,gh_mc_render_status *);

@@ -24,6 +24,8 @@ gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *,const gh_id_texture *,
 gh_ui_error gh_ui_sprite_batch(gh_ui_sprite_renderer *,const gh_ui_sprite_state *,
  const gh_ui_sprite_item *,size_t count,const unsigned char *background,
  unsigned char *output,size_t output_bytes);
+gh_ui_error gh_ui_sprite_batch_with_depth(gh_ui_sprite_renderer *,const gh_ui_sprite_state *,
+ const gh_ui_sprite_item *,size_t,const unsigned char *,unsigned char *,size_t,const gh_ui_depth_write *);
 #ifdef __cplusplus
 }
 #endif

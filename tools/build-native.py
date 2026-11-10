@@ -140,6 +140,7 @@ def main():
                ("game_player_targets", "src/core/game_player_targets.c"),
                ("game_player_idle_input", "src/core/game_player_idle_input.c"),
                ("game_player_walk", "src/core/game_player_walk.c"),
+               ("game_pad_analog", "src/core/game_pad_analog.c"),
                ("game_player_run", "src/core/game_player_run.c"),
                ("game_player_root_delta", "src/core/game_player_root_delta.c"),
                ("game_effect_create", "src/core/game_effect_create.c"),
@@ -158,6 +159,8 @@ def main():
                ("game_effect_node", "src/core/game_effect_node.c"),
                ("game_esp_update", "src/core/game_esp_update.c"),
                ("game_effects_trans", "src/core/game_effects_trans.c"),
+               ("game_effect_sprite", "src/core/game_effect_sprite.c"),
+               ("effect_postprocess_reference", "src/platform/effect_postprocess_reference.c"),
                ("game_actor_model_trans", "src/core/game_actor_model_trans.c"),
                ("game_actor_shadow_draw", "src/core/game_actor_shadow_draw.c"),
                ("game_actor_model_draw", "src/core/game_actor_model_draw.c"),
@@ -273,6 +276,9 @@ def main():
                ("game_event_clear", "src/core/game_event_clear.c"),
                ("game_event_module", "src/core/game_event_module.c"),
                ("game_event_resource", "src/core/game_event_resource.c"),
+               ("game_event_components", "src/core/game_event_components.c"),
+               ("game_event_create", "src/core/game_event_create.c"),
+               ("game_event_link", "src/core/game_event_link.c"),
                ("r100_scripts", "src/rooms/r100_scripts.c"),
                ("r100_roof_task", "src/rooms/r100_roof_task.c"),
                ("r100_counter_task", "src/rooms/r100_counter_task.c"),
@@ -369,6 +375,9 @@ def main():
         ("game-event-clear", "tests/core/test_game_event_clear.c", "iso"),
         ("game-event-module", "tests/core/test_game_event_module.c", "iso"),
         ("game-event-resource", "tests/core/test_game_event_resource.c", "iso"),
+        ("game-event-components", "tests/core/test_game_event_components.c", "iso"),
+        ("game-event-create", "tests/core/test_game_event_create.c", "iso"),
+        ("game-event-link", "tests/core/test_game_event_link.c", "iso"),
         ("r100-scripts", "tests/core/test_r100_scripts.c", "iso"),
         ("r100-roof-task", "tests/core/test_r100_roof_task.c", "iso"),
         ("r100-counter-task", "tests/core/test_r100_counter_task.c", "iso"),
@@ -445,6 +454,7 @@ def main():
         ("sound-control", "tests/core/test_sound_control.c", "iso"),
         ("video-player", "tests/platform/test_video_player.c", "movie"),
         ("native-input", "tests/platform/test_native_input.c", "iso"),
+        ("game-pad-analog", "tests/core/test_game_pad_analog.c", "none"),
         ("frame-state", "tests/core/test_frame_state.c", "none"),
         ("screen-fade", "tests/core/test_screen_fade.c", "none"),
         ("game-scene-setup", "tests/core/test_game_scene_setup.c", "none"),
@@ -514,6 +524,9 @@ def main():
         ("game-effect-node", "tests/core/test_game_effect_node.c", "both"),
         ("game-esp-update", "tests/core/test_game_esp_update.c", "both"),
         ("game-effects-trans", "tests/core/test_game_effects_trans.c", "both"),
+        ("game-effect-sprite", "tests/core/test_game_effect_sprite.c", "both"),
+        ("game-effects-two-frames", "tests/core/test_game_effects_two_frames.c", "both"),
+        ("effect-postprocess-reference", "tests/platform/test_effect_postprocess_reference.c", "iso"),
         ("static-mesh-signed-w", "tests/assets/test_static_mesh_signed_w.c", "iso"),
         ("game-esp-1a", "tests/core/test_game_esp_1a.c", "both"),
         ("game-actor-model-trans", "tests/core/test_game_actor_model_trans.c", "iso"),
@@ -751,7 +764,7 @@ def main():
         run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
         run("test-id-text", [output / "test_id_text.exe", baseline["source_iso"]["path"]])
         for name, _, inputs in extra_tests:
-            if ((name in ("se-voice", "se-stop", "se-bank2", "se-voice-stop-bank", "mc-control-flow", "bgm-requests", "bgm-automatic", "adx-stream", "r020-title", "game-services", "game-scene-exit", "scene-exit-cleanup", "game-object-sound", "sound-scene-exit") and not args.hardware_audio)
+            if ((name in ("game-event-create", "se-voice", "se-stop", "se-bank2", "se-voice-stop-bank", "mc-control-flow", "bgm-requests", "bgm-automatic", "adx-stream", "r020-title", "game-services", "game-scene-exit", "scene-exit-cleanup", "game-object-sound", "sound-scene-exit") and not args.hardware_audio)
                     or (inputs == "movie" and not args.movie_codec)
                     or (inputs == "adx-reference" and not args.adx_reference_wave)):
                 manifest.setdefault("skipped_checks", []).append({"name": "test-" + name, "reason": "Explicit hardware/codec opt-in not supplied"})
