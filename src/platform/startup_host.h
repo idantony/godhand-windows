@@ -85,6 +85,15 @@ typedef struct gh_startup_snapshot {
     uint64_t title_move_serial;
     uint64_t ui_resource_epoch; /*native borrowed-resource/cache lifetime*/
     uint16_t current_room,next_room;
+    /* Read-only developer frontier diagnostics; no actor pointers escape. */
+    uint32_t scene_stage,hitarea_phase,hitarea_slot,hitarea_node;
+    uint32_t hitarea_shape_index,hitarea_shape_flags,hitarea_shape_kind;
+    int32_t hitarea_hit_count;uint8_t hitarea_diagnostic_ready,hitarea_hit_samples;
+    uint32_t hitarea_hit_indices[4],hitarea_hit_kinds[4],hitarea_hit_distance_bits[4];
+    uint32_t hitarea_actor_present,hitarea_actor_kind;
+    uint32_t hitarea_actor_flags,hitarea_actor_cooldown_bits,hitarea_source_unit_flags,hitarea_source_excluded_token,hitarea_source_is_player;
+    uint32_t hitarea_hit_unit_known[4],hitarea_hit_unit_slots[4],hitarea_hit_actor_present[4],hitarea_hit_actor_kinds[4],hitarea_hit_actor_tokens[4];
+    uint32_t hitarea_hit_actor_flags[4],hitarea_hit_actor_cooldown_bits[4],hitarea_hit_same_actor[4];
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization

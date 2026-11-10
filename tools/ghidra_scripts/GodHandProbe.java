@@ -70,7 +70,20 @@ public class GodHandProbe extends GhidraScript {
         DecompInterface di = new DecompInterface();
         di.openProgram(currentProgram);
         LinkedHashMap<String,Integer> queued = new LinkedHashMap<>();
-        for(int i=1;i<args.length;i++) queued.put(args[i], 0);
+        int maxInstructions=2048;
+        for(int i=1;i<args.length;i++) {
+            if(args[i].equals("max-insns")) {
+                if(++i==args.length) throw new IllegalArgumentException("max-insns requires a value");
+                maxInstructions=Integer.parseInt(args[i]);
+            }
+            else if(args[i].startsWith("max-insns=")) maxInstructions=Integer.parseInt(args[i].substring("max-insns=".length()));
+            // Ghidra flow targets use canonical lower-case addresses. Normalize
+            // explicit requests too so auto expansion cannot duplicate the same
+            // function when a caller supplied upper-case hexadecimal digits.
+            else queued.put(toAddr(args[i]).toString(), 0);
+        }
+        if(maxInstructions<1 || maxInstructions>65536) throw new IllegalArgumentException("max-insns must be 1..65536");
+        out.addProperty("rawInstructionLimit",maxInstructions);
         List<String> pending = new ArrayList<>(queued.keySet());
         for (int i = 0; i < pending.size() && i < 30; i++) {
             JsonObject p = new JsonObject();
@@ -99,8 +112,9 @@ public class GodHandProbe extends GhidraScript {
                 JsonArray calls = new JsonArray();
                 InstructionIterator it = currentProgram.getListing().getInstructions(f.getBody(), true);
                 int count = 0;
-                while(it.hasNext() && count++ < 2048) {
+                while(it.hasNext() && count < maxInstructions) {
                     Instruction ins = it.next();
+                    count++;
                     asm.add(ins.getAddress().toString() + " " + ins.toString());
                     raw.add(instruction(ins));
                     if(ins.getFlowType().isCall()) {
@@ -117,6 +131,9 @@ public class GodHandProbe extends GhidraScript {
                 p.add("disassembly", asm);
                 p.add("rawInstructions", raw);
                 p.add("outgoingCalls", calls);
+                p.addProperty("instructionLimit",maxInstructions);
+                p.addProperty("instructionCount",count);
+                p.addProperty("disassemblyTruncated",it.hasNext());
                 DecompileResults r = di.decompileFunction(f, 45, monitor);
                 p.addProperty("decompileCompleted", r.decompileCompleted());
                 p.addProperty("decompileError", r.getErrorMessage());

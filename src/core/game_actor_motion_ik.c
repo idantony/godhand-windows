@@ -70,3 +70,5 @@ gh_actor_motion_status gh_actor_motion_ik_00152448(gh_actor_model*m,const gh_mot
  }
  if(fesetenv(&env))return GH_ACTOR_MOTION_UNSUPPORTED;return result;
 }
+
+gh_actor_motion_status gh_actor_matrix_quaternion_0015a190(const float*m,float*out,const gh_motion_ik_globals*g,gh_static_transform_policy policy,uint32_t*f){if(!m||!out||!g||!g->initialized||!f)return GH_ACTOR_MOTION_ARGUMENT;*f=0;if(policy!=GH_STATIC_BINARY32_REFERENCE){*f=0x15a190;return GH_ACTOR_MOTION_UNSUPPORTED;}for(unsigned i=0;i<3;i++)if(g->cycle[i]>=3)return GH_ACTOR_MOTION_BOUNDS;for(unsigned i=0;i<16;i++)if(!isfinite(m[i]))return GH_ACTOR_MOTION_BOUNDS;fenv_t env;if(feholdexcept(&env))return GH_ACTOR_MOTION_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_ACTOR_MOTION_UNSUPPORTED;}float q[4];matrix_quat(q,m,g->cycle);int valid=1;for(unsigned i=0;i<4;i++)if(!isfinite(q[i]))valid=0;if(fesetenv(&env))valid=0;if(!valid){*f=0x15a190;return GH_ACTOR_MOTION_UNSUPPORTED;}memcpy(out,q,16);return GH_ACTOR_MOTION_OK;}

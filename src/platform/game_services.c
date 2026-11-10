@@ -22,6 +22,7 @@
 #include "../core/game_om_initialize.h"
 #include "../core/game_hitarea_shapes.h"
 #include "../core/game_actor_motion_step.h"
+#include "../core/game_actor_motion_call.h"
 #include "../core/game_actor_motion_solve.h"
 #include "../core/game_effect_release.h"
 #include "../rooms/r100_roof_task.h"
@@ -70,6 +71,7 @@ struct gh_game_services {
  gh_player_child_tail child_tail;gh_game_player_child *work5f8;
  gh_game_player_spawn player_spawn;
  gh_actor_motion player_motion;
+ gh_actor_motion_call player_motion_call;
  gh_game_player_frame player_frame;gh_effect_release_bindings player_frame_effects;
  gh_motion_solve player_motion_solve;
  uint64_t ui_resource_epoch;
@@ -216,11 +218,25 @@ static int player_motion_request_matches(gh_game_services*s,const gh_player_moti
 }
 static gh_player_init_status player_motion_initialize(void*p,const gh_player_motion_request*r,uint32_t*frontier){
  gh_game_services*s=p;if(!player_motion_request_matches(s,r))return GH_PLAYER_INIT_ARGUMENT;
- if(r->start_frame_bits||r->blend_frames||!r->release_previous_sequence){if(frontier)*frontier=0x2a8578;return GH_PLAYER_INIT_UNSUPPORTED;}
  gh_actor_motion_bindings b={.model=r->model,.resource=r->resource,.resource_bytes=r->resource_bytes,.work=r->work,
   .effect=player_motion_effect,.context=s,.ik_globals=s->b.motion_ik_globals};
- gh_actor_motion_status e=gh_actor_motion_begin_002a8578(&s->player_motion,&b,r->motion_offset,r->sequence_candidate_offset,r->flags);
- if(frontier)*frontier=s->player_motion.frontier;
+  gh_actor_motion_status e;gh_actor_motion_call *call=&s->player_motion_call;
+  if(call->active&&!call->complete){
+   /* Retry the same original invocation after a late native frontier. */
+   if(call->current!=&s->player_motion||call->motion_offset!=r->motion_offset||call->candidate_offset!=r->sequence_candidate_offset||
+      call->start_frame_bits!=r->start_frame_bits||call->blend_frames!=r->blend_frames||call->flags!=r->flags||call->release_previous!=r->release_previous_sequence)
+    return GH_PLAYER_INIT_ARGUMENT;
+   e=gh_actor_motion_call_step_002a8578(call);if(frontier)*frontier=call->frontier;
+  }else if(s->player_motion.bound&&s->player_motion.complete){
+   e=gh_actor_motion_call_open_parameters_002a8578(call,&s->player_motion,&b,r->motion_offset,r->sequence_candidate_offset,
+    r->start_frame_bits,r->blend_frames,r->flags,r->release_previous_sequence);
+   if(!e)e=gh_actor_motion_call_step_002a8578(call);if(frontier)*frontier=call->frontier;
+  }else{
+   /* Constructor's first Begin has no old native sequence. */
+   if(!r->release_previous_sequence){if(frontier)*frontier=0x2a8578;return GH_PLAYER_INIT_UNSUPPORTED;}
+   e=gh_actor_motion_begin_parameters_002a8578(&s->player_motion,&b,r->motion_offset,r->sequence_candidate_offset,r->start_frame_bits,r->blend_frames,r->flags);
+   if(frontier)*frontier=s->player_motion.frontier;
+  }
  return !e?GH_PLAYER_INIT_OK:e==GH_ACTOR_MOTION_UNSUPPORTED?GH_PLAYER_INIT_UNSUPPORTED:e==GH_ACTOR_MOTION_BOUNDS?GH_PLAYER_INIT_BOUNDS:GH_PLAYER_INIT_CALLEE;
 }
 static gh_player_init_status player_motion_advance(void*p,const gh_player_motion_request*r,uint32_t*frontier){

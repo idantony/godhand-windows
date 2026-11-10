@@ -64,6 +64,7 @@ typedef struct {
  gh_scene_profile_counter profile_counter;void *profile_context;
  gh_scenario_task_status scenario_status;void *scenario_status_context;
  const struct gh_dynamic_corner_tables *dynamic_corners; /*RootONE static globals*/
+ const uint8_t *boot_elf;size_t boot_elf_bytes; /*borrow descriptor identities for HitArea LOS*/
 } gh_game_scene_step_bindings;
 /* Explicit cold host companion init: caller supplies original Main1A8 seed;
  * ignored whilePFD absent. Does not invent the earlier complete Mainctor. */

@@ -133,3 +133,21 @@ gh_pair_shape_status gh_collision_pair_dispatch_002b8f48(unsigned a,unsigned b,g
  static const uint32_t entries[26]={0,0,0x2bb488,0x2bb670,0x2bb760,0x2bbba0,0x2bbce0,0,0x2bbdb8,0x2bc470,0x2bc6c8,0x2bcb80,0x2bccc0,0x2bcd58,0x2bcf28,0x2bd078,0x2bd200,0x2bd340,0x2bd3d8,0x2bd4b0,0x2bd6a8,0x2bd7e8,0x2bd7f8,0x2bd828,0x2bda10,0x2bda20};
  if(!out||a>=7||b>=7)return GH_PAIR_SHAPE_ARGUMENT;unsigned c=cases[a][b];*out=(gh_collision_pair_dispatch){entries[c],(uint8_t)c,(uint8_t)(c&&b<a)};return GH_PAIR_SHAPE_OK;
 }
+
+gh_pair_shape_status gh_collision_pair_shape_hitarea_owner(const gh_collision_pair_shape*v,gh_hitarea_object*out){
+ if(!out||!valid(v))return GH_PAIR_SHAPE_ARGUMENT;shape_row*r=&v->manager->native_shapes->rows[v->index];
+ if(w(v->record+0x14)!=1)return GH_PAIR_SHAPE_UNSUPPORTED;
+ gh_title_player_view*a;if(gh_hitarea_object_actor(&r->inputs.owner,&a))return GH_PAIR_SHAPE_UNSUPPORTED;
+ *out=r->inputs.owner;return GH_PAIR_SHAPE_OK;
+}
+gh_pair_shape_status gh_collision_pair_shape_sort_hits_001fc810(const gh_collision_pair_shape*v,uint32_t*f){
+ if(f)*f=0;if(!valid(v))return GH_PAIR_SHAPE_ARGUMENT;unsigned n=w(v->record+0xd8);if((int32_t)n<=0)return GH_PAIR_SHAPE_OK;
+ if(n>20)return fail(f,0x1fc810,GH_PAIR_SHAPE_UNSUPPORTED);
+ for(unsigned i=0;i<n;i++){gh_collision_pair_shape other;uint32_t d;if(gh_collision_pair_shape_hit_at(v,i,&other,&d))return fail(f,0x1fc810,GH_PAIR_SHAPE_ARGUMENT);if(!isfinite(value(d)))return fail(f,0x1fc810,GH_PAIR_SHAPE_UNSUPPORTED);}
+ shape_row*r=&v->manager->native_shapes->rows[v->index];
+ for(unsigned i=0;i+1<n;i++){for(unsigned j=i+1;j<n;j++){if(value(w(v->record+0x88+j*4))<value(w(v->record+0x88+i*4))){
+  uint32_t t=r->hit_indices[i];r->hit_indices[i]=r->hit_indices[j];r->hit_indices[j]=t;t=r->hit_serials[i];r->hit_serials[i]=r->hit_serials[j];r->hit_serials[j]=t;
+  t=w(v->record+0x88+i*4);ww(v->record+0x88+i*4,w(v->record+0x88+j*4));ww(v->record+0x88+j*4,t);
+ }}}
+ return GH_PAIR_SHAPE_OK;
+}

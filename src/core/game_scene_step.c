@@ -103,7 +103,9 @@ static gh_scene_step_status object_pool(gh_game_scene_step*s,const gh_game_scene
   return GH_SCENE_STEP_OK;
  }
  float rate;memcpy(&rate,(const uint8_t*)b->work+0x574,4);uint32_t f=0;
- gh_hitarea_status e=gh_hitarea_frame_resume_001fdfd8(b->init,b->work,rate,GH_STATIC_BINARY32_REFERENCE,&s->hitarea_frame,&f);
+ gh_hitarea_frame_bindings bindings={.tables=b->actors,.boot_elf=b->boot_elf,.boot_elf_size=b->boot_elf_bytes,
+  .current_player=b->title_player?&b->title_player->view:NULL};
+ gh_hitarea_status e=gh_hitarea_frame_resume_bound_001fdfd8(b->init,b->work,rate,GH_STATIC_BINARY32_REFERENCE,&s->hitarea_frame,&bindings,&f);
  return !e?GH_SCENE_STEP_OK:fail(s,f?f:0x1fdfd8,e==GH_HITAREA_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE,e);
 }
 static int scenario_gate(const gh_game_scene_step_bindings*b){const uint8_t*r=(const uint8_t*)b->work;return (int32_t)w(r+0x58c)>=0&&!(w(r+0x5e4)&0x8000000)&&!(w(r+0x584)&8)&&!(w(r+0x5d8)&0x10000)&&!(w(r+0x590)&1);}

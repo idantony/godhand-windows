@@ -3,28 +3,80 @@
 Updated 2026-11-10. Read Git and live worker ownership before editing. This is
 an ongoing authorized source port, not a playable Windows game yet.
 
-Latest public commit f03ff947580df365fc8963bdffa0bad65fb52cb2 was pushed and
-remote main verified; formalpostpush review is analysis/project-review.json.
-Current verified milestone is room-transition-44:212C/228checks, fullhardware/
-codec/independentADX opt-ins, matchingDLL RNG20544/20534 PASS. Matching Windows
-QA489ticks/R100/Main4,6MC/90Movie/369UI, actualNearCheck131E10,worldpackets0,
-renderer/window/world/cleanup0,exit4. R100Init completes,69OMS+4runtime3EB;
-Main4 dispatch actuallystarts but stops at firstpositivePFD NearCheckquery.
-roof/9B0 Scenario registered but notvisited, no originalworldframe/gameplay.
-Private44 report authoritative; standard Eanalysis/bilingualdocs exported44.
-Prior publicmilestone34/787f26e; localrollback37/587dc93. Public44 adds only
-terminalblankline normalization in10files after exactsnapshotstaging; allother
-source bytes unchanged (private normalizationreceipt); frozen44 untouched.
-Consult liveGit before trusting historical publication state.
+Latest fully verified integration is room-transition-59, an immutable G: source
+copy: 221C / 237checks, hardware/codec/full independentADX and matchingDLL
+RNG20544/20534 PASS. Matching hidden/muted Windows executes489ticks, R100/Main4,
+6MC/90Movie/369UI. Actual NearCheck, lighting, positiveHitArea sort/filter/LOS/
+publication now finish, and MoveObj really calls player108AB0. Idle selection,
+positiveblend10 Begin and first157C18 sample execute. Precise frontier123938
+idle input/interaction. Worldpackets0, renderer/window/worlderrors0, normal
+cleanup/exit4. No complete player frame, original3D frame or gameplay yet.
+Private analysis/room-transition-59-verification.json is authoritative. Standard
+localreports and bilingualdocs nowdescribe59. Source-staging/publication must
+still be verified from liveGit; do not infer a successful push from this note.
+Formal review AFTER a meaningful push uses analysis/project-review.json. Last
+confirmed public milestone before preparing59 was44/f03ff947580df365fc8963bdffa0bad65fb52cb2.
+Local rollback51/1d2c3c1 andtoolv1/ef6c4d8 remain inhistory.
 
-NEWEST LOCAL fully VERIFIED integration is room-transition-51:216C/235checks,
-allhardware/codec/independentADX and matchingDLL RNG20544/20534 PASS. Actual
-hidden/muted Windows489ticks/R100/Main4 now passes2D7560 worldlight and stops
-at realPOSITIVE hit1FC810 in1FDFD8 HitArea update. worldpackets0, renderer/
-window/worlderrors0, normalcleanup/processexit4. Private51 report authoritative.
-Public/standard E reports remain44. Do NOT claim playerMove visited: earlier
-positivehit blocks beforeMoveObj. Root newtyped MoveObj/player108AB0 wiring
-andprotocol retry/reload tests passed in51 but are not actualgameplay proof.
+59 derives58 plus one obsolete fixture correction: recoveredSEQ timing means
+count>0 alone is not unsupported; test now supplies an actual unresolved418
+pointer, proves strict2C7FD0/no time advance, then repairs/retries. Runtime was
+not weakened.58 nativefailed that oldassertion; neverexport58 asfullyverified.
+58 derives57 +immutable actor-motion-blend-batch-01 and Rootpersistentmotion
+callbridge. SharedABI compiledfresh. Worker dependencies camera.h/c differ only
+CR/newline+terminalblankline (audited privatehashes), Root57 behavior retained.
+ActualBegin must releaseoldSEQ/570, captureoldpartworldrelativeparent at40,
+then setoriginalblend10.157C18 samplesusing OLD27C, storesNEW.9 for149EB8;
+firstdisplayedpose isNOT100%old. Real156D70 math and trueIK skipgate remain.
+
+57 was217C/235checks +alloptins/RNG PASS, actual2A8578 beforepositiveblend.
+56 also217C/235 PASS, actual1FD100 afterpositivehit sorting/LOS. Itsnew
+107C68 springreset is independentPL01-tested but not a fullhair simulation.
+Hitarea latestimmutable hitarea-publish-20261110-121004 isintegrated57+;
+last_hit_actors[416] companions are currentvalues with generationcheck, not
+history; shapes/objects/frameheaders must remain onecohort. SceneStep uses
+samecurrentplayer; pausewords stayNULL/strict1FE348 if an actualplayer pair
+needs them. ActualfirstOM pairs needno pausewordread and reallypublish.
+ReadonlyQA diagnostics startup_host.c/h+src/main.cpp muststay together.
+
+Liveworkerownership atthisedit:
+- skill_forward_test froze blend01 (integrated59), targets01/frame04 NOTyet
+  integrated, nowfinishingblend02 sameSave+typed actor-attachedSE callback.
+  Do notmixmutableE motionheaders withfrozenobjects. NoSEQ deletion or using
+  originSE whitelist asattached2CBA48. Frame04 needs persistentidle owner and
+  stablebindings, samepools/actors/player/resolver/ELF. Rootownsservices/manifests.
+- opengoal_method finishedHitArea (integrated), nowfreezes real306528 effect
+  producer21/2E on sameeffects/ESP/emitterbuffers/MT, nativeowner tailmetadata;
+  neweffects ABI requiresfreshwholecohort and explicitmetadata lifetimecleanup.
+- godhand_upstream froze enemy-factory-complete-19-delta:20NEWmodules+tests,
+  only existingcoupledplayer_shadow generic14EF50 export. NOTintegrated59.
+  Nevertakeoldmath/init headers overcurrentblend. One-callwrapper supports
+  actual202/20Aappearance0/3 andreturnsactorONLYafterfullInitreturn1. Real
+  RoomSave firstEMS proved separately, notactualWindowsenemyexecution.
+  Worker nextNEWcloth_templates/106218, thenchild100530/100CE0/104010 lane.
+
+Rootchildresearch: actualchild VT41B6A0+54->100530,delta0; 100530 followsSAME
+attachedparentpart, optional2F0bit2->107C68,149EB8->100CE0->104010 andclears
+currentplayer650/654/658 onlyaftercompletion. Fullraw104010=2175instructions/
+8700B nowverified using toolcap4096. analysis/player-spring-frame-55-full-
+ghidra-private.json +function-context; 53hadBATargumentcapbug,54duplicateletter
+case,55fixedcanonicaldedup. 106218 usesmutableBSS template2084 andcanonical
+461600/461608 outputs, NOTELF-backedfakeBSS. Actual100FB8 constructor923insns/
+3692B writes4tables460E00/461040/461250/4613A0 guardedinit1/priorityFFFF.
+Wrapperis101E98 (NOT100508dtor); actualELF.data3FC884containswrapperpointer.
+analysis/cloth-static-58-* andcloth-ctor-59-* privateGhidra/contextreportsverify
+allbytes. Earlierbootctortraversal notyetrestored, do notclaimitexecuted.
+Onepersistenttypedmutableowner atstartup isplanned, neverreset perchild.
+
+Self-builtfunction-context v2 is local1d2c3c1:11tests andrealreportsPASS. It
+verifiesELFidentity/rawbytes/calls/ranges/imports andstaticregister+signedoffset
+memoryoperands, no guessed classes/livevalues. Ghidra exporter nowexplicitly
+records instructionlimit/count/truncation anddeduplicates requestedaddresses.
+Toolcap1/full4096cases tested; docs/EVIDENCE_TOOLS.md hasusage. Rawreportsstay
+privateanalysis, allbuild/cache/logsG. Skillvalidator dependency PyYAML6.0.3 is
+local.tools/skill-validation; prependthatdir whenrunningquick_validate.py.
+
+Historical51 detail follows; currentstatus above supersedes oldassignments.
 
 51 derives50 +genuine empty/pause no-numeric-policy pool path correction,
 Root typed MoveObj/services/playerFrame integration, exactframe01/02/03 and
@@ -57,7 +109,7 @@ game_player_targets, notin51; continues123938 actualinput/Heat/prompts, noWIP
 frame04imports. opengoal_method positiveHitArea thenFX. Root next actual
 positivehit integration, then reachesprepared MoveObj/player firstupdate.
 
-Latest LOCAL verified integration is room-transition-47:212C/229checks with
+Historical LOCAL verified integration47 is room-transition-47:212C/229checks with
 all hardware/codec/fullADX opt-ins and matchingDLL RNG20544/20534 PASS. Actual
 Windows489ticks/R100/Main4 now executes NearCheck and stops at12DCB8 in the
 dynamic-ray geometry readiness guard; worldpackets0, renderer/window/world
@@ -66,7 +118,7 @@ is authoritative; standard E/publicreports remain44. Pair rows have one owned
 mutable copy; sourcePFD stays read-only. Two-iteration continuation, signed
 ADDIU32 wrap/remainder, lower31 flagbits and release/rebind/reset tested.
 
-Latest LOCAL integration49 is now fully VERIFIED212C/229checks, allhardware/
+Historical LOCAL integration49 was fully VERIFIED212C/229checks, allhardware/
 codec/fullADX andmatchingDLL RNG20544/20534 PASS. Actual Windows489ticks/Main4
 now reaches world-light model registry3 frontier2D74B8. NearCheck, collision
 pairs, actual12E840 geometry, Eventemptyupdate, ScenarioBefore ATaging,

@@ -209,3 +209,22 @@ MoveObj30F090 caches its iteration gate/end, calls the original descriptor,
 then reloads the current registry slot at30F16C before clearing2F0 lowtwo bits.
 Native continuations need a separate completed-call/post-call phase: an error
 resolving that reloaded slot must not execute the completed Move again.
+
+Large-function evidence must record the raw instruction limit and explicit
+truncation.104010 is2175 instructions: a2048 capture is incomplete even when
+Ghidra produced C. Normalize requested addresses before expanding callees;
+upper/lowercase duplicates can otherwise obscure the exact selected body.
+Keep earlier incomplete reports and label the authoritative replacement.
+
+Positive motion blend ordering is observable:157C18 decrements438, samples
+158328 with the PREVIOUS27C, then stores the next factor for149EB8 matrix
+blend. OldSEQ release, old world-relative pose capture and new motion binding
+are distinct phases. A late native error must resume the same invocation,
+without repeating released effects, RNG, decrement or completed bone sampling.
+
+HitArea's native last-hit actor companion replaces the current original34
+identity. Validate its lifetime/generation; keep rawguest tokens separate from
+host pointers. Source and target views must resolve the same registered owners.
+The real actor may aliasF0 to a part: reading rawF0 bytes as a position can give
+a plausible wrong ray. A genuine original earlyout may avoid reading unrelated
+player pause globals; require them only on a branch that actually consumes them.

@@ -39,6 +39,11 @@ typedef struct {uint32_t entry;uint8_t case_id,swapped;} gh_collision_pair_dispa
 gh_pair_shape_status gh_collision_pair_dispatch_002b8f48(unsigned source_kind,unsigned target_kind,gh_collision_pair_dispatch *);
 /* Typed replacement for original +38 hit-pointer array; distance is squared. */
 gh_pair_shape_status gh_collision_pair_shape_hit_at(const gh_collision_pair_shape *,unsigned ordinal,gh_collision_pair_shape *other,uint32_t *distance_bits);
+/* Same attr1 DamageUnit identity, not raw record+18 guest token. */
+gh_pair_shape_status gh_collision_pair_shape_hitarea_owner(const gh_collision_pair_shape *,gh_hitarea_object *);
+/* Original1FC810 in-place distance ordering, paired SAME native hit identities.
+ * Bounds/serials preflight before mutation; no hit is removed. */
+gh_pair_shape_status gh_collision_pair_shape_sort_hits_001fc810(const gh_collision_pair_shape *,uint32_t *frontier);
 /* A paused original frame is not a new frame. Keep this companion stable
  * across error/retry; it borrows SAME manager/storage and never owns physics.
  * Success clears it for the next frame. Do not copy an active cursor. */

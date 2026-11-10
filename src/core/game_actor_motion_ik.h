@@ -13,6 +13,8 @@ gh_actor_motion_status gh_motion_ik_globals_from_elf(gh_motion_ik_globals *,cons
  *15A190 matrix→quaternion and15ADA0 vectorrotation. Originalconstant vectors
  * and cyclicindices are read from bounded ELF PT_LOAD, not guessed pose rules.
  * Complete IK setup is not per-frame IK solve152A20 or animation sampling. */
+/* Shared original15A190 kernel; SAME canonical cycle table, atomic output. */
+gh_actor_motion_status gh_actor_matrix_quaternion_0015a190(const float matrix[16],float quaternion[4],const gh_motion_ik_globals *,gh_static_transform_policy,uint32_t *frontier);
 gh_actor_motion_status gh_actor_motion_ik_00152448(gh_actor_model *,const gh_motion_view *,const gh_motion_ik_globals *globals,gh_static_transform_policy,uint32_t *frontier,unsigned *part);
 #ifdef __cplusplus
 }

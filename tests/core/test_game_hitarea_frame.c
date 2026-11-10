@@ -30,14 +30,62 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
  C(!w(tail.give_objects[0].bytes+0x34)&&w(tail.take_object.bytes+0x40)==0xffffffff&&!tail.take_object.bytes[0x44]&&w(tail.take_object.bytes+0x60)==0xfffffc40&&!(w(give.record)&2)&&!tn[0x30]&&!(w(take.record)&2));
  const uint8_t*position;C(!gh_collision_pair_shape_position(&give,&position)&&!memcmp(gn,position,12)&&!memcmp(gn,gn+0x10,12));
  put(give.record,w(give.record)|3);put(give.record+0xd8,1);gn[0x30]=2;put(player.view.bytes+0x54c,0x40000000);
- C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_UNSUPPORTED&&frontier==0x1fc810&&frame.phase==2&&frame.slot==0&&frame.active);
+ C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_ARGUMENT&&frontier==0x1fc810&&frame.phase==2&&frame.slot==0&&frame.active);
  C(w(player.view.bytes+0x54c)==0x3fc00000&&gn[0x30]==2);
  gh_hitarea_frame copy=frame;C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&copy,&frontier)==GH_HITAREA_ARGUMENT);
- for(unsigned k=0;k<3;k++)C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_UNSUPPORTED&&w(player.view.bytes+0x54c)==0x3fc00000&&gn[0x30]==2);
+ for(unsigned k=0;k<3;k++)C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_ARGUMENT&&w(player.view.bytes+0x54c)==0x3fc00000&&gn[0x30]==2);
  put(give.record+0xd8,0);C(!gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)&&!frame.active&&gn[0x30]==1&&w(player.view.bytes+0x54c)==0x3fc00000);
  gh_game_damage_link*saved=init->object_links[0];init->object_links[0]=(gh_game_damage_link*)(uintptr_t)1;put(tail.give_objects[0].bytes+0x34,0xaabbccdd);
  C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_ARGUMENT&&w(tail.give_objects[0].bytes+0x34)==0xaabbccdd);init->object_links[0]=saved;C(!gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier));
  C(gh_hitarea_frame_resume_001fdfd8(NULL,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_ARGUMENT);
  frame=(gh_hitarea_frame){.active=1,.cursor_identity=&frame,.identity=init,.generation=init->hitarea_generation,.slot=416};C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_ARGUMENT);frame=(gh_hitarea_frame){0};
+
+ /* Unknown nonzero raw actor token is not typed NULL. */
+ gh_title_player_view*saved_actor=init->hitarea_native->actors[160];init->hitarea_native->actors[160]=NULL;put(tail.take_object.bytes+0x30,0x12345678);put((uint8_t*)&work+0x5d8,0);
+ C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_UNSUPPORTED&&frontier==0x1fd448);init->hitarea_native->actors[160]=saved_actor;put(tail.take_object.bytes+0x30,0);C(!gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier));
+ saved_actor=init->hitarea_native->actors[0];init->hitarea_native->actors[0]=NULL;put(tail.give_objects[0].bytes+0x30,0x12345678);
+ C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_UNSUPPORTED&&frontier==0x1fcf20);init->hitarea_native->actors[0]=saved_actor;put(tail.give_objects[0].bytes+0x30,0);C(!gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier));
+
+ /* Real pair queries populate typed hit identities; same actor targets are
+  * filtered only by original identity condition, never by distance zero. */
+ gh_hitarea_object source,box1,box2;int nonnull,index;uint32_t zero[3]={0},size_xyz[3]={0x40000000,0x40000000,0x40000000};gh_hitarea_shape_bindings hb={&pairs,&math,GH_STATIC_BINARY32_REFERENCE};
+ C(!gh_hitarea_object_create_001fe0e8(init,&player.view,0,&source,&nonnull,&frontier)&&nonnull);
+ C(!gh_hitarea_add_sphere_001fdaf0(&source,&hb,player.view.bytes+0x80,zero,0x3f800000,&index,&frontier));
+ C(!gh_hitarea_object_create_001fe218(init,&player.view,1,&box1,&nonnull,&frontier)&&!gh_hitarea_add_box_001fd9d8(&box1,&hb,player.view.bytes+0x80,zero,zero,size_xyz,&index,&frontier));
+ C(!gh_hitarea_object_create_001fe218(init,&player.view,1,&box2,&nonnull,&frontier)&&!gh_hitarea_add_box_001fd9d8(&box2,&hb,player.view.bytes+0x80,zero,zero,size_xyz,&index,&frontier));
+ C(!gh_collision_pairs_step_002b9d58(&pairs,GH_STATIC_BINARY32_REFERENCE,&frontier));
+ gh_collision_pair_shape sphere;C(!gh_hitarea_node_at(&source,0,&node,&sphere)&&w(sphere.record+0xd8)>=2);
+ gh_collision_pair_shape before0,before1,after;uint32_t distance;C(!gh_collision_pair_shape_hit_at(&sphere,0,&before0,&distance)&&!gh_collision_pair_shape_hit_at(&sphere,1,&before1,&distance));
+ put(sphere.record+0x88,0x40800000);put(sphere.record+0x8c,0x3f800000);
+ /* Disable remaining hits for this sort oracle only by placing their
+  * distances later, retaining EVERY original identity and hit count. */
+ for(unsigned i=2;i<w(sphere.record+0xd8);i++)put(sphere.record+0x88+4*i,0x41000000+i*0x10000);
+ C(!gh_collision_pair_shape_sort_hits_001fc810(&sphere,&frontier)&&!gh_collision_pair_shape_hit_at(&sphere,0,&after,&distance)&&after.index==before1.index&&distance==0x3f800000);
+ C(!gh_collision_pair_shape_hit_at(&sphere,1,&after,&distance)&&after.index==before0.index&&distance==0x40800000);
+ C(!gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)&&!frame.active);
+
+ uint8_t other_bytes[GH_TITLE_PLAYER_BYTES];memcpy(other_bytes,player.view.bytes,sizeof(other_bytes));gh_title_player_view other_actor=player.view;other_actor.bytes=other_bytes;put(other_bytes+0x54c,0);put(other_bytes+0x250,0);
+ init->hitarea_native->actors[box1.index]=&other_actor;
+ C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_UNSUPPORTED&&frontier==0x131e10&&frame.active);
+
+ /* Explicit absent actor table is a ray-helper fixture, not R100 miss proof.
+  * Real bound path validates original vtable descriptors and native aliases. */
+ other_actor.alias_f0=other_bytes+(player.view.alias_f0-player.view.bytes);other_actor.alias_d0=other_bytes+(player.view.alias_d0-player.view.bytes);put(other_actor.alias_f0,0x3e800000);
+ gh_game_scene_tables empty_tables={0};gh_hitarea_frame_bindings bound={.tables=&empty_tables,.boot_elf=c.elf,.boot_elf_size=c.elf_size};
+ C(gh_hitarea_frame_resume_bound_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&bound,&frontier)==GH_HITAREA_UNSUPPORTED&&frontier==0x2db6b0);
+ other_actor.original_vtable214^=4;C(gh_hitarea_frame_resume_bound_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&bound,&frontier)==GH_HITAREA_UNSUPPORTED&&frontier==0x2a9468);other_actor.original_vtable214^=4;
+ uint8_t*alias=other_actor.alias_f0;other_actor.alias_f0=other_bytes+sizeof(other_bytes)-4;C(gh_hitarea_frame_resume_bound_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&bound,&frontier)==GH_HITAREA_BOUNDS&&frontier==0x2a9458);other_actor.alias_f0=alias;
+ bound.current_player=&player.view;C(gh_hitarea_frame_resume_bound_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&bound,&frontier)==GH_HITAREA_UNSUPPORTED&&frontier==0x1fe348);
+ uint32_t explicit_pause_fixture[2]={0,0};bound.player_pause_words=explicit_pause_fixture;
+ C(!gh_hitarea_frame_resume_bound_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&bound,&frontier)&&!frame.active);
+ const gh_title_player_view*last_actor;C(!gh_hitarea_object_last_hit_actor(&box1,&last_actor)&&last_actor&&last_actor->bytes==player.view.bytes&&(w(box1.bytes+0x60)&3)==3);
+
+
+ init->hitarea_native->actors[box1.index]=&player.view;
+ C(!gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)&&!frame.active);
  put((uint8_t*)&work+0x5d8,0x80000000);put(player.view.bytes+0x54c,0x40000000);C(!gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)&&w(player.view.bytes+0x54c)==0x40000000);
+
+ int released;C(!gh_hitarea_object_clear_shapes_001fd580(&box1,&released,&frontier)&&released&&!gh_hitarea_object_release_empty_001fe278(&box1,&frontier));
+ C(!gh_hitarea_object_last_hit_actor(&box1,&last_actor)&&!last_actor);
+ C(!gh_hitarea_object_create_001fe218(init,&player.view,1,&box1,&nonnull,&frontier)&&nonnull&&!gh_hitarea_object_last_hit_actor(&box1,&last_actor)&&!last_actor);
  C(!gh_hitarea_shapes_abort(init,&frontier)&&!gh_game_object_pool_release_001fdfa8(init,&frontier)&&!gh_collision_solid_units_shutdown(&solids,&frontier));gh_game_player_child_attachment_clear(&attachment);c.publication=NULL;C(!gh_game_player_child_release_prefix(&child)&&!gh_actor_model_release(&c.model)&&!gh_game_player_factory_release_prefix(&factory)&&!gh_collision_pairs_release(&pairs)&&!gh_game_world_light_release_presets(light));free(light);gh_game_objects_destroy(objects);gh_game_objects_destroy(global);C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(c.heap)&&!gh_heap_destroy(c.heap));free(hair);free(pl);free(room);free(init);free(c.elf);gh_disc_close(d);puts("PASS actualISO PL00/PL01 5Give+1Take: four-pass HitArea positions/reset/cooldown/countdown/FEnv/pause/strict positive query/late retry/foreign links/cleanup");return 0;}

@@ -12,7 +12,8 @@ typedef struct {gh_actor_model *model;const uint8_t *resource;size_t resource_by
  gh_motion_effect_consumer effect;void *context;const struct gh_motion_ik_globals *ik_globals;} gh_actor_motion_bindings;
 typedef struct {gh_actor_motion_bindings b;gh_motion_view motion;size_t sequence_offset;
  gh_motion_cache caches[255];uint32_t stage,frontier,detail;size_t release_index;
- uint16_t flags;uint8_t bound,complete,sequence_valid;} gh_actor_motion;
+ uint16_t flags;uint8_t bound,complete,sequence_valid;
+ uint32_t start_frame_bits,blend_frames,step_rate_bits;float step_dt,step_ratio;uint8_t step_stage;} gh_actor_motion;
 /* Actual2A8578 initialzero-blend/start0 binding. Secondoffset is RAW a2 candidate, not forcedSEQ:
  * sameMTB3 candidate produces absentSEQ through actual2C7F88; SIZE_MAX isNULL.
  * Includes originaloldSEQ release,
@@ -20,6 +21,9 @@ typedef struct {gh_actor_motion_bindings b;gh_motion_view motion;size_t sequence
  * ActiveIK without sharedik_globals remains a precise152448 frontier;
  * this never acknowledges sampledpose/animationstep for that branch.
  * Raw guest428/42C remain zero: this owner supplies their native identities. */
+/* start0,flags0 native domain; positiveblend uses original SAMEpart+40
+ * capturedlocalmatrices and438/43C counters, sameIKglobals binding. */
+gh_actor_motion_status gh_actor_motion_begin_parameters_002a8578(gh_actor_motion *,const gh_actor_motion_bindings *,size_t motion_offset,size_t raw_a2_candidate_offset,uint32_t start_frame_bits,uint32_t blend_frames,uint16_t flags);
 gh_actor_motion_status gh_actor_motion_begin_002a8578(gh_actor_motion *,const gh_actor_motion_bindings *,size_t motion_offset,size_t sequence_offset,uint16_t flags);
 #ifdef __cplusplus
 }

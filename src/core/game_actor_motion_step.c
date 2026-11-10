@@ -1,5 +1,6 @@
 #include "game_actor_motion_step.h"
 #include "game_actor_matrix.h"
+#include "game_actor_sequence.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -41,31 +42,18 @@ gh_actor_motion_status gh_actor_motion_sample_00158328(gh_actor_motion*s,gh_stat
  }
  return GH_ACTOR_MOTION_OK;
 }
-static gh_actor_motion_status empty_sequence(gh_actor_motion*s,uint32_t*f){
- if(!s->sequence_valid)return GH_ACTOR_MOTION_OK; /* actual2C7FD0(NULL) */
- const uint8_t*b=s->b.resource;size_t n=s->b.resource_bytes,o=s->sequence_offset;if(o>n||n-o<0x20)return GH_ACTOR_MOTION_BOUNDS;const uint8_t*seq=b+o;
- if(memcmp(seq,"SEQ\0",4))return GH_ACTOR_MOTION_BOUNDS;for(unsigned j=0;j<4;j++)if(half(seq+10+j*4))return fail(f,0x2c7fd0);
- uint8_t*p=s->b.model->root.bytes;if(rd(p+0x418))return fail(f,0x2c7fd0);
- if(!(half(p+0x434)&0x20))memset(p+0x410,0,8);p[0x3ac]=p[0x3ad]=0;if(!(p[0x420]&1))p[0x3ae]=p[0x3af]=0;wr(p+0x41c,rd(p+0x430));wr(p+0x3a8,rd(p+0x440));return GH_ACTOR_MOTION_OK;
-}
 gh_actor_motion_status gh_actor_motion_step_00157c18(gh_actor_motion*s,float rate,gh_static_transform_policy policy,int*ended,uint32_t*f){
- if(!s||!s->bound||!s->complete||!s->b.model||!s->b.work||!ended||!f)return GH_ACTOR_MOTION_ARGUMENT;*f=0;*ended=0;uint8_t*p=s->b.model->root.bytes;
- if(policy!=GH_STATIC_BINARY32_REFERENCE||half(p+0x434)||!isfinite(rate)||rate<0||rf(p+0x438)!=0)return fail(f,0x157c18);
+ if(!s||!s->bound||!s->complete||!s->b.model||!s->b.work||!ended||!f)return GH_ACTOR_MOTION_ARGUMENT;*f=0;*ended=0;uint8_t*p=s->b.model->root.bytes;uint32_t rate_bits;memcpy(&rate_bits,&rate,4);
+ if(policy!=GH_STATIC_BINARY32_REFERENCE||half(p+0x434)||!isfinite(rate)||rate<0)return fail(f,0x157c18);
+ if(s->step_stage&&rate_bits!=s->step_rate_bits)return GH_ACTOR_MOTION_BUSY;
  if(!isfinite(rf(p+0x444))||!isfinite(rf(p+0x440))||rf(p+0x444)<0||rf(p+0x440)<0)return fail(f,0x157c18);
- gh_actor_motion_status result=empty_sequence(s,f);if(result)return result;
- fenv_t env;if(fegetenv(&env)||fesetround(FE_TONEAREST))return fail(f,0x157c18);
- float dt=mul(mul(rf(p+0x444),rf(p+0x440)),s->b.work->phase569==1?mul(rate,.5f):rate);if(!isfinite(dt)){result=fail(f,0x157c18);goto finish;}
- wf(p+0x438,0);wf(p+0x27c,0);result=gh_actor_motion_sample_00158328(s,policy,f);if(result)goto finish;
- float delta[4]={0},angles[4]={0},rotation[16];for(unsigned j=0;j<3;j++)delta[j]=sub(rf(p+0x310+j*4),rf(p+0x320+j*4));delta[3]=1;memcpy(p+0x320,p+0x310,12);angles[1]=-rf(p+0x344);
- if(gh_actor_matrix_rotation_00147728(angles,0,rotation,policy,f)){result=GH_ACTOR_MOTION_UNSUPPORTED;goto finish;}
- for(unsigned row=0;row<3;row++){float v=add(add(add(mul(rotation[row],delta[0]),mul(rotation[4+row],delta[1])),mul(rotation[8+row],delta[2])),rotation[12+row]);wf(p+0x330+row*4,v);}
- float dif[4],wrapped[4];for(unsigned j=0;j<4;j++)dif[j]=sub(rf(p+0x340+j*4),rf(p+0x350+j*4));if(gh_actor_euler_adjust_001f7da0(dif,wrapped,policy,f)){result=GH_ACTOR_MOTION_UNSUPPORTED;goto finish;}memcpy(p+0x360,wrapped,12);memcpy(p+0x350,p+0x340,16);
- for(unsigned j=0;j<3;j++)wf(p+0x390+j*4,sub(rf(p+0x370+j*4),rf(p+0x380+j*4)));memcpy(p+0x380,p+0x370,12);
- float next=add(rf(p+0x430),dt);if(dt==1){float adjusted=add(next,.0001f);if(adjusted>2147483520.0f){result=fail(f,0x157c18);goto finish;}next=(float)(int32_t)adjusted;}wf(p+0x430,next);
- float last=(float)(s->motion.frames-1);if(next>last){
-  if(s->motion.flags&1){float excess=sub(next,last);if(excess<0)excess=0;if(excess>last)excess=last;wf(p+0x430,excess);memset(p+0x320,0,12);memset(p+0x350,0,12);}else wf(p+0x430,last);
-  if(p[0x436]!=255)p[0x436]++;*ended=1;
- }
-finish:
- if(fesetenv(&env))return fail(f,0x157c18);return result;
+ fenv_t env;if(feholdexcept(&env))return fail(f,0x157c18);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(f,0x157c18);}gh_actor_motion_status result=GH_ACTOR_MOTION_OK;
+ if(!s->step_stage){result=gh_actor_motion_sequence_002c7fd0(s,rate,policy,f);if(result)goto finish;float remaining=rf(p+0x438),duration=rf(p+0x43c);if(!isfinite(remaining)||!isfinite(duration)||remaining<0||duration<0){result=fail(f,0x157c18);goto finish;}float dt=mul(mul(rf(p+0x444),rf(p+0x440)),s->b.work->phase569==1?mul(rate,.5f):rate);if(!isfinite(dt)){result=fail(f,0x157c18);goto finish;}float next=sub(remaining,dt);if(next<0)next=0;float ratio=0;if(next>0){if(!(duration>0)){result=fail(f,0x157c18);goto finish;}volatile float q=next/duration;ratio=q;if(!isfinite(ratio)){result=fail(f,0x157c18);goto finish;}}s->step_dt=dt;s->step_ratio=ratio;s->step_rate_bits=rate_bits;wf(p+0x438,next);s->step_stage=1;}
+ if(s->step_stage==1){/*158328 reads PREVIOUS27C. Only aftercomplete sample store nextfactor. */result=gh_actor_motion_sample_00158328(s,policy,f);if(result)goto finish;wf(p+0x27c,s->step_ratio);s->step_stage=2;}
+ if(s->step_stage==2){float delta[4]={0},angles[4]={0},rotation[16],translated[3];for(unsigned j=0;j<3;j++)delta[j]=sub(rf(p+0x310+j*4),rf(p+0x320+j*4));delta[3]=1;memcpy(angles,p+0x340,16);angles[1]=-angles[1];if(gh_actor_matrix_rotation_00147728(angles,0,rotation,policy,f)){result=GH_ACTOR_MOTION_UNSUPPORTED;goto finish;}
+ for(unsigned row=0;row<3;row++){translated[row]=add(add(add(mul(rotation[row],delta[0]),mul(rotation[4+row],delta[1])),mul(rotation[8+row],delta[2])),rotation[12+row]);if(!isfinite(translated[row])){result=fail(f,0x150830);goto finish;}}
+ float dif[4],wrapped[4],scale_delta[3];for(unsigned j=0;j<4;j++)dif[j]=sub(rf(p+0x340+j*4),rf(p+0x350+j*4));if(gh_actor_euler_adjust_001f7da0(dif,wrapped,policy,f)){result=GH_ACTOR_MOTION_UNSUPPORTED;goto finish;}for(unsigned j=0;j<3;j++){scale_delta[j]=sub(rf(p+0x370+j*4),rf(p+0x380+j*4));if(!isfinite(scale_delta[j])){result=fail(f,0x157c18);goto finish;}}
+ memcpy(p+0x330,translated,12);memcpy(p+0x320,p+0x310,12);memcpy(p+0x360,wrapped,12);memcpy(p+0x350,p+0x340,16);memcpy(p+0x390,scale_delta,12);memcpy(p+0x380,p+0x370,12);s->step_stage=3;}
+ if(s->step_stage==3){float dt=s->step_dt,next=add(rf(p+0x430),dt);if(dt==1){float adjusted=add(next,.0001f);if(adjusted>2147483520.0f){result=fail(f,0x157c18);goto finish;}next=(float)(int32_t)adjusted;}if(!isfinite(next)){result=fail(f,0x157c18);goto finish;}float last=(float)(s->motion.frames-1);if(next>last){if(s->motion.flags&1){float excess=sub(next,last);if(excess<0)excess=0;if(excess>last)excess=last;next=excess;memset(p+0x320,0,12);memset(p+0x350,0,12);}else next=last;if(p[0x436]!=255)p[0x436]++;*ended=1;}wf(p+0x430,next);s->step_stage=0;}
+finish:if(fesetenv(&env))return fail(f,0x157c18);return result;
 }

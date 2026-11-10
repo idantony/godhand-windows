@@ -14,6 +14,7 @@ typedef struct {uint32_t handle;uint8_t *bytes,*alias_d0,*alias_f0;
 typedef enum {GH_ACTOR_MODEL_OK,GH_ACTOR_MODEL_ARGUMENT,GH_ACTOR_MODEL_BOUNDS,
  GH_ACTOR_MODEL_MEMORY,GH_ACTOR_MODEL_BUSY,GH_ACTOR_MODEL_UNSUPPORTED} gh_actor_model_status;
 struct gh_actor_model_nodes;
+struct gh_motion_ik_globals;
 typedef struct gh_actor_model {gh_title_player_view root;gh_boot_work *work;gh_room_pools *pools;
  gh_model_view script;gh_bundle_entry texture;gh_actor_part parts[255];
  uint32_t part_count,parts_allocated,stage,texture_flags,packet_argument,texture_mode,frontier,detail;
@@ -22,6 +23,7 @@ typedef struct gh_actor_model {gh_title_player_view root;gh_boot_work *work;gh_r
  /* Native lifetime identity and actual cross-model part148 link (100ED8). */
  struct gh_actor_model *native_identity,*external_parent;const void *external_owner;
  const uint8_t *external_parent_bytes;uint32_t external_parent_index,external_parent_handle,external_child_handle,external_borrowers;
+ const struct gh_motion_ik_globals *blend_globals; /* borrowed SAME motion setup */
 } gh_actor_model;
 /* Real149738 prefix and149C20 skeletalbind initialization. Current finite
  * zero-rotation/unit-scale reference domain reproduces initialPL00/OM00 pose.

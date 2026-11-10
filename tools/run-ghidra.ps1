@@ -2,7 +2,8 @@ param(
     [string]$InputElf = 'E:\godhand_windows\reference\SLUS_215.03',
     [string]$ProjectName = 'godhand_probe',
     [string[]]$Addresses = @('0031cf30','0031cf78','00100008','00320260','0031cfe0','0031d020'),
-    [string]$OutputJson = 'E:\godhand_windows\analysis\ghidra-startup.json'
+    [string]$OutputJson = 'E:\godhand_windows\analysis\ghidra-startup.json',
+    [ValidateRange(1,65536)][int]$MaxInstructions = 2048
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -15,5 +16,5 @@ $env:TMP = "$scratch\tmp"
 New-Item -ItemType Directory -Path "$scratch\projects","$scratch\tmp","$scratch\settings","$scratch\cache" -Force | Out-Null
 if (!(Test-Path -LiteralPath $InputElf -PathType Leaf)) { throw "ELF missing: $InputElf" }
 # Re-import only the named binary in this dedicated scratch project on repeat runs.
-& "$ghidra\support\analyzeHeadless.bat" "$scratch\projects" $ProjectName -import $InputElf -overwrite -processor 'r5900:LE:32:default' -cspec default -noanalysis -scriptPath "$PSScriptRoot\ghidra_scripts" -postScript GodHandProbe.java $OutputJson @Addresses -log "$scratch\ghidra-headless.log" -scriptlog "$scratch\ghidra-script.log" -max-cpu 4
+& "$ghidra\support\analyzeHeadless.bat" "$scratch\projects" $ProjectName -import $InputElf -overwrite -processor 'r5900:LE:32:default' -cspec default -noanalysis -scriptPath "$PSScriptRoot\ghidra_scripts" -postScript GodHandProbe.java $OutputJson max-insns $MaxInstructions @Addresses -log "$scratch\ghidra-headless.log" -scriptlog "$scratch\ghidra-script.log" -max-cpu 4
 exit $LASTEXITCODE

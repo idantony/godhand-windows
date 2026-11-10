@@ -10,6 +10,9 @@ extern "C" {
  * Writes SAME two parts/worldposes only after complete numeric validation. */
 /* Actual147C88 mode0 and150138 local rebuild after solvedworld→local.
  * Same original3A2558 rational asinf and1F8180 coefficientborrow. */
+/* Shared unchanged SDK math kernels, finite/atomic/reference policy. */
+gh_actor_motion_status gh_actor_sine_small_003a19f8(float,float *,gh_static_transform_policy,uint32_t *frontier);
+gh_actor_motion_status gh_actor_quaternion_matrix_001478a8(const float quaternion[4],float matrix[16],gh_static_transform_policy,uint32_t *frontier);
 gh_actor_motion_status gh_actor_part_extract_rebuild_00147c88(gh_actor_model *,unsigned,const float atan_coeff[8],gh_static_transform_policy,uint32_t *frontier);
 gh_actor_motion_status gh_actor_part_rebuild_00150138(gh_actor_model *,unsigned,gh_static_transform_policy,uint32_t *frontier);
 gh_actor_motion_status gh_actor_two_bone_00153158(gh_actor_model *,unsigned first_part,const gh_boot_work *,const gh_motion_ik_globals *,const float atan_coeff[8],gh_static_transform_policy,uint32_t *frontier);

@@ -4,7 +4,38 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
-## Current milestone: R100 Init and first update entry
+## Current milestone: player first-update motion
+
+An immutable source copy passes 221 C modules / 237 checks, including muted
+hardware audio, the movie codec and the full independent ADX comparison. Its
+matching Windows QA executes 489 updates: 6 MC, 90 movie and 369 title/menu
+frames. Main state4 now completes original NearCheck, world lighting and
+positive HitArea sorting, actor filtering, line-of-sight and hit publication.
+It then enters the actual player Move method, selects idle motion, binds the
+original 10-frame blend and samples its first pose. The next unresolved call
+is idle input/interaction `0x00123938`.
+
+Independent motion tests exercise 12 ticks and 32 original PL00 parts, actual
+alternate-idle SEQ timing, old-sequence release and late-error resumption. This
+is not continuous in-game animation or a human playtest. World packets remain
+zero, so the original 3D scene, complete player frame and gameplay are pending.
+Enemy initialization and effects work are being verified separately and are
+not included in this integrated execution claim.
+
+Self-built evidence tools check instruction bytes against the user's actual
+ELF, classify direct calls/imports and summarize static memory operands. The
+Ghidra exporter now records instruction limits and truncation explicitly.
+See [tool documentation](EVIDENCE_TOOLS.md); raw reports stay private.
+
+固定源码副本通过 221 个 C 模块／237 项检查，含真实静音音频设备、片头解码和完整
+独立 ADX 对照。匹配的 Windows 验收完成 489 次更新：6 帧存储卡、90 帧片头和
+369 帧标题／菜单。Main state4 已完成 NearCheck、光照和正碰撞排序／对象筛选／
+视线／命中发布，真正进入玩家 Move，执行原待机选择、10 帧过渡绑定及首次姿态采样。
+下一调用为输入／交互 `0x00123938`。世界绘制包仍为 0，没有完整首帧或可玩场景。
+独立动作测试覆盖 32 个部件、12 次更新和失败续接，不能替代整合动画验收。自制工具
+核对实际指令、调用／导入及访存操作；大函数截断会明确标出，原始报告不公开。
+
+## Previous milestone: R100 Init and first update entry
 
 An immutable source copy passes 212 C modules / 228 checks with muted hardware,
 codec and the full independent ADX comparison. Its matching Windows QA completes

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-10T09:57:00.264218+00:00",
+  "verified_utc": "2026-11-10T12:45:12.865565+00:00",
   "stage": "native-windows-R100-update-entry",
   "playable": false,
   "original_game_scene_observed_in_native_port": false,
@@ -71,13 +71,13 @@
       "next_entry_available": true,
       "current_frontier": {
         "module": "main ELF",
-        "address": "00131E10",
+        "address": "00123938",
         "operation": "Original unresolved consumer"
       },
       "alternate_original_branch": {
         "GameMain_case0_and_parallel_asset_loader_tested": true,
         "full_native_services_tested": true,
-        "next_unavailable_entry": "0x00131E10"
+        "next_unavailable_entry": "0x00123938"
       },
       "earlier_boot_and_complete_main_loop_run": false
     },
@@ -145,7 +145,7 @@
     }
   },
   "native_windows_execution": {
-    "scope": "Hidden/muted original NewGame completes R100 Init including69OMS+4runtime3EB, then enters Main4 and stops at actual NearCheck131E10; no original world frame",
+    "scope": "Hidden/muted original NewGame reaches R100/Main4 player first update after NearCheck, lighting and positive HitArea; positive blend10 and bone sampling execute, strict idle input123938; no original world frame",
     "hidden": true,
     "muted": true,
     "synthetic_input_fixture": true,
@@ -160,7 +160,7 @@
     "assets_loaded": true,
     "original_title_scene_frames_presented": 369,
     "bounded_execution_running": false,
-    "frontier": "00131E10",
+    "frontier": "00123938",
     "frontier_module": "main ELF",
     "original_world_packets_submitted": 0,
     "full_game_scene_or_gameplay_observed": false
@@ -260,6 +260,11 @@
       "game_ray_query",
       "game_scene_at_step",
       "game_scene_at_age",
+      "game_hitarea_frame",
+      "game_player_frame",
+      "game_scene_at_damage",
+      "sdk_rotation_trig",
+      "game_player_springs_frame",
       "game_scene_post",
       "cockpit_fan",
       "id_number",
@@ -308,6 +313,10 @@
       "game_event_player_reset",
       "game_actor_motion_ik",
       "game_actor_motion_step",
+      "game_actor_inverse",
+      "game_actor_blend",
+      "sdk_sine",
+      "game_actor_sequence",
       "game_actor_motion_solve",
       "game_actor_two_bone",
       "game_actor_finish_model",
@@ -440,6 +449,8 @@
       "test-game-event-player-reset",
       "test-game-actor-motion-ik",
       "test-game-actor-motion-step",
+      "test-game-actor-blend",
+      "test-game-actor-motion-blend",
       "test-game-actor-motion-solve",
       "test-game-actor-two-bone",
       "test-game-actor-finish-model",
@@ -567,6 +578,8 @@
       "test-game-camera-projection",
       "test-game-scene-finish",
       "test-game-scene-step",
+      "test-game-nearcheck",
+      "test-game-object-move-live",
       "test-game-scene-aux",
       "test-ui-order",
       "test-game-object-step",
@@ -577,6 +590,11 @@
       "test-game-ray-query",
       "test-game-scene-at-step",
       "test-game-scene-at-age",
+      "test-game-hitarea-frame",
+      "test-game-player-frame",
+      "test-game-player-frame-physics",
+      "test-game-scene-at-damage",
+      "test-sdk-rotation-trig",
       "test-game-scene-post",
       "test-game-cockpit-frame",
       "test-game-door",

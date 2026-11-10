@@ -22,6 +22,7 @@
 #include "../core/game_event_start.h"
 #include "../core/game_event_clear.h"
 #include "../core/game_hitarea_objects.h"
+#include "../core/game_hitarea_internal.h"
 #include "../core/game_dynamic_corners.h"
 #include "../core/enemy_se_banks.h"
 #include "../core/game_camera_shake.h"
@@ -656,7 +657,7 @@ static int update_state4(void *context,gh_game_loop *loop)
         .cockpit_action_flags_1414=gh_game_cockpit_action_flags_1414(s.cockpit),.binary32_reference=1,
         .scenario_callback104=s.scenario_callback104,.external=scene_consumer,.external_context=h,
         .profile_counter=scene_profile_clock,.profile_context=h,.scenario_status=scene_scenario_status,.scenario_status_context=h,
-        .dynamic_corners=&h->dynamic_corners};
+        .dynamic_corners=&h->dynamic_corners,.boot_elf=h->boot_reference,.boot_elf_bytes=h->boot_reference_bytes};
     gh_scene_step_status e=gh_game_scene_step_002a6690(s.step,&b);
     if(e)return entry_frontier(h,s.step->frontier?s.step->frontier:0x2a6690,
         gh_game_services_frontier_module(h->services),s.step->detail?s.step->detail:(int)e);
@@ -1156,6 +1157,10 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
     }
     return h->phase;
 }
+static const uint8_t* diagnostic_hitarea_slot(const gh_game_init_state*s,unsigned slot)
+{
+    return slot<160?s->object_pool+(size_t)slot*0x60:slot<416?s->object_pool+0x3c00+(size_t)(slot-160)*0x70:NULL;
+}
 gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snapshot *out)
 {
     if(!h || !out)return GH_HOST_ARGUMENT;
@@ -1181,8 +1186,45 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->scene_frame_serial=h->scene_frame_serial;out->scene_frame_ready=h->scene_frame_ready;
     out->ui_resource_epoch=gh_game_services_ui_resource_epoch(h->services);
     out->current_room=(uint16_t)h->work.room;memcpy(&out->next_room,(const uint8_t*)&h->work+0x5b4,2);
-    if(h->services){gh_game_services_scene_view scene;
-        if(!gh_game_services_get_scene_view(h->services,&scene)&&scene.title){gh_r020_title_view title;
+    if(h->services){gh_game_services_scene_view scene={0};
+        if(!gh_game_services_get_scene_view(h->services,&scene)){
+            const gh_hitarea_frame*c=&scene.step->hitarea_frame;
+            out->scene_stage=scene.step->stage;out->hitarea_phase=c->phase;out->hitarea_slot=c->slot;out->hitarea_node=c->node;
+            const struct gh_hitarea_native*n=h->game_init.hitarea_native;
+            if(c->active&&c->node&&c->node<=672&&n&&n->owner==&h->game_init){
+                const gh_native_hitarea_node*node=&n->nodes[c->node-1];const uint8_t*position;
+                if(node->associated&&node->object.state==&h->game_init&&node->object.generation==h->game_init.hitarea_generation&&
+                   node->object.index<416&&node->object.bytes==diagnostic_hitarea_slot(&h->game_init,node->object.index)&&
+                   !gh_collision_pair_shape_position(&node->shape,&position)){
+                    out->hitarea_diagnostic_ready=1;out->hitarea_shape_index=node->shape.index;
+                    memcpy(&out->hitarea_shape_flags,node->shape.record,4);memcpy(&out->hitarea_shape_kind,node->shape.record+0xe0,4);
+                    memcpy(&out->hitarea_hit_count,node->shape.record+0xd8,4);
+                    const gh_title_player_view*source_actor=node->object.index<416?n->actors[node->object.index]:NULL;
+                    memcpy(&out->hitarea_source_unit_flags,node->object.bytes,4);memcpy(&out->hitarea_source_excluded_token,node->object.bytes+0x38,4);
+                    if(source_actor&&source_actor->bytes&&source_actor->size>=0x300){uint16_t kind;memcpy(&kind,source_actor->bytes+0x2fe,2);out->hitarea_actor_present=1;out->hitarea_actor_kind=kind;
+                        memcpy(&out->hitarea_actor_flags,source_actor->bytes+0x250,4);if(source_actor->size>=0x550)memcpy(&out->hitarea_actor_cooldown_bits,source_actor->bytes+0x54c,4);
+                        out->hitarea_source_is_player=scene.title_player&&scene.title_player->view.bytes==source_actor->bytes;}
+                    for(unsigned i=0;i<4&&out->hitarea_hit_count>0&&i<(uint32_t)out->hitarea_hit_count;i++){
+                        gh_collision_pair_shape other;uint32_t distance;
+                        if(gh_collision_pair_shape_hit_at(&node->shape,i,&other,&distance))break;
+                        out->hitarea_hit_indices[i]=other.index;memcpy(out->hitarea_hit_kinds+i,other.record+0xe0,4);
+                        out->hitarea_hit_distance_bits[i]=distance;out->hitarea_hit_samples++;
+                        for(unsigned j=0;j<672;j++){const gh_native_hitarea_node*t=&n->nodes[j];
+                            if(!t->associated||t->shape.record!=other.record||t->shape.manager!=other.manager||t->shape.index!=other.index||t->shape.serial!=other.serial||
+                               t->object.state!=&h->game_init||t->object.generation!=h->game_init.hitarea_generation||t->object.index>=416||t->object.serial!=n->serials[t->object.index]||
+                               t->object.bytes!=diagnostic_hitarea_slot(&h->game_init,t->object.index))continue;
+                            out->hitarea_hit_unit_known[i]=1;out->hitarea_hit_unit_slots[i]=t->object.index;
+                            memcpy(out->hitarea_hit_actor_tokens+i,t->object.bytes+0x30,4);
+                            const gh_title_player_view*a=n->actors[t->object.index];
+                            if(a&&a->bytes&&a->size>=0x300){uint16_t kind;memcpy(&kind,a->bytes+0x2fe,2);out->hitarea_hit_actor_present[i]=1;out->hitarea_hit_actor_kinds[i]=kind;
+                                memcpy(out->hitarea_hit_actor_flags+i,a->bytes+0x250,4);if(a->size>=0x550)memcpy(out->hitarea_hit_actor_cooldown_bits+i,a->bytes+0x54c,4);
+                                out->hitarea_hit_same_actor[i]=source_actor&&a->bytes==source_actor->bytes;}break;
+                        }
+                    }
+                }
+            }
+        }
+        if(scene.title){gh_r020_title_view title;
             if(!gh_r020_title_inspect(scene.title,&title)&&title.field_bytes>=0x20){
                 out->title_live=1;out->title_mode=title.fields[0];out->title_phase=title.fields[1];out->title_subphase=title.fields[2];
                 memcpy(&out->title_timer,title.fields+8,4);memcpy(&out->title_game_selection,title.fields+0x14,4);

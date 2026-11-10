@@ -356,7 +356,10 @@ int main(int argc,char **argv)
         "\"mc_phase\":%u,\"mc_subphase\":%u,\"game_state\":%u,\"assets_loaded\":%s,\"room\":\"%04X\",\"next_room\":\"%04X\","
         "\"work_flags584\":\"%08X\",\"system_flags5d8\":\"%08X\","
         "\"scene_frames_presented\":%llu,\"scene_frame_serial\":%llu,"
-        "\"renderer_error\":%u,\"renderer_frontier\":\"%08X\",\"world_gpu_error\":%u,\"world_frontier\":\"%08X\",\"world_vu_pc\":\"%08X\",\"world_packets_submitted\":%llu,\"window_error\":%u,\"exit_code\":%d}\n",
+        "\"renderer_error\":%u,\"renderer_frontier\":\"%08X\",\"world_gpu_error\":%u,\"world_frontier\":\"%08X\",\"world_vu_pc\":\"%08X\",\"world_packets_submitted\":%llu,\"window_error\":%u,\"exit_code\":%d,"
+        "\"hitarea_diagnostic_ready\":%s,\"scene_stage\":%u,\"hitarea_phase\":%u,\"hitarea_slot\":%u,\"hitarea_node\":%u,"
+        "\"hitarea_shape_index\":%u,\"hitarea_shape_flags\":\"%08X\",\"hitarea_shape_kind\":%u,\"hitarea_hit_count\":%d,"
+        "\"hitarea_hit_samples\":%u,\"hitarea_hit_indices\":[%u,%u,%u,%u],\"hitarea_hit_kinds\":[%u,%u,%u,%u],\"hitarea_hit_distance_bits\":[%u,%u,%u,%u]}\n",
         show?"false":"true",muted?"true":"false",prefix?"true":"false",synthetic_input?"true":"false",
         (unsigned long long)app.snapshot.ticks,(unsigned)app.snapshot.phase,
         (unsigned)(host_error!=GH_HOST_OK?host_error:app.snapshot.error),app.snapshot.subsystem_error,
@@ -369,7 +372,21 @@ int main(int argc,char **argv)
         app.snapshot.game_assets_loaded?"true":"false",app.snapshot.current_room,app.snapshot.next_room,app.snapshot.flags,system_flags5d8,
         (unsigned long long)app.presented_scene,(unsigned long long)app.snapshot.scene_frame_serial,(unsigned)renderer.id_error,renderer.frontier,
         (unsigned)app.world_gpu_error,app.world_frontier,app.world_vu_pc,(unsigned long long)app.world_packets,
-        (unsigned)app.window_error,result);
+        (unsigned)app.window_error,result,app.snapshot.hitarea_diagnostic_ready?"true":"false",
+        app.snapshot.scene_stage,app.snapshot.hitarea_phase,app.snapshot.hitarea_slot,app.snapshot.hitarea_node,
+        app.snapshot.hitarea_shape_index,app.snapshot.hitarea_shape_flags,app.snapshot.hitarea_shape_kind,app.snapshot.hitarea_hit_count,
+        (unsigned)app.snapshot.hitarea_hit_samples,
+        app.snapshot.hitarea_hit_indices[0],app.snapshot.hitarea_hit_indices[1],app.snapshot.hitarea_hit_indices[2],app.snapshot.hitarea_hit_indices[3],
+        app.snapshot.hitarea_hit_kinds[0],app.snapshot.hitarea_hit_kinds[1],app.snapshot.hitarea_hit_kinds[2],app.snapshot.hitarea_hit_kinds[3],
+        app.snapshot.hitarea_hit_distance_bits[0],app.snapshot.hitarea_hit_distance_bits[1],app.snapshot.hitarea_hit_distance_bits[2],app.snapshot.hitarea_hit_distance_bits[3]);
+    if(qa_new_game&&app.snapshot.hitarea_diagnostic_ready){
+        std::fprintf(stderr,"QA HitArea source slot%u actor_present%u actor_kind%04X flags250%08X cooldown54C%08X unitflags%08X excluded38%08X sameplayer%u\n",app.snapshot.hitarea_slot,app.snapshot.hitarea_actor_present,app.snapshot.hitarea_actor_kind,
+            app.snapshot.hitarea_actor_flags,app.snapshot.hitarea_actor_cooldown_bits,app.snapshot.hitarea_source_unit_flags,app.snapshot.hitarea_source_excluded_token,app.snapshot.hitarea_source_is_player);
+        for(unsigned i=0;i<app.snapshot.hitarea_hit_samples;i++)std::fprintf(stderr,"QA HitArea target%u shape%u unit_known%u slot%u actor_present%u actor_kind%04X raw30%08X flags250%08X cooldown54C%08X same_source_actor%u\n",
+            i,app.snapshot.hitarea_hit_indices[i],app.snapshot.hitarea_hit_unit_known[i],app.snapshot.hitarea_hit_unit_slots[i],
+            app.snapshot.hitarea_hit_actor_present[i],app.snapshot.hitarea_hit_actor_kinds[i],app.snapshot.hitarea_hit_actor_tokens[i],
+            app.snapshot.hitarea_hit_actor_flags[i],app.snapshot.hitarea_hit_actor_cooldown_bits[i],app.snapshot.hitarea_hit_same_actor[i]);
+    }
     if(app.host){gh_host_error cleanup=gh_startup_host_destroy(app.host);if(cleanup!=GH_HOST_OK){std::fprintf(stderr,"Native host cleanup failed: %u\n",(unsigned)cleanup);result=1;}}
     gh_static_world_queue_destroy(app.world_queue);gh_model_renderer_destroy(app.world_renderer);
     gh_mc_renderer_destroy(app.renderer);gh_window_destroy(app.window);
