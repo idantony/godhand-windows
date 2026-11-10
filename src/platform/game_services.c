@@ -85,6 +85,7 @@ struct gh_game_services {
  gh_player_door_probe player_door;gh_player_door_bindings player_door_bindings;gh_bundle player_door_room;
  gh_child_wind_update child_update;
  gh_actor_attached_sound player_sound;gh_player_tail_target_slot player_target_644;
+ gh_game_update_diagnostic update_diagnostic;
  gh_motion_solve player_motion_solve;
  uint64_t ui_resource_epoch;
  gh_game_door door;uint8_t system_menu_enabled;uint32_t room_texture_channel;int room_texture_ready;
@@ -863,6 +864,7 @@ static gh_player_frame_status player_frame_door_probe(void*p,const gh_title_play
 }
 gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t handle,uint32_t entry,int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,uint32_t*f){
  if(f)*f=0;if(!s||!v||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
+ s->update_diagnostic.last_move_handle=handle;s->update_diagnostic.last_move_entry=entry;
   if(handle==s->player_child.handle&&s->player_child.complete&&v->bytes==s->player_child.object.view.bytes&&v->size==s->player_child.object.view.size){
    if(entry!=0x100530||delta){*f=entry;return GH_SERVICES_FRONTIER;}
    if(s->child_update.original.original_returned)s->child_update=(gh_child_wind_update){0};
@@ -871,7 +873,7 @@ gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t 
      .matrix_policy=GH_STATIC_BINARY32_REFERENCE,.random_policy=GH_FRAME_CHOP_REFERENCE},.work=s->b.work,.work5f4=&s->title_player.view};
    gh_title_player_status e=gh_game_player_child_update_wind_00100530(&s->child_update,&child,s->b.player_shared_vector);*f=s->child_update.original.frontier;
    if(e)return e==GH_PLAYER_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
-   return s->child_update.original.original_returned?GH_SERVICES_OK:GH_SERVICES_ASSET;
+   if(s->child_update.original.original_returned){s->update_diagnostic.child_updates_completed++;return GH_SERVICES_OK;}return GH_SERVICES_ASSET;
   }
  const gh_title_player_view*canonical=NULL;
  if(gh_game_player_factory_scalar_view(&s->player_factory,handle,&canonical)||canonical->bytes!=v->bytes||canonical->size!=v->size){*f=entry;return GH_SERVICES_FRONTIER;}
@@ -900,6 +902,7 @@ gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t 
  if(!s->player_frame.bound)s->player_idle_bindings=(gh_player_idle_input_bindings){.frame=b,
   .targets={.pools=&s->pools,.actors=&s->scene_tables,.player=&s->title_player.view,.resolve=player_target_view,.context=s,.elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes}};
  gh_player_frame_status e=gh_game_player_frame_00108ab0(&s->player_frame,&b);*f=s->player_frame.frontier;
+ if(!e&&s->player_frame.stage==31&&!s->player_frame.bound)s->update_diagnostic.player_updates_completed++;
  return !e?GH_SERVICES_OK:e==GH_PLAYER_FRAME_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
 }
 gh_scene_step_status gh_game_services_task_status(gh_game_services*s,uint32_t*frontier){
@@ -938,6 +941,13 @@ gh_game_event_status gh_game_services_event_player_clear(gh_game_services*s,cons
  }
  if(!e)e=gh_event_player_reset_step_0012c418(&s->event_player_reset);
  *frontier=s->event_player_reset.frontier;return e;
+}
+gh_game_services_status gh_game_services_update_diagnostic(const gh_game_services*s,gh_game_update_diagnostic*out){
+ if(!s||!out)return GH_SERVICES_ARGUMENT;*out=s->update_diagnostic;
+ out->player_stage=s->player_frame.stage;out->player_frontier=s->player_frame.frontier;
+ out->child_stage=s->child_update.original.stage;out->child_frontier=s->child_update.original.frontier;
+ out->child_forces_complete=s->child_update.original.forces.complete;out->child_angles_complete=s->child_update.original.angles.complete;
+ out->child_distances_complete=s->child_update.original.distances.complete;out->child_finish_complete=s->child_update.original.finish.complete;return GH_SERVICES_OK;
 }
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services*s,gh_game_services_scene_view*out){
  if(!s||!out)return GH_SERVICES_ARGUMENT;

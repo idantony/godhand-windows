@@ -1,7 +1,76 @@
+# Current God Hand state — verified local67
+
+Read Git before assuming a push. Current full verified source is
+G:/middle_thing/godhand_windows/snapshots/room-transition-67; matching scratch
+G:/middle_thing/godhand_windows/verification/room-transition-67.
+254 C modules /273 checks, all hardware/codec/full independent ADX and same-DLL
+RNG20544/20534 PASS. Private proof: analysis/room-transition-67-verification-private.json.
+Standard E reports and bilingual public summaries now describe67, prepared for
+publication; latest verified remote is still59/8b3c033 until Git confirms a push.
+Local66 rollback is822a641; no formal overall review is due merely for that commit.
+
+Actual hidden/muted synthetic NewGame:489ticks,6MC/90Movie/369UI, R100/Main4.
+player_updates_completed1/stage31, child_updates_completed1/stage6; all four
+child simulation stages complete. Exact frontier mainELF00186928, handle159,
+first door300 Move. worldpackets0; renderer/window/worlderrors0; normal exit4.
+No complete scene frame, continuous animation, combat or playable game.
+
+67 adds only EE-acos02 +Root read-only call/stage diagnostics to full66.
+66 passed253C/272 and actualparent completion, strictchild1F8140. Separate
+66-diag was a Windows-only G-instrumented probe: angle input3F800001/radicalB4800000.
+Never stage its three diagnostic-print cloth sources. Correct normal67 uses
+CPU COP1 SQRT numeric reference (not VU/not clamp); no FCR31/hardware claim.
+65 native failed a new fixture indentation warning, while its Windows run reached
+14FB48; never label65 fully verified.64 was243C/260, strict132DA0.
+
+Current independent lanes (Root owns services/startup/frame/manifests):
+- godhand_upstream: actualdoor186928→1BC0A0→1BD430→1BC300. SAME native
+  geometry_state.box is original644; raw0 is removedguestptr, neverNULL proof.
+  It consumes/clears actualdynamic contacts34/count54. Dynamic owner/h/c/internal
+  lane transferred from opengoal; no reset in12E840/12DCB8.
+- opengoal_method: frozen object-live-trans233618 NOTin67. Owns step.h/static.c
+  minimal liveTrans hook +NEWmodule. Continues real14A3E8 modelTrans, predicates,
+  preTrans12BBE0/14EFA8 and actualGPU consumers. Borrow s.player_tail.shadow;
+  removed raw44C/450 zero is not knownNULL. Dynamic lane is no longer owned here.
+- skill_forward_test: actual30F228→300628 emitters→2FB0E8 ESP frame update,
+  SAME buffers/creator metadata/MT. Approved emitterview mutable span and pure
+  matrix→Euler export in game_actor_two_bone.h/c. No fake empty activeeffects.
+
+Frozen useful tool batches: ghidra-report-validator231409 (14tests +realprobe),
+native-milestone-tool-batch-01 (13tests, real64 accept/65 reject, actual66/67 accept).
+record-native-milestone.py requires fresh ignored analysis/*-private.json,
+matching snapshot/scratch, all source/artifact/report hashes and explicit expected
+unfinished frontier. It emits facts only, never completion estimates or publishing.
+Ghidra requires quoted hex addresses and a fresh output; scientificnotation,
+Java ERROR/exit0 missing report and stale reports are rejected. Index-only EOF
+normalizer has been exercised on66; it preserves mutable E and frozen G sources.
+
+Public pushes remain meaningful milestones only. Formal review and the private
+rough workload estimate follow a verified GitHub push; do not publish the number.
+The older notes below are historical and may describe superseded assignments.
+
 # Active project resume: God Hand
 
 Updated 2026-11-10. Read Git and live worker ownership before editing. This is
 an ongoing authorized source port, not a playable Windows game yet.
+
+Latestworkerfreezes readyforRootintegration (NOTin62):
+- collision-solid-step-20261110-140017 schema1: approvedsolids.h/c contacts08[32],
+  units.c detachonly, NEWstep c/h/test; wholefreshABIrequired. opengoal nowowns
+  NEWterrain132DA0/1329C0/1321D8, Rootdoesnotduplicateimplementation.
+- action-button-step-20261110-132838 schema1 (requiresSet131146), realHUD/cleanup.
+- cloth-child-complete-batch-01-delta schema1:13NEWC+14tests+staticwriteaudittool,
+  nooldsharedsource. Complete00100530 child_update wrapper passedseparateactual
+  attached32/41part/40spring/12sphere4frame fixtures; NOTactualWindowsclaimyet.
+  Rootpersistentowners templates+runtimeglobals, ONEborrow3BD880; exactargs in
+  header/receipt. Templates ELF-only;axis/child_step/collision/point noargs;
+  othersISO+ELF. Newpreflight shouldcatch CLI domainmislabel early.
+- enemy-factory-complete-19-delta remainsready, onlycoupledplayer_shadow generic
+  export plus20NEWmodules; do not overwriteRootnewblend/nodemask witholdheaders.
+Rootnextintegrates frozenSolid/ActionStep/fullchild, thenactualQA; enemycanfollow.
+Sound03 remainsWIP: realcore1E/1F descriptor18/1A are signed-128/+128, requires
+SDE RNG377FA0/pitchvariation. Fixedpitch14k isNOTcomplete2CBA48; workerkeeps
+strict2CE588 whilefinishingrealpitch. Itsmodel/se_voice/motionABI notin62/tools63.
 
 Newuserworkflowrule: a reproducibleproblem seen twice shouldprefer a reusable
 check/diagnostic/repairtool before a thirdmanualrepeat. Storedin EAGENTS and
@@ -13,7 +82,12 @@ Testcontractchecker catchesactual61 wrongargc beforecompile; currentmanifest
 NEXTfrozenbuild mustinclude thathelper+newbuildscript together, neveroldbase
 missingimport. This isTOOL-onlyverification, notnewfullnative63. Latestfull
 native remains62 below. Localrollback62 is37bd67b, NOTpushed; public59/8b3c033.
-Toolproof analysis/workflow-tools-v1-evidence-private.json. Rootnextphysics/
+Toolproof analysis/workflow-tools-v1-evidence-private.json.
+Tool-only localrollback 1f73c6e; newbase room-transition-63-tools contains the
+helper+preflight script together andpassed160known/50unknown checks, NO full
+native63 claim. Nextfullcohort shouldderive63-tools thenoverlay Root newmodule
+manifest; do not reapplyv1 toolbundle AFTERa newerRootmanifest (bundle carries
+base62 build-native.py andwouldoverwrite newmodulelist). Rootnextphysics/
 ActionStep+enemy integration unchanged; workerSolidStep nearingfreeze.
 
 NEWEST LOCAL fullyverified integration is room-transition-62:228C/244checks,

@@ -2,6 +2,7 @@
 #include "game_cloth_point.h"
 #include "game_axis_angle.h"
 #include "game_camera.h"
+#include "game_ee_acos.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -22,7 +23,7 @@ static gh_cloth_status body(gh_cloth_finish*s,gh_cloth_distances*distances){
   float point[3],anchor[3];memcpy(point,r+0x40,12);if(target==255)memcpy(anchor,m+12,12);else memcpy(anchor,records+target*0xa0+0x40,12);int hit;uint32_t pc;gh_cloth_status e=gh_cloth_point_body_001067b8(prefix->geometry,point,anchor,angles->shared_pivot,prefix->bindings.matrix_policy,&hit,&pc);if(e)return fail(s,pc,e);memcpy(r+0x40,point,12);if(hit){r[0x90]|=1;hits++;}if(r[0x91]&1)memcpy(r+0x40,r+0x80,12);
   float damping=rf(p+0x2090);if(r[0x90]&1)damping=mul(damping,0.3f);for(unsigned k=0;k<3;k++){float velocity=mul(add(rf(r+0x40+4*k),-rf(r+0x50+4*k)),damping);memcpy(r+0x30+4*k,&velocity,4);}
   float local[3],reference[3],current[3],position[3];memcpy(local,r+0x10,12);direction(m,local,reference);normalize(reference);for(unsigned k=0;k<3;k++)current[k]=add(rf(r+0x40+4*k),-m[12+k]);if(current[0]==0&&current[1]==0&&current[2]==0)memcpy(current,local,12);else normalize(current);memcpy(position,m+12,12);
-  float dot=add(add(mul(reference[0],current[0]),mul(reference[1],current[1])),mul(reference[2],current[2])),radical=add(1,-mul(dot,dot));if(!isfinite(radical)||radical<0)return fail(s,0x1f8140,GH_CLOTH_UNSUPPORTED);float angle;if(gh_game_angle_001f8180(sqrtf(radical),dot,&angle,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&pc))return fail(s,pc,GH_CLOTH_UNSUPPORTED);
+  float dot=add(add(mul(reference[0],current[0]),mul(reference[1],current[1])),mul(reference[2],current[2]));float angle;if(gh_game_ee_acos_reference_001f8140(dot,&angle,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&pc))return fail(s,pc,GH_CLOTH_UNSUPPORTED);
   if(angle>0.01f&&angle<3.1315928f){float axis[3]={add(mul(reference[1],current[2]),-mul(reference[2],current[1])),add(mul(reference[2],current[0]),-mul(reference[0],current[2])),add(mul(reference[0],current[1]),-mul(reference[1],current[0]))},turn[16],result[16];if(gh_axis_angle_matrix_0015af30(angle,axis,angles->shared_pivot->bytes,turn,prefix->bindings.matrix_policy,&pc)||gh_actor_matrix_product_00147548(turn,m,result,prefix->bindings.matrix_policy,&pc))return fail(s,pc,GH_CLOTH_UNSUPPORTED);memcpy(m,result,64);rotated++;}memcpy(m+12,position,12);
   for(unsigned k=0;k<3;k++)if(!isfinite(rf(r+0x30+4*k))||!isfinite(rf(r+0x40+4*k)))return fail(s,0x1061c0,GH_CLOTH_NUMERIC);for(unsigned k=0;k<16;k++)if(!isfinite(m[k]))return fail(s,0x1061c0,GH_CLOTH_NUMERIC);
  }

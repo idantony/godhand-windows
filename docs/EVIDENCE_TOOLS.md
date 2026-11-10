@@ -49,3 +49,32 @@ native tests and actual execution remain required.
 同类可复现问题第二次出现时，优先固化成检查或修复工具。行尾工具只处理暂存区中
 报告的尾部空行；参数工具会在编译前拦住“测试需要一个文件却传了两个”的明确矛盾。
 未知参数约定仍保留未知，两项工具均有回归及真实失败案例验证。
+
+
+`run-ghidra.ps1` validates each new headless run before publishing its report.
+Pass addresses as quoted hexadecimal strings: PowerShell can interpret an
+unquoted value containing `e` as scientific notation. The wrapper uses a new G:
+run directory, checks logs and the complete requested function set, and verifies
+raw words against the same ELF. A process exit code of zero is insufficient.
+Choose a fresh output filename; a failed or repeated probe never replaces an
+existing report. `tests/tools/test_validate_ghidra_report.py` covers these failures.
+
+Ghidra 包装工具现在会核对本轮日志、完整函数清单、输出生成时间和实际 ELF 指令字。
+地址必须写成带引号的十六进制字符串，避免 PowerShell 把含 e 的地址解析为科学计数。
+即使进程返回 0，Java 报错或缺少报告也会失败；已有报告始终保留，请使用新输出文件名。
+
+
+`tools/record-native-milestone.py` consolidates matching private evidence. It
+checks source, artifact and report hashes, the executed Windows path, two RNG
+reports and the actual hidden/muted QA result. A nonzero unfinished stop needs
+an explicit matching `--expected-frontier`; it never becomes playable acceptance.
+The output must be a new ignored `analysis/*-private.json`, and existing evidence
+is not overwritten. It does not build, launch the game or publish progress.
+
+```powershell
+python -B tools/record-native-milestone.py --snapshot 'G:\middle_thing\godhand_windows\snapshots\room-transition-67' --scratch 'G:\middle_thing\godhand_windows\verification\room-transition-67' --output 'E:\godhand_windows\analysis\new-proof-private.json' --expected-frontier 00186928
+```
+
+验收汇总工具核对固定源码、二进制、报告与实际运行是否属于同一批；失败报告、混合
+版本和覆盖旧证据都会被拒绝。未完成的停止必须明确指定预期地址；工具只记录事实，
+不推算完成比例，不把开发测试通过当成可玩验收，也不会自动推送仓库。

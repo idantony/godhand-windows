@@ -4,7 +4,34 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
-## Current milestone: player first-update motion
+## Current milestone: complete first player and child updates
+
+The immutable source copy passes 254 C modules / 273 checks, including real
+muted audio, movie decoding and the full independent ADX comparison. Its
+matching Windows run completes one original player108AB0 update and one
+child100530 update. The actual counters show all child force, angle, distance
+and finish stages completed. The next unresolved descriptor is the first
+door's Move method `0x00186928` (handle159).
+
+This connects the original motion/blend, interaction, solid/wall/floor collision,
+ground pose, hierarchy/IK, opacity, position history and Save/Heat updates.
+The child uses the same parent parts and persistent spring/template owners.
+A real one-ULP acos input exposed an EE COP1 SQRT difference; its explicit
+numeric reference follows the original operation, with no input clamp or
+PS2 hardware-equivalence claim.
+
+The run still submits zero world packets and stops during MoveObj. It is not
+a complete scene frame, continuous animation, combat or a human playtest.
+Focused attached-sound tests additionally verify real muted random-pitch ADPCM
+voices; complete in-game audio remains unfinished.
+
+固定源码副本通过 254 个 C 模块／273 项检查，含真实静音音频、片头解码和完整 ADX
+独立对照。匹配的 Windows 程序实际完成玩家与附属子模型各一次完整更新，弹性骨骼
+各阶段均完成；下一处为首扇门 Move `0x00186928`。世界绘制包仍为 0，尚无完整场景
+首帧、连续动画或玩法验收。数值参考遵循原 CPU 运算语义，不以夹住输入掩盖差异，
+也不声称 PS2 实机位精确。原声音、战斗、存读档和完整流程仍需继续恢复。
+
+## Previous milestone: player first-update motion
 
 An immutable source copy passes 221 C modules / 237 checks, including muted
 hardware audio, the movie codec and the full independent ADX comparison. Its

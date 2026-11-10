@@ -1210,6 +1210,12 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->scene_frame_serial=h->scene_frame_serial;out->scene_frame_ready=h->scene_frame_ready;
     out->ui_resource_epoch=gh_game_services_ui_resource_epoch(h->services);
     out->current_room=(uint16_t)h->work.room;memcpy(&out->next_room,(const uint8_t*)&h->work+0x5b4,2);
+    if(h->services){gh_game_update_diagnostic d={0};if(!gh_game_services_update_diagnostic(h->services,&d)){
+        out->player_updates_completed=d.player_updates_completed;out->child_updates_completed=d.child_updates_completed;
+        out->last_move_handle=d.last_move_handle;out->last_move_entry=d.last_move_entry;out->player_update_stage=d.player_stage;out->child_update_stage=d.child_stage;
+        out->child_update_frontier=d.child_frontier;out->child_forces_complete=d.child_forces_complete;out->child_angles_complete=d.child_angles_complete;
+        out->child_distances_complete=d.child_distances_complete;out->child_finish_complete=d.child_finish_complete;}
+    }
     if(h->services){gh_game_services_scene_view scene={0};
         if(!gh_game_services_get_scene_view(h->services,&scene)){
             const gh_hitarea_frame*c=&scene.step->hitarea_frame;

@@ -128,6 +128,13 @@ typedef struct {
  uint8_t *scene_buffer_a,*scene_buffer_b;size_t scene_buffer_a_size,scene_buffer_b_size;
 } gh_game_services_scene_view;
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services *,gh_game_services_scene_view *);
+/* Read-only native execution diagnostics; counters are not game state. */
+typedef struct {uint64_t player_updates_completed,child_updates_completed;
+ uint32_t last_move_handle,last_move_entry,player_stage,player_frontier,child_stage,child_frontier;
+ uint32_t child_forces_complete,child_angles_complete,child_distances_complete,child_finish_complete;
+} gh_game_update_diagnostic;
+gh_game_services_status gh_game_services_update_diagnostic(const gh_game_services *,gh_game_update_diagnostic *);
+
 /* Resolve actual canonical actor identity before caller-specific ID filtering. */
 gh_game_services_status gh_game_services_actor_view(gh_game_services *,uint32_t handle,gh_title_player_view *);
 /* Dispatches a verified original Move descriptor on the SAME canonical actor.

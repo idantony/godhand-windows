@@ -357,6 +357,8 @@ int main(int argc,char **argv)
         "\"work_flags584\":\"%08X\",\"system_flags5d8\":\"%08X\","
         "\"scene_frames_presented\":%llu,\"scene_frame_serial\":%llu,"
         "\"renderer_error\":%u,\"renderer_frontier\":\"%08X\",\"world_gpu_error\":%u,\"world_frontier\":\"%08X\",\"world_vu_pc\":\"%08X\",\"world_packets_submitted\":%llu,\"window_error\":%u,\"exit_code\":%d,"
+        "\"player_updates_completed\":%llu,\"child_updates_completed\":%llu,\"last_move_handle\":%u,\"last_move_entry\":\"%08X\",\"player_update_stage\":%u,\"child_update_stage\":%u,"
+        "\"child_update_frontier\":\"%08X\",\"child_forces_complete\":%u,\"child_angles_complete\":%u,\"child_distances_complete\":%u,\"child_finish_complete\":%u,"
         "\"hitarea_diagnostic_ready\":%s,\"scene_stage\":%u,\"hitarea_phase\":%u,\"hitarea_slot\":%u,\"hitarea_node\":%u,"
         "\"hitarea_shape_index\":%u,\"hitarea_shape_flags\":\"%08X\",\"hitarea_shape_kind\":%u,\"hitarea_hit_count\":%d,"
         "\"hitarea_hit_samples\":%u,\"hitarea_hit_indices\":[%u,%u,%u,%u],\"hitarea_hit_kinds\":[%u,%u,%u,%u],\"hitarea_hit_distance_bits\":[%u,%u,%u,%u]}\n",
@@ -372,7 +374,11 @@ int main(int argc,char **argv)
         app.snapshot.game_assets_loaded?"true":"false",app.snapshot.current_room,app.snapshot.next_room,app.snapshot.flags,system_flags5d8,
         (unsigned long long)app.presented_scene,(unsigned long long)app.snapshot.scene_frame_serial,(unsigned)renderer.id_error,renderer.frontier,
         (unsigned)app.world_gpu_error,app.world_frontier,app.world_vu_pc,(unsigned long long)app.world_packets,
-        (unsigned)app.window_error,result,app.snapshot.hitarea_diagnostic_ready?"true":"false",
+        (unsigned)app.window_error,result,
+        (unsigned long long)app.snapshot.player_updates_completed,(unsigned long long)app.snapshot.child_updates_completed,
+        app.snapshot.last_move_handle,app.snapshot.last_move_entry,app.snapshot.player_update_stage,app.snapshot.child_update_stage,
+        app.snapshot.child_update_frontier,app.snapshot.child_forces_complete,app.snapshot.child_angles_complete,app.snapshot.child_distances_complete,app.snapshot.child_finish_complete,
+        app.snapshot.hitarea_diagnostic_ready?"true":"false",
         app.snapshot.scene_stage,app.snapshot.hitarea_phase,app.snapshot.hitarea_slot,app.snapshot.hitarea_node,
         app.snapshot.hitarea_shape_index,app.snapshot.hitarea_shape_flags,app.snapshot.hitarea_shape_kind,app.snapshot.hitarea_hit_count,
         (unsigned)app.snapshot.hitarea_hit_samples,

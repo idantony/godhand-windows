@@ -53,7 +53,7 @@ def main():
     progress = {
         "schema_version": 1,
         "verified_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "stage": ("native-windows-R100-update-entry" if window["execution"].get("game_state") == 4 else "native-windows-new-game-R100-construction") if window["execution"].get("room") == "0100" else "native-windows-original-title-scene",
+        "stage": "native-windows-R100-player-child-update" if window["execution"].get("player_updates_completed", 0) > 0 and window["execution"].get("child_updates_completed", 0) > 0 else ("native-windows-R100-update-entry" if window["execution"].get("game_state") == 4 else "native-windows-new-game-R100-construction") if window["execution"].get("room") == "0100" else "native-windows-original-title-scene",
         "playable": False,
         "original_game_scene_observed_in_native_port": False,
         "original_title_UI_scene_observed_in_native_port": window["execution"].get("scene_frames_presented", 0) > 0,
@@ -123,6 +123,9 @@ def main():
             "frontier": window["execution"]["frontier"],
             "frontier_module": window["execution"].get("frontier_module", "main ELF"),
             "original_world_packets_submitted": window["execution"].get("world_packets_submitted", 0),
+            "player_updates_completed": window["execution"].get("player_updates_completed", 0),
+            "child_updates_completed": window["execution"].get("child_updates_completed", 0),
+            "last_move_entry": window["execution"].get("last_move_entry"),
             "full_game_scene_or_gameplay_observed": False},
         "tests": {"native_build": native["status"],
                   "built_modules": native["module_names"],

@@ -1,6 +1,7 @@
 #include "game_cloth_angles.h"
 #include "game_axis_angle.h"
 #include "game_camera.h"
+#include "game_ee_acos.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -23,7 +24,7 @@ static gh_cloth_status body(gh_cloth_angles*s,gh_cloth_forces*forces,gh_player_s
   if(target==255){direction(model->parts[id].bytes+0x80,local,reference);normalize(reference);}else{if(target>=44||target>=model->parts_allocated)return fail(s,0x104ac0,GH_CLOTH_BOUNDS);memcpy(points[id],records+target*0xa0+0x40,12);for(unsigned k=0;k<3;k++)reference[k]=add(rf(records+target*0xa0+0x40+k*4),-points[target][k]);if(reference[0]==0&&reference[1]==0&&reference[2]==0)memcpy(reference,local,12);else normalize(reference);}
   float current[3];for(unsigned k=0;k<3;k++)current[k]=add(rf(r+0x40+4*k),-points[id][k]);float length=norm(current);
   if(current[0]==0&&current[1]==0&&current[2]==0)memcpy(current,local,12);else normalize(current);
-  float dot=add(add(mul(reference[0],current[0]),mul(reference[1],current[1])),mul(reference[2],current[2]));float radical=add(1,-mul(dot,dot));if(!isfinite(radical)||radical<0)return fail(s,0x1f8140,GH_CLOTH_UNSUPPORTED);float angle;uint32_t pc;if(gh_game_angle_001f8180(sqrtf(radical),dot,&angle,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&pc))return fail(s,pc,GH_CLOTH_UNSUPPORTED);float limit;memcpy(&limit,springs->coefficients[0]+row,4);if(!isfinite(limit)||!isfinite(length))return fail(s,0x104d94,GH_CLOTH_NUMERIC);
+  float dot=add(add(mul(reference[0],current[0]),mul(reference[1],current[1])),mul(reference[2],current[2]));float angle;uint32_t pc;if(gh_game_ee_acos_reference_001f8140(dot,&angle,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&pc))return fail(s,pc,GH_CLOTH_UNSUPPORTED);float limit;memcpy(&limit,springs->coefficients[0]+row,4);if(!isfinite(limit)||!isfinite(length))return fail(s,0x104d94,GH_CLOTH_NUMERIC);
   if(limit<angle&&angle<3.1315928f){float axis[3]={add(mul(reference[1],current[2]),-mul(reference[2],current[1])),add(mul(reference[2],current[0]),-mul(reference[0],current[2])),add(mul(reference[0],current[1]),-mul(reference[1],current[0]))};float target_angle=add(mul(angle,0.2f),mul(limit,0.8f)),matrix[16],rotated[3];if(gh_axis_angle_matrix_0015af30(target_angle,axis,pivot->bytes,matrix,prefix->bindings.matrix_policy,&pc))return fail(s,pc,GH_CLOTH_UNSUPPORTED);direction((const uint8_t*)matrix,reference,rotated);for(unsigned k=0;k<3;k++){float value=add(mul(rotated[k],length),points[id][k]);memcpy(r+0x40+4*k,&value,4);}corrections++;}
   for(unsigned k=0;k<3;k++)if(!isfinite(points[id][k])||!isfinite(rf(r+0x40+4*k)))return fail(s,0x104ec4,GH_CLOTH_NUMERIC);
  }

@@ -87,6 +87,9 @@ typedef struct gh_startup_snapshot {
     uint16_t current_room,next_room;
     /* Read-only developer frontier diagnostics; no actor pointers escape. */
     uint32_t scene_stage,hitarea_phase,hitarea_slot,hitarea_node;
+    uint64_t player_updates_completed,child_updates_completed;
+    uint32_t last_move_handle,last_move_entry,player_update_stage,child_update_stage;
+    uint32_t child_update_frontier,child_forces_complete,child_angles_complete,child_distances_complete,child_finish_complete;
     uint32_t hitarea_shape_index,hitarea_shape_flags,hitarea_shape_kind;
     int32_t hitarea_hit_count;uint8_t hitarea_diagnostic_ready,hitarea_hit_samples;
     uint32_t hitarea_hit_indices[4],hitarea_hit_kinds[4],hitarea_hit_distance_bits[4];

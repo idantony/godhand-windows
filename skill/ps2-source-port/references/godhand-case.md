@@ -228,3 +228,15 @@ host pointers. Source and target views must resolve the same registered owners.
 The real actor may aliasF0 to a part: reading rawF0 bytes as a position can give
 a plausible wrong ray. A genuine original earlyout may avoid reading unrelated
 player pause globals; require them only on a branch that actually consumes them.
+
+
+God Hand cloth's1F8140 is an EE CPU COP1 operation, not a VU instruction.
+Its actual leaf computes MUL.S, SUB.S, SQRT.S and calls1F8180. The real first
+parent-updated child produced input3F800001 (one ULP above1), radicalB4800000.
+Host sqrtf of the negative radicand wrongly stopped that supported path.
+The explicit finite binary32 reference uses the pinned PCSX2 EE SQRT numeric
+sign-magnitude rule: negative-normal magnitude is square-rooted. It does not
+clamp the dot input, change game thresholds, own FCR31 or claim hardware bits.
+The same-snapshot independent oracle, actual parent/child call counters and
+normal67 Windows run verify the correction. Do not generalize this CPU rule
+to every PS2/VU instruction or copy diagnostic-only G sources into production.
