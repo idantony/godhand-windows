@@ -18,6 +18,7 @@ typedef struct gh_adx_decoder gh_adx_decoder;
  * bounded ELF32 PT_LOAD spans. No executable bytes are run or host-cast. */
 gh_adx_error gh_adx_key_from_elf(const void*,size_t,gh_adx_key*);
 /* Restricted ADX encoding3/frame18/bits4/stereo/version0408, 48k/500Hz.
+ * Includes the verified 0x28-byte nonlooping header with stereo history.
  * Borrows immutable source until close; scans all real scale headers against
  * the key. This is format validation, not cryptographic authentication. */
 gh_adx_error gh_adx_open(const void*,size_t,const gh_adx_key*,gh_adx_decoder**);

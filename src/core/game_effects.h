@@ -14,7 +14,8 @@ struct gh_effect_native;
 typedef struct {gh_effect_resource resources[64];gh_effect_view emd_tables[1250],emitter_entries[64];
  gh_effect_view ssd,ear;uint32_t cached408,cached40c,field414;uint8_t active;
  uint32_t vectors[1000][4];gh_effect_pool_node nodes[32],head;uint32_t pool_words[32];
- uint8_t ready;uint32_t frontier;int detail;struct gh_effect_native *native;} gh_game_effects;
+ uint8_t ready;uint32_t frontier;int detail;struct gh_effect_native *native;
+ uint8_t event_registered_41c;gh_effect_view event_data;} gh_game_effects;
 typedef enum {GH_EFFECT_OK,GH_EFFECT_ARGUMENT,GH_EFFECT_BOUNDS,GH_EFFECT_UNSUPPORTED} gh_effect_status;
 /* Borrow exactcanonicalbuffers alreadyreset by2FAA20/3003F0. Live slots need
  * realoriginalkillconsumers, currently explicitunsupported302918/2FBE50.
@@ -26,6 +27,9 @@ gh_effect_status gh_game_effects_initialize_00305a68(gh_game_effects *,
 /* Actual306D18/306F88 pool initialization: XYZzero, Wpreserved;32nodes plus
  * sentinel use explicitindices (-1=NULL,32=head) instead of32bitguestpointers. */
 void gh_game_effects_pool_reset_00306d18(gh_game_effects *);
+/* 2FA0B0 -> 305758, original bank 6. The EV01 bundle is borrowed until
+ * 2FA0E8/305778 removes its references or the effects owner is retired. */
+gh_effect_status gh_game_effects_register_event_002fa0b0(gh_game_effects *, const void *, size_t);
 #ifdef __cplusplus
 }
 #endif

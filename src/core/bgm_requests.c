@@ -1,4 +1,5 @@
 #include "bgm_requests.h"
+#include "game_event_audio.h"
 #include <stdlib.h>
 #include <string.h>
 #include <fenv.h>
@@ -8,10 +9,13 @@
 typedef struct {uint8_t scalar[0xdc],row[32];gh_r207_allocation encoded,work;
  uint64_t offset,size;uint32_t work_bytes,rate;uint16_t member;
  uint8_t occupied,source_loaded,adx_channels,adx_version,adx_flags,linked,start_pending;
- int previous,next;gh_adx_stream *player;gh_adx_stream_status transport;} request;
+ int previous,next;gh_adx_stream *player;gh_adx_stream_status transport;
+ gh_adx_decoder *event_prefetch_decoder;
+ uint32_t event_prefetch_bytes;
+ float event_prefetch_gain;} request;
 struct gh_bgm_requests {gh_audio_registry *registry;gh_sound_control *control;gh_disc *disc;gh_heap *heap;
  request requests[16];uint32_t frontier;DWORD owner;gh_adx_key key;int16_t decibels[128];
- int native_enabled,muted,head;int32_t current128;uint32_t field138,field44,field48;
+ int native_enabled,event_output_enabled,muted,head;int32_t current128;uint32_t field138,field44,field48;
  uint8_t fallback_map[24],scene_event_valid;int32_t scene_event;const gh_game_children *scene_children;const gh_game_init_state *scene_init;uint32_t field134;};
 static uint16_t u16(const uint8_t*p){return (uint16_t)((unsigned)p[0]|(unsigned)p[1]<<8);}
 static uint32_t u32(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
@@ -108,7 +112,8 @@ static gh_bgm_status gain(gh_bgm_requests*s,request*q,float volume){
  volatile float result=scaled*rf(q->scalar+0x2c);float limited=result;if(limited>=127)limited=127;
  if(!isfinite(limited)||limited<0)return fail(s,0x373ff0,GH_BGM_UNSUPPORTED);
  int index=(int)limited;volatile float exponent=(float)s->decibels[index]/200.0f;float linear=powf(10.0f,exponent);
- if(gh_adx_stream_set_gain(q->player,linear)!=GH_ADX_OK)return fail(s,0x32a9f0,GH_BGM_NATIVE);
+ if(q->event_prefetch_decoder)q->event_prefetch_gain=linear;
+ else if(gh_adx_stream_set_gain(q->player,linear)!=GH_ADX_OK)return fail(s,0x32a9f0,GH_BGM_NATIVE);
  putf(q->scalar+0x14,volume);return GH_BGM_OK;
 }
 static void fade(request*q,float target,float frames){
@@ -117,6 +122,7 @@ static void fade(request*q,float target,float frames){
 }
 static gh_bgm_status clear_stream(gh_bgm_requests*s,request*q){
  q->start_pending=0;if(q->player){gh_adx_stream_close(q->player);q->player=NULL;}memset(&q->transport,0,sizeof(q->transport));
+ if(q->event_prefetch_decoder){gh_adx_close(q->event_prefetch_decoder);q->event_prefetch_decoder=NULL;}
  if(q->work.pointer){if(gh_heap_release(s->heap,q->work)!=GH_MEM_OK)return fail(s,0x373d48,GH_BGM_MEMORY);q->work=(gh_r207_allocation){0};}
  if(q->encoded.pointer){if(gh_heap_release(s->heap,q->encoded)!=GH_MEM_OK)return fail(s,0x373d48,GH_BGM_MEMORY);q->encoded=(gh_r207_allocation){0};q->source_loaded=0;}
  memset(q->scalar,0,0x84);return GH_BGM_OK;
@@ -124,6 +130,246 @@ static gh_bgm_status clear_stream(gh_bgm_requests*s,request*q){
 static void unlink_request(gh_bgm_requests*s,request*q){
  if(q->previous<0)s->head=q->next;else s->requests[q->previous].next=q->next;
  if(q->next>=0)s->requests[q->next].previous=q->previous;q->linked=0;q->occupied=0;w32(q->scalar+0x94,0);
+}
+
+static int find_event_request(const gh_bgm_requests *s,unsigned channel,uint32_t row)
+{
+    for(int i=s->head;i>=0;i=s->requests[i].next){
+        const request *q=&s->requests[i];
+        if(u32(q->scalar+0x8c)==0x80u+channel && u32(q->scalar+0x90)==row)
+            return i;
+    }
+    return -1;
+}
+
+gh_bgm_status gh_bgm_event_enable_output(gh_bgm_requests *s)
+{
+    if(!own(s)||!s->native_enabled)return GH_BGM_ARGUMENT;
+    s->event_output_enabled=1;
+    return GH_BGM_OK;
+}
+
+gh_bgm_status gh_bgm_event_start_002d1d00(gh_bgm_requests *s,unsigned channel,uint32_t row,
+    int32_t delay,int *original)
+{
+    if(!own(s)||!original||channel!=1)return GH_BGM_ARGUMENT;
+    *original=0;
+    s->frontier=0;
+    int slot=find_event_request(s,channel,row);
+    if(slot<0){
+        for(unsigned i=0;i<16;++i)if(!s->requests[i].occupied){
+            if(row>55 || !gh_audio_startup_ready(s->registry,NULL,NULL,NULL))return GH_BGM_OK;
+            (void)delay; /* Missing-request branch writes delay through 373A18. */
+            return fail(s,0x2cc900,GH_BGM_UNSUPPORTED);
+        }
+        return GH_BGM_OK;
+    }
+    request *q=&s->requests[slot];
+    if(!(u32(q->scalar+0x98)&1)){*original=1;return GH_BGM_OK;}
+    if(row || u32(q->scalar+0x94)!=4 || !q->event_prefetch_decoder || q->player ||
+       gh_adx_tell(q->event_prefetch_decoder)!=0)
+        return fail(s,0x2ccac8,GH_BGM_UNSUPPORTED);
+    if(!s->event_output_enabled)return fail(s,0x3734f0,GH_BGM_UNSUPPORTED);
+
+    /* Existing request ignores delay. Keep its software pause state until a
+     * real endpoint has accepted PCM, so a failed open leaves it retryable. */
+    request started=*q;
+    started.event_prefetch_decoder=NULL;
+    gh_adx_error audio=gh_adx_stream_open(q->encoded.pointer,(size_t)q->size,&s->key,&started.player);
+    if(!audio)audio=gh_adx_stream_set_muted(started.player,s->muted);
+    if(audio){gh_adx_stream_close(started.player);return fail(s,0x3734f0,GH_BGM_NATIVE);}
+    fenv_t saved;
+    if(feholdexcept(&saved)){
+        gh_adx_stream_close(started.player);return fail(s,0x373ff0,GH_BGM_UNSUPPORTED);
+    }
+    gh_bgm_status status=fesetround(FE_TONEAREST)?fail(s,0x373ff0,GH_BGM_UNSUPPORTED):gain(s,&started,rf(q->scalar+0x14));
+    if(fesetenv(&saved))status=fail(s,0x373ff0,GH_BGM_UNSUPPORTED);
+    if(!status && (gh_adx_stream_start(started.player)||gh_adx_stream_poll(started.player,&started.transport)))
+        status=fail(s,0x3734f0,GH_BGM_NATIVE);
+    if(status){gh_adx_stream_close(started.player);return status;}
+    gh_adx_close(q->event_prefetch_decoder);
+    w32(started.scalar+0x98,u32(started.scalar+0x98)&~1u);
+    w32(started.scalar+0x4c,u32(started.scalar+0x4c)&~2u);
+    *q=started;
+    *original=1;
+    return GH_BGM_OK;
+}
+
+gh_bgm_status gh_bgm_event_wait_002d1dd0(const gh_bgm_requests *s,unsigned channel,uint32_t row,int *ready)
+{
+    if(!own(s)||!ready||channel!=1)return GH_BGM_ARGUMENT;
+    int slot=find_event_request(s,channel,row);
+    const request *q=slot<0?NULL:&s->requests[slot];
+    /* Native positive playback proof uses actual waveOut completion. A
+     * submitted buffer alone does not prove SDK's running-or-later state. */
+    *ready=!q || (u32(q->scalar+0x98)&1) ||
+        q->transport.completed_frames>0 || q->transport.complete;
+    return GH_BGM_OK;
+}
+
+gh_bgm_status gh_bgm_event_fade_002d1e18(gh_bgm_requests *s,unsigned channel,int32_t row)
+{
+    if(!own(s)||channel>1||row< -1)return GH_BGM_ARGUMENT;
+    for(int i=s->head;i>=0;i=s->requests[i].next){
+        request *q=&s->requests[i];
+        if(row==-1 || (u32(q->scalar+0x8c)==0x80u+channel && u32(q->scalar+0x90)==(uint32_t)row))
+            fade(q,0,15);
+    }
+    s->frontier=0;
+    return GH_BGM_OK;
+}
+
+static gh_bgm_status tick_paused_event_prefetch(gh_bgm_requests *s,request *q)
+{
+    if(u32(q->scalar+0x8c)!=0x81 || u32(q->scalar+0x94)!=4 ||
+       u32(q->scalar+0x98)!=1 || u32(q->scalar+0x4c)!=3 ||
+       u32(q->scalar+0xb0)!=1 || !q->event_prefetch_decoder || !q->event_prefetch_bytes ||
+       gh_adx_tell(q->event_prefetch_decoder)!=0 || q->player ||
+       rf(q->scalar+0x50)!=0 || rf(q->scalar+0x2c)!=1 || rf(q->scalar+0x30)!=1)
+        return fail(s,0x372cb0,GH_BGM_UNSUPPORTED);
+    volatile float desired=rf(q->scalar+0x20)*rf(q->scalar+0x18);
+    float time=rf(q->scalar+0x1c);
+    float volume=desired;
+    if(time>0){
+        volatile float next=time-1.0f,difference=rf(q->scalar+0x14)-desired;
+        volatile float delta=difference/time,result=rf(q->scalar+0x14)-delta;
+        putf(q->scalar+0x1c,next);
+        volume=result;
+    }
+    gh_bgm_status status=gain(s,q,volume);
+    if(status || volume>0)return status;
+    /* 373430 reaches a fully stopped software request immediately. The
+     * next 2CD310 visit observes it and unlinks it from the original list. */
+    return clear_stream(s,q);
+}
+
+static gh_bgm_status complete_event_prefetch(gh_bgm_requests *s,request *q)
+{
+    gh_adx_info info;
+    if(gh_adx_inspect(q->event_prefetch_decoder,&info)||gh_adx_tell(q->event_prefetch_decoder)!=0)
+        return fail(s,0x373fa0,GH_BGM_NATIVE);
+    /* 373FA0/32B188 set cold pause/priming before 32BB48 associates archive
+     * member0. The native decoder already borrows this complete owned member. */
+    uint32_t capacity=(q->work_bytes-2u*0x40c0u-0x124u)/2048u;
+    uint32_t sectors=(2u*info.sample_rate/32u*info.channels*18u)/2048u;
+    if(sectors>capacity)sectors=capacity;
+    q->event_prefetch_bytes=sectors*2048u;
+    if(!q->event_prefetch_bytes || q->event_prefetch_bytes>q->size-info.data_offset)
+        return fail(s,0x3741b0,GH_BGM_BOUNDS);
+
+    fenv_t saved;
+    if(feholdexcept(&saved))return fail(s,0x373ff0,GH_BGM_UNSUPPORTED);
+    if(fesetround(FE_TONEAREST)){(void)fesetenv(&saved);return fail(s,0x373ff0,GH_BGM_UNSUPPORTED);}
+    w32(q->scalar+0x4c,3); /* 373158 publishes the paused stream bit. */
+    gh_bgm_status status=gain(s,q,0);
+    if(!status){
+        fade(q,1,0); /* 2CD398 -> 2CD470, actual AFD fade-in 0. */
+        w32(q->scalar+0xb4,0);
+        w32(q->scalar+0xb0,1); /* 2CD310 clears hold bit8, already clear. */
+        status=tick_paused_event_prefetch(s,q);
+    }
+    if(fesetenv(&saved))return fail(s,0x373ff0,GH_BGM_UNSUPPORTED);
+    if(status)return status;
+    int slot=(int)(q-s->requests);
+    q->previous=-1;q->next=s->head;
+    if(s->head>=0)s->requests[s->head].previous=slot;
+    s->head=slot;q->linked=1;s->frontier=0;
+    return GH_BGM_OK;
+}
+
+gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
+    const struct gh_event_audio_prefetch_request *source)
+{
+    if(!own(s)||!source||source->registry!=s->registry||source->disc!=s->disc)return GH_BGM_ARGUMENT;
+    const uint8_t *row=source->afd_row;
+    if(source->archive_id!=0x81 || source->row_index || u16(row+2) || row[10]!=1 || row[11]!=9 ||
+       row[15]!=3 || row[16] || u16(row+4) || u16(row+8)!=48000 || !row[12])
+        return fail(s,0x373158,GH_BGM_UNSUPPORTED);
+    uint64_t offset,size;
+    if(gh_audio_event_afs_member(s->registry,source->archive_owner,0,&offset,&size)||
+       offset!=source->member_offset||size!=source->member_size)
+        return fail(s,0x32bb48,GH_BGM_BOUNDS);
+    for(unsigned i=0;i<16;++i){
+        request *pending=&s->requests[i];
+        if(!pending->occupied||pending->linked)continue;
+        if(pending->source_loaded && u32(pending->scalar+0x8c)==0x81 && pending->offset==source->member_offset &&
+           pending->size==source->member_size && !memcmp(pending->row,row,32))
+            return pending->event_prefetch_decoder?complete_event_prefetch(s,pending):fail(s,0x329438,GH_BGM_UNSUPPORTED);
+        return fail(s,s->frontier?s->frontier:0x2d2228,GH_BGM_BUSY);
+    }
+    /* 2D22B0 finds a linked request by archive and row, never by room track. */
+    for(int i=s->head;i>=0;i=s->requests[i].next){
+        request *old=&s->requests[i];
+        if(u32(old->scalar+0x8c)==0x81 && u32(old->scalar+0x90)==0){
+            if(!old->event_prefetch_decoder||old->player||u32(old->scalar+0x98)!=1)
+                return fail(s,0x2ccb10,GH_BGM_UNSUPPORTED);
+            gh_bgm_status status=clear_stream(s,old);
+            if(status)return status;
+            unlink_request(s,old);
+            break;
+        }
+    }
+    request *slot=NULL;
+    for(unsigned i=0;i<16;++i)if(!u32(s->requests[i].scalar+0x94)){slot=&s->requests[i];break;}
+    if(!slot){s->frontier=0;return GH_BGM_OK;}
+    if(!s->native_enabled)return fail(s,0x329438,GH_BGM_UNSUPPORTED);
+    gh_disc_entry archive;
+    size_t archive_index;
+    if(gh_disc_find(s->disc,"se/ev/ev01.afs",&archive_index)||archive_index!=source->archive_index||
+       gh_disc_entry_at(s->disc,archive_index,&archive)||source->member_offset!=0x800||
+       source->member_size!=0x21ae3a||source->member_offset+source->member_size>archive.size)
+        return fail(s,0x32bb48,GH_BGM_DISC);
+
+    request next={0};
+    memcpy(next.row,row,32);
+    next.rate=48000;
+    next.offset=source->member_offset;
+    next.size=source->member_size;
+    uint32_t sectors=(2u*48u*25000u/44u*4u+2048u)/2048u;
+    next.work_bytes=sectors*2048u+2u*0x40c0u+0x24u+0x40u;
+    if(gh_heap_allocate(s->heap,next.work_bytes,64,&next.work)!=GH_MEM_OK)
+        return fail(s,0x31c8e0,GH_BGM_MEMORY);
+    gh_bgm_status status=GH_BGM_MEMORY;
+    uint32_t frontier=0x31c8e0;
+    if(gh_heap_allocate(s->heap,(size_t)next.size,64,&next.encoded)!=GH_MEM_OK)goto release;
+    status=GH_BGM_DISC;
+    frontier=0x32bb48;
+    if(gh_disc_read(s->disc,archive_index,next.offset,next.encoded.pointer,(size_t)next.size))goto release;
+    status=GH_BGM_UNSUPPORTED;
+    frontier=0x329438;
+    const uint8_t *encoded=next.encoded.pointer;
+    if(encoded[0]!=0x80||encoded[1]||encoded[2]||encoded[3]!=0x24||encoded[4]!=3||
+       encoded[7]!=2||be32(encoded+8)!=next.rate||encoded[18]!=4||encoded[19]!=8||
+       memcmp(encoded+0x22,"(c)CRI",6))goto release;
+    next.adx_channels=encoded[7];next.adx_version=encoded[18];next.adx_flags=encoded[19];
+    next.occupied=next.source_loaded=1;
+    w32(next.scalar+0x8c,0x81);w32(next.scalar+0x94,4);
+    w32(next.scalar+0x98,1);w32(next.scalar+0x9c,UINT32_MAX);
+    w32(next.scalar+0x48,1);w32(next.scalar+0x74,0x81);w32(next.scalar+0x4c,1);
+    w32(next.scalar+0x58,row[10]);w32(next.scalar+0x54,row[11]&3);
+    memcpy(next.scalar+0x5c,row+0x11,8);memcpy(next.scalar+0x64,row+0x19,4);
+    memcpy(next.scalar+0x68,row+0x1d,3);
+    wf(next.scalar+0x20,row[12]);wf(next.scalar+0x24,u16(row+4));wf(next.scalar+0x28,u16(row+6));
+    fenv_t saved;
+    status=GH_BGM_UNSUPPORTED;
+    frontier=0x373d90;
+    if(fegetenv(&saved)||fesetround(FE_TONEAREST))goto release;
+    volatile float ratio=(float)row[13]/(float)row[12],scaled=ratio*100.0f;
+    volatile float step=(float)((int)scaled+1),factor=step/100.0f;
+    putf(next.scalar+0x34,factor);
+    if(fesetenv(&saved))goto release;
+    w32(next.scalar+0xc,next.rate);w32(next.scalar+0x10,2);
+    w32(next.scalar+0x2c,0x3f800000);w32(next.scalar+0x30,0x3f800000);
+    if(gh_adx_open(encoded,(size_t)next.size,&s->key,&next.event_prefetch_decoder)!=GH_ADX_OK){
+        *slot=next;
+        return fail(s,0x329438,GH_BGM_UNSUPPORTED);
+    }
+    *slot=next;
+    return complete_event_prefetch(s,slot);
+release:
+    if(next.encoded.pointer)(void)gh_heap_release(s->heap,next.encoded);
+    (void)gh_heap_release(s->heap,next.work);
+    return fail(s,frontier,status);
 }
 static gh_bgm_status stream_update(gh_bgm_requests*s,request*q){
  if(!q->player)return GH_BGM_OK;uint32_t flags=u32(q->scalar+0x4c);float delay=rf(q->scalar+0x50);
@@ -152,7 +398,13 @@ static gh_bgm_status stream_update(gh_bgm_requests*s,request*q){
  if(q->transport.complete)return clear_stream(s,q);return GH_BGM_OK;
 }
 static gh_bgm_status update_one(gh_bgm_requests*s,request*q){
- uint32_t mode=u32(q->scalar+0x94);if(!mode)return GH_BGM_OK;if(mode!=1&&mode!=5)return fail(s,0x2cc628,GH_BGM_UNSUPPORTED);
+ uint32_t mode=u32(q->scalar+0x94);if(!mode)return GH_BGM_OK;
+ if(mode==4){
+  if(q->event_prefetch_decoder)return tick_paused_event_prefetch(s,q);
+  if(q->player)return stream_update(s,q);
+  unlink_request(s,q);return GH_BGM_OK;
+ }
+ if(mode!=1&&mode!=5)return fail(s,0x2cc628,GH_BGM_UNSUPPORTED);
  if(!q->player){if(q->linked)unlink_request(s,q);return GH_BGM_OK;}
  uint32_t state=u32(q->scalar+0xb0);if(state>2)return fail(s,0x2cd1d0,GH_BGM_UNSUPPORTED);
  if(state==0){if(u16(q->scalar+0xa0)&1){w32(q->scalar+0x4c,u32(q->scalar+0x4c)|8);w32(q->scalar+0xb4,(uint32_t)(int32_t)(int16_t)u16(q->scalar+0xa2));}w32(q->scalar+0xb0,1);state=1;}
@@ -225,7 +477,7 @@ gh_bgm_status gh_bgm_event_start_002d1610(gh_bgm_requests*s,uint32_t event,int16
 }
 gh_bgm_status gh_bgm_event_fade_002d1768(gh_bgm_requests*s,uint32_t event,float frames,float target,float initial_factor){
  if(!own(s)||!isfinite(frames)||!isfinite(target)||!isfinite(initial_factor)||frames<0)return GH_BGM_ARGUMENT;
- request*q=NULL;for(int i=s->head;i>=0;i=s->requests[i].next)if(u32(s->requests[i].scalar+0x90)==event){q=&s->requests[i];break;}
+ request*q=NULL;for(int i=s->head;i>=0;i=s->requests[i].next){request*r=&s->requests[i];if(u32(r->scalar+0x8c)==0x80&&u32(r->scalar+0x90)==event){q=r;break;}}
  if(!q){s->frontier=0;return GH_BGM_OK;}
  if(initial_factor>=0)return fail(s,0x373938,GH_BGM_UNSUPPORTED);
  fenv_t saved;if(fegetenv(&saved)||fesetround(FE_TONEAREST))return fail(s,0x3735e0,GH_BGM_UNSUPPORTED);
@@ -238,7 +490,7 @@ gh_bgm_status gh_bgm_event_stop_002d1800(gh_bgm_requests*s,int preserve_mode5){
  fenv_t saved;if(fegetenv(&saved)||fesetround(FE_TONEAREST))return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);
  gh_bgm_status e=GH_BGM_OK;for(int i=s->head;i>=0;i=s->requests[i].next){request*q=&s->requests[i];
   if(u32(q->scalar+0x94)==5){if(!preserve_mode5)fade(q,0,0);}
-  else {e=fail(s,0x2d1854,GH_BGM_UNSUPPORTED);break;}}
+  else if(!(u32(q->scalar+0x94)==4 && u32(q->scalar+0x8c)==0x81 && !(u32(q->scalar+0x98)&0x1000))) {e=fail(s,0x2d1854,GH_BGM_UNSUPPORTED);break;}}
  if(fesetenv(&saved))return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);if(!e)s->frontier=0;return e;
 }
 int gh_bgm_requests_scene_event(const gh_bgm_requests*s,int32_t*out){if(!own(s)||!out||!s->scene_event_valid)return 0;*out=s->scene_event;return 1;}
@@ -315,6 +567,7 @@ int gh_bgm_requests_automatic_state(const gh_bgm_requests*s,gh_bgm_automatic_sta
 gh_bgm_status gh_bgm_requests_abort_pending(gh_bgm_requests*s){
  if(!own(s))return GH_BGM_ARGUMENT;if(gh_bgm_requests_active(s))return GH_BGM_BUSY;for(unsigned i=0;i<16;i++){request*q=&s->requests[i];
   if(q->player){gh_adx_stream_close(q->player);q->player=NULL;}
+  if(q->event_prefetch_decoder){gh_adx_close(q->event_prefetch_decoder);q->event_prefetch_decoder=NULL;}
   if(q->encoded.pointer){if(gh_heap_release(s->heap,q->encoded)!=GH_MEM_OK)return GH_BGM_MEMORY;q->encoded=(gh_r207_allocation){0};}
   if(q->work.pointer){if(gh_heap_release(s->heap,q->work)!=GH_MEM_OK)return GH_BGM_MEMORY;q->work=(gh_r207_allocation){0};}memset(q,0,sizeof(*q));
  }s->frontier=0;return GH_BGM_OK;

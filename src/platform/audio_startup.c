@@ -10,7 +10,8 @@ typedef struct bank {uint8_t *bytes;size_t size;gh_sound_bank view;
  uint32_t flags;directory afs;
 } bank;
 struct gh_audio_registry {bank banks[BANKS];uint64_t next;
- uint8_t *bgm_table;size_t bgm_size;directory bgm_afs;uint32_t bgm_flags;};
+ uint8_t *bgm_table;size_t bgm_size;directory bgm_afs;uint32_t bgm_flags;
+ directory event_afs;const void *event_afs_owner;};
 static uint32_t le(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|
  (uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static int valid_id(int16_t id){return id>=0 && id<BANKS;}
@@ -23,7 +24,7 @@ gh_audio_status gh_audio_registry_create(gh_audio_registry **out){
 }
 void gh_audio_registry_destroy(gh_audio_registry *r){
  if(r){for(unsigned i=0;i<BANKS;i++){free(r->banks[i].bytes);free(r->banks[i].afs.pairs);}
- free(r->bgm_table);free(r->bgm_afs.pairs);free(r);}
+ free(r->bgm_table);free(r->bgm_afs.pairs);free(r->event_afs.pairs);free(r);}
 }
 gh_audio_status gh_audio_commit_se(gh_audio_registry *r,int16_t id,const void *ses,
  size_t size,gh_audio_token *token){
@@ -148,6 +149,51 @@ static int afd_links_valid(gh_sound_span afd,const directory *dir){
   if(member>=dir->count)return 0;
  }
  return 1;
+}
+gh_audio_status gh_audio_event_afs_register(gh_audio_registry *r,const void *owner,
+    gh_disc *disc,const char *path,gh_sound_span afd)
+{
+    if(!r||!owner||!disc||!path||!afd.data)return GH_AUDIO_ARGUMENT;
+    if(r->event_afs_owner)return GH_AUDIO_UNSUPPORTED;
+    if(!afd_valid(afd)||le(afd.data+4)<16)return GH_AUDIO_FORMAT;
+    directory dir={0};
+    gh_audio_status status=read_directory(disc,path,&dir);
+    if(status)return status;
+    /* 322AD0 queues one directory sector, with compact sector-size entries. */
+    if(!dir.count||dir.count>255||dir.count>le(afd.data)||!afd_links_valid(afd,&dir))
+        status=GH_AUDIO_BOUNDS;
+    uint64_t next_offset=0;
+    for(uint32_t i=0;!status&&i<dir.count;++i){
+        uint32_t offset=dir.pairs[i*2],size=dir.pairs[i*2+1];
+        if(offset<2048||(offset&2047)||!size||size>UINT16_MAX*2048u || (i&&offset!=next_offset))
+            status=GH_AUDIO_BOUNDS;
+        next_offset=(uint64_t)offset+((uint64_t)size+2047)/2048*2048;
+    }
+    if(status){free(dir.pairs);return status;}
+    r->event_afs=dir;
+    r->event_afs_owner=owner;
+    return GH_AUDIO_OK;
+}
+
+gh_audio_status gh_audio_event_afs_member(const gh_audio_registry *r,const void *owner,
+    uint32_t index,uint64_t *offset,uint64_t *size)
+{
+    if(!r||!owner||!offset||!size)return GH_AUDIO_ARGUMENT;
+    if(r->event_afs_owner!=owner)return GH_AUDIO_NOT_FOUND;
+    if(index>=r->event_afs.count)return GH_AUDIO_BOUNDS;
+    *offset=r->event_afs.pairs[index*2];
+    *size=r->event_afs.pairs[index*2+1];
+    return GH_AUDIO_OK;
+}
+
+gh_audio_status gh_audio_event_afs_release(gh_audio_registry *r,const void *owner)
+{
+    if(!r||!owner)return GH_AUDIO_ARGUMENT;
+    if(r->event_afs_owner!=owner)return GH_AUDIO_NOT_FOUND;
+    free(r->event_afs.pairs);
+    r->event_afs=(directory){0};
+    r->event_afs_owner=NULL;
+    return GH_AUDIO_OK;
 }
 gh_audio_status gh_audio_commit_se_with_external_index(gh_audio_registry*r,int16_t id,
  const void*ses,size_t bytes,gh_disc*disc,gh_audio_token*token){

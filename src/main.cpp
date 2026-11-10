@@ -671,6 +671,14 @@ int main(int argc,char **argv)
         app.snapshot.hitarea_hit_kinds[0],app.snapshot.hitarea_hit_kinds[1],app.snapshot.hitarea_hit_kinds[2],app.snapshot.hitarea_hit_kinds[3],
         app.snapshot.hitarea_hit_distance_bits[0],app.snapshot.hitarea_hit_distance_bits[1],app.snapshot.hitarea_hit_distance_bits[2],app.snapshot.hitarea_hit_distance_bits[3]);
 #ifdef GH_NATIVE_STARTUP_QA
+    if(qa_new_game&&app.snapshot.fade){
+        const auto &d=app.snapshot;const auto &fade=*d.fade;uint32_t shift=0;
+        if(d.work)std::memcpy(&shift,(const uint8_t*)d.work+0x564,4);
+        std::fprintf(stderr,"QA_EVENT_BOUNDARY number%d flags%08X state%u phase%u config%08X callee%d clearStage%u clearDetail%d audioFlags%X cameraCuts%u actorRecords%u timingRows%u fadeState%02X count%u time%u from%08X to%08X shift%u\n",
+            d.event_number,d.event_flags,(unsigned)d.event_state,(unsigned)d.event_phase,d.event_config_flags,d.event_callee_error,
+            d.event_clear_stage,d.event_clear_detail,d.event_audio_flags,d.event_camera_cuts,d.event_actor_records,d.event_timing_rows,(unsigned)fade.state,(unsigned)fade.count,(unsigned)fade.time,
+            fade.color_from,fade.color_to,shift);
+    }
     if(qa_new_game)for(unsigned i=0;i<app.snapshot.emitter_samples;i++)std::fprintf(stderr,"QA Emitter slot%u bank%u kind%u flags%08X known%u type%u\n",app.snapshot.emitter_slots[i],app.snapshot.emitter_banks[i],app.snapshot.emitter_kinds[i],app.snapshot.emitter_flags[i],app.snapshot.emitter_known[i],app.snapshot.emitter_types[i]);
     if(qa_new_game&&app.snapshot.current_actor_ready){
         const auto&d=app.snapshot;std::fprintf(stderr,"QA CurrentActor kind%04X flags250%08X state%04X 5B0%08X 5B4%08X 5B8%08X HP548%04X HP54A%04X cooldown54C%08X 5C0XYZ%08X,%08X,%08X\n",d.current_actor_kind,d.current_actor_flags,d.current_actor_state,d.current_actor_5b0,d.current_actor_5b4,d.current_actor_5b8,d.current_actor_hp548,d.current_actor_hp54a,d.current_actor_54c,d.current_actor_5c0[0],d.current_actor_5c0[1],d.current_actor_5c0[2]);

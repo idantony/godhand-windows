@@ -11,7 +11,7 @@ extern "C" {
  * the TWO calls after124F60 has cleared player15F4 bit2, not124F60 itself. */
 typedef gh_game_event_status (*gh_event_clear_consumer)(void *,uint32_t *frontier);
 typedef struct {gh_game_event *event;const gh_game_event_config *config;gh_game_init_state *init;
- gh_room_pools *pools;gh_game_objects *global_objects;const gh_player_abort_bindings *player_abort;
+ gh_room_pools *pools;gh_game_objects *room_objects; /* original 005864E0 */const gh_player_abort_bindings *player_abort;
  gh_event_object_view object_view;gh_event_clear_consumer player_clear_0012c418,camera_reset_0013b9b8_then_00138d40,special_remove_00312708;
  gh_object_slot_release release_sound_slot;void *context;} gh_event_clear_bindings;
 typedef struct {gh_game_player_abort abort;uint8_t *player;uint32_t stage,frontier;} gh_event_player_clear;

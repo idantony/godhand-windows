@@ -23,10 +23,14 @@ def main():
     parser.add_argument("--jobs", type=int, default=4, help="Independent compiler processes (1..16); device tests remain serial")
     parser.add_argument("--hardware-audio", action="store_true", help="Run muted real-device voice, ADX, BGM and scene-flow checks")
     parser.add_argument("--adx-reference-wave", type=Path, help="Independent vgmstream WAV for the full native ADX sample comparison")
+    parser.add_argument("--event-adx-reference-wave", type=Path,
+                        help="Independent vgmstream WAV for the EV01 compact ADX comparison")
     parser.add_argument("--movie-codec", type=Path, help="Also run the muted Movie0 native codec/device check")
     parser.add_argument("--compiler", type=Path, default=PROJECT / ".tools" / "zig-x86_64-windows-0.17.1" / "zig.exe", help="Zig executable; permits reusing an installed toolchain")
     parser.add_argument("--scratch", type=Path, default=SCRATCH, help="External build/cache root")
     args = parser.parse_args()
+    wave_inputs = {"adx-reference": args.adx_reference_wave,
+                   "event-adx-reference": args.event_adx_reference_wave}
     if not 1 <= args.jobs <= 16:
         parser.error("--jobs must be in 1..16")
     compiler, scratch = args.compiler.resolve(), args.scratch.resolve()
@@ -278,6 +282,11 @@ def main():
                ("game_event_resource", "src/core/game_event_resource.c"),
                ("game_event_components", "src/core/game_event_components.c"),
                ("game_event_create", "src/core/game_event_create.c"),
+               ("game_event_data_prefix", "src/core/game_event_data_prefix.c"),
+               ("game_event_timing", "src/core/game_event_timing.c"),
+               ("game_event_actor_create", "src/core/game_event_actor_create.c"),
+               ("game_event_play_env", "src/core/game_event_play_env.c"),
+               ("game_event_audio", "src/core/game_event_audio.c"),
                ("game_event_link", "src/core/game_event_link.c"),
                ("r100_scripts", "src/rooms/r100_scripts.c"),
                ("r100_roof_task", "src/rooms/r100_roof_task.c"),
@@ -377,6 +386,10 @@ def main():
         ("game-event-resource", "tests/core/test_game_event_resource.c", "iso"),
         ("game-event-components", "tests/core/test_game_event_components.c", "iso"),
         ("game-event-create", "tests/core/test_game_event_create.c", "iso"),
+        ("game-event-data-prefix", "tests/core/test_game_event_data_prefix.c", "iso"),
+        ("game-event-play-env", "tests/core/test_game_event_play_env.c", "iso"),
+        ("game-event-actor-create", "tests/core/test_game_event_actor_create.c", "iso"),
+        ("game-event-audio", "tests/core/test_game_event_audio.c", "iso"),
         ("game-event-link", "tests/core/test_game_event_link.c", "iso"),
         ("r100-scripts", "tests/core/test_r100_scripts.c", "iso"),
         ("r100-roof-task", "tests/core/test_r100_roof_task.c", "iso"),
@@ -468,6 +481,7 @@ def main():
         ("se-voice-stop-bank", "tests/core/test_se_voice_stop_bank.c", "iso"),
         ("title-texture", "tests/core/test_title_texture.c", "iso"),
         ("adx", "tests/assets/test_adx.c", "adx-reference"),
+        ("adx-compact", "tests/assets/test_adx_compact.c", "event-adx-reference"),
         ("adx-stream", "tests/platform/test_adx_stream.c", "iso"),
         ("sound-scene-tick", "tests/core/test_sound_scene_tick.c", "iso"),
         ("game-world-light", "tests/core/test_game_world_light.c", "iso"),
@@ -766,19 +780,19 @@ def main():
         for name, _, inputs in extra_tests:
             if ((name in ("game-event-create", "se-voice", "se-stop", "se-bank2", "se-voice-stop-bank", "mc-control-flow", "bgm-requests", "bgm-automatic", "adx-stream", "r020-title", "game-services", "game-scene-exit", "scene-exit-cleanup", "game-object-sound", "sound-scene-exit") and not args.hardware_audio)
                     or (inputs == "movie" and not args.movie_codec)
-                    or (inputs == "adx-reference" and not args.adx_reference_wave)):
+                    or (inputs in wave_inputs and not wave_inputs[inputs])):
                 manifest.setdefault("skipped_checks", []).append({"name": "test-" + name, "reason": "Explicit hardware/codec opt-in not supplied"})
                 continue
             arguments = []
-            if inputs in ("iso", "both", "movie", "adx-reference"):
+            if inputs in ("iso", "both", "movie") or inputs in wave_inputs:
                 arguments.append(baseline["source_iso"]["path"])
             if inputs in ("elf", "both"):
                 arguments.append(PROJECT / "reference" / "SLUS_215.03")
             if inputs == "movie":
                 arguments.append(args.movie_codec.resolve())
-            if inputs == "adx-reference":
-                arguments.append(args.adx_reference_wave.resolve())
-            if name in ("enemy-se-banks", "game-object-sounds", "game-enemy-resources") and args.hardware_audio:
+            if inputs in wave_inputs:
+                arguments.append(wave_inputs[inputs].resolve())
+            if name in ("enemy-se-banks", "game-object-sounds", "game-enemy-resources", "game-event-audio") and args.hardware_audio:
                 arguments.append("--hardware-audio")
             run("test-" + name, [output / ("test_" + name.replace("-", "_") + ".exe")] + arguments)
     manifest["status"] = "passed" if not args.skip_tests else "build-only"

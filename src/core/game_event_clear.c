@@ -45,9 +45,9 @@ gh_game_event_status gh_event_clear_00296818(gh_event_clear_state*s,const gh_eve
    case 0:e=enemies(s,b);if(e)return e;p->phase++;break;
    case 6:if(b->config->flags&0x400)goto complete;/* fall through */
    case 1:case 2:case 3:case 4:case 5:case 7:p->phase++;break;
-   case 8:{if(!b->global_objects)return fail(&s->frontier,0x1fef30);
-    gh_object_status o=GH_OBJECT_OK;if(s->stage==1){o=gh_game_objects_release_nonpinned_001fef30(b->global_objects,b->release_sound_slot,b->context,&s->frontier);if(o){s->detail=o;return GH_EVENT_CALLEE;}s->stage=2;}
-    o=gh_game_objects_reset_records_001ff028(b->global_objects,&s->frontier);if(o){s->detail=o;return GH_EVENT_CALLEE;}goto complete;}
+   case 8:{if(!b->room_objects)return fail(&s->frontier,0x1fef30);
+    gh_object_status o=GH_OBJECT_OK;if(s->stage==1){o=gh_game_objects_release_nonpinned_001fef30(b->room_objects,b->release_sound_slot,b->context,&s->frontier);if(o){s->detail=o;if(!s->frontier)s->frontier=0x1fef30;return GH_EVENT_CALLEE;}s->stage=2;}
+    o=gh_game_objects_reset_records_001ff028(b->room_objects,&s->frontier);if(o){s->detail=o;if(!s->frontier)s->frontier=0x1ff028;return GH_EVENT_CALLEE;}goto complete;}
    default:break;
   }
   memset(s,0,sizeof(*s));return GH_EVENT_OK;

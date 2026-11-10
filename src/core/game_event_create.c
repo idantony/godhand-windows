@@ -1,4 +1,6 @@
 #include "game_event_create.h"
+#include "game_event_data_prefix.h"
+#include "game_scene_finish.h"
 static gh_game_event_status fail(gh_event_create_state*s,uint32_t pc,gh_game_event_status e){s->frontier=pc;return e;}
 static gh_game_event_status audio(gh_event_create_state*s,const gh_event_create_bindings*b,gh_event_audio_operation op,int32_t arg,int*ready){
  static const uint32_t calls[]={0x2d1900,0x2d19d8,0x2d1a30,0x2d1b70};if(!b->audio_channel1)return fail(s,calls[op],GH_EVENT_UNSUPPORTED);uint32_t pc=0;gh_game_event_status e=b->audio_channel1(b->context,op,b->event->fields.data_number,arg,ready,&pc);if(e)return fail(s,pc?pc:calls[op],e);if((op==GH_EVENT_AUDIO_READY_002D19D8||op==GH_EVENT_AUDIO_WAIT_002D1B70)&&*ready!=0&&*ready!=1)return fail(s,calls[op],GH_EVENT_ARGUMENT);return GH_EVENT_OK;
@@ -6,8 +8,8 @@ static gh_game_event_status audio(gh_event_create_state*s,const gh_event_create_
 static gh_game_event_status leaf(gh_event_create_state*s,const gh_event_create_bindings*b,gh_event_create_leaf fn,uint32_t address){if(!fn)return fail(s,address,GH_EVENT_UNSUPPORTED);uint32_t pc=0;gh_game_event_status e=fn(b->context,&pc);return e?fail(s,pc?pc:address,e):GH_EVENT_OK;}
 static void release_phase(gh_event_create_state*s,gh_game_event*e){e->fields.unknown07=0;e->fields.state=4;e->fields.phase=0;e->fields.unknown06=0;s->substep=0;s->finished=1;}
 gh_game_event_status gh_game_event_create_00296958(gh_event_create_state*s,const gh_event_create_bindings*b,int*done){
- if(!s||!b||!done||!b->event||!b->event->initialized||!b->work||!b->module||!b->components||!b->resource||!b->dvd||!b->heap)return GH_EVENT_ARGUMENT;*done=0;if(s->event&&s->event!=b->event)return GH_EVENT_ARGUMENT;s->event=b->event;s->frontier=0;if(s->finished)return GH_EVENT_OK;gh_game_event*e=b->event;gh_game_event_status status;int ready=0;
- switch(e->fields.phase){case 0:goto first;case 1:goto module;case 2:goto resource;case 3:goto audio_ready;case 4:goto data_ready;case 5:return fail(s,0x297a68,GH_EVENT_UNSUPPORTED);case 6:return fail(s,0x296bd0,GH_EVENT_UNSUPPORTED);default:return GH_EVENT_OK;}
+ if(!s||!b||!done||!b->event||!b->event->initialized||!b->work||!b->module||!b->components||!b->resource||!b->dvd||!b->heap)return GH_EVENT_ARGUMENT;*done=0;if(s->event&&s->event!=b->event)return GH_EVENT_ARGUMENT;s->event=b->event;s->frontier=0;if(s->finished)return GH_EVENT_OK;gh_game_event*e=b->event;gh_game_event_status status;int ready=0,enable_after=0;
+ switch(e->fields.phase){case 0:goto first;case 1:goto module;case 2:goto resource;case 3:goto audio_ready;case 4:goto data_ready;case 5:goto actor_ready;case 6:goto wait_for_play;default:return GH_EVENT_OK;}
 first:
  if(s->substep==0){if(!b->voices)return fail(s,0x2cbc58,GH_EVENT_UNSUPPORTED);while(s->bank<52){gh_voice_status v=gh_se_voice_stop_bank_002cbc58(b->voices,(int16_t)s->bank,0);if(v){s->detail=v;return fail(s,gh_se_voice_frontier(b->voices)?gh_se_voice_frontier(b->voices):0x2cbc58,GH_EVENT_CALLEE);}s->bank++;}s->substep=1;}
  if(s->substep==1){status=gh_game_event_module_begin_00297378(b->module,e,b->work,b->dvd,b->heap);if(status)return fail(s,b->module->frontier?b->module->frontier:0x297378,status);s->substep=2;}
@@ -26,5 +28,37 @@ data_ready:
  if(s->substep==0){status=audio(s,b,GH_EVENT_AUDIO_WAIT_002D1B70,-1,&ready);if(status)return status;if(!ready)return GH_EVENT_OK;s->substep=1;}
  if(s->substep==1){status=leaf(s,b,b->data_bind_002977e8,0x2977e8);if(status)return status;s->substep=2;}
  if(s->substep==2){status=leaf(s,b,b->data_prepare_002979f0,0x2979f0);if(status)return status;e->fields.phase++;s->substep=0;}
- if(e->fields.flags&0x10000000){release_phase(s,e);return GH_EVENT_OK;}return fail(s,0x297a68,GH_EVENT_UNSUPPORTED);
+ if(e->fields.flags&0x10000000){release_phase(s,e);return GH_EVENT_OK;}
+actor_ready:
+ if(b->actor_task_status){status=leaf(s,b,b->actor_task_status,0x297a68);if(status)return status;}
+ status=gh_event_actor_creation_poll_00297a68(b->components,&ready);
+ if(status)return fail(s,0x297a68,status);
+ if(!ready)return GH_EVENT_OK;
+ status=gh_event_actor_creation_end_normal_000012a8(b->components,&ready);
+ if(status)return fail(s,0x296b50,status);
+ if(!ready){
+  status=leaf(s,b,b->abnormal_fade_002d1e18,0x2d1e18);
+  if(status)return status;
+  release_phase(s,e);
+  return GH_EVENT_OK;
+ }
+ e->fields.flags|=0x10;
+ if(!(e->fields.flags&0x20))goto enter_play;
+ e->fields.phase++;
+wait_for_play:
+ if(!(e->fields.flags&0x40))return GH_EVENT_OK;
+ enable_after=1;
+enter_play:
+ if(!b->system_menu_enabled)return fail(s,0x2b65f0,GH_EVENT_ARGUMENT);
+ /* The immediate and gated branches both enable the original menu task's
+  * exit flag in the call that changes Create to Play. */
+ if(!enable_after)gh_scene_system_menu_enable_002b65f0(b->system_menu_enabled);
+ e->fields.unknown07=0;
+ e->fields.state=3;
+ e->fields.phase=0;
+ e->fields.unknown06=0;
+ if(enable_after)gh_scene_system_menu_enable_002b65f0(b->system_menu_enabled);
+ s->finished=1;
+ *done=1;
+ return GH_EVENT_OK;
 }

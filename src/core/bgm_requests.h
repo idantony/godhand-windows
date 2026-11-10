@@ -10,6 +10,7 @@
 extern "C" {
 #endif
 typedef struct gh_bgm_requests gh_bgm_requests;
+struct gh_event_audio_prefetch_request;
 typedef enum {GH_BGM_OK,GH_BGM_ARGUMENT,GH_BGM_MEMORY,GH_BGM_NOT_READY,
  GH_BGM_BOUNDS,GH_BGM_DISC,GH_BGM_BUSY,GH_BGM_UNSUPPORTED,GH_BGM_NATIVE} gh_bgm_status;
 typedef enum {GH_BGM_GAIN_NATIVE_DB_REFERENCE=1} gh_bgm_gain_policy;
@@ -38,6 +39,16 @@ gh_bgm_status gh_bgm_event_set_prefix_002d15a8(gh_bgm_requests *,uint32_t event,
  * binary32 nearest pow10 reference; not a claim of originalSPU2 DSP equality.
  * Configure before requests; masterMute is player-local, before firststart. */
 gh_bgm_status gh_bgm_requests_enable_native(gh_bgm_requests *,const gh_adx_key *,int muted,gh_bgm_gain_policy);
+/* Original archive 0x81 row 0 mode-4 prefetch in the common 16 slots.
+ * Links a paused software decoder with resident source and no audio endpoint. */
+gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *,
+    const struct gh_event_audio_prefetch_request *);
+/* The host opts into output before Event playback. Prefetch never uses it. */
+gh_bgm_status gh_bgm_event_enable_output(gh_bgm_requests *);
+gh_bgm_status gh_bgm_event_start_002d1d00(gh_bgm_requests *,unsigned channel,uint32_t row,
+    int32_t delay,int *original);
+gh_bgm_status gh_bgm_event_wait_002d1dd0(const gh_bgm_requests *,unsigned channel,uint32_t row,int *ready);
+gh_bgm_status gh_bgm_event_fade_002d1e18(gh_bgm_requests *,unsigned channel,int32_t row);
 /* Full immediate mode5 R020event0 path, including realnativeprepare,original
  * update andlistinsert. Doesnotstartplayback untiloriginalflagsrequest it. */
 gh_bgm_status gh_bgm_event_set_002d15a8(gh_bgm_requests *,uint32_t event,int16_t arg3,int16_t arg4);

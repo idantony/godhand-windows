@@ -35,10 +35,51 @@ static gh_effect_status reg(gh_game_effects*s,unsigned id,const gh_bundle*b){
  be=gh_bundle_find(b,"EMD",0,&e);if(be==GH_BUNDLE_OK){gh_effect_status x=emd(s,id,e);if(x)return x;}else if(be!=GH_BUNDLE_NOT_FOUND)return fail(s,0x3057d0,be,GH_EFFECT_BOUNDS);
  r->references++;return GH_EFFECT_OK;
 }
+
+gh_effect_status gh_game_effects_register_event_002fa0b0(gh_game_effects *s, const void *data, size_t bytes) {
+ if (!s || !s->ready) return GH_EFFECT_ARGUMENT;
+ s->frontier = 0;
+ s->detail = 0;
+ if (!data) return bytes ? fail(s, 0x2fa0b0, 0, GH_EFFECT_ARGUMENT) : GH_EFFECT_OK;
+
+ if (s->event_registered_41c && (s->event_data.bytes != data || s->event_data.size != bytes)) {
+  return fail(s, 0x2fa0e8, 0, GH_EFFECT_UNSUPPORTED);
+ }
+ gh_bundle bundle;
+ gh_bundle_entry table0, table1, emitters;
+ if (gh_bundle_open(data, bytes, &bundle) || gh_bundle_find(&bundle, "TBL", 0, &table0) ||
+     gh_bundle_find(&bundle, "TBL", 1, &table1) || gh_bundle_find(&bundle, "EMD", 0, &emitters) ||
+     table0.size < 4 || table1.size < 4 || emitters.size < 16 || u32(emitters.bytes) != 0x00444d45u) {
+  return fail(s, 0x3057d0, 0, GH_EFFECT_BOUNDS);
+ }
+ const uint32_t count = u32(emitters.bytes + 4);
+ if (count > 64 || count > (emitters.size - 16) / 4) return fail(s, 0x306af0, 0, GH_EFFECT_BOUNDS);
+ // EV01's EMD contains an empty emitter slot. A positive slot changes
+ // the shared emitter pointer array and requires its release path too.
+ for (uint32_t i = 0; i < count; ++i) {
+  if (u32(emitters.bytes + 16 + i * 4)) return fail(s, 0x306af0, (int)i, GH_EFFECT_UNSUPPORTED);
+ }
+ for (unsigned i = 0; i < 64; ++i) {
+  const gh_effect_resource *r = s->resources + i;
+  if (r->kind == 6 && (!s->event_registered_41c || r->references == UINT32_MAX ||
+                      r->tbl0.bytes != table0.bytes || r->tbl1.bytes != table1.bytes ||
+                      s->emd_tables[6].bytes != emitters.bytes)) {
+   return fail(s, 0x305908, (int)i, GH_EFFECT_UNSUPPORTED);
+  }
+ }
+
+ gh_effect_status status = reg(s, 6, &bundle);
+ if (status != GH_EFFECT_OK) return status;
+ s->event_data = (gh_effect_view){data, bytes};
+ s->event_registered_41c = 1;
+ return GH_EFFECT_OK;
+}
+
 gh_effect_status gh_game_effects_initialize_00305a68(gh_game_effects*s,
  uint8_t*a,size_t az,uint8_t*b,size_t bz,const void*core,size_t cz,const gh_bundle*room){
  gh_bundle c0,c58,rb;gh_bundle_entry e;gh_bundle_error be;gh_effect_status x;
  if(!s||!a||az<0x100180||!b||bz<0x26060||!core||!room)return GH_EFFECT_ARGUMENT;
+ if(s->event_registered_41c)return fail(s,0x2fa0e8,0,GH_EFFECT_UNSUPPORTED);
  s->frontier=0;s->detail=0;s->active=0;s->ready=0;
  /* Read eachbit anew, matching original loops; no invented clearing/killing. */
  for(unsigned i=0;i<256;i++){unsigned off=(i>>5)*4;uint32_t mask=0x80000000u>>(i&31);if((u32(b+0x26000+off)&mask)&&!(u32(b+0x26020+off)&mask)&&!(u32(b+0x26040+off)&mask))return fail(s,0x302918,(int)i,GH_EFFECT_UNSUPPORTED);}

@@ -9,4 +9,30 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
   * callback is supplied and no fullproductionphase0->phase1 claim is made. */
  state=(gh_event_create_state){0};event.fields.phase=1;C(gh_game_event_create_00296958(&state,&b,&done)==GH_EVENT_UNSUPPORTED&&state.frontier==0x2be890&&!components.bound&&!(event.fields.flags&0x80));
  state=(gh_event_create_state){0};event.fields.phase=2;C(gh_game_event_create_00296958(&state,&b,&done)==GH_EVENT_UNSUPPORTED&&state.frontier==0x2d19d8&&event.fields.phase==3&&resource.requested&&resource.file_bytes==873872&&(event.fields.flags&0x100)&&!resource.loaded);ready=0;for(unsigned i=0;i<8&&!ready;i++)C(!gh_dvd_pump(&dvd)&&!gh_game_event_resource_poll_002975d0(&resource,&ready));C(ready&&resource.loaded);state=(gh_event_create_state){0};event.fields.phase=4;C(gh_game_event_create_00296958(&state,&b,&done)==GH_EVENT_UNSUPPORTED&&state.frontier==0x2d1b70&&!done&&event.fields.state==2);C(!gh_game_event_resource_abort(&resource));
+ /* Verify the native state transitions on the original component banks.
+  * The flag writes below represent the separate actor task's results. */
+ C(!gh_event_components_bind(&components,&module,elf,en));
+ C(!gh_event_components_construct_00297680(&components,1));
+ gh_event_component_view actor;
+ C(!gh_event_component_at(&components,2,&actor));
+ uint8_t menu_enabled=0;
+ b.system_menu_enabled=&menu_enabled;
+ event.fields.phase=5;
+ event.fields.flags=0x183;
+ state=(gh_event_create_state){0};
+ C(!gh_game_event_create_00296958(&state,&b,&done)&&!done&&event.fields.phase==5&&!menu_enabled);
+ actor.bytes[0]=3;
+ C(gh_game_event_create_00296958(&state,&b,&done)==GH_EVENT_UNSUPPORTED&&state.frontier==0x2d1e18&&!done&&!menu_enabled);
+ actor.bytes[0]=1;
+ event.fields.unknown06=7;event.fields.unknown07=8;
+ C(!gh_game_event_create_00296958(&state,&b,&done)&&done&&menu_enabled);
+ C(event.fields.state==3&&!event.fields.phase&&!event.fields.unknown06&&!event.fields.unknown07&&event.fields.flags==0x193);
+ menu_enabled=0;
+ event.fields.state=2;event.fields.phase=5;event.fields.flags=0x1a3;
+ state=(gh_event_create_state){0};
+ C(!gh_game_event_create_00296958(&state,&b,&done)&&!done&&!menu_enabled);
+ C(event.fields.state==2&&event.fields.phase==6&&event.fields.flags==0x1b3);
+ C(!gh_game_event_create_00296958(&state,&b,&done)&&!done&&event.fields.phase==6&&!menu_enabled);
+ event.fields.flags|=0x40;
+ C(!gh_game_event_create_00296958(&state,&b,&done)&&done&&event.fields.state==3&&!event.fields.phase&&menu_enabled);
  gh_game_event absent={0};C(!gh_game_event_from_elf(&absent,elf,en));absent.fields.state=2;absent.fields.phase=2;absent.fields.data_number=0x123;gh_event_resource missing={0};b.event=&absent;b.resource=&missing;state=(gh_event_create_state){0};C(!gh_game_event_create_00296958(&state,&b,&done)&&!done&&state.finished&&absent.fields.state==4&&!absent.fields.phase&&!missing.allocation.pointer&&missing.requested);C(!gh_game_event_resource_abort(&missing));C(!gh_game_event_module_abort(&module)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));gh_se_voice_destroy(voices);gh_audio_output_destroy(out);gh_audio_registry_destroy(registry);gh_disc_close(d);free(elf);puts("PASS actual Eventcreate bank52/queuedSE cleanup->realModuleDVD->strictchannel1, stableprefixretry, realev01data873872 IO and requiredLink/voicewait; realmissingfile release-state0return. No fakeplaydone orsuccessfulstubservices.");return 0;}

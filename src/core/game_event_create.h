@@ -20,13 +20,15 @@ typedef struct {gh_game_event *event;const gh_boot_work *work;gh_event_module *m
  /* Link must really bind native SNR2 imports/constructors, not only markDVD
   * done. Component data callback executes actual2977E8 methods on SAMEbanks. */
  gh_event_create_leaf module_link_002be890,data_bind_002977e8,data_prepare_002979f0;
+ gh_event_create_leaf actor_task_status;
+ gh_event_create_leaf abnormal_fade_002d1e18;
+ uint8_t *system_menu_enabled;
  void *context;} gh_event_create_bindings;
 typedef struct {gh_game_event *event;uint32_t substep,bank,frontier;int detail;
  uint8_t finished;} gh_event_create_state;
-/* Actual296958 recovered phases0..4, with same-call fallthrough and real
- * pending waits. Later create phase5 remains precise297A68, no fakeplaydone.
- * done remains original0 until a future real transition toPLAY is recovered.
- * Missingrequired consumers preserve prefix and exactcallee. */
+/* Original 296958, including the two actor creation flags and the optional
+ * phase 6 wait. The original return becomes one when Create enters Play.
+ * Resource consumers and the menu flag refer to the current native owners. */
 gh_game_event_status gh_game_event_create_00296958(gh_event_create_state *,const gh_event_create_bindings *,int *original_done);
 #ifdef __cplusplus
 }

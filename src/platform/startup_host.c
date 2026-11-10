@@ -23,6 +23,11 @@
 #include "../core/game_event_start.h"
 #include "../core/game_event_clear.h"
 #include "../core/game_event_create.h"
+#include "../core/game_event_data_prefix.h"
+#include "../core/game_event_timing.h"
+#include "../core/game_event_actor_create.h"
+#include "../core/game_event_play_env.h"
+#include "../core/game_event_audio.h"
 #include "../core/game_event_link.h"
 #include "../core/game_hitarea_objects.h"
 #include "../core/game_hitarea_internal.h"
@@ -141,6 +146,11 @@ struct gh_startup_host {
     gh_event_resource event_resource;
     gh_event_link event_link;
     gh_event_create_state event_create;
+    gh_event_data_prefix event_data;
+    gh_event_timing event_timing;
+    gh_event_actor_create event_actor_create;
+    gh_event_play_state event_play;
+    gh_event_audio_channel1 event_audio;
     int event_link_relative;
     gh_display_state display;
     gh_game_scene_aux scene_aux;
@@ -331,40 +341,157 @@ static gh_game_event_status event_module_link(void *context,uint32_t *frontier)
     return status;
 }
 
+static gh_game_event_status event_audio_channel1(void *context,gh_event_audio_operation op,
+    int32_t event_no,int32_t argument,int *ready,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    return gh_event_audio_channel1_service(&h->event_audio,op,event_no,argument,ready,frontier);
+}
+static gh_game_event_status event_register_effects(void *context, const uint8_t *data,
+    size_t bytes, uint32_t *frontier)
+{
+    gh_startup_host *host = context;
+    gh_game_services_scene_view scene;
+    if (gh_game_services_get_scene_view(host->services, &scene) || !scene.effects)
+        return GH_EVENT_ARGUMENT;
+    gh_effect_status status = gh_game_effects_register_event_002fa0b0(scene.effects, data, bytes);
+    if (status) *frontier = scene.effects->frontier;
+    return status == GH_EFFECT_OK ? GH_EVENT_OK :
+           status == GH_EFFECT_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+}
+
+static gh_game_event_status event_data_bind(void *context, uint32_t *frontier)
+{
+    gh_startup_host *host = context;
+    if (!host->event_data.bound) {
+        gh_game_event_status status = gh_event_data_bind_prefix_002977e8(
+            &host->event_data, &host->event_link.components, &host->event_resource, frontier);
+        if (status) return status;
+    }
+
+    if (!host->event_data.actor_cuts_bound) {
+        gh_game_event_status status = gh_event_actor_cuts_bind_00297864(&host->event_data, frontier);
+        if (status) return status;
+    }
+
+    return gh_event_data_bind_tail_00297880(
+        &host->event_data, &host->event_link.components, event_register_effects, host, frontier);
+}
+
+static gh_game_event_status event_data_prepare(void *context, uint32_t *frontier)
+{
+    gh_startup_host *host = context;
+    int allocated;
+    gh_game_event_status status = gh_event_timing_prepare_000054c0(
+        &host->event_timing, &host->event_link.components, host->heap, &allocated);
+    if (status) {
+        *frontier = 0x297a08;
+        return status;
+    }
+    if (!allocated) {
+        host->event.fields.flags |= 0x10000000;
+        return GH_EVENT_OK;
+    }
+
+    gh_game_services_scene_view scene;
+    if (gh_game_services_get_scene_view(host->services, &scene)) {
+        *frontier = 0x297a1c;
+        return GH_EVENT_ARGUMENT;
+    }
+    const gh_event_actor_create_bindings bindings = {
+        .components = &host->event_link.components,
+        .data = &host->event_data,
+        .heap = host->heap,
+        .pools = scene.pools,
+        .objects = scene.objects,
+        .global_threads = host->threads,
+        .save = {host->save_bytes, sizeof(host->save_bytes)},
+        .object_view = event_object_view,
+        .context = host
+    };
+    return gh_event_actor_create_start_002979f0(&host->event_actor_create, &bindings, frontier);
+}
+
+static gh_game_event_status event_actor_task_status(void *context, uint32_t *frontier)
+{
+    gh_startup_host *host = context;
+    return gh_event_actor_create_task_status(&host->event_actor_create, frontier);
+}
+
+static gh_game_event_status event_abnormal_fade(void *context, uint32_t *frontier)
+{
+    gh_startup_host *host = context;
+    gh_bgm_status status = gh_bgm_event_fade_002d1e18(host->bgm, 1, -1);
+    if (status) *frontier = gh_bgm_requests_frontier(host->bgm);
+    return status == GH_BGM_OK ? GH_EVENT_OK :
+           status == GH_BGM_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+}
+
 static int event_create_stage(void *context,gh_game_event *event,int *done)
 {
     gh_startup_host *h=context;
+    gh_game_services_scene_view scene={0};
     if(event!=&h->event)return GH_EVENT_ARGUMENT;
+    if(h->services && gh_game_services_get_scene_view(h->services,&scene))return GH_EVENT_ARGUMENT;
     h->event_link_relative=0;
     const gh_event_create_bindings bindings={
         .event=event,.work=&h->work,.module=&h->event_module,
         .components=&h->event_link.components,.resource=&h->event_resource,
         .dvd=&h->dvd,.heap=h->heap,.voices=h->voices,
         .boot_elf=h->boot_reference,.boot_elf_bytes=h->boot_reference_bytes,
-        .module_link_002be890=event_module_link,.context=h
+        .module_link_002be890=event_module_link,.audio_channel1=event_audio_channel1,
+        .data_bind_002977e8=event_data_bind,.data_prepare_002979f0=event_data_prepare,
+        .actor_task_status=event_actor_task_status,
+        .abnormal_fade_002d1e18=event_abnormal_fade,
+        .system_menu_enabled=scene.system_menu_enabled,.context=h
     };
     gh_game_event_status status=gh_game_event_create_00296958(&h->event_create,&bindings,done);
     if(status)event->frontier=h->event_create.frontier?h->event_create.frontier:0x296958;
     return status;
 }
 
+static int event_play_stage(void *context, gh_game_event *event, int *done)
+{
+    gh_startup_host *host = context;
+    if (event != &host->event) return GH_EVENT_ARGUMENT;
+    uint32_t frontier;
+    host->event_link_relative = 0;
+    gh_game_event_status status = gh_event_play_00296c28(
+        &host->event_play, event, &host->event_link.components, &host->event_config,
+        &host->work, &host->fade, &host->display, done, &frontier);
+    if (status) event->frontier = frontier;
+    return status;
+}
+
 static gh_game_event_status event_abort_resources(gh_startup_host *h)
 {
-    gh_game_event_status status=gh_game_event_resource_abort(&h->event_resource);
+    gh_game_event_status status=gh_event_actor_create_abort(&h->event_actor_create);
     if(status)return status;
+    status=gh_event_timing_abort(&h->event_timing);
+    if(status)return status;
+    status=gh_game_event_resource_abort(&h->event_resource);
+    if(status)return status;
+    memset(&h->event_data, 0, sizeof(h->event_data));
+    memset(&h->event_play, 0, sizeof(h->event_play));
     /* Link symbol names borrow the module allocation. Drop those views first. */
     memset(&h->event_link,0,sizeof(h->event_link));
     return gh_game_event_module_abort(&h->event_module);
 }
 
+static gh_object_status event_release_sound_slot(void *context,int32_t slot,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    gh_object_sound_binding sound={&h->sound_control,h->voices};
+    return gh_sound_object_slot_release_002cb340(&sound,slot,frontier);
+}
 static int event_clear_stage(void *context,gh_game_event*event,int*done)
 {
     gh_startup_host*h=context;gh_game_services_scene_view s;
     if(event!=&h->event||gh_game_services_get_scene_view(h->services,&s))return GH_EVENT_ARGUMENT;
     gh_player_abort_bindings abort={.player=s.title_player,.sound=&h->sound_control};
     gh_event_clear_bindings b={.event=event,.config=&h->event_config,.init=&h->game_init,
-        .pools=s.pools,.global_objects=s.objects,.player_abort=&abort,.object_view=event_object_view,.context=h,
-        .player_clear_0012c418=event_player_clear};
+        .pools=s.pools,.room_objects=s.room_objects,.player_abort=&abort,.object_view=event_object_view,.context=h,
+        .player_clear_0012c418=event_player_clear,.release_sound_slot=event_release_sound_slot};
     gh_game_event_status e=gh_event_clear_00296818(&h->event_clear,&b,done);
     if(e)event->frontier=h->event_clear.frontier?h->event_clear.frontier:0x296818;
     return (int)e;
@@ -375,7 +502,7 @@ static gh_game_event_status event_player_clear(void *context,uint32_t*frontier)
     if(gh_game_services_get_scene_view(h->services,&s))return GH_EVENT_ARGUMENT;
     gh_player_abort_bindings abort={.player=s.title_player,.sound=&h->sound_control};
     gh_event_clear_bindings b={.event=&h->event,.config=&h->event_config,.init=&h->game_init,
-        .pools=s.pools,.global_objects=s.objects,.player_abort=&abort,.context=h};
+        .pools=s.pools,.room_objects=s.room_objects,.player_abort=&abort,.context=h};
     return gh_game_services_event_player_clear(h->services,&b,frontier);
 }
 static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32_t argument,uint32_t *frontier)
@@ -523,6 +650,13 @@ static int entry_frontier(gh_startup_host *h,uint32_t address,const char *module
 {h->unavailable_entry=address;h->frontier_module=module;return failure(h,GH_HOST_ENTRY_UNAVAILABLE,detail);}
 static char *copy_string(const char *s)
 {size_t n=strlen(s)+1;char *p=malloc(n);if(p)memcpy(p,s,n);return p;}
+static gh_game_event_status event_prefetch(void *context,const gh_event_audio_prefetch_request *request,uint32_t *frontier)
+{
+    gh_bgm_requests *pool=context;
+    gh_bgm_status status=gh_bgm_event_prefetch_002d1c78(pool,request);
+    if(frontier)*frontier=status?gh_bgm_requests_frontier(pool):0;
+    return status==GH_BGM_OK?GH_EVENT_OK:status==GH_BGM_UNSUPPORTED?GH_EVENT_UNSUPPORTED:GH_EVENT_CALLEE;
+}
 static int initialize_native_bgm(gh_startup_host *h)
 {
     gh_adx_key key;gh_adx_error decoded;gh_bgm_status status;
@@ -538,6 +672,7 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(!event_status)event_status=gh_game_event_set_stage(&h->event,0,event_start_stage,h);
     if(!event_status)event_status=gh_game_event_set_stage(&h->event,1,event_clear_stage,h);
     if(!event_status)event_status=gh_game_event_set_stage(&h->event,2,event_create_stage,h);
+    if(!event_status)event_status=gh_game_event_set_stage(&h->event,3,event_play_stage,h);
     gh_display_status display_status=gh_display_state_from_elf(&h->display,elf,(size_t)bytes);
     if(!display_status)display_status=gh_display_static_initialize_002a48a8(&h->display,1,0xffff);
     gh_render_step_status env_status=gh_render_draw_env_from_elf(&h->draw_env,elf,(size_t)bytes);
@@ -584,6 +719,11 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(cloth_status)return failure(h,GH_HOST_ASSET,cloth_status);
     status=gh_bgm_requests_create(h->audio,&h->sound_control,h->disc,h->heap,&h->bgm);
     if(!status)status=gh_bgm_requests_enable_native(h->bgm,&key,h->continuation.muted,GH_BGM_GAIN_NATIVE_DB_REFERENCE);
+    if(status)return failure(h,GH_HOST_AUDIO,status);
+    gh_game_event_status audio=gh_event_audio_channel1_bind_prefetch(&h->event_audio,event_prefetch,h->bgm);
+    if(!audio)audio=gh_event_audio_channel1_bind_lifecycle(&h->event_audio,h->bgm);
+    if(audio)return failure(h,GH_HOST_AUDIO,audio);
+    status=gh_bgm_event_enable_output(h->bgm);
     return status?failure(h,GH_HOST_AUDIO,status):0;
 }
 static int sound_startup(void *context)
@@ -596,6 +736,11 @@ static int sound_startup(void *context)
     gh_audio_status e=gh_audio_startup_load(h->audio,h->disc);
     if(e)return failure(h,GH_HOST_AUDIO,(int)e);
     if(!h->sound_control.initialized){gh_voice_status se=gh_sound_control_from_startup(&h->sound_control,h->disc,h->audio);if(se)return failure(h,GH_HOST_AUDIO,se);}
+    if(!h->event_audio.control){
+        gh_game_event_status audio=gh_event_audio_channel1_bind(&h->event_audio,&h->sound_control,&h->dvd,h->heap);
+        if(!audio)audio=gh_event_audio_channel1_bind_registry(&h->event_audio,h->audio);
+        if(audio)return failure(h,GH_HOST_AUDIO,audio);
+    }
     if(!h->sound_scene.startup_bound){
         gh_sound_scene_status scene=gh_sound_scene_from_startup(&h->sound_scene,&h->sound_control,h->audio);
         if(scene)return failure(h,GH_HOST_AUDIO,scene);
@@ -1325,6 +1470,14 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
         gh_enemy_se_status bank=gh_enemy_se_banks_update_002cf440(h->enemy_banks);
         if(bank){entry_frontier(h,gh_enemy_se_frontier(h->enemy_banks)?gh_enemy_se_frontier(h->enemy_banks):0x2cf440,0,bank);h->phase=GH_HOST_FRONTIER;}
     }
+    if(h->phase==GH_HOST_RUNNING&&h->event_audio.control){
+        // Original 2CA558 updates channel 1 after the SE bank loop.
+        gh_game_event_status audio=gh_event_audio_channel1_tick_002d0068(&h->event_audio);
+        if(audio){
+            entry_frontier(h,h->event_audio.frontier?h->event_audio.frontier:0x2d0068,0,audio);
+            h->phase=GH_HOST_FRONTIER;
+        }
+    }
     if(h->phase==GH_HOST_RUNNING && h->startup_returned) {
         for(i=0;i<4;++i)if(h->records[i].running)active=1;
         if(!active)h->phase=h->error==GH_HOST_ENTRY_UNAVAILABLE?GH_HOST_FRONTIER:GH_HOST_COMPLETE;
@@ -1360,6 +1513,14 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->scene_frame_serial=h->scene_frame_serial;out->scene_frame_ready=h->scene_frame_ready;
     out->ui_resource_epoch=gh_game_services_ui_resource_epoch(h->services);
     out->id_vertex_z=h->draw_env.scalar.clip;out->id_vertex_z_known=h->draw_env.ready;
+    out->event_number=h->event.fields.data_number;out->event_flags=h->event.fields.flags;
+    out->event_state=h->event.fields.state;out->event_phase=h->event.fields.phase;
+    out->event_config_flags=h->event_config.flags;out->event_clear_stage=h->event_clear.stage;
+    out->event_callee_error=h->event.callee_error;out->event_clear_detail=h->event_clear.detail;
+    out->event_audio_flags=h->event_audio.flags;
+    out->event_camera_cuts=h->event_data.camera_count;
+    out->event_actor_records=h->event_data.actor_count;
+    out->event_timing_rows=h->event_timing.count;
     out->current_room=(uint16_t)h->work.room;memcpy(&out->next_room,(const uint8_t*)&h->work+0x5b4,2);
     if(h->services){gh_game_update_diagnostic d={0};if(!gh_game_services_update_diagnostic(h->services,&d)){
         out->player_updates_completed=d.player_updates_completed;out->child_updates_completed=d.child_updates_completed;out->om_updates_completed=d.om_updates_completed;
@@ -1468,8 +1629,9 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
         h->services=0;
     }
     if(event_abort_resources(h)!=GH_EVENT_OK)return GH_HOST_ASSET;
-    /* Close actual BGM endpoints before encoded source/heap/registry owners. */
+    /* Close actual BGM/Event requests before encoded source/heap/registry owners. */
     if(h->bgm){gh_bgm_requests_destroy(h->bgm);h->bgm=0;}
+    if(gh_event_audio_channel1_shutdown(&h->event_audio)!=GH_EVENT_OK)return GH_HOST_AUDIO;
     if(h->enemy_banks){if(gh_enemy_se_banks_destroy(h->enemy_banks)!=GH_ENEMY_SE_OK)return GH_HOST_AUDIO;h->enemy_banks=0;}
     if(gh_sound_scene_release_loading(&h->sound_scene,&h->dvd,h->heap)!=GH_SOUND_SCENE_OK)return GH_HOST_AUDIO;
     h->mc_bindings.id_runtime=h->id_runtime;

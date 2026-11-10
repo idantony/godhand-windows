@@ -47,12 +47,14 @@ static uint16_t next_key(uint16_t x,gh_adx_key k){return (uint16_t)(((uint32_t)x
 static int32_t shift12(int64_t n){return n>=0?(int32_t)(n/4096):-(int32_t)((-n+4095)/4096);}
 static void reset(gh_adx_decoder*d){unsigned c;d->position=0;d->loaded_block=UINT32_MAX;d->xor_value=d->key.start;for(c=0;c<2;c++){d->history[c][0]=d->info.initial_history[c][0];d->history[c][1]=d->info.initial_history[c][1];}}
 gh_adx_error gh_adx_open(const void*data,size_t size,const gh_adx_key*key,gh_adx_decoder**out){
- const uint8_t*b=data;gh_adx_decoder*d;uint32_t offset,samples;size_t blocks,i;uint16_t x;unsigned valid=0,c;
+ const uint8_t*b=data;gh_adx_decoder*d;uint32_t offset,samples;size_t blocks,i;uint16_t x;unsigned valid=0,c;int compact;
  if(!b||!key||!out)return GH_ADX_ARGUMENT;*out=NULL;
- if(size<64||be16(b)!=0x8000)return GH_ADX_FORMAT;
+ if(size<40||be16(b)!=0x8000)return GH_ADX_FORMAT;
+ offset=(uint32_t)be16(b+2)+4;compact=offset==0x28;
+ if(!compact&&size<64)return GH_ADX_FORMAT;
  if(b[4]!=3||b[5]!=18||b[6]!=4||b[7]!=2||be32(b+8)!=48000||be16(b+16)!=500||be16(b+18)!=0x0408)return GH_ADX_UNSUPPORTED;
- offset=(uint32_t)be16(b+2)+4;samples=be32(b+12);
- if(!samples||samples>INT32_MAX||offset<62||offset>size||memcmp(b+offset-6,"(c)CRI",6))return GH_ADX_FORMAT;
+ samples=be32(b+12);
+ if(!samples||samples>INT32_MAX||(!compact&&offset<62)||offset>size||memcmp(b+offset-6,"(c)CRI",6))return GH_ADX_FORMAT;
  blocks=((size_t)samples+31)/32;
  if(blocks>(size-offset)/36)return GH_ADX_BOUNDS;
  if(key->start>0x7fff||key->mult>0x7fff||key->add>0x7fff||!(key->mult&1)||!(key->add&1))return GH_ADX_KEY;
@@ -61,13 +63,17 @@ gh_adx_error gh_adx_open(const void*data,size_t size,const gh_adx_key*key,gh_adx
   if(nonzero){if((be16(f)&0xe000)!=(x&0x6000))return GH_ADX_KEY;valid++;}x=next_key(x,*key);
  }
  if(!valid)return GH_ADX_KEY;
- if(be32(b+36)>1)return GH_ADX_UNSUPPORTED;
- if(be32(b+36)&&(be32(b+40)>=be32(b+48)||be32(b+48)>samples))return GH_ADX_FORMAT;
- if(be32(b+36)&&((uint64_t)offset+((uint64_t)be32(b+40)+31)/32*36!=be32(b+44)||
-  (uint64_t)offset+((uint64_t)be32(b+48)+31)/32*36!=be32(b+52)))return GH_ADX_FORMAT;
+ /* Actual 33EA98 history ends at 0x20. 33EBD0 rejects loop metadata
+  * for the verified 0x28-byte header; its caller leaves the loop flag zero. */
+ if(!compact){
+  if(be32(b+36)>1)return GH_ADX_UNSUPPORTED;
+  if(be32(b+36)&&(be32(b+40)>=be32(b+48)||be32(b+48)>samples))return GH_ADX_FORMAT;
+  if(be32(b+36)&&((uint64_t)offset+((uint64_t)be32(b+40)+31)/32*36!=be32(b+44)||
+   (uint64_t)offset+((uint64_t)be32(b+48)+31)/32*36!=be32(b+52)))return GH_ADX_FORMAT;
+ }
  d=calloc(1,sizeof(*d));if(!d)return GH_ADX_MEMORY;
  d->bytes=b;d->size=size;d->key=*key;d->info.sample_rate=48000;d->info.channels=2;d->info.sample_count=samples;d->info.data_offset=offset;
- d->info.loop_enabled=(uint8_t)be32(b+36);d->info.loop_start=be32(b+40);d->info.loop_end=be32(b+48);
+ if(!compact){d->info.loop_enabled=(uint8_t)be32(b+36);d->info.loop_start=be32(b+40);d->info.loop_end=be32(b+48);}
  /* Same documented ADX high-pass coefficients; truncate toward zero. */
  {float z=cosf((float)(6.28318530717958647692*500.0/48000.0));float a=(float)(1.4142135623730951-z),v=(float)(1.4142135623730951-1.0);float t=(a-sqrtf((a+v)*(a-v)))/v;
  d->info.coefficient[0]=(int16_t)(t*8192);d->info.coefficient[1]=(int16_t)(t*t*-4096);}

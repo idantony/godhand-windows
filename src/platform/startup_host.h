@@ -108,6 +108,10 @@ typedef struct gh_startup_snapshot {
     uint32_t hitarea_hit_actor_flags[4],hitarea_hit_actor_cooldown_bits[4],hitarea_hit_same_actor[4];
     uint16_t id_vertex_z; /* draw env +30 used by original 2C5EA8 */
     uint8_t id_vertex_z_known;
+    uint8_t event_state,event_phase;
+    int32_t event_number,event_callee_error,event_clear_detail;
+    uint32_t event_flags,event_config_flags,event_clear_stage,event_audio_flags;
+    uint32_t event_camera_cuts,event_actor_records,event_timing_rows;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization

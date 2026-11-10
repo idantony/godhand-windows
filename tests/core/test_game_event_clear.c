@@ -28,7 +28,7 @@ int main(int argc,char**argv){
  event.fields.state=1;event.fields.phase=0;config.flags=1;C(!gh_event_clear_00296818(&state,&b,&done)&&done&&calls==11);
  event.fields.state=1;event.fields.phase=0;config.flags=0;wr(init.enemies+0x500,1);C(gh_event_clear_00296818(&state,&b,&done)==GH_EVENT_UNSUPPORTED&&state.frontier==0x290770&&!done&&!event.fields.phase);
  memset(&state,0,sizeof(state));event.fields.phase=8;wr(init.enemies+0x500,0);gh_stage_slots slots={0};gh_game_objects*objects=NULL;C(!gh_game_objects_create(&slots,0,&objects));C(!gh_stage_slots_reset(&slots,NULL));
- for(unsigned i=0;i<80;i++)wr(slots.records+(size_t)i*0x5c+4,0xffffffff);b.global_objects=objects;b.release_sound_slot=no_slot;
+ for(unsigned i=0;i<80;i++)wr(slots.records+(size_t)i*0x5c+4,0xffffffff);b.room_objects=objects;b.release_sound_slot=no_slot;
  C(!gh_event_clear_00296818(&state,&b,&done)&&done&&event.fields.state==2);for(unsigned i=0;i<80;i++)C(!rd(slots.records+(size_t)i*0x5c+4));gh_game_objects_destroy(objects);
  free(elf);puts("PASS actual ISO Event cold state, real12C418 prefix/126770/byte-neighbors and strictanimationfrontier; isolated dispatch fixture phase0..8/config gates/positive enemy rejection (not completed player clear)");return 0;
 }
