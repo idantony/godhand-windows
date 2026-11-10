@@ -19,7 +19,3 @@ int main(int argc,char**argv){gh_disc*d;C(argc==2&&!gh_disc_open(argv[1],&d));si
  C(!gh_game_player_child_release_prefix(&child)&&!pools.arenas[2].live_allocations&&!pools.vectors[0].count&&!pools.vectors[3].count&&gh_heap_used(heap)==used);gh_object_view rec;C(!gh_game_objects_find(global,0x101,&rec)&&rec.use_count==-100&&rec.state==3);
  C(!gh_game_objects_add_pinned_001fece0(objects,0x101,file,file_size,&added)&&!gh_game_objects_set_file_extent(objects,0x101,file,file_size));C(!gh_game_player_child_create_0030fa98(&child,&b,&original)&&original&&child.resource_from_room&&!(w(child.object.view.bytes+0x250)&0x2000000)&&serial==1);C(!gh_game_player_child_release_prefix(&child));
  gh_game_objects_destroy(objects);gh_game_objects_destroy(global);C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));free(file);free(room);gh_disc_close(d);puts("PASS actualR100 child101 arena20E0/44VF0/shared14E990, serial retry+wrap, sourceextent/nativeidentity, realpl01 41Parts->148420 and orderedabort; virtualInit not acknowledged");return 0;}
-
-
-
-

@@ -59,6 +59,3 @@ static gh_camera_status finish(gh_camera_envelope*s,gh_camera_follow*follow,uint
  gh_camera_status e=aim(s,c,f);if(e)return e;follow->stage=0;follow->frontier=0;s->stage=0;s->pending=NULL;return GH_CAMERA_OK;
 }
 gh_camera_status gh_game_camera_finish_follow_00139c88(gh_camera_envelope*s,gh_camera_follow*follow,uint32_t*f){if(f)*f=0;fenv_t env;if(feholdexcept(&env))return GH_CAMERA_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_CAMERA_NUMERIC;}gh_camera_status e=finish(s,follow,f);if(fesetenv(&env))return GH_CAMERA_NUMERIC;return e;}
-
-
-

@@ -41,4 +41,3 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  C(!gh_stage_tm3_resolve(manager,copy,tm3.size,37,1,&b)&&b==outside&&b->cache_id==outside_id);C(!gh_stage_tm3_resolve(manager,tm3.bytes,tm3.size,37,1,&a)&&a->cache_id>last);C(gh_stage_tm3_resolve(manager,tm3.bytes,tm3.size,37,4,&b)==GH_STAGE_UNSUPPORTED&&!b);
  C(!gh_stage_texture_forget_source_range(manager,core,core_bytes)&&gh_stage_texture_channel(manager,0,&global)==GH_STAGE_UNAVAILABLE);C(!gh_stage_texture_cursor_get(manager,&after)&&!memcmp(&before,&after,sizeof(before)));gh_stage_textures_destroy(manager);free(copy);free(core);free(raw);printf("PASS actualR100TM3 69 materials(%u direct/%u CT32-fast),%zu pixels independenttransfer/sampleinverse RGBA-GS hash%016llx; rawalpha129 retained, modecacheidentity/rangeforget/coreVRAM/lifecycle\n",normal,fast,pixels,(unsigned long long)hash);return 0;
 }
-

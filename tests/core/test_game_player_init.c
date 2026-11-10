@@ -20,4 +20,3 @@ int main(int argc,char**argv){gh_disc*d;C(argc==2&&!gh_disc_open(argv[1],&d));si
   * no globalAcquire call and no loadWaitownershipflag2000000. */
  C(!gh_game_objects_add_pinned_001fece0(objects,0x100,model,player_size,&added));serial=255;C(!gh_game_player_factory_create_0030fa98(&factory,&b,&original)&&original&&factory.resource_from_room&&!serial&&!(w(player.view.bytes+0x250)&0x2000000));C(!gh_game_player_factory_release_prefix(&factory));
  gh_game_objects_destroy(objects);gh_game_objects_destroy(global);C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));free(model);free(room);gh_disc_close(d);puts("PASS actualpl00 MD26/TM3 selection and honest149738 frontier; genuineNULL-MD originalfailure writes continueonlytochild101; no model/virtualInit readyack");return 0;}
-

@@ -1,5 +1,6 @@
 /* Actual2B8AE0/2B8B50/2B8D88; MIT LICENSE.upstream. */
 #include "game_collision_pairs.h"
+#include "game_collision_pair_shapes.h"
 #include <string.h>
 gh_collision_status gh_collision_pairs_construct_002b8ae0(gh_collision_pairs*s,gh_heap*h){
  if(!s||!h)return GH_COLLISION_ARGUMENT;if(s->constructed)return GH_COLLISION_BUSY;
@@ -28,6 +29,7 @@ gh_collision_status gh_collision_pairs_initialize_002b8b50(gh_collision_pairs*s)
 }
 gh_collision_status gh_collision_pairs_release(gh_collision_pairs*s){
  if(!s||!s->constructed||!s->heap)return GH_COLLISION_ARGUMENT;
+ if(gh_collision_pair_shapes_release_native(s)!=GH_PAIR_SHAPE_OK)return GH_COLLISION_BUSY;
  if(s->records.pointer&&gh_heap_release(s->heap,s->records)!=GH_MEM_OK)return GH_COLLISION_MEMORY;
  s->records=(gh_r207_allocation){0};s->count=0;s->used=0;return GH_COLLISION_OK;
 }

@@ -3,6 +3,48 @@
 Updated 2026-11-10. Read Git and live worker ownership before editing. This is
 an ongoing authorized source port, not a playable Windows game yet.
 
+Latest GitHub milestone is b78ae9d (151C/159checks, room-transition-22,
+actual001FE218). Push succeeded and formal review was recorded privately.
+Latest complete LOCAL verification is room-transition-26:179C/187checks,
+allhardware/codec/fullADX, matchingRNG20544/20534 and hidden/muted actualWindows
+470ticks/R100/Main3. It executesNodeCache, actual107F58 sameMTB3 a1/a2->SEQabsent,
+real306200 coldscan, completeinitialbinding/152448 setup, real157C18 sampling/
+advance,149EB8,then152A20 actualR100 ray/height/153808; strict153158. World0,
+renderer/window/cleanup0, process4. Private26 receipt separates actual versus
+44OM constructor and9573vertex geometry fixtures. Standard public reports remain22.
+Frozen26 is eligible for the exact local rollback checkpoint; inspect Git for
+its current local commit. It has not been pushed at this update.
+
+OM worker now maintains own chained immutable om-batch-* snapshots onG, starting
+from room-transition-25. Latest observed is om-batch-310 (45OMS independent
+sourceintegration); next320 in progress. Do not overlay its mutable sharedE
+factory/common files blindly. Root26 used exact om-batch-30e(44OMS) plus explicit
+Root/player overlays.24/25 were source copies, never whole-suite passes.
+
+Root motion bridges borrow same fullDAT/model/rate/IKglobals/effects buffers;
+tail solves only through real153158 frontier. Peer opengoal restores that math
+and later solve, skill_forward_test restores1FD580 normaldtor/lifetimes;
+godhand_upstream continues remainingOMconstructors. Native shapeabort is still
+separate from original deferred deletion. Pending E changes are not26 proof.
+
+Codex HTTP400 interruption was diagnosed in local scoped logs: official
+responses endpoint returned only BadRequest; no specific cause was supplied.
+SubsequentHTTP200 and resumed child tests confirmed recovery. No credentials or
+request content was archived. A UI request error is not a native-game test failure.
+
+New room-transition-23 passed163C/171checks, all opt-ins, matching hidden/muted
+Windows470ticks reaches real0014B730 after4Take spheres/4Give cylinders/box;
+worldpackets0, cleanup passes. Private23 receipt preserves actual/fixture scopes.
+It copied exact163-module inputs:
+same-pool HitArea4spheres/4cylinders/box, full3door300 models/shapes/dynamicboxes,
+general matrix/spawn and Event env/start/strictclear/module-load leaves.
+Standard public reports still identify22;23 is not committed/pushed yet. RNG
+now explicitly uses matching snapshot verification/build/native/godhand_core.dll
+via --dll, rather than the legacy default DLL.22 was also rechecked this way.
+Workers continue outside23:
+godhand_upstream303 frozen and304 next; skill_forward_test player14B730 suffix;
+opengoal_method mtb3 initial motion/IK/cache (2A8578/157568 etc).
+
 ## Scope and authority
 
 - Recover readable original behavior and native Windows platform support, using
@@ -62,9 +104,8 @@ Earlier17 is NOT whole-pass (stale ScenePost assertion);20 is NOT whole-pass
 (dedicated GameInit test missed new link dependency). Preserve failed receipts.
 21 passes149C/157checks, strict100420. Do not modify any immutable source copy.
 
-Git history before the next push: publicd4fad08 title, local372e13d NewGame,
-7e2568a first-room constructors/native static renderer. Reconcile current Git;
-new exact22 checkpoint/docs may already have been committed/pushed.
+Git history: d4fad08 title,372e13d NewGame,7e2568a first-room constructors/native
+static renderer,b78ae9d full initial parent/child models. All are now public.
 
 ## Ownership and immediate next work
 
@@ -78,6 +119,11 @@ new exact22 checkpoint/docs may already have been committed/pushed.
 - skill_forward_test owns HitArea/shape constructors and player-init tail. New
   collision_pair_shapes/hitarea_shapes need SAMEinit/pairs and Rootmath owner;
   existing shared-file edits are coordinated/frozen per batch.
+
+Cross-model attachment limitation: Init149EB8 runs before child attachment and
+is verified. Later bare149EB8 on attachedchild must honor the external parent17
+typed link; current local-only hierarchy is insufficient. Do not silently sample
+an attachedchild with its former localparent. Model/attachment workers know this.
 
 Use collaboration live status: a send_message to a completed worker does not
 wake it; use followup_task. Never stage all newer working changes. Workers may

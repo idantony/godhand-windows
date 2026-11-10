@@ -26,14 +26,3 @@ for(unsigned costume=0;costume<8;costume++){save_bytes[0xae]=(uint8_t)costume;gh
 uint8_t*bad=malloc((size_t)elf_size);C(bad);memcpy(bad,elf,(size_t)elf_size);bad[0x3bbf80-0x100000+0x1000]=44;uint8_t before_bad[44*0xa0];memcpy(before_bad,child.object.view.bytes+0x4d0,sizeof(before_bad));gh_game_player_springs malformed={0};save_bytes[0xae]=0;malformed=(gh_game_player_springs){0};C(gh_game_player_springs_initialize_00100870(&malformed,&child,save,bad,(size_t)elf_size,GH_STATIC_BINARY32_REFERENCE)==GH_SPRINGS_BOUNDS&&malformed.frontier==0x1039b0&&!malformed.initialized&&!memcmp(before_bad,child.object.view.bytes+0x4d0,sizeof(before_bad)));memcpy(bad,elf,(size_t)elf_size);bad[0x3bbfd0-0x100000+0x1000]=255;gh_game_player_springs free_end={0};C(!gh_game_player_springs_initialize_00100870(&free_end,&child,save,bad,(size_t)elf_size,GH_STATIC_BINARY32_REFERENCE)&&w(child.object.view.bytes+0x4d0+0xa0+0x60)==0x3dcccccd&&w(child.object.view.bytes+0x4d0+0xa0+4)==0xbdcccccd);free(bad);variant(d,&pools,&work,elf,(size_t)elf_size,0,"pl/pl01.dat",41,40);variant(d,&pools,&work,elf,(size_t)elf_size,2,"pl/pl06.dat",25,24);variant(d,&pools,&work,elf,(size_t)elf_size,4,"pl/pl08.dat",34,33);variant(d,&pools,&work,elf,(size_t)elf_size,6,"pl/pl12.dat",21,20);free(elf);C(!gh_game_player_child_release_prefix(&child)&&!pools.arenas[2].live_allocations&&!pools.vectors[0].count&&!pools.vectors[3].count&&gh_heap_used(heap)==used);gh_object_view rec;C(!gh_game_objects_find(global,0x101,&rec)&&rec.use_count==-100&&rec.state==3);
  C(!gh_game_objects_add_pinned_001fece0(objects,0x101,file,file_size,&added)&&!gh_game_objects_set_file_extent(objects,0x101,file,file_size));C(!gh_game_player_child_create_0030fa98(&child,&b,&original)&&original&&child.resource_from_room&&!(w(child.object.view.bytes+0x250)&0x2000000)&&serial==1);C(!gh_game_player_child_release_prefix(&child));
  gh_game_objects_destroy(objects);gh_game_objects_destroy(global);C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));free(file);free(room);gh_disc_close(d);puts("PASS actual100870 ELFtables/1038E0 springinit; actualR100 child101 arena20E0/44VF0/shared14E990, serial retry+wrap, sourceextent/nativeidentity, realpl01 41Parts->148420 and orderedabort; virtualInit not acknowledged");return 0;}
-
-
-
-
-
-
-
-
-
-
-

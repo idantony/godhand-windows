@@ -54,5 +54,3 @@ gh_title_player_status gh_game_player_child_release_prefix(gh_game_player_child*
  if(s->global_reference){if(gh_game_objects_release_reference_001ff0b0(s->b.global_objects,0x101))return GH_PLAYER_UNSUPPORTED;s->global_reference=0;}
  gh_title_player_status e=gh_game_title_player_release(&s->object);if(e)return e;memset(s,0,sizeof(*s));return GH_PLAYER_OK;
 }
-
-

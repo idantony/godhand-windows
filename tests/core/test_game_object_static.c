@@ -79,7 +79,3 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  C(!gh_scene_meshes_release_prefix(&meshes)&&!gh_game_world_light_release_presets(light)&&!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));gh_stage_textures_destroy(textures);free(light);free(raw);free(r020);free(elf);
  printf("PASS actualR100156 static Move (program10:%u/14:%u,UVrates%u), sourceTEST/ALPHA, partialretry/timer/FEnv; real Trans constants/materials and twoOTqueuegroups+LIFO; requiredfrontend/deletionfrontiers. CPU queue fixture, no GPU frame claim\n",p10,p14,uv);return 0;
 }
-
-
-
-

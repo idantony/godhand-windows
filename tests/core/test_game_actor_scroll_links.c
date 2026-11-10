@@ -23,7 +23,3 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;size_t i;gh_disc_entry e;C(!g
  gh_scene_table_view saved=tables.actor_links[7].view;tables.actor_links[7].view.size=8;C(gh_scene_actor_scroll_links_native_00307a60(&tables,&pools,&meshes)==GH_TABLE_BOUNDS);tables.actor_links[7].view=saved;C(!gh_scene_actor_scroll_links_native_00307a60(&tables,&pools,&meshes));C(!gh_collision_scroll_mutation_release(&mutation)&&!gh_scene_actors_reset_0012e800(&tables)&&!tables.actor_scroll_native);C(!gh_scene_actors_0012e670(&tables,&room)&&!gh_scene_actor_scroll_entry_001333b8(&tables,0,&a)&&!a.resolved);C(!gh_scene_actor_scroll_links_native_00307a60(&tables,&pools,&meshes)&&!gh_scene_actors_reset_0012e800(&tables));
  C(!gh_scene_meshes_release_prefix(&meshes));C(!gh_game_world_light_release_presets(light));free(light);gh_stage_textures_destroy(textures);C(!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(raw);free(elf);printf("PASS actualR100 AKG193 links: %u matches/%u originalnomatches, canonical156mesh first-name-order, 64bitkeys, immutableassets, collisionlink4 coexist, invalidhandle/bounds/prefix, reset/rebind lifecycle\n",matches,missing);return 0;
 }
-
-
-
-

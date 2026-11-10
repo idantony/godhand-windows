@@ -48,5 +48,3 @@ gh_static_world_status gh_static_world_queue_append(gh_static_world_queue*q,cons
  group*a=realloc(q->groups,(q->count+1)*sizeof(*a));if(!a){status=GH_WORLD_MEMORY;goto fail;}q->groups=a;q->groups[q->count]=g;*out=q->count++;q->packets+=g.view.packets;return GH_WORLD_OK;
 fail:release(&g);return status;
 }
-
-

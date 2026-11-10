@@ -18,5 +18,3 @@ int main(int argc,char**argv){gh_disc*d;size_t index;gh_disc_entry entry;C(argc=
   C(!memcmp(copy,p,(size_t)entry.size)&&!gh_scene_at_units_release(&s)&&!s.native_units&&!s.ready&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));feclearexcept(FE_ALL_EXCEPT);
  }
  fesetround(FE_TONEAREST);free(copy);free(p);gh_disc_close(d);puts("PASS actualR10024sourceunits/JMP4 typedlinks, self-target isolatedallocation, strictfrontier/resume, explicitreferenceFEnv, nativeget/set ownership and realrelease");return 0;}
-
-

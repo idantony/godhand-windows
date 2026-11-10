@@ -26,4 +26,3 @@ gh_camera_status gh_game_camera_finish_follow_00139c88(gh_camera_envelope *,gh_c
 }
 #endif
 #endif
-

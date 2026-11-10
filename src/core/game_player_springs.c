@@ -55,5 +55,3 @@ gh_player_springs_status gh_game_player_springs_initialize_00100870(gh_game_play
  }
  uint8_t records[44*0xa0];memcpy(records,c->object.view.bytes+0x4d0,sizeof(records));fenv_t env;if(feholdexcept(&env))return fail(s,0x1038e0,GH_SPRINGS_NUMERIC);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(s,0x1038e0,GH_SPRINGS_NUMERIC);}gh_player_springs_status e=setup(s,records);if(fesetenv(&env))return fail(s,0x1038e0,GH_SPRINGS_NUMERIC);if(e)return e;memcpy(c->object.view.bytes+0x4d0,records,sizeof(records));s->initialized=1;s->frontier=0;return GH_SPRINGS_OK;
 }
-
-

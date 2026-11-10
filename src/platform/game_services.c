@@ -18,6 +18,12 @@
 #include "../core/game_collision_solid_units.h"
 #include "../core/game_player_init_tail.h"
 #include "../core/game_player_springs.h"
+#include "../core/game_player_spawn.h"
+#include "../core/game_om_initialize.h"
+#include "../core/game_hitarea_shapes.h"
+#include "../core/game_actor_motion_step.h"
+#include "../core/game_actor_motion_solve.h"
+#include "../core/game_effect_release.h"
 #include <stdlib.h>
 #include <string.h>
 struct gh_game_services {
@@ -36,12 +42,17 @@ struct gh_game_services {
  gh_scene_meshes meshes;
  gh_r100_init r100;
  gh_om_factory om_factory;
+ gh_om_initializer_bindings om_initializer;
+ gh_hitarea_shape_bindings om_shapes;gh_scene_dynamic_owner dynamic_objects;
  gh_game_player_factory player_factory;
  gh_object_resource_bindings object_resources;
  gh_game_player_init player_init;gh_actor_model player_model;
  gh_game_player_init_tail player_tail;gh_game_player_child player_child;
  gh_player_child_attachment player_attachment;
  gh_player_child_tail child_tail;gh_game_player_child *work5f8;
+ gh_game_player_spawn player_spawn;
+ gh_actor_motion player_motion;
+ gh_motion_solve player_motion_solve;
  uint64_t ui_resource_epoch;
  gh_game_door door;uint8_t system_menu_enabled;uint32_t room_texture_channel;int room_texture_ready;
  gh_stage_object_init old_children,old_cockpit;void *old_context;
@@ -136,6 +147,10 @@ static gh_r100_init_status room_r100_om_view(void*p,uint32_t handle,gh_r100_om_v
  if(gh_game_player_factory_scalar_view(&s->player_factory,handle,&player)==GH_PLAYER_OK){
   *out=(gh_r100_om_view){player->bytes,player->size,player->bytes};return GH_R100_INIT_OK;
  }
+ if(s->player_child.handle==handle&&s->player_child.complete){
+  const gh_title_player_view *child=&s->player_child.object.view;
+  *out=(gh_r100_om_view){child->bytes,child->size,child->bytes};return GH_R100_INIT_OK;
+ }
  gh_scene_placement_status e=gh_om_factory_object_view(&s->om_factory,handle,&v);
  if(e){if(frontier)*frontier=0x14fd98;return GH_R100_INIT_UNSUPPORTED;}
  *out=(gh_r100_om_view){v.bytes,v.size,v.bytes};return GH_R100_INIT_OK;
@@ -167,6 +182,37 @@ static gh_title_player_status player_child_initialize(void*p,gh_game_player_chil
  }
  if(frontier)*frontier=child->frontier;
  return e;
+}
+static gh_actor_motion_status player_motion_effect(void*p,const gh_title_player_view*actor,int32_t kind,uint32_t mode,uint32_t*frontier){
+ gh_game_services*s=p;if(!actor||actor->bytes!=s->title_player.view.bytes)return GH_ACTOR_MOTION_ARGUMENT;
+ gh_effect_release_bindings b={.effects=&s->effects,.esp=s->scene_buffer_a,.emitters=s->scene_buffer_b,
+  .esp_bytes=sizeof(s->scene_buffer_a),.emitter_bytes=sizeof(s->scene_buffer_b)};unsigned slot=0;
+ gh_effect_status e=gh_game_effect_release_00306200(&b,actor,kind,mode,frontier,&slot);
+ return !e?GH_ACTOR_MOTION_OK:e==GH_EFFECT_UNSUPPORTED?GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_CALLEE;
+}
+static int player_motion_request_matches(gh_game_services*s,const gh_player_motion_request*r){
+ return r&&r->player==&s->title_player&&r->model==&s->player_model&&r->work==s->b.work&&
+  r->resource==s->player_factory.resource.bytes&&r->resource_bytes==s->player_factory.file_bytes&&r->rate==s->b.rate;
+}
+static gh_player_init_status player_motion_initialize(void*p,const gh_player_motion_request*r,uint32_t*frontier){
+ gh_game_services*s=p;if(!player_motion_request_matches(s,r))return GH_PLAYER_INIT_ARGUMENT;
+ if(r->start_frame_bits||r->blend_frames||!r->release_previous_sequence){if(frontier)*frontier=0x2a8578;return GH_PLAYER_INIT_UNSUPPORTED;}
+ gh_actor_motion_bindings b={.model=r->model,.resource=r->resource,.resource_bytes=r->resource_bytes,.work=r->work,
+  .effect=player_motion_effect,.context=s,.ik_globals=s->b.motion_ik_globals};
+ gh_actor_motion_status e=gh_actor_motion_begin_002a8578(&s->player_motion,&b,r->motion_offset,r->sequence_candidate_offset,r->flags);
+ if(frontier)*frontier=s->player_motion.frontier;
+ return !e?GH_PLAYER_INIT_OK:e==GH_ACTOR_MOTION_UNSUPPORTED?GH_PLAYER_INIT_UNSUPPORTED:e==GH_ACTOR_MOTION_BOUNDS?GH_PLAYER_INIT_BOUNDS:GH_PLAYER_INIT_CALLEE;
+}
+static gh_player_init_status player_motion_advance(void*p,const gh_player_motion_request*r,uint32_t*frontier){
+ gh_game_services*s=p;if(!player_motion_request_matches(s,r)||!r->rate)return GH_PLAYER_INIT_ARGUMENT;
+ int ended=0;gh_actor_motion_status e=gh_actor_motion_step_00157c18(&s->player_motion,*r->rate,GH_STATIC_BINARY32_REFERENCE,&ended,frontier);
+ return !e?GH_PLAYER_INIT_OK:e==GH_ACTOR_MOTION_UNSUPPORTED?GH_PLAYER_INIT_UNSUPPORTED:e==GH_ACTOR_MOTION_BOUNDS?GH_PLAYER_INIT_BOUNDS:GH_PLAYER_INIT_CALLEE;
+}
+static gh_player_init_status player_motion_solve(void*p,const gh_player_motion_request*r,uint32_t*frontier){
+ gh_game_services*s=p;if(!player_motion_request_matches(s,r)||!s->player_motion.complete)return GH_PLAYER_INIT_ARGUMENT;
+ gh_motion_solve_bindings b={.model=&s->player_model,.work=s->b.work,.actors=&s->scene_tables};
+ gh_actor_motion_status e=gh_actor_motion_solve_00152a20(&s->player_motion_solve,&b,GH_STATIC_BINARY32_REFERENCE,frontier);
+ return !e?GH_PLAYER_INIT_OK:e==GH_ACTOR_MOTION_UNSUPPORTED?GH_PLAYER_INIT_UNSUPPORTED:e==GH_ACTOR_MOTION_BOUNDS?GH_PLAYER_INIT_BOUNDS:GH_PLAYER_INIT_CALLEE;
 }
 static gh_scene_status room_r100_init(void*p,uint32_t*frontier){
  gh_game_services*s=p;
@@ -408,13 +454,19 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
    if(ie==GH_PLAYER_INIT_UNSUPPORTED&&s->player_init.frontier==0x30fa98&&s->player_init.stage==4&&s->player_init.model_call_complete){
     gh_player_init_tail_bindings tb={.prefix=&s->player_init,.parent_model=&s->player_model,.child=&s->player_child,
      .attachment=&s->player_attachment,.solids=&s->collision_solids,.default_heap=s->b.assets->heap,.save=s->b.save,.resources=s->object_resources,
-     .initialize_child=player_child_initialize,.child_context=s};
+     .initialize_child=player_child_initialize,.child_context=s,.init=s->b.init,.pairs=&s->collision_pairs,
+     .math_globals=s->b.math_globals,.shape_policy=GH_STATIC_BINARY32_REFERENCE,.node_names=s->b.player_node_names,
+     .initialize_motion=player_motion_initialize,.advance_motion=player_motion_advance,.solve_motion=player_motion_solve,.motion_context=s,.rate=s->b.rate};
     ie=gh_game_player_initialize_tail_00107f58(&s->player_tail,&tb);
     if(ie)return fail(s,ie==GH_PLAYER_INIT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->player_tail.frontier?s->player_tail.frontier:0x107f58,ie);
    }
    if(ie)return fail(s,ie==GH_PLAYER_INIT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->player_init.frontier?s->player_init.frontier:0x107f58,ie);
-   /* Following31C5C0 spawn collision and final139DB8 binding remain required. */
-   return fail(s,GH_SERVICES_FRONTIER,0x31c5c0,0);
+   gh_player_spawn_bindings sb={.player=&s->title_player,.model=&s->player_model,.actors=&s->scene_tables,
+    .work=work,.init=s->b.init,.camera=&s->camera,.follow=s->b.camera_follow,
+    .elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes};
+   gh_player_spawn_status se=gh_game_player_spawn_0031c5c0(&s->player_spawn,&sb);
+   if(se)return fail(s,se==GH_PLAYER_SPAWN_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,
+    s->player_spawn.frontier?s->player_spawn.frontier:0x31c5c0,se);
   }s->case3_stage=17;
  }
  gh_bundle room;if(gh_game_room_pack_bundle(&s->room_pack,&room))return fail(s,GH_SERVICES_ASSET,0x31ccf0,0);
@@ -456,7 +508,13 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
    int result;gh_scene_placement_status pe=GH_PLACE_OK;
    if(!s->om_placements.native_bound)pe=gh_om_scene_bind_001c3cb8(&s->om_placements,&oms,&result);
    if(pe==GH_PLACE_UNSUPPORTED||s->om_placements.native_bound){
-    if(!s->om_factory.bound){gh_om_factory_bindings ob={.pools=&s->pools,.work=work,.room_state=&s->room_state,.objects=s->objects,.room_objects=s->room_objects,.factory_serial=s->b.factory_serial,.resources=&s->object_resources};
+    if(!s->om_factory.bound){
+     gh_scene_dynamic_status de=gh_scene_dynamic_bind(&s->dynamic_objects,&s->scene_tables,s->b.assets->heap);
+     if(de)return fail(s,GH_SERVICES_ASSET,0x12ead8,de);
+     s->om_shapes=(gh_hitarea_shape_bindings){.pairs=&s->collision_pairs,.math=s->b.math_globals,.policy=GH_STATIC_BINARY32_REFERENCE};
+     s->om_initializer=(gh_om_initializer_bindings){.work=work,.packet_heap=s->b.assets->heap,.fog_rgb=s->world_light.scalar+4,.init=s->b.init,
+      .shapes=&s->om_shapes,.dynamic=&s->dynamic_objects,.door_shared=s->b.door_shared};
+     gh_om_factory_bindings ob={.pools=&s->pools,.work=work,.room_state=&s->room_state,.objects=s->objects,.room_objects=s->room_objects,.factory_serial=s->b.factory_serial,.resources=&s->object_resources,.initializer=&s->om_initializer};
      pe=gh_om_factory_bind(&s->om_factory,&ob,s->om_placements.count);if(pe)return fail(s,GH_SERVICES_ASSET,0x30fb70,pe);}
     pe=gh_om_scene_bind_native_001c3cb8(&s->om_placements,&oms,&s->om_factory,&result);
    }
@@ -481,7 +539,12 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
  if(s->case3_stage==33){
   /* Static light records can select now. Any real player attachment still
    * requires the actual initialized model-parts owner, never invented parts0. */
-  gh_light_status le=gh_game_world_light_select_002d8408(&s->world_light,0,NULL);if(le)return fail(s,le==GH_LIGHT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->world_light.frontier?s->world_light.frontier:0x2d8408,le);s->case3_stage=34;
+  const void *parts[255];gh_light_player_parts player={0};
+  if(s->player_model.parts_ready){
+   for(unsigned i=0;i<s->player_model.part_count;i++)parts[i]=s->player_model.parts[i].bytes;
+   player=(gh_light_player_parts){.owner=s->title_player.view.bytes,.parts=parts,.count=s->player_model.part_count};
+  }
+  gh_light_status le=gh_game_world_light_select_002d8408(&s->world_light,0,player.owner?&player:NULL);if(le)return fail(s,le==GH_LIGHT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->world_light.frontier?s->world_light.frontier:0x2d8408,le);s->case3_stage=34;
  }
  if(s->case3_stage==34){if(!s->b.bgm_requests)return fail(s,GH_SERVICES_FRONTIER,0x2d0850,0);gh_bgm_status be=gh_bgm_requests_scene_begin_002d0850(s->b.bgm_requests,work,*s->b.children,s->b.init);if(be)return fail(s,be==GH_BGM_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,gh_bgm_requests_frontier(s->b.bgm_requests),be);s->case3_stage=35;}
  if(s->case3_stage==35){gh_game_scene_step_case3_cooldown(&s->step);if(work->room!=0x20)return fail(s,GH_SERVICES_FRONTIER,0x2db6b0,0);
@@ -517,6 +580,11 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  if(gh_scene_at_units_release(&s->scene_at))return fail(s,GH_SERVICES_ASSET,0x2c1270,0);
  {uint32_t f=0;gh_solid_unit_status se=gh_collision_solid_units_shutdown(&s->collision_solids,&f);if(se)return fail(s,GH_SERVICES_ASSET,f?f:0x1347e8,se);}
  if(gh_om_factory_release(&s->om_factory))return fail(s,GH_SERVICES_ASSET,0x30f8b0,0);
+ if(gh_scene_dynamic_release(&s->dynamic_objects))return fail(s,GH_SERVICES_ASSET,0x12ecf0,0);
+ {uint32_t f=0;gh_hitarea_status he=gh_hitarea_shapes_abort(s->b.init,&f);
+  if(he)return fail(s,GH_SERVICES_ASSET,f?f:0x1fd580,he);
+  gh_init_status ie=gh_game_object_pool_release_001fdfa8(s->b.init,&f);
+  if(ie)return fail(s,GH_SERVICES_ASSET,f?f:0x1fdfa8,ie);}
  gh_game_player_child_attachment_clear(&s->player_attachment);
  s->work5f8=NULL;
  if(gh_game_player_child_release_prefix(&s->player_child))return fail(s,GH_SERVICES_ASSET,0x100378,0);
@@ -552,6 +620,14 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  gh_game_objects_destroy(s->room_objects);gh_game_objects_destroy(s->objects);free(s);return GH_SERVICES_OK;
 }
 
+gh_game_services_status gh_game_services_actor_view(gh_game_services*s,uint32_t handle,gh_title_player_view*out){
+ if(!s||!out)return GH_SERVICES_ARGUMENT;
+ const gh_title_player_view *player=NULL;
+ if(gh_game_player_factory_scalar_view(&s->player_factory,handle,&player)==GH_PLAYER_OK){*out=*player;return GH_SERVICES_OK;}
+ if(s->player_child.handle==handle&&s->player_child.complete){*out=s->player_child.object.view;return GH_SERVICES_OK;}
+ gh_scene_placement_status e=gh_om_factory_object_view(&s->om_factory,handle,out);
+ return !e?GH_SERVICES_OK:e==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+}
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services*s,gh_game_services_scene_view*out){
  if(!s||!out)return GH_SERVICES_ARGUMENT;
  *out=(gh_game_services_scene_view){.root=&s->b,.prepare=&s->prepare,.scenario=&s->scenario,

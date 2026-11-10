@@ -21,4 +21,3 @@ gh_player_springs_status gh_game_player_springs_initialize_00100870(gh_game_play
 }
 #endif
 #endif
-

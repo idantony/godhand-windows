@@ -18,6 +18,10 @@
 #include "../core/game_camera_follow.h"
 #include "../core/game_camera_envelope.h"
 #include "../core/game_math_globals.h"
+#include "../core/game_event_environment.h"
+#include "../core/game_event_start.h"
+#include "../core/game_event_clear.h"
+#include "../core/game_hitarea_objects.h"
 #include "../core/game_camera_shake.h"
 #include "../core/game_object_step.h"
 #include "../core/game_render_projection.h"
@@ -115,6 +119,9 @@ struct gh_startup_host {
     gh_bgm_requests *bgm;
     gh_sound_scene sound_scene;
     gh_game_event event;
+    gh_game_event_config event_config;
+    gh_event_start_state event_start;
+    gh_event_clear_state event_clear;
     gh_display_state display;
     gh_game_scene_aux scene_aux;
     gh_game_object_step object_step;
@@ -122,6 +129,8 @@ struct gh_startup_host {
     gh_camera_follow camera_follow;gh_camera_envelope camera_envelope;
     gh_player_shared_vector player_shared_vector;
     gh_game_math_globals math_globals;
+    gh_om_door_shared door_shared;
+    gh_player_node_names player_node_names;gh_motion_ik_globals motion_ik_globals;
     uint8_t camera_update_stage;
     gh_render_draw_env draw_env;
     gh_r020_reference_profile title_reference;
@@ -215,6 +224,41 @@ static gh_game_services_status scene_start_loading_menu(void *context,uint32_t *
     gh_system_menu_status e=gh_system_menu_start_002b65b0(&h->system_menu,&b);
     if(e&&frontier)*frontier=h->system_menu.frontier?h->system_menu.frontier:0x2b65b0;
     return !e?GH_SERVICES_OK:e==GH_SYSTEM_MENU_UNSUPPORTED?GH_SERVICES_FRONTIER:e==GH_SYSTEM_MENU_THREAD?GH_SERVICES_THREAD:GH_SERVICES_ASSET;
+}
+static gh_game_event_status event_object_view(void *context,uint32_t handle,gh_title_player_view*out,uint32_t*frontier)
+{
+    gh_startup_host*h=context;gh_game_services_status e=gh_game_services_actor_view(h->services,handle,out);
+    if(e&&frontier)*frontier=0x14fd98;
+    return !e?GH_EVENT_OK:e==GH_SERVICES_FRONTIER?GH_EVENT_UNSUPPORTED:GH_EVENT_CALLEE;
+}
+static gh_game_event_status event_loading_menu(void *context,uint32_t *frontier)
+{
+    gh_game_services_status e=scene_start_loading_menu(context,frontier);
+    return !e?GH_EVENT_OK:e==GH_SERVICES_FRONTIER?GH_EVENT_UNSUPPORTED:GH_EVENT_CALLEE;
+}
+static int event_start_stage(void *context,gh_game_event*event,int*done)
+{
+    gh_startup_host*h=context;gh_game_services_scene_view s;
+    if(event!=&h->event||gh_game_services_get_scene_view(h->services,&s))return GH_EVENT_ARGUMENT;
+    gh_screen_fade_context fade={h->display.screen_width,h->display.gs_y_origin,0,0};
+    memcpy(&fade.frame_shift,(uint8_t*)&h->work+0x564,4);memcpy(&fade.input_mask_5e0,(uint8_t*)&h->work+0x5e0,4);
+    gh_event_start_bindings b={.event=event,.config=&h->event_config,.work=&h->work,.fade=&h->fade,.fade_context=&fade,
+        .tables=s.scene_tables,.pools=s.pools,.meshes=s.meshes,.object_view=event_object_view,
+        .system_menu_start=event_loading_menu,.context=h};
+    gh_game_event_status e=gh_event_start_002965f0(&h->event_start,&b,done);
+    if(e)event->frontier=h->event_start.frontier?h->event_start.frontier:0x2965f0;
+    return (int)e;
+}
+static int event_clear_stage(void *context,gh_game_event*event,int*done)
+{
+    gh_startup_host*h=context;gh_game_services_scene_view s;
+    if(event!=&h->event||gh_game_services_get_scene_view(h->services,&s))return GH_EVENT_ARGUMENT;
+    gh_player_abort_bindings abort={.player=s.title_player,.sound=&h->sound_control};
+    gh_event_clear_bindings b={.event=event,.config=&h->event_config,.init=&h->game_init,
+        .pools=s.pools,.global_objects=s.objects,.player_abort=&abort,.object_view=event_object_view,.context=h};
+    gh_game_event_status e=gh_event_clear_00296818(&h->event_clear,&b,done);
+    if(e)event->frontier=h->event_clear.frontier?h->event_clear.frontier:0x296818;
+    return (int)e;
 }
 static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32_t argument,uint32_t *frontier)
 {
@@ -334,12 +378,18 @@ static int initialize_native_bgm(gh_startup_host *h)
     h->boot_reference=elf;h->boot_reference_bytes=(size_t)bytes;
     decoded=gh_adx_key_from_elf(elf,(size_t)bytes,&key);
     gh_game_event_status event_status=gh_game_event_from_elf(&h->event,elf,(size_t)bytes);
+    if(!event_status)event_status=gh_game_event_config_from_elf(&h->event_config,elf,(size_t)bytes);
+    if(!event_status)event_status=gh_game_event_set_stage(&h->event,0,event_start_stage,h);
+    if(!event_status)event_status=gh_game_event_set_stage(&h->event,1,event_clear_stage,h);
     gh_display_status display_status=gh_display_state_from_elf(&h->display,elf,(size_t)bytes);
     if(!display_status)display_status=gh_display_static_initialize_002a48a8(&h->display,1,0xffff);
     gh_render_step_status env_status=gh_render_draw_env_from_elf(&h->draw_env,elf,(size_t)bytes);
     gh_scene_mesh_status factory_status=gh_scene_mesh_factory_serial_from_elf(elf,(size_t)bytes,&h->factory_serial);
     uint32_t camera_frontier=0;gh_camera_status camera_status=gh_game_camera_envelope_from_elf(&h->camera_envelope,elf,(size_t)bytes,&camera_frontier);
     gh_title_player_status player_vector_status=gh_player_shared_vector_from_elf(&h->player_shared_vector,elf,(size_t)bytes);
+    gh_scene_placement_status door_shared_status=gh_om_door_shared_from_elf(&h->door_shared,elf,(size_t)bytes);
+    gh_player_nodes_status node_names_status=gh_player_node_names_from_elf(&h->player_node_names,elf,(size_t)bytes);
+    gh_actor_motion_status motion_globals_status=gh_motion_ik_globals_from_elf(&h->motion_ik_globals,elf,(size_t)bytes);
     gh_math_globals_status math_status=gh_game_math_globals_from_elf(&h->math_globals,elf,(size_t)bytes);
     if(!math_status)math_status=gh_game_math_static_initialize_003079c8(&h->math_globals,&h->work,1,0xffff);
     if(decoded)return failure(h,GH_HOST_AUDIO,decoded);
@@ -349,6 +399,9 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(factory_status)return failure(h,GH_HOST_ASSET,factory_status);h->factory_serial_ready=1;
     if(camera_status)return entry_frontier(h,camera_frontier,0,camera_status);
     if(player_vector_status)return failure(h,GH_HOST_ASSET,player_vector_status);
+    if(door_shared_status)return failure(h,GH_HOST_ASSET,door_shared_status);
+    if(node_names_status)return failure(h,GH_HOST_ASSET,node_names_status);
+    if(motion_globals_status)return failure(h,GH_HOST_ASSET,motion_globals_status);
     if(math_status)return failure(h,GH_HOST_ASSET,math_status);
     status=gh_bgm_requests_create(h->audio,&h->sound_control,h->disc,h->heap,&h->bgm);
     if(!status)status=gh_bgm_requests_enable_native(h->bgm,&key,h->continuation.muted,GH_BGM_GAIN_NATIVE_DB_REFERENCE);
@@ -512,6 +565,9 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.camera_follow=&h->camera_follow;
         b.camera_envelope=&h->camera_envelope;
         b.player_shared_vector=&h->player_shared_vector;
+        b.math_globals=&h->math_globals;
+        b.door_shared=&h->door_shared;
+        b.player_node_names=&h->player_node_names;b.motion_ik_globals=&h->motion_ik_globals;
         e=gh_game_services_create(&b,&h->services);
         if(e)return failure(h,GH_HOST_ASSET,e);
     }
@@ -874,6 +930,8 @@ gh_host_error gh_startup_host_create_with_profile(const char *iso,const char *pr
     h->work.room=0x20;
     {uint32_t one=0x3f800000;memcpy((unsigned char*)&h->work+0x574,&one,4);}
     gh_game_init_state_initialize(&h->game_init);
+    {uint32_t frontier=0;if(gh_hitarea_objects_construct_001fde00(&h->game_init,&frontier)){
+        e=GH_HOST_ASSET;goto failed;}}
     h->title_reference=(gh_r020_reference_profile){GH_R020_MEMORY_ZERO_REFERENCE,0,0,1};
     if(gh_game_object_step_construct_002c53a8(&h->object_step,&h->game_init)!=GH_OBJSTEP_OK)goto failed;
     {gh_core_save_view save={h->save_bytes,sizeof(h->save_bytes)};

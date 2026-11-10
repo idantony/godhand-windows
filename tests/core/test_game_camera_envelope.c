@@ -45,9 +45,3 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;size_t i;gh_disc_entry e;C(!g
  gh_actor_model foreign=model;foreign.root.bytes++;c=base_camera;follow=base_follow;envelope=base_envelope;C(!gh_game_camera_envelope_bind_model(&envelope,&foreign)&&gh_game_camera_finish_follow_00139c88(&envelope,&follow,&f)==GH_CAMERA_UNSUPPORTED&&f==0x13a7d8);
  const float separation[3]={1,3.5f,10};for(unsigned h=0;h<3;h++)for(unsigned mode=0;mode<4;mode++){store(part0->alias_f0+4,player_y+separation[h]);c=base_camera;follow=base_follow;envelope=base_envelope;C(!gh_game_camera_envelope_bind_model(&envelope,&model));C(!fesetround(modes[mode])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));C(!gh_game_camera_finish_follow_00139c88(&envelope,&follow,&f)&&fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);C(number(c.fields+0x510)==(h==0?0:h==1?2:3));}C(!fesetround(FE_TONEAREST));store(part0->alias_f0+4,original_part_y);C(!gh_game_camera_envelope_bind_model(&envelope,NULL)&&!gh_actor_model_release(&model));free(pl_raw);
 C(!gh_scene_actors_reset_0012e800(&tables)&&!gh_game_title_player_release(&player)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(raw);free(elf);puts("PASS actualELF +R100-owned outside-grid camera prefix->envelope state/FOV/presets->original138358 aim; actualPL00 32parts firstpart height/clamp/identity/providerretry,independent double aim,4FEnv,orderedflags,target/parts-provider/fovmode frontiers/retry. Numeric pose fixture, not R100 production/gameframe");return 0;}
-
-
-
-
-
-

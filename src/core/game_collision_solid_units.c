@@ -28,5 +28,3 @@ gh_solid_unit_status gh_collision_solid_release_unit_001347e8(gh_game_collision_
 }
 int gh_collision_solid_units_empty(const gh_game_collision_solids*m){return m&&!m->unit_head&&!m->native_units&&!m->unit_count&&!m->global_00460d18;}
 gh_solid_unit_status gh_collision_solid_units_shutdown(gh_game_collision_solids*m,uint32_t*f){if(f)*f=0;if(!valid(m))return fail(f,0x1347e8,GH_SOLID_UNIT_UNSUPPORTED);while(m->native_units){gh_solid_unit_status e=gh_collision_solid_release_unit_001347e8(m,m->native_units->object,f);if(e)return e;}return GH_SOLID_UNIT_OK;}
-
-

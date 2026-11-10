@@ -35,4 +35,3 @@ gh_scene_table_status gh_scene_actor_scroll_links_native_00307a60(gh_game_scene_
  }
  for(unsigned i=32;i;i--)s->scroll_link_words[i-1]=0;return GH_TABLE_OK;
 }
-

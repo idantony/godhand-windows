@@ -1,5 +1,6 @@
 #include "game_scene_step.h"
 #include "game_camera.h"
+#include "game_collision_pair_shapes.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -33,10 +34,11 @@ static gh_scene_step_status collision(gh_game_scene_step*s,const gh_game_scene_s
   if(flags&0x603){if(flags&0x400)return fail(s,0x2ba2b0,GH_SCENE_STEP_UNSUPPORTED,(int)i);if(flags&0x200)p32(p,flags|0x400);}
   s->collision_cursor=i+1;
  }
- /* Freshactual400recordowner hasno linkedhead. Anyactive record/usedcount
-  * needs recoveredtypedlinks andcollisioncallbacks, never rawguesttraversal. */
+ /* The legacy used word retains a guest-head token, not an active count.
+  * Native shapes carry the same live list through their typed companion. */
  if(c->used)return fail(s,0x2b8aa8,GH_SCENE_STEP_UNSUPPORTED,0);
  for(uint32_t i=0;i<c->count;i++)if(w((const uint8_t*)c->records.pointer+(size_t)i*GH_COLLISION_RECORD_BYTES)&3)return fail(s,0x2b8aa8,GH_SCENE_STEP_UNSUPPORTED,(int)i);
+ if(gh_collision_pair_shapes_have_live(c))return fail(s,0x2b8aa8,GH_SCENE_STEP_UNSUPPORTED,0);
  return GH_SCENE_STEP_OK;
 }
 static gh_scene_step_status actors(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){if(b->actors->pending_actor_head||b->actors->pending_actor_count)return fail(s,0x12e870,GH_SCENE_STEP_UNSUPPORTED,0);if(w((const uint8_t*)b->work+0x594)&0x8000000)return fail(s,0x12e8cc,GH_SCENE_STEP_UNSUPPORTED,0);return GH_SCENE_STEP_OK;}

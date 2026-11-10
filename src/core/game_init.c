@@ -80,6 +80,13 @@ static gh_init_status pool_record(uint8_t *b,gh_game_damage_link **links,unsigne
  w32(b,0x4c,0);w32(b,0x34,0);b[0x49]=(uint8_t)kind;if(kind==2)w32(b,0x60,0);
  return GH_INIT_OK;
 }
+gh_init_status gh_hitarea_clear_record_bytes(uint8_t*b,gh_game_damage_link**links,unsigned kind){return pool_record(b,links,kind);}
+/* Actual1FDE00 coldconstructors, separatefrom recurringroomreset. */
+gh_hitarea_status gh_hitarea_objects_construct_001fde00(gh_game_init_state*s,uint32_t*f){
+ if(f)*f=0;if(!s)return GH_HITAREA_ARGUMENT;if(s->hitarea_cold_constructed||s->hitarea_native){if(f)*f=0x1fde00;return GH_HITAREA_UNSUPPORTED;}for(unsigned i=0;i<416;i++)if(s->object_links[i]){if(f)*f=0x1fde00;return GH_HITAREA_UNSUPPORTED;}
+ for(unsigned slot=0;slot<418;slot++){unsigned kind=slot<160||slot==416?1:2;uint8_t*b=slot<160?s->object_pool+(size_t)slot*0x60:slot<416?s->object_pool+0x3c00+(size_t)(slot-160)*0x70:s->object_pool+(slot==416?0xac00:0xac60);w32(b,0x50,kind==1?0x42c4b8:0x42c498);w32(b,0,0);for(unsigned j=0;j<3;j++){w32(b,0x10+j*4,0);w32(b,0x20+j*4,0);}w32(b,0x1c,0x3f800000);w32(b,0x2c,0x3f800000);w32(b,0x3c,0);gh_game_damage_link*unused=NULL;(void)pool_record(b,slot<416?&s->object_links[slot]:&unused,kind);}
+ s->hitarea_cold_constructed=1;return GH_HITAREA_OK;
+}
 gh_init_status gh_game_object_pool_reset_001fdea8(gh_game_init_state*s){
  gh_init_status e;if(!s)return GH_INIT_ARGUMENT;
  for(unsigned i=0;i<160;i++){e=pool_record(s->object_pool+(size_t)i*0x60,&s->object_links[i],1);if(e)return e;}

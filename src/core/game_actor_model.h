@@ -34,8 +34,9 @@ gh_actor_model_status gh_actor_model_initialize_00149738(gh_actor_model *,const 
  * and canonical604704 fog snapshot. Bind before first initialize; no copyowner. */
 gh_actor_model_status gh_actor_model_bind_packet_inputs(gh_actor_model *,gh_heap *,const void *fog_rgb);
 gh_actor_model_status gh_actor_model_node_at(const gh_actor_model *,unsigned,const uint8_t **,size_t *mesh_index);
-/* Actual149EB8 boundedzeroEuler/unitScale hierarchy update; arbitrary finite
+/* Actual149EB8 bounded generalEuler/scale reference hierarchy update; arbitrary finite
  * stored local matrices allowed only when original154 bit8 skips rebuild.
+ * Original SDKorders0..5/defaultidentity and XYZEulerwrap restored.
  * Does not recompute inversebindC0 or pretend animation/blend is restored. */
 gh_actor_model_status gh_actor_model_update_hierarchy_00149eb8(gh_actor_model *,gh_static_transform_policy);
 gh_actor_model_status gh_actor_model_part_at(const gh_actor_model *,unsigned,const gh_actor_part **);

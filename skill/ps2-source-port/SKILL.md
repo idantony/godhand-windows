@@ -48,6 +48,13 @@ calling conventions into a 64-bit host without explicit ABI adaptation. Resolve
 guest addresses through an explicit mapping before native dereferences; verify
 bounds and lifetime for any intentional fixed mapping.
 
+Trace both caller arguments and callee validation before assigning pointer
+types. Two arguments may intentionally alias. A callee can accept a resource
+candidate and return NULL when its magic differs; rejecting that candidate as
+a host format error changes valid original behavior. A fixture supplying a
+recognized format does not establish that the real caller supplies it. Keep
+original NULL/false returns distinct from native bounds or implementation errors.
+
 Treat a typed pointer companion as the current value of an original field,
 not an append-only history of assignments. Repeated writes to the same owner
 offset must replace that slot while preserving other fields. Exercise scene
@@ -107,6 +114,12 @@ may write CT32 pixels that are later sampled as indexed textures from the same
 VRAM. Verify address permutation, CLUT selection and consumer UVs before using
 a generic linear decoder. GPU upload/readback proves transfer correctness;
 it does not by itself verify original blending or a rendered game scene.
+
+Recover attribute signedness and scale from actual upload commands and math.
+Do not assume byte weights divide by255, sum normalization is required, or
+normals are renormalized merely because those are familiar graphics conventions.
+Keep a recovered geometry leaf separate from palette production, lighting,
+projection, clipping and observed native rendering.
 
 ## Resume and acceptance
 

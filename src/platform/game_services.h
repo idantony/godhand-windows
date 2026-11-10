@@ -43,6 +43,10 @@
 #include "../core/game_camera_follow.h"
 #include "../core/game_camera_envelope.h"
 #include "../core/game_player_child_tail.h"
+#include "../core/game_math_globals.h"
+#include "../core/game_om_door_geometry.h"
+#include "../core/game_player_node_cache.h"
+#include "../core/game_actor_motion_ik.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -73,6 +77,10 @@ typedef struct {
  gh_camera_follow *camera_follow; /*RootONEcontinuation; bind onlyatactual139DB8*/
  gh_camera_envelope *camera_envelope; /*RootONE3BD540; borrow SAMEplayer modelparts*/
  gh_player_shared_vector *player_shared_vector; /*RootONE mutable3BD880 across rooms*/
+ gh_game_math_globals *math_globals; /*RootONE actual3079C8 globals*/
+ gh_om_door_shared *door_shared; /*RootONE mutable429290 six attributes*/
+ gh_player_node_names *player_node_names;
+ gh_motion_ik_globals *motion_ik_globals; /*RootONE mutable math vectors*/
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;
@@ -108,6 +116,8 @@ typedef struct {
  uint8_t *scene_buffer_a,*scene_buffer_b;size_t scene_buffer_a_size,scene_buffer_b_size;
 } gh_game_services_scene_view;
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services *,gh_game_services_scene_view *);
+/* Resolve actual canonical actor identity before caller-specific ID filtering. */
+gh_game_services_status gh_game_services_actor_view(gh_game_services *,uint32_t handle,gh_title_player_view *);
 /* Native continuation/cache metadata only, after original state5 chooses the
  * next Main2/3 visit. Actual room allocations expire later at2A6210. */
 gh_game_services_status gh_game_services_begin_next_room(gh_game_services *);

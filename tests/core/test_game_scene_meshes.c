@@ -87,15 +87,3 @@ int main(int argc,char**argv){
  printf("PASS R100 28 SCR/156 mesh descriptors: %zu streams/%zu rawVIF vertices, XYZ[%d,%d,%d]..[%d,%d,%d]; realfactory prefix, sharedregistry identity, default155678 frontier; 156boundconstructors complete including actualSDK rotated objects, FEnv preserved, reverse host cleanup\n",streams,vertices,min[0],min[1],min[2],max[0],max[1],max[2]);
  gh_stage_textures_destroy(textures);free(light);free(elf);free(raw);gh_disc_close(d);return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-

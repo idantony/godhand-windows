@@ -24,7 +24,3 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;size_t i;gh_disc_entry e;C(!g
  C(!gh_static_world_queue_append(q,&cmd,&index,&f)&&index==3);C(!gh_static_world_queue_group_at(q,3,&g));size_t fans=0,last_batch=0;int strip=0;
  for(size_t p=0;p<g.packets;p++){gh_static_world_packet v;C(!gh_static_world_queue_packet_at(q,3,p,&v));if(v.batch!=last_batch){C(strip);strip=0;last_batch=v.batch;}if(v.primitive==0x7d){C(!strip);fans++;}else{C(v.primitive==0x7c&&!strip);strip=1;}for(size_t j=0;j<v.triangles*3;j++)C(v.indices[j]<v.vertex_count);}
  C(fans&&strip);gh_static_world_queue_reset(q);C(!gh_static_world_queue_count(q));gh_static_world_queue_destroy(q);gh_stage_textures_destroy(textures);free(raw);puts("PASS actualR100 SCR48/TM3member37 program10/14 two batches, setup OT LIFO, local indices/material identity, atomic unsupported/FEnv; CPU queue not GPU frame");return 0;}
-
-
-
-

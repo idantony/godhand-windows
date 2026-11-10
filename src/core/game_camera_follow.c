@@ -50,8 +50,3 @@ gh_camera_status gh_game_camera_follow_00139ff8(gh_camera_follow*s,gh_game_scene
  fenv_t env;if(feholdexcept(&env))return GH_CAMERA_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_CAMERA_NUMERIC;}gh_camera_status e=follow_impl(s,t,cb,ctx,f);if(fesetenv(&env))return GH_CAMERA_NUMERIC;return e;
 }
 gh_camera_status gh_game_camera_step_follow_00138fc8(gh_game_pl_camera*c,gh_game_init_state*i,gh_acd_scene_binding*p,const gh_title_player_view*v,const gh_boot_work*w,gh_camera_follow*s,gh_game_scene_tables*t,gh_camera_follow_ray cb,void*ctx,uint32_t*f){if(f)*f=0;if(!c||!i||!p||!v||!w||c->identity!=&i->camera)return GH_CAMERA_ARGUMENT;/* Resume the SAME pending update, not a new path-blend frame. */if(s&&s->bound&&s->stage){if(s->camera!=c||s->player!=v)return GH_CAMERA_ARGUMENT;return gh_game_camera_follow_00139ff8(s,t,cb,ctx,f);}uint32_t pc=0;gh_camera_status e=gh_game_camera_step_00138fc8(c,i,p,v,w,&pc);if(e==GH_CAMERA_UNSUPPORTED&&pc==0x139ff8){if(!s||!s->bound||s->camera!=c||s->player!=v)return stop(s,f,0x139db8,GH_CAMERA_UNSUPPORTED);e=gh_game_camera_follow_00139ff8(s,t,cb,ctx,&pc);}if(f)*f=pc;return e;}
-
-
-
-
-
