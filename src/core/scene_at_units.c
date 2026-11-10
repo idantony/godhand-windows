@@ -60,3 +60,14 @@ gh_scene_at_status gh_scene_at_initialize_units_002c0f90(gh_scene_at_manager*s,c
 gh_scene_at_status gh_scene_at_set_enabled(gh_scene_at_manager*s,gh_at_native_unit v,int enabled,int*original){if(!s||!original)return GH_AT_ARGUMENT;*original=0;if(!s->headers[0].bytes||!v.bytes)return GH_AT_OK;if(!own(s,v))return GH_AT_ARGUMENT;if(v.bytes[0x35]==9)return fail(s,enabled?0x2c0e20:0x2c0e60,0,GH_AT_UNSUPPORTED);if(enabled)v.bytes[0x34]|=1;else v.bytes[0x34]&=0xfe;*original=1;return GH_AT_OK;}
 gh_scene_at_status gh_scene_at_set_jump_info_002c2750(gh_scene_at_manager*s,gh_at_native_unit v,uint8_t state,uint32_t fn,uint32_t arg,uint8_t trigger){if(!s)return GH_AT_ARGUMENT;if(!v.bytes)return GH_AT_OK;if(!own(s,v))return GH_AT_ARGUMENT;uint8_t*p=v.bytes;if(trigger){if(!p[0x4e])p[0x4e]=p[0x3b];p[0x3b]=trigger;}ww(p+0x40,arg);p[0x44]=state;ww(p+0x3c,fn);return GH_AT_OK;}
 gh_scene_at_status gh_scene_at_units_release(gh_scene_at_manager*s){if(!s)return GH_AT_ARGUMENT;struct gh_scene_at_units*t=s->native_units;if(!t)return GH_AT_OK;for(size_t i=0;i<t->count;i++)if(t->nodes[i].owned.pointer&&gh_heap_release(t->heap,t->nodes[i].owned))return GH_AT_BOUNDS;for(unsigned i=0;i<4;i++)free(t->copies[i]);free(t->nodes);free(t);s->native_units=NULL;s->ready=0;for(unsigned i=0;i<4;i++)s->units[i]=(gh_at_unit_view){0};for(unsigned i=0;i<8;i++)s->jump_slots[i]=(gh_at_unit_view){0};return GH_AT_OK;}
+/* Strict typed traversal of the SAME original tagged unit lists. */
+static gh_scene_at_status walk_checked(gh_scene_at_manager*s,gh_at_link link,gh_at_native_unit*out){
+ *out=(gh_at_native_unit){0};for(unsigned depth=0;depth<17;depth++){
+  if(link.kind==GH_AT_LINK_END)return GH_AT_OK;
+  if(link.kind==GH_AT_LINK_SLOT){if(link.index>=16)return GH_AT_BOUNDS;link=s->heads[link.index];continue;}
+  if(link.kind!=GH_AT_LINK_UNIT||!s->native_units)return GH_AT_BOUNDS;node*n=resolve(s->native_units,link.index);if(!n||!n->linked||!n->view.bytes||n->view.size!=0x9c)return GH_AT_BOUNDS;*out=n->view;return GH_AT_OK;
+ }return GH_AT_BOUNDS;
+}
+gh_scene_at_status gh_scene_at_first_unit_002c30c0(gh_scene_at_manager*s,gh_at_native_unit*out){if(!s||!out||!s->ready)return GH_AT_ARGUMENT;return walk_checked(s,(gh_at_link){GH_AT_LINK_SLOT,15},out);}
+gh_scene_at_status gh_scene_at_next_unit_002c30c8(gh_scene_at_manager*s,gh_at_native_unit current,gh_at_native_unit*out){if(!s||!out||!own(s,current))return GH_AT_ARGUMENT;node*n=resolve(s->native_units,current.handle);return walk_checked(s,n->next,out);}
+size_t gh_scene_at_native_unit_count(const gh_scene_at_manager*s){return s&&s->native_units?s->native_units->count:0;}

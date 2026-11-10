@@ -16,7 +16,7 @@ typedef struct {gh_game_player_factory *factory;gh_boot_work *work;
  gh_player_model_initialize model_initialize_00149738;void *model_context;} gh_player_init_bindings;
 typedef struct {uint32_t stage,frontier;gh_game_player_factory *factory;gh_boot_work *work;
  gh_bundle_entry geometry,texture;gh_model_view geometry_scripts;
- uint32_t texture_mode;int model_original_return;uint8_t model_complete;
+ uint32_t texture_mode;int model_original_return;uint8_t model_call_complete;
  uint32_t pending_child_id;} gh_game_player_init;
 /* Actualvirtual107F58 Main-player entry. Currentrecoveredprefix reachesreal
  * sharedmodel149738, then originalchild101 factory; neither isfakedready.

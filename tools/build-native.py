@@ -158,6 +158,26 @@ def main():
                ("game_om_factory", "src/core/game_om_factory.c"),
                ("game_player_factory", "src/core/game_player_factory.c"),
                ("game_actor_scroll_links", "src/core/game_actor_scroll_links.c"),
+               ("game_ray_static", "src/core/game_ray_static.c"),
+               ("game_player_init", "src/core/game_player_init.c"),
+               ("game_actor_model", "src/core/game_actor_model.c"),
+               ("skinned_mesh", "src/assets/skinned_mesh.c"),
+               ("game_actor_packets", "src/core/game_actor_packets.c"),
+               ("game_actor_model_nodes", "src/core/game_actor_model_nodes.c"),
+               ("game_actor_hierarchy", "src/core/game_actor_hierarchy.c"),
+               ("game_camera_follow", "src/core/game_camera_follow.c"),
+               ("game_camera_envelope", "src/core/game_camera_envelope.c"),
+               ("game_camera_shake", "src/core/game_camera_shake.c"),
+               ("game_player_child", "src/core/game_player_child.c"),
+               ("game_player_child_attach", "src/core/game_player_child_attach.c"),
+               ("game_player_child_tail", "src/core/game_player_child_tail.c"),
+               ("game_math_globals", "src/core/game_math_globals.c"),
+               ("game_player_springs", "src/core/game_player_springs.c"),
+               ("game_player_shadow", "src/core/game_player_shadow.c"),
+               ("game_collision_solid_units", "src/core/game_collision_solid_units.c"),
+               ("game_player_init_tail", "src/core/game_player_init_tail.c"),
+               ("game_hitarea_objects", "src/core/game_hitarea_objects.c"),
+               ("game_scene_at_geometry", "src/core/game_scene_at_geometry.c"),
                ("id_entry_reset", "src/core/id_entry_reset.c"), ("id_layout_rotation", "src/core/id_layout_rotation.c"),
                ("id_animation", "src/core/id_animation.c"), ("id_texture_polygon", "src/core/id_texture_polygon.c"),
                ("r020_title", "src/rooms/r020_title.c"), ("r100", "src/rooms/r100.c")]
@@ -175,10 +195,28 @@ def main():
         ("game-room-arena", "tests/core/test_game_room_arena.c", "iso"),
         ("game-player-factory", "tests/core/test_game_player_factory.c", "iso"),
         ("game-player-postfactory", "tests/core/test_game_player_postfactory.c", "iso"),
+        ("game-player-init", "tests/core/test_game_player_init.c", "iso"),
+        ("game-actor-model", "tests/core/test_game_actor_model.c", "iso"),
+        ("game-actor-packets", "tests/core/test_game_actor_packets.c", "iso"),
+        ("game-actor-model-nodes", "tests/core/test_game_actor_model_nodes.c", "iso"),
+        ("game-camera-follow", "tests/core/test_game_camera_follow.c", "iso"),
+        ("game-camera-envelope", "tests/core/test_game_camera_envelope.c", "iso"),
+        ("game-camera-shake", "tests/core/test_game_camera_shake.c", "none"),
+        ("game-player-child", "tests/core/test_game_player_child.c", "iso"),
+        ("game-player-child-attach", "tests/core/test_game_player_child_attach.c", "iso"),
+        ("game-player-child-tail", "tests/core/test_game_player_child_tail.c", "both"),
+        ("game-math-globals", "tests/core/test_game_math_globals.c", "elf"),
+        ("game-player-springs", "tests/core/test_game_player_springs.c", "both"),
+        ("game-player-shadow", "tests/core/test_game_player_shadow.c", "iso"),
+        ("game-collision-solid-units", "tests/core/test_game_collision_solid_units.c", "none"),
+        ("game-player-init-tail", "tests/core/test_game_player_init_tail.c", "iso"),
+        ("game-hitarea-objects", "tests/core/test_game_hitarea_objects.c", "none"),
+        ("game-scene-at-native", "tests/core/test_game_scene_at_native.c", "iso"),
         ("game-om-factory", "tests/core/test_game_om_factory.c", "iso"),
         ("game-object-acquire", "tests/core/test_game_object_acquire.c", "none"),
         ("game-object-resources", "tests/core/test_game_object_resources.c", "iso"),
         ("game-actor-scroll-links", "tests/core/test_game_actor_scroll_links.c", "iso"),
+        ("game-ray-static", "tests/core/test_game_ray_static.c", "iso"),
         ("movie-task", "tests/core/test_movie_task.c", "none"),
         ("game-camera", "tests/core/test_game_camera.c", "elf"),
         ("game-movie-pool", "tests/core/test_game_movie_pool.c", "none"),
@@ -287,6 +325,7 @@ def main():
                      "tests/core/test_id_text.c"}
     shared_headers = {"game_room_arena": "src/core/game_room_pools.h","game_object_static": "src/core/game_object_step.h","id_jobs_texture": "src/core/id_jobs.h", "id_jobs_primitive": "src/core/id_jobs.h",
                       "game_scene_meshes_finish": "src/core/game_scene_meshes.h",
+                      "game_actor_hierarchy": "src/core/game_actor_model.h",
                       "game_world_light_select": "src/core/game_world_light.h",
                       "game_scene_meshes_material": "src/core/game_scene_meshes.h"}
     source_inputs.update(source for _, source, _ in extra_tests)
@@ -294,6 +333,8 @@ def main():
     # borrow a second owner's layout without sharing its source filename.
     source_inputs.update(path.relative_to(PROJECT).as_posix() for path in (PROJECT / "src").rglob("*.h"))
     source_inputs.update({"tests/assets/oracle_static_mesh_transform.py",
+                          "tests/assets/oracle_actor_bind_pose.py",
+                          "tests/assets/oracle_player_springs.py",
                           "tests/assets/oracle_static_mesh_program10.py",
                           "tests/assets/oracle_static_mesh_clip10.py"})
     for name, source in modules:
@@ -337,7 +378,7 @@ def main():
     run("compile-game-gate-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_gate", "game_start", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_game_gate.c", "-o", output / "test_game_gate.exe"])
     run("compile-id-base-tests", common + ["-Isrc/core"] + [objects[name] for name in ("id_base", "id_path", "mc_boot_id", "menu_state", "core_bundle", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_id_base.c", "-o", output / "test_id_base.exe"])
     run("compile-packed-message-tests", common + [objects[name] for name in ("packed_message", "id_base", "id_path", "font_state", "core_bundle", "menu_state", "disc")] + ["tests/core/test_packed_message.c", "-o", output / "test_packed_message.exe"])
-    run("compile-game-init-tests", common + ["-Isrc/core", objects["game_init"], "tests/core/test_game_init.c", "-o", output / "test_game_init.exe"])
+    run("compile-game-init-tests", common + ["-Isrc/core", objects["game_init"], objects["game_hitarea_objects"], "tests/core/test_game_init.c", "-o", output / "test_game_init.exe"])
     run("compile-mc-task-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_task.c", "-o", output / "test_mc_task.exe"])
     id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "id_animation", "id_layout_rotation", "menu_state", "font_state", "font_texture", "core_bundle", "disc", "tim2")]
     run("compile-id-jobs-tests", common + id_objects + ["tests/core/test_id_jobs.c", "-o", output / "test_id_jobs.exe"])

@@ -74,7 +74,7 @@ int main(void){
  {gh_core_save_view short_view={record,GH_CORE_SAVE_BYTES-1};CHECK(gh_core_save_game_init(short_view,&work)!=GH_INIT_OK);}
  /* Later1FDF88 uses the exact same canonical pool without replaying case0. */
  CHECK(gh_game_object_pool_reset_001fdea8(NULL)==GH_INIT_ARGUMENT);
- memset(s,0xa5,sizeof(*s));gh_game_init_state *snapshot=malloc(sizeof(*snapshot));CHECK(snapshot);
+ memset(s,0xa5,sizeof(*s));s->hitarea_native=NULL;s->hitarea_generation=0;gh_game_init_state *snapshot=malloc(sizeof(*snapshot));CHECK(snapshot);
  uint32_t retained_target=0x12345678;gh_game_damage_link retained_link={.target_mask=&retained_target};
  for(unsigned i=0;i<416;i++)s->object_links[i]=&retained_link;memcpy(snapshot,s,sizeof(*s));
  CHECK(gh_game_object_pool_reset_001fdea8(s)==GH_INIT_OK&&retained_target==0x12345678);

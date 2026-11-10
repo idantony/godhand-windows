@@ -10,11 +10,12 @@ This follows OpenGOAL's source recovery/platform adaptation method. God Hand was
 not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
 **Early development. No playable original game scene has been verified.**
-A native Windows execution now connects the original memory-card interface,
-normal exit, Clover movie, GameMain initialization and the original title scene.
-A bounded run completes 600 updates and presents 481 title scene frames,
-including the original GOD HAND / PRESS START screen. It begins at startup task
-`0x0030D358`; earlier boot, the first world scene and gameplay remain unfinished.
+A native Windows execution connects the original memory-card interface, Clover
+movie, title scene and New Game transition into room R100. A bounded synthetic
+run presents 6 MC, 90 movie and 351 title/menu frames, then completes original
+player/child model construction before stopping at collision initialization
+`0x001FE218`. It begins at startup task `0x0030D358`; earlier boot, the first
+world frame and gameplay remain unfinished.
 
 ### Verified progress
 
@@ -27,17 +28,20 @@ including the original GOD HAND / PRESS START screen. It begins at startup task
 - Actual MC prompts, text, window and TIM2 cursor draw through restricted D3D11
   backends. Absent-card and empty-profile paths execute original Control,
   digital input mapping, limited real SFX and normal resource cleanup.
-- One hidden, muted native Windows QA run presents 6 MC frames and all 90 Clover
-  movie frames, waits for video EOF and real audio completion, then reaches
-  GameMain state4 with real startup assets and the title room running. Its keys
-  are an explicitly labeled synthetic fixture; no human playtest is claimed.
+- One hidden, muted native Windows QA run waits for video EOF and real audio
+  completion, executes Title/New Game and reaches R100 in GameMain state3.
+  Its keys are an explicitly labeled synthetic fixture; no human playtest is claimed.
 - Limited MC ADPCM voices use real XAudio2. Movie0 uses an explicit native
   FFmpeg codec process and Windows audio. Reference DSP/GS numerical profiles
   are documented; they are not PS2 hardware-equivalence claims or complete audio.
 - Original case0 initialization, HUD setup, room state, camera reset and room
   allocation operate on shared native owners. Asset descriptors are distinct
   from completed model/animation rendering or gameplay.
-- 105 C modules pass 111 checks with hardware/codec checks and an independent
+- Actual first-room construction creates 156 static objects and binds actor
+  scroll links. Parent PL00 and child PL01 build their original parts, nodes
+  and semantic drawing packets; child springs, attachment and solid-shape
+  prefixes execute. These constructors do not establish animation or rendering.
+- 151 C modules pass 159 checks with hardware/codec checks and an independent
   ADX reference WAV enabled.
   The earlier foundation also passes in an independent clean source snapshot.
   Restricted GPU pixels match separate CPU equations. The recovered OT traversal
@@ -47,9 +51,10 @@ including the original GOD HAND / PRESS START screen. It begins at startup task
 
 Native encrypted title BGM decoding now matches every sample from independent
 vgmstream output. The original warning, logos and title screen now execute in
-the integrated native scene. A separate synthetic New Game run reaches the
-difficulty menu; the next real boundary is its bank2 sound request. World models,
-animation, combat, complete audio and save/load still need implementation.
+the integrated native scene. New Game now loads the first room and advances
+through player/child construction to `0x001FE218`. The actual run submits zero
+world packets. World rendering, animation, combat, complete audio and save/load
+still need implementation.
 
 Current boundaries: [docs/progress.json](docs/progress.json).
 Milestone history: [docs/PROGRESS.md](docs/PROGRESS.md).
@@ -89,7 +94,7 @@ The window stays hidden unless `--show` is supplied. `--muted` silences only
 this program's output while retaining actual device processing/completion.
 
 Exit code **4** reports an unfinished execution frontier. It is expected at the
-current title-module boundary and never means the game is complete. `--prefix`
+current unfinished constructor boundary and never means the game is complete. `--prefix`
 selects the bounded first-MC-frame developer check. Scheduler visits are not
 proof of complete original frame timing.
 
@@ -132,9 +137,10 @@ mark substantial milestones.
 使用 Jak 专用反编译器。
 
 **仍处于早期开发，尚未验证可玩的原游戏场景。** 同一个 Windows 原生程序已串联
-原版存储卡界面、正常退出、Clover 片头、GameMain 初始化和真实标题场景。一次有界
-运行完成 600 次更新，实际显示 481 帧标题场景，包括原始 GOD HAND / PRESS START
-画面。执行从原启动任务 `0x0030D358` 开始，前置启动、第一关和玩法仍未完成。
+原版存储卡界面、Clover 片头、标题场景和“新游戏”到 R100 的转换。一次有界合成输入
+验收显示 6 帧存储卡、90 帧片头和 351 帧标题／菜单，完成玩家及子模型构造后停在
+碰撞初始化 `0x001FE218`。执行从原启动任务 `0x0030D358` 开始，前置启动、首个实际
+3D 场景画面和玩法仍未完成。
 
 ### 已验证的进展
 
@@ -145,13 +151,16 @@ mark substantial milestones.
 - 存储卡提示文字、窗口和原 TIM2 光标已实际绘制。无卡和空目录分支执行原 Control、
   按键映射、有限真实音效及正常资源释放；完整存档读写尚未实现。
 - 一次隐藏、静音的 Windows 原生验收显示了 6 帧存储卡界面和全部 90 帧 Clover
-  片头，确实等待视频结束及音频设备完成，再进入 GameMain 的 state4 和真实标题场景。
+  片头，确实等待视频结束及音频设备完成，再执行标题／新游戏流程进入 R100、Main state3。
   确认按键由明确标注的合成测试输入提供，不冒充玩家实测。
 - 存储卡 ADPCM 音效通过真实 XAudio2 处理；片头通过原生 FFmpeg 进程及 Windows
   音频设备播放。数值参考策略有明确范围，不声称完整音频或 PS2 实机位精确。
 - 原系统、HUD、房间、相机和内存池初始化共用真实原生状态；描述解析不代表模型、
   动画、战斗或游戏场景已经完成。
-- 启用硬件/解码器检查后，105 个 C 模块通过 111 项检查（包含独立 ADX 参考 WAV），
+- 首房间实际创建 156 个静态对象并连接场景碰撞记录；玩家 PL00 和子模型 PL01 完成
+  原版部件、节点及绘制数据包构造，子模型弹性骨骼、绑定和实体形状初始化前缀已运行。
+  该次运行仍未提交世界绘制包，不据此声称动画或场景渲染完成。
+- 启用硬件/解码器检查后，151 个 C 模块通过 159 项检查（包含独立 ADX 参考 WAV），
   在固定源码副本验证。受限 GPU 像素与独立 CPU 方程一致；绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 两个 RNG 对 10272 个种子完成 20544 次精确比较，依据实际指令的受限模型验证；

@@ -20,6 +20,8 @@ typedef struct {gh_r207_allocation allocation;gh_heap *heap;gh_title_player_view
  uint32_t frontier;uint8_t ready;gh_player_allocation_domain allocation_domain;
  gh_room_arena_allocation arena_allocation;} gh_game_title_player;
 typedef enum {GH_PLAYER_OK,GH_PLAYER_ARGUMENT,GH_PLAYER_BOUNDS,GH_PLAYER_MEMORY,GH_PLAYER_BUSY,GH_PLAYER_UNSUPPORTED} gh_title_player_status;
+/* Shared actual14E990 cObjBase constructor only; minimum4D0 bytes. */
+gh_title_player_status gh_game_actor_construct_0014e990(void *,size_t,gh_title_player_view *);
 /* Shared actual2A7338 basegameobject constructor only; minimum5B0 bytes.
  * Preservesunspecifiedinput, typedD0/F0 aliases, no player/modelInit claim. */
 gh_title_player_status gh_game_object_construct_002a7338(void *,size_t,gh_title_player_view *);

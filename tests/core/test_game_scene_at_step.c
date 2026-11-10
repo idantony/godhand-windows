@@ -14,7 +14,7 @@ int main(int argc,char**argv){
  fenv_t env;C(!fegetenv(&env));C(!fesetround(FE_DOWNWARD)&&!feraiseexcept(FE_INVALID));int flags=fetestexcept(FE_ALL_EXCEPT);
  C(!gh_scene_at_step_002c1618(&at,&actors,&player,&result,&frontier)&&!result&&!frontier&&actors.ray.native_queries==1&&!memcmp(&at,&original,sizeof(at)));
  C(fegetround()==FE_DOWNWARD&&fetestexcept(FE_ALL_EXCEPT)==flags);C(!fesetenv(&env));
- at.heads[15].kind=GH_AT_LINK_UNIT;C(gh_scene_at_step_002c1618(&at,&actors,&player,&result,&frontier)==GH_AT_UNSUPPORTED&&frontier==0x2c30c8&&actors.ray.native_queries==2);at=original;
- memory[0x80]=1;C(gh_scene_at_step_002c1618(&at,&actors,&player,&result,&frontier)==GH_AT_UNSUPPORTED&&frontier==0x1508d8&&actors.ray.native_queries==2);
- free(memory);free(data);gh_disc_close(d);puts("PASS actual R020 constructor aim ray before both empty interaction passes, canonical scratch and exact positive/nonidentity frontiers");return 0;
+ at.heads[15].kind=GH_AT_LINK_UNIT;C(gh_scene_at_step_002c1618(&at,&actors,&player,&result,&frontier)==GH_AT_BOUNDS&&frontier==0x2c30c8&&actors.ray.native_queries==2);at=original;
+ memory[0x80]=1;C(!gh_scene_at_step_002c1618(&at,&actors,&player,&result,&frontier)&&!frontier&&actors.ray.native_queries==3);
+ free(memory);free(data);gh_disc_close(d);puts("PASS actual R020 constructor aim ray before both empty interaction passes, canonical scratch, invalid-link frontier, finite general-worldtransform");return 0;
 }

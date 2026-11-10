@@ -15,6 +15,10 @@
 #include "../core/display_state.h"
 #include "../core/game_scene_aux.h"
 #include "../core/game_camera_projection.h"
+#include "../core/game_camera_follow.h"
+#include "../core/game_camera_envelope.h"
+#include "../core/game_math_globals.h"
+#include "../core/game_camera_shake.h"
 #include "../core/game_object_step.h"
 #include "../core/game_render_projection.h"
 #include "../core/game_render_steps.h"
@@ -115,6 +119,10 @@ struct gh_startup_host {
     gh_game_scene_aux scene_aux;
     gh_game_object_step object_step;
     gh_game_render_projection render_projection;
+    gh_camera_follow camera_follow;gh_camera_envelope camera_envelope;
+    gh_player_shared_vector player_shared_vector;
+    gh_game_math_globals math_globals;
+    uint8_t camera_update_stage;
     gh_render_draw_env draw_env;
     gh_r020_reference_profile title_reference;
     void *boot_reference;size_t boot_reference_bytes;int cockpit_frame_bound;
@@ -214,7 +222,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     if(gh_game_services_get_scene_view(h->services,&s))return GH_SCENE_STEP_ARGUMENT;
     gh_scene_aux_status aux=GH_AUX_OK;
     if(address==0x2c1618){
-        int original_return;gh_scene_at_status e=gh_scene_at_step_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,&original_return,frontier);
+        int original_return;gh_scene_at_status e=gh_scene_at_step_native_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,&h->work,NULL,&original_return,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x30f090){
         if(!h->object_step.static_bound){
@@ -289,9 +297,20 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     else if(address==0x138fc8){
         gh_camera_projection_display display={&h->display.screen_width,&h->display.screen_height_bits,
             &h->display.pixel_aspect_bits,&h->display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
-        gh_camera_status e=gh_game_camera_step_projected_00138fc8(s.pl_camera,&h->game_init,s.acd,
-            &s.title_player->view,&h->work,&display,frontier);
-        return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
+        gh_camera_status e=GH_CAMERA_OK;uint32_t pc=0;
+        if(!h->camera_update_stage){
+            e=gh_game_camera_step_follow_00138fc8(s.pl_camera,&h->game_init,s.acd,&s.title_player->view,
+                &h->work,&h->camera_follow,s.scene_tables,NULL,NULL,&pc);
+            if(e==GH_CAMERA_UNSUPPORTED&&pc==0x13a3c0)h->camera_update_stage=1;
+            else if(e==GH_CAMERA_UNSUPPORTED&&pc==0x138558)h->camera_update_stage=2;
+            else if(e==GH_CAMERA_UNSUPPORTED&&pc==0x138740)h->camera_update_stage=3;
+            else {if(frontier)*frontier=pc;return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;}
+            e=GH_CAMERA_OK; /* the exact continuation below now supplies it */
+        }
+        if(h->camera_update_stage==1){e=gh_game_camera_finish_follow_00139c88(&h->camera_envelope,&h->camera_follow,&pc);if(!e)h->camera_update_stage=2;}
+        if(!e&&h->camera_update_stage==2){e=gh_game_camera_shake_step_00138558(s.pl_camera,&pc);if(!e)h->camera_update_stage=3;}
+        if(!e&&h->camera_update_stage==3){e=gh_game_camera_project_00138740(s.pl_camera,&display,&pc);if(!e)h->camera_update_stage=0;}
+        if(frontier)*frontier=pc;return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else {if(frontier)*frontier=address;return GH_SCENE_STEP_UNSUPPORTED;}
     if(aux&&frontier)*frontier=h->scene_aux.frontier?h->scene_aux.frontier:address;
     return aux?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -319,11 +338,18 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(!display_status)display_status=gh_display_static_initialize_002a48a8(&h->display,1,0xffff);
     gh_render_step_status env_status=gh_render_draw_env_from_elf(&h->draw_env,elf,(size_t)bytes);
     gh_scene_mesh_status factory_status=gh_scene_mesh_factory_serial_from_elf(elf,(size_t)bytes,&h->factory_serial);
+    uint32_t camera_frontier=0;gh_camera_status camera_status=gh_game_camera_envelope_from_elf(&h->camera_envelope,elf,(size_t)bytes,&camera_frontier);
+    gh_title_player_status player_vector_status=gh_player_shared_vector_from_elf(&h->player_shared_vector,elf,(size_t)bytes);
+    gh_math_globals_status math_status=gh_game_math_globals_from_elf(&h->math_globals,elf,(size_t)bytes);
+    if(!math_status)math_status=gh_game_math_static_initialize_003079c8(&h->math_globals,&h->work,1,0xffff);
     if(decoded)return failure(h,GH_HOST_AUDIO,decoded);
     if(event_status)return failure(h,GH_HOST_ASSET,event_status);
     if(display_status)return failure(h,GH_HOST_ASSET,display_status);
     if(env_status)return failure(h,GH_HOST_ASSET,env_status);
     if(factory_status)return failure(h,GH_HOST_ASSET,factory_status);h->factory_serial_ready=1;
+    if(camera_status)return entry_frontier(h,camera_frontier,0,camera_status);
+    if(player_vector_status)return failure(h,GH_HOST_ASSET,player_vector_status);
+    if(math_status)return failure(h,GH_HOST_ASSET,math_status);
     status=gh_bgm_requests_create(h->audio,&h->sound_control,h->disc,h->heap,&h->bgm);
     if(!status)status=gh_bgm_requests_enable_native(h->bgm,&key,h->continuation.muted,GH_BGM_GAIN_NATIVE_DB_REFERENCE);
     return status?failure(h,GH_HOST_AUDIO,status):0;
@@ -483,6 +509,9 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.factory_serial=h->factory_serial_ready?&h->factory_serial:0;
         b.boot_elf=h->boot_reference;b.boot_elf_bytes=h->boot_reference_bytes;
         b.start_loading_menu=scene_start_loading_menu;b.loading_context=h;
+        b.camera_follow=&h->camera_follow;
+        b.camera_envelope=&h->camera_envelope;
+        b.player_shared_vector=&h->player_shared_vector;
         e=gh_game_services_create(&b,&h->services);
         if(e)return failure(h,GH_HOST_ASSET,e);
     }

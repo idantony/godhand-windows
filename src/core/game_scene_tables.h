@@ -18,12 +18,18 @@ typedef struct {
  uint32_t mask174,flags178,triangle17c,distance184,distance188;
  uint8_t hit_kind180,mode181;
  uint64_t native_queries;
+ /* Canonical query fields and original triangle-visited bit4 companion.
+  * Bit2 remains in the SAME mutable actor_links[4] flags view. */
+ uint32_t grid_min6c[3],grid_max78[3],hit_position120[3],hit_normal130[3];
+ struct gh_ray_triangle_state *triangle_state;
 } gh_scene_ray_state;
 struct gh_scene_actor_scroll_state;
 typedef struct {gh_scene_table_view environment,scroll_texture;
  uint32_t scroll_pairs[32][2],scroll_words[32],scroll_link_words[32];
  gh_bundle_entry akt,akg;gh_scene_actor_link actor_links[8];
  uint32_t actor_vec30[3],actor_vec40[3],actor_vec50[3],actor_count60,actor_count64,actor_count68;
+ /* Legacyhost names: original190/194 LIVE dynamic collision shape list,
+  * destroyed by12ECF0 during actor reset; not a deferred-delete queue. */
  void *pending_actor_head;uint32_t pending_actor_count;uint8_t actors_ready;
  uint32_t frontier;int detail;gh_scene_ray_state ray;struct gh_scene_actor_scroll_state *actor_scroll_native;} gh_game_scene_tables;
 typedef enum {GH_TABLE_OK,GH_TABLE_ARGUMENT,GH_TABLE_BOUNDS,GH_TABLE_UNSUPPORTED,GH_TABLE_MEMORY} gh_scene_table_status;
@@ -47,5 +53,3 @@ gh_scene_table_status gh_scene_actor_scroll_links_00307a60(gh_game_scene_tables 
 }
 #endif
 #endif
-
-

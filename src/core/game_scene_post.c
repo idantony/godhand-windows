@@ -74,9 +74,11 @@ gh_scene_post_status gh_scene_model_hide_00307b28(const gh_scene_post_bindings*b
  gh_scene_hidden_clear_00308d40(b->tables);
  gh_scene_model_ray rays[5];size_t count;e=gh_scene_model_rays_00307b28(b,rays,&count,f);if(e)return e;
  for(size_t i=0;i<count;i++)for(unsigned report=0;report<2;report++){
-  unsigned char storage[128];gh_scene_ray_request request={0};int hit=0;uint32_t pc=0;
+  gh_scene_ray_report storage[8];const void *objects[8]={0};uint32_t object_count=0;
+  gh_ray_dynamic_reports dynamic={objects,8,&object_count};gh_scene_ray_request request={0};int hit=0;uint32_t pc=0;
   memcpy(request.from,rays[i].from,16);memcpy(request.to,rays[i].to,16);request.mask=7;
-  request.report_limit=report?0:8;request.reports=report?NULL:storage;
+  request.report_limit=report?0:8;request.native_reports=report?NULL:storage;
+  request.dynamic_reports=report?&dynamic:NULL;
   gh_scene_ray_status q=gh_scene_ray_query_00131e10(b->tables,&request,&hit,&pc);
   if(q!=GH_RAY_OK)return fail(f,pc?pc:0x131e10,q==GH_RAY_UNSUPPORTED?GH_POST_UNSUPPORTED:GH_POST_QUERY);
   if(hit)return fail(f,0x307b28,GH_POST_UNSUPPORTED);

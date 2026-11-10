@@ -26,6 +26,7 @@ typedef struct gh_game_camera {
 typedef struct gh_game_damage_link {
  struct gh_game_damage_link *next;uint32_t *target_mask;
 } gh_game_damage_link;
+struct gh_hitarea_native;
 typedef struct gh_game_init_state {
  uint32_t world_time;
  gh_game_camera camera,*active_camera;
@@ -35,6 +36,7 @@ typedef struct gh_game_init_state {
  uint8_t records_a[160][0x40],records_b[512][0x40];
  uint8_t heat[0x18],input[0x14];
  gh_game_mt random;
+ struct gh_hitarea_native *hitarea_native;uint32_t hitarea_generation;
 } gh_game_init_state;
 /* Host storage initialization, not the earlier complete PS2 boot. Existing
  * save data must separately be system-initialized or loaded by its owner. */

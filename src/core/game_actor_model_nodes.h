@@ -1,0 +1,20 @@
+#ifndef GH_GAME_ACTOR_MODEL_NODES_H
+#define GH_GAME_ACTOR_MODEL_NODES_H
+#include "game_actor_packets.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+typedef struct {size_t header_offset[2],constants_offset[2],palette_offset[2],part_table_offset,bytes;
+ uint32_t object_program[2],node_selector[2],palette_unpack,fog_rgb;
+ uint64_t dma_constants,cycle,gif,gs_fog_register,dma_palette,ret;
+ uint32_t flush,direct,mscnt;const gh_actor_part *parts;size_t part_count;uint8_t ready;
+} gh_actor_object_packets;
+gh_actor_model_status gh_actor_model_object_packet(const gh_actor_model *,const gh_actor_object_packets **);
+/* Shared149738 continuation. Public callers use initialize, not a second init. */
+gh_actor_model_status gh_actor_model_build_nodes(gh_actor_model *,gh_static_transform_policy,int *);
+gh_actor_model_status gh_actor_model_release_nodes(gh_actor_model *);
+gh_actor_model_status gh_actor_model_packet_at(const gh_actor_model *,unsigned,const gh_actor_node_packets **);
+#ifdef __cplusplus
+}
+#endif
+#endif

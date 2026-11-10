@@ -88,3 +88,8 @@ gh_title_player_status gh_game_player_construct_00312f00(gh_game_title_player*s,
 gh_title_player_status gh_game_object_construct_002a7338(void*data,size_t bytes,gh_title_player_view*out){
  if(!data||!out)return GH_PLAYER_ARGUMENT;if(bytes<0x5b0)return GH_PLAYER_BOUNDS;uint8_t*p=data;game_object_002a7338(p);*out=(gh_title_player_view){p,bytes,p+0x30,p+0xb0,0x44ae28,0x44adf0,GH_TITLE_MEMORY_UNSPECIFIED};return GH_PLAYER_OK;
 }
+
+
+gh_title_player_status gh_game_actor_construct_0014e990(void*data,size_t bytes,gh_title_player_view*out){
+ if(!data||!out)return GH_PLAYER_ARGUMENT;if(bytes<0x4d0)return GH_PLAYER_BOUNDS;uint8_t*p=data;actor_0014e990(p);*out=(gh_title_player_view){p,bytes,p+0x30,p+0xb0,0x41ebe8,0x41eb80,GH_TITLE_MEMORY_UNSPECIFIED};return GH_PLAYER_OK;
+}

@@ -1,6 +1,7 @@
 /* MIT LICENSE.upstream; exactscene resourcebinding leaves. */
 #include "game_scene_tables.h"
 #include "game_actor_scroll_links.h"
+#include "game_ray_static.h"
 #include <string.h>
 static uint32_t u32(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static unsigned u16(const uint8_t*p){return p[0]|(unsigned)p[1]<<8;}
@@ -54,10 +55,9 @@ gh_scene_table_status gh_scene_actor_scroll_links_00307a60(gh_game_scene_tables*
 
 gh_scene_table_status gh_scene_actors_reset_0012e800(gh_game_scene_tables*s){
  if(!s)return GH_TABLE_ARGUMENT;
- gh_scene_actor_scroll_links_release(s);s->akg=(gh_bundle_entry){0};memset(s->actor_links,0,sizeof(s->actor_links));s->actors_ready=0;
+ gh_scene_actor_scroll_links_release(s);gh_scene_ray_triangle_state_release(s);s->akg=(gh_bundle_entry){0};memset(s->actor_links,0,sizeof(s->actor_links));s->actors_ready=0;
  /* akt is the bounded containing asset, not an original additional pointer
   * field; retain its provenance view until the actual room asset release. */
  if(s->pending_actor_head)return fail(s,0x12ecf0,0,GH_TABLE_UNSUPPORTED);
  s->frontier=0;return GH_TABLE_OK;
 }
-

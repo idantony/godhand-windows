@@ -1,5 +1,6 @@
 #include "game_scene_post.h"
 #include "game_ray_query.h"
+#include "game_ray_static.h"
 #include "disc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,10 +33,10 @@ int main(int argc,char**argv){
  /* Two actualqueriesperray reachrealAKG inclusiveAABBrejection, preserving
   * canonicalqueryscratch. No fakeNoHit callback suppliedbythis test. */
  for(unsigned k=0;k<3;k++){float x;memcpy(&x,&tables.ray.frome0[k],4);C(x==rays[4].from[k]);}
- /* PutstartinsidefloorAABB: provider muststopatrealnexttriangle/gridcallee,
-  * neveruseemptyobjectregistries toreturnfakeNoHit. */
+ /* Inside the floor AABB these upward/boundary R020 rays still genuinely
+  * miss after complete static polygon traversal, not an empty-list shortcut. */
  put(player.alias_f0+4,0xbf99999a);before=tables.ray.native_queries;
- C(gh_scene_model_hide_00307b28(&b,&frontier)==GH_POST_UNSUPPORTED&&frontier==0x12f318&&tables.ray.native_queries==before+1);put(player.alias_f0+4,0);
+ C(gh_scene_model_hide_00307b28(&b,&frontier)==GH_POST_OK&&!frontier&&tables.ray.native_queries==before+10);put(player.alias_f0+4,0);
  /* Original200000gate preservesexistinghiddenlist/querycounter. */
  for(unsigned i=0;i<32;i++)tables.scroll_link_words[i]=i+1;put((uint8_t*)&work+0x5d8,0x200000);before=tables.ray.native_queries;
  C(gh_scene_model_hide_00307b28(&b,&frontier)==GH_POST_OK&&tables.ray.native_queries==before&&tables.scroll_link_words[31]==32);
@@ -44,6 +45,6 @@ int main(int argc,char**argv){
  pools.vectors[2].count=1;C(gh_scene_scroll_forward_002c5470(&pools,&work,&frontier)==GH_POST_UNSUPPORTED&&frontier==0x319520);put((uint8_t*)&work+0x5d8,0x08000000);C(gh_scene_scroll_forward_002c5470(&pools,&work,&frontier)==GH_POST_OK);pools.vectors[2].count=0;
  pools.vectors[3].count=1;C(gh_scene_hidden_reset_00308bc0(&tables,&pools,&frontier)==GH_POST_UNSUPPORTED&&frontier==0x308bc0);pools.vectors[3].count=0;
  init.camera.mode=0;C(gh_scene_model_rays_00307b28(&b,rays,&count,&frontier)==GH_POST_OK&&count==3);C(rays[0].from[1]==value(camera.fields+0x204)&&rays[0].to[1]==value(camera.fields+0x214));
- C(gh_game_room_pools_release(&pools)==GH_POOL_OK&&gh_heap_used(heap)==0&&gh_heap_destroy(heap)==GH_MEM_OK);free(r);gh_disc_close(d);
+ gh_scene_ray_triangle_state_release(&tables);C(gh_game_room_pools_release(&pools)==GH_POOL_OK&&gh_heap_used(heap)==0&&gh_heap_destroy(heap)==GH_MEM_OK);free(r);gh_disc_close(d);
  puts("PASS actualR020 postscene registries/hiddenowner, fiveoriginalrays +10realAKGAABBqueries, nativequaternionreference, positivegeometryfrontier andoriginalgates");return 0;
 }

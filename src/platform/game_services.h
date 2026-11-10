@@ -40,6 +40,9 @@
 #include "../core/game_camera_step.h"
 #include "../core/game_door.h"
 #include "../rooms/r020_title.h"
+#include "../core/game_camera_follow.h"
+#include "../core/game_camera_envelope.h"
+#include "../core/game_player_child_tail.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -67,6 +70,9 @@ typedef struct {
  const void *boot_elf;size_t boot_elf_bytes; /*borrowactualimmutableimageforconstructorconstants*/
  gh_game_services_status (*start_loading_menu)(void *,uint32_t *frontier);
  void *loading_context;
+ gh_camera_follow *camera_follow; /*RootONEcontinuation; bind onlyatactual139DB8*/
+ gh_camera_envelope *camera_envelope; /*RootONE3BD540; borrow SAMEplayer modelparts*/
+ gh_player_shared_vector *player_shared_vector; /*RootONE mutable3BD880 across rooms*/
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;
@@ -87,6 +93,7 @@ typedef struct {
  gh_room_module *module;gh_sound_scene *sound_scene;gh_collision_pairs *collision_pairs;
  gh_game_effects *effects;gh_scene_filters *filters;
  gh_game_world_light *world_light;gh_game_model_packets *model_packets;
+ gh_game_player_child **work5f8; /*canonical typed child publication*/
  gh_game_collision_solids *collision_solids;gh_game_scene_tables *scene_tables;
  gh_game_title_player *title_player; /*canonicaltypedWork.playerObj*/
  gh_game_checkpoint *checkpoint;gh_game_scene_ui *scene_ui;

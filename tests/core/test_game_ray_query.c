@@ -1,4 +1,5 @@
 #include "game_ray_query.h"
+#include "game_ray_static.h"
 #include "../platform/disc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,9 +24,10 @@ int main(int argc,char**argv){
   gh_scene_ray_state q=s.ray;q.native_queries=0;if(!m)expected=q;else C(!memcmp(&q,&expected,sizeof(q)));
  }
  C(!fesetenv(&original));
- /* Crossing the actual room AABB must NOT be silently turned into a miss. */
- r.from[1]=0;r.to[1]=0;C(gh_scene_ray_query_00131e10(&s,&r,&hit,&frontier)==GH_RAY_UNSUPPORTED&&frontier==0x12f318);
- uint64_t count=s.ray.native_queries;r.segmented=1;C(gh_scene_ray_query_00131e10(&s,&r,&hit,&frontier)==GH_RAY_UNSUPPORTED&&frontier==0x131e78&&s.ray.native_queries==count);
+ /* The actual overlapping R020 horizontal ray now traverses its real grid.
+  * It still misses the polygons; independent positiveR100 checks are separate. */
+ r.from[1]=0;r.to[1]=0;C(!gh_scene_ray_query_00131e10(&s,&r,&hit,&frontier)&&!hit&&!frontier&&reports[0]==0xa5a5a5a5);
+ uint64_t count=s.ray.native_queries;r.segmented=1;C(!gh_scene_ray_query_00131e10(&s,&r,&hit,&frontier)&&!hit&&!frontier&&s.ray.native_queries==count+1&&s.ray.mode181==1);
  gh_game_scene_tables absent={0};r.segmented=0;C(!gh_scene_ray_query_00131e10(&absent,&r,&hit,&frontier)&&!hit&&!absent.ray.native_queries);
- free(data);gh_disc_close(d);puts("PASS actual R020 outside-grid ray, canonical query prefix, untouched outputs/reports, positive-overlap frontier and FEnv");return 0;
+ gh_scene_ray_triangle_state_release(&s);free(data);gh_disc_close(d);puts("PASS actual R020 outside/inside-grid misses, canonical query prefix, untouched outputs/reports, segmented frontier and FEnv");return 0;
 }

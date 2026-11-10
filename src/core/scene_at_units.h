@@ -12,6 +12,11 @@ gh_scene_at_status gh_scene_at_initialize_units_002c0f90(gh_scene_at_manager *,c
 gh_scene_at_status gh_scene_at_get_jump_002c2ae0(gh_scene_at_manager *,uint32_t,gh_at_native_unit *);
 gh_scene_at_status gh_scene_at_set_enabled(gh_scene_at_manager *,gh_at_native_unit,int enabled,int *original_return);
 gh_scene_at_status gh_scene_at_set_jump_info_002c2750(gh_scene_at_manager *,gh_at_native_unit,uint8_t state,uint32_t function_id,uint32_t arg,uint8_t trigger);
+/* Originalslot15 (owner+5C) and taggednext traversal, preserving sourceunit
+ * handles/identity. Invalid links are errors, never an empty-list success. */
+gh_scene_at_status gh_scene_at_first_unit_002c30c0(gh_scene_at_manager *,gh_at_native_unit *);
+gh_scene_at_status gh_scene_at_next_unit_002c30c8(gh_scene_at_manager *,gh_at_native_unit,gh_at_native_unit *);
+size_t gh_scene_at_native_unit_count(const gh_scene_at_manager *);
 /* Native ownership cleanup at proven room lifetime boundary. Includes isolated
  * allocation made by originalself-destination JMP path; no destructor ack. */
 gh_scene_at_status gh_scene_at_units_release(gh_scene_at_manager *);
