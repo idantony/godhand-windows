@@ -32,3 +32,24 @@ gh_hitarea_status gh_hitarea_shapes_abort(gh_game_init_state*s,uint32_t*f){if(f)
  for(unsigned i=0;i<416;i++){uint8_t*raw=i<160?s->object_pool+(size_t)i*0x60:s->object_pool+0x3c00+(size_t)(i-160)*0x70;if(w(raw+0x3c)&&!s->object_links[i])return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);size_t guard=0;for(gh_game_damage_link*n=s->object_links[i];n;n=n->next){if(++guard>672)return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);int known=0;for(unsigned j=0;j<672;j++)if(s->hitarea_native->nodes[j].associated && &s->hitarea_native->nodes[j].link==n){known=1;break;}if(!known)return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);}}
  for(unsigned i=0;i<416;i++){s->object_links[i]=NULL;uint8_t*p=i<160?s->object_pool+(size_t)i*0x60:s->object_pool+0x3c00+(size_t)(i-160)*0x70;ww(p+0x3c,0);}
  for(unsigned i=0;i<672;i++){gh_native_hitarea_node*n=&s->hitarea_native->nodes[i];if(n->associated){uint32_t pc=0;gh_pair_shape_status e=gh_collision_pair_shape_abort(&n->shape,&pc);if(e)return fail(f,pc?pc:0x2bae98,GH_HITAREA_UNSUPPORTED);n->record[0x2e]=0;ww(n->record+0x28,0);*n=(gh_native_hitarea_node){0};}}return GH_HITAREA_OK;}
+
+gh_hitarea_status gh_hitarea_object_clear_shapes_001fd580(gh_hitarea_object*o,int*original,uint32_t*f){
+ if(f)*f=0;if(!o||!original)return GH_HITAREA_ARGUMENT;*original=0;gh_title_player_view*actor=NULL;if(gh_hitarea_object_actor(o,&actor))return GH_HITAREA_ARGUMENT;
+ if(o->fallback){if(w(o->bytes+0x3c))return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);*original=1;return GH_HITAREA_OK;}
+ gh_game_init_state*s=o->state;if(w(o->bytes+0x3c)&&!s->object_links[o->index])return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);
+ size_t guard=0;while(s->object_links[o->index]){if(++guard>672)return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);gh_game_damage_link*head=s->object_links[o->index];gh_native_hitarea_node*n=NULL;
+ if(s->hitarea_native)for(unsigned i=0;i<672;i++){gh_native_hitarea_node*p=&s->hitarea_native->nodes[i];if(p->associated&&&p->link==head&&p->object.index==o->index&&p->object.serial==o->serial&&p->object.generation==o->generation){n=p;break;}}
+ if(!n)return fail(f,0x1fcba0,GH_HITAREA_UNSUPPORTED);uint32_t pc=0;if(gh_collision_pair_shape_remove_001fcba0(&n->shape,o,&pc))return fail(f,pc?pc:0x1fcba0,GH_HITAREA_UNSUPPORTED);
+ n->record[0x2e]=0;ww(n->record+0x28,0);s->object_links[o->index]=head->next;ww(o->bytes+0x3c,0);
+ /* Original 1FC7F8 resets only words20/24/28 and halfword30. */
+ ww(n->record+0x24,0);ww(n->record+0x28,0);n->record[0x30]=n->record[0x31]=0;ww(n->record+0x20,0);*n=(gh_native_hitarea_node){0};}
+ *original=1;return GH_HITAREA_OK;
+}
+
+gh_hitarea_status gh_hitarea_pool_slot_clear_001fd580(gh_game_init_state*s,unsigned slot,uint32_t*f){
+ if(f)*f=0;if(!s||slot>=416)return GH_HITAREA_ARGUMENT;
+ if(!s->hitarea_native||s->hitarea_native->owner!=s)return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);
+ unsigned group=slot<160?1:2;uint8_t*b=group==1?s->object_pool+(size_t)slot*0x60:s->object_pool+0x3c00+(size_t)(slot-160)*0x70;
+ gh_hitarea_object o={s,b,group==1?0x60:0x70,s->hitarea_generation,(uint16_t)slot,(uint8_t)group,0,s->hitarea_native->serials[slot]};int original;
+ return gh_hitarea_object_clear_shapes_001fd580(&o,&original,f);
+}

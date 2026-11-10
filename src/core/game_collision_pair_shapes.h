@@ -26,6 +26,22 @@ gh_pair_shape_status gh_collision_pair_shape_mode_pointer(const gh_collision_pai
 /* Nativefailed-construction/shutdown cleanup, not originalruntime destructor.
  * Refuses a live canonicalobject_links targetborrow; unlinknodefirst. */
 gh_pair_shape_status gh_collision_pair_shape_abort(gh_collision_pair_shape *,uint32_t *frontier);
+/* Actual 1FCBA0 pair-side removal. Constructor 2B8AE0 selects mode2:
+ * unlink active row and preserve original flags|200 until later pool update. */
+gh_pair_shape_status gh_collision_pair_shape_remove_001fcba0(gh_collision_pair_shape *,const gh_hitarea_object *,uint32_t *frontier);
+
+/* Typed replacement for original +38 hit-pointer array; distance is squared. */
+gh_pair_shape_status gh_collision_pair_shape_hit_at(const gh_collision_pair_shape *,unsigned ordinal,gh_collision_pair_shape *other,uint32_t *distance_bits);
+/* A paused original frame is not a new frame. Keep this companion stable
+ * across error/retry; it borrows SAME manager/storage and never owns physics.
+ * Success clears it for the next frame. Do not copy an active cursor. */
+typedef struct {const void *identity;gh_collision_pairs *manager;const void *records;
+ uint32_t serial,count,stage,sweep_row,geometry_link,geometry_phase,geometry_visited,source_link,target_link;uint8_t active;} gh_collision_pair_frame;
+gh_pair_shape_status gh_collision_pairs_step_resume_002b9d58(gh_collision_pairs *,gh_collision_pair_frame *,gh_static_transform_policy,uint32_t *frontier);
+/* Original ordered frame entry; never substitutes a negative query. */
+gh_pair_shape_status gh_collision_pairs_step_002b9d58(gh_collision_pairs *,gh_static_transform_policy,uint32_t *frontier);
+gh_pair_shape_status gh_collision_pairs_sweep_002ba250(gh_collision_pairs *,uint32_t *frontier);
+
 gh_pair_shape_status gh_collision_pair_shapes_release_native(gh_collision_pairs *);
 #ifdef __cplusplus
 }

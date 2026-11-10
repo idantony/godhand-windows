@@ -1,0 +1,14 @@
+/*Actual320195C20/195D08,1C27E8base andshared1C28A0.*/
+#include "game_om320.h"
+#include "game_om_base.h"
+#include "game_om_fragments.h"
+#include <string.h>
+static uint32_t w(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}static void put(uint8_t*p,size_t o,uint32_t n){memcpy(p+o,&n,4);}static void half(uint8_t*p,size_t o,uint16_t n){memcpy(p+o,&n,2);}static void vf0(uint8_t*p,size_t o){memset(p+o,0,12);put(p,o+12,0x3f800000);}
+gh_scene_placement_status gh_om320_construct_00195c20(void*data,size_t n,gh_title_player_view*out){if(!data||!out)return GH_PLACE_ARGUMENT;if(n<0x800)return GH_PLACE_BOUNDS;gh_scene_placement_status e=gh_om_base_construct_001b6e90(data,n,out);if(e)return e;uint8_t*p=data;put(p,0x214,0x429c80);put(p,0x214,0x424c30);for(unsigned i=0;i<5;i++){size_t o=0x620+(size_t)i*0x60;for(unsigned j=0;j<5;j++)vf0(p,o+j*16);p[o+0x54]=0;}out->original_vtable214=0x424c30;return GH_PLACE_OK;}
+static gh_scene_placement_status fail(gh_om320_state*s,uint32_t f,gh_scene_placement_status e){s->frontier=f;return e;}
+gh_scene_placement_status gh_om320_initialize_00195d08(gh_om320_state*s,gh_om_object*o,const gh_om_initializer_bindings*b,int*out){if(!s||!o||o->source.type!=0x320||!out)return GH_PLACE_ARGUMENT;*out=0;s->frontier=0;int common_return=0;gh_scene_placement_status e=gh_om_common_initialize_001b6fb8(&s->common,o,b,&common_return);if(e)return fail(s,s->common.frontier,e);if(!common_return)return fail(s,0x1b6fb8,GH_PLACE_UNSUPPORTED);uint8_t*p=o->view.bytes;
+ if(s->stage==0){if(!b->init)return fail(s,0x1fe218,GH_PLACE_UNSUPPORTED);uint32_t frontier=0;int original;gh_hitarea_status he=gh_hitarea_object_create_001fe218(b->init,&o->view,2,&s->common.hitarea,&original,&frontier);if(he)return fail(s,frontier?frontier:0x1fe218,GH_PLACE_UNSUPPORTED);s->common.hitarea_created=(uint8_t)original;put(p,0x600,0);s->stage=1;}
+ if(s->stage==1){if(s->common.hitarea_created){if(!b->shapes)return fail(s,0x1fd9d8,GH_PLACE_UNSUPPORTED);const uint32_t rotation[3]={0},offset[3]={0,0xbecccccd,0},size[3]={0x40a66666,0x3f4ccccd,0x4019999a};uint32_t frontier=0;int index;gh_hitarea_status he=gh_hitarea_add_box_001fd9d8(&s->common.hitarea,b->shapes,p+0x80,offset,rotation,size,&index,&frontier);if(he)return fail(s,frontier?frontier:0x1fd9d8,GH_PLACE_UNSUPPORTED);put(s->common.hitarea.bytes,0,w(s->common.hitarea.bytes)|1u);}s->stage=2;}
+ if(s->stage==2){put(p,0x5e8,0);put(p,0x5e4,0);put(p,0x5f0,0);half(p,0x54a,1);put(p,0x608,0);s->segments=p+0x620;p[0x60c]=5;put(p,0x5ec,7);half(p,0x5f6,10);half(p,0x548,1);half(p,0x5f4,0xffff);e=gh_om_fragments_initialize_001c28a0(&s->common);if(e)return fail(s,s->common.frontier,e);s->stage=5;}
+ *out=1;return GH_PLACE_OK;}
+gh_scene_placement_status gh_om320_abort(gh_om320_state*s){return gh_om303_abort(s);}

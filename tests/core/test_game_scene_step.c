@@ -38,7 +38,7 @@ int main(int argc,char**argv){gh_disc*d;size_t index,elfn;gh_disc_entry asset;ui
  C(gh_game_scene_step_002a6690(&step,&b)==GH_SCENE_STEP_UNSUPPORTED&&step.frontier==0x30f090&&init->enemies[0x538]==17);
  C(init->world_time==1&&step.cooldown_1b0==14&&!step.completed_frames);
  gh_game_scene_step_construct(&step,0,15);put(collision.records.pointer,0x200);put((uint8_t*)collision.records.pointer+GH_COLLISION_RECORD_BYTES,0x400);
- C(gh_game_scene_step_002a6690(&step,&b)==GH_SCENE_STEP_UNSUPPORTED&&step.frontier==0x2ba2b0&&step.collision_cursor==1&&step.detail==1);C(get(collision.records.pointer)==0x600);C(gh_game_scene_step_002a6690(&step,&b)==GH_SCENE_STEP_UNSUPPORTED&&step.detail==1&&step.collision_cursor==1); /* firstrecordnotrevisitedasnewframe */
+ C(gh_game_scene_step_002a6690(&step,&b)==GH_SCENE_STEP_UNSUPPORTED&&step.frontier==0x2bac98&&step.collision_cursor==1&&step.detail==1);C(get(collision.records.pointer)==0x600);C(gh_game_scene_step_002a6690(&step,&b)==GH_SCENE_STEP_UNSUPPORTED&&step.frontier==0x2bac98&&step.detail==1&&step.collision_cursor==1&&get(collision.records.pointer)==0x600); /* same pausedframe must not revisit firstrow as a new sweep */
  C(gh_collision_pairs_release(&collision)==GH_COLLISION_OK&&gh_heap_destroy(heap)==GH_MEM_OK);free(init);free(data);free(elf);test_fibers(0);test_fibers(1);
  puts("PASS actualR020 state4 orderedprefix to30F090, realELFevent/AT/action emptydomains, camera mode4 frontier, independentMainNearCheck, noreplay failureprefix andScenario16 nativefibers +parentSleep/revisit");return 0;
 }

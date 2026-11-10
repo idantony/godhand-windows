@@ -210,7 +210,8 @@ static gh_player_init_status player_motion_advance(void*p,const gh_player_motion
 }
 static gh_player_init_status player_motion_solve(void*p,const gh_player_motion_request*r,uint32_t*frontier){
  gh_game_services*s=p;if(!player_motion_request_matches(s,r)||!s->player_motion.complete)return GH_PLAYER_INIT_ARGUMENT;
- gh_motion_solve_bindings b={.model=&s->player_model,.work=s->b.work,.actors=&s->scene_tables};
+ gh_motion_solve_bindings b={.model=&s->player_model,.work=s->b.work,.actors=&s->scene_tables,
+  .ik_globals=s->b.motion_ik_globals,.atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL};
  gh_actor_motion_status e=gh_actor_motion_solve_00152a20(&s->player_motion_solve,&b,GH_STATIC_BINARY32_REFERENCE,frontier);
  return !e?GH_PLAYER_INIT_OK:e==GH_ACTOR_MOTION_UNSUPPORTED?GH_PLAYER_INIT_UNSUPPORTED:e==GH_ACTOR_MOTION_BOUNDS?GH_PLAYER_INIT_BOUNDS:GH_PLAYER_INIT_CALLEE;
 }
@@ -513,7 +514,7 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
      if(de)return fail(s,GH_SERVICES_ASSET,0x12ead8,de);
      s->om_shapes=(gh_hitarea_shape_bindings){.pairs=&s->collision_pairs,.math=s->b.math_globals,.policy=GH_STATIC_BINARY32_REFERENCE};
      s->om_initializer=(gh_om_initializer_bindings){.work=work,.packet_heap=s->b.assets->heap,.fog_rgb=s->world_light.scalar+4,.init=s->b.init,
-      .shapes=&s->om_shapes,.dynamic=&s->dynamic_objects,.door_shared=s->b.door_shared};
+      .shapes=&s->om_shapes,.dynamic=&s->dynamic_objects,.door_shared=s->b.door_shared,.player=&s->title_player.view};
      gh_om_factory_bindings ob={.pools=&s->pools,.work=work,.room_state=&s->room_state,.objects=s->objects,.room_objects=s->room_objects,.factory_serial=s->b.factory_serial,.resources=&s->object_resources,.initializer=&s->om_initializer};
      pe=gh_om_factory_bind(&s->om_factory,&ob,s->om_placements.count);if(pe)return fail(s,GH_SERVICES_ASSET,0x30fb70,pe);}
     pe=gh_om_scene_bind_native_001c3cb8(&s->om_placements,&oms,&s->om_factory,&result);
@@ -547,7 +548,15 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
   gh_light_status le=gh_game_world_light_select_002d8408(&s->world_light,0,player.owner?&player:NULL);if(le)return fail(s,le==GH_LIGHT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->world_light.frontier?s->world_light.frontier:0x2d8408,le);s->case3_stage=34;
  }
  if(s->case3_stage==34){if(!s->b.bgm_requests)return fail(s,GH_SERVICES_FRONTIER,0x2d0850,0);gh_bgm_status be=gh_bgm_requests_scene_begin_002d0850(s->b.bgm_requests,work,*s->b.children,s->b.init);if(be)return fail(s,be==GH_BGM_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,gh_bgm_requests_frontier(s->b.bgm_requests),be);s->case3_stage=35;}
- if(s->case3_stage==35){gh_game_scene_step_case3_cooldown(&s->step);if(work->room!=0x20)return fail(s,GH_SERVICES_FRONTIER,0x2db6b0,0);
+ if(s->case3_stage==35){gh_game_scene_step_case3_cooldown(&s->step);
+  if(work->room!=0x20){
+   /* Actual2DB6B0 only loads747A94 (Work5F4), whose native publication is
+    * SAMEfactory player. Original2A65D0 then writes float30 at player54C. */
+   const gh_title_player_view *player=NULL;
+   if(gh_game_player_factory_scalar_view(&s->player_factory,s->player_factory.handle,&player)||
+      player!=&s->title_player.view||player->size<0x550)return fail(s,GH_SERVICES_FRONTIER,0x2db6b0,0);
+   w32(player->bytes+0x54c,0x41f00000);
+  }
   if((u32(raw+0x594)&0x800)&&(work->flags&0x200)){size_t n;uint8_t*p=(uint8_t*)(void*)gh_game_cockpit_fields(s->cockpit,&n);if(n<0x460)return fail(s,GH_SERVICES_ASSET,0x2a65ec,0);p[0x45e]=p[0x45f]=255;}
   work->flags&=0xfafffdbd;w32(raw+0x5e0,u32(raw+0x5e0)&0xfdffffff);work->flags59c&=0xff7fffff;s->case3_stage=36;
  }

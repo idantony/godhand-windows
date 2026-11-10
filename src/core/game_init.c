@@ -1,6 +1,7 @@
 /* Actual patched ELF2A5B18 and callees. Evidence:game-init-evidence.json. */
 #include "game_init.h"
 #include "game_hitarea_objects.h"
+#include "game_hitarea_shapes.h"
 #include <string.h>
 static void w16(uint8_t *b,size_t o,uint16_t v){b[o]=(uint8_t)v;b[o+1]=(uint8_t)(v>>8);}
 static void w32(uint8_t *b,size_t o,uint32_t v){for(unsigned i=0;i<4;i++)b[o+i]=(uint8_t)(v>>(i*8));}
@@ -124,7 +125,7 @@ gh_init_status gh_game_init_002a5b18(gh_game_init_state *s,gh_boot_work *work,
 gh_init_status gh_game_object_pool_release_001fdfa8(gh_game_init_state*s,uint32_t*f){
  if(f)*f=0;if(!s)return GH_INIT_ARGUMENT;
  for(unsigned i=0;i<416;i++){uint8_t*b=i<160?s->object_pool+(size_t)i*0x60:s->object_pool+0x3c00+(size_t)(i-160)*0x70;
-  if(s->object_links[i]||b[0x3c]||b[0x3d]||b[0x3e]||b[0x3f]){if(f)*f=0x1fd580;return GH_INIT_LINKS;}
+  if(s->object_links[i]||b[0x3c]||b[0x3d]||b[0x3e]||b[0x3f]){if(gh_hitarea_pool_slot_clear_001fd580(s,i,f))return GH_INIT_LINKS;}
   gh_init_status e=pool_record(b,&s->object_links[i],i<160?1:2);if(e)return e;
  }gh_hitarea_detach_after_pool_reset(s);return GH_INIT_OK;
 }

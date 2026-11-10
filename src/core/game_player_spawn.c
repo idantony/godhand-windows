@@ -1,5 +1,5 @@
 #include "game_player_spawn.h"
-#include "id_layout_rotation.h"
+#include "game_actor_matrix.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -8,18 +8,17 @@ static float value(const uint8_t*p){float v;memcpy(&v,p,4);return v;}
 static void put(uint8_t*p,uint32_t v){memcpy(p,&v,4);}
 static float bits(uint32_t n){float x;memcpy(&x,&n,4);return x;}
 static float add(float a,float b){volatile float v=a+b;return v;}
-static float mul(float a,float b){volatile float v=a*b;return v;}
 static gh_player_spawn_status fail(gh_game_player_spawn*s,uint32_t pc,int detail,gh_player_spawn_status e){s->frontier=pc;s->detail=detail;return e;}
 static int coeff(const uint8_t*b,size_t n){if(!b||n<52||memcmp(b,"\177ELF\1\1\1",7)||b[18]!=8||b[19])return 0;size_t table=word(b+28);unsigned step=b[42]|(unsigned)b[43]<<8,count=b[44]|(unsigned)b[45]<<8;if(step<32||count>128||table>n||(size_t)count*step>n-table)return 0;unsigned found=0;const uint32_t expected[4]={0x362e9c14,0xb94fb21f,0x3c08873e,0xbe2aaaa4};for(unsigned i=0;i<count;i++){const uint8_t*p=b+table+(size_t)i*step;if(word(p)!=1)continue;uint32_t off=word(p+4),base=word(p+8),files=word(p+16),mem=word(p+20);if(files>mem||off>n||files>n-off||(uint64_t)base+mem>UINT64_C(0x100000000))return 0;if(base<=0x3c3c90&&(uint64_t)0x3c3ca0<=(uint64_t)base+files){if(found++)return 0;if(memcmp(b+off+(0x3c3c90-base),expected,16))return 0;}}return found==1;}
 static void identity(float*m){memset(m,0,64);for(unsigned i=0;i<4;i++)m[i*5]=1;}
-static void matrix(float*out,const float*a,const float*b){float m[16];for(unsigned c=0;c<4;c++)for(unsigned r=0;r<4;r++){float v=mul(a[r],b[c*4]);v=add(v,mul(a[4+r],b[c*4+1]));v=add(v,mul(a[8+r],b[c*4+2]));m[c*4+r]=add(v,mul(a[12+r],b[c*4+3]));}memcpy(out,m,64);}
 static gh_player_spawn_status world_matrix(gh_game_player_spawn*s){uint8_t*p=s->b.player->view.bytes;
- if(p[0x140])return fail(s,0x147728,p[0x140],GH_PLAYER_SPAWN_UNSUPPORTED);if(!coeff(s->b.elf,s->b.elf_bytes))return fail(s,0x30a5d0,0,GH_PLAYER_SPAWN_UNSUPPORTED);
- fenv_t env;if(feholdexcept(&env))return GH_PLAYER_SPAWN_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_PLAYER_SPAWN_NUMERIC;}float sn,cs;gh_id_error e=gh_id_sincos_reference(s->yaw,&sn,&cs);float m[16],translation[16],rx[16],rz[16],sy0,cy0;
- /* Actual147728 order0 always invokes allthree SDKrotation leaves. */
- if(!e)e=gh_id_sincos_reference(0,&sy0,&cy0);
- if(!e){float x[16]={1,0,0,0,0,cy0,sy0,0,0,-sy0,cy0,0,0,0,0,1},y[16]={cs,0,-sn,0,0,1,0,0,sn,0,cs,0,0,0,0,1},z[16]={cy0,sy0,0,0,-sy0,cy0,0,0,0,0,1,0,0,0,0,1};memcpy(rx,x,64);memcpy(rz,z,64);identity(m);matrix(m,rx,m);matrix(m,y,m);matrix(m,rz,m);identity(translation);memcpy(translation+12,s->position,12);matrix(m,translation,m);}
- if(fesetenv(&env))return GH_PLAYER_SPAWN_NUMERIC;if(e)return fail(s,0x147728,e,GH_PLAYER_SPAWN_UNSUPPORTED);for(unsigned i=0;i<16;i++)if(!isfinite(m[i]))return fail(s,0x147b60,0,GH_PLAYER_SPAWN_NUMERIC);memcpy(p+0x80,m,64);return GH_PLAYER_SPAWN_OK;
+ /* Raw31C78C1476D0 establishes T, then31C7A0147B60(out,T,angles,mode).
+  *147B60 is147728 rotation followedby147548 T*R; SCALE is not involved. */
+ unsigned mode=p[0x140];if(mode<6&&!coeff(s->b.elf,s->b.elf_bytes))return fail(s,0x30a5d0,0,GH_PLAYER_SPAWN_UNSUPPORTED);
+ float angles[3],rotation[16],translation[16],result[16];memcpy(angles,p+0x100,12);memcpy(translation,p+0x80,64);uint32_t frontier=0;
+ gh_actor_matrix_status e=gh_actor_matrix_rotation_00147728(angles,mode,rotation,GH_STATIC_BINARY32_REFERENCE,&frontier);
+ if(!e)e=gh_actor_matrix_product_00147548(translation,rotation,result,GH_STATIC_BINARY32_REFERENCE,&frontier);
+ if(e)return fail(s,frontier?frontier:0x147b60,e,GH_PLAYER_SPAWN_UNSUPPORTED);memcpy(p+0x80,result,64);return GH_PLAYER_SPAWN_OK;
 }
 gh_player_spawn_status gh_game_player_spawn_0031c5c0(gh_game_player_spawn*s,const gh_player_spawn_bindings*b){
  if(!s||!b||!b->player||!b->work||!b->actors)return GH_PLAYER_SPAWN_ARGUMENT;gh_title_player_view*v=&b->player->view;if(!v->bytes||v->size<GH_TITLE_PLAYER_BYTES||v->alias_f0!=v->bytes+0xb0||v->alias_d0!=v->bytes+0x30)return GH_PLAYER_SPAWN_ARGUMENT;

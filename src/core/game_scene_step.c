@@ -29,16 +29,12 @@ static gh_scene_step_status nearcheck(gh_game_scene_step*s,const gh_game_scene_s
  }return GH_SCENE_STEP_OK;
 }
 static gh_scene_step_status collision(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){gh_collision_pairs*c=b->collision;
- if(!c->constructed||c->count>GH_COLLISION_CAPACITY||!c->records.pointer)return fail(s,0x2b9d58,GH_SCENE_STEP_ARGUMENT,0);
- for(uint32_t i=s->collision_cursor;i<c->count;i++){uint8_t*p=(uint8_t*)c->records.pointer+(size_t)i*GH_COLLISION_RECORD_BYTES;uint32_t flags=w(p);
-  if(flags&0x603){if(flags&0x400)return fail(s,0x2ba2b0,GH_SCENE_STEP_UNSUPPORTED,(int)i);if(flags&0x200)p32(p,flags|0x400);}
-  s->collision_cursor=i+1;
- }
- /* The legacy used word retains a guest-head token, not an active count.
-  * Native shapes carry the same live list through their typed companion. */
- if(c->used)return fail(s,0x2b8aa8,GH_SCENE_STEP_UNSUPPORTED,0);
- for(uint32_t i=0;i<c->count;i++)if(w((const uint8_t*)c->records.pointer+(size_t)i*GH_COLLISION_RECORD_BYTES)&3)return fail(s,0x2b8aa8,GH_SCENE_STEP_UNSUPPORTED,(int)i);
- if(gh_collision_pair_shapes_have_live(c))return fail(s,0x2b8aa8,GH_SCENE_STEP_UNSUPPORTED,0);
+ uint32_t frontier=0;gh_pair_shape_status e=gh_collision_pairs_step_resume_002b9d58(c,&s->collision_frame,GH_STATIC_BINARY32_REFERENCE,&frontier);
+ s->collision_cursor=s->collision_frame.sweep_row;
+ if(e){uint32_t detail=!s->collision_frame.stage?s->collision_frame.sweep_row:
+   s->collision_frame.stage==1?s->collision_frame.geometry_link:s->collision_frame.source_link;
+  return fail(s,frontier?frontier:0x2b9d58,e==GH_PAIR_SHAPE_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:
+   e==GH_PAIR_SHAPE_ARGUMENT?GH_SCENE_STEP_ARGUMENT:GH_SCENE_STEP_CALLEE,(int)detail);}
  return GH_SCENE_STEP_OK;
 }
 static gh_scene_step_status actors(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){if(b->actors->pending_actor_head||b->actors->pending_actor_count)return fail(s,0x12e870,GH_SCENE_STEP_UNSUPPORTED,0);if(w((const uint8_t*)b->work+0x594)&0x8000000)return fail(s,0x12e8cc,GH_SCENE_STEP_UNSUPPORTED,0);return GH_SCENE_STEP_OK;}

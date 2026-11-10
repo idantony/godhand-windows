@@ -1,5 +1,6 @@
 #include "game_scene_exit.h"
 #include "game_scene_aux.h"
+#include "scene_at_units.h"
 #include <string.h>
 static uint32_t w(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void put(uint8_t*p,uint32_t n){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(n>>(8*i));}
@@ -61,7 +62,10 @@ static gh_scene_exit_status phase1(gh_game_scene_exit*s,const gh_game_scene_exit
  case 14:break; /*actual141620 JRRA/NOP*/
  case 15:if((e=call(s,b,0x141628,NULL)))return e;break;
  case 16:if((e=call(s,b,0x1612a8,NULL)))return e;break;
- case 17:if(!b->scene_at)return fail(s,0x2c1270,GH_SCENE_EXIT_ARGUMENT);for(unsigned i=0;i<8;i++)if(b->scene_at->jump_slots[i].bytes)return fail(s,0x30f5a0,GH_SCENE_EXIT_UNSUPPORTED);break;
+ case 17:if(!b->scene_at)return fail(s,0x2c1270,GH_SCENE_EXIT_ARGUMENT);for(unsigned i=0;i<8;i++)if(b->scene_at->jump_slots[i].bytes)return fail(s,0x30f5a0,GH_SCENE_EXIT_UNSUPPORTED);
+  /* The verified empty-jump quit also ends this room's native list companion.
+   * Retaining it would bind the next room to the old bundle/room identity. */
+  if(gh_scene_at_units_release(b->scene_at))return fail(s,0x2c1270,GH_SCENE_EXIT_CALLEE);break;
  case 18:if((e=call(s,b,0x2ad108,NULL)))return e;break;
  default:return GH_SCENE_EXIT_OK;
  }s->operation++;}

@@ -55,6 +55,14 @@ a host format error changes valid original behavior. A fixture supplying a
 recognized format does not establish that the real caller supplies it. Keep
 original NULL/false returns distinct from native bounds or implementation errors.
 
+Keep a paused original invocation distinct from a new frame or call. A host
+frontier can occur after a list sweep, matrix write or hit insertion; persist
+the completed prefix and resume at the failing operation. Retrying from the
+start can advance destruction by a frame or duplicate hits. Clear continuation
+state only on genuine completion. Rebinding an animation must explicitly begin
+a new invocation on the same owner and release its previous sequence/effects;
+zeroing the owner is not a valid replacement for the original cleanup.
+
 Treat a typed pointer companion as the current value of an original field,
 not an append-only history of assignments. Repeated writes to the same owner
 offset must replace that slot while preserving other fields. Exercise scene

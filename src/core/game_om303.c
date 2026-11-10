@@ -1,6 +1,7 @@
 /* Actualtype303 constructor1879C8/1C27E8/1B6E90, virtual187A78. */
 #include "game_om303.h"
 #include "game_om_base.h"
+#include "game_om_fragments.h"
 #include "game_actor_model_nodes.h"
 #include <string.h>
 static uint32_t w(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}static void put(uint8_t*p,size_t o,uint32_t n){memcpy(p+o,&n,4);}static void half(uint8_t*p,size_t o,uint16_t n){memcpy(p+o,&n,2);}static void vf0(uint8_t*p,size_t o){memset(p+o,0,12);put(p,o+12,0x3f800000);}
@@ -18,9 +19,8 @@ gh_scene_placement_status gh_om303_initialize_00187a78(gh_om303_state*s,gh_om_ob
   if(index>=0){const uint8_t*record;gh_collision_pair_shape shape;uint32_t*mask;if(gh_hitarea_node_at(&s->sphere_unit,0,&record,&shape)||gh_collision_pair_shape_mode_pointer(&shape,&mask))return fail(s,0x1fd668,GH_PLACE_UNSUPPORTED);*mask&=~2u;}}
  s->stage=4;}
  if(s->stage==4){put(p,0x5e8,0);put(p,0x5e4,0);put(p,0x5f0,0);half(p,0x5f6,0);half(p,0x54a,1);put(p,0x608,0);s->segments=p+0x620;p[0x60c]=10;put(p,0x5ec,7);half(p,0x548,1);half(p,0x5f4,0xffff);
-  /*1C28A0 initialpart/visibility gates.*/half(p,0x610,30);for(unsigned i=0;i<s->common.model.script.mesh_count;i++){const gh_actor_node_packets*packet;if(gh_actor_model_packet_at(&s->common.model,i,&packet))return fail(s,0x14b6f8,GH_PLACE_BOUNDS);uint8_t*n=packet->node;if(n[0x40c]==0)put(n,0x380,w(n+0x380)&~1u);else if(n[0x40c]==0x40)put(n,0x380,w(n+0x380)|1u);}for(unsigned i=1;i<10&&i<s->common.model.part_count;i++){const gh_actor_part*part;if(gh_actor_model_part_at(&s->common.model,i,&part))return fail(s,0x1c28a0,GH_PLACE_BOUNDS);put(part->bytes,0x154,w(part->bytes+0x154)|0x18u);}s->stage=5;}
+  e=gh_om_fragments_initialize_001c28a0(&s->common);if(e)return fail(s,s->common.frontier,e);s->stage=5;}
  *out=1;return GH_PLACE_OK;}
 static gh_scene_placement_status setters(gh_om303_state*s,const uint8_t*xyz,int euler){if(!s||!xyz||s->stage<5||!s->common.object)return GH_PLACE_ARGUMENT;uint8_t*p=s->common.object->view.bytes;if(euler)memcpy(p+0x100,xyz,12);else{memcpy(p+0x490,xyz,12);memcpy(s->common.object->view.alias_f0,p+0x490,12);}put(p,0x5b8,w(p+0x5b8)|0x10u);int segment_count=p[0x60c]<128?p[0x60c]:(int)p[0x60c]-256;if(!(w(p+0x5b0)&2u)){for(unsigned i=1;(int)i<segment_count&&i<s->common.model.part_count;i++){const gh_actor_part*part;if(gh_actor_model_part_at(&s->common.model,i,&part))return fail(s,0x14bfe0,GH_PLACE_BOUNDS);put(part->bytes,0x154,w(part->bytes+0x154)&~0x18u);}gh_actor_model_status me=gh_actor_model_update_hierarchy_00149eb8(&s->common.model,GH_STATIC_BINARY32_REFERENCE);if(me)return fail(s,s->common.model.frontier,GH_PLACE_UNSUPPORTED);for(unsigned i=1;(int)i<segment_count&&i<s->common.model.part_count;i++){const gh_actor_part*part;if(gh_actor_model_part_at(&s->common.model,i,&part))return GH_PLACE_BOUNDS;put(part->bytes,0x154,w(part->bytes+0x154)|0x18u);}}s->frontier=0;return GH_PLACE_OK;}
 gh_scene_placement_status gh_om303_set_position_001c3778(gh_om303_state*s,const uint8_t*xyz){return setters(s,xyz,0);}gh_scene_placement_status gh_om303_set_euler_001c3988(gh_om303_state*s,const uint8_t*xyz){return setters(s,xyz,1);}
 gh_scene_placement_status gh_om303_abort(gh_om303_state*s){if(!s)return GH_PLACE_ARGUMENT;if(s->sphere_created){uint32_t frontier=0;gh_hitarea_status he=gh_hitarea_shapes_abort_object(&s->sphere_unit,&frontier);if(he)return fail(s,frontier,GH_PLACE_UNSUPPORTED);he=gh_hitarea_object_release_empty_001fe278(&s->sphere_unit,&frontier);if(he)return fail(s,frontier,GH_PLACE_UNSUPPORTED);s->sphere_created=0;}return gh_om_initialize_abort(&s->common);}
-

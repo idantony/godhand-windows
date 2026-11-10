@@ -13,7 +13,7 @@ extern "C" {
 struct gh_collision_pair_shapes;
 typedef struct {gh_r207_allocation records;gh_heap *heap;uint32_t count,used;
  uint32_t pair_masks[32];uint8_t constructed;
- struct gh_collision_pair_shapes *native_shapes;uint32_t shape_serial;} gh_collision_pairs;
+ struct gh_collision_pair_shapes *native_shapes;uint32_t shape_serial;uint8_t deletion_mode;} gh_collision_pairs;
 typedef enum {GH_COLLISION_OK,GH_COLLISION_ARGUMENT,GH_COLLISION_BUSY,GH_COLLISION_MEMORY} gh_collision_status;
 /* Actual2B8AE0->2BA178. Matrix initialzero comes from originalstaticBSS,
  * not a clear performed by every2B8B50 invocation. Call once pernativeowner. */

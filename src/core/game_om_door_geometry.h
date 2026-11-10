@@ -8,7 +8,7 @@ extern "C" {
 #endif
 /* Persistent canonical429290 mutable .data attributes; loadonceatboot, same
  * bytesborrowed byall doors/rooms. Never assume staticELFmeansconstmemory. */
-typedef struct {uint8_t attributes[96];uint8_t initialized;uint8_t ranges307[12],ranges307_initialized;} gh_om_door_shared;
+typedef struct {uint8_t attributes[96];uint8_t initialized;uint8_t ranges307[12],ranges307_initialized;uint8_t ranges322[8],ranges322_initialized;uint8_t ranges323[8],ranges323_initialized;uint8_t ranges346[12],ranges346_initialized;} gh_om_door_shared;
 typedef gh_om_door_shared gh_om_shared_tables;
 gh_scene_placement_status gh_om_door_shared_from_elf(gh_om_door_shared *,const void *,size_t);
 typedef struct {struct gh_scene_dynamic_box *box;gh_om_object *object;gh_scene_dynamic_owner *owner;uint32_t frontier;uint8_t complete;} gh_om_door_geometry;

@@ -4,6 +4,7 @@
 #include "game_scene_setup.h"
 #include "game_scene_tables.h"
 #include "game_collision_pairs.h"
+#include "game_collision_pair_shapes.h"
 #include "game_title_player.h"
 #include "screen_fade.h"
 #include "game_event.h"
@@ -25,6 +26,7 @@ typedef struct {
  uint32_t profile_752cf0,profile_752cfc,profile_752d44,word_5caff4;
  uint32_t stage,frontier,collision_cursor,scenario_task_cursor;int detail;uint64_t completed_frames;
  uint8_t scenario_stage,scenario_before_stage,death_callback_pending,enemy_stage;
+ gh_collision_pair_frame collision_frame;
  uint32_t object_wait_acd0; /*previouslyunrepresented574380+ACD0scalar*/
 } gh_game_scene_step;
 /* Required semantic boundaries for as-yet-unported world/render consumers.

@@ -3,47 +3,66 @@
 Updated 2026-11-10. Read Git and live worker ownership before editing. This is
 an ongoing authorized source port, not a playable Windows game yet.
 
-Latest GitHub milestone is b78ae9d (151C/159checks, room-transition-22,
-actual001FE218). Push succeeded and formal review was recorded privately.
-Latest complete LOCAL verification is room-transition-26:179C/187checks,
-allhardware/codec/fullADX, matchingRNG20544/20534 and hidden/muted actualWindows
-470ticks/R100/Main3. It executesNodeCache, actual107F58 sameMTB3 a1/a2->SEQabsent,
-real306200 coldscan, completeinitialbinding/152448 setup, real157C18 sampling/
-advance,149EB8,then152A20 actualR100 ray/height/153808; strict153158. World0,
-renderer/window/cleanup0, process4. Private26 receipt separates actual versus
-44OM constructor and9573vertex geometry fixtures. Standard public reports remain22.
-Frozen26 is eligible for the exact local rollback checkpoint; inspect Git for
-its current local commit. It has not been pushed at this update.
+Latest public milestone: b78ae9d / room-transition-22 (151C/159checks,
+actual001FE218). Latest local rollback: e34265a / room-transition-26
+(179C/187checks, actual153158). Public reports intentionally remain22.
 
-OM worker now maintains own chained immutable om-batch-* snapshots onG, starting
-from room-transition-25. Latest observed is om-batch-310 (45OMS independent
-sourceintegration); next320 in progress. Do not overlay its mutable sharedE
-factory/common files blindly. Root26 used exact om-batch-30e(44OMS) plus explicit
-Root/player overlays.24/25 were source copies, never whole-suite passes.
+Latest complete LOCAL verification: room-transition-32 passes192C/199checks,
+all hardware/codec/fullADX and matchingDLL RNG20544/20534. Matching hidden/muted
+actualWindows32 executes full107F58,31C5C0(mode4T*R/ray/hierarchy/camera), R020
+SceneAt quit lifetime release, then R10024sourceunits/JMP initialization.
+Next strict002BEDE8 positiveEMS saved-record encoding atcase3stage27, BEFOREOM.
+470ticks/R100/Main3,6MC/90Movie/351UI,world0,renderer/window/cleanup0,exit4.
+Private32 receipt is current proof. Standard public reports still identify22.
 
-Root motion bridges borrow same fullDAT/model/rate/IKglobals/effects buffers;
-tail solves only through real153158 frontier. Peer opengoal restores that math
-and later solve, skill_forward_test restores1FD580 normaldtor/lifetimes;
-godhand_upstream continues remainingOMconstructors. Native shapeabort is still
-separate from original deferred deletion. Pending E changes are not26 proof.
+31 passed192C/199checks but actualWindows failed ARG2C0F90: oldR020 native list
+companion retained oldroom identity. 32 releases it at the verified empty-jump
+SceneExit phase1operation17 boundary; nonemptyjump destructors remain strict.
+A realR020 cleanup regression asserts companion release. Do not hide failed31
+run behind its passing module suite. No immutable sources were changed.
 
-Codex HTTP400 interruption was diagnosed in local scoped logs: official
-responses endpoint returned only BadRequest; no specific cause was supplied.
-SubsequentHTTP200 and resumed child tests confirmed recovery. No credentials or
-request content was archived. A UI request error is not a native-game test failure.
+Earlier28 passes189C/196checks. 27 failed dedicated GameInit test link (28 fixes
+coherent closure). 29 failed an obsolete post_init fixture expecting missing
+14A038 implementation;30 source-only fixes it to assert missingparts BOUNDS.
+31 derives30+om346 delta+normalized spawn-order delta, Root bridges/manifests.
+The original spawn-order receipt lacked schema1; Root normalized hashes into a
+separate new directory without modifying the frozen original. 31 passes all.
 
-New room-transition-23 passed163C/171checks, all opt-ins, matching hidden/muted
-Windows470ticks reaches real0014B730 after4Take spheres/4Give cylinders/box;
-worldpackets0, cleanup passes. Private23 receipt preserves actual/fixture scopes.
-It copied exact163-module inputs:
-same-pool HitArea4spheres/4cylinders/box, full3door300 models/shapes/dynamicboxes,
-general matrix/spawn and Event env/start/strictclear/module-load leaves.
-Standard public reports still identify22;23 is not committed/pushed yet. RNG
-now explicitly uses matching snapshot verification/build/native/godhand_core.dll
-via --dll, rather than the legacy default DLL.22 was also rechecked this way.
-Workers continue outside23:
-godhand_upstream303 frozen and304 next; skill_forward_test player14B730 suffix;
-opengoal_method mtb3 initial motion/IK/cache (2A8578/157568 etc).
+29 derives28 + actor-finish-model-20261110-065239-781 and hitarea runtime06,
+then explicit Root post_init/build overlays. 28 derives27 with build-tool fix.
+27 derives full om-batch-33f + Root26 exact39-file delta + runtime01..05 +
+child-attached-batch-01 + actor-palette-batch-01 +
+actor-two-bone-20261110-064505-281, followed by explicit Root bridges/manifests.
+Each delta has immutable receipt.json hashes; never edit any frozen source.
+
+The freeze tool now supports repeated --overlay-bundle (requires base). It
+validates receipt/source/dependency hashes and rechecks frozen inputs across
+copying. Private analysis JSON stays in its original bundle, never authored
+source. Bundle order applies after E: --overlay, so use a second composition
+when Root overlays must take final priority. Functional traversal/hash/dependency/
+frozen-source/frozen-receipt mutation rejection passed; evidence is private.
+
+Runtime/fixture distinction: full153158/152A20/14A038/107F58/31C5C0 are
+connected in actualWindows32. 64/69 first-room OM constructors remain fixtures
+until actual startup reaches them. 9573 actual OM00/PL00/PL01 vertices now pass canonical
+1503B8 world80*translation(C0.xyz) palette + kernel2 geometry against independent
+vertex-first math. No lighting/clip/projection/GPU/worldframe claim follows.
+
+Root bridges borrow SAME fullDAT/model/rate/effect/IK globals; atan_coeff is
+Root camera_envelope's original coefficients. 107F58 truly passes the sameMTB3
+for a1/a2; SEQmagic gate yields absentSEQ. Do not insert1CF3A8 in107F58: raw
+108918 calls14A038 then108928 Heat2A9CC8; child runtime1CF3A8 belongs12C418.
+
+Physics now has a persistent frame cursor in scene_step. Failure/retry resumes
+sweep/geometry/query prefixes; success clears it for the next true frame.
+Typed child0->parent17 attachment participates in shared149EB8, with lifetime
+borrow guards; clear attachment before either model release. Nativeabort is
+separate from original deferred destruction. Runtime06 adds true sphere-cylinder
+both directions; box queries remain strict. Workers continue in newer E: WIP.
+
+Codex HTTP400 was diagnosed in local scoped logs: official responses endpoint
+returned only BadRequest, no specific cause. LaterHTTP200 and resumed child
+tests confirmed recovery. No request/credentials archived; UI error != game error.
 
 ## Scope and authority
 
@@ -81,7 +100,7 @@ FFmpeg .tools/ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe; vgmstream-r2168
 independent oracle. G:/middle_thing/godhand_windows/adx-research/reference.wav
 matches all6369200 stereo48k title samples. RTX4080SUPER hardware D3D11 tested.
 
-## Latest whole verification
+## Published whole verification
 
 Immutable snapshot G:/middle_thing/godhand_windows/snapshots/room-transition-22
 passes151C/159checks, hardware/codec/fullADX enabled. RNG20544/20534 modeled
@@ -111,19 +130,22 @@ static renderer,b78ae9d full initial parent/child models. All are now public.
 
 - Root owns build manifests, platform/game_services/startup_host/main and native
   GPU integration, exact-source verification, curated docs/checkpoints/push.
-- godhand_upstream owns actor models/packets/hierarchy/matrix and child-tail;
-  next firstdoor300 virtual1B7118. Matrix batch after22 is separately frozen,
-  not yet whole verified: add game_actor_matrix.c; coordinate shared headers.
-- opengoal_method owns SceneAt geometry/step, follow/envelope/shake; new original
-  player spawn31C5C0 in progress. It must follow real107F58 completion.
-- skill_forward_test owns HitArea/shape constructors and player-init tail. New
-  collision_pair_shapes/hitarea_shapes need SAMEinit/pairs and Rootmath owner;
-  existing shared-file edits are coordinated/frozen per batch.
-
-Cross-model attachment limitation: Init149EB8 runs before child attachment and
-is verified. Later bare149EB8 on attachedchild must honor the external parent17
-typed link; current local-only hierarchy is insufficient. Do not silently sample
-an attachedchild with its former localparent. Model/attachment workers know this.
+- godhand_upstream owns first-room OM constructors/shared actor matrix/model
+  consumers. Own full chained frozen snapshots through om-batch-309 cover69/69
+  constructors independently; Root32 uses346(64/69). Next sameRoomSave EMS
+  positive binder2BEDE8 actualfrontier (Root provided enemy-placements-32 probe).
+  35D tailappend
+  initializer.solids needs SAMEcollision_solids; release OM scopedunits before
+  global solids_shutdown on shutdown. No global clear from per-OMabort. Root uses frozen shared files only.
+- opengoal_method owns motion/IK/finish-model recovery. Explicit new Motion
+  invocation companion is frozen (motion-call-20261110-071116-836), not yet
+  integrated; next R100 Scenario9B0/BC0/Event1 true native fiber script.
+- skill_forward_test owns HitArea/collision/attachment. runtime06 sphere-cylinder
+  is integrated31; runtime07..09 are frozen but NOT integrated. Peer found dispatch assumptions
+  wrong for kind2 cylinder pairs/boxbox; correcting ALL2B8F48 kind mapping,
+  including audit of integrated06 sphere-cylinder. Preserve original erroneous
+  records, no claim of complete collision. Await corrected runtime10 before
+  integrating more queries. None has executed actualworld physics yet.
 
 Use collaboration live status: a send_message to a completed worker does not
 wake it; use followup_task. Never stage all newer working changes. Workers may

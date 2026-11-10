@@ -7,6 +7,8 @@ extern "C" {
 #endif
 /* Original1B6E90 sharedbase. Callerfactoryzeroscompleteconcreteallocation;
  * ctor preservesallotherbytes, includingunknown derivedstorage. */
+/* Original1C7D98 adds610/630 VF0 and5B0bit8 only. */
+gh_scene_placement_status gh_om_pushable_construct_001c7d98(void *,size_t,gh_title_player_view *);
 gh_scene_placement_status gh_om_base_construct_001b6e90(void *,size_t,gh_title_player_view *);
 #ifdef __cplusplus
 }

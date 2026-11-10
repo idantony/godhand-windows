@@ -4,7 +4,7 @@
 #include <string.h>
 gh_collision_status gh_collision_pairs_construct_002b8ae0(gh_collision_pairs*s,gh_heap*h){
  if(!s||!h)return GH_COLLISION_ARGUMENT;if(s->constructed)return GH_COLLISION_BUSY;
- *s=(gh_collision_pairs){0};s->heap=h;s->constructed=1;return GH_COLLISION_OK;
+ *s=(gh_collision_pairs){0};s->heap=h;s->deletion_mode=2;s->constructed=1;return GH_COLLISION_OK;
 }
 gh_collision_status gh_collision_pair_set_002b8d88(gh_collision_pairs*s,int mode,unsigned a,unsigned b){
  if(!s||!s->constructed||a>=32||b>=32)return GH_COLLISION_ARGUMENT;

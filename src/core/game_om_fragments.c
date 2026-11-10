@@ -1,0 +1,6 @@
+/*Actual1C28A0,ONE sharedimplementation for303/305/320.*/
+#include "game_om_fragments.h"
+#include "game_actor_model_nodes.h"
+#include <string.h>
+static uint32_t w(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}static void put(uint8_t*p,size_t o,uint32_t n){memcpy(p+o,&n,4);}
+gh_scene_placement_status gh_om_fragments_initialize_001c28a0(gh_om_init_state*s){if(!s||!s->object||!s->model.ready||s->model.root.bytes!=s->object->view.bytes||s->object->view.size<0x612)return GH_PLACE_ARGUMENT;uint8_t*p=s->object->view.bytes;s->frontier=0;if(p[0x2b4]!=s->model.part_count){s->frontier=0x14bfe0;return GH_PLACE_BOUNDS;}uint16_t value=30;memcpy(p+0x610,&value,2);for(unsigned i=0;i<s->model.script.mesh_count;i++){const gh_actor_node_packets*packet;if(gh_actor_model_packet_at(&s->model,i,&packet)){s->frontier=0x14b6f8;return GH_PLACE_BOUNDS;}uint8_t*n=packet->node;if(n[0x40c]==0)put(n,0x380,w(n+0x380)&~1u);else if(n[0x40c]==0x40)put(n,0x380,w(n+0x380)|1u);}int limit=p[0x60c]<128?p[0x60c]:(int)p[0x60c]-256;for(unsigned i=1;(int)i<limit&&i<s->model.part_count;i++){const gh_actor_part*part;if(gh_actor_model_part_at(&s->model,i,&part)){s->frontier=0x14bfe0;return GH_PLACE_BOUNDS;}put(part->bytes,0x154,w(part->bytes+0x154)|0x18u);}return GH_PLACE_OK;}

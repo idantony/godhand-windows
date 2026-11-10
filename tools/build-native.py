@@ -171,6 +171,10 @@ def main():
                ("game_actor_motion_ik", "src/core/game_actor_motion_ik.c"),
                ("game_actor_motion_step", "src/core/game_actor_motion_step.c"),
                ("game_actor_motion_solve", "src/core/game_actor_motion_solve.c"),
+               ("game_actor_two_bone", "src/core/game_actor_two_bone.c"),
+               ("game_actor_finish_model", "src/core/game_actor_finish_model.c"),
+               ("game_actor_palette", "src/core/game_actor_palette.c"),
+               ("game_actor_external_parent", "src/core/game_actor_external_parent.c"),
                ("game_effect_release", "src/core/game_effect_release.c"),
                ("skinned_mesh_blend", "src/assets/skinned_mesh_blend.c"),
                ("game_player_node_cache", "src/core/game_player_node_cache.c"),
@@ -191,6 +195,14 @@ def main():
                ("game_om307", "src/core/game_om307.c"),
                ("game_om30a", "src/core/game_om30a.c"),
                ("game_om30e", "src/core/game_om30e.c"),
+               ("game_om310", "src/core/game_om310.c"),
+               ("game_om320", "src/core/game_om320.c"),
+               ("game_om322", "src/core/game_om322.c"),
+               ("game_om323", "src/core/game_om323.c"),
+               ("game_om324", "src/core/game_om324.c"),
+               ("game_om33f", "src/core/game_om33f.c"),
+               ("game_om346", "src/core/game_om346.c"),
+               ("game_om_fragments", "src/core/game_om_fragments.c"),
                ("game_camera_follow", "src/core/game_camera_follow.c"),
                ("game_camera_envelope", "src/core/game_camera_envelope.c"),
                ("game_camera_shake", "src/core/game_camera_shake.c"),
@@ -205,6 +217,7 @@ def main():
                ("game_hitarea_objects", "src/core/game_hitarea_objects.c"),
                ("game_hitarea_shapes", "src/core/game_hitarea_shapes.c"),
                ("game_collision_pair_shapes", "src/core/game_collision_pair_shapes.c"),
+               ("game_collision_pair_queries", "src/core/game_collision_pair_queries.c"),
                ("game_scene_at_geometry", "src/core/game_scene_at_geometry.c"),
                ("id_entry_reset", "src/core/id_entry_reset.c"), ("id_layout_rotation", "src/core/id_layout_rotation.c"),
                ("id_animation", "src/core/id_animation.c"), ("id_texture_polygon", "src/core/id_texture_polygon.c"),
@@ -233,6 +246,9 @@ def main():
         ("game-actor-motion-ik", "tests/core/test_game_actor_motion_ik.c", "iso"),
         ("game-actor-motion-step", "tests/core/test_game_actor_motion_step.c", "iso"),
         ("game-actor-motion-solve", "tests/core/test_game_actor_motion_solve.c", "iso"),
+        ("game-actor-two-bone", "tests/core/test_game_actor_two_bone.c", "iso"),
+        ("game-actor-finish-model", "tests/core/test_game_actor_finish_model.c", "iso"),
+        ("game-actor-palette", "tests/core/test_game_actor_palette.c", "iso"),
         ("game-effect-release", "tests/core/test_game_effect_release.c", "iso"),
         ("skinned-mesh-blend", "tests/assets/test_skinned_mesh_blend.c", "iso"),
         ("game-player-node-cache", "tests/core/test_game_player_node_cache.c", "both"),
@@ -253,6 +269,15 @@ def main():
         ("game-om307", "tests/core/test_game_om307.c", "both"),
         ("game-om30a", "tests/core/test_game_om30a.c", "both"),
         ("game-om30e", "tests/core/test_game_om30e.c", "both"),
+        ("game-om310", "tests/core/test_game_om310.c", "both"),
+        ("game-om320", "tests/core/test_game_om320.c", "both"),
+        ("game-om322", "tests/core/test_game_om322.c", "both"),
+        ("game-om323", "tests/core/test_game_om323.c", "both"),
+        ("game-om324", "tests/core/test_game_om324.c", "both"),
+        ("game-om33f", "tests/core/test_game_om33f.c", "both"),
+        ("game-om346", "tests/core/test_game_om346.c", "both"),
+        ("game-collision-pair-step", "tests/core/test_game_collision_pair_step.c", "elf"),
+        ("game-collision-pair-queries", "tests/core/test_game_collision_pair_queries.c", "none"),
         ("game-camera-follow", "tests/core/test_game_camera_follow.c", "iso"),
         ("game-camera-envelope", "tests/core/test_game_camera_envelope.c", "iso"),
         ("game-camera-shake", "tests/core/test_game_camera_shake.c", "none"),
@@ -434,7 +459,9 @@ def main():
     run("compile-game-gate-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_gate", "game_start", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_game_gate.c", "-o", output / "test_game_gate.exe"])
     run("compile-id-base-tests", common + ["-Isrc/core"] + [objects[name] for name in ("id_base", "id_path", "mc_boot_id", "menu_state", "core_bundle", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_id_base.c", "-o", output / "test_id_base.exe"])
     run("compile-packed-message-tests", common + [objects[name] for name in ("packed_message", "id_base", "id_path", "font_state", "core_bundle", "menu_state", "disc")] + ["tests/core/test_packed_message.c", "-o", output / "test_packed_message.exe"])
-    run("compile-game-init-tests", common + ["-Isrc/core", objects["game_init"], objects["game_hitarea_objects"], "tests/core/test_game_init.c", "-o", output / "test_game_init.exe"])
+    # Object-pool shutdown now owns real shape/list destruction too; use the
+    # coherent core closure instead of maintaining a second partial link list.
+    run("compile-game-init-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_game_init.c", "-o", output / "test_game_init.exe"])
     run("compile-mc-task-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_task.c", "-o", output / "test_mc_task.exe"])
     id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "id_animation", "id_layout_rotation", "menu_state", "font_state", "font_texture", "core_bundle", "disc", "tim2")]
     run("compile-id-jobs-tests", common + id_objects + ["tests/core/test_id_jobs.c", "-o", output / "test_id_jobs.exe"])

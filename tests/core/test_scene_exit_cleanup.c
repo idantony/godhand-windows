@@ -127,7 +127,9 @@ int main(int argc,char**argv){
   CHECK(gh_game_scene_exit_002a67d0(&exiting,&eb)==GH_SCENE_EXIT_UNSUPPORTED&&exiting.frontier==0x12e800&&exiting.operation==11&&audio_exit.begun&&!scene.module->bound&&scene.room_pack->loaded&&scene.pools->initialized&&id->pool_used==405);
   uint32_t counts_before[]={scene.scene_tables->actor_count60,scene.scene_tables->actor_count64,scene.scene_tables->actor_count68};uint32_t vec_before[3];memcpy(vec_before,scene.scene_tables->actor_vec30,12);
   cleanup_context cleanup={&audio_exit,&scene,init,save,runtime,children,&dvd};eb.external=cleanup_provider;eb.context=&cleanup;
+  CHECK(scene.scene_at->native_units&&scene.scene_at->ready);
   CHECK(!gh_game_scene_exit_002a67d0(&exiting,&eb)&&loop.game_state[1]==2&&!scene.scene_tables->akg.bytes&&!scene.scene_tables->actors_ready);
+  CHECK(!scene.scene_at->native_units&&!scene.scene_at->ready); /* oldR020 room identity cannot survive into R100 */
   CHECK(scene.scene_tables->actor_count60==counts_before[0]&&scene.scene_tables->actor_count64==counts_before[1]&&scene.scene_tables->actor_count68==counts_before[2]&&!memcmp(vec_before,scene.scene_tables->actor_vec30,12));
   CHECK(id->pool_used==405&&id->job_count==39&&system_menu.task_live);
   CHECK(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK&&!system_menu.error&&system_menu.task_live&&ui.calls==3);
