@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import threading
+from test_contracts import check_contracts, TestContractError
 
 PROJECT = Path(__file__).resolve().parents[1]
 SCRATCH = Path(r"G:\middle_thing\godhand_windows")
@@ -470,7 +471,13 @@ def main():
         ("r020-title", "tests/rooms/test_r020_title.c", "iso"),
         ("r100", "tests/rooms/test_r100.c", "iso"),
     ]
-    source_inputs = {"tools/build-native.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
+    try:
+        manifest["test_contracts"] = check_contracts(PROJECT, extra_tests)
+    except TestContractError as error:
+        manifest.update(status="failed", error=str(error))
+        report.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        raise SystemExit(str(error))
+    source_inputs = {"tools/build-native.py", "tools/test_contracts.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
                      "tests/platform/test_memory.c", "tests/core/test_tasks.c",
                      "tests/platform/test_task_threads.c", "tests/assets/test_tim2.c", "tools/decode-tim2.c",

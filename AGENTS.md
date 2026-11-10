@@ -13,6 +13,7 @@
 - After milestone pushes, give the user a rough workload-completion estimate and remaining largest items in chat only. Do not publish that subjective percentage to GitHub or confuse it with upstream matching coverage.
 - Maintain the reusable `skill/ps2-source-port` throughout the work. Preserve a resumable project state there; label unverified techniques and never generalize God Hand-specific facts into all PS2 games.
 - Development agents: use at most `gpt-6.1-sol`; use `gpt-6-luna` for mechanical bounded work. Do not enable Codex Fast.
+- When the same reproducible problem occurs a second time, prioritize a small reusable diagnostic, check or repair tool before a third manual repetition. Use it on the real case and add a regression for the failure. Keep tool work tied to the native execution path.
 
 ## Ground truth and dependencies
 

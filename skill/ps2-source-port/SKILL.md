@@ -100,7 +100,11 @@ register writes and primary implementation evidence. Prefer local explicit
 numeric adaptation to changing process-wide FEnv. Do not generalize one RNG
 conversion into a model of the whole EE FPU.
 
-Run meaningful known vectors, boundaries and state transitions. Where useful,
+Run meaningful known vectors, boundaries and state transitions. Turn a
+reproducible problem observed twice into a small reusable check, diagnostic or repair
+tool, then exercise it on the real case so a third occurrence is caught early.
+Keep tool development tied to original-code recovery and actual native execution.
+Where useful,
 compare actual instruction words with native output using a small offline model
 or isolated oracle. Record supported instructions, inputs, states and raw return
 bits. Reject unsupported instructions instead of inventing semantics. Keep the

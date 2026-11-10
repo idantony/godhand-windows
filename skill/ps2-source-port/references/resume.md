@@ -3,6 +3,19 @@
 Updated 2026-11-10. Read Git and live worker ownership before editing. This is
 an ongoing authorized source port, not a playable Windows game yet.
 
+Newuserworkflowrule: a reproducibleproblem seen twice shouldprefer a reusable
+check/diagnostic/repairtool before a thirdmanualrepeat. Storedin EAGENTS and
+skillSKILL. Rootworkflow-tools-v1 frozen G snapshots/workflow-tools-v1-20261110-
+1400/receipt.json:9unitchecks PASS; actual62 EOF16-file replay exactlymatches
+manualSHA receipts, index-only tool preservesWIP/snapshots andGitlock/CAS.
+Testcontractchecker catchesactual61 wrongargc beforecompile; currentmanifest
+160known/50unknown. Build-native preflight nowimports tools/test_contracts.py:
+NEXTfrozenbuild mustinclude thathelper+newbuildscript together, neveroldbase
+missingimport. This isTOOL-onlyverification, notnewfullnative63. Latestfull
+native remains62 below. Localrollback62 is37bd67b, NOTpushed; public59/8b3c033.
+Toolproof analysis/workflow-tools-v1-evidence-private.json. Rootnextphysics/
+ActionStep+enemy integration unchanged; workerSolidStep nearingfreeze.
+
 NEWEST LOCAL fullyverified integration is room-transition-62:228C/244checks,
 allhardware/codec/fullADX andmatchingDLL RNG20544/20534 PASS. Actual hidden/
 muted489ticks/R100/Main4 nowcompletes BOTH12BFB8 Door probes (sameSceneAt/JMP/
