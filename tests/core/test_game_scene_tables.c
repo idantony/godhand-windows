@@ -9,7 +9,8 @@ static void put(uint8_t*p,uint32_t n){memcpy(p,&n,4);}
 int main(int argc,char**argv){gh_disc*d;CHECK(argc==2&&gh_disc_open(argv[1],&d)==GH_DISC_OK);size_t idx;gh_disc_entry de;CHECK(gh_disc_find(d,"st0/r020.dat",&idx)==GH_DISC_OK&&gh_disc_entry_at(d,idx,&de)==GH_DISC_OK);uint8_t*r=malloc((size_t)de.size),*backup=malloc((size_t)de.size);CHECK(r&&backup&&gh_disc_read(d,idx,0,r,(size_t)de.size)==GH_DISC_OK);memcpy(backup,r,(size_t)de.size);gh_bundle b;CHECK(gh_bundle_open(r,(size_t)de.size,&b)==GH_BUNDLE_OK);
  gh_game_scene_tables s={0};gh_boot_work w;memset(&w,0xa5,sizeof(w));memset(s.scroll_pairs,0x5a,sizeof(s.scroll_pairs));memset(s.scroll_words,0x5a,sizeof(s.scroll_words));
  CHECK(gh_scene_environment_002a71b0(&s,&w,&b)==GH_TABLE_OK&&!s.environment.bytes&&!u32((uint8_t*)&w+0x608));
- CHECK(gh_scene_scrolls_0031d1b0(&s,&w,&b)==GH_TABLE_OK&&!s.scroll_texture.bytes&&!u32((uint8_t*)&w+0x5fc)&&!u32((uint8_t*)&w+0x600));
+ CHECK(gh_scene_scrolls_0031d1b0(&s,&w,&b)==GH_TABLE_OK&&!s.scroll_texture.bytes&&!u32((uint8_t*)&w+0x5fc)&&!((uint8_t*)&w)[0x600]);
+ CHECK(((uint8_t*)&w)[0x601]==0xa5&&((uint8_t*)&w)[0x602]==0xa5&&((uint8_t*)&w)[0x603]==0xa5);
  for(unsigned i=0;i<32;i++)CHECK(!s.scroll_pairs[i][0]&&!s.scroll_pairs[i][1]&&!s.scroll_words[i]);
  CHECK(gh_scene_actors_0012e670(&s,&b)==GH_TABLE_OK&&s.actors_ready&&s.akg.bytes==r+0x6140&&s.akt.bytes==r+0x6120);
  static const uint32_t offsets[8]={0x68,0x7c,0x8c,0xbc,0xc8,0xdc,0xfc,0xffffffff};

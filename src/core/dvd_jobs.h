@@ -47,6 +47,10 @@ gh_dvd_error gh_dvd_pump(gh_dvd_jobs *);
 gh_dvd_error gh_dvd_check_wait_frame(gh_dvd_jobs *,uint32_t,gh_task_threads *);
 /* Original cancel subset: cancel current or matching queued IDs. Output buffer
  * remains caller-owned. No in-flight DMA because native reads are synchronous. */
+/* Actual201018 clears all32 job records/current/queue-state1108. Native reads
+ * are synchronous: no in-flight DMA/CRI handle exists to fake-cancel. Allocations
+ * remain caller-owned, disc/id_counter/diagnostics remain the same owner. */
+gh_dvd_error gh_dvd_jobs_reset_00201018(gh_dvd_jobs *);
 int gh_dvd_cancel(gh_dvd_jobs *,uint32_t id);
 #ifdef __cplusplus
 }

@@ -13,8 +13,14 @@ typedef struct {
  uint32_t bytes20,remaining18,remaining1c,limit24;uint8_t *active;
 } gh_room_block_pool;
 typedef struct {
+ void *object;const void *owner;uint32_t kind,handle;
+} gh_room_object_binding;
+typedef struct {
  gh_heap *heap;gh_room_vector vectors[4];gh_room_arena arenas[3];gh_room_block_pool blocks[2];
  int initialized;uint32_t failed_entry;int detail;
+ /* Host-only shared namespace. Original four-byte vectors contain handles,
+  * never truncated native pointers. Handles are not recycled while live. */
+ gh_room_object_binding *objects;size_t object_slots,object_capacity;uint32_t next_object_handle;
 } gh_room_pools;
 /* Actual2A5D80 using realRHT. Caller zero-inits; three arenas and both concrete
  * fixed block pools own actual native storage. STL metadata is typed hoststate,
@@ -33,6 +39,22 @@ gh_room_pool_status gh_room_block_put_002a9800(gh_room_block_pool *,uint32_t han
  * memory is dereferenced. Positive elements still require typed native actors.
  * An initialized empty vector is distinct from an absent pool constructor. */
 gh_room_pool_status gh_room_registry_view(const gh_room_pools *,uint32_t original_global,const gh_room_vector **);
+/* Native equivalents of the paired 30FCC0/3129D0 registration. mask bits
+ * select vectors0..3. Capacity/duplicates are checked before any mutation.
+ * One object has one shared handle even when present in several lists. */
+gh_room_pool_status gh_room_object_register(gh_room_pools *,void *object,const void *owner,
+ uint32_t kind,uint32_t vector_mask,uint32_t *handle);
+gh_room_pool_status gh_room_object_lookup(const gh_room_pools *,uint32_t handle,
+ uint32_t kind,const void *owner,void **object);
+/* Stable erase from every list. Foreign owner and unknown handles fail before
+ * mutation. Caller destroys the actual typed object after unregistering. */
+gh_room_pool_status gh_room_object_unregister(gh_room_pools *,uint32_t handle,const void *owner);
+/* Ordered original room-exit primitives. These preserve other pool owners.
+ * Live typed objects/used blocks retain their concrete destructor frontier. */
+gh_room_pool_status gh_room_registries_release_0030f5f0(gh_room_pools *);
+gh_room_pool_status gh_room_model_pool_release_00150078(gh_room_pools *);
+gh_room_pool_status gh_room_aux_pool_release_001492c8(gh_room_pools *);
+gh_room_pool_status gh_room_arena_clear_002a9528(gh_room_pools *,uint32_t original_global);
 #ifdef __cplusplus
 }
 #endif

@@ -19,6 +19,13 @@ int main(int argc,char **argv){gh_disc *d;gh_disc_entry entry;size_t i;unsigned 
   for(i=0;i<16;i++)C(picture.clut[i*4+3]<=128);
   C(gh_id_texture_rgba(&t,rgba,4096)==GH_ID_OK);for(i=0;i<4096;i++)hash=(hash^rgba[i])*UINT64_C(1099511628211);for(i=0;i<1024;i++)nonzero+=rgba[i*4+3]!=0;C(hash==UINT64_C(0x4950639901636b2f)&&nonzero==194);
   {unsigned char*alpha=(unsigned char*)picture.clut+3;unsigned char saved=*alpha;*alpha=129;C(gh_id_texture_rgba(&t,rgba,4096)==GH_ID_UNSUPPORTED);*alpha=saved;}
+  C(gh_id_texture_open(manager,1,31,&t)==GH_ID_OK&&t.width==32&&t.height==16&&t.tex0==UINT64_C(0x115408000));
+  C(gh_tim2_first(t.source.bytes,t.source.size,&picture)==GH_TIM2_OK&&picture.image_size==256&&picture.clut_size==64&&picture.colors==16);
+  C(gh_id_texture_rgba(&t,rgba,2048)==GH_ID_OK);unsigned loading_nonzero=0;
+  for(unsigned pixel=0;pixel<512;pixel++){unsigned shift=pixel%2?4:0,index4=picture.image[pixel/2]>>shift&15;const unsigned char*color=picture.clut+index4*4;
+   C(color[3]<=128);for(unsigned channel=0;channel<3;channel++)C(rgba[pixel*4+channel]==color[channel]);C(rgba[pixel*4+3]==(color[3]==128?255:color[3]*2));loading_nonzero+=rgba[pixel*4+3]!=0;
+  }C(loading_nonzero>0);C(gh_id_texture_rgba(&t,rgba,2047)==GH_ID_CAPACITY);printf("actualSystemMenu32x16 item31 independentlymapped512pixels nontransparent%u\n",loading_nonzero);
   printf("actualcursor32x32 RGBAfnv%016llx nontransparent%u\n",(unsigned long long)hash,nonzero);free(lang);
  }
  free(rgba);free(b);free(manager);gh_disc_close(d);puts("PASS actual MC TBL1 T32/PSMT8 512x512 and512x256 native decoding; source bounds and empty slots");return 0;}
+

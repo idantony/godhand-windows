@@ -142,3 +142,9 @@ gh_child_status gh_game_children_draw_00160b90(const gh_game_children*s,const gh
  }
  return GH_CHILD_OK;
 }
+
+gh_child_status gh_game_children_quit_001612a8(gh_game_children*s,gh_boot_work*w,uint32_t*f){
+ if(f)*f=0;if(!s||!w)return GH_CHILD_ARGUMENT;
+ if(r32((const uint8_t*)w+0x5e4)&0x8000000)return child_stop(f,0x15ff10,GH_CHILD_UNSUPPORTED);
+ return GH_CHILD_OK;
+}

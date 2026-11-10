@@ -179,9 +179,4 @@ gh_voice_status gh_se_voice_scene_exit_begin(gh_se_voice_engine*s){
 
 int gh_se_voice_uses_registry(const gh_se_voice_engine*s,const gh_audio_registry*r){return s&&r&&s->registry==r;}
 
-gh_voice_status gh_se_voice_stop_bank_002cbe68(gh_se_voice_engine*s,int16_t bank,int16_t ticks){
- if(!s)return GH_VOICE_ARGUMENT;s->frontier=0;
- for(int i=s->head;i!=-1;){struct voice*v=s->voices+i;int next=v->next;
-  if(v->info.bank==bank){if(v->info.native_voice||v->info.retiring){int accepted;gh_voice_status e=gh_se_voice_request_stop_00375050(s,v->info.original_handle,ticks,&accepted);if(e)return e;}else drop(s,i,0);}i=next;
- }return GH_VOICE_OK;
-}
+unsigned gh_se_voice_bank_nodes(const gh_se_voice_engine*s,int16_t bank){unsigned n=0;if(s)for(unsigned i=0;i<64;i++)n+=s->voices[i].used&&s->voices[i].info.bank==bank;return n;}

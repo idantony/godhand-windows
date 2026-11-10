@@ -141,15 +141,8 @@ static const gh_id_animation_profile room_animation_profile={1,0}; /*explicitnat
 static gh_id_error move_only(gh_game_cockpit*s,unsigned o){gh_id_frontier f={0};gh_id_error e=gh_id_jobs_move_reference(base(s,o),NULL,NULL,&room_animation_profile,&f);if(e)s->frontier=f.address;return e;}
 static gh_id_error reset_family(gh_game_cockpit*s,unsigned o,int id,int16_t hidden){gh_id_entry*e;gh_id_frontier f={0};TRY(work(s,o,id,0,&e));gh_id_error result=gh_id_entry_reset_family_reference(base(s,o),e,hidden,&room_animation_profile,&f);if(result)s->frontier=f.address;return result;}
 static gh_id_error flag_entry(gh_game_cockpit*s,unsigned o,int id,uint32_t set,uint32_t clear){gh_id_entry*e;TRY(work(s,o,id,0,&e));e->flags=(e->flags&~clear)|set;return GH_ID_OK;}
-gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit*s,gh_core_save_view save,const gh_boot_work*work_state,const uint8_t heat[0x18]){
- gh_id_entry*e;const uint8_t*wr=(const uint8_t*)work_state;unsigned o;
- if(!s||!s->ready||!save.bytes||save.size<GH_CORE_SAVE_BYTES||!work_state||!heat)return GH_ID_ARGUMENT;
- if(s->room_begun)return GH_ID_BUSY;s->room_begun=1;s->frontier=0;
- /*143BE8, firstnonNULL registryrow. Allpointercachefields stay native. */
- o=0x6e0;w32(s,o+0x90,0);if(u32(wr+0x5f4)){s->frontier=0x2db6b0;return GH_ID_UNSUPPORTED;}w32(s,o+0x98,0);wf(s,o+0x5d0,20);
- TRY(restart(s,o));TRY(restart(s,o+0x500));TRY(move_only(s,o+0x500));TRY(restart(s,o+0x550));TRY(move_only(s,o+0x550));TRY(restart(s,o+0x4b0));
- TRY(cache(s,o,2,o+0x4a0,0));TRY(work(s,o+0x500,0,o+0x5a4,&e));TRY(work(s,o+0x550,0,o+0x5a8,&e));TRY(work(s,o+0x4b0,0,o+0x5a0,&e));
- s->fields[o+0x5dc]=s->fields[o+0x5dd]=0;w32(s,o+0x5d8,0x80808080);
+static gh_id_error room_heat_reset_00141ce8(gh_game_cockpit*s,gh_core_save_view save,const uint8_t heat[0x18]){
+ gh_id_entry*e;unsigned o;
  /*141CE8: saved level, upgrade icons and original per-entry/directchild
   * reset do not call wholeMove or advance unrelatedentries. */
  o=0x460;w32(s,o+0x90,0);TRY(restart(s,o));TRY(restart(s,o+0x210));for(int id=12;id<=15;id++)TRY(flag_entry(s,o,id,0x8000000,0));
@@ -168,6 +161,19 @@ gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit*s,gh_core_save_v
  TRY(reset_family(s,o,11,1));TRY(work(s,o,11,0,&e));e->color_base&=0xffffff;
  static const int reset_ids[]={2,10,11};for(unsigned i=0;i<3;i++){TRY(reset_family(s,o+0x190,reset_ids[i],1));TRY(work(s,o+0x190,reset_ids[i],0,&e));e->color_base=(e->color_base&0xffffff)|(i==2?0x80000000:0);}
  s->fields[o+0x26f]=0;
+ return GH_ID_OK;
+}
+
+gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit*s,gh_core_save_view save,const gh_boot_work*work_state,const uint8_t heat[0x18]){
+ gh_id_entry*e;const uint8_t*wr=(const uint8_t*)work_state;unsigned o;
+ if(!s||!s->ready||!save.bytes||save.size<GH_CORE_SAVE_BYTES||!work_state||!heat)return GH_ID_ARGUMENT;
+ if(s->room_begun)return GH_ID_BUSY;s->room_begun=1;s->frontier=0;
+ /*143BE8, firstnonNULL registryrow. Allpointercachefields stay native. */
+ o=0x6e0;w32(s,o+0x90,0);if(u32(wr+0x5f4)){s->frontier=0x2db6b0;return GH_ID_UNSUPPORTED;}w32(s,o+0x98,0);wf(s,o+0x5d0,20);
+ TRY(restart(s,o));TRY(restart(s,o+0x500));TRY(move_only(s,o+0x500));TRY(restart(s,o+0x550));TRY(move_only(s,o+0x550));TRY(restart(s,o+0x4b0));
+ TRY(cache(s,o,2,o+0x4a0,0));TRY(work(s,o+0x500,0,o+0x5a4,&e));TRY(work(s,o+0x550,0,o+0x5a8,&e));TRY(work(s,o+0x4b0,0,o+0x5a0,&e));
+ s->fields[o+0x5dc]=s->fields[o+0x5dd]=0;w32(s,o+0x5d8,0x80808080);
+ TRY(room_heat_reset_00141ce8(s,save,heat));
  /*144C08 then13D0B8: actualreset-only preserves baseplaying. */
  o=0xea0;TRY(gauge(s));for(unsigned i=0;i<5;i++)TRY(reset_only(s,o+0x100+i*0x50));TRY(reset_only(s,o+0x430));TRY(reset_only(s,o+0x480));w16(s,o+0x41e,0);w16(s,o+0x420,0);w32(s,o+0x90,0);w16(s,o+0x4d0,95);
  o=0xcc0;TRY(reset_only(s,o));TRY(reset_only(s,o+0x140));TRY(reset_only(s,o+0x190));TRY(reset_only(s,o+0xa0));TRY(reset_only(s,o+0xf0));
@@ -305,4 +311,15 @@ gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit*s,const gh_boot_work*
 gh_id_error gh_game_cockpit_get_system_menu(gh_game_cockpit*s,gh_cockpit_system_menu_view*out){
  if(!s||!out||!s->ready)return GH_ID_ARGUMENT;
  *out=(gh_cockpit_system_menu_view){base(s,0x3a0),s->fields+0x3a0+0x90,0x30};return GH_ID_OK;
+}
+
+gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit*s,gh_core_save_view save,const uint8_t heat[0x18]){
+ if(!s||!s->ready||!save.bytes||save.size<GH_CORE_SAVE_BYTES||!heat)return GH_ID_ARGUMENT;s->frontier=0;
+ /*13E400,13C930,13F510 then13E908,147188,1434A8->Heat141CE8. */
+ w32(s,0x1910+0x90,0);unsigned o=0x1dc0;w32(s,o+0xb8,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);w32(s,o+0xa0,0);
+ o=0x1e90;for(unsigned i=0;i<5;i++){w32(s,o+0x260-4*i,0);w32(s,o+0x2d0-4*i,0x3f800000);w32(s,o+0xb8-4*i,0);}s->fields[o+0x384]=0;w32(s,o+0xa0,0);s->fields[o+0x358]=0;
+ o=0x2220;if(u32(s->fields+o+0x94)){s->frontier=0x2aa078;return GH_ID_UNSUPPORTED;}w32(s,o+0xa0,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);
+ o=0x1a20;if(u32(s->fields+o+0xb0)){s->fields[o+0xb8]=0;w16(s,o+0xac,0xffff);w32(s,o+0xb0,0);}
+ if(u32(s->fields+0x460+0x80)!=0x41e620){s->frontier=0x1434a8;return GH_ID_UNSUPPORTED;}
+ TRY(room_heat_reset_00141ce8(s,save,heat));s->room_begun=s->room_ready=0;s->update_stage=s->draw_stage=s->radar_stage=s->heat_stage=0;return GH_ID_OK;
 }

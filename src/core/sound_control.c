@@ -59,12 +59,18 @@ gh_voice_status gh_sound_control_from_startup(gh_sound_control *s,gh_disc *d,con
   {0x2c9fc0,0xe60000c0},{0x2c9fc4,0xe60100cc},
   {0x2c9fc8,0xae07005c},{0x2c9fcc,0xae070058},
   {0x2c9fd0,0xe60000c8},{0x2c9fd4,0x0c0c2968},
-  {0x2c9fd8,0xe60000c4},{0x2c9fdc,0xae000110}};
+  {0x2c9fd8,0xe60000c4},{0x2c9fdc,0xae000110},
+  {0x2c9f7c,0x3c050060},{0x2c9f90,0x24a5eff0},{0x2c9fb0,0xae05003c},
+  {0x2c9fe0,0x2404ffff},{0x2c9fe4,0x26020160},{0x2c9fe8,0x2403000f},
+  {0x2c9ff0,0xa4440002},{0x2c9ff4,0x2463ffff},{0x2c9ff8,0xa4440000},
+  {0x2c9ffc,0xac400004},{0x2ca000,0x0461fffb},{0x2ca004,0x24420008},
+  {0x2ca00c,0xae0001e0}};
   for(unsigned i=0;i<sizeof(checks)/sizeof(checks[0]);i++){
    uint32_t code;error=initial_word(d,checks[i][0],&code);if(error)return error;
    if(code!=checks[i][1])return GH_VOICE_UNSUPPORTED;
   }
  }
+ for(unsigned i=0;i<16;i++){candidate.recent[i].bank=candidate.recent[i].program=-1;candidate.recent[i].key=0;}candidate.recent_pos=0;candidate.recent_initialized=1;
  candidate.event_mask50=candidate.event_mask58=candidate.base_mask5c=0x80000000u;candidate.output_mode=1;
  candidate.listener_position_c0[3]=0x3f800000;
  for(unsigned i=0;i<4;i++)candidate.listener_matrix_d0[i*5]=0x3f800000;

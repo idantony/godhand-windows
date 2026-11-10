@@ -12,7 +12,7 @@ typedef struct gh_se_mix {uint16_t se_level_q8;uint8_t output_mode;uint32_t syst
  * SFX90/127 of master127. Does not claim the original global frame/RPC calls. */
 gh_voice_status gh_se_mix_boot_defaults_002c9e78(gh_se_mix *,uint32_t system_flags,gh_se_dsp_policy);
 typedef struct gh_se_voice_info {uint32_t original_handle,native_voice,sample_slot,frames,rate;uint16_t pitch_q12,adsr1,adsr2,level_q14;int16_t program,bank;uint8_t pending,channel;int16_t stop_current,stop_step;uint16_t stop_count;uint8_t stopping,retiring;} gh_se_voice_info;
-/* Narrow real origin MC event path: core bank0 programs2D/15E/160/161, original
+/* Narrow real origin MC event path: core bank0 programs2D/15E/160/161 and R020 bank2 programs0/10/11/12, original
  * default args(-1,-1,0,0), stereo/mono and explicit original SFX master level.
  * Caller supplies real registry/device; no emulated device or empty command
  * acknowledgment. Hardware DSP becomes a documented native linear resampler
@@ -43,7 +43,7 @@ gh_voice_status gh_se_voice_pcm_view(const gh_se_voice_engine *,uint32_t handle,
  * Native source gain replaces SPU volume/keyoff timing, not hardware DSP. */
 gh_voice_status gh_se_voice_request_stop_00375050(gh_se_voice_engine *,uint32_t original_handle,int16_t ticks,int *accepted);
 /* Original ascending program0..51 stops10 plus pending EE-node removal. */
-gh_voice_status gh_se_voice_stop_bank_002cbe68(gh_se_voice_engine *,int16_t bank,int16_t ticks);
+unsigned gh_se_voice_bank_nodes(const gh_se_voice_engine *,int16_t bank);
 gh_voice_status gh_se_voice_scene_exit_begin(gh_se_voice_engine *);
 int gh_se_voice_uses_registry(const gh_se_voice_engine *,const gh_audio_registry *);
 unsigned gh_se_voice_active_nodes(const gh_se_voice_engine *);

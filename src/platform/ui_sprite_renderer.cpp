@@ -35,12 +35,18 @@ uint rational(uint a,uint b,uint divisor){
 }
 int4 texel(int x,int y){return int4(sourceImage.Load(int3(x&int(info.y-1),y&int(info.z-1),0)));}
 int4 lerp4(int4 a,int4 b,int f){return a+(((b-a)*f)>>4);}
+int coordinate(int a,int b,uint numerator,uint denominator){
+ // Floor signed linear interpolation. Reflect descending ranges about their
+ // endpoint so the 64-bit unsigned multiply/divide stays exact.
+ return b>=a?a+int(rational(uint(b-a),numerator,denominator)):
+  b+int(rational(uint(a-b),denominator-numerator,denominator));
+}
 [numthreads(8,8,1)]void main(uint3 tid:SV_DispatchThreadID){
  uint2 p=tid.xy;if(p.x>=info.w||p.y>=dimensions.x)return;uint4 destination=previous.Load(int3(p,0));int2 fixedp=int2(p)*16;
  if(any(fixedp<rectangle.xy)||any(fixedp>=rectangle.zw)){outputImage[p]=destination;return;}
- uint u=st.x+rational(st.z-st.x,uint(fixedp.x-rectangle.x),uint(rectangle.z-rectangle.x));
- uint v=st.y+rational(st.w-st.y,uint(fixedp.y-rectangle.y),uint(rectangle.w-rectangle.y));
- int bu=int(u)-32768,bv=int(v)-32768;int x=bu>>16,y=bv>>16,fu=(bu>>12)&15,fv=(bv>>12)&15;
+ int u=coordinate(int(st.x),int(st.z),uint(fixedp.x-rectangle.x),uint(rectangle.z-rectangle.x));
+ int v=coordinate(int(st.y),int(st.w),uint(fixedp.y-rectangle.y),uint(rectangle.w-rectangle.y));
+ int bu=u-32768,bv=v-32768;int x=bu>>16,y=bv>>16,fu=(bu>>12)&15,fv=(bv>>12)&15;
  int4 filtered=lerp4(lerp4(texel(x,y),texel(x+1,y),fu),lerp4(texel(x,y+1),texel(x+1,y+1),fu),fv);
  uint4 tint=uint4(info.x&255,(info.x>>8)&255,(info.x>>16)&255,info.x>>24);
  int alpha=min(255,(filtered.a*int(tint.a))>>7);if(alpha<=1){outputImage[p]=destination;return;}
@@ -71,7 +77,8 @@ extern "C" gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *r,const gh_id_
  bool t32=(t->width==512&&(t->height==256||t->height==512)&&((t->tex0>>20)&63)==19)||level;
  bool logo=t->width==512&&t->height==512&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==9&&((t->tex0>>30)&15)==9&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  bool cursor=t->width==32&&t->height==32&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==5&&((t->tex0>>30)&15)==5&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
- if((!t32&&!cursor&&!logo)||bytes!=(size_t)t->width*t->height*4||((t->tex0>>35)&3)!=0)return GH_UI_UNSUPPORTED;
+ bool loading=t->width==32&&t->height==16&&t->tex0==UINT64_C(0x115408000);
+ if((!t32&&!cursor&&!logo&&!loading)||bytes!=(size_t)t->width*t->height*4||((t->tex0>>35)&3)!=0)return GH_UI_UNSUPPORTED;
  std::vector<unsigned char> raw;try{raw.assign(rgba,rgba+bytes);}catch(const std::bad_alloc&){return GH_UI_MEMORY;}
  for(size_t i=3;i<bytes;i+=4){if((raw[i]&1)&&raw[i]!=255)return GH_UI_UNSUPPORTED;raw[i]=raw[i]==255?128:(unsigned char)(raw[i]/2);}
  std::unique_ptr<SpriteTexture> texture(new(std::nothrow)SpriteTexture);if(!texture)return GH_UI_MEMORY;texture->width=t->width;texture->height=t->height;
@@ -84,8 +91,8 @@ static gh_ui_error parameters(const gh_ui_sprite_renderer *r,const gh_ui_sprite_
  const gh_id_texture_quad &q=item.quad;if(!item.texture||item.texture>r->textures.size())return GH_UI_ARGUMENT;const SpriteTexture &t=*r->textures[item.texture-1];
  float coords[]={q.x0,q.y0,q.x1,q.y1};for(unsigned i=0;i<4;i++){if(!std::isfinite(coords[i])||coords[i]<-4096||coords[i]>4096)return GH_UI_UNSUPPORTED;p->rectangle[i]=(int)(coords[i]*16);}
  if(p->rectangle[2]<=p->rectangle[0]||p->rectangle[3]<=p->rectangle[1]||q.color_mode!=6||q.font_mode!=5||q.clip)return GH_UI_UNSUPPORTED;
- float uv[]={q.u0,q.v0,q.u1,q.v1};for(unsigned i=0;i<4;i++){if(!std::isfinite(uv[i])||uv[i]<0||uv[i]>1)return GH_UI_UNSUPPORTED;p->st[i]=(unsigned)(uv[i]*(float)(i&1?t.height:t.width)*65536.0f);}
- if(p->st[2]<p->st[0]||p->st[3]<p->st[1])return GH_UI_UNSUPPORTED;
+ float uv[]={q.u0,q.v0,q.u1,q.v1};for(unsigned i=0;i<4;i++){if(!std::isfinite(uv[i])||uv[i]<-4||uv[i]>4)return GH_UI_UNSUPPORTED;
+  int32_t fixed=(int32_t)(uv[i]*(float)(i&1?t.height:t.width)*65536.0f);p->st[i]=(uint32_t)fixed;}
  p->info[0]=q.color;p->info[1]=t.width;p->info[2]=t.height;p->info[3]=r->width;p->dimensions[0]=r->height;p->dimensions[1]=p->dimensions[2]=p->dimensions[3]=0;return GH_UI_OK;
 }
 extern "C" gh_ui_error gh_ui_sprite_batch(gh_ui_sprite_renderer *r,const gh_ui_sprite_state *s,const gh_ui_sprite_item *items,size_t count,const unsigned char *back,unsigned char *output,size_t bytes){

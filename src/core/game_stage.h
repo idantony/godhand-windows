@@ -25,6 +25,21 @@ gh_stage_status gh_stage_texture_load(gh_stage_textures *,const void *bank,size_
 gh_stage_status gh_stage_core_textures(gh_stage_textures *,const void *core_dat,size_t bytes);
 gh_stage_status gh_stage_texture_channel(const gh_stage_textures *,uint32_t,gh_stage_channel *);
 gh_stage_status gh_stage_texture_cursor_get(const gh_stage_textures *,gh_stage_texture_cursor *);
+/* Native image cache of the SAME cTexture manager, for151398/151368 after
+ * 1522C0 selects an original TM3 member. Unlike core.dat channel registration,
+ * a decoded image is not an acknowledgment of D3D upload or GS submission.
+ * Alpha remains raw GS0..255. Borrowed view/pixels live until cacheclear. */
+typedef struct gh_stage_material {const uint8_t *source,*rgba_gs;size_t source_bytes,rgba_bytes;
+ uint64_t cache_id,source_tex0;uint16_t width,height;uint8_t record_mode,cache_pool,psm,draw_tcc,draw_tfx;} gh_stage_material;
+gh_stage_status gh_stage_tm3_resolve(gh_stage_textures *,const void *tm3,size_t,
+ unsigned zero_based_member,unsigned record_mode,const gh_stage_material **);
+/* Clear before freeing borrowed room/TM3 source bytes. Core channels and VRAM
+ * owner stay intact. Cache IDs are never recycled within this manager. */
+void gh_stage_tm3_cache_clear(gh_stage_textures *);
+/* Original room-heap replacement can invalidate borrowed source identities.
+ * Drops only identities inside [base,base+bytes), including decoded TM3 data;
+ * preserves VRAM, global/core channels outside range and ID/cursor sequences. */
+gh_stage_status gh_stage_texture_forget_source_range(gh_stage_textures *,const void *base,size_t bytes);
 /* Reads actual CT32-addressed native VRAM. Used for validating transfers,
  * not an approximation of the later PSMT4/PSMT8 texture sampling pipeline. */
 /* Original core.dat PSMT4/PSMT8, CSM1/CSA0, RGBA32 CLUT conversion for

@@ -20,6 +20,9 @@ gh_id_error gh_game_cockpit_initialize_00140c88(gh_game_cockpit *,gh_core_save_v
  * nonNULLplayer binding remainsunsupported), never creates newbases.
  * Currentlyfirstboot gauge-limit profile is actualELF3BD70C=95. */
 gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit *,gh_core_save_view,const gh_boot_work *,const uint8_t heat[0x18]);
+/* Actual141628 roomQuit only, preservingglobal405 IDruns/SystemMenu. Six
+ * concrete widget methods; dynamic2220 release still needs its real owner. */
+gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit *,gh_core_save_view,const uint8_t heat[0x18]);
 gh_id_error gh_game_cockpit_destroy(gh_game_cockpit *);
 gh_id_error gh_game_cockpit_base(gh_game_cockpit *,uint32_t original_offset,gh_id_base **);
 gh_id_error gh_game_cockpit_widget_at(const gh_game_cockpit *,unsigned,gh_cockpit_widget *);

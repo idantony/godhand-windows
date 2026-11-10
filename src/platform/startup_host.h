@@ -82,6 +82,8 @@ typedef struct gh_startup_snapshot {
     uint8_t title_live,title_mode,title_phase,title_subphase;
     uint32_t title_timer,title_game_selection,title_level;
     uint64_t title_move_serial;
+    uint64_t ui_resource_epoch; /*native borrowed-resource/cache lifetime*/
+    uint16_t current_room,next_room;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization

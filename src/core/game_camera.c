@@ -75,3 +75,8 @@ gh_camera_status gh_game_camera_before_move_00138f98(const gh_game_init_state*s,
  if((uint32_t)s->camera.mode&4u){if(frontier)*frontier=0x138600;return GH_CAMERA_UNSUPPORTED;}
  return GH_CAMERA_OK;
 }
+
+gh_camera_status gh_game_camera_restore_00138d40(gh_game_init_state*s){
+ if(!s)return GH_CAMERA_ARGUMENT;
+ if(s->camera.mode!=1&&s->camera.mode!=16){s->camera.previous_mode=s->camera.mode;s->camera.previous=s->active_camera;s->active_camera=&s->camera;s->camera.mode=1;}return GH_CAMERA_OK;
+}

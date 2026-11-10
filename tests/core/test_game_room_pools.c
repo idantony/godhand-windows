@@ -56,6 +56,9 @@ int main(int argc,char**argv){
    CHECK(!p->used_head&&!p->used_count&&gh_room_block_put_002a9800(p,1)==GH_POOL_BOUNDS);
   }
   printf("%s real RHT nativepayload bytes%zu, blocks%u/%u\n",paths[sample],total,pools.blocks[0].count,pools.blocks[1].count);
+  {int object=1,owner=2;uint32_t handle;CHECK(!gh_room_object_register(&pools,&object,&owner,123,1,&handle));size_t before=gh_heap_used(heap);CHECK(gh_room_registries_release_0030f5f0(&pools)==GH_POOL_UNSUPPORTED&&pools.failed_entry==0x30f8b0&&gh_heap_used(heap)==before);CHECK(!gh_room_object_unregister(&pools,handle,&owner));uint32_t serial=pools.next_object_handle;
+   CHECK(!gh_room_registries_release_0030f5f0(&pools)&&pools.next_object_handle==serial);for(unsigned i=0;i<4;i++)CHECK(!pools.vectors[i].allocation.pointer&&!pools.vectors[i].capacity);CHECK(!pools.arenas[0].allocation.pointer&&!pools.arenas[2].allocation.pointer&&pools.arenas[1].allocation.pointer&&pools.blocks[0].allocation.pointer&&pools.blocks[1].allocation.pointer);
+   uint32_t h;void*payload;CHECK(!gh_room_block_take_002a97a0(&pools.blocks[0],0,&h,&payload));CHECK(gh_room_model_pool_release_00150078(&pools)==GH_POOL_UNSUPPORTED&&pools.failed_entry==0x150418);CHECK(!gh_room_block_put_002a9800(&pools.blocks[0],h));CHECK(!gh_room_model_pool_release_00150078(&pools)&&pools.blocks[1].allocation.pointer&&pools.arenas[1].allocation.pointer);CHECK(!gh_room_aux_pool_release_001492c8(&pools)&&pools.arenas[1].allocation.pointer);CHECK(!gh_room_arena_clear_002a9528(&pools,0x754240)&&!gh_heap_used(heap)&&!pools.initialized&&pools.next_object_handle==serial);}
   CHECK(gh_game_room_pools_release(&pools)==GH_POOL_OK&&gh_heap_used(heap)==0&&gh_heap_destroy(heap)==GH_MEM_OK);
   gh_room_pools partial={0};CHECK(gh_heap_create(4096,&heap)==GH_MEM_OK);
   CHECK(gh_game_room_pools_initialize_002a5d80(&partial,&bundle,heap)==GH_POOL_MEMORY&&partial.failed_entry==0x3127b0&&partial.vectors[0].allocation.pointer);

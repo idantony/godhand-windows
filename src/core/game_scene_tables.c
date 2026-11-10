@@ -15,7 +15,7 @@ gh_scene_table_status gh_scene_environment_002a71b0(gh_game_scene_tables*s,gh_bo
 }
 gh_scene_table_status gh_scene_scrolls_0031d1b0(gh_game_scene_tables*s,gh_boot_work*w,const gh_bundle*b){
  if(!s||!w||!b)return GH_TABLE_ARGUMENT;s->frontier=0;
- work32(w,0x600,0);
+ ((uint8_t*)w)[0x600]=0; /*actual31D1E4 SB; preserve601..603*/
  for(unsigned i=32;i;i--){s->scroll_pairs[i-1][0]=s->scroll_pairs[i-1][1]=0;s->scroll_words[i-1]=0;}
  gh_bundle_entry e;gh_bundle_error r=gh_bundle_find(b,"SCP",0,&e);
  if(r==GH_BUNDLE_OK)return fail(s,0x31d1b0,0,GH_TABLE_UNSUPPORTED);
@@ -49,4 +49,13 @@ gh_scene_table_status gh_scene_actor_scroll_links_00307a60(gh_game_scene_tables*
   if(u16(s->akg.bytes+0x2a))return fail(s,0x2c5420,0,GH_TABLE_UNSUPPORTED);}
  for(unsigned i=32;i;i--)s->scroll_link_words[i-1]=0;
  return GH_TABLE_OK;
+}
+
+gh_scene_table_status gh_scene_actors_reset_0012e800(gh_game_scene_tables*s){
+ if(!s)return GH_TABLE_ARGUMENT;
+ s->akg=(gh_bundle_entry){0};memset(s->actor_links,0,sizeof(s->actor_links));s->actors_ready=0;
+ /* akt is the bounded containing asset, not an original additional pointer
+  * field; retain its provenance view until the actual room asset release. */
+ if(s->pending_actor_head)return fail(s,0x12ecf0,0,GH_TABLE_UNSUPPORTED);
+ s->frontier=0;return GH_TABLE_OK;
 }

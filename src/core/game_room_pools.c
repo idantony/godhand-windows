@@ -60,10 +60,12 @@ gh_room_pool_status gh_room_block_put_002a9800(gh_room_block_pool*p,uint32_t h){
 }
 gh_room_pool_status gh_game_room_pools_release(gh_room_pools*s){
  if(!s||!s->heap)return GH_POOL_ARGUMENT;
+ for(size_t i=0;i<s->object_slots;i++)if(s->objects[i].object){s->failed_entry=0x30f8b0;return GH_POOL_UNSUPPORTED;}
  for(unsigned i=0;i<2;i++)if(s->blocks[i].used_count){s->failed_entry=i?0x149378:0x150418;return GH_POOL_UNSUPPORTED;}
  for(unsigned i=0;i<2;i++){if(s->blocks[i].allocation.pointer&&gh_heap_release(s->heap,s->blocks[i].allocation)!=GH_MEM_OK)return GH_POOL_MEMORY;free(s->blocks[i].active);memset(&s->blocks[i],0,sizeof(s->blocks[i]));}
  for(unsigned i=0;i<3;i++){if(s->arenas[i].allocation.pointer&&gh_heap_release(s->heap,s->arenas[i].allocation)!=GH_MEM_OK)return GH_POOL_MEMORY;memset(&s->arenas[i],0,sizeof(s->arenas[i]));}
  for(unsigned i=0;i<4;i++){if(s->vectors[i].allocation.pointer&&gh_heap_release(s->heap,s->vectors[i].allocation)!=GH_MEM_OK)return GH_POOL_MEMORY;memset(&s->vectors[i],0,sizeof(s->vectors[i]));}
+ free(s->objects);s->objects=NULL;s->object_slots=s->object_capacity=0;s->next_object_handle=0;
  s->initialized=0;s->failed_entry=0;s->detail=0;return GH_POOL_OK;
 }
 
@@ -79,3 +81,77 @@ gh_room_pool_status gh_room_registry_view(const gh_room_pools*s,uint32_t address
  }
  return GH_POOL_ARGUMENT;
 }
+
+/* Typed host ownership replaces guest pointer representation only. */
+gh_room_pool_status gh_room_object_register(gh_room_pools*s,void*object,const void*owner,uint32_t kind,uint32_t mask,uint32_t*out){
+ if(!s||!object||!owner||!kind||!out||!mask||(mask&~15u))return GH_POOL_ARGUMENT;
+ if(!s->initialized)return GH_POOL_BUSY;
+ for(size_t i=0;i<s->object_slots;i++)if(s->objects[i].object==object)return GH_POOL_BUSY;
+ for(unsigned i=0;i<4;i++){
+  const gh_room_vector*v=NULL;static const uint32_t a[]={0x754c30,0x754c38,0x754c50,0x754c58};
+  gh_room_pool_status e=gh_room_registry_view(s,a[i],&v);if(e)return e;
+  if((mask&(1u<<i))&&v->count==v->capacity)return GH_POOL_MEMORY;
+ }
+ if(s->next_object_handle==UINT32_MAX)return GH_POOL_BOUNDS;
+ size_t slot=0;while(slot<s->object_slots&&s->objects[slot].object)slot++;
+ if(slot==s->object_capacity){
+  size_t n=s->object_capacity?s->object_capacity*2:16;
+  if(n<s->object_capacity||n>SIZE_MAX/sizeof(*s->objects))return GH_POOL_BOUNDS;
+  gh_room_object_binding*p=realloc(s->objects,n*sizeof(*p));if(!p)return GH_POOL_MEMORY;
+  memset(p+s->object_capacity,0,(n-s->object_capacity)*sizeof(*p));s->objects=p;s->object_capacity=n;
+ }
+ uint32_t handle=++s->next_object_handle;
+ s->objects[slot]=(gh_room_object_binding){object,owner,kind,handle};if(slot==s->object_slots)s->object_slots++;
+ for(unsigned i=0;i<4;i++)if(mask&(1u<<i)){gh_room_vector*v=&s->vectors[i];w32((uint8_t*)v->allocation.pointer+(size_t)v->count*4,handle);v->count++;}
+ *out=handle;return GH_POOL_OK;
+}
+gh_room_pool_status gh_room_object_lookup(const gh_room_pools*s,uint32_t h,uint32_t kind,const void*owner,void**out){
+ if(!s||!out||!h||!kind||!owner)return GH_POOL_ARGUMENT;*out=NULL;
+ if(!s->initialized)return GH_POOL_BUSY;
+ for(size_t i=0;i<s->object_slots;i++)if(s->objects[i].object&&s->objects[i].handle==h){
+  const gh_room_object_binding*b=&s->objects[i];if(b->kind!=kind||b->owner!=owner)return GH_POOL_ARGUMENT;
+  *out=b->object;return GH_POOL_OK;
+ }
+ return GH_POOL_BOUNDS;
+}
+gh_room_pool_status gh_room_object_unregister(gh_room_pools*s,uint32_t h,const void*owner){
+ if(!s||!h||!owner)return GH_POOL_ARGUMENT;if(!s->initialized)return GH_POOL_BUSY;
+ size_t slot=0;while(slot<s->object_slots&&(!s->objects[slot].object||s->objects[slot].handle!=h))slot++;
+ if(slot==s->object_slots)return GH_POOL_BOUNDS;if(s->objects[slot].owner!=owner)return GH_POOL_ARGUMENT;
+ /* Validate all lists before stable erasing any of them. */
+ for(unsigned i=0;i<4;i++)if(s->vectors[i].count>s->vectors[i].capacity||(s->vectors[i].count&&!s->vectors[i].allocation.pointer))return GH_POOL_BOUNDS;
+ for(unsigned i=0;i<4;i++){gh_room_vector*v=&s->vectors[i];uint8_t*p=v->allocation.pointer;uint32_t n=0;
+  for(uint32_t j=0;j<v->count;j++){uint32_t x=u32(p+(size_t)j*4);if(x!=h)w32(p+(size_t)n++*4,x);}v->count=n;
+ }
+ memset(&s->objects[slot],0,sizeof(s->objects[slot]));return GH_POOL_OK;
+}
+
+
+static void exit_metadata(gh_room_pools*s){
+ for(unsigned i=0;i<4;i++)if(s->vectors[i].allocation.pointer)return;
+ for(unsigned i=0;i<3;i++)if(s->arenas[i].allocation.pointer)return;
+ for(unsigned i=0;i<2;i++)if(s->blocks[i].allocation.pointer)return;
+ s->initialized=0; /* host construction state only; shared handle serial survives */
+}
+gh_room_pool_status gh_room_arena_clear_002a9528(gh_room_pools*s,uint32_t address){
+ if(!s||!s->heap)return GH_POOL_ARGUMENT;unsigned i;if(address==0x754c20)i=0;else if(address==0x754240)i=1;else if(address==0x754c10)i=2;else return GH_POOL_ARGUMENT;
+ /* Original two manager pointers become NULL. Native bounded backing is
+  * individually owned rather than a suballocation of original roomheap;
+  * relinquish that SAME backing at the proven end of manager lifetime. */
+ gh_room_arena*p=&s->arenas[i];if(p->allocation.pointer&&gh_heap_release(s->heap,p->allocation)!=GH_MEM_OK){s->failed_entry=0x2a9528;return GH_POOL_MEMORY;}memset(p,0,sizeof(*p));exit_metadata(s);return GH_POOL_OK;
+}
+gh_room_pool_status gh_room_registries_release_0030f5f0(gh_room_pools*s){
+ if(!s||!s->heap)return GH_POOL_ARGUMENT;
+ for(size_t i=0;i<s->object_slots;i++)if(s->objects[i].object){s->failed_entry=0x30f8b0;return GH_POOL_UNSUPPORTED;}
+ for(unsigned i=0;i<4;i++)if(s->vectors[i].count){s->failed_entry=0x3128b0;return GH_POOL_UNSUPPORTED;}
+ for(unsigned i=0;i<4;i++){gh_room_vector*v=&s->vectors[i];if(v->allocation.pointer&&gh_heap_release(s->heap,v->allocation)!=GH_MEM_OK){s->failed_entry=0x3128b0;return GH_POOL_MEMORY;}memset(v,0,sizeof(*v));}
+ gh_room_pool_status e=gh_room_arena_clear_002a9528(s,0x754c20);if(e)return e;return gh_room_arena_clear_002a9528(s,0x754c10);
+}
+static gh_room_pool_status release_empty_block(gh_room_pools*s,unsigned i){
+ if(!s||!s->heap)return GH_POOL_ARGUMENT;gh_room_block_pool*p=&s->blocks[i];
+ if(p->used_count||p->used_head){s->failed_entry=i?0x149378:0x150418;return GH_POOL_UNSUPPORTED;}
+ if(p->allocation.pointer&&gh_heap_release(s->heap,p->allocation)!=GH_MEM_OK){s->failed_entry=i?0x149378:0x150418;return GH_POOL_MEMORY;}
+ free(p->active);memset(p,0,sizeof(*p));exit_metadata(s);return GH_POOL_OK;
+}
+gh_room_pool_status gh_room_model_pool_release_00150078(gh_room_pools*s){return release_empty_block(s,0);}
+gh_room_pool_status gh_room_aux_pool_release_001492c8(gh_room_pools*s){return release_empty_block(s,1);}

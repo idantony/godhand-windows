@@ -119,3 +119,8 @@ int gh_dvd_cancel(gh_dvd_jobs *q,uint32_t id)
     for(i=0;i<GH_DVD_JOB_COUNT;++i)if(q->jobs[i].id==id) {clear_job(&q->jobs[i]);found=1;}
     return found;
 }
+
+gh_dvd_error gh_dvd_jobs_reset_00201018(gh_dvd_jobs*q){
+ if(!q||!q->disc||q->current < -1||q->current>=GH_DVD_JOB_COUNT)return GH_DVD_ARGUMENT;
+ memset(q->jobs,0,sizeof(q->jobs));q->current=-1;q->queue_state=0;return GH_DVD_OK;
+}

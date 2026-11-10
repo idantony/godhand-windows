@@ -23,7 +23,9 @@ gh_id_error gh_id_texture_open(const gh_id_state *m,uint32_t slot,uint32_t n,gh_
   if(pe)return pe==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
   /* ActualMC confirmationcursor: languageTBL1 item47. Original151630
    * classifiesTIM2as0;15BCF0 calls15E0A0 linearPSMT4+8x2CLUTupload. */
-  if(picture.width!=32||picture.height!=32||picture.image_type!=4||picture.clut_type!=3||picture.colors!=16||((picture.tex0>>20)&63)!=20||((picture.tex0>>26)&15)!=5||((picture.tex0>>30)&15)!=5||((picture.tex0>>35)&3))return GH_ID_UNSUPPORTED;
+  int loading=picture.width==32&&picture.height==16&&picture.tex0==UINT64_C(0x115408000);
+  int cursor=picture.width==32&&picture.height==32&&((picture.tex0>>30)&15)==5;
+  if((!loading&&!cursor)||picture.image_type!=4||picture.clut_type!=3||picture.colors!=16||((picture.tex0>>20)&63)!=20||((picture.tex0>>26)&15)!=5||((picture.tex0>>35)&3))return GH_ID_UNSUPPORTED;
   t.width=picture.width;t.height=picture.height;t.tex0=picture.tex0;*out=t;return GH_ID_OK;
  }
  if(t.source.size<48||u32(t.source.bytes)&0x80000000U)return GH_ID_UNSUPPORTED;
@@ -63,7 +65,7 @@ gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity
  if(t->source.size>=4&&!memcmp(t->source.bytes,"TIM2",4)){
   gh_tim2_picture p;gh_tim2_error e=gh_tim2_first(t->source.bytes,t->source.size,&p);
   if(e)return e==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
-  if(t->width!=32||t->height!=32||p.width!=32||p.height!=32||t->tex0!=p.tex0)return GH_ID_UNSUPPORTED;
+  if(t->width!=32||(t->height!=32&&(t->height!=16||t->tex0!=UINT64_C(0x115408000)))||p.width!=t->width||p.height!=t->height||t->tex0!=p.tex0)return GH_ID_UNSUPPORTED;
   e=gh_tim2_rgba4(&p,rgba,capacity);return e==GH_TIM2_OK?GH_ID_OK:e==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
  }
  int level=t->width==256&&t->height==128&&t->tex0==UINT64_C(0x20000001e1310000);

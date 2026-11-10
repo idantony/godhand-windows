@@ -4,6 +4,7 @@
 #include "../core/game_init.h"
 #include "../core/game_stage.h"
 #include "../core/game_children.h"
+#include "../core/game_scene_meshes.h"
 #include "../core/id_base.h"
 #include "../core/sound_control.h"
 #include "../core/game_movie_pool.h"
@@ -62,6 +63,10 @@ typedef struct {
  gh_display_state *display; /*RootONEcanonicaldisplay/font/projectionglobals*/
  gh_r020_move_callbacks title_callbacks; /*borrowRootfrontend/providercontext*/
  const gh_r020_reference_profile *title_reference_profile; /*borrowuntilactualR020Initcopiesit*/
+ uint8_t *factory_serial; /*ONEpersistent3C3D18byte, importedfromactualELF*/
+ const void *boot_elf;size_t boot_elf_bytes; /*borrowactualimmutableimageforconstructorconstants*/
+ gh_game_services_status (*start_loading_menu)(void *,uint32_t *frontier);
+ void *loading_context;
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;
@@ -90,11 +95,16 @@ typedef struct {
  gh_game_scene_step *step;gh_game_event *event;gh_display_state *display;gh_r020_title *title;
  gh_scene_hook *scenario_exit,*scenario_callback104;
  gh_game_door *door;uint16_t *door_wait;uint8_t *system_menu_enabled;
+ gh_scene_meshes *meshes;
  uint32_t room_texture_channel;int room_texture_ready;
  uint32_t *main_word4;gh_game_main_record *main_records;size_t main_record_count;
  uint8_t *scene_buffer_a,*scene_buffer_b;size_t scene_buffer_a_size,scene_buffer_b_size;
 } gh_game_services_scene_view;
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services *,gh_game_services_scene_view *);
+/* Native continuation/cache metadata only, after original state5 chooses the
+ * next Main2/3 visit. Actual room allocations expire later at2A6210. */
+gh_game_services_status gh_game_services_begin_next_room(gh_game_services *);
+uint64_t gh_game_services_ui_resource_epoch(const gh_game_services *);
 /* Borrow every existing canonical rootobject. Runtime/children use root-owned
  * pointer slots, never duplicate rootidentity. New owners and16taskScenario
  * storage are private. CancreatefromexecutingMain task on nativebackend.

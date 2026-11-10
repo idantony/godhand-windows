@@ -44,6 +44,9 @@ gh_child_status gh_game_children_alpha_step_00160c48(gh_game_children *,uint32_t
 /* Actual1601D8 cold/default/null-selected state machine and genuine early
  * gates. Active unrecovered child operations/fade/IO remain precise frontiers.
  * Does not iterate nine widgets, allocate ID runs or acknowledge UI drawing. */
+/* Actual1612A8->15FF10 firstboot inactive branch. ActiveSubScr requires its
+ * real open/childQuit/snapshot provenance and stays an explicit frontier. */
+gh_child_status gh_game_children_quit_001612a8(gh_game_children *,gh_boot_work *,uint32_t *frontier);
 gh_child_status gh_game_children_move_001601d8(gh_game_children *,gh_boot_work *,uint32_t *frontier);
 /* Exact160D50 untextured fullscreenstrip. Backendmustreallyallocate/submit
  * the15B880 operation (evenalpha0) andapplyTEST3001D beforeconsumption.

@@ -23,10 +23,11 @@ gh_sound_exit_status gh_sound_scene_exit_wait_002cab58(gh_sound_scene_exit*s,int
  if(e)return bad(s,0x2cab58,e,GH_SOUND_EXIT_NATIVE);*out=ready&&!gh_se_voice_active_nodes(s->voices);s->frontier=0;return GH_SOUND_EXIT_OK;
 }
 static gh_sound_exit_status release_bank(gh_sound_scene_exit*s,int16_t bank){
+ if(gh_se_voice_bank_nodes(s->voices,bank))return bad(s,0x2cbe68,bank,GH_SOUND_EXIT_UNSUPPORTED);
  gh_sound_span a,b,c,d;gh_audio_status e=gh_audio_bank_views(s->scene->registry,bank,&a,&b,&c,&d);
  if(e==GH_AUDIO_NOT_FOUND)return GH_SOUND_EXIT_OK;if(e)return bad(s,0x2cf310,e,GH_SOUND_EXIT_NATIVE);
- /* Current supported voices are exclusively bank0; a future nonzero-bank
-  * voice path must add its real2CBE68 stop/ref semantics before this release. */
+ /* Current caller waited until the real EE voice list was empty. Active
+  * bank unregister/IOP consequences remain precise2CBE68 unsupported above. */
  e=gh_audio_release_bank(s->scene->registry,bank);if(e)return bad(s,0x2cf310,e,GH_SOUND_EXIT_NATIVE);return GH_SOUND_EXIT_OK;
 }
 gh_sound_exit_status gh_sound_scene_exit_finalize_002ca910(gh_sound_scene_exit*s){

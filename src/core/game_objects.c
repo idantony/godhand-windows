@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 struct gh_game_objects {
+ uint32_t release_cursor,release_sound;uint8_t releasing;
  gh_stage_slots *slots;uint8_t records[80][0x5c];
  struct {const uint8_t *bytes;size_t size;} source[80];
 };
@@ -81,4 +82,29 @@ gh_object_status gh_game_objects_update_001fe748(gh_game_objects*s,uint32_t*f){
   }
  }
  memcpy(s->slots->records,plan,(size_t)s->slots->count*0x5c);return GH_OBJECT_OK;
+}
+
+
+gh_object_status gh_game_objects_release_nonpinned_001fef30(gh_game_objects*s,gh_object_slot_release call,void*ctx,uint32_t*f){
+ if(f)*f=0;if(!manager_valid(s)||!call)return GH_OBJECT_ARGUMENT;
+ if(!s->releasing){s->release_cursor=s->slots->count;s->release_sound=0;s->releasing=1;}
+ while(s->release_cursor){unsigned i=s->release_cursor-1;uint8_t*p=s->slots->records+(size_t)i*0x5c;
+  if(u32(p+4)&0x80000000u){s->release_cursor--;continue;}
+  /*1FF3A0 clears usecount/flags before the actualdata free. Borrowed pinned
+   * views never enter this branch; unknown owned data needs original2A9680. */
+  w32(p+4,0);w32(p+8,0);
+  if(u32(p+0x10)){if(f)*f=0x2a9680;return GH_OBJECT_UNSUPPORTED;}
+  w32(p+0xc,UINT32_MAX);w32(p+0x1c,0);w32(p+0x18,0);s->source[i].bytes=NULL;s->source[i].size=0;
+  while(s->release_sound<10){uint8_t*q=p+0x24+s->release_sound*4;uint32_t v=u32(q);int32_t slot=v<=INT32_MAX?(int32_t)v:(int32_t)((int64_t)v-4294967296LL);
+   gh_object_status e=call(ctx,slot,f);if(e)return e;w32(q,UINT32_MAX);s->release_sound++;
+  }
+  w32(p,8);s->release_sound=0;s->release_cursor--;
+ }
+ s->releasing=0;return GH_OBJECT_OK;
+}
+gh_object_status gh_game_objects_reset_records_001ff028(gh_game_objects*s,uint32_t*f){
+ if(f)*f=0;if(!manager_valid(s))return GH_OBJECT_ARGUMENT;
+ if(s->releasing){if(f)*f=0x1fef30;return GH_OBJECT_NOT_READY;}
+ if(gh_stage_slots_reset(s->slots,s->slots->heap_handle)!=GH_STAGE_OK)return GH_OBJECT_BOUNDS;
+ memset(s->source,0,sizeof(s->source));return GH_OBJECT_OK;
 }

@@ -14,11 +14,11 @@ static unsigned sample(const std::vector<unsigned char>&pixels,unsigned w,unsign
 }
 static void oracle(std::vector<unsigned char>&dst,unsigned w,unsigned h,const gh_id_texture_quad&q,const std::vector<unsigned char>&texture){
  int r[4]={(int)(q.x0*16),(int)(q.y0*16),(int)(q.x1*16),(int)(q.y1*16)};
- unsigned st[4]={(unsigned)(q.u0*q.texture.width*65536.0f),(unsigned)(q.v0*q.texture.height*65536.0f),(unsigned)(q.u1*q.texture.width*65536.0f),(unsigned)(q.v1*q.texture.height*65536.0f)};
+ int st[4]={(int)(q.u0*q.texture.width*65536.0f),(int)(q.v0*q.texture.height*65536.0f),(int)(q.u1*q.texture.width*65536.0f),(int)(q.v1*q.texture.height*65536.0f)};
  for(unsigned y=0;y<h;y++)for(unsigned x=0;x<w;x++){
   if((int)x*16<r[0]||(int)x*16>=r[2]||(int)y*16<r[1]||(int)y*16>=r[3])continue;
-  int u=(int)(st[0]+(uint64_t)(st[2]-st[0])*(unsigned)((int)x*16-r[0])/(unsigned)(r[2]-r[0]))-32768;
-  int v=(int)(st[1]+(uint64_t)(st[3]-st[1])*(unsigned)((int)y*16-r[1])/(unsigned)(r[3]-r[1]))-32768;
+  int64_t un=(int64_t)(st[2]-st[0])*((int)x*16-r[0]),ud=r[2]-r[0];int u=st[0]+(int)(un>=0?un/ud:-((-un+ud-1)/ud))-32768;
+  int64_t vn=(int64_t)(st[3]-st[1])*((int)y*16-r[1]),vd=r[3]-r[1];int v=st[1]+(int)(vn>=0?vn/vd:-((-vn+vd-1)/vd))-32768;
   int tx=floor_div(u,65536),ty=floor_div(v,65536),fu=(u-tx*65536)/4096,fv=(v-ty*65536)/4096;int filtered[4];
   for(unsigned c=0;c<4;c++)filtered[c]=lerp(lerp((int)sample(texture,q.texture.width,q.texture.height,tx,ty,c),(int)sample(texture,q.texture.width,q.texture.height,tx+1,ty,c),fu),lerp((int)sample(texture,q.texture.width,q.texture.height,tx,ty+1,c),(int)sample(texture,q.texture.width,q.texture.height,tx+1,ty+1,c),fu),fv);
   int alpha=(filtered[3]*(int)(q.color>>24))/128;if(alpha>255)alpha=255;if(alpha<=1)continue;
@@ -69,9 +69,19 @@ int main(int argc,char**argv){
  level.quad.x0=445-(124*.6f)*.5f;level.quad.x1=445+(124*.6f)*.5f;level.quad.y0=395-(40*.800000191f)*.5f;level.quad.y1=395+(40*.800000191f)*.5f;
  level.quad.u0=.000117192685f;level.quad.v0=.267812282f;level.quad.u1=.487695187f;level.quad.v1=.591581762f;level.quad.color=0x02808080;level.quad.color_mode=6;level.quad.font_mode=5;
  std::vector<unsigned char> level_rgba(256*128*4);C(!gh_id_texture_rgba(&level.quad.texture,level_rgba.data(),level_rgba.size())&&!gh_ui_sprite_upload(renderer,&level.quad.texture,level_rgba.data(),level_rgba.size(),&level.texture));auto level_expected=back;oracle(level_expected,512,448,level.quad,level_rgba);C(!gh_ui_sprite_batch(renderer,&state,&level,1,back.data(),output.data(),output.size())&&output==level_expected&&output!=back);output=previous;
+ gh_ui_sprite_item loading={};C(!gh_id_texture_open(manager.get(),1,31,&loading.quad.texture));C(loading.quad.texture.width==32&&loading.quad.texture.height==16&&loading.quad.texture.tex0==UINT64_C(0x115408000));
+ loading.quad.x0=-18;loading.quad.x1=532;loading.quad.y0=-50;loading.quad.y1=500;loading.quad.u1=loading.quad.v1=1;loading.quad.color=0x80808080;loading.quad.color_mode=6;loading.quad.font_mode=5;
+ std::vector<unsigned char> loading_rgba(32*16*4);C(!gh_id_texture_rgba(&loading.quad.texture,loading_rgba.data(),loading_rgba.size())&&!gh_ui_sprite_upload(renderer,&loading.quad.texture,loading_rgba.data(),loading_rgba.size(),&loading.texture));auto loading_expected=back;oracle(loading_expected,512,448,loading.quad,loading_rgba);C(!gh_ui_sprite_batch(renderer,&state,&loading,1,back.data(),output.data(),output.size())&&output==loading_expected&&output!=back);output=previous;
+ gh_ui_sprite_item scroll={};C(!gh_id_texture_open(manager.get(),1,34,&scroll.quad.texture));scroll.quad.x0=286;scroll.quad.x1=542;scroll.quad.y0=337;scroll.quad.y1=465;scroll.quad.u0=2.02999997f;scroll.quad.u1=1.02999997f;scroll.quad.v1=1;scroll.quad.color=0x80808080;scroll.quad.color_mode=6;scroll.quad.font_mode=5;
+ std::vector<unsigned char> scroll_rgba((size_t)scroll.quad.texture.width*scroll.quad.texture.height*4);C(!gh_id_texture_rgba(&scroll.quad.texture,scroll_rgba.data(),scroll_rgba.size())&&!gh_ui_sprite_upload(renderer,&scroll.quad.texture,scroll_rgba.data(),scroll_rgba.size(),&scroll.texture));
+ for(unsigned variant=0;variant<3;variant++){if(variant==1){scroll.quad.u0=-1.125f;scroll.quad.u1=.875f;scroll.quad.v0=1.75f;scroll.quad.v1=-.25f;}if(variant==2){scroll.quad.u0=3.5f;scroll.quad.u1=-2.5f;scroll.quad.v0=-2;scroll.quad.v1=3;}
+  auto scroll_expected=back;oracle(scroll_expected,512,448,scroll.quad,scroll_rgba);C(!gh_ui_sprite_batch(renderer,&state,&scroll,1,back.data(),output.data(),output.size())&&output==scroll_expected&&output!=back);
+ }scroll.quad.u0=4.01f;C(gh_ui_sprite_batch(renderer,&state,&scroll,1,back.data(),output.data(),output.size())==GH_UI_UNSUPPORTED);output=previous;
  auto saved=textures[0][3];textures[0][3]=3;uint32_t bad;C(gh_ui_sprite_upload(renderer,&items[0].quad.texture,textures[0].data(),textures[0].size(),&bad)==GH_UI_UNSUPPORTED);textures[0][3]=saved;
  state.tex1=0;C(gh_ui_sprite_batch(renderer,&state,items,2,back.data(),output.data(),output.size())==GH_UI_UNSUPPORTED);
  if(argc==3){FILE*f=std::fopen(argv[2],"wbx");C(f);C(std::fwrite(output.data(),1,output.size(),f)==output.size());C(std::fclose(f)==0);}
  gh_ui_sprite_destroy(renderer);C(gh_id_base_release_002aa078(runtime,&object,&original,&reclaimed)==GH_ID_OK);C(gh_id_runtime_destroy(runtime)==GH_ID_OK);
  std::puts("PASS hardware MC T32 scaled1.4Y, real32x32TIM2cursor,TitlePSMT4Logo+actual256x128Level: each229376pixels exactindependentCPU; invalidTIM2extent/LogoCSA rejected");return 0;
 }
+
+

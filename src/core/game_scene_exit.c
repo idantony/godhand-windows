@@ -67,12 +67,21 @@ static gh_scene_exit_status phase1(gh_game_scene_exit*s,const gh_game_scene_exit
  }s->operation++;}
 }
 static gh_scene_exit_status phase5(gh_game_scene_exit*s,const gh_game_scene_exit_bindings*b){
- /* Phase5 begins201018/2CA910 then real1FEF30 for global80 and room32.
-  * That owner operation and its following descending32-record destructor
-  * loop are not one generic callback or a whole-services destroy. */
- static const uint32_t calls[]={0x201018,0x2ca910};
- while(s->operation<2){gh_scene_exit_status e=call(s,b,calls[s->operation],NULL);if(e)return e;s->operation++;}
- return fail(s,0x1fef30,GH_SCENE_EXIT_UNSUPPORTED);
+ static const uint32_t calls[]={0x201018,0x2ca910,0x1fef30,0x1fef30,0x1ff028,0x30f5f0,0x150078,0x1492c8,0x2a9528,0x1fdfa8,0x2a71f0,0x2a7280,0x2d73e0};
+ static const uint32_t args[]={0x583f20,0x5fee00,0x580d20,0x5864e0,0x5864e0,0,0,0,0x754240,0x574380,0x5e8040,0x5e8040,0x604700};
+ while(s->operation<13){uint32_t pc=calls[s->operation],f=0;int ignored=0;
+  if(!b->external)return fail(s,pc,GH_SCENE_EXIT_UNSUPPORTED);
+  gh_scene_exit_status e=b->external(b->context,pc,args[s->operation],&ignored,&f);if(e)return fail(s,f?f:pc,e);s->operation++;
+ }
+ uint8_t*p=(uint8_t*)b->loop->work;uint16_t next=(uint16_t)(p[0x5b4]|(uint16_t)p[0x5b5]<<8),old=(uint16_t)(p[0x5b0]|(uint16_t)p[0x5b1]<<8);
+ p[0x5bb]=p[0x5b9];p[0x5b6]=(uint8_t)old;p[0x5b7]=(uint8_t)(old>>8);p[0x5b9]=p[0x5ba];p[0x5b0]=(uint8_t)next;p[0x5b1]=(uint8_t)(next>>8);
+ if(!(w(b->save.bytes+0x14)&0x4000000)||next){
+  if(next==0x20){put(p+0x584,w(p+0x584)|0x8000);s->operation=0;return GH_SCENE_EXIT_OK;}
+  if((w(p+0x598)&0x40)&&(old>>8)!=(next>>8)&&(old>>8)&&(next>>8))b->loop->game_state[0]=2;
+  else if(w(b->save.bytes+0xb8c)&1){b->loop->game_state[0]=2;put(b->save.bytes+0xb8c,w(b->save.bytes+0xb8c)&~1u);}
+  else b->loop->game_state[0]=3;
+ }else b->loop->game_state[0]=3;
+ b->loop->game_state[1]=b->loop->game_state[2]=b->loop->game_state[3]=0;s->phase=0;s->operation=0;return GH_SCENE_EXIT_OK;
 }
 
 gh_scene_exit_status gh_game_scene_exit_002a67d0(gh_game_scene_exit*s,const gh_game_scene_exit_bindings*b){

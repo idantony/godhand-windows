@@ -16,6 +16,7 @@ struct gh_id_runtime {
     gh_id_path_policy path_policy;
     gh_id_entry entries[POOL_COUNT];
     gh_id_job_view jobs[JOB_COUNT];
+    gh_id_base *job_owners[JOB_COUNT]; /*native lifetime only, never guestdata*/
     gh_id_entry fallback;
 };
 static uint32_t u32(const unsigned char *p)
@@ -87,7 +88,7 @@ gh_id_error gh_id_pool_allocate_002ace48(gh_id_runtime *r,uint32_t n,int32_t tag
     memset(out,0,sizeof(*out));
     if(!n)return GH_ID_NOT_FOUND;
     if(n>POOL_COUNT-r->manager->pool_used || r->manager->job_count>=JOB_COUNT)return GH_ID_CAPACITY;
-    start=r->manager->pool_used;job=&r->jobs[r->manager->job_count];
+    start=r->manager->pool_used;job=&r->jobs[r->manager->job_count];r->job_owners[r->manager->job_count]=NULL;
     job->tag=tag;job->arg=arg;job->start=start;job->wire_count=s8((unsigned char)n);job->active=1;
     wire=r->manager->jobs+(size_t)r->manager->job_count*0x10;
     put32(wire,(uint32_t)tag);put32(wire+4,(uint32_t)arg);
@@ -187,7 +188,7 @@ gh_id_error gh_id_base_initialize_002a9ea0(gh_id_runtime *r,gh_id_base *o,int32_
     if(!count) {*original_return=1;return GH_ID_FORMAT;}
     error=gh_id_pool_allocate_002ace48(r,count,resource,id,&run);
     if(error) {*original_return=1;return error;}
-    o->entries=run.entries;o->owns_run=1;++r->live_objects;
+    o->entries=run.entries;o->owns_run=1;++r->live_objects;r->job_owners[r->manager->job_count-1]=o;
     o->source_records.bytes=view.bytes+16;o->source_records.size=(size_t)raw_count*SOURCE_SIZE;
     o->source_records.offset=view.offset+16;
     for(i=0;i<raw_count;++i) {
@@ -209,6 +210,7 @@ gh_id_error gh_id_base_release_002aa078(gh_id_runtime *r,gh_id_base *o,int *orig
     if(address<base || address-base>=sizeof(r->entries) || (address-base)%sizeof(*r->entries))return GH_ID_ARGUMENT;
     run.entries=o->entries;run.start=(uint32_t)((address-base)/sizeof(*r->entries));run.count=o->entry_count;
     error=gh_id_pool_release_002acf30(r,run,o->resource_number,reclaimed);if(error)return error;
+    for(unsigned i=0;i<JOB_COUNT;i++)if(r->job_owners[i]==o)r->job_owners[i]=NULL;
     memset(&o->source_records,0,sizeof(o->source_records));memset(&o->packed,0,sizeof(o->packed));o->entries=0;
     if(o->owns_run) {o->owns_run=0;--r->live_objects;}
     o->initialized=0;*original_return=1;return GH_ID_OK;
@@ -264,4 +266,22 @@ gh_id_error gh_id_entry_restore_source_002aa2d0(gh_id_base*o,gh_id_entry*e){
  if(source<records||source-records>o->source_records.size||SOURCE_SIZE>o->source_records.size-(source-records)||(source-records)%SOURCE_SIZE)return GH_ID_BOUNDS;
  if((source-records)/SOURCE_SIZE!=e->source_index)return GH_ID_BOUNDS;
  init_entry(e,e->source,e->source_index);return GH_ID_OK;
+}
+
+gh_id_error gh_id_pool_compact_002ad108(gh_id_runtime*r,int*original){
+ if(!runtime_valid(r)||!original)return GH_ID_ARGUMENT;*original=0;
+ if(!r->manager->pool_used)return GH_ID_OK;
+ unsigned count=r->manager->job_count;if(count>JOB_COUNT||r->manager->pool_used>POOL_COUNT)return GH_ID_FORMAT;
+ int seen_other=0,blocked=0,found=0;unsigned last=0;int64_t total=0;
+ for(unsigned i=0;i<count;i++){
+  const gh_id_job_view*j=r->jobs+i;if(j->tag==1){found=1;last=i;total+=j->wire_count;if(seen_other)blocked=1;}else seen_other=1;
+ }
+ if(blocked)return GH_ID_OK; /*actualreturn0; interiorforeignresource blocks*/
+ /* Original all-non1/signed-byte overflow domains can manufacture impossible
+  * native pool bounds. Preserve them as explicitunsupported, not danglingIDs. */
+ if(!found)return GH_ID_UNSUPPORTED;if(total<0||total>POOL_COUNT)return GH_ID_BOUNDS;
+ if((uint64_t)r->jobs[last].start+(uint32_t)(uint8_t)r->jobs[last].wire_count!=(uint64_t)total)return GH_ID_FORMAT;
+ for(unsigned i=last+1;i<count;i++)if(r->job_owners[i])return GH_ID_BUSY;
+ r->manager->job_count=last+1;r->manager->pool_used=(uint32_t)total;for(unsigned i=last+1;i<count;i++)r->jobs[i].active=0;
+ *original=1;return GH_ID_OK;
 }

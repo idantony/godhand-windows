@@ -8,6 +8,7 @@ int main(int argc,char **argv){gh_disc *d;gh_audio_registry *r;gh_sound_control 
  C(gh_audio_startup_load(r,d)==GH_AUDIO_OK);
  C(gh_sound_control_from_startup(&s,d,r)==GH_VOICE_OK && s.initialized && !s.flags_ac && !s.flags_b0 && !s.bgm_state_13c);
  C(!s.unload_a4&&s.room_heaps[0].registry==r&&s.room_heaps[1].registry==r&&s.room_heaps[0].original_global==0x6036a0&&s.room_heaps[1].original_global==0x603310&&s.room_heaps[0].identity_verified&&s.room_heaps[1].identity_verified&&!s.room_heaps[0].closed&&!s.room_heaps[1].closed);
+ C(s.recent_initialized&&!s.recent_pos);for(unsigned i=0;i<16;i++)C(s.recent[i].bank==-1&&s.recent[i].program==-1&&!s.recent[i].key);
  C(s.event_mask50==0x80000000u && s.event_mask58==0x80000000u && s.base_mask5c==0x80000000u && !s.previous_mask54 && s.output_mode==1 && !s.ts_head2c && !s.listener_mode110);
  for(unsigned i=0;i<4;i++)C(s.listener_position_c0[i]==(i==3?0x3f800000u:0));
  for(unsigned i=0;i<16;i++)C(s.listener_matrix_d0[i]==(i%5==0?0x3f800000u:0));

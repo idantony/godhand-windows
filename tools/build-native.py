@@ -133,9 +133,19 @@ def main():
                ("game_system_menu", "src/core/game_system_menu.c"),
                ("game_scene_exit", "src/core/game_scene_exit.c"),
                ("sound_scene_exit", "src/core/sound_scene_exit.c"),
+               ("game_scene_meshes", "src/core/game_scene_meshes.c"),
+               ("game_scene_meshes_finish", "src/core/game_scene_meshes_finish.c"),
+               ("static_mesh", "src/assets/static_mesh.c"),
+               ("static_mesh_transform", "src/assets/static_mesh_transform.c"),
+               ("game_object_sound", "src/core/game_object_sound.c"),
+               ("game_scene_exit_leaves", "src/core/game_scene_exit_leaves.c"),
+               ("game_world_light_select", "src/core/game_world_light_select.c"),
+               ("game_world_light_step", "src/core/game_world_light_step.c"),
+               ("tm3", "src/assets/tm3.c"),
+               ("game_scene_meshes_material", "src/core/game_scene_meshes_material.c"),
                ("id_entry_reset", "src/core/id_entry_reset.c"), ("id_layout_rotation", "src/core/id_layout_rotation.c"),
                ("id_animation", "src/core/id_animation.c"), ("id_texture_polygon", "src/core/id_texture_polygon.c"),
-               ("r020_title", "src/rooms/r020_title.c")]
+               ("r020_title", "src/rooms/r020_title.c"), ("r100", "src/rooms/r100.c")]
     extra_tests = [
         ("nested-tasks", "tests/platform/test_nested_tasks.c", "none"),
         ("id-path", "tests/core/test_id_path.c", "iso"),
@@ -156,6 +166,8 @@ def main():
         ("mc-control-flow", "tests/core/test_mc_control_flow.c", "iso"),
         ("audio-events", "tests/platform/test_audio_events.c", "iso"),
         ("se-voice", "tests/core/test_se_voice.c", "iso"),
+        ("se-stop", "tests/core/test_se_stop.c", "iso"),
+        ("se-bank2", "tests/core/test_se_bank2.c", "iso"),
         ("sound-control", "tests/core/test_sound_control.c", "iso"),
         ("video-player", "tests/platform/test_video_player.c", "movie"),
         ("native-input", "tests/platform/test_native_input.c", "iso"),
@@ -173,6 +185,8 @@ def main():
         ("adx-stream", "tests/platform/test_adx_stream.c", "iso"),
         ("sound-scene-tick", "tests/core/test_sound_scene_tick.c", "iso"),
         ("game-world-light", "tests/core/test_game_world_light.c", "iso"),
+        ("game-world-light-r100", "tests/core/test_game_world_light_r100.c", "iso"),
+        ("game-world-light-step", "tests/core/test_game_world_light_step.c", "iso"),
         ("game-model-packets", "tests/core/test_game_model_packets.c", "none"),
         ("game-collision-solids", "tests/core/test_game_collision_solids.c", "none"),
         ("game-scene-tables", "tests/core/test_game_scene_tables.c", "iso"),
@@ -208,12 +222,20 @@ def main():
         ("sound-spatial-step", "tests/core/test_sound_spatial_step.c", "iso"),
         ("game-system-menu", "tests/core/test_game_system_menu.c", "iso"),
         ("game-scene-exit", "tests/core/test_game_scene_exit.c", "iso"),
+        ("scene-exit-cleanup", "tests/core/test_scene_exit_cleanup.c", "iso"),
+        ("game-scene-meshes", "tests/core/test_game_scene_meshes.c", "iso"),
+        ("static-mesh", "tests/assets/test_static_mesh.c", "iso"),
+        ("tm3", "tests/assets/test_tm3.c", "iso"),
+        ("static-mesh-transform", "tests/assets/test_static_mesh_transform.c", "iso"),
+        ("game-object-sound", "tests/core/test_game_object_sound.c", "iso"),
         ("sound-scene-exit", "tests/core/test_sound_scene_exit.c", "iso"),
         ("id-entry-reset", "tests/core/test_id_entry_reset.c", "iso"),
         ("id-layout-rotation", "tests/core/test_id_layout_rotation.c", "iso"),
         ("id-animation", "tests/core/test_id_animation.c", "iso"),
         ("id-number", "tests/core/test_id_number.c", "iso"),
+        ("id-alignment", "tests/core/test_id_alignment.c", "iso"),
         ("r020-title", "tests/rooms/test_r020_title.c", "iso"),
+        ("r100", "tests/rooms/test_r100.c", "iso"),
     ]
     source_inputs = {"tools/build-native.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
@@ -230,7 +252,10 @@ def main():
                      "tests/core/test_mc_task.c", "tests/core/test_id_jobs.c", "tests/core/test_id_texture.c",
                      "tests/core/test_mc_control.c", "tests/core/test_game_stage.c", "tests/core/test_game_children.c",
                      "tests/core/test_id_text.c"}
-    shared_headers = {"id_jobs_texture": "src/core/id_jobs.h", "id_jobs_primitive": "src/core/id_jobs.h"}
+    shared_headers = {"id_jobs_texture": "src/core/id_jobs.h", "id_jobs_primitive": "src/core/id_jobs.h",
+                      "game_scene_meshes_finish": "src/core/game_scene_meshes.h",
+                      "game_world_light_select": "src/core/game_world_light.h",
+                      "game_scene_meshes_material": "src/core/game_scene_meshes.h"}
     source_inputs.update(source for _, source, _ in extra_tests)
     for name, source in modules:
         source_inputs.add(source)
@@ -327,7 +352,7 @@ def main():
         run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
         run("test-id-text", [output / "test_id_text.exe", baseline["source_iso"]["path"]])
         for name, _, inputs in extra_tests:
-            if ((name in ("se-voice", "mc-control-flow", "bgm-requests", "adx-stream", "r020-title", "game-services", "game-scene-exit", "sound-scene-exit") and not args.hardware_audio)
+            if ((name in ("se-voice", "se-stop", "se-bank2", "mc-control-flow", "bgm-requests", "adx-stream", "r020-title", "game-services", "game-scene-exit", "scene-exit-cleanup", "game-object-sound", "sound-scene-exit") and not args.hardware_audio)
                     or (inputs == "movie" and not args.movie_codec)
                     or (inputs == "adx-reference" and not args.adx_reference_wave)):
                 manifest.setdefault("skipped_checks", []).append({"name": "test-" + name, "reason": "Explicit hardware/codec opt-in not supplied"})

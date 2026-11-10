@@ -19,6 +19,9 @@ gh_camera_status gh_game_camera_construct_pl_00139bc8(gh_game_pl_camera *,gh_gam
 gh_camera_status gh_game_camera_reset_00138210(gh_game_pl_camera *,const gh_game_camera *active);
 /* Original early update 138F98 reads canonical CamManager+1028 only.
  * Mode bit4 delegates to real cCamera_move; other modes do no work here. */
+/* Actual138D40 with source argument0: canonical mode/previous/active links;
+ * no matrix-copy branch, allocation, projection or camera reset is implied. */
+gh_camera_status gh_game_camera_restore_00138d40(gh_game_init_state *);
 gh_camera_status gh_game_camera_before_move_00138f98(const gh_game_init_state *,uint32_t *frontier);
 #ifdef __cplusplus
 }

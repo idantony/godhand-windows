@@ -36,6 +36,9 @@ gh_scene_table_status gh_scene_scrolls_0031d1b0(gh_game_scene_tables *,gh_boot_w
 /* ActualAKT/AKG init: eightoffsets resolvewithincontainingAKT, including
  * FFFFFFFF=>header-1 when stillinsideparent. Sourceimage remainsimmutable.
  * Nonemptyactor deletionlist explicit12ECF0 frontier, neverfakedestruction. */
+/* Actual12E800 clears only AKG and eight links, preserving counts/vectors,
+ * then12ECF0 destroys the real pending list (positive list stillunsupported). */
+gh_scene_table_status gh_scene_actors_reset_0012e800(gh_game_scene_tables *);
 gh_scene_table_status gh_scene_actors_0012e670(gh_game_scene_tables *,const gh_bundle *);
 /* ActualR020AKG+2Acount0 path plus308D40 clear32words. */
 gh_scene_table_status gh_scene_actor_scroll_links_00307a60(gh_game_scene_tables *);

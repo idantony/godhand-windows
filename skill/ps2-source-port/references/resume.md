@@ -15,8 +15,9 @@ instruction-translated final runtime. No playable original scene verified yet.
 - Needed tool installation, GPU and parallel agents are authorized. Development
   agents at most gpt-6.1-sol, mechanical tasks prefer gpt-6-luna. No Codex Fast.
 - Public repo https://github.com/idantony/godhand-windows. Local commits for
-  rollback; push major milestones only. Review execution frontier after every
-  code commit. After pushes, give rough workload percentage in chat/private
+  rollback; push major milestones only. Formal overall review follows each
+  GitHub push (latest user clarification), rather than each local commit.
+  After pushes, give rough workload percentage in chat/private
   analysis only, never GitHub or as upstream matching coverage.
 - README English/Chinese. Publish authored source/tests/curated documentation;
   exclude game data, raw disassembly/decompiler dumps, tools/dependencies/keys.
@@ -27,7 +28,49 @@ instruction-translated final runtime. No playable original scene verified yet.
   at a module/push, pause without instruction, or stop after this resume.
 - These historical permissions do not transfer to another game/read-only task.
 
-## Latest verified title checkpoint (2026-11-10)
+## Latest local room-transition checkpoint (2026-11-10)
+
+Public main remains d4fad08, Title milestone105C/111checks; subjective work
+estimates belong only in private analysis/chat. Do not push every local step. Goal remains ACTIVE/unbounded;
+user status questions do not cancel it, and no world frame/gameplay is verified.
+
+- Passing immutable source: G:/middle_thing/godhand_windows/snapshots/room-transition-09.
+  Scratch: G:/middle_thing/godhand_windows/verification/room-transition-09.
+  116C/123checks PASS, no skips; fresh RNG20544/20534 comparisons PASS.
+- Matching native Windows QA NewGame:470ticks,6MC/90Movie/351sceneUIframes,
+  original Title/Level/SFX/Exit/Jump ->state5 complete ->room0100/Main3,
+  actual new R100 pack load and PreInit. Renderer/window0. Reported sound
+  frontier2CF258 was an older provisional marker: audio worker is correcting
+  true external SES/AFD decode-directory boundary2CFBC0/322A68, not replaying
+  volume-selection leaf2CF258 as a loader. No world rendering claimed.
+- Header/source ABI changes require fresh full compile. Windows QA flags:
+  --hidden --muted --qa-new-game --max-ticks1100. Captures are raw512448RGBA
+  via --qa-capture PATH --qa-capture-frame N; production has no syntheticinput.
+- Root added actualR100 modulehash/PreInit1A0/Move740. Realsha7a335d22...c57;
+  ctor list3400 is ZEROCOUNT/NULL (notFFFF);3090 proves noctors. R100Init208
+  staysunresolved until its true nativeorderedimplementation isconnected.
+- Room lifetime: actualnextcase3 2A6210 resets754220 parentroomheap before
+  31CC48. Rootservices finalize detaches oldpack boundedviews, invalidates
+  stage texture source range, releasespack, advances nativeUIresourceepoch.
+  KeepsglobalCore/Cockpit/SystemMenu/prepare/RoomSave owners. Defaultheap
+  TitlePlayer must NOT be freed as roomheap: oldoriginalglobal is overwritten,
+  exactclass lifetime/explicitunreachable-owner adaptation remains toresolve.
+- Newroomcan enterMain3directly: update_state5 calls begin_next_room toreset
+  nativecase3cursor, notonlystate2. Case3 loading provider reuses Root'sONE
+  SystemMenu task, including its actualalreadyactive earlyreturn.
+- Current uncommitted newwork: SceneAt positiveunits +r100_init/Eventmodule
+  (skill_forward_test); R100external bankreload +actualmatrix/light/fog helpers
+  (godhand_upstream); live staticMove/Trans/OTgroups (opengoal_method).
+  Root owns services/host/Main/GPUintegration. All freeze messages must be
+  reconciled with workingtree; a passing copy never proves laterworkerbytes.
+- Static helpers: all156 originalR100 constructors/353stream materialconsumers
+  and69TM3 materials/910848pixels independentlytested. This is construction,
+  not uploaded/running3D. Program14 VUalgorithm is restored; realMove mayselect
+  program10 fornearobjects. Never route10 through14. Draw producesTWOoriginal
+  OTgroups geometry then setup; LIFO executes setupfirst. OTdepthshiftB58 is
+  originalctor SB0. PACKEDXYZF2 XYlow16,Z=(word2>>4)&FFFFFF,F=(word3>>4)&FF.
+
+## Earlier verified title checkpoint (2026-11-10)
 
 - Immutable source: G:/middle_thing/godhand_windows/snapshots/title-native-04.
   Build/cache/output: G:/middle_thing/godhand_windows/verification/title-native-04.
@@ -206,7 +249,7 @@ canonical cEvent prefix initialized from actual mapped ELF/BSS before state4;
 services must borrow it. New game_scene_step is not in the above84-module suite.
 Preserve explicit path-distance and title-player allocation memory profiles.
 Last pushed milestone is still4578b62; subjective percentage belongs only in
-chat/private review and was8. Keep working until the full playable port goal.
+chat/private review. Keep working until the full playable port goal.
 
 
 Latest committed local checkpoint is b25aa28 (not pushed). Source after it is

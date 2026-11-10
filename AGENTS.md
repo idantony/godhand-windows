@@ -9,7 +9,7 @@
 - Build outputs, object files, test executables, temporary downloads, caches, headless projects and bulky logs belong in `G:\middle_thing\godhand_windows`.
 - The user has authorized installing needed tools. Do not ask again for routine tool installation or reversible implementation work.
 - Public GitHub repository: `https://github.com/idantony/godhand-windows`. Keep local commits for rollback; push only meaningful execution/integration milestones, not every small module. Exclude original game data, raw instruction/decompiler dumps, dependencies and caches. Publish curated progress separately from private analysis.
-- After each code commit, review the overall execution frontier, remaining blockers and critical path; adjust the next work and independent agent assignments when evidence warrants it. Keep this review short and actionable.
+- After each meaningful GitHub push, review the overall execution frontier, remaining blockers and critical path; adjust the next work and independent agent assignments when evidence warrants it. Keep this review short and actionable. Local commits retain rollback points; formal overall reviews use the GitHub push milestone, following the user's latest clarification.
 - After milestone pushes, give the user a rough workload-completion estimate and remaining largest items in chat only. Do not publish that subjective percentage to GitHub or confuse it with upstream matching coverage.
 - Maintain the reusable `skill/ps2-source-port` throughout the work. Preserve a resumable project state there; label unverified techniques and never generalize God Hand-specific facts into all PS2 games.
 - Development agents: use at most `gpt-6.1-sol`; use `gpt-6-luna` for mechanical bounded work. Do not enable Codex Fast.

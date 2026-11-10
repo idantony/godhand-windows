@@ -22,6 +22,7 @@ struct NativeApp {
     uint64_t prepared_mc_serial=0,pending_mc_serial=0,pending_fade_serial=0;
     uint64_t prepared_scene_serial=0,presented_scene=0;
     uint64_t resource_epoch=0,frame_serial=0,presented_mc=0,presented_movie=0;
+    uint64_t scene_resource_epoch=0;
     uint64_t presented_fade_serial=0;
     unsigned surface_kind=0; /*1=actual UI512448,2=Movie640448*/
     gh_window_error window_error=GH_WINDOW_OK;
@@ -37,7 +38,8 @@ static gh_id_error begin_scene(void *opaque,uint32_t *)
 {
     auto &app=*(NativeApp*)opaque;gh_startup_snapshot s={};
     if(gh_startup_host_snapshot(app.host,&s)!=GH_HOST_OK)return GH_ID_ARGUMENT;
-    if(s.mc_ui_epoch!=app.resource_epoch){gh_mc_renderer_reset_resources(app.renderer);app.resource_epoch=s.mc_ui_epoch;}
+    if(s.mc_ui_epoch!=app.resource_epoch||s.ui_resource_epoch!=app.scene_resource_epoch){
+        gh_mc_renderer_reset_resources(app.renderer);app.resource_epoch=s.mc_ui_epoch;app.scene_resource_epoch=s.ui_resource_epoch;}
     gh_mc_renderer_begin(app.renderer);app.groups.clear();app.frame_building=true;app.building_scene=true;app.surface_kind=1;return GH_ID_OK;
 }
 static gh_id_error draw_mc(void *opaque,const gh_id_draw_job *job)
@@ -282,7 +284,7 @@ int main(int argc,char **argv)
         "\"frontier_module\":\"%s\",\"frontier\":\"%08X\","
         "\"mc_frames_presented\":%llu,\"mc_frame_serial\":%llu,\"mc_ui_live\":%s,\"mc_ui_epoch\":%llu,"
         "\"movie_frames_presented\":%llu,\"movie_eof\":%s,\"movie_audio_done\":%s,\"movie_complete\":%s,"
-        "\"mc_phase\":%u,\"mc_subphase\":%u,\"game_state\":%u,\"assets_loaded\":%s,"
+        "\"mc_phase\":%u,\"mc_subphase\":%u,\"game_state\":%u,\"assets_loaded\":%s,\"room\":\"%04X\",\"next_room\":\"%04X\","
         "\"work_flags584\":\"%08X\",\"system_flags5d8\":\"%08X\","
         "\"scene_frames_presented\":%llu,\"scene_frame_serial\":%llu,"
         "\"renderer_error\":%u,\"renderer_frontier\":\"%08X\",\"window_error\":%u,\"exit_code\":%d}\n",
@@ -295,7 +297,7 @@ int main(int argc,char **argv)
         (unsigned long long)app.presented_movie,app.snapshot.movie_video.video_eof?"true":"false",
         app.snapshot.movie_video.audio_done?"true":"false",app.snapshot.movie_video.complete?"true":"false",
         app.snapshot.mc_phase,app.snapshot.mc_subphase,(unsigned)app.snapshot.game_state,
-        app.snapshot.game_assets_loaded?"true":"false",app.snapshot.flags,system_flags5d8,
+        app.snapshot.game_assets_loaded?"true":"false",app.snapshot.current_room,app.snapshot.next_room,app.snapshot.flags,system_flags5d8,
         (unsigned long long)app.presented_scene,(unsigned long long)app.snapshot.scene_frame_serial,(unsigned)renderer.id_error,renderer.frontier,
         (unsigned)app.window_error,result);
     if(app.host){gh_host_error cleanup=gh_startup_host_destroy(app.host);if(cleanup!=GH_HOST_OK){std::fprintf(stderr,"Native host cleanup failed: %u\n",(unsigned)cleanup);result=1;}}

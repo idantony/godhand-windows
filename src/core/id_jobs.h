@@ -39,7 +39,7 @@ gh_id_error gh_id_texture_open(const gh_id_state *,uint32_t slot,uint32_t one_ba
 gh_id_error gh_id_texture_rgba(const gh_id_texture *,void *rgba,size_t capacity);
 typedef struct {gh_id_texture texture;float x0,y0,x1,y1,u0,v0,u1,v1;
  uint32_t color;uint8_t color_mode;int16_t font_mode;uint16_t clip;} gh_id_texture_quad;
-/* Actual TransTex->2C5EA8 observed MC path: centered alignment0, rotation0,
+/* Actual TransTex->2C5EA8: zero rotation, alignment0 centered and1..4 corners,
  * f80=1 and default drawInit scales/shift(+1,+1), clip reset0 by Trans.
  * Coordinates remain original pre-GS UI units; renderer scaling/state follows.
  * Caller runs Move first and preserves layer ordering from visible jobs. */

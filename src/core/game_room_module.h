@@ -16,10 +16,11 @@ typedef struct {
  gh_scene_hook hook4,hook8,hook12;
  uint32_t init_offset,move_offset,end_offset,frontier;int detail;
 } gh_room_module;
-/* Actual2BE708/2BE838/2BE560 load/wait portion, pinned R020 profile only.
+/* Actual2BE708/2BE838/2BE560 load/wait portion, pinned R020/R100 profiles.
  * Release aliases DebugOptimize via actual1FF858/1FFA68 FST directory policy;
  * the canonical physical path below is not a generic basename fallback.
- * Export+8/+C remain UNRESOLVED until recovered native implementations attach.
+ * R100 PreInit+4 and both profiles' +8/+C remain UNRESOLVED until native
+ * implementations attach. A hash match never executes REL machine code.
  * Never invokes REL instructions or substitutes an empty successful callback. */
 gh_room_module_status gh_room_module_load_002be708(gh_room_module *,uint16_t);
 gh_room_module_status gh_room_module_release(gh_room_module *);

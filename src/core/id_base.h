@@ -57,6 +57,11 @@ gh_id_error gh_id_pool_allocate_002ace48(gh_id_runtime *,uint32_t count,int32_t 
 /* Original free helper only reclaims a matching LAST run, compares tag but
  * ignores arg, and sign-extends stored8-bit count. Nonmatching returns freed0. */
 gh_id_error gh_id_pool_release_002acf30(gh_id_runtime *,gh_id_pool_run,int32_t tag,int *freed);
+/* Actual2AD108 retains resource/tag1 prefix and can discard only non1 tail.
+ * Interior non1 then1 returns original0 unchanged. Native live Base ownership
+ * prevents truncating a still-borrowed run (BUSY). Unsafe original signed-byte
+ * overflow/all-non1 domains remain explicitunsupported instead of danglingIDs. */
+gh_id_error gh_id_pool_compact_002ad108(gh_id_runtime *,int *original_return);
 gh_id_error gh_id_runtime_job(const gh_id_runtime *,uint32_t,gh_id_job_view *);
 void gh_id_base_clear_002a9df8(gh_id_base *);
 /* Zero-init or previously release object before init. Returns original return

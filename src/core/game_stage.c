@@ -1,10 +1,13 @@
 /* Actual150C10,309D88,30A200 registry/transfer slice. Only packet shapes
  * supported by the independently verified font_texture helper are admitted. */
 #include "game_stage.h"
+#include "../assets/tm3.h"
 #include <stdlib.h>
 #include <string.h>
 #define VRAM_BYTES (4u*1024u*1024u)
-struct gh_stage_textures {uint8_t *vram;gh_stage_channel channel[256];gh_stage_texture_cursor cursor;};
+typedef struct stage_material_node {gh_stage_material view;uint8_t *pixels;struct stage_material_node *next;} stage_material_node;
+struct gh_stage_textures {uint8_t *vram;gh_stage_channel channel[256];gh_stage_texture_cursor cursor;
+ stage_material_node *materials;size_t material_count;uint64_t next_material_id;};
 static uint16_t u16(const uint8_t *p){return (uint16_t)((unsigned)p[0]|(unsigned)p[1]<<8);}
 static uint32_t u32(const uint8_t *p){return (uint32_t)u16(p)|(uint32_t)u16(p+2)<<16;}
 static uint64_t u64(const uint8_t *p){return (uint64_t)u32(p)|(uint64_t)u32(p+4)<<32;}
@@ -23,7 +26,36 @@ gh_stage_status gh_stage_textures_create(gh_stage_textures **out){
  s->cursor.image_base=0x2600; /*1508F8 constructor, not guessed GPU heap*/
  *out=s;return GH_STAGE_OK;
 }
-void gh_stage_textures_destroy(gh_stage_textures *s){if(s){free(s->vram);free(s);}}
+void gh_stage_tm3_cache_clear(gh_stage_textures*s){if(s){stage_material_node*n=s->materials;while(n){stage_material_node*next=n->next;free(n->pixels);free(n);n=next;}s->materials=NULL;s->material_count=0;}}
+gh_stage_status gh_stage_texture_forget_source_range(gh_stage_textures*s,const void*base,size_t bytes){
+ if(!s||(!base&&bytes))return GH_STAGE_ARGUMENT;uintptr_t start=(uintptr_t)base;
+ if(bytes>UINTPTR_MAX-start)return GH_STAGE_BOUNDS;
+ for(unsigned i=0;i<256;i++){uintptr_t p=(uintptr_t)s->channel[i].source;
+  if(s->channel[i].source&&p>=start&&p-start<bytes)memset(&s->channel[i],0,sizeof(s->channel[i]));}
+ stage_material_node**link=&s->materials;
+ while(*link){stage_material_node*n=*link;uintptr_t p=(uintptr_t)n->view.source;
+  if(p>=start&&p-start<bytes){*link=n->next;free(n->pixels);free(n);s->material_count--;}
+  else link=&n->next;
+ }
+ return GH_STAGE_OK;
+}
+void gh_stage_textures_destroy(gh_stage_textures *s){if(s){gh_stage_tm3_cache_clear(s);free(s->vram);free(s);}}
+gh_stage_status gh_stage_tm3_resolve(gh_stage_textures*s,const void*raw,size_t n,unsigned member,unsigned mode,const gh_stage_material**out){
+ if(!s||!raw||!out)return GH_STAGE_ARGUMENT;*out=NULL;
+ if(mode>3)return GH_STAGE_UNSUPPORTED;
+ gh_tm3_bundle bundle;gh_tm3_picture picture;gh_tm3_error e=gh_tm3_open(raw,n,&bundle);
+ if(!e)e=gh_tm3_member(&bundle,member,&picture);
+ if(e)return e==GH_TM3_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;
+ unsigned pool=mode==1?1:mode==2?2:0;
+ /* Original151398 key is source identity in its selected cache pool. */
+ for(stage_material_node*p=s->materials;p;p=p->next)if(p->view.source==picture.source&&p->view.cache_pool==pool){*out=&p->view;return GH_STAGE_OK;}
+ if(s->material_count>=1024||s->next_material_id==UINT64_MAX)return GH_STAGE_MEMORY;
+ stage_material_node*p=calloc(1,sizeof(*p));if(!p)return GH_STAGE_MEMORY;
+ size_t bytes=(size_t)picture.width*picture.height*4;p->pixels=malloc(bytes);if(!p->pixels){free(p);return GH_STAGE_MEMORY;}
+ e=gh_tm3_rgba_gs(&picture,p->pixels,bytes);if(e){free(p->pixels);free(p);return e==GH_TM3_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;}
+ p->view=(gh_stage_material){picture.source,p->pixels,picture.source_bytes,bytes,++s->next_material_id,picture.tex0,picture.width,picture.height,(uint8_t)mode,(uint8_t)pool,20,1,(uint8_t)((picture.tex0>>35)&3)};
+ p->next=s->materials;s->materials=p;s->material_count++;*out=&p->view;return GH_STAGE_OK;
+}
 static gh_stage_status transfer(uint8_t *vram,const gh_font_transfer *t,uint32_t base){
  if(t->psm!=0 || !t->buffer_width || t->width>(uint32_t)t->buffer_width*64)return GH_STAGE_UNSUPPORTED;
  for(uint32_t y=0;y<t->height;y++)for(uint32_t x=0;x<t->width;x++){

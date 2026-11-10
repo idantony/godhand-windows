@@ -118,3 +118,12 @@ gh_init_status gh_game_init_002a5b18(gh_game_init_state *s,gh_boot_work *work,
  w32(s->input,0,0);w32(s->input,8,0);w16(s->input,12,0);w16(s->input,14,0);w16(s->input,16,0);w16(s->input,18,0);
  e=gh_core_save_game_init(save,work);if(e)return e;*rate=0.5f;return GH_INIT_OK;
 }
+
+
+gh_init_status gh_game_object_pool_release_001fdfa8(gh_game_init_state*s,uint32_t*f){
+ if(f)*f=0;if(!s)return GH_INIT_ARGUMENT;
+ for(unsigned i=0;i<416;i++){uint8_t*b=i<160?s->object_pool+(size_t)i*0x60:s->object_pool+0x3c00+(size_t)(i-160)*0x70;
+  if(s->object_links[i]||b[0x3c]||b[0x3d]||b[0x3e]||b[0x3f]){if(f)*f=0x1fd580;return GH_INIT_LINKS;}
+  gh_init_status e=pool_record(b,&s->object_links[i],i<160?1:2);if(e)return e;
+ }return GH_INIT_OK;
+}
