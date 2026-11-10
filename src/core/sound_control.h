@@ -13,6 +13,7 @@ extern "C" {
 typedef struct {const gh_audio_registry *registry;uint32_t original_global;
  uint8_t identity_verified,closed;} gh_sound_heap_registry_owner;
 typedef struct {int16_t bank,program;uint32_t key;} gh_sound_recent;
+struct gh_enemy_se_banks;
 typedef struct gh_sound_control {uint32_t flags_ac,flags_b0;int32_t bgm_state_13c;uint8_t initialized;
  /* Actual2C9E78 bootgainfloatbits at+0..14, and2C9F58 +50 eventmask.
   * One canonical source for BGM/SE consumers, not separate bootshadows. */
@@ -23,7 +24,9 @@ typedef struct gh_sound_control {uint32_t flags_ac,flags_b0;int32_t bgm_state_13
  int32_t listener_mode110;void *ts_head2c;
  uint32_t unload_a4;gh_sound_heap_registry_owner room_heaps[2];
  /* ONE actual160..1DF ring and1E0 index. SupportedSE variants currently0. */
- gh_sound_recent recent[16];int32_t recent_pos;uint8_t recent_initialized;} gh_sound_control;
+ gh_sound_recent recent[16];int32_t recent_pos;uint8_t recent_initialized;
+ /* Canonical dynamic subset of original+3C cSeData table; no second sample registry. */
+ struct gh_enemy_se_banks *enemy_se_banks;} gh_sound_control;
 /* Restore exact actual-ELF PT_LOAD values (including BSS), then require actual
  * startup bank readiness. Verified current startup/MC path has no other writes
  * to these fields except the original SE flush pending-bit operation. Not a

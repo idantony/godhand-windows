@@ -1,6 +1,7 @@
 /* Original source semantics from actual patched ELF, upstream MIT pin
  * eaae18d0dfab1f9a0df276ae5ca1581ad326faf3. See private evidence JSON. */
 #include "sound_scene_exit.h"
+#include "enemy_se_banks.h"
 #include <string.h>
 static gh_sound_exit_status bad(gh_sound_scene_exit*s,uint32_t f,int detail,gh_sound_exit_status e){s->frontier=f;s->detail=detail;return e;}
 static int valid(const gh_sound_scene_exit*s){return s&&s->scene&&s->scene->control&&s->scene->control->initialized&&s->scene->registry&&s->bgm&&s->voices;}
@@ -23,6 +24,7 @@ gh_sound_exit_status gh_sound_scene_exit_wait_002cab58(gh_sound_scene_exit*s,int
  if(e)return bad(s,0x2cab58,e,GH_SOUND_EXIT_NATIVE);*out=ready&&!gh_se_voice_active_nodes(s->voices);s->frontier=0;return GH_SOUND_EXIT_OK;
 }
 static gh_sound_exit_status release_bank(gh_sound_scene_exit*s,int16_t bank){
+ if(s->scene->control->enemy_se_banks){gh_enemy_se_slot_view view;gh_enemy_se_banks*owner=s->scene->control->enemy_se_banks;if(gh_enemy_se_slot_at(owner,bank,&view)==GH_ENEMY_SE_OK){gh_enemy_se_status error=gh_enemy_se_release_002cf310(owner,bank);if(error)return bad(s,gh_enemy_se_frontier(owner),error,error==GH_ENEMY_SE_BUSY?GH_SOUND_EXIT_BUSY:GH_SOUND_EXIT_UNSUPPORTED);}}
  if(gh_se_voice_bank_nodes(s->voices,bank))return bad(s,0x2cbe68,bank,GH_SOUND_EXIT_UNSUPPORTED);
  gh_sound_span a,b,c,d;gh_audio_status e=gh_audio_bank_views(s->scene->registry,bank,&a,&b,&c,&d);
  if(e==GH_AUDIO_NOT_FOUND)return GH_SOUND_EXIT_OK;if(e)return bad(s,0x2cf310,e,GH_SOUND_EXIT_NATIVE);

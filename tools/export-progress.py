@@ -53,7 +53,7 @@ def main():
     progress = {
         "schema_version": 1,
         "verified_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "stage": "native-windows-new-game-R100-construction" if window["execution"].get("room") == "0100" else "native-windows-original-title-scene",
+        "stage": ("native-windows-R100-update-entry" if window["execution"].get("game_state") == 4 else "native-windows-new-game-R100-construction") if window["execution"].get("room") == "0100" else "native-windows-original-title-scene",
         "playable": False,
         "original_game_scene_observed_in_native_port": False,
         "original_title_UI_scene_observed_in_native_port": window["execution"].get("scene_frames_presented", 0) > 0,
@@ -129,7 +129,7 @@ def main():
                   "passed_steps": [step["name"] for step in native["steps"] if step["name"].startswith("test-") and step["returncode"] == 0],
                   "rng_differential": {"distinct_seeds": differential["distinct_seeds"], "calls_compared": differential["function_calls_compared"],
                                        "comparison": differential["comparison"], "hardware_capture": False}},
-        "remaining": ["Finish R100 scenario/Event initialization and reach its first real world frame", "Earlier subsystem initialization and full main-loop integration", "Dynamic model animation, skinning and actor behavior",
+        "remaining": ["Finish first-frame scene/actor updates and execute original R100 Scenario/Event flows", "Earlier subsystem initialization and full main-loop integration", "Dynamic model animation, skinning and actor behavior",
                       "Native rendering, audio, input and save adapters", "Full game progression and timing validation"],
         "progress_policy": "Upstream PS2 matching coverage is not native port coverage; no synthetic completion percentage",
         "sources": {"upstream": "https://github.com/LucasPicoli/god-hand-decomp", "upstream_commit": "eaae18d0dfab1f9a0df276ae5ca1581ad326faf3",

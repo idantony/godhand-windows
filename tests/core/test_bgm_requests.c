@@ -72,7 +72,7 @@ int main(int argc,char**argv){
  CHECK(gh_bgm_requests_active(s)==3&&!gh_heap_used(h));
  CHECK(!gh_bgm_requests_update_002d0938(s,&work)&&!gh_bgm_requests_active(s)&&!gh_bgm_requests_pending(s));
  CHECK(gh_bgm_requests_inspect(s,0,&v)==GH_BGM_NOT_READY);
- control.flags_ac|=0x10000000;CHECK(!gh_bgm_requests_update_002d0938(s,&work)&&!(control.flags_ac&0x10000000));control.flags_ac|=0x200000;CHECK(gh_bgm_requests_update_002d0938(s,&work)==GH_BGM_UNSUPPORTED&&gh_bgm_requests_frontier(s)==0x2d0ea0);control.flags_ac&=~0x200000u;
+ control.flags_ac|=0x10000000;CHECK(!gh_bgm_requests_update_002d0938(s,&work)&&!(control.flags_ac&0x10000000));control.flags_ac|=0x200000;CHECK(gh_bgm_requests_update_002d0938(s,&work)==GH_BGM_UNSUPPORTED&&gh_bgm_requests_frontier(s)==0x2d0d70);control.flags_ac&=~0x200000u;
  CHECK(!gh_bgm_requests_abort_pending(s));
  /* Actualcase3tail doesNOTpreserveTitleevent0: room20 has nostaticmaprow,
   * original2D0B88 fallback selects2 andfades event0 over15ticks. */

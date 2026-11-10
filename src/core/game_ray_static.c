@@ -3,6 +3,7 @@
  * Native visited bytes represent ONLY original per-triangle flag mask4;
  * all other flags are read from the canonical, possibly modified link4 view. */
 #include "game_ray_static.h"
+#include "game_ray_dynamic.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -88,23 +89,25 @@ static gh_scene_ray_status cell(gh_game_scene_tables*s,const gh_scene_ray_reques
 }
 gh_scene_ray_status gh_scene_ray_static_overlap(gh_game_scene_tables*s,const gh_scene_ray_request*r,int*hit,uint32_t*f){
  if(!s||!r||!hit)return GH_RAY_ARGUMENT;fenv_t env;if(feholdexcept(&env))return GH_RAY_NUMERIC;if(fesetround(FE_TONEAREST)){fesetenv(&env);return GH_RAY_NUMERIC;}gh_scene_ray_status e=GH_RAY_OK;
- gh_scene_ray_request query=*r;gh_scene_ray_report *reports=NULL;
+ gh_scene_ray_request query=*r;gh_scene_ray_report *reports=NULL;const void **identities=NULL;uint32_t dynamic_count=0;gh_ray_dynamic_reports dynamic={0};
  uint32_t counts[3]={s->actor_count60,s->actor_count64,s->actor_count68};
  for(unsigned k=0;k<3;k++){float size=from_bits(s->actor_vec50[k]);float n=divf(sub(from_bits(s->ray.bounds_min90[k]),from_bits(s->actor_vec30[k])),size);
   if(!isfinite(size)||size<=0||!isfinite(n)||n<=-2147483648.0f||n>=2147483648.0f){e=stop(f,0x12f318,GH_RAY_NUMERIC);goto out;}int32_t value=(int32_t)n;s->ray.grid_min6c[k]=value<0?0:(uint32_t)value;}
  for(unsigned k=0;k<3;k++)if(s->ray.grid_min6c[k]>=counts[k])goto out;
  for(unsigned k=0;k<3;k++){float n=divf(sub(from_bits(s->ray.bounds_maxa0[k]),from_bits(s->actor_vec30[k])),from_bits(s->actor_vec50[k]));if(!isfinite(n)||n<=-2147483648.0f||n>=2147483648.0f){e=stop(f,0x12f318,GH_RAY_NUMERIC);goto out;}uint32_t value=(uint32_t)(int32_t)n;s->ray.grid_max78[k]=value>counts[k]-1?counts[k]-1:value;}
  if((r->native_reports||r->reports)&&r->report_limit<0){e=GH_RAY_ARGUMENT;goto out;}e=marks(s);if(e)goto out;
- if(r->native_reports&&(r->report_limit||s->ray.mode181)){size_t cap=s->ray.mode181?1:(uint32_t)r->report_limit;if(cap>s->ray.triangle_state->count)cap=s->ray.triangle_state->count;if(cap){reports=calloc(cap,sizeof(*reports));if(!reports){e=GH_RAY_MEMORY;goto out;}}query.native_reports=reports;}
+ if(r->native_reports&&(r->report_limit||s->ray.mode181)){size_t cap=s->ray.mode181?1:(uint32_t)r->report_limit;if(cap){reports=calloc(cap,sizeof(*reports));if(!reports){e=GH_RAY_MEMORY;goto out;}}query.native_reports=reports;}
+ if(r->dynamic_reports){dynamic=*r->dynamic_reports;dynamic.count=r->dynamic_reports->count?&dynamic_count:NULL;if(dynamic.object_identities&&dynamic.capacity){identities=calloc(dynamic.capacity,sizeof(*identities));if(!identities){e=GH_RAY_MEMORY;goto out;}dynamic.object_identities=identities;}query.dynamic_reports=&dynamic;}
  /* Native-error adaptation: caller outputs commit only after the complete
   * query succeeds; original successful report order/count remain unchanged. */
  for(unsigned pass=0;pass<2;pass++)for(uint32_t x=s->ray.grid_min6c[0];x<=s->ray.grid_max78[0];x++)for(uint32_t y=s->ray.grid_min6c[1];y<=s->ray.grid_max78[1];y++)for(uint32_t z=s->ray.grid_min6c[2];z<=s->ray.grid_max78[2];z++){e=cell(s,&query,x,y,z,pass==0,f);if(e)goto out;}
  /* Legacyhost names denote the original LIVE dynamic shape190/194 list;
   * 12ECF0 destroys it on reset, while130700 traverses it for every grid hit. */
- if(s->pending_actor_head||s->pending_actor_count){e=stop(f,0x130700,GH_RAY_UNSUPPORTED);goto out;}
+ if(s->dynamic_native_owner){e=gh_scene_ray_dynamic_00130700(s->dynamic_native_owner,&query,f);if(e)goto out;}
+ else if(s->pending_actor_head||s->pending_actor_count){e=stop(f,0x130700,GH_RAY_UNSUPPORTED);goto out;}
  if(s->ray.hit_kind180){float unit[3];if(r->hit_normal){float n[3];for(unsigned k=0;k<3;k++)n[k]=from_bits(s->ray.hit_normal130[k]);if(!normalize(unit,n)){e=GH_RAY_NUMERIC;goto out;}}
   if(r->hit_position)for(unsigned k=0;k<3;k++)r->hit_position[k]=from_bits(s->ray.hit_position120[k]);if(r->hit_normal)memcpy(r->hit_normal,unit,12);
   if(reports&&s->ray.triangle17c)memcpy(r->native_reports,reports,(size_t)s->ray.triangle17c*sizeof(*reports));*hit=1;}
- if(r->dynamic_reports&&r->dynamic_reports->count)*r->dynamic_reports->count=0;
-out:free(reports);if(fesetenv(&env))return GH_RAY_NUMERIC;return e;
+ if(r->dynamic_reports&&r->dynamic_reports->count){if(identities&&dynamic_count)memcpy(r->dynamic_reports->object_identities,identities,(size_t)dynamic_count*sizeof(*identities));*r->dynamic_reports->count=dynamic_count;}
+out:free(identities);free(reports);if(fesetenv(&env))return GH_RAY_NUMERIC;return e;
 }

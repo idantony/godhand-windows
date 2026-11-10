@@ -19,7 +19,9 @@ typedef struct gh_om_init_state {gh_actor_model model;gh_bundle_entry geometry,t
 /* Actual1B7118->door virtual1867E8->1B6FB8. Genuine model/source binding,
  * zeroanimation-source path, flags and direct semantic boundary at1FE218.
  * Future box/dynamicshape work continues SAME owner, nevermetadata-ready. */
-/* Sharedactual1B6FB8 plus1B7118 sourcebinding; one modelowner peractor. */
+/* Sharedactual1B6FB8 plus1B7118 sourcebinding; one modelowner peractor.
+ * Runtime3EB has no OMS source; its constructor5E0==NULL genuinely skips
+ * placement-action selection. No synthetic zero-filled OMS is supplied. */
 gh_scene_placement_status gh_om_common_initialize_001b6fb8(gh_om_init_state *,gh_om_object *,const gh_om_initializer_bindings *,int *original_return);
 gh_scene_placement_status gh_om_door_initialize_001b7118(gh_om_init_state *,gh_om_object *,const gh_om_initializer_bindings *,int *original_return);
 gh_scene_placement_status gh_om_initialize_abort(gh_om_init_state *);

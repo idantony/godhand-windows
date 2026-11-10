@@ -46,13 +46,13 @@ gh_pair_query_status gh_collision_query_sphere_box_002bbba0(const uint8_t*point,
  if(fesetenv(&env))return fail(f,0x2bb868);if(!valid)return fail(f,0x2bb868);*hit=result;return GH_PAIR_QUERY_OK;
 }
 
-gh_pair_query_status gh_collision_query_cylinder_cylinder_002bc470(const uint8_t*matrix_a,uint32_t radius_a,uint32_t height_a,const uint8_t*matrix_b,uint32_t radius_b,uint32_t height_b,gh_static_transform_policy policy,int*hit,uint32_t*f){
- if(f)*f=0;if(!matrix_a||!matrix_b||!hit)return GH_PAIR_QUERY_ARGUMENT;if(policy!=GH_STATIC_BINARY32_REFERENCE)return fail(f,0x2bc470);
- float ma[16],mb[16],ra=val(radius_a),rb=val(radius_b),ha=val(height_a),hb=val(height_b);memcpy(ma,matrix_a,64);memcpy(mb,matrix_b,64);for(unsigned k=0;k<16;k++)if(!normal(ma[k])||!normal(mb[k]))return fail(f,0x30a2b0);if(!normal(ra)||!normal(rb)||!normal(ha)||!normal(hb))return fail(f,0x2bc470);
+static gh_pair_query_status cylinder_pair_body(const uint8_t*matrix_a,uint32_t radius_a,uint32_t height_a,const uint8_t*matrix_b,uint32_t radius_b,uint32_t height_b,int trim_first,uint32_t entry,gh_static_transform_policy policy,int*hit,uint32_t*f){
+ if(f)*f=0;if(!matrix_a||!matrix_b||!hit)return GH_PAIR_QUERY_ARGUMENT;if(policy!=GH_STATIC_BINARY32_REFERENCE)return fail(f,entry);
+ float ma[16],mb[16],ra=val(radius_a),rb=val(radius_b),ha=val(height_a),hb=val(height_b);memcpy(ma,matrix_a,64);memcpy(mb,matrix_b,64);for(unsigned k=0;k<16;k++)if(!normal(ma[k])||!normal(mb[k]))return fail(f,0x30a2b0);if(!normal(ra)||!normal(rb)||!normal(ha)||!normal(hb))return fail(f,entry);
  fenv_t env;if(feholdexcept(&env))return fail(f,0x2bc0f8);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(f,0x2bc0f8);}uint32_t pc=0;int result=0;
  float a[3],b[3],c[3],d[3],direction[3],unit[3];if(!endpoints(ma,ha,a,b)||!endpoints(mb,hb,c,d)){pc=0x30a2b0;goto done;}
- for(unsigned k=0;k<3;k++)direction[k]=sub(b[k],a[k]);if(!normalize(direction,unit)){pc=0x101e28;goto done;}for(unsigned k=0;k<3;k++){float offset=mul(unit[k],ra);a[k]=add(a[k],offset);b[k]=sub(b[k],offset);if(!normal(a[k])||!normal(b[k])){pc=0x2bc470;goto done;}}ha=sub(ha,add(ra,ra));
- /* Original wrapper trims only first cylinder. 2BC0F8 then samples the
+ if(trim_first){for(unsigned k=0;k<3;k++)direction[k]=sub(b[k],a[k]);if(!normalize(direction,unit)){pc=0x101e28;goto done;}for(unsigned k=0;k<3;k++){float offset=mul(unit[k],ra);a[k]=add(a[k],offset);b[k]=sub(b[k],offset);if(!normal(a[k])||!normal(b[k])){pc=0x2bc470;goto done;}}ha=sub(ha,add(ra,ra));}
+ /* 2BC470 trims first kind1 segment; 2BCF28 leaves both full. 2BC0F8 then samples the
   * larger-radius line (equal radii choose second), including raw short/negative
   * shortened height rather than a geometric clamp. */
  float *start=rb<ra?a:c,*end=rb<ra?b:d,*other_start=rb<ra?c:a,*other_end=rb<ra?d:b,large=rb<ra?ra:rb,length=rb<ra?ha:hb,sum=rb<ra?add(rb,ra):add(ra,rb),distance;
@@ -62,13 +62,38 @@ gh_pair_query_status gh_collision_query_cylinder_cylinder_002bc470(const uint8_t
  done:if(fesetenv(&env))return fail(f,0x2bc0f8);if(pc)return fail(f,pc);*hit=result;return GH_PAIR_QUERY_OK;
 }
 
-gh_pair_query_status gh_collision_query_cylinder_box_002bcb80(const uint8_t*cylinder_matrix,uint32_t radius,uint32_t height,const uint8_t*box_matrix,const uint32_t*full_size,gh_static_transform_policy policy,int*hit,uint32_t*f){
- if(f)*f=0;if(!cylinder_matrix||!box_matrix||!full_size||!hit)return GH_PAIR_QUERY_ARGUMENT;if(policy!=GH_STATIC_BINARY32_REFERENCE)return fail(f,0x2bcb80);
- float cm[16],bm[16],r=val(radius),h=val(height),size[3];memcpy(cm,cylinder_matrix,64);memcpy(bm,box_matrix,64);for(unsigned k=0;k<16;k++)if(!normal(cm[k])||!normal(bm[k]))return fail(f,0x30a2b0);for(unsigned k=0;k<3;k++){size[k]=val(full_size[k]);if(!normal(size[k]))return fail(f,0x2bcb80);}if(!normal(r)||!normal(h))return fail(f,0x2bc6c8);
+gh_pair_query_status gh_collision_query_cylinder_cylinder_002bc470(const uint8_t*a,uint32_t ra,uint32_t ha,const uint8_t*b,uint32_t rb,uint32_t hb,gh_static_transform_policy p,int*hit,uint32_t*f){return cylinder_pair_body(a,ra,ha,b,rb,hb,1,0x2bc470,p,hit,f);}
+gh_pair_query_status gh_collision_query_kind2_pair_002bcf28(const uint8_t*a,uint32_t ra,uint32_t ha,const uint8_t*b,uint32_t rb,uint32_t hb,gh_static_transform_policy p,int*hit,uint32_t*f){return cylinder_pair_body(a,ra,ha,b,rb,hb,0,0x2bcf28,p,hit,f);}
+
+static gh_pair_query_status cylinder_box_body(const uint8_t*cylinder_matrix,uint32_t radius,uint32_t height,const uint8_t*box_matrix,const uint32_t*full_size,int trim_first,uint32_t entry,gh_static_transform_policy policy,int*hit,uint32_t*f){
+ if(f)*f=0;if(!cylinder_matrix||!box_matrix||!full_size||!hit)return GH_PAIR_QUERY_ARGUMENT;if(policy!=GH_STATIC_BINARY32_REFERENCE)return fail(f,entry);
+ float cm[16],bm[16],r=val(radius),h=val(height),size[3];memcpy(cm,cylinder_matrix,64);memcpy(bm,box_matrix,64);for(unsigned k=0;k<16;k++)if(!normal(cm[k])||!normal(bm[k]))return fail(f,0x30a2b0);for(unsigned k=0;k<3;k++){size[k]=val(full_size[k]);if(!normal(size[k]))return fail(f,entry);}if(!normal(r)||!normal(h))return fail(f,trim_first?0x2bc6c8:0x2bd078);
  fenv_t env;if(feholdexcept(&env))return fail(f,0x2bc950);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(f,0x2bc950);}uint32_t pc=0;int result=0;float a[3],b[3],direction[3],unit[3],corners[8][3];
- if(!endpoints(cm,h,a,b)){pc=0x30a2b0;goto done;}for(unsigned k=0;k<3;k++)direction[k]=sub(b[k],a[k]);if(!normalize(direction,unit)){pc=0x101e28;goto done;}for(unsigned k=0;k<3;k++){float offset=mul(unit[k],r);a[k]=add(a[k],offset);b[k]=sub(b[k],offset);if(!normal(a[k])||!normal(b[k])){pc=0x2bc6c8;goto done;}}h=sub(h,add(r,r));if(!normal(h)||!box_corners(bm,size,corners)){pc=0x2bc6c8;goto done;}
+ if(!endpoints(cm,h,a,b)){pc=0x30a2b0;goto done;}if(trim_first){for(unsigned k=0;k<3;k++)direction[k]=sub(b[k],a[k]);if(!normalize(direction,unit)){pc=0x101e28;goto done;}for(unsigned k=0;k<3;k++){float offset=mul(unit[k],r);a[k]=add(a[k],offset);b[k]=sub(b[k],offset);if(!normal(a[k])||!normal(b[k])){pc=0x2bc6c8;goto done;}}h=sub(h,add(r,r));}if(!normal(h)){pc=trim_first?0x2bc6c8:0x2bd078;goto done;}if(!box_corners(bm,size,corners)){pc=0x30a2b0;goto done;}
  if(!sphere_poly(r,a,corners,&result)){pc=0x2bb868;goto done;}if(result)goto done;if(!sphere_poly(r,b,corners,&result)){pc=0x2bb868;goto done;}if(result)goto done;
  float ratio=divide(h,r);if(!normal(ratio)||ratio>4096){pc=0x2bc950;goto done;}uint32_t samples=ratio<0?0:(uint32_t)ratio;float step=divide(h,(float)(samples+1));if(!normal(step)){pc=0x2bc950;goto done;}for(unsigned k=0;k<3;k++)direction[k]=sub(b[k],a[k]);if(!normalize(direction,unit)){pc=0x101e28;goto done;}for(unsigned k=0;k<3;k++){unit[k]=mul(unit[k],step);if(!normal(unit[k])){pc=0x2bc950;goto done;}}
  for(uint32_t i=0;i<samples;i++){for(unsigned k=0;k<3;k++)a[k]=add(a[k],unit[k]);if(!sphere_poly(r,a,corners,&result)){pc=0x2bb868;goto done;}if(result)break;}
  done:if(fesetenv(&env))return fail(f,0x2bc950);if(pc)return fail(f,pc);*hit=result;return GH_PAIR_QUERY_OK;
+}
+gh_pair_query_status gh_collision_query_cylinder_box_002bcb80(const uint8_t*c,uint32_t r,uint32_t h,const uint8_t*b,const uint32_t*size,gh_static_transform_policy p,int*hit,uint32_t*f){return cylinder_box_body(c,r,h,b,size,1,0x2bcb80,p,hit,f);}
+gh_pair_query_status gh_collision_query_kind2_box_002bd200(const uint8_t*c,uint32_t r,uint32_t h,const uint8_t*b,const uint32_t*size,gh_static_transform_policy p,int*hit,uint32_t*f){return cylinder_box_body(c,r,h,b,size,0,0x2bd200,p,hit,f);}
+
+/* Original136A88 OBB15SAT. Keep source operation order and .001 padding,
+ * including ascending-other-axis radius terms in the nine cross tests. */
+static int obb_sat(const float ca[3],const float aa[3][3],const float ea[3],const float cb[3],const float ab[3][3],const float eb[3],int*hit,float*maximum){
+ float r[3][3],absolute[3][3],delta[3],t[3];*maximum=0;float epsilon=val(0x3a83126f);
+ for(unsigned i=0;i<3;i++)for(unsigned j=0;j<3;j++){r[i][j]=dot(aa[i],ab[j]);float v=r[i][j];if(v<0)v=-v;absolute[i][j]=add(v,epsilon);if(!normal(r[i][j])||!normal(absolute[i][j]))return 0;}
+ for(unsigned k=0;k<3;k++){delta[k]=sub(cb[k],ca[k]);if(!normal(delta[k]))return 0;}for(unsigned i=0;i<3;i++){t[i]=dot(delta,aa[i]);if(!normal(t[i]))return 0;}
+ for(unsigned i=0;i<3;i++){float projected=t[i];if(projected<0)projected=-projected;float radius=add(ea[i],mul(eb[0],absolute[i][0]));radius=add(radius,mul(eb[1],absolute[i][1]));radius=add(radius,mul(eb[2],absolute[i][2]));if(!normal(radius))return 0;if(radius<projected){*hit=0;return 1;}if(*maximum<radius)*maximum=radius;}
+ for(unsigned j=0;j<3;j++){float projected=add(add(mul(t[0],r[0][j]),mul(t[1],r[1][j])),mul(t[2],r[2][j]));if(projected<0)projected=-projected;float radius=add(mul(ea[0],absolute[0][j]),mul(ea[1],absolute[1][j]));radius=add(radius,mul(ea[2],absolute[2][j]));radius=add(radius,eb[j]);if(!normal(projected)||!normal(radius))return 0;if(radius<projected){*hit=0;return 1;}if(*maximum<radius)*maximum=radius;}
+ for(unsigned i=0;i<3;i++)for(unsigned j=0;j<3;j++){unsigned u=i==0?1:0,v=i==2?1:2,s=j==0?1:0,z=j==2?1:2;float projected=sub(mul(t[(i+2)%3],r[(i+1)%3][j]),mul(t[(i+1)%3],r[(i+2)%3][j]));if(projected<0)projected=-projected;float radius=add(mul(ea[u],absolute[v][j]),mul(ea[v],absolute[u][j]));radius=add(radius,mul(eb[s],absolute[i][z]));radius=add(radius,mul(eb[z],absolute[i][s]));if(!normal(projected)||!normal(radius))return 0;if(radius<projected){*hit=0;return 1;}if(*maximum<radius)*maximum=radius;}
+ *hit=1;return 1;
+}
+gh_pair_query_status gh_collision_query_box_box_002bd828(const uint8_t*matrix_a,const uint32_t*size_a,const uint8_t*matrix_b,const uint32_t*size_b,gh_static_transform_policy policy,int*hit,uint32_t*f){
+ if(f)*f=0;if(!matrix_a||!matrix_b||!size_a||!size_b||!hit)return GH_PAIR_QUERY_ARGUMENT;if(policy!=GH_STATIC_BINARY32_REFERENCE)return fail(f,0x2bd828);
+ float a[16],b[16],sa[3],sb[3];memcpy(a,matrix_a,64);memcpy(b,matrix_b,64);for(unsigned k=0;k<16;k++)if(!normal(a[k])||!normal(b[k]))return fail(f,0x2bd828);for(unsigned k=0;k<3;k++){sa[k]=val(size_a[k]);sb[k]=val(size_b[k]);if(!normal(sa[k])||!normal(sb[k]))return fail(f,0x2bd828);}
+ fenv_t env;if(feholdexcept(&env))return fail(f,0x136a88);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(f,0x136a88);}float ca[3],cb[3],aa[3][3],ab[3][3],ea[3],eb[3],scratch;int result=0,valid=1;
+ for(unsigned k=0;k<3;k++){ea[k]=mul(sa[k],0.5f);eb[k]=mul(sb[k],0.5f);valid=valid&&normal(ea[k])&&normal(eb[k]);}for(unsigned k=0;k<3;k++){float v=mul(a[k],0);v=add(v,mul(a[4+k],ea[1]));v=add(v,mul(a[8+k],0));ca[k]=add(v,mul(a[12+k],1));v=mul(b[k],0);v=add(v,mul(b[4+k],eb[1]));v=add(v,mul(b[8+k],0));cb[k]=add(v,mul(b[12+k],1));valid=valid&&normal(ca[k])&&normal(cb[k]);}
+ for(unsigned i=0;i<3&&valid;i++){valid=normalize(a+i*4,aa[i])&&normalize(b+i*4,ab[i]);}
+ if(valid)valid=obb_sat(ca,aa,ea,cb,ab,eb,&result,&scratch);if(fesetenv(&env))return fail(f,0x136a88);if(!valid)return fail(f,0x136a88);*hit=result;return GH_PAIR_QUERY_OK;
 }

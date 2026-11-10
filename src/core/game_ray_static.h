@@ -5,7 +5,9 @@
 extern "C" {
 #endif
 /* Native continuation of12F288/12F4C8/12F600/12F750. Borrows the SAME
- * actor tables including current mutable triangle flags. No fake no-hit. */
+ * actor tables including current mutable triangle flags and same190/194
+ * dynamic boxes. Stages both attribute/actor outputs until all traversal
+ * succeeds; geometry must already be updated by original12E840. No fake no-hit. */
 gh_scene_ray_status gh_scene_ray_static_overlap(gh_game_scene_tables *,const gh_scene_ray_request *,int *,uint32_t *);
 void gh_scene_ray_triangle_state_release(gh_game_scene_tables *);
 gh_scene_ray_status gh_scene_ray_triangle_flags(const gh_game_scene_tables *,uint16_t,uint32_t *);

@@ -22,6 +22,8 @@
 #include "../core/game_event_start.h"
 #include "../core/game_event_clear.h"
 #include "../core/game_hitarea_objects.h"
+#include "../core/game_dynamic_corners.h"
+#include "../core/enemy_se_banks.h"
 #include "../core/game_camera_shake.h"
 #include "../core/game_object_step.h"
 #include "../core/game_render_projection.h"
@@ -105,6 +107,7 @@ struct gh_startup_host {
     gh_mc_exit_state mc_exit;
     gh_audio_output *audio_output;
     gh_se_voice_engine *voices;
+    gh_enemy_se_banks *enemy_banks;
     gh_sound_control sound_control;
     gh_movie_pool *movies;
     gh_movie_task movie_task;
@@ -131,6 +134,7 @@ struct gh_startup_host {
     gh_game_math_globals math_globals;
     gh_om_door_shared door_shared;
     gh_player_node_names player_node_names;gh_motion_ik_globals motion_ik_globals;
+    gh_dynamic_corner_tables dynamic_corners;
     uint8_t camera_update_stage;
     gh_render_draw_env draw_env;
     gh_r020_reference_profile title_reference;
@@ -249,16 +253,27 @@ static int event_start_stage(void *context,gh_game_event*event,int*done)
     if(e)event->frontier=h->event_start.frontier?h->event_start.frontier:0x2965f0;
     return (int)e;
 }
+static gh_game_event_status event_player_clear(void *context,uint32_t*frontier);
 static int event_clear_stage(void *context,gh_game_event*event,int*done)
 {
     gh_startup_host*h=context;gh_game_services_scene_view s;
     if(event!=&h->event||gh_game_services_get_scene_view(h->services,&s))return GH_EVENT_ARGUMENT;
     gh_player_abort_bindings abort={.player=s.title_player,.sound=&h->sound_control};
     gh_event_clear_bindings b={.event=event,.config=&h->event_config,.init=&h->game_init,
-        .pools=s.pools,.global_objects=s.objects,.player_abort=&abort,.object_view=event_object_view,.context=h};
+        .pools=s.pools,.global_objects=s.objects,.player_abort=&abort,.object_view=event_object_view,.context=h,
+        .player_clear_0012c418=event_player_clear};
     gh_game_event_status e=gh_event_clear_00296818(&h->event_clear,&b,done);
     if(e)event->frontier=h->event_clear.frontier?h->event_clear.frontier:0x296818;
     return (int)e;
+}
+static gh_game_event_status event_player_clear(void *context,uint32_t*frontier)
+{
+    gh_startup_host*h=context;gh_game_services_scene_view s;
+    if(gh_game_services_get_scene_view(h->services,&s))return GH_EVENT_ARGUMENT;
+    gh_player_abort_bindings abort={.player=s.title_player,.sound=&h->sound_control};
+    gh_event_clear_bindings b={.event=&h->event,.config=&h->event_config,.init=&h->game_init,
+        .pools=s.pools,.global_objects=s.objects,.player_abort=&abort,.context=h};
+    return gh_game_services_event_player_clear(h->services,&b,frontier);
 }
 static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32_t argument,uint32_t *frontier)
 {
@@ -392,6 +407,8 @@ static int initialize_native_bgm(gh_startup_host *h)
     gh_actor_motion_status motion_globals_status=gh_motion_ik_globals_from_elf(&h->motion_ik_globals,elf,(size_t)bytes);
     gh_math_globals_status math_status=gh_game_math_globals_from_elf(&h->math_globals,elf,(size_t)bytes);
     if(!math_status)math_status=gh_game_math_static_initialize_003079c8(&h->math_globals,&h->work,1,0xffff);
+    gh_dynamic_corner_status corner_status=gh_dynamic_corners_from_elf(&h->dynamic_corners,elf,(size_t)bytes);
+    if(!corner_status)corner_status=gh_dynamic_corners_initialize_00133670(&h->dynamic_corners,1,0xffff);
     if(decoded)return failure(h,GH_HOST_AUDIO,decoded);
     if(event_status)return failure(h,GH_HOST_ASSET,event_status);
     if(display_status)return failure(h,GH_HOST_ASSET,display_status);
@@ -403,6 +420,7 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(node_names_status)return failure(h,GH_HOST_ASSET,node_names_status);
     if(motion_globals_status)return failure(h,GH_HOST_ASSET,motion_globals_status);
     if(math_status)return failure(h,GH_HOST_ASSET,math_status);
+    if(corner_status)return failure(h,GH_HOST_ASSET,corner_status);
     status=gh_bgm_requests_create(h->audio,&h->sound_control,h->disc,h->heap,&h->bgm);
     if(!status)status=gh_bgm_requests_enable_native(h->bgm,&key,h->continuation.muted,GH_BGM_GAIN_NATIVE_DB_REFERENCE);
     return status?failure(h,GH_HOST_AUDIO,status):0;
@@ -430,6 +448,12 @@ static int sound_startup(void *context)
         if(!se)se=gh_se_voice_create(h->audio,h->audio_output,&mix,&h->voices);
         if(se)return failure(h,GH_HOST_AUDIO,se);
         if(initialize_native_bgm(h))return (int)h->error;
+    }
+    if(!h->enemy_banks){
+        gh_enemy_se_bindings b={.control=&h->sound_control,.registry=h->audio,.disc=h->disc,.dvd=&h->dvd,
+            .default_heap=h->heap,.room_heap=h->heap,.voices=h->voices};
+        gh_enemy_se_status bank=gh_enemy_se_banks_from_startup(&b,&h->enemy_banks);
+        if(bank)return failure(h,GH_HOST_AUDIO,bank);
     }
     return 0;
 }
@@ -569,6 +593,7 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.door_shared=&h->door_shared;
         b.player_node_names=&h->player_node_names;b.motion_ik_globals=&h->motion_ik_globals;
         b.event_config=&h->event_config;b.packed=&h->mc_messages;
+        b.enemy_banks=h->enemy_banks;
         e=gh_game_services_create(&b,&h->services);
         if(e)return failure(h,GH_HOST_ASSET,e);
     }
@@ -607,7 +632,8 @@ static int update_state4(void *context,gh_game_loop *loop)
         .fade=&h->fade,.display=&h->display,.event=&h->event,.scene_at=s.scene_at,.action_buttons=s.action_buttons,
         .cockpit_action_flags_1414=gh_game_cockpit_action_flags_1414(s.cockpit),.binary32_reference=1,
         .scenario_callback104=s.scenario_callback104,.external=scene_consumer,.external_context=h,
-        .profile_counter=scene_profile_clock,.profile_context=h,.scenario_status=scene_scenario_status,.scenario_status_context=h};
+        .profile_counter=scene_profile_clock,.profile_context=h,.scenario_status=scene_scenario_status,.scenario_status_context=h,
+        .dynamic_corners=&h->dynamic_corners};
     gh_scene_step_status e=gh_game_scene_step_002a6690(s.step,&b);
     if(e)return entry_frontier(h,s.step->frontier?s.step->frontier:0x2a6690,
         gh_game_services_frontier_module(h->services),s.step->detail?s.step->detail:(int)e);
@@ -999,16 +1025,9 @@ gh_host_error gh_startup_host_set_mc_frame_begin(gh_startup_host *h,gh_host_mc_f
 }
 gh_host_error gh_startup_host_set_input(gh_startup_host *h,const gh_native_input_snapshot *input)
 {
-    unsigned char *raw;
     if(!h || !input || h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
     if(!on_owner(h))return GH_HOST_THREADS;
-    raw=(unsigned char*)&h->work;
-    memcpy(raw,&input->raw_held,4);memcpy(raw+8,&input->raw_pressed,4);
-    memcpy(raw+0xc,&input->raw_released,4);memcpy(raw+0x18,&input->raw_repeat_fast,4);
-    memcpy(raw+0x1c,&input->raw_repeat_menu,4);
-    memcpy(raw+0x190,&input->held,8);memcpy(raw+0x1a0,&input->pressed,8);
-    memcpy(raw+0x1a8,&input->released,8);memcpy(raw+0x1b8,&input->repeat_fast,8);
-    memcpy(raw+0x1b0,&input->repeat_menu,8);return GH_HOST_OK;
+    return gh_native_input_store_work(&h->work,input)?GH_HOST_OK:GH_HOST_ARGUMENT;
 }
 gh_host_error gh_startup_host_set_fade_consumer(gh_startup_host *h,gh_host_fade_consumer consumer,void *context)
 {
@@ -1103,6 +1122,11 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
         gh_voice_status audio=gh_sound_control_flush_se_002ca5d8(&h->sound_control,h->voices);
         if(audio){failure(h,GH_HOST_AUDIO,audio);h->phase=GH_HOST_FAILED;}
     }
+    if(h->phase==GH_HOST_RUNNING && h->enemy_banks){
+        /* Actual2CA558 visits52 bank loads after the original voice updates. */
+        gh_enemy_se_status bank=gh_enemy_se_banks_update_002cf440(h->enemy_banks);
+        if(bank){entry_frontier(h,gh_enemy_se_frontier(h->enemy_banks)?gh_enemy_se_frontier(h->enemy_banks):0x2cf440,0,bank);h->phase=GH_HOST_FRONTIER;}
+    }
     if(h->phase==GH_HOST_RUNNING && h->startup_returned) {
         for(i=0;i<4;++i)if(h->records[i].running)active=1;
         if(!active)h->phase=h->error==GH_HOST_ENTRY_UNAVAILABLE?GH_HOST_FRONTIER:GH_HOST_COMPLETE;
@@ -1171,6 +1195,7 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
     }
     /* Close actual BGM endpoints before encoded source/heap/registry owners. */
     if(h->bgm){gh_bgm_requests_destroy(h->bgm);h->bgm=0;}
+    if(h->enemy_banks){if(gh_enemy_se_banks_destroy(h->enemy_banks)!=GH_ENEMY_SE_OK)return GH_HOST_AUDIO;h->enemy_banks=0;}
     if(gh_sound_scene_release_loading(&h->sound_scene,&h->dvd,h->heap)!=GH_SOUND_SCENE_OK)return GH_HOST_AUDIO;
     h->mc_bindings.id_runtime=h->id_runtime;
     if(h->mc.stage && h->mc.stage!=5 && gh_mc_task_abort(&h->mc,&h->mc_bindings)!=GH_MC_TASK_OK)

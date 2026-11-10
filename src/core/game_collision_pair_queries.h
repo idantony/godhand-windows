@@ -20,6 +20,15 @@ gh_pair_query_status gh_collision_query_cylinder_cylinder_002bc470(const uint8_t
 /* Actual2BCB80/2BC6C8/2BC950, original trimmed line and sampled calls
  * to the same six-face predicate. Same explicit count/numeric reference. */
 gh_pair_query_status gh_collision_query_cylinder_box_002bcb80(const uint8_t cylinder_matrix[64],uint32_t radius,uint32_t height,const uint8_t box_matrix[64],const uint32_t full_size_xyz[3],gh_static_transform_policy,int *hit,uint32_t *frontier);
+/* Actual native kind2 x kind2 case0E:2BCF28 builds FULL endpoints then
+ * shared2BC0F8; unlike kind1x2's2BC470 it never trims either endpoint. */
+gh_pair_query_status gh_collision_query_kind2_pair_002bcf28(const uint8_t matrix_a[64],uint32_t radius_a,uint32_t height_a,const uint8_t matrix_b[64],uint32_t radius_b,uint32_t height_b,gh_static_transform_policy,int *hit,uint32_t *frontier);
+/* Actual native kind2 x kind4 case10:2BD200 ->2BD078 fullsegment,
+ * then shared2BC950. It does not call kind1x4's trim wrapper2BCB80. */
+gh_pair_query_status gh_collision_query_kind2_box_002bd200(const uint8_t kind2_matrix[64],uint32_t radius,uint32_t height,const uint8_t box_matrix[64],const uint32_t full_size_xyz[3],gh_static_transform_policy,int *hit,uint32_t *frontier);
+/* Actualnative kind4x4 case17:2BD828 centers/fullsizehalf/copyaxes ->
+ *136A88 normalized-axis15SAT with original .001 padding and operation order. */
+gh_pair_query_status gh_collision_query_box_box_002bd828(const uint8_t matrix_a[64],const uint32_t full_size_a[3],const uint8_t matrix_b[64],const uint32_t full_size_b[3],gh_static_transform_policy,int *hit,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

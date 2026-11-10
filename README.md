@@ -12,9 +12,10 @@ not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 **Early development. No playable original game scene has been verified.**
 A native Windows execution connects the original memory-card interface, Clover
 movie, title scene and New Game transition into room R100. A bounded synthetic
-run presents 6 MC, 90 movie and 368 title/menu frames, completes original
-player initialization, spawn/camera binding and all 69 first-room object
-initializers, then stops at the R100 roof script `r100.rel+0x2F30`. It begins at startup task `0x0030D358`; earlier boot, the first
+run presents 6 MC, 90 movie and 369 title/menu frames, completes original
+player initialization, spawn/camera binding, all 69 first-room object
+initializers and four runtime tutorial objects. R100 Init completes and Main
+state4 reaches the original NearCheck ray at `0x00131E10`. It begins at startup task `0x0030D358`; earlier boot, the first
 world frame and gameplay remain unfinished.
 
 ### Verified progress
@@ -29,7 +30,7 @@ world frame and gameplay remain unfinished.
   backends. Absent-card and empty-profile paths execute original Control,
   digital input mapping, limited real SFX and normal resource cleanup.
 - One hidden, muted native Windows QA run waits for video EOF and real audio
-  completion, executes Title/New Game and reaches R100 in GameMain state3.
+  completion, executes Title/New Game and reaches R100 in GameMain state4 at its first update entry.
   Its keys are an explicitly labeled synthetic fixture; no human playtest is claimed.
 - Limited MC ADPCM voices use real XAudio2. Movie0 uses an explicit native
   FFmpeg codec process and Windows audio. Reference DSP/GS numerical profiles
@@ -41,8 +42,9 @@ world frame and gameplay remain unfinished.
   objects. Parent PL00 and child PL01 share original parts/nodes, child springs
   and attachment. Original player initialization executes initial motion binding,
   bone sampling, terrain IK and matrix recovery, followed by spawn and camera
-  binding. This is not a continuous animation or gameplay acceptance test.
-- 196 C modules pass 207 checks with hardware/codec checks and an independent
+  binding. Four runtime tutorial objects also use the same original factory
+  and registries. This is not a continuous animation or gameplay acceptance test.
+- 212 C modules pass 228 checks with hardware/codec checks and an independent
   ADX reference WAV enabled.
   The earlier foundation also passes in an independent clean source snapshot.
   Restricted GPU pixels match separate CPU equations. The recovered OT traversal
@@ -53,7 +55,8 @@ world frame and gameplay remain unfinished.
 Native encrypted title BGM decoding now matches every sample from independent
 vgmstream output. The original warning, logos and title screen now execute in
 the integrated native scene. New Game now loads the first room and advances
-through player initialization and all first-room objects to `r100.rel+0x2F30`.
+through player initialization, all first-room objects and tutorial initialization
+to Main state4 at NearCheck `0x00131E10`.
 The actual run submits zero
 world packets. World rendering, animation, combat, complete audio and save/load
 still need implementation.
@@ -140,8 +143,9 @@ mark substantial milestones.
 
 **仍处于早期开发，尚未验证可玩的原游戏场景。** 同一个 Windows 原生程序已串联
 原版存储卡界面、Clover 片头、标题场景和“新游戏”到 R100 的转换。一次有界合成输入
-验收显示 6 帧存储卡、90 帧片头和 368 帧标题／菜单，完成玩家初始化、出生位置／
-摄像机绑定及全部 69 个首关物件初始化，停在屋顶脚本 `r100.rel+0x2F30`。执行从原启动任务 `0x0030D358` 开始，前置启动、首个实际
+验收显示 6 帧存储卡、90 帧片头和 369 帧标题／菜单，完成玩家初始化、出生位置／
+摄像机绑定、全部 69 个首关物件及 4 个运行时教程物件初始化。R100 Init 完成后，
+Main state4 到达原 NearCheck 射线入口 `0x00131E10`。执行从原启动任务 `0x0030D358` 开始，前置启动、首个实际
 3D 场景画面和玩法仍未完成。
 
 ### 已验证的进展
@@ -153,7 +157,7 @@ mark substantial milestones.
 - 存储卡提示文字、窗口和原 TIM2 光标已实际绘制。无卡和空目录分支执行原 Control、
   按键映射、有限真实音效及正常资源释放；完整存档读写尚未实现。
 - 一次隐藏、静音的 Windows 原生验收显示了 6 帧存储卡界面和全部 90 帧 Clover
-  片头，确实等待视频结束及音频设备完成，再执行标题／新游戏流程进入 R100、Main state3。
+  片头，确实等待视频结束及音频设备完成，再执行标题／新游戏流程进入 R100、Main state4 的首个更新入口。
   确认按键由明确标注的合成测试输入提供，不冒充玩家实测。
 - 存储卡 ADPCM 音效通过真实 XAudio2 处理；片头通过原生 FFmpeg 进程及 Windows
   音频设备播放。数值参考策略有明确范围，不声称完整音频或 PS2 实机位精确。
@@ -161,8 +165,9 @@ mark substantial milestones.
   动画、战斗或游戏场景已经完成。
 - 首房间实际创建 156 个静态对象和全部 69 个 OMS 物件。玩家与子模型共用原版部件、
   节点、弹性骨骼和绑定；原玩家初始化执行初始动作绑定、骨骼采样、地面 IK 与矩阵回写，
-  随后完成出生位置和摄像机绑定。尚未提交世界绘制包，未验证连续动画或可玩场景。
-- 启用硬件/解码器检查后，196 个 C 模块通过 207 项检查（包含独立 ADX 参考 WAV），
+  随后完成出生位置和摄像机绑定；4 个运行时教程物件共用原工厂和对象列表。
+  尚未提交世界绘制包，未验证连续动画或可玩场景。
+- 启用硬件/解码器检查后，212 个 C 模块通过 228 项检查（包含独立 ADX 参考 WAV），
   在固定源码副本验证。受限 GPU 像素与独立 CPU 方程一致；绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 两个 RNG 对 10272 个种子完成 20544 次精确比较，依据实际指令的受限模型验证；
@@ -188,7 +193,7 @@ Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音
 
 原加密标题 BGM 已逐样本匹配独立 vgmstream 输出；原警告、Logo 和标题画面已接入
 完整的当前原生启动流程。合成“新游戏”输入已进入首关并执行原玩家／物件初始化，
-当前边界是 `r100.rel+0x2F30`。首个世界画面、连续动画、战斗、完整音频和存档读写仍需继续。
+当前边界是 Main state4 的 NearCheck `0x00131E10`。首个世界画面、连续动画、战斗、完整音频和存档读写仍需继续。
 
 接下来继续首关 Scenario／Event 脚本、首个原游戏画面、连续动画、战斗、场景切换与
 存档验收。本地提交保留回退，大节点才推送。当前状态见 [进展数据](docs/progress.json)。

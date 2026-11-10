@@ -9,6 +9,7 @@
 #include "screen_fade.h"
 #include "game_event.h"
 #include "game_scene_at.h"
+#include "game_scene_at_age.h"
 #include "game_action_buttons.h"
 #include "display_state.h"
 #include "../platform/task_threads.h"
@@ -28,6 +29,7 @@ typedef struct {
  uint8_t scenario_stage,scenario_before_stage,death_callback_pending,enemy_stage,scenario_status_pending;
  gh_collision_pair_frame collision_frame;
  uint32_t object_wait_acd0; /*previouslyunrepresented574380+ACD0scalar*/
+ gh_scene_at_age at_frame_age;
 } gh_game_scene_step;
 /* Required semantic boundaries for as-yet-unported world/render consumers.
  * The address/argument identify original operations, NEVER callable guestcode.
@@ -55,6 +57,7 @@ typedef struct {
  gh_scene_step_external external;void *external_context;
  gh_scene_profile_counter profile_counter;void *profile_context;
  gh_scenario_task_status scenario_status;void *scenario_status_context;
+ const struct gh_dynamic_corner_tables *dynamic_corners; /*RootONE static globals*/
 } gh_game_scene_step_bindings;
 /* Explicit cold host companion init: caller supplies original Main1A8 seed;
  * ignored whilePFD absent. Does not invent the earlier complete Mainctor. */

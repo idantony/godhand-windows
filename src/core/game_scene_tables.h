@@ -24,6 +24,7 @@ typedef struct {
  struct gh_ray_triangle_state *triangle_state;
 } gh_scene_ray_state;
 struct gh_scene_actor_scroll_state;
+struct gh_scene_dynamic_owner;
 typedef struct {gh_scene_table_view environment,scroll_texture;
  uint32_t scroll_pairs[32][2],scroll_words[32],scroll_link_words[32];
  gh_bundle_entry akt,akg;gh_scene_actor_link actor_links[8];
@@ -31,7 +32,9 @@ typedef struct {gh_scene_table_view environment,scroll_texture;
  /* Legacyhost names: original190/194 LIVE dynamic collision shape list,
   * destroyed by12ECF0 during actor reset; not a deferred-delete queue. */
  void *pending_actor_head;uint32_t pending_actor_count;uint8_t actors_ready;
- uint32_t frontier;int detail;gh_scene_ray_state ray;struct gh_scene_actor_scroll_state *actor_scroll_native;} gh_game_scene_tables;
+ uint32_t frontier;int detail;gh_scene_ray_state ray;struct gh_scene_actor_scroll_state *actor_scroll_native;
+ struct gh_scene_dynamic_owner *dynamic_native_owner; /*borrow ONE original190/194 typedowner*/
+} gh_game_scene_tables;
 typedef enum {GH_TABLE_OK,GH_TABLE_ARGUMENT,GH_TABLE_BOUNDS,GH_TABLE_UNSUPPORTED,GH_TABLE_MEMORY} gh_scene_table_status;
 /* Work608 is a canonical typed environment view plus native opaque handle1,
  * never a truncated host pointer. 2A71B0 only binds SearchData("ENV",0);

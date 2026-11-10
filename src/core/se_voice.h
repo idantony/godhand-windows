@@ -42,7 +42,11 @@ gh_voice_status gh_se_voice_pcm_view(const gh_se_voice_engine *,uint32_t handle,
  * uses real SamplesPlayed; integer ramp matches37D8B8/378020/378070/37CC78.
  * Native source gain replaces SPU volume/keyoff timing, not hardware DSP. */
 gh_voice_status gh_se_voice_request_stop_00375050(gh_se_voice_engine *,uint32_t original_handle,int16_t ticks,int *accepted);
-/* Original ascending program0..51 stops10 plus pending EE-node removal. */
+/* Original2CBC58 matches EE node+08 BANK, not node+0A program. Active
+ * voices queue real375050 stops; unissued pending nodes are removed now.
+ * Original void ignores queue-full; accepted48-command bound is preserved. */
+gh_voice_status gh_se_voice_stop_bank_002cbc58(gh_se_voice_engine *,int16_t bank,int16_t ticks);
+/* Original ascending bank0..51 stops10 plus pending EE-node removal. */
 unsigned gh_se_voice_bank_nodes(const gh_se_voice_engine *,int16_t bank);
 gh_voice_status gh_se_voice_scene_exit_begin(gh_se_voice_engine *);
 int gh_se_voice_uses_registry(const gh_se_voice_engine *,const gh_audio_registry *);

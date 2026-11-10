@@ -3,6 +3,59 @@
 Updated 2026-11-10. Read Git and live worker ownership before editing. This is
 an ongoing authorized source port, not a playable Windows game yet.
 
+Current verified milestone is room-transition-44:212C/228checks, fullhardware/
+codec/independentADX opt-ins, matchingDLL RNG20544/20534 PASS. Matching Windows
+QA489ticks/R100/Main4,6MC/90Movie/369UI, actualNearCheck131E10,worldpackets0,
+renderer/window/world/cleanup0,exit4. R100Init completes,69OMS+4runtime3EB;
+Main4 dispatch actuallystarts but stops at firstpositivePFD NearCheckquery.
+roof/9B0 Scenario registered but notvisited, no originalworldframe/gameplay.
+Private44 report authoritative; standard Eanalysis/bilingualdocs exported44.
+Prior publicmilestone34/787f26e; localrollback37/587dc93. Consult liveGit for
+44 publication rather than inferring it from this resumable status file.
+
+42 passed211C/227checks butactual13F238 was DISCONNECTED-CONTROLLER modal,
+NOT collision. Root had briefly mislabeled it and corrected the userupdate.
+Actual31B560 SB14 stores31AF40 boolean source-readiness.44 nativeinput adapter
+provides configured keyboard port0, explicit disconnect stays0, focusloss only
+clearskeys. StoreWork width/poisonneighbors and disconnected cases PASS.43 adds
+actual2C1540 tagged-list flags aging (NOW->PREV, mask71FFFFFF) +persistent
+retrycursor; linkpoison/repair test proves no doubleaging. Thisleaf notyet
+reached inactual44. Source-only39/41 manifest mistakes fixedbeforetest in40/42.
+
+44 derives43 +Root nativeinput/status integration;43 derives42+RootATaging.
+42 derives40+frozenbgm-automatic-batch-01 andse-stop-bank-092958; BGM consumes
+samepersistent children/init inexisting scene_begin, countdown3 first. New
+scene_exit audio matches BANK atnode08 (oldbugusedprogram), realhighprogram
+muted testsPASS.40 integrationdetails below, allrequiredsource frozen.
+
+Next Root: recover2A6FF8 actualtwoqueries, mask1/flags40/straight131E10 and
+pair+8 highbit mutation, preserving inputPFD source and pausediterationcursor.
+Evidence game-scene-step-inner-ghidra-private.json hasfull2A6FF8 (not older
+nearcheck reports, those only31BE78/31C1D0/31C238). Needtypedmutable flags owner
+and genuine cleanup beforeoldroompack expires. BewareNearCheck runs BEFORE
+12E840: dynamicquery originalAABB/attribute earlyouts mustbe faithful; do not
+forceupdate earlier, fakeworld_ready, or defaultmiss.
+Then actualpositivephysics/AT/camera/MoveObj, firstworld packets; no gameplay
+remake/generictranslation. Root had planned nonstaticMoveObj typeddispatch but
+hasNOT implementedit. OriginalVTplayer41D220+50delta0/+54=108AB0, tutorial
+4296F0+54=1BF518. Actual30F090 rereadsregistryentry afterMove before2F0&~3.
+
+Activeworkers: skill_forward_test froze player-frame-batch-01 (6files inclnarrow
+camera angle1F8180 export, newtestELF), firstnormalHeatpath exact306528 effect
+producer missing; continuing Take/Give/Solid/damage, owns narrow solid_units/
+hitarea_shapes append. Root haspersistentELF/currentplayer/model/tailtake/give
+owners toborrow. godhand_upstream enemy-factory-batch-01..08 frozen chain
+(ctor, sparseMD/TM3 model, same64manager/game_init append, initprefix, entry,
+Cockpitbase,tail,HP); continuesactualappearance3 MTB/SEQ. FirstrealR100EMS
+appearance3 mustnot useappearance0 fixture asfullproof. opengoal_method froze
+Eventcomponents-093944, create-prefix-094631 (stage2 first2D1900 channel1BGM),
+Eventlink-100401 (122imports/518relocs+oneVF0ctor). Link owns SAMEcomponents;
+identity_resolved is distinctfromcallable_native; unsupportedexports muststop,
+no guestcodecast. Root hasNOT integratedthese/Enemyfactory/playerframe yet.
+User requested self-builttools forspeed; opengoal_method nowownsNEW tools/
+function-context.py (actualreport/image hash+compactcalls/import evidencepacks),
+usingNearCheck/playerframe actualcases. Noautotranslatedproductionruntime.
+
 Latest public milestone is 787f26e / room-transition-34:196C/207checks, all
 hardware/codec/fullADX opt-ins and matchingDLL RNG20544/20534. Matching hidden/
 muted Windows QA completes487ticks/R100/Main3,6MC/90Movie/368UI; full107F58,
@@ -68,14 +121,64 @@ actual visit; shutdown cancels Scenario before tutorial/source/room destruction.
 Tutorial release detaches its run before405/39 Cockpit guard; not an invented
 original147188 destructor. R100 scripts/counter/tail own no second RoomSave.
 
-Active opengoal_method owns narrowruntime3EB common/factory edits; Root37 uses
-old frozenfactory, NEVER mutableE WIP. Factory's fixedarray mustreserve future
-runtime objects at bind; registry stores object addresses, cannot realloc.
-Root exported shared1365B8 quad primitive in game_ray_static.c/h for dynamic
-query; caller ownsFEnv/nearest. Peer dynamic14 frozen includes geometry,
-corner globals and coupledscene_tables/dynamicheaders; not yet in37. Future
-oneowner initialization133670 and shutdowncancel_update required. EnemySE01+
-object-sounds01 and physics11..13 remain unintegrated frozen batches.
+Latest local rollback commit587dc93 captures37 verified sources/resume, NOT
+pushed. Latest FROZEN wholeintegration38 is VERIFIED203C/214checks, alloptins,
+matchingDLL RNG20544/20534 PASS. Windows488ticks/R100/Main4,6MC/90Movie/369UI,
+actualstrict mainELF2D0EA0;worldpackets0,renderer/window/world/cleanup0,exit4.
+analysis/room-transition-38-verification.json authoritative. Base37 plus frozen
+om-runtime3eb-20261110-090109 and Rootservices/manifest. SAMEfactory capacity
+now comes from canonical754C58.capacity, preserving object addresses; four
+originalCreateObj invocations use four persistent companions, virtualInit and
+setPos separately, no fakeOMS. ActualR100Init complete, Main3->4, but SAMEtick
+BGMupdate fails2D0EA0 BEFORE firstMain4visit; Scenario9B0/roof registered,
+not yet actualvisited. Next Root criticalpath is nativeBGM2D0EA0 and actualframe.
+PublicREADME/docs/E standardreports intentionally remain pushed34; no newpush.
+
+Peer physics11/12/13, dynamic14/15 currentlynotintegrated38. skill_forward_test
+owns Rootapproved ray_static thinconnector and is freezing comprehensive16:
+all14+15 authoredchanges plusrealstatic->130700 staging, mixed/staticoracle
+regressions PASS. Onlyoverlay16 (old15 pins oldrayC and wouldconflict); Root
+musthold ONEstartupcornerowner/fromELF/133670 init, connect12E840, call
+cancel_update beforeOM/dynamicshutdown. Root37 quadexport remainsshared.
+EnemySE01/object-sounds01/enemyresources02 exact normalized authored deltas now
+G snapshots/enemy-se-batch-01-delta, enemy-resource-batch-01-delta,
+enemy-resource-batch-02-delta. Oldfullsnapshots haveanalysis/source-snapshot,
+NOT rootreceipt. Root mustintegrate SAMEbankowner/sound_context and realpump.
+Actualraw2CA470 frameorder:2CAF28,2D0938,325DD8,2CA5D8,375380,375500,
+2CA558(52x2CF440 +2BGMloads),2D2E38,2CBC20. Enemybankupdate belongsAFTER
+voiceflush, notbefore. fromstartup allowsNULLvoices onlystrictmetadata/0request;
+createafterstartupvoices toavoidlaterrebind. soundcontrol.h/sound_scene_exit.c
+arecoupledwithenemySE01; no mutableE headercopy inolderfrozenbuild.
+Agents: opengoal_method newEvent12C418 reset fullcold/weapontypedhelper freezing;
+godhand_upstream real2905D0 firstEM202 factory; skill_forward_test dynamic16
+FROZEN at hitarea-batch-runtime-16/receipt.json (19files), now restoring actual
+BGM2D0EA0 narrow bgm_requests.c/h owner. Root must not edit those while active.
+Private36/37/38 RNG receipt pointers corrected to rng-differential.json and
+frame-rng-differential.json, explicit matchingDLL path+hash rechecked.
+
+Latest wholeintegration40 VERIFIED211C/225checks withhardware/codec/fullADX
+and matchingDLL RNG20544/20534. ActualWindows488ticks/R100/Main4, same2D0EA0,
+6MC/90Movie/369UI,worldpackets0/errors0/cleanup0/exit4. NofirstMain4visit yet.
+Privateanalysis/room-transition-40-verification.json. Source-only39 had wrong
+Eventreset test argv classifier(both); corrected40 beforeexecuting any39tests.
+40 derives38 plus physics11/12/13, comprehensive16, three normalizedenemy
+batches, motion-call andEventreset, Root services/startup/SceneStep/manifest.
+RootONEdynamic_corners initializesfromELF+133670; SceneStep actors calls actual
+12E840 SAMEtables.dynamic_native_owner; shutdowncancel_update beforeOM abort.
+SameRootenemy_banks attached afterstartupvoices (prefixmodeNULLallowed), pump
+attrueaftervoiceflush position, destroybeforevoices/registry. Existingresource
+bindings borrowrealbankready; enemy294CA0 prefix onlycalledwhenwhole294C68
+stops there, neveraftergenuinestop1skip. FullEventplayerresetcallback iswired,
+prefix/abortbindings copiedtopersistentservices storage; futureweaponwriters
+mustupdate SAMEplayer_weapon slot. KnownNULL comesfromactual107E40 write6A8,
+notfromremovedrawzero. No actualEventresetexecution inWindows yet.
+Current root research player-frame-40 Ghidra nativeMove108AB0/3EB1BF518; first
+player vtable41D220+50 delta0,+54=108AB0 actualELFread. NoactorMoveglue yet.
+BGMagent skill_forward_test has actualR100mapEvent2/mode1nativeADX working,
+notyetfrozen. opengoal_method owns NEWse_voiceStopBank2CBC58 and fixes old
+scene_exit bank/program confusion beforeEventcreate; Rootmustnoteditse_voice.
+godhand_upstream ctorbatch01 frozen, continuing EM202thirdMD/TM3 sparseSearch
+andmanager/modelinit; genericbundle staysstrict. Public34 unchanged.
 
 Whole33 separately passed196C/203checks and sameactual2F30. 31 module suite
 passed but its actualARG2C0F90 was fixed32 at verifiedempty-jump SceneExit17

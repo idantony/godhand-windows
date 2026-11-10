@@ -168,11 +168,15 @@ gh_voice_status gh_se_voice_request_stop_00375050(gh_se_voice_engine*s,uint32_t 
  if(s->stop_count==48)return GH_VOICE_OK;
  s->stops[s->stop_count].handle=handle;s->stops[s->stop_count].ticks=ticks;s->stop_count++;*accepted=1;return GH_VOICE_OK;
 }
+gh_voice_status gh_se_voice_stop_bank_002cbc58(gh_se_voice_engine*s,int16_t bank,int16_t ticks){
+ if(!s||bank<0||bank>=52)return GH_VOICE_ARGUMENT;if(ticks < -1)return unsupported(s,0x378020);s->frontier=0;
+ for(int i=s->head;i!=-1;){struct voice*v=s->voices+i;int next=v->next;
+  if(v->info.bank==bank){if(v->info.native_voice||v->info.retiring){int accepted;gh_voice_status e=gh_se_voice_request_stop_00375050(s,v->info.original_handle,ticks,&accepted);if(e)return e;/* Originalvoid ignores queuefull. */}else drop(s,i,0);}i=next;
+ }return GH_VOICE_OK;
+}
 gh_voice_status gh_se_voice_scene_exit_begin(gh_se_voice_engine*s){
  if(!s)return GH_VOICE_ARGUMENT;s->frontier=0;
- for(int program=0;program<52;program++)for(int i=s->head;i!=-1;){struct voice*v=s->voices+i;int next=v->next;
-  if(v->info.program==program){if(v->info.native_voice||v->info.retiring){int accepted;gh_voice_status e=gh_se_voice_request_stop_00375050(s,v->info.original_handle,10,&accepted);if(e)return e;/* original ignores queue-full */}
-   else drop(s,i,0);}i=next;}
+ for(int bank=0;bank<52;bank++){gh_voice_status e=gh_se_voice_stop_bank_002cbc58(s,(int16_t)bank,10);if(e)return e;}
  for(int i=s->head;i!=-1;){struct voice*v=s->voices+i;int next=v->next;if(!v->info.native_voice&&!v->info.retiring)drop(s,i,0);i=next;}
  return GH_VOICE_OK;
 }

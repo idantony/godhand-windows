@@ -4,7 +4,30 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
-## Current milestone: original player and first-room objects
+## Current milestone: R100 Init and first update entry
+
+An immutable source copy passes 212 C modules / 228 checks with muted hardware,
+codec and the full independent ADX comparison. Its matching Windows QA completes
+489 updates: 6 MC, 90 movie and 369 title/menu frames. Original R100 Init now
+finishes, including all69 OMS objects and four real runtime tutorial objects;
+Main state4 enters its first update and stops at NearCheck ray `0x00131E10`.
+Roof/intro Scenario tasks are registered but have not been visited yet.
+
+The native input sample now supplies original port0 readiness from the keyboard
+adapter; losing focus releases keys without unplugging it. Collision dispatch,
+dynamic boxes and shared static/dynamic ray queries pass real-resource tests.
+Original room music selection independently reaches real muted PCM consumption;
+it has not yet started in this bounded Windows run. No world packet is submitted,
+so no original 3D frame or gameplay is claimed. Later updates, Event/actor logic,
+continuous animation, combat and save/load remain unfinished.
+
+固定源码副本通过212个C模块／228项检查；匹配的Windows程序完成489次更新，显示
+6帧存储卡、90帧片头和369帧标题／菜单。R100初始化及69个OMS／4个教程物件完成，
+Main state4首次进入更新，停在NearCheck射线入口0x00131E10；Scenario任务已注册，
+尚未遍历。键盘适配器写入原输入连接状态；失焦与断开分开处理。碰撞／混合射线和
+首关BGM正分支已分别测试，不能当成整合画面或玩法验收。世界绘制包仍为0。
+
+## Previous milestone: original player and first-room objects
 
 An immutable source copy passes 196 C modules / 207 checks with muted hardware,
 codec and full independent ADX verification. Matching hidden Windows QA executes

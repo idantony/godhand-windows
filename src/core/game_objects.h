@@ -54,6 +54,11 @@ typedef gh_object_status (*gh_object_slot_release)(void *,int32_t slot,uint32_t 
 gh_object_status gh_game_objects_release_nonpinned_001fef30(gh_game_objects *,gh_object_slot_release,void *,uint32_t *frontier);
 /* Actual1FF028 descending reset; only call after release. */
 gh_object_status gh_game_objects_reset_records_001ff028(gh_game_objects *,uint32_t *frontier);
+/* Narrow canonical holder sound fields for actual1FF4D0/1FF238 callers.
+ * These are original52bank IDs, never hostpointers or model readiness. */
+gh_object_status gh_game_objects_sound_slots(const gh_game_objects *,uint32_t kind,uint32_t *count,int32_t slots[10]);
+gh_object_status gh_game_objects_append_sound_slot(gh_game_objects *,uint32_t kind,int32_t slot);
+gh_object_status gh_game_objects_check_ready_001ff238(gh_game_objects *,uint32_t kind,const gh_object_resource_bindings *,int *original_ready,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

@@ -65,6 +65,13 @@ gh_bgm_status gh_bgm_requests_scene_exit_begin(gh_bgm_requests *);
 gh_bgm_status gh_bgm_requests_scene_exit_ready(const gh_bgm_requests *,int *);
 gh_bgm_status gh_bgm_requests_scene_exit_finalize(gh_bgm_requests *);
 int gh_bgm_requests_scene_event(const gh_bgm_requests *,int32_t *);
+/* Borrowed scene context is captured by actual scene_begin and must outlive
+ * ordinary audio ticks. This is the SAME children/Heat/enemy owner, no copies.
+ *2D0EA0 countdown/select/crossfade uses original16 request pool, mode1 source
+ * preparation and native transport. Native scene starts queue at next audio
+ * tick, after original constructor zero-gain/fade writes have completed. */
+typedef struct {int32_t current128;uint32_t delay134,countdown138;const gh_game_children *children;const gh_game_init_state *init;} gh_bgm_automatic_state;
+int gh_bgm_requests_automatic_state(const gh_bgm_requests *,gh_bgm_automatic_state *);
 unsigned gh_bgm_requests_pending(const gh_bgm_requests *);
 unsigned gh_bgm_requests_active(const gh_bgm_requests *);
 uint32_t gh_bgm_requests_frontier(const gh_bgm_requests *);

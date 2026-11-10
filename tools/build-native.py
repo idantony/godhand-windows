@@ -125,6 +125,7 @@ def main():
                ("game_render_steps", "src/core/game_render_steps.c"),
                ("game_ray_query", "src/core/game_ray_query.c"),
                ("game_scene_at_step", "src/core/game_scene_at_step.c"),
+               ("game_scene_at_age", "src/core/game_scene_at_age.c"),
                ("game_scene_post", "src/core/game_scene_post.c"), ("cockpit_fan", "src/core/cockpit_fan.c"),
                ("id_number", "src/core/id_number.c"),
                ("game_door", "src/core/game_door.c"),
@@ -168,6 +169,8 @@ def main():
                ("game_actor_matrix", "src/core/game_actor_matrix.c"),
                ("motion", "src/assets/motion.c"),
                ("game_actor_motion", "src/core/game_actor_motion.c"),
+               ("game_actor_motion_call", "src/core/game_actor_motion_call.c"),
+               ("game_event_player_reset", "src/core/game_event_player_reset.c"),
                ("game_actor_motion_ik", "src/core/game_actor_motion_ik.c"),
                ("game_actor_motion_step", "src/core/game_actor_motion_step.c"),
                ("game_actor_motion_solve", "src/core/game_actor_motion_solve.c"),
@@ -192,6 +195,12 @@ def main():
                ("game_cockpit_tutorial", "src/core/game_cockpit_tutorial.c"),
                ("game_player_abort", "src/core/game_player_abort.c"),
                ("game_scene_dynamic", "src/core/game_scene_dynamic.c"),
+               ("game_dynamic_corners", "src/core/game_dynamic_corners.c"),
+               ("game_scene_dynamic_geometry", "src/core/game_scene_dynamic_geometry.c"),
+               ("game_ray_dynamic", "src/core/game_ray_dynamic.c"),
+               ("enemy_se_banks", "src/core/enemy_se_banks.c"),
+               ("game_object_sounds", "src/core/game_object_sounds.c"),
+               ("game_enemy_resources", "src/core/game_enemy_resources.c"),
                ("game_om_door_geometry", "src/core/game_om_door_geometry.c"),
                ("game_om_initialize", "src/core/game_om_initialize.c"),
                ("game_om303", "src/core/game_om303.c"),
@@ -211,6 +220,7 @@ def main():
                ("game_om354", "src/core/game_om354.c"),
                ("game_om35d", "src/core/game_om35d.c"),
                ("game_om309", "src/core/game_om309.c"),
+               ("game_om3eb", "src/core/game_om3eb.c"),
                ("game_enemy_placements", "src/core/game_enemy_placements.c"),
                ("game_om_fragments", "src/core/game_om_fragments.c"),
                ("game_camera_follow", "src/core/game_camera_follow.c"),
@@ -253,6 +263,8 @@ def main():
         ("game-actor-matrix", "tests/core/test_game_actor_matrix.c", "none"),
         ("motion", "tests/assets/test_motion.c", "iso"),
         ("game-actor-motion", "tests/core/test_game_actor_motion.c", "iso"),
+        ("game-actor-motion-call", "tests/core/test_game_actor_motion_call.c", "iso"),
+        ("game-event-player-reset", "tests/core/test_game_event_player_reset.c", "iso"),
         ("game-actor-motion-ik", "tests/core/test_game_actor_motion_ik.c", "iso"),
         ("game-actor-motion-step", "tests/core/test_game_actor_motion_step.c", "iso"),
         ("game-actor-motion-solve", "tests/core/test_game_actor_motion_solve.c", "iso"),
@@ -277,6 +289,12 @@ def main():
         ("game-cockpit-tutorial", "tests/core/test_game_cockpit_tutorial.c", "iso"),
         ("game-player-abort", "tests/core/test_game_player_abort.c", "iso"),
         ("game-scene-dynamic", "tests/core/test_game_scene_dynamic.c", "both"),
+        ("game-scene-dynamic-geometry", "tests/core/test_game_scene_dynamic_geometry.c", "both"),
+        ("game-ray-dynamic", "tests/core/test_game_ray_dynamic.c", "elf"),
+        ("game-ray-mixed", "tests/core/test_game_ray_mixed.c", "both"),
+        ("enemy-se-banks", "tests/core/test_enemy_se_banks.c", "iso"),
+        ("game-object-sounds", "tests/core/test_game_object_sounds.c", "iso"),
+        ("game-enemy-resources", "tests/core/test_game_enemy_resources.c", "iso"),
         ("game-om-door-geometry", "tests/core/test_game_om_door_geometry.c", "elf"),
         ("game-om-initialize", "tests/core/test_game_om_initialize.c", "both"),
         ("game-om303", "tests/core/test_game_om303.c", "both"),
@@ -295,6 +313,7 @@ def main():
         ("game-om354", "tests/core/test_game_om354.c", "both"),
         ("game-om35d", "tests/core/test_game_om35d.c", "both"),
         ("game-om309", "tests/core/test_game_om309.c", "both"),
+        ("game-om3eb", "tests/core/test_game_om3eb.c", "iso"),
         ("game-enemy-placements", "tests/core/test_game_enemy_placements.c", "iso"),
         ("game-collision-pair-step", "tests/core/test_game_collision_pair_step.c", "elf"),
         ("game-collision-pair-queries", "tests/core/test_game_collision_pair_queries.c", "none"),
@@ -302,6 +321,9 @@ def main():
         ("game-collision-cylinder-cylinder", "tests/core/test_game_collision_cylinder_cylinder.c", "none"),
         ("game-collision-cylinder-box", "tests/core/test_game_collision_cylinder_box.c", "none"),
         ("game-collision-pair-dispatch", "tests/core/test_game_collision_pair_dispatch.c", "elf"),
+        ("game-collision-kind2-pair", "tests/core/test_game_collision_kind2_pair.c", "none"),
+        ("game-collision-kind2-box", "tests/core/test_game_collision_kind2_box.c", "none"),
+        ("game-collision-box-box", "tests/core/test_game_collision_box_box.c", "none"),
         ("game-camera-follow", "tests/core/test_game_camera_follow.c", "iso"),
         ("game-camera-envelope", "tests/core/test_game_camera_envelope.c", "iso"),
         ("game-camera-shake", "tests/core/test_game_camera_shake.c", "none"),
@@ -345,6 +367,8 @@ def main():
         ("game-effects", "tests/core/test_game_effects.c", "iso"),
         ("game-scene-filters", "tests/core/test_game_scene_filters.c", "iso"),
         ("bgm-requests", "tests/core/test_bgm_requests.c", "iso"),
+        ("bgm-automatic", "tests/core/test_bgm_automatic.c", "iso"),
+        ("se-voice-stop-bank", "tests/core/test_se_voice_stop_bank.c", "iso"),
         ("title-texture", "tests/core/test_title_texture.c", "iso"),
         ("adx", "tests/assets/test_adx.c", "adx-reference"),
         ("adx-stream", "tests/platform/test_adx_stream.c", "iso"),
@@ -379,6 +403,7 @@ def main():
         ("game-children-draw", "tests/core/test_game_children_draw.c", "none"),
         ("game-ray-query", "tests/core/test_game_ray_query.c", "iso"),
         ("game-scene-at-step", "tests/core/test_game_scene_at_step.c", "iso"),
+        ("game-scene-at-age", "tests/core/test_game_scene_at_age.c", "iso"),
         ("game-scene-post", "tests/core/test_game_scene_post.c", "iso"),
         ("game-cockpit-frame", "tests/core/test_game_cockpit_frame.c", "iso"),
         ("game-door", "tests/core/test_game_door.c", "iso"),
@@ -540,7 +565,7 @@ def main():
         run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
         run("test-id-text", [output / "test_id_text.exe", baseline["source_iso"]["path"]])
         for name, _, inputs in extra_tests:
-            if ((name in ("se-voice", "se-stop", "se-bank2", "mc-control-flow", "bgm-requests", "adx-stream", "r020-title", "game-services", "game-scene-exit", "scene-exit-cleanup", "game-object-sound", "sound-scene-exit") and not args.hardware_audio)
+            if ((name in ("se-voice", "se-stop", "se-bank2", "se-voice-stop-bank", "mc-control-flow", "bgm-requests", "bgm-automatic", "adx-stream", "r020-title", "game-services", "game-scene-exit", "scene-exit-cleanup", "game-object-sound", "sound-scene-exit") and not args.hardware_audio)
                     or (inputs == "movie" and not args.movie_codec)
                     or (inputs == "adx-reference" and not args.adx_reference_wave)):
                 manifest.setdefault("skipped_checks", []).append({"name": "test-" + name, "reason": "Explicit hardware/codec opt-in not supplied"})
@@ -554,6 +579,8 @@ def main():
                 arguments.append(args.movie_codec.resolve())
             if inputs == "adx-reference":
                 arguments.append(args.adx_reference_wave.resolve())
+            if name in ("enemy-se-banks", "game-object-sounds", "game-enemy-resources") and args.hardware_audio:
+                arguments.append("--hardware-audio")
             run("test-" + name, [output / ("test_" + name.replace("-", "_") + ".exe")] + arguments)
     manifest["status"] = "passed" if not args.skip_tests else "build-only"
     final_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}

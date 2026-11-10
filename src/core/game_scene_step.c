@@ -1,4 +1,5 @@
 #include "game_scene_step.h"
+#include "game_scene_dynamic_geometry.h"
 #include "game_camera.h"
 #include "game_collision_pair_shapes.h"
 #include <string.h>
@@ -37,7 +38,17 @@ static gh_scene_step_status collision(gh_game_scene_step*s,const gh_game_scene_s
    e==GH_PAIR_SHAPE_ARGUMENT?GH_SCENE_STEP_ARGUMENT:GH_SCENE_STEP_CALLEE,(int)detail);}
  return GH_SCENE_STEP_OK;
 }
-static gh_scene_step_status actors(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){if(b->actors->pending_actor_head||b->actors->pending_actor_count)return fail(s,0x12e870,GH_SCENE_STEP_UNSUPPORTED,0);if(w((const uint8_t*)b->work+0x594)&0x8000000)return fail(s,0x12e8cc,GH_SCENE_STEP_UNSUPPORTED,0);return GH_SCENE_STEP_OK;}
+static gh_scene_step_status actors(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){
+ if(b->actors->dynamic_native_owner){uint32_t f=0;
+  if(!b->dynamic_corners)return fail(s,0x133670,GH_SCENE_STEP_UNSUPPORTED,0);
+  if(!b->binary32_reference)return fail(s,0x12e840,GH_SCENE_STEP_UNSUPPORTED,0);
+  gh_scene_dynamic_status e=gh_scene_dynamic_step_0012e840(b->actors->dynamic_native_owner,b->dynamic_corners,b->work,
+   GH_STATIC_BINARY32_REFERENCE,&f);
+  return !e?GH_SCENE_STEP_OK:fail(s,f?f:0x12e840,e==GH_DYNAMIC_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE,e);
+ }
+ if(b->actors->pending_actor_head||b->actors->pending_actor_count)return fail(s,0x12e870,GH_SCENE_STEP_UNSUPPORTED,0);
+ if(w((const uint8_t*)b->work+0x594)&0x8000000)return fail(s,0x12e8cc,GH_SCENE_STEP_UNSUPPORTED,0);return GH_SCENE_STEP_OK;
+}
 static void world_clock(const gh_game_scene_step_bindings*b){const uint8_t*r=(const uint8_t*)b->work;if((w(r+0x5d8)&0x2000)||(w(r+0x584)&8)||(w(r+0x5e4)&0x2000000)||b->work->room==0x21||((w(r+0x594)&0x800)&&(w(r+0x5e4)&0x8000000))||(b->work->phase569==1&&!(w(r+0x210)&1)))return;b->init->world_time++;b->prepare->global_0061a994++;}
 static gh_scene_step_status enemies(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){uint8_t*e=b->init->enemies;const uint8_t*raw=(const uint8_t*)b->work;
  /*294AD8 and292F68 are actualJRRA/NOP, not missing native implementations. */
@@ -64,9 +75,9 @@ static gh_scene_step_status object_pool(gh_game_scene_step*s,const gh_game_scene
  for(unsigned i=0;i<256;i++)if(p[0x3c00+(size_t)i*0x70+0x4a])return fail(s,0x1fd448,GH_SCENE_STEP_UNSUPPORTED,(int)i);return GH_SCENE_STEP_OK;
 }
 static int scenario_gate(const gh_game_scene_step_bindings*b){const uint8_t*r=(const uint8_t*)b->work;return (int32_t)w(r+0x58c)>=0&&!(w(r+0x5e4)&0x8000000)&&!(w(r+0x584)&8)&&!(w(r+0x5d8)&0x10000)&&!(w(r+0x590)&1);}
-static gh_scene_step_status at_empty(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){gh_scene_at_manager*a=b->scene_at;if(!a||!a->ready)return fail(s,0x2c1540,GH_SCENE_STEP_ARGUMENT,0);
- for(unsigned i=0;i<4;i++)if(a->units[i].count)return fail(s,0x2c30c8,GH_SCENE_STEP_UNSUPPORTED,(int)i);
- gh_at_link link=a->heads[15];unsigned steps=0;while(link.kind!=GH_AT_LINK_END){if(link.kind==GH_AT_LINK_UNIT)return fail(s,0x2c30c8,GH_SCENE_STEP_UNSUPPORTED,(int)link.index);if(link.kind!=GH_AT_LINK_SLOT||link.index>=16||++steps>16)return fail(s,0x2c30c8,GH_SCENE_STEP_BOUNDS,0);link=a->heads[link.index];}return GH_SCENE_STEP_OK;
+static gh_scene_step_status at_before(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){gh_scene_at_manager*a=b->scene_at;if(!a||!a->ready)return fail(s,0x2c1540,GH_SCENE_STEP_ARGUMENT,0);
+ uint32_t f=0;gh_scene_at_status e=gh_scene_at_age_002c1540(&s->at_frame_age,a,&f);
+ return !e?GH_SCENE_STEP_OK:fail(s,f?f:0x2c1540,e==GH_AT_BOUNDS?GH_SCENE_STEP_BOUNDS:e==GH_AT_ARGUMENT?GH_SCENE_STEP_ARGUMENT:GH_SCENE_STEP_CALLEE,e);
 }
 static gh_scene_step_status action_empty(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){const uint8_t*raw=(const uint8_t*)b->work;gh_game_action_buttons*a=b->action_buttons;
  if(!(w(raw+0x5e0)&0x100000)&&(w(raw+0x5d8)&0x400000))return GH_SCENE_STEP_OK;
@@ -95,7 +106,7 @@ static int scenario_visit(void*context,gh_task_manager*m,gh_task_record32*record
 }
 gh_scene_step_status gh_game_scene_scenario_before_002c3500(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){gh_scene_step_status e;if(!s||!valid(b))return GH_SCENE_STEP_ARGUMENT;
  if(!s->scenario_before_stage){e=death_gate(s,b);if(e)return e;if(!scenario_gate(b))return GH_SCENE_STEP_OK;p32((uint8_t*)b->work+0x610,0xffff);s->scenario_before_stage=1;}
- if(s->scenario_before_stage==1){if(!(b->scenario.manager->flags&2)){e=at_empty(s,b);if(e)return e;}s->scenario_before_stage=2;}
+ if(s->scenario_before_stage==1){if(!(b->scenario.manager->flags&2)){e=at_before(s,b);if(e)return e;}s->scenario_before_stage=2;}
  if(s->scenario_before_stage==2){const gh_scene_hook*hook=b->scenario_callback104;
   if(hook&&hook->kind==GH_SCENE_HOOK_NATIVE){uint32_t f=0;if(!hook->call)return fail(s,0x2c364c,GH_SCENE_STEP_ARGUMENT,0);gh_scene_status r=hook->call(hook->context,&f);if(r)return fail(s,f?f:0x2c364c,GH_SCENE_STEP_CALLEE,r);}
   else if((hook&&hook->kind==GH_SCENE_HOOK_UNRESOLVED)||w(b->scenario.bytes+0x104))return fail(s,0x2c364c,GH_SCENE_STEP_UNSUPPORTED,0);
