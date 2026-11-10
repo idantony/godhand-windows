@@ -49,7 +49,7 @@ unfinished. The QA counters describe completed calls, not a playable scene.
   binding, bone sampling, terrain IK and matrix recovery, followed by spawn and
   camera binding. Four runtime tutorial objects from 3EB use the original
   factory and registries. The first original FX call 0x30F228 completes and
-  creates four ambient emitters (bank3, kind1; esp0). This is not continuous
+  creates four ambient emitters (bank3; no active ESP slots). This is not continuous
   animation or gameplay acceptance.
 - 270 C modules pass 295 checks with hardware-muted audio, movie decoding and
   the full independent ADX comparison enabled.
@@ -176,7 +176,7 @@ mark substantial milestones.
   共用原版部件、节点、弹性骨骼和绑定；玩家初始化执行初始动作绑定、骨骼采样、
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始FX调用0x30F228完成，并创建4个环境发射器
-  （bank3，kind1；esp0）。这不代表连续动画或玩法验收。
+  （bank3；ESP 活动槽为 0）。这不代表连续动画或玩法验收。
 - 启用硬件静音音频、片头解码和完整独立ADX对照后，270个C模块通过295项检查，
   在固定源码副本验证。受限 GPU 像素与独立 CPU 方程一致；绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。

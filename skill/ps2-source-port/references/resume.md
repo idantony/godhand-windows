@@ -1,9 +1,30 @@
+Next76 sources ready (unbuilt): Root GPUproof02 uses actual referenced indices
+only, invalid unused carry data no longer causes a false raster rejection;
+used invalidQ remainsstrict. Independent full512x448GPU oraclepassed. Frozen
+scene-visibility02-box and signedWclip023617 are ready; neither was in75.
+Wait HUD original13C950/registeredwidget chain (upstream) and correctedFX08
+CNode parent topology before freezing76. RootHUD gameplay binding is prewired inE atactual140E58/1410A8 using
+stablebind_gameplay API, sameinit/player/pools/camera/canonicalactor resolver;
+unknown player staysunknown whenview notready. Wait workerimmutableHUDbatch. RootFX .actors binding also notyetwired.
+Public doc emitter grouping correction is local pending next meaningfulpush:
+4bank3 emitters are group0×1 andgroup1×3, not allgroup1. Total4 unchanged.
+
+Latest unpublished75: FULL275C/301checks +sameDLL RNG PASS; actual489ticks
+R100 player1/child1/OM73/ambient4/ESP0, now13C950 atSceneStage24 Cockpit update,
+so realvisibility307B28 completed. world0/errors0/exit4; no captureframe370.
+Private aggregate room-transition-75-verification-private.json includessemantic
+caveat: FX07 parent topology at300EF8/2B5D58 is being independently re-audited;
+SDKexp/Gaussian arithmeticpassed but fullESP init/lifetime is NOT established.
+Actual75 stillESP0 beforethatpath, so its observedprefix is unaffected.
+Root76 will use corrected08 or preciseattachment frontier, never the knownbad
+parentNULL interpretation as a completed game path. Public remains74/a3ebd03.
+
 Verified milestone74 (2026-11-11 local):
 
 FULL private74 passed270C/295checks, muted device audio/movie/full independent
 ADX and sameDLL RNG20544/20534. Actual489ticks R100/Main4: player1/child1/OM73
 (69cold OMS+4runtime3EB); originalFX first30F228 completes,4ambient emitters
-bank3/kind1,esp0. Next308BC0 inside307B28 model-hide/reset,scene_stage22.
+bank3/groups0+1,esp0. Next308BC0 inside307B28 model-hide/reset,scene_stage22.
 World0/renderer0/GPU0/window0/normalunfinishedexit4. No worldframe/playable claim.
 G snapshot/scratch room-transition-74 and E analysis/room-transition-74-
 verification-private.json hold exact proof. CanonicalEreports+publicdocs now74;
