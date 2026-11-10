@@ -36,6 +36,20 @@ uint8_t *gh_game_cockpit_action_flags_1414(gh_game_cockpit *);
  * scalar-only span. No guest/native pointer fields are exposed as bytes. */
 typedef struct {gh_id_base *base;uint8_t *scalars90;size_t size;} gh_cockpit_system_menu_view;
 gh_id_error gh_game_cockpit_get_system_menu(gh_game_cockpit *,gh_cockpit_system_menu_view *);
+/* Original tutorial at SAME Cockpit+1A20. Native presence replaces its B0
+ * guest pointer; actual resource storage stays owned by tutorial consumer.
+ * begin registers its run in this Cockpit's existing owned[] list, finish
+ * writes the original seven typed refs and scalar/entry fields. */
+typedef struct {gh_id_base *base;const gh_id_state *manager;uint32_t read_id;uint16_t current_message;
+ uint8_t data_present,state_b8;} gh_cockpit_tutorial_view;
+gh_id_error gh_game_cockpit_get_tutorial(gh_game_cockpit *,gh_cockpit_tutorial_view *);
+gh_id_error gh_game_cockpit_tutorial_mark_resource(gh_game_cockpit *,uint32_t read_id);
+gh_id_error gh_game_cockpit_tutorial_begin_base(gh_game_cockpit *);
+gh_id_error gh_game_cockpit_tutorial_finish_00147028(gh_game_cockpit *);
+/* Native borrowed-view teardown before freeing the resource/ID compaction.
+ * Not a claim that original147188 freed its ID run (it only clears B0/AC/B8).
+ * Requires Main/consumers cancelled, exactly as other source-view releases. */
+gh_id_error gh_game_cockpit_tutorial_detach(gh_game_cockpit *);
 /* Actual frame consumers, same explicit nativebinary32/seed0 reference policy
  * as room reset, not EE/VU bit identity. Successful IDTrans callback must queue/execute real
  * entries, never acknowledge unknown consumers. Pointer stays owned here. */

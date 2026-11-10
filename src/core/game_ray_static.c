@@ -52,6 +52,10 @@ static int intersect(const float*from,const float*to,const float v[4][3],unsigne
  float t=divf(sub(dot(unit,v[0]),dot(unit,from)),denominator);if(!isfinite(t))return -1;if(t<0||t>1)return 0;
  for(unsigned k=0;k<3;k++){out[k]=add(from[k],mul(direction[k],t));if(!isfinite(out[k]))return -1;}return inside(v,n,out);
 }
+int gh_scene_ray_quad_intersection_001365b8(const float from[3],const float to[3],const float vertices[4][3],const float normal[3],float out[3]){
+ if(!from||!to||!vertices||!normal||!out)return -1;
+ return intersect(from,to,vertices,4,normal,out);
+}
 static gh_scene_ray_status triangle(gh_game_scene_tables*s,const gh_scene_ray_request*r,uint16_t id,uint32_t*f){
  uint32_t flags;gh_scene_ray_status e=gh_scene_ray_triangle_flags(s,id,&flags);if(e)return stop(f,0x12f750,e);if(flags&6)return GH_RAY_OK;
  s->ray.triangle_state->visited[id]=1;const uint8_t*t=s->actor_links[4].view.bytes+(size_t)id*20;uint16_t attr=h(t+12),normal_id=h(t+8);

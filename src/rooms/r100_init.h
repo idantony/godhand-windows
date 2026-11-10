@@ -16,10 +16,16 @@ typedef gh_r100_init_status (*gh_r100_collision_enable)(void *,const char *name,
  * own taskowner). Never acknowledge an
  * unresolvedRELentry. No callback => preciseR100 relativefrontier. */
 typedef gh_r100_init_status (*gh_r100_task_exec)(void *,uint32_t relative_entry,int32_t argument,uint32_t *frontier);
+struct gh_r100_init_tail;
+struct gh_r100_init_tail_bindings;
 typedef struct {gh_boot_work *work;const gh_room_state *room_state;gh_scene_at_manager *at;
  gh_room_pools *pools;gh_scene_meshes *meshes;gh_heap *default_heap;
  gh_r100_om_scalar_view object_view;gh_r100_collision_enable collision_enable;gh_r100_task_exec task_exec;void *context;
  gh_game_scene_tables *actor_tables; /*optionalborrow SAMEcollisiontable owner*/
+ /* Original alternate path calls BC0 synchronously BEFORE task10F8. */
+ gh_r100_init_status (*setup_00000bc0)(void *,uint32_t *frontier);
+ struct gh_r100_init_tail *tail;
+ const struct gh_r100_init_tail_bindings *tail_bindings;
 } gh_r100_init_bindings;
 typedef struct {gh_r207_allocation work;gh_heap *heap;uint16_t known_work_bytes;
  uint32_t stage,frontier,pending_script;uint8_t frontier_relative,ready;

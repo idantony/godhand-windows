@@ -3,16 +3,17 @@
 Updated 2026-11-10. Read Git and live worker ownership before editing. This is
 an ongoing authorized source port, not a playable Windows game yet.
 
-Latest publication candidate is room-transition-34:196C/207checks, all
+Latest public milestone is 787f26e / room-transition-34:196C/207checks, all
 hardware/codec/fullADX opt-ins and matchingDLL RNG20544/20534. Matching hidden/
 muted Windows QA completes487ticks/R100/Main3,6MC/90Movie/368UI; full107F58,
 31C5C0, R020quit/R100SceneAt24units, EMS30 savedrecords and ALL69OMS execute.
 Actual strict frontier is r100.rel+2F30 roofScenario task, worldpackets0,
 renderer/window/cleanup0,processexit4. Private34 receipt is authoritative.
 Standard E analysis reports and bilingual publicdocs were refreshed to34.
-Root is staging exact34 inputs; inspect Git/remote before claiming it pushed.
+Exact34 authored inputs, bilingual docs and curatedprogress were committed and
+pushed successfully; remote main was checked. Formal review saved privately.
 Prior local rollback ea982d2 captured32/2BEDE8, e34265a captured26/153158;
-last confirmed publiccommit before this staging was b78ae9d/snapshot22.
+earlier publiccommit was b78ae9d/snapshot22.
 
 34 derives33 plus physics frozen07/08/09/10 and Rootmanifest. 33 derives32
 plus om309-since346-delta-01, em-batch-01-delta and Rootmanifest/services.
@@ -42,6 +43,39 @@ Current independent batches not yet in34:
 Root Event research: event-data-33/main-imports/ctor/read-flow private probes.
 297680 zeroes15 actual imported Eventcomponent prefixes then setEventNo; it
 is NOT the resourceparser. RELctor46B8->4688 writesVF0 toCF30/40/50.
+
+Latest LOCAL verified integration is room-transition-36:199C/210checks,
+all hardware/codec/fullADX opt-ins and matchingDLL RNG20544/20534 PASS.
+Matching Windows QA exits4 at R100+9B0 after actual2F30 registration;487ticks,
+6MC/90Movie/368UI, worldpackets0, renderer/window/world errors0. Private
+analysis/room-transition-36-verification.json records this. Public34 unchanged.
+Failed35 newSceneStep test exposed observer/retry stepping a completed child
+twice;36 keeps pending observer and cursor after that child, preservingSleep1.
+Do not restart a yielded build merely because its tool handle was lost; read
+the immutable report first. The36 full suite finished before context recovery.
+
+room-transition-37 is FROZEN and VERIFIED202C/213checks, allhardware/codec/
+fullADX opt-ins and matchingDLL RNG20544/20534 PASS. Matching Windows QA488ticks,
+6MC/90Movie/369UI, R100/Main3, actualstrict mainELF30FA98;worldpackets0 and
+renderer/window/world errors0; normal nativecleanup/processexit4. Private
+analysis/room-transition-37-verification.json authoritative. Base36 plus frozen
+r100-counter, r100-init-tail, cockpit-tutorial and Root services/manifests/ray
+export. Root binds SAMEScenario/Event/config/player/fade/display/ELF and SAME
+Cockpit/ID/packed/fonts; actual tutorial147028 and true1FE8A0 3EB wait completed.
+9B0 registeredbutnot yetvisited whileInitpending30FA98: do notclaimEventstarted.
+No runtime3EB CreateObj provider in37. Scenario errors inspected after each
+actual visit; shutdown cancels Scenario before tutorial/source/room destruction.
+Tutorial release detaches its run before405/39 Cockpit guard; not an invented
+original147188 destructor. R100 scripts/counter/tail own no second RoomSave.
+
+Active opengoal_method owns narrowruntime3EB common/factory edits; Root37 uses
+old frozenfactory, NEVER mutableE WIP. Factory's fixedarray mustreserve future
+runtime objects at bind; registry stores object addresses, cannot realloc.
+Root exported shared1365B8 quad primitive in game_ray_static.c/h for dynamic
+query; caller ownsFEnv/nearest. Peer dynamic14 frozen includes geometry,
+corner globals and coupledscene_tables/dynamicheaders; not yet in37. Future
+oneowner initialization133670 and shutdowncancel_update required. EnemySE01+
+object-sounds01 and physics11..13 remain unintegrated frozen batches.
 
 Whole33 separately passed196C/203checks and sameactual2F30. 31 module suite
 passed but its actualARG2C0F90 was fixed32 at verifiedempty-jump SceneExit17

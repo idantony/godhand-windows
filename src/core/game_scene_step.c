@@ -83,10 +83,12 @@ static gh_scene_step_status death_gate(gh_game_scene_step*s,const gh_game_scene_
  if(!(b->scenario.manager->flags&2)&&vitality<1){b->scenario.manager->flags|=2;s->death_callback_pending=1;return death_gate(s,b);}
  if((b->scenario.manager->flags&2)&&vitality>0){b->scenario.manager->flags&=~2u;uint8_t*r=(uint8_t*)b->work;p32(r+0x5e0,w(r+0x5e0)&~0x100000u);}return GH_SCENE_STEP_OK;
 }
-typedef struct {gh_game_scene_step*s;const gh_game_scene_step_bindings*b;gh_task_step_fn original;void*context;} traversal;
+typedef struct {gh_game_scene_step*s;const gh_game_scene_step_bindings*b;gh_task_step_fn original;void*context;gh_scene_step_status error;} traversal;
 static int scenario_visit(void*context,gh_task_manager*m,gh_task_record32*record){traversal*t=context;uint8_t*request=t->b->scenario.bytes+0x50;
  if(m->current_index<0)return GH_THREAD_INVALID;if((uint32_t)m->current_index<t->s->scenario_task_cursor)return 0;t->s->scenario_task_cursor=(uint32_t)m->current_index;
- for(;;){p16(request,0);int e=t->original(t->context,m,record);if(e)return e;uint16_t raw=h(request);if(!raw)return 0;int16_t frames=(int16_t)(raw<32768?(int)raw:(int)raw-65536);
+ for(;;){p16(request,0);int e=t->original(t->context,m,record);if(e)return e;
+  if(t->b->scenario_status){uint32_t frontier=0;t->error=t->b->scenario_status(t->b->scenario_status_context,&frontier);if(t->error){t->s->scenario_status_pending=1;t->s->scenario_task_cursor=(uint32_t)m->current_index+1;fail(t->s,frontier?frontier:0x2d5358,t->error,m->current_index);return GH_THREAD_UNSUPPORTED;}}
+  uint16_t raw=h(request);if(!raw)return 0;int16_t frames=(int16_t)(raw<32768?(int)raw:(int)raw-65536);
   gh_thread_status status=gh_task_threads_sleep(t->b->main_threads,frames);if(status){fail(t->s,0x2d5aa0,GH_SCENE_STEP_THREAD,status);return status;}
   if(m->current_index<0||(uint32_t)m->current_index>=m->count)return 0;if(((m->flags&1)&&!(record->attributes&1))||((m->flags&2)&&!(record->attributes&2)))return 0;
  }
@@ -101,10 +103,11 @@ gh_scene_step_status gh_game_scene_scenario_before_002c3500(gh_game_scene_step*s
  }
  e=action_empty(s,b);if(e)return e;s->scenario_before_stage=0;return GH_SCENE_STEP_OK;
 }
-gh_scene_step_status gh_game_scene_tasks_002d5358(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){if(!s||!b||!b->scenario.bytes||b->scenario.size<0x114||!b->scenario.manager)return GH_SCENE_STEP_ARGUMENT;gh_task_manager*m=b->scenario.manager;traversal t={s,b,m->step,m->step_context};
+gh_scene_step_status gh_game_scene_tasks_002d5358(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){if(!s||!b||!b->scenario.bytes||b->scenario.size<0x114||!b->scenario.manager)return GH_SCENE_STEP_ARGUMENT;gh_task_manager*m=b->scenario.manager;traversal t={s,b,m->step,m->step_context,GH_SCENE_STEP_OK};
  if(!b->main_threads||!b->scenario_threads||m->step!=gh_task_threads_step||m->step_context!=b->scenario_threads||m->count>16||m->capacity<16)return fail(s,0x2d5358,GH_SCENE_STEP_THREAD,0);
+ if(s->scenario_status_pending){if(!b->scenario_status)return fail(s,0x2d5358,GH_SCENE_STEP_ARGUMENT,0);uint32_t frontier=0;gh_scene_step_status e=b->scenario_status(b->scenario_status_context,&frontier);if(e)return fail(s,frontier?frontier:0x2d5358,e,s->detail);s->scenario_status_pending=0;}
  p16(b->scenario.bytes+0x50,0);m->step=scenario_visit;m->step_context=&t;gh_task_run_result r=gh_task_threads_run_nested(b->main_threads,b->scenario_threads);m->step=t.original;m->step_context=t.context;
- if(r.status!=GH_TASK_OK)return fail(s,s->frontier?s->frontier:0x2d57c8,GH_SCENE_STEP_THREAD,r.platform_error);s->scenario_task_cursor=0;return GH_SCENE_STEP_OK;
+ if(t.error)return t.error;if(r.status!=GH_TASK_OK)return fail(s,s->frontier?s->frontier:0x2d57c8,GH_SCENE_STEP_THREAD,r.platform_error);s->scenario_task_cursor=0;return GH_SCENE_STEP_OK;
 }
 gh_scene_step_status gh_game_scene_scenario_move_002c3678(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){gh_scene_step_status e;if(!s||!valid(b))return GH_SCENE_STEP_ARGUMENT;
  if(s->scenario_stage==0){e=death_gate(s,b);if(e)return e;if(!scenario_gate(b))return GH_SCENE_STEP_OK;s->scenario_stage=1;}

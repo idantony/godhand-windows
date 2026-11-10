@@ -47,6 +47,8 @@
 #include "../core/game_om_door_geometry.h"
 #include "../core/game_player_node_cache.h"
 #include "../core/game_actor_motion_ik.h"
+#include "../core/game_event_environment.h"
+#include "../core/packed_message.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -81,6 +83,8 @@ typedef struct {
  gh_om_door_shared *door_shared; /*RootONE mutable429290 six attributes*/
  gh_player_node_names *player_node_names;
  gh_motion_ik_globals *motion_ik_globals; /*RootONE mutable math vectors*/
+ gh_game_event_config *event_config; /*same Root586B30, not a room copy*/
+ gh_packed_message_state *packed; /*same Root packed/font state*/
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;
@@ -118,6 +122,8 @@ typedef struct {
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services *,gh_game_services_scene_view *);
 /* Resolve actual canonical actor identity before caller-specific ID filtering. */
 gh_game_services_status gh_game_services_actor_view(gh_game_services *,uint32_t handle,gh_title_player_view *);
+/* Inspect native script errors immediately after a real Scenario visit. */
+gh_scene_step_status gh_game_services_task_status(gh_game_services *,uint32_t *frontier);
 /* Native continuation/cache metadata only, after original state5 chooses the
  * next Main2/3 visit. Actual room allocations expire later at2A6210. */
 gh_game_services_status gh_game_services_begin_next_room(gh_game_services *);

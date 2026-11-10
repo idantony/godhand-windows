@@ -568,6 +568,7 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.math_globals=&h->math_globals;
         b.door_shared=&h->door_shared;
         b.player_node_names=&h->player_node_names;b.motion_ik_globals=&h->motion_ik_globals;
+        b.event_config=&h->event_config;b.packed=&h->mc_messages;
         e=gh_game_services_create(&b,&h->services);
         if(e)return failure(h,GH_HOST_ASSET,e);
     }
@@ -593,6 +594,8 @@ static int initialize_state2(void *context,gh_game_loop *loop)
 {gh_startup_host *h=context;(void)loop;return service_state(h,2);}
 static int initialize_state3(void *context,gh_game_loop *loop)
 {gh_startup_host *h=context;(void)loop;return service_state(h,3);}
+static gh_scene_step_status scene_scenario_status(void *context,uint32_t *frontier)
+{gh_startup_host*h=context;return gh_game_services_task_status(h->services,frontier);}
 static int update_state4(void *context,gh_game_loop *loop)
 {
     gh_startup_host *h=context;gh_game_services_scene_view s;(void)loop;
@@ -604,7 +607,7 @@ static int update_state4(void *context,gh_game_loop *loop)
         .fade=&h->fade,.display=&h->display,.event=&h->event,.scene_at=s.scene_at,.action_buttons=s.action_buttons,
         .cockpit_action_flags_1414=gh_game_cockpit_action_flags_1414(s.cockpit),.binary32_reference=1,
         .scenario_callback104=s.scenario_callback104,.external=scene_consumer,.external_context=h,
-        .profile_counter=scene_profile_clock,.profile_context=h};
+        .profile_counter=scene_profile_clock,.profile_context=h,.scenario_status=scene_scenario_status,.scenario_status_context=h};
     gh_scene_step_status e=gh_game_scene_step_002a6690(s.step,&b);
     if(e)return entry_frontier(h,s.step->frontier?s.step->frontier:0x2a6690,
         gh_game_services_frontier_module(h->services),s.step->detail?s.step->detail:(int)e);

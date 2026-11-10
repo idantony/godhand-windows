@@ -1,0 +1,16 @@
+#include "r100_counter_task.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define C(x)do{if(!(x)){fprintf(stderr,"FAIL%d %s\n",__LINE__,#x);exit(1);}}while(0)
+static uint32_t rd(const void*p){uint32_t x;memcpy(&x,p,4);return x;}
+static void wr(void*p,uint32_t x){memcpy(p,&x,4);}
+int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t index;gh_disc_entry entry;uint8_t header[16];C(!gh_disc_find(d,"dll/debugoptimize/r100.rel",&index)&&!gh_disc_entry_at(d,index,&entry)&&entry.size==25663&&!gh_disc_read(d,index,0,header,sizeof(header))&&!memcmp(header,"SNR2",4));gh_disc_close(d);
+ gh_heap*heap;C(!gh_heap_create(1024,&heap));gh_r100_init owner={0};C(!gh_heap_allocate(heap,12,16,&owner.work));owner.heap=heap;memset(owner.work.pointer,0xa5,12);((uint8_t*)owner.work.pointer)[4]=0;owner.known_work_bytes=1u<<4;uint8_t room_bytes[0x1650]={0},scenario_bytes[0x114]={0};wr(room_bytes+0x1610,7);gh_room_state room={.active=room_bytes,.size=sizeof(room_bytes)};gh_game_init_state init={0};gh_task_record32 records[16]={0};for(unsigned i=0;i<16;i++)records[i].thread_id=-1;gh_task_manager manager={.records=records,.count=16,.capacity=16,.current_index=-1};gh_task_threads*threads;C(!gh_task_threads_create(&manager,&threads));gh_scene_scenario_view scenario={scenario_bytes,sizeof(scenario_bytes),&manager};gh_r100_counter_bindings bindings={.room_init=&owner,.room=&room,.init=&init,.scenario=scenario,.threads=threads};gh_r100_counter_task task={0};int32_t slot;
+ C(!gh_r100_counter_bind(&task,&bindings)&&!gh_r100_counter_register_000010f8(&task,-1,&slot)&&slot==2&&!task.entered);C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK&&task.entered&&task.stage==0&&task.sleep_calls==1&&rd(owner.work.pointer)==0xa5a5a5a5&&rd(room_bytes+0x1610)==7);
+ C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK&&task.stage==2&&task.status==GH_R100_SCRIPT_OK&&rd(owner.work.pointer)==7&&rd(room_bytes+0x1610)==7&&((uint8_t*)owner.work.pointer)[5]==0&&owner.known_work_bytes==0x3f);for(unsigned i=6;i<12;i++)C(((uint8_t*)owner.work.pointer)[i]==0xa5);
+ for(unsigned i=0;i<3;i++)C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK&&task.status==GH_R100_SCRIPT_OK&&rd(owner.work.pointer)==7&&rd(room_bytes+0x1610)==7&&records[slot].running==1);C(!gh_task_threads_cancel(threads,slot));
+ /* Originalpositivehead cannotbe treatedaszero justbecause a nativeenemy
+  * consumer isnotyetrecovered. No syntheticdeath/alivecountsuccess. */
+ wr(init.enemies+0x500,1);gh_r100_counter_task blocked={0};C(!gh_r100_counter_bind(&blocked,&bindings)&&!gh_r100_counter_register_000010f8(&blocked,-1,&slot));C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK);C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK&&blocked.status==GH_R100_SCRIPT_UNSUPPORTED&&blocked.frontier==0x1028&&blocked.frontier_relative&&rd(room_bytes+0x1610)==7&&records[slot].running==1);C(!gh_task_threads_cancel(threads,slot));
+ C(!gh_task_threads_destroy(threads)&&!gh_heap_release(heap,owner.work)&&!gh_heap_destroy(heap));puts("PASS actualR100REL identity +nativeScenario10F8 firstSleep/emptycanonicalEM count +same12B roomwork/RoomSave1610 loop, preservesunknownbytes, positivehead strict1028; no fakeenemy deaths orscriptcompletion");return 0;}

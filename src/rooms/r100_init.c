@@ -1,4 +1,5 @@
 #include "r100_init.h"
+#include "r100_init_tail.h"
 #include <string.h>
 static uint16_t h(const uint8_t*p){return (uint16_t)(p[0]|(unsigned)p[1]<<8);}
 static uint32_t w(const uint8_t*p){return (uint32_t)h(p)|(uint32_t)h(p+2)<<16;}
@@ -34,8 +35,9 @@ gh_r100_init_status gh_r100_initialize_00000208(gh_r100_init*s,const gh_r100_ini
  default:break;}s->stage++;}
  /* Original firsttask dispatch is deferred onlyuntil its REALnativebody is
   * supplied. Unresolved functions are never registered as empty callbacks. */
- if(s->stage==15){if(!(w(b->room_state->active+4)&0x1000000)&&!(w(raw+0x594)&0x800)){e=task(s,b,0x9b0);if(e)return e;s->stage=17;}else return fail(s,0xbc0,1,GH_R100_INIT_UNSUPPORTED);}
- if(s->stage==17)return fail(s,0x1fa6c0,0,GH_R100_INIT_UNSUPPORTED);
+ if(s->stage==15){if(!(w(b->room_state->active+4)&0x1000000)&&!(w(raw+0x594)&0x800)){e=task(s,b,0x9b0);if(e)return e;s->stage=17;}else{if(!b->setup_00000bc0)return fail(s,0xbc0,1,GH_R100_INIT_UNSUPPORTED);e=b->setup_00000bc0(b->context,&f);if(e)return fail(s,f?f:0xbc0,!f,e);s->stage=16;}}
+ if(s->stage==16){e=task(s,b,0x10f8);if(e)return e;s->stage=17;}
+ if(s->stage==17){if(!b->tail||!b->tail_bindings)return fail(s,0x1fa6c0,0,GH_R100_INIT_UNSUPPORTED);if(b->tail_bindings->work!=b->work)return GH_R100_INIT_ARGUMENT;e=gh_r100_init_tail_step(b->tail,b->tail_bindings);if(e)return fail(s,b->tail->frontier,b->tail->frontier_relative,e);if(!b->tail->complete)return fail(s,0x748,1,GH_R100_INIT_UNSUPPORTED);s->stage=18;s->ready=1;s->frontier=0;s->frontier_relative=0;return GH_R100_INIT_OK;}
  return fail(s,0x208,1,GH_R100_INIT_UNSUPPORTED);
 }
 gh_r100_init_status gh_r100_init_release(gh_r100_init*s){if(!s)return GH_R100_INIT_ARGUMENT;if(gh_collision_scroll_mutation_release(&s->collision))return GH_R100_INIT_CALLEE;if(s->work.pointer&&(!s->heap||gh_heap_release(s->heap,s->work)))return GH_R100_INIT_MEMORY;memset(s,0,sizeof(*s));return GH_R100_INIT_OK;}

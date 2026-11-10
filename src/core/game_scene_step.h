@@ -25,7 +25,7 @@ typedef struct {
  gh_scene_nearcheck nearcheck;int16_t cooldown_1b0;
  uint32_t profile_752cf0,profile_752cfc,profile_752d44,word_5caff4;
  uint32_t stage,frontier,collision_cursor,scenario_task_cursor;int detail;uint64_t completed_frames;
- uint8_t scenario_stage,scenario_before_stage,death_callback_pending,enemy_stage;
+ uint8_t scenario_stage,scenario_before_stage,death_callback_pending,enemy_stage,scenario_status_pending;
  gh_collision_pair_frame collision_frame;
  uint32_t object_wait_acd0; /*previouslyunrepresented574380+ACD0scalar*/
 } gh_game_scene_step;
@@ -38,6 +38,7 @@ typedef struct {
 typedef gh_scene_step_status (*gh_scene_step_external)(void*,uint32_t address,
  uint32_t original_argument,uint32_t *frontier);
 typedef uint32_t (*gh_scene_profile_counter)(void*);
+typedef gh_scene_step_status (*gh_scenario_task_status)(void *,uint32_t *frontier);
 typedef struct {
  gh_boot_work *work;gh_game_init_state *init;gh_game_prepare *prepare;
  gh_core_save_view save;
@@ -53,6 +54,7 @@ typedef struct {
  const gh_scene_hook *scenario_callback104;
  gh_scene_step_external external;void *external_context;
  gh_scene_profile_counter profile_counter;void *profile_context;
+ gh_scenario_task_status scenario_status;void *scenario_status_context;
 } gh_game_scene_step_bindings;
 /* Explicit cold host companion init: caller supplies original Main1A8 seed;
  * ignored whilePFD absent. Does not invent the earlier complete Mainctor. */

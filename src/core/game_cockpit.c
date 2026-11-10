@@ -318,6 +318,42 @@ gh_id_error gh_game_cockpit_get_system_menu(gh_game_cockpit*s,gh_cockpit_system_
  *out=(gh_cockpit_system_menu_view){base(s,0x3a0),s->fields+0x3a0+0x90,0x30};return GH_ID_OK;
 }
 
+gh_id_error gh_game_cockpit_get_tutorial(gh_game_cockpit*s,gh_cockpit_tutorial_view*out){
+ if(!s||!out||!s->ready)return GH_ID_ARGUMENT;
+ *out=(gh_cockpit_tutorial_view){base(s,0x1a20),s->manager,u32(s->fields+0x1a20+0xb4),
+ (uint16_t)(s->fields[0x1a20+0xac]|(unsigned)s->fields[0x1a20+0xad]<<8),
+ u32(s->fields+0x1a20+0xb0)!=0,s->fields[0x1a20+0xb8]};return GH_ID_OK;
+}
+gh_id_error gh_game_cockpit_tutorial_mark_resource(gh_game_cockpit*s,uint32_t job){
+ if(!s||!s->ready||!job)return GH_ID_ARGUMENT;
+ w32(s,0x1a20+0xb4,job);w32(s,0x1a20+0xb0,1);return GH_ID_OK;
+}
+gh_id_error gh_game_cockpit_tutorial_begin_base(gh_game_cockpit*s){
+ if(!s||!s->ready)return GH_ID_ARGUMENT;gh_id_base*b=base(s,0x1a20);
+ if(b->owns_run)return GH_ID_BUSY;
+ if(s->owned_count>=BASES)return GH_ID_CAPACITY;
+ int original;gh_id_error e=gh_id_base_initialize_002a9ea0(s->runtime,b,0x1d,0,rnd,s->random,&original);
+ if(b->owns_run)s->owned[s->owned_count++]=b;
+ if(e){s->frontier=b->first_unported?b->first_unported:0x2a9ea0;return e;}
+ if(original!=1){s->frontier=0x2a9ea0;return GH_ID_NOT_FOUND;}return GH_ID_OK;
+}
+gh_id_error gh_game_cockpit_tutorial_finish_00147028(gh_game_cockpit*s){
+ if(!s||!s->ready)return GH_ID_ARGUMENT;unsigned o=0x1a20;
+ TRY(restart(s,o));base(s,o)->playing=1;
+ gh_id_entry*entries[7];for(unsigned i=0;i<7;i++)TRY(work(s,o,(int)i,o+0x90+i*4,&entries[i]));
+ entries[0]->scale_x=0;entries[0]->scale_y=0;
+ entries[1]->flags|=0x8000000;entries[2]->flags|=0x8000000;
+ entries[3]->message=0x200c;entries[4]->message=0x200c;
+ w16(s,o+0xac,0xffff);s->fields[o+0xb8]=0;return GH_ID_OK;
+}
+gh_id_error gh_game_cockpit_tutorial_detach(gh_game_cockpit*s){
+ if(!s||!s->ready)return GH_ID_ARGUMENT;gh_id_base*b=base(s,0x1a20);
+ if(b->owns_run){int original,freed;gh_id_error e=gh_id_base_release_002aa078(s->runtime,b,&original,&freed);if(e)return e;(void)original;(void)freed;}
+ for(unsigned i=0;i<s->owned_count;)if(s->owned[i]==b){memmove(s->owned+i,s->owned+i+1,(s->owned_count-i-1)*sizeof(*s->owned));s->owned_count--;}else i++;
+ for(unsigned i=0;i<s->ref_count;)if(s->refs[i].offset>=0x1a20+0x90&&s->refs[i].offset<0x1a20+0xac){memmove(s->refs+i,s->refs+i+1,(s->ref_count-i-1)*sizeof(*s->refs));s->ref_count--;}else i++;
+ w32(s,0x1a20+0xb0,0);w16(s,0x1a20+0xac,0xffff);s->fields[0x1a20+0xb8]=0;return GH_ID_OK;
+}
+
 gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit*s,gh_core_save_view save,const uint8_t heat[0x18]){
  if(!s||!s->ready||!save.bytes||save.size<GH_CORE_SAVE_BYTES||!heat)return GH_ID_ARGUMENT;s->frontier=0;
  /*13E400,13C930,13F510 then13E908,147188,1434A8->Heat141CE8. */
