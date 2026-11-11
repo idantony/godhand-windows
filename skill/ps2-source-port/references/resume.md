@@ -528,6 +528,59 @@ history was compacted; private receipts and Git preserve old checkpoints.
   the strict Heat call 002A9BF0. The title caller and original cMcSave UI/write
   remain separate production work. The exact169 composition with HitArea
   verifies the unchanged preimages and dependencies before native testing.
+- Exact171 binds the same scene registry and actor resolver into enemy
+  Move, restoring periodic weapon lookup and the original close attack
+  decision. Windows reaches tick1777, scene1636 and 1305926 world packets
+  with zero graphics or window errors. The target has HP74 and naturally
+  selects state00/15 phase0 at 0021A538. The presented player motion sample
+  is 6.75 and the next 7.5 sample is prepared. Private execution evidence
+  `analysis/room-transition-171-weapon-execution-private.json` pins the run.
+  Exact171 also passes 365 modules and 348 checks (18 skipped). Local
+  rollback `e8ed8ac` contains exact167; public main is still `6be81c8`.
+- Exact174 composes the original 0021A538 attack with the real SEQ effect
+  records and exact 002C7F00/002C8978 native producer. Actual EM02 row6B0
+  records its bank58/index2D request at frame1. The native fixture can reach
+  the following original consumer 0014FB48, which remains under recovery.
+  The other exercised actual EM02 row6A4 returns through 64 original Moves
+  with canonical Give4 active at samples33/34. Exact174 Windows executes the
+  player's original Give/Take contact at tick1778, HP74→71, but a different
+  actor (stamp20, dep0200, row03DC) stops on its bank0 program8D request at
+  002CBF78 before that frame can be presented. Both focused checks passed.
+- Exact175 adds the authenticated CORE8D descriptor/PCM and advances all
+  five original stamp20 motion rows in the no-device fixture. Actual
+  Windows presents the hit and HP change in scene1638. At tick1784 it has
+  1643 presents, 1320495 world packets and zero renderer/GPU/post/window
+  errors. The next call is OM324's 00198CE0 destructor in 0030F650 actor
+  Trans (SceneStep31); the last Move handle is unrelated. Exact177 adds
+  the three corrected motion retry fixtures and reproduces the same
+  Windows result. `analysis/room-transition-177-first-hit-execution-private.json`
+  pins the two adjacent frames, original Take and exact HP subtraction.
+- Exact169 passes broad native verification for the complete selected-file
+  load prefix. Exact170 builds the ordinary Windows executable with Heat
+  and next-room restore. Exact172 directly exercises the selected-file
+  test through `build-native.py --focus memory-card`. Exact173 connects
+  the title Load callback to original cSaveLoad 002BF268 and its distinct
+  owner at 005F38F0, resolved from ELF 003C2648. Focused cursor and card
+  tests pass. Actual load-mode task scheduling and UI remain open.
+  Independent G-only work also verifies the door, clocks, vitality and
+  idle stereo restore, plus normal 0xB400 serialization and slot19 write/read.
+- Exact176 connects real task slot2 and the mode-specific fades/ID family,
+  reinitializes the same card after boot End, and includes save write/restore
+  in the build. A Windows test with an isolated valid synthetic save reads
+  its boot header, reaches R020 and chooses Load (mode3 phase2 sub20), then
+  stops on original bank2 program15 at 002CB8A0. The save is unchanged.
+  Exact178 combines that original R020 sound with slot scan, header and
+  first save list recovery. Native and Windows tests for that composition
+  are in progress. Independent selected I/O, real confirm/countdown,
+  successful fade and exit are verified in G fixtures. The title has
+  active BGM when applying saved audio mode; native active output handling
+  and loaded-room handoff remain open.
+- R100 teardown fixture now retires 231 actual actors, including all 69
+  cold OMS entries and the four runtime tutorial actors, with original
+  deferred holder unload. An independent native fixture verifies the first
+  enemy death mark for weaponless 0202 and 02A2. Armed 0202 stops at
+  original 001B79B0 after its owned HitAreas are marked. Original enemy
+  destructors and the production room-transition integration remain open.
 - The original room exit dispatcher now has actual combined CPU proofs
   through all five OM303, ten OM304 and eight OM305/307 after 156 SCP, PL00,
   PL01 and three OM300. G receipt `r100-om305-307-retire-over155-delta`

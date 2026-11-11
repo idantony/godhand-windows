@@ -127,6 +127,10 @@ def control_observation(command, trace):
     proof.require(len(presented) == int(motion), "control motion status and presentation differ")
     result = {"mode": mode, "saw_event": status[2] == "1", "pressed": status[3] == "1",
               "motion_presented": motion, "input_trace": observations}
+    combat = [line for line in trace if line.startswith("QA_COMBAT ")]
+    if combat:
+        proof.require(mode == "approach-square" and len(combat) <= 16, "invalid combat trace observations")
+        result["combat_trace"] = combat
     if presented:
         marker = r"mode=(walk|run|square|approach-square) handle=([1-9][0-9]*) scene=([1-9][0-9]*)"
         attacks = mode in ("square", "approach-square")
@@ -143,6 +147,36 @@ def control_observation(command, trace):
                           "Square animation sample did not advance")
             result["presented_motion"].update(entry="0010D3A8", sample_before=before, sample=sample)
     return result
+
+
+def presented_player_damage(control, captures):
+    """Correlate the post-tick Take record and HP with two presented frames."""
+    if not control or control["mode"] != "approach-square" or not control["motion_presented"]:
+        return None
+    targets = set()
+    for line in control["input_trace"]:
+        match = re.search(r"\btick=(\d+) .* target=(\d+)$", line)
+        if match:
+            targets.add((int(match[1]), int(match[2])))
+    rows = []
+    pattern = (r"QA_COMBAT tick=(\d+) scene=(\d+) enemy=(\d+) stamp=(\d+) hp=(\d+) "
+               r"player_hit_kind=(\d+) player_hit_power=(-?\d+) xz=[-+0-9.eE]+,[-+0-9.eE]+")
+    for line in control.get("combat_trace", ()):
+        match = re.fullmatch(pattern, line)
+        proof.require(match is not None, "invalid player damage trace row")
+        rows.append(tuple(map(int, match.groups())))
+    visible = {frame["scene_serial"] for frame in captures
+               if frame["presented"] and frame["composite"]["nonblack_rgb_pixels"]}
+    motion_scene = control["presented_motion"]["scene_serial"]
+    for before, after in zip(rows, rows[1:]):
+        tick, scene, handle, stamp, hp, kind, power = after
+        if (before[:4] == (tick - 1, scene - 1, handle, stamp) and handle and
+                (tick, handle) in targets and kind == 7 and power > 0 and before[4] - hp == power and
+                motion_scene < scene and scene - 1 in visible and scene in visible):
+            return {"enemy_stamp": stamp, "hit_kind": kind, "hit_power": power,
+                    "hp_before": before[4], "hp_after": hp,
+                    "contact_scene_serial": scene, "damage_scene_serial": scene}
+    return None
 
 
 def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=None,
@@ -265,6 +299,9 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
                               "An external process SHA256 can anchor output fingerprints against coordinated edits."]}
     if capture_series:
         result["captures"] = capture_observations(inputs, scratch, capture, hashes, command, trace)
+        damage = presented_player_damage(control, result["captures"])
+        if damage is not None:
+            observation["presented_player_damage"] = damage
     inputs.recheck()
     return result, inputs
 
@@ -285,6 +322,8 @@ def main():
     parser.add_argument("--capture-sha256")
     parser.add_argument("--capture-series", action="store_true",
                         help="verify captured world/final pairs and count nonblack RGB pixels")
+    parser.add_argument("--require-presented-player-damage", action="store_true",
+                        help="require a visible player Take and matching next-frame HP decrease")
     args = parser.parse_args()
     try:
         output = args.output.resolve()
@@ -295,7 +334,10 @@ def main():
                                    expected_native_error=args.expected_native_error,
                                    process_sha=args.process_sha256, stdout_sha=args.stdout_sha256,
                                    stderr_sha=args.stderr_sha256, capture_name=args.capture,
-                                   capture_sha=args.capture_sha256, capture_series=args.capture_series)
+                                   capture_sha=args.capture_sha256,
+                                   capture_series=args.capture_series or args.require_presented_player_damage)
+        proof.require(not args.require_presented_player_damage or "presented_player_damage" in receipt["observation"],
+                      "no presented player damage with an authenticated contact and HP change")
         inputs.recheck()
         with output.open("x", encoding="utf-8") as stream:
             json.dump(receipt, stream, indent=2)

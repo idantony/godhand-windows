@@ -44,6 +44,7 @@
 #include "../core/game_event_audio.h"
 #include "../core/game_event_link.h"
 #include "../core/game_hitarea_objects.h"
+#include "../core/game_hitarea_frame.h"
 #include "../core/game_hitarea_internal.h"
 #include "../core/game_enemy_entry.h"
 #include "../core/game_dynamic_corners.h"
@@ -207,6 +208,7 @@ struct gh_startup_host {
     gh_om_door_shared door_shared;
     gh_player_node_names player_node_names;gh_motion_ik_globals motion_ik_globals;
     gh_dynamic_corner_tables dynamic_corners;
+    uint32_t player_hit_pause_words[2];
     uint8_t camera_update_stage;
     gh_render_draw_env draw_env;
     gh_r020_reference_profile title_reference;
@@ -1163,6 +1165,7 @@ static int initialize_native_bgm(gh_startup_host *h)
     uint32_t camera_frontier=0;gh_camera_status camera_status=gh_game_camera_envelope_from_elf(&h->camera_envelope,elf,(size_t)bytes,&camera_frontier);
     gh_title_player_status player_vector_status=gh_player_shared_vector_from_elf(&h->player_shared_vector,elf,(size_t)bytes);
     gh_actor_model_status actor_light_status=gh_actor_light_globals_from_elf(&h->actor_light_globals,elf,(size_t)bytes);
+    gh_hitarea_status hit_pause_status=gh_hitarea_pause_words_from_elf(elf,(size_t)bytes,h->player_hit_pause_words);
     gh_scene_placement_status door_shared_status=gh_om_door_shared_from_elf(&h->door_shared,elf,(size_t)bytes);
     gh_player_nodes_status node_names_status=gh_player_node_names_from_elf(&h->player_node_names,elf,(size_t)bytes);
     gh_actor_motion_status motion_globals_status=gh_motion_ik_globals_from_elf(&h->motion_ik_globals,elf,(size_t)bytes);
@@ -1189,6 +1192,7 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(camera_status)return entry_frontier(h,camera_frontier,0,camera_status);
     if(player_vector_status)return failure(h,GH_HOST_ASSET,player_vector_status);
     if(actor_light_status)return failure(h,GH_HOST_ASSET,actor_light_status);
+    if(hit_pause_status)return failure(h,GH_HOST_ASSET,hit_pause_status);
     if(door_shared_status)return failure(h,GH_HOST_ASSET,door_shared_status);
     if(node_names_status)return failure(h,GH_HOST_ASSET,node_names_status);
     if(motion_globals_status)return failure(h,GH_HOST_ASSET,motion_globals_status);
@@ -1431,7 +1435,7 @@ static int update_state4(void *context,gh_game_loop *loop)
         .scenario_callback104=s.scenario_callback104,.external=scene_consumer,.external_context=h,
         .profile_counter=scene_profile_clock,.profile_context=h,.scenario_status=scene_scenario_status,.scenario_status_context=h,
         .dynamic_corners=&h->dynamic_corners,.boot_elf=h->boot_reference,.boot_elf_bytes=h->boot_reference_bytes,
-        .action_native=&h->action_bindings};
+        .action_native=&h->action_bindings,.player_hit_pause_words=h->player_hit_pause_words};
     h->event_link_relative=0;
     gh_scene_step_status e=gh_game_scene_step_002a6690(s.step,&b);
     if(e){

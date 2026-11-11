@@ -1,19 +1,28 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-11T08:32:53.783592+00:00",
-  "stage": "native-windows-R100-first-visible-room-frame",
+  "verified_utc": "2026-11-11T11:22:27.390129+00:00",
+  "stage": "native-windows-R100-first-player-hit",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
     "scope": "original R100 room and HUD during the opening fade",
-    "frame_serial": 1603,
-    "nonblack_world_pixels": 228916,
-    "nonblack_composite_pixels": 222192,
-    "opening_fade_rgba": "77000000",
+    "frame_serial": 1610,
+    "nonblack_world_pixels": 229090,
+    "nonblack_composite_pixels": 229063,
+    "opening_fade_rgba": "00000000",
     "fade_active": true,
     "synthetic_control": {
-      "mode": "run",
-      "first_motion_presented_frame": 1599
+      "mode": "approach-square",
+      "first_motion_presented_frame": 1629
+    },
+    "presented_player_damage": {
+      "enemy_stamp": 19,
+      "hit_kind": 7,
+      "hit_power": 3,
+      "hp_before": 74,
+      "hp_after": 71,
+      "contact_scene_serial": 1638,
+      "damage_scene_serial": 1638
     }
   },
   "original_world_layer_observed_before_UI": true,
@@ -85,13 +94,13 @@
       "next_entry_available": true,
       "current_frontier": {
         "module": "main ELF",
-        "address": "002CBF78",
+        "address": "00198CE0",
         "operation": "Original unresolved consumer"
       },
       "alternate_original_branch": {
         "GameMain_case0_and_parallel_asset_loader_tested": true,
         "full_native_services_tested": true,
-        "next_unavailable_entry": "0x002CBF78"
+        "next_unavailable_entry": "0x00198CE0"
       },
       "earlier_boot_and_complete_main_loop_run": false
     },
@@ -159,12 +168,12 @@
     }
   },
   "native_windows_execution": {
-    "scope": "Original R100 first visible room frame and native player run with synthetic gamepad input; bounded unfinished source port",
+    "scope": "Original R100 first presented player hit, bounded unfinished native Windows source port",
     "hidden": true,
     "muted": true,
     "synthetic_input_fixture": true,
     "actual_user_input_observed": false,
-    "ticks": 1744,
+    "ticks": 1784,
     "original_MC_frames_presented": 6,
     "Movie0_frames_presented": 90,
     "video_EOF_and_audio_done": true,
@@ -172,17 +181,17 @@
     "current_room": "0100",
     "next_room": "0100",
     "assets_loaded": true,
-    "original_title_scene_frames_presented": 1603,
+    "original_title_scene_frames_presented": 1643,
     "bounded_execution_running": false,
-    "frontier": "002CBF78",
+    "frontier": "00198CE0",
     "frontier_module": "main ELF",
-    "original_world_packets_submitted": 1243415,
-    "player_updates_completed": 10,
-    "child_updates_completed": 1233,
-    "object_updates_completed": 82805,
-    "emitter_slots_active": 9,
-    "particle_slots_active": 62,
-    "scene_update_stage": 13,
+    "original_world_packets_submitted": 1320495,
+    "player_updates_completed": 50,
+    "child_updates_completed": 1273,
+    "object_updates_completed": 85721,
+    "emitter_slots_active": 4,
+    "particle_slots_active": 36,
+    "scene_update_stage": 31,
     "last_move_entry": "00208BE0",
     "full_game_scene_or_gameplay_observed": false
   },
@@ -736,6 +745,8 @@
       "test-game-effects",
       "test-game-scene-filters",
       "test-title-texture",
+      "test-adx-mono",
+      "test-se-adx-sequence",
       "test-sound-scene-tick",
       "test-game-world-light",
       "test-game-world-light-r100",
@@ -844,6 +855,7 @@
       "test-game-enemy-started-pitch",
       "test-game-ema2-impact-sound",
       "test-game-enemy-state71-sound",
+      "test-game-enemy-6b-sound",
       "test-se-pitch",
       "test-game-actor-attached-pitch",
       "test-game-terrain-sphere",
@@ -910,7 +922,7 @@
     }
   },
   "remaining": [
-    "Advance original object states and continuous frames beyond the opening fade; execute R100 Scenario/Event flows",
+    "Advance original combat, object retirement and R100 progression beyond the first hit",
     "Earlier subsystem initialization and full main-loop integration",
     "Continuous dynamic animation and actor behavior",
     "Native rendering, audio, input and save adapters",

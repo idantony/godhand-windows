@@ -69,6 +69,7 @@ typedef struct {
  const struct gh_dynamic_corner_tables *dynamic_corners; /*RootONE static globals*/
  const uint8_t *boot_elf;size_t boot_elf_bytes; /*borrow descriptor identities for HitArea LOS*/
  const gh_action_step_bindings *action_native;
+ const uint32_t *player_hit_pause_words; /* Root data at 3BF190/194 */
 } gh_game_scene_step_bindings;
 /* Explicit cold host companion init: caller supplies original Main1A8 seed;
  * ignored whilePFD absent. Does not invent the earlier complete Mainctor. */

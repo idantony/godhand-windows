@@ -118,7 +118,7 @@ static gh_scene_step_status object_pool(gh_game_scene_step*s,const gh_game_scene
  }
  float rate;memcpy(&rate,(const uint8_t*)b->work+0x574,4);uint32_t f=0;
  gh_hitarea_frame_bindings bindings={.tables=b->actors,.boot_elf=b->boot_elf,.boot_elf_size=b->boot_elf_bytes,
-  .current_player=b->title_player?&b->title_player->view:NULL};
+  .current_player=b->title_player?&b->title_player->view:NULL,.player_pause_words=b->player_hit_pause_words};
  gh_hitarea_status e=gh_hitarea_frame_resume_bound_001fdfd8(b->init,b->work,rate,GH_STATIC_BINARY32_REFERENCE,&s->hitarea_frame,&bindings,&f);
  return !e?GH_SCENE_STEP_OK:fail(s,f?f:0x1fdfd8,e==GH_HITAREA_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE,e);
 }

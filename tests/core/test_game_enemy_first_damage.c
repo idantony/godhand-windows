@@ -708,6 +708,18 @@ restore_scenery_fixture:
     return 0;
 }
 
+static gh_actor_motion_status record_stamp19_attack_sound(void *context,
+    const gh_motion_sound_request *request,uint32_t *handle,uint32_t *frontier)
+{
+    const gh_enemy_actor *enemy=context;
+    if(!request||!handle||!frontier||!request->actor||request->actor->bytes!=enemy->entry.object.view.bytes||
+       request->model!=enemy->motion.motion.b.model)return GH_ACTOR_MOTION_ARGUMENT;
+    fprintf(stderr,"stamp19 attack voice bank%d program%04x\n",request->bank,(uint16_t)request->program);
+    *handle=0;
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
 static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_t *elf, size_t elf_size,
     const gh_enemy_ems_bindings *bindings, gh_enemy_ems *owner, gh_enemy_ems_live *first,
     const gh_enemy_ems_live *appearance2, const gh_enemy_ems_live *selector1,const gh_enemy_ems_live *stamp11,
@@ -1181,6 +1193,103 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             status,move.frontier,move.substate67_stage,word(actor+0x2f4),word(actor+0x16d4),word(actor+0x768));
         CHECK(!status&&!move.frontier&&move.original_returned &&
             word(actor+0x2f4)==0x00000900 && (word(actor+0x16d4)&0x08000000u));
+        camera_target_fixture target_fixture={.enemies=owner,.player=&factory,.child=&child};
+        const gh_player_target_bindings targets={.pools=b->entry.pools,.actors=b->actors,
+            .player=&player.view,.resolve=resolve_camera_target,.context=&target_fixture,.elf=elf,.elf_bytes=elf_size};
+        CHECK(weapon_live->actor&&weapon_live->weapon);
+        const gh_title_player_view *weapon=&weapon_live->actor->view;
+        CHECK((word(weapon->bytes+0x2fc)>>16)==0x363 && !weapon->bytes[0x664]);
+        uint8_t old_weapon_position[12];
+        memcpy(old_weapon_position,weapon->alias_f0,12);
+        const uint32_t old_weapon_flags=word(weapon->bytes+0x250);
+        const uint32_t old_weapon_timer=word(weapon->bytes+0x66c);
+        float weapon_xyz[3]={actor_xyz[0],actor_xyz[1],actor_xyz[2]-3};
+        memcpy(weapon->alias_f0,weapon_xyz,12);
+        memcpy(weapon->bytes+0x250,&(uint32_t){old_weapon_flags&~0x80008000u},4);
+        memcpy(weapon->bytes+0x66c,&(uint32_t){0},4);
+        weapon->bytes[0x664]=1; /* Original 1D07E0 available floor-weapon input. */
+
+        memcpy(actor+0x2f4,&(uint32_t){0x00010000},4);
+        memcpy(raw_work+0x210,actor+0x17d0,4);
+        move=(gh_enemy202_move){0};
+        CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+        CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+        CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+        CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+        status=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+        fprintf(stderr,"stamp19 periodic weapon status%d pc%08x stage%u state%08x available=%u timer=%08x goto=%08x/%u\n",
+            status,move.frontier,move.substate67_stage,word(actor+0x2f4),weapon->bytes[0x664],
+            word(weapon->bytes+0x66c),word(actor+0x16c0),word(actor+0x16c4));
+        CHECK(!status&&!move.frontier&&move.original_returned && word(actor+0x2f4)==0x00001300);
+        CHECK(word(weapon->bytes+0x66c)==0x43e10000 && word(actor+0x16c0)==0x43960000 &&
+            word(actor+0x16c4)==8 && !memcmp(actor+0x16b0,weapon_xyz,12));
+        memcpy(weapon->alias_f0,old_weapon_position,12);
+        memcpy(weapon->bytes+0x250,&old_weapon_flags,4);
+        memcpy(weapon->bytes+0x66c,&old_weapon_timer,4);
+        weapon->bytes[0x664]=0;
+        memcpy(actor+0x16c0,&(uint32_t){0},4);
+        memcpy(actor+0x16c4,&(uint32_t){0},4);
+
+        float current_actor[3];
+        memcpy(current_actor,near->entry.object.view.alias_f0,12);
+        memcpy(target_xyz,current_actor,12);
+        target_xyz[2]+=1.005f;
+        memcpy(player.view.alias_f0,target_xyz,12);
+        memcpy(player.view.bytes+0x630,target_xyz,12);
+        CHECK(!gh_player_target_angle_002da038(elf,elf_size,current_actor,target_xyz,0,3.1415927f,&enemy_yaw,&frontier));
+        CHECK(!gh_player_target_angle_002da038(elf,elf_size,target_xyz,current_actor,0,3.1415927f,&player_yaw,&frontier));
+        memcpy(actor+0x104,&enemy_yaw,4);
+        memcpy(player.view.bytes+0x104,&player_yaw,4);
+        memcpy(actor+0x2f4,&(uint32_t){0x00010000},4);
+        memcpy(actor+0x16d4,&(uint32_t){0x08000000},4);
+        memcpy(init->enemies+0x510,&(uint32_t){0},4);
+        memcpy(init->enemies+0x514,&(uint32_t){0},4);
+        gh_game_mt_seed_0030f2b0(&init->random,4);
+        move=(gh_enemy202_move){0};
+        CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+        CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+        CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+        CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+        status=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+        fprintf(stderr,"stamp19 periodic attack status%d pc%08x stage%u state%08x distance=%08x flags=%08x phase=%u class=%u rng=%u timer=%u/%u\n",
+            status,move.frontier,move.substate67_stage,word(actor+0x2f4),word(actor+0x618),
+            word(actor+0x16d0),actor[0x2f6],word(actor+0x474),init->random.index,
+            word(actor+0x16dc),word(init->enemies+0x510));
+        CHECK(!status&&!move.frontier&&move.original_returned);
+        CHECK(word(actor+0x2f4)==0x00001500 && (word(actor+0x16d0)&0x200000u) &&
+            word(actor+0x16dc)==50 && word(init->enemies+0x510)==15 &&
+            word(actor+0x171c)==0x44160000u);
+
+        near->motion.motion.b.sound=record_stamp19_attack_sound;
+        near->motion.motion.b.sound_context=near;
+        uint32_t first_attack_row=0;
+        unsigned attack_frames=0, active_frames=0;
+        for(;attack_frames<100&&actor[0x2f5]==0x15;attack_frames++){
+            memcpy(raw_work+0x210,&(uint32_t){word(actor+0x17d0)^1u},4);
+            move=(gh_enemy202_move){0};
+            CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+            CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+            CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+            CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+            status=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+            if(!attack_frames)first_attack_row=move.reaction_resource_offset;
+            if(near->hitareas.units[4].bytes[0x46]) {
+                CHECK(near->hitareas.units[4].bytes[0x46]==0x37 && word(near->hitareas.units[4].bytes+0x4c)==20);
+                active_frames++;
+            }
+            fprintf(stderr,"stamp19 attack15 frame%u status%d pc%08x stage%u row%04x motion%08zx seq%08zx state%08x flags%04x sample%08x Give4 %02x/%u\n",
+                attack_frames,status,move.frontier,move.substate67_stage,move.reaction_resource_offset,
+                move.substate67_motion.motion_offset,near->motion.motion.sequence_offset,
+                word(actor+0x2f4),word(actor+0x3ac)&0xffff,word(actor+0x430),
+                near->hitareas.units[4].bytes[0x46],word(near->hitareas.units[4].bytes+0x4c));
+            CHECK(!status&&!move.frontier&&move.original_returned);
+        }
+        fprintf(stderr,"stamp19 attack15 terminal row %04x frames %u active %u state %08x\n",
+            first_attack_row,attack_frames,active_frames,word(actor+0x2f4));
+        CHECK(attack_frames==64 && active_frames==2 && first_attack_row==0x6a4 && word(actor+0x2f4)==0);
+        near->motion.motion.b.sound=NULL;
+        near->motion.motion.b.sound_context=NULL;
+
         memcpy(player.view.alias_f0,old_player,12);
         memcpy(player.view.bytes+0x630,old_previous,12);
         memcpy(player.view.bytes+0x104,&old_player_yaw,4);

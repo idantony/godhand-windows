@@ -4,6 +4,25 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## First presented player hit in R100
+
+A hidden, muted Windows run uses synthetic gamepad input to approach an
+original enemy and start Gene's Square attack. The original hit applies 3
+damage to the selected enemy. Frame 1,637 records HP 74 and frame 1,638
+records HP 71 and the matching Take event. Both frames reach the window
+after the room fade. The run continues to tick 1,784 and scene frame 1,643,
+with 1,320,495 world packets and zero renderer, GPU, postprocess or window errors.
+
+The next original call is the OM324 actor destructor at `0x00198CE0`.
+Continued combat, room transitions and full save/load remain under development.
+
+隐藏、静音的 Windows 实跑通过合成手柄输入接近原版敌人，并让 Gene 按方块出拳。
+第 1637 帧记录敌人 HP 为 74，第 1638 帧记录原版受击事件、3 点伤害和 HP 降到 71。
+两帧均在房间淡入完成后呈现。运行继续到 1784 ticks 和第 1643 帧，共提交 1320495 个
+世界绘制包，渲染器、GPU、后处理和窗口错误均为 0。
+
+下一处原版调用是 OM324 物件析构 `0x00198CE0`。后续战斗、房间切换和完整存读档仍在开发。
+
 ## First visible R100 room frame and native player movement
 
 A hidden, muted Windows run reaches tick 1,744 and presents scene frame

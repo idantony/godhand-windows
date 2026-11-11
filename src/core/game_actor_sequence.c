@@ -43,6 +43,47 @@ static gh_actor_motion_status sequence_interval_flags(gh_actor_motion *s,
  sh(actor+0x3ac,flags);
  return GH_ACTOR_MOTION_OK;
 }
+
+/* Original 002C8978..002C8A7C queues up to eight effects. 002C7F00
+ * copies a 12-byte record for format one and returns zeros otherwise. */
+static gh_actor_motion_status sequence_effects(gh_actor_motion *s,
+ const uint8_t *sequence,uint32_t *frontier)
+{
+ const unsigned count=h(sequence+0x16);
+ const size_t offset=s->sequence_offset+h(sequence+0x14);
+ const int stored=sequence[0x1c]==1;
+ if(stored && count && (offset<s->sequence_offset ||
+     !span(s->b.resource_bytes,offset,(size_t)count*12)))
+  return fail(frontier,0x2c7f00,GH_ACTOR_MOTION_BOUNDS);
+
+ uint8_t *actor=s->b.model->root.bytes;
+ const float time=rf(actor+0x430);
+ const float rate=rf(&s->sequence_rate_bits);
+ const float phase_rate=s->b.work->phase569==1?mul(rate,.5f):rate;
+ const float window=mul(mul(rf(actor+0x444),rf(actor+0x3a8)),phase_rate);
+ if(count && (!isfinite(time)||!isfinite(window)))
+  return fail(frontier,0x2c7f00,GH_ACTOR_MOTION_UNSUPPORTED);
+
+ const uint8_t zero[12]={0};
+ unsigned queued=0;
+ for(unsigned i=0;i<count && queued<8;i++){
+  const uint8_t *record=stored?s->b.resource+offset+i*12:zero;
+  const float first=(float)h(record+4);
+  if(!(first<=time && time<add(first,window)) || (actor[0x410+queued]&0x80))
+   continue;
+  uint8_t *entry=actor+0x3b0+queued*12;
+  memcpy(entry+4,record,4);
+  entry[0]=record[7];
+  entry[1]=record[8];
+  entry[8]=record[9];
+  entry[9]=record[10];
+  actor[0x410+queued]|=0x80;
+  ++queued;
+ }
+ sh(actor+0x3ae,queued);
+ return GH_ACTOR_MOTION_OK;
+}
+
 static gh_actor_motion_status body(gh_actor_motion*s,float rate,uint32_t*f){if(!s->sequence_valid)return s->sequence_stage?GH_ACTOR_MOTION_ARGUMENT:GH_ACTOR_MOTION_OK;const uint8_t*b=s->b.resource;size_t n=s->b.resource_bytes,o=s->sequence_offset;if(!span(n,o,0x20))return GH_ACTOR_MOTION_BOUNDS;const uint8_t*seq=b+o;uint8_t*p=s->b.model->root.bytes;if(memcmp(seq,"SEQ\0",4))return GH_ACTOR_MOTION_BOUNDS;uint32_t rate_bits;memcpy(&rate_bits,&rate,4);if(s->sequence_stage&&s->sequence_rate_bits!=rate_bits)return GH_ACTOR_MOTION_BUSY;
  if(!s->sequence_stage){if(w(p+0x418))return fail(f,0x2c7fd0,GH_ACTOR_MOTION_UNSUPPORTED);float time=rf(p+0x430),step=mul(mul(rf(p+0x444),rf(p+0x3a8)),s->b.work->phase569==1?mul(rate,.5f):rate);if(!isfinite(time)||!isfinite(step)||step<0)return fail(f,0x2c7fd0,GH_ACTOR_MOTION_UNSUPPORTED);s->sequence_time=time;s->sequence_window=step;s->sequence_rate_bits=rate_bits;
  /* Actual802C/8080 bug:418 is assigned only when ALREADYequal. OriginalNULL
@@ -51,6 +92,6 @@ static gh_actor_motion_status body(gh_actor_motion*s,float rate,uint32_t*f){if(!
  if(h(seq+14)){sh(p+0x3a0,0);sh(p+0x3a2,0);sh(p+0x3a4,0);}s->sequence_index=0;s->sequence_pending=0;s->sequence_stage=1;}
  if(s->sequence_stage==1){unsigned count=h(seq+14);size_t table=o+h(seq+12);if(seq[0x1a]==1&&count&&(table<o||!span(n,table,(size_t)count*12)))return GH_ACTOR_MOTION_BOUNDS;while(s->sequence_index<count){if(!s->sequence_pending){uint8_t zero[12]={0};const uint8_t*r=seq[0x1a]==1?b+table+s->sequence_index*12:zero;float first=(float)h(r);if(!(first<=s->sequence_time&&s->sequence_time<add(first,s->sequence_window)&&rf(p+0x41c)!=s->sequence_time)){s->sequence_index++;continue;}unsigned program=h(r+2)+(r[8]&0x30)*16;sh(p+0x3a0,h(r+2));sh(p+0x3a2,r[8]);sh(p+0x3a4,h(r+4));s->pending_sound=(gh_motion_sound_request){.model=s->b.model,.actor=&s->b.model->root,.bank=(int16_t)r[8],.program=(int16_t)program};s->sequence_source_flags=r[6];s->sequence_variations=(uint16_t)h(r+4);s->sequence_pending=1;}gh_actor_motion_status e=sound(s,f);if(e)return e;}sh(p+0x3ac,0);s->sequence_stage=2;}
  if(s->sequence_stage==2){gh_actor_motion_status status=sequence_interval_flags(s,seq,f);if(status)return status;s->sequence_effect_gate=(uint8_t)(!(p[0x420]&1));s->sequence_stage=3;}
- if(s->sequence_stage==3){if(s->sequence_effect_gate){if(h(seq+22))return fail(f,0x2c7f00,GH_ACTOR_MOTION_UNSUPPORTED);sh(p+0x3ae,0);}put(p+0x41c,w(p+0x430));put(p+0x3a8,w(p+0x440));s->sequence_stage=0;}
+ if(s->sequence_stage==3){if(s->sequence_effect_gate){gh_actor_motion_status status=sequence_effects(s,seq,f);if(status)return status;}put(p+0x41c,w(p+0x430));put(p+0x3a8,w(p+0x440));s->sequence_stage=0;}
  return GH_ACTOR_MOTION_OK;}
 gh_actor_motion_status gh_actor_motion_sequence_002c7fd0(gh_actor_motion*s,float rate,gh_static_transform_policy policy,uint32_t*f){if(!s||!s->bound||!s->complete||!s->b.model||!s->b.work||!f)return GH_ACTOR_MOTION_ARGUMENT;*f=0;if(policy!=GH_STATIC_BINARY32_REFERENCE||!isfinite(rate)||rate<0)return fail(f,0x2c7fd0,GH_ACTOR_MOTION_UNSUPPORTED);fenv_t env;if(feholdexcept(&env))return GH_ACTOR_MOTION_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_ACTOR_MOTION_UNSUPPORTED;}gh_actor_motion_status e=body(s,rate,f);if(fesetenv(&env))return GH_ACTOR_MOTION_UNSUPPORTED;return e;}

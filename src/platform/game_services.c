@@ -1772,6 +1772,8 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   }
   s->enemy_opacity=(gh_object_opacity_environment){s->b.init,&s->camera,&s->title_player.view,1};
   gh_actor_motion_status e=gh_enemy202_move_bind_navigation(move,&s->step.nearcheck);
+  const gh_player_target_bindings targets=gh_game_services_scene_targets(s);
+  if(!e)e=gh_enemy202_move_bind_targets(move,&targets);
   /* PL00 construction publishes +698 NULL; positive writers require a typed owner. */
   if(!e&&!move->stage&&s->title_player.view.size>=0x69c&&!u32(s->title_player.view.bytes+0x698))
    e=gh_enemy202_move_bind_player_aux_698(move,NULL);

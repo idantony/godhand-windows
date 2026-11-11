@@ -69,7 +69,7 @@ def presented_scene_summary(scratch, source_root, execution, window_build):
         if not frame["presented"] or not frame["composite"]["nonblack_rgb_pixels"]:
             continue
         summary = {
-            "scope": "original R100 room and HUD during the opening fade",
+            "scope": "original R100 room and HUD" + (" during the opening fade" if frame["fade_visible"] else ""),
             "frame_serial": frame["scene_serial"],
             "nonblack_world_pixels": frame["world"]["nonblack_rgb_pixels"],
             "nonblack_composite_pixels": frame["composite"]["nonblack_rgb_pixels"],
@@ -81,6 +81,8 @@ def presented_scene_summary(scratch, source_root, execution, window_build):
             summary["synthetic_control"] = {
                 "mode": control["mode"], "first_motion_presented_frame": control["presented_motion"]["scene_serial"],
             }
+        if "presented_player_damage" in observed:
+            summary["presented_player_damage"] = observed["presented_player_damage"]
         return summary
     raise ValueError("No nonblack R100 composite reached the window")
 
@@ -226,6 +228,9 @@ def main():
                     "method": "https://opengoal.dev/docs/developing/decompiling/getting_started/"}}
     if presented_scene:
         progress["stage"] = "native-windows-R100-first-visible-room-frame"
+        if presented_scene.get("presented_player_damage"):
+            progress["stage"] = "native-windows-R100-first-player-hit"
+            progress["remaining"][0] = "Advance original combat, object retirement and R100 progression beyond the first hit"
     elif world_layer:
         progress["stage"] = "native-windows-R100-world-layer-opening-fade"
     target = ROOT / "docs" / "progress.json"

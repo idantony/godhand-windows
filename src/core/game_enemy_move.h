@@ -2,6 +2,7 @@
 #define GH_GAME_ENEMY_MOVE_H
 #include "game_enemy_damage.h"
 #include "game_enemy_near.h"
+#include "game_player_targets.h"
 #include "game_effect_create.h"
 #include "game_actor_motion_call.h"
 #include "game_object_opacity.h"
@@ -56,6 +57,7 @@ typedef struct {
     gh_enemy_ema2_hit_sound near_sound;
     void *near_sound_context;
     const gh_room_state *room_state;
+    gh_player_target_bindings targets;
 } gh_enemy202_move;
 
 /* Borrow original Main+18C bound PFD2 owner before entering Move. */
@@ -65,6 +67,8 @@ gh_actor_motion_status gh_enemy202_move_bind_opacity(gh_enemy202_move *,const gh
 gh_actor_motion_status gh_enemy202_move_bind_player_aux_698(gh_enemy202_move *,const gh_title_player_view *);
 /* Borrows the existing scene effect owner for the original impact call. */
 gh_actor_motion_status gh_enemy202_move_bind_impact(gh_enemy202_move *,const gh_effect_create_bindings *);
+/* Canonical room actor registry, borrowed by the periodic weapon search. */
+gh_actor_motion_status gh_enemy202_move_bind_targets(gh_enemy202_move *,const gh_player_target_bindings *);
 /* Same actor-attached sound owner for original 292D18 -> 288F00. */
 gh_actor_motion_status gh_enemy202_move_bind_near_sound(gh_enemy202_move *,gh_enemy_ema2_hit_sound,void *);
 /* Borrow the selected RoomSave for original 2736F8 -> 295498. */

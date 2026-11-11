@@ -76,7 +76,10 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
  other_actor.original_vtable214^=4;C(gh_hitarea_frame_resume_bound_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&bound,&frontier)==GH_HITAREA_UNSUPPORTED&&frontier==0x2a9468);other_actor.original_vtable214^=4;
  uint8_t*alias=other_actor.alias_f0;other_actor.alias_f0=other_bytes+sizeof(other_bytes)-4;C(gh_hitarea_frame_resume_bound_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&bound,&frontier)==GH_HITAREA_BOUNDS&&frontier==0x2a9458);other_actor.alias_f0=alias;
  bound.current_player=&player.view;C(gh_hitarea_frame_resume_bound_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&bound,&frontier)==GH_HITAREA_UNSUPPORTED&&frontier==0x1fe348);
- uint32_t explicit_pause_fixture[2]={0,0};bound.player_pause_words=explicit_pause_fixture;
+ uint32_t actual_pause_words[2]={UINT32_MAX,UINT32_MAX};
+ C(gh_hitarea_pause_words_from_elf(c.elf,52,actual_pause_words)==GH_HITAREA_BOUNDS&&actual_pause_words[0]==UINT32_MAX);
+ C(!gh_hitarea_pause_words_from_elf(c.elf,c.elf_size,actual_pause_words)&&!actual_pause_words[0]&&!actual_pause_words[1]);
+ bound.player_pause_words=actual_pause_words;
  C(!gh_hitarea_frame_resume_bound_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&bound,&frontier)&&!frame.active);
  const gh_title_player_view*last_actor;C(!gh_hitarea_object_last_hit_actor(&box1,&last_actor)&&last_actor&&last_actor->bytes==player.view.bytes&&(w(box1.bytes+0x60)&3)==3);
 

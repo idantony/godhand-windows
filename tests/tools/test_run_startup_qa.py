@@ -108,6 +108,30 @@ class StartupRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(frontier.proof.ProofError, "presentation differ"):
             frontier.control_observation(command, [status])
 
+    def test_presented_player_damage_requires_same_target_hit_and_visible_health_update(self):
+        control = {"mode": "approach-square", "motion_presented": True,
+                   "presented_motion": {"scene_serial": 1629},
+                   "input_trace": ["QA_CONTROL mode=approach-square tick=1778 updates=44 target=253"],
+                   "combat_trace": [
+                       "QA_COMBAT tick=1777 scene=1637 enemy=253 stamp=19 hp=74 player_hit_kind=0 player_hit_power=0 xz=.2,20.5",
+                       "QA_COMBAT tick=1778 scene=1638 enemy=253 stamp=19 hp=71 player_hit_kind=7 player_hit_power=3 xz=.2,20.4",
+                   ]}
+        frames = [{"scene_serial": scene, "presented": True, "composite": {"nonblack_rgb_pixels": 10}}
+                  for scene in (1637, 1638)]
+        self.assertEqual(frontier.presented_player_damage(control, frames), {
+            "enemy_stamp": 19, "hit_kind": 7, "hit_power": 3, "hp_before": 74, "hp_after": 71,
+            "contact_scene_serial": 1638, "damage_scene_serial": 1638,
+        })
+        frames[1]["presented"] = False
+        self.assertIsNone(frontier.presented_player_damage(control, frames))
+        frames[1]["presented"] = True
+        for field, old, new in ((1, "enemy=253", "enemy=254"), (1, "hp=71", "hp=70"),
+                                (1, "scene=1638", "scene=1637"), (1, "player_hit_kind=7", "player_hit_kind=46")):
+            with self.subTest(new=new):
+                modified = control["combat_trace"].copy()
+                modified[field] = modified[field].replace(old, new)
+                self.assertIsNone(frontier.presented_player_damage(dict(control, combat_trace=modified), frames))
+
     def test_frontier_capture_range_hashes_both_layers_and_ignores_alpha(self):
         prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, 500, 370, 3)
         qa = self.qa(playable_game_verified=False, frontier_module="main ELF")

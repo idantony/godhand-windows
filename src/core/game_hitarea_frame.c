@@ -31,6 +31,15 @@ static int elf_read(const gh_hitarea_frame_bindings*b,uint32_t va,size_t n,uint8
  if(!b||!b->boot_elf||b->boot_elf_size<52)return 0;const uint8_t*p=b->boot_elf;size_t z=b->boot_elf_size;if(memcmp(p,"\177ELF\1\1",6))return 0;uint32_t off=w(p+28);unsigned count=p[44]|(unsigned)p[45]<<8,stride=p[42]|(unsigned)p[43]<<8;if(stride<32||off>z||count>(z-off)/stride)return 0;int found=0;
  for(unsigned i=0;i<count;i++){const uint8_t*h=p+off+(size_t)i*stride;if(w(h)!=1)continue;uint32_t base=w(h+8),len=w(h+16),file=w(h+4);if(va<base||(uint64_t)va+n>(uint64_t)base+len)continue;uint64_t at=(uint64_t)file+va-base;if(at>z||n>z-at||found++)return 0;memcpy(out,p+(size_t)at,n);}return found==1;
 }
+gh_hitarea_status gh_hitarea_pause_words_from_elf(const void *elf,size_t bytes,uint32_t out[2])
+{
+    if(!elf||!out)return GH_HITAREA_ARGUMENT;
+    const gh_hitarea_frame_bindings bindings={.boot_elf=elf,.boot_elf_size=bytes};
+    uint8_t raw[8];
+    if(!elf_read(&bindings,0x3bf190,sizeof(raw),raw))return GH_HITAREA_BOUNDS;
+    out[0]=w(raw);out[1]=w(raw+4);
+    return GH_HITAREA_OK;
+}
 static gh_hitarea_status actor_position(const gh_title_player_view*a,const gh_hitarea_frame_bindings*b,float*out,uint32_t*f){
  if(!a||!a->bytes||a->size<0x218)return fail(f,0x2a9468,GH_HITAREA_BOUNDS);uint32_t vt=w(a->bytes+0x214);if(vt!=a->original_vtable214)return fail(f,0x2a9468,GH_HITAREA_UNSUPPORTED);uint8_t d[8];
  if(!elf_read(b,vt+0x90,8,d))return fail(f,0x2a9468,GH_HITAREA_UNSUPPORTED);

@@ -13,14 +13,14 @@ not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 from the user's ISO and returns to the room. In a hidden, muted Windows run,
 synthetic gamepad input moves Gene within roughly one unit of an original
 enemy and starts the original Square attack. The fully visible room includes
-successive attack animation frames. The run reaches 1,776 ticks and presents
-1,635 scene frames, including earlier title and room startup frames. It
-submits 1,303,779 world packets with zero renderer, GPU, postprocess and
+successive attack frames. Gene's punch applies 3 damage to that enemy, whose
+HP falls from 74 to 71 in presented scene frame 1,638. The run reaches 1,784
+ticks and presents 1,643 scene frames, including title and room startup.
+It submits 1,320,495 world packets with zero renderer, GPU, postprocess and
 window errors.
 
-The run stops in the nearby enemy's periodic weapon lookup at `0x002DDAB0`.
-The attack's hit and damage, continued combat, room transitions and full
-save/load still need end-to-end verification.
+The next original call reached is `0x00198CE0`. Continued combat, room
+transitions and full save/load still need end-to-end verification.
 
 ### Verified progress
 
@@ -51,8 +51,8 @@ save/load still need end-to-end verification.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters. Subsequent opening frames create original
   event effects, update their lifetimes and render sprites and framebuffer warp.
-- The latest frozen source builds 365 C modules and passes 349 native checks.
-  Seventeen checks that need extra tools or devices were skipped in this run.
+- The latest frozen source builds 365 C modules and passes 348 native checks.
+  Eighteen checks that need extra tools or devices were skipped in this run.
   Earlier Windows verification exercised muted hardware audio, movie decoding
   and the full independent ADX comparison.
   Restricted GPU pixels match separate CPU equations. The recovered OT traversal
@@ -66,10 +66,10 @@ output. Real-resource tests cover attached ADPCM voices with original random
 pitch. Native world rendering preserves the original shared OT order, material
 state and packed coordinates; exact wide integer coverage is independently
 checked across the full 16-bit XY range. Original walk/run states and their
-PL00 animation/root displacement pass focused tests, while platform analog
-input is still being connected. The opening's final composites include the
-original fade, dialogue poses and camera changes. The next scenario and
-combat paths remain under recovery.
+PL00 animation/root displacement pass focused tests. Windows QA exercises
+native input mapping with synthetic gamepad samples. The opening's final
+composites include the original fade, dialogue poses and camera changes.
+The next scenario and combat paths remain under recovery.
 
 Project evidence tools verify actual instruction bytes, calls, imports and
 static memory sites. Their generated reports remain private; see
@@ -157,12 +157,12 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 
 **仍处于早期开发。** 已从用户 ISO 播完 R100 开场十个镜头并回到房间。隐藏、静音的
 Windows 测试通过合成手柄输入让 Gene 接近原版敌人至约一个游戏距离单位，再按方块
-触发原版攻击。房间淡入已完成，窗口连续呈现攻击动画。运行到 1776 ticks，
-呈现 1635 个场景帧，包含此前的标题和房间启动帧。累计提交 1303779 个世界绘制包，
+触发原版攻击。房间淡入后，窗口连续呈现出拳动画，第 1638 个场景帧记录了命中和敌人 HP
+从 74 降到 71。运行到 1784 ticks，呈现 1643 个场景帧，包含标题和房间启动帧。
+累计提交 1320495 个世界绘制包，
 渲染器、GPU、后处理和窗口错误均为 0。
 
-运行停在近处敌人的周期武器查询 `0x002DDAB0`。攻击命中与扣血、后续战斗、房间切换和
-完整存读档仍待端到端验证。
+运行随后到达原版调用 `0x00198CE0`。后续战斗、房间切换和完整存读档仍待端到端验证。
 
 ### 已验证的进展
 
@@ -183,8 +183,8 @@ Windows 测试通过合成手柄输入让 Gene 接近原版敌人至约一个游
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始 FX 调用 0x30F228 创建 4 个环境发射器。
   后续片头帧创建原剧情特效，更新其生命周期，并绘制精灵和画面扭曲。
-- 最新冻结源码编译 365 个 C 模块，通过 349 项原生检查，本次跳过 17 项需要额外工具或设备的检查。
-  在固定源码副本验证。受限 GPU 像素与独立 CPU 方程一致；绘制保留原 OT 的层级、
+- 最新冻结源码编译 365 个 C 模块，通过 348 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
+  受限 GPU 像素与独立 CPU 方程一致。绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
   这不是 PS2 实机验证。上游匹配比例也不是本项目的移植完成比例。
