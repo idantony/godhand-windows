@@ -114,6 +114,12 @@ typedef struct gh_startup_snapshot {
     uint32_t event_camera_cuts,event_actor_records,event_timing_rows;
     uint32_t event_actor_handle,event_actor_parts,event_actors_initialized,event_actor_accessory_handle;
     uint8_t event_actor_jacket_attached;
+    int32_t event_cut;
+    float event_cut_frame;
+    uint8_t event_motion_camera_active;
+    uint32_t effect_frontier, effect_emitter_slot, effect_emitter_serial;
+    uint32_t effect_emitter_mode, effect_emitter_class, effect_emitter_step;
+    uint32_t effect_esp_slot, effect_esp_step;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization

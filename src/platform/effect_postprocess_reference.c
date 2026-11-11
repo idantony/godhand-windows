@@ -122,3 +122,52 @@ done:
  if(!status){for(unsigned y=0;y<dst->height;y++)memcpy(dst->rgba+(size_t)y*dst->stride,copy+(size_t)y*row_bytes,row_bytes);*out=receipt;*f=0;}
  free(copy);return status;
 }
+
+gh_effect_post_status gh_effect_postprocess_capture_scene(const gh_effect_trans_packet *p,
+ const gh_effect_post_sampler *state,const gh_effect_post_surface *scene,
+ gh_effect_post_surface *capture,uint32_t x_origin,uint32_t y_origin,int *first_row_known)
+{
+ if(!p||!first_row_known||!surface_valid(scene)||!surface_valid(capture))return GH_EFFECT_POST_ARGUMENT;
+ if(p->kind!=GH_EFFECT_PASS_SCENE_CAPTURE||p->original_callee!=0x2fa620||
+    p->source!=GH_EFFECT_SURFACE_SCENE_COLOR||p->destination!=GH_EFFECT_SURFACE_3C00||
+    p->quad_count!=8||p->prim!=0x116||p->test!=0x30000||
+    p->tex0!=UINT64_C(0x2000000664020e00)||p->alpha!=UINT64_C(0x8000000044)||
+    p->zbuf!=UINT64_C(0x13a0000f8)||p->frame_mask!=0xff000000u||
+    !p->writes_tex0||p->writes_texa||p->writes_clamp||!p->inherited_sampler||!p->texture_flush_after||
+    !p->restores_scene_target||p->restore_frame_mask||p->restore_zbuf!=0x3a0000f8||
+    x_origin!=28672||y_origin!=29184||overlap(scene,capture))
+  return GH_EFFECT_POST_UNSUPPORTED;
+ if(scene->width!=512||scene->height!=448||capture->width!=256||capture->height!=448)
+  return GH_EFFECT_POST_BOUNDS;
+ for(unsigned strip=0;strip<8;strip++){
+  const gh_effect_trans_quad *quad=p->quads+strip;
+  if(quad->vertex_count!=2)return GH_EFFECT_POST_UNSUPPORTED;
+  for(unsigned end=0;end<2;end++){
+   const gh_effect_trans_vertex *vertex=quad->vertices+end;
+   if(vertex->x12_4!=(int32_t)(x_origin+(strip+end)*512)||
+      vertex->y12_4!=(int32_t)(y_origin+end*7168)||
+      vertex->u12_4!=(strip+end)*1024+8||vertex->v12_4!=end*7168+4||
+      vertex->rgba!=0x80808080u||vertex->z!=0xffffu||vertex->q!=1)
+    return GH_EFFECT_POST_UNSUPPORTED;
+  }
+ }
+ int linear;
+ gh_effect_post_status status=sampler(state,&linear);
+ if(status)return status;
+ uint8_t boundary[4];
+ unsigned first_y=linear?1u:0u;
+ status=gh_effect_post_sample(scene,512,512,state,8,first_y*16+4,boundary);
+ if(status)return status;
+ status=gh_effect_post_sample(scene,512,512,state,255*32+8,447*16+4,boundary);
+ if(status)return status;
+ for(unsigned y=first_y;y<448;y++){
+  for(unsigned x=0;x<256;x++){
+   uint8_t rgba[4];
+   status=gh_effect_post_sample(scene,512,512,state,x*32+8,y*16+4,rgba);
+   if(status)return status;
+   memcpy(capture->rgba+(size_t)y*capture->stride+x*4,rgba,3);
+  }
+ }
+ *first_row_known=!first_y;
+ return GH_EFFECT_POST_OK;
+}

@@ -10,16 +10,26 @@ extern "C" {
 /* Actual306528 integer ABI: bank/index/actor/config(NULL subset)/mode/selector.
  * selector==-1 denotes SAME actor, never a host pointer cast. */
 typedef struct {uint32_t bank,index;const gh_title_player_view *actor;int32_t mode,selector;} gh_effect_create_request;
+/* REL1640 matches work row +4 kind and +8 code. Return stable native views
+ * for a live row, or both NULL for a completed original lookup with no row. */
+typedef gh_effect_status (*gh_effect_event_actor_resolve)(void *,uint16_t kind,uint8_t actor_code,
+ const gh_title_player_view **,const gh_actor_model **,uint32_t *frontier);
 typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;
- gh_game_mt *random;const gh_actor_model *model;} gh_effect_create_bindings;
+ gh_game_mt *random;const gh_actor_model *model;
+ gh_effect_event_actor_resolve event_actor;void *event_actor_context;} gh_effect_create_bindings;
 typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_request request;
  gh_effect_view est;uint32_t stage,row,count,slot,serial,frontier,config_flags;gh_game_mt *random_identity;int original_return;
- uint8_t active,complete,configuration_305e88;} gh_effect_create_call;
+ const gh_title_player_view *event_row_actor;const gh_actor_model *event_row_model;
+ uint8_t active,complete,configuration_305e88,configuration_2fa158;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
 /* Only the known non-NULL305E88 configuration (unit scales/VF0 vectors,
  * flags40, actorNULL, mode=index+2200). Caller still owns the414 mark. */
 gh_effect_status gh_effect_create_ambient_begin_00305e88(gh_effect_create_call *,uint32_t index);
+/* 2FA158's explicit configuration and camera cut -> bank 6 index. The
+ * 2FA240 row actor is distinct from the original NULL selector argument. */
+gh_effect_status gh_effect_create_event_cut_begin_002fa158(gh_effect_create_call *,uint32_t cut);
+gh_effect_status gh_effect_event_cut_present_002fa128(const gh_game_effects *,uint32_t cut,int *present);
 gh_effect_status gh_game_effect_create_00306528(gh_effect_create_call *,const gh_effect_create_bindings *);
 typedef struct {gh_effect_view record;const gh_title_player_view *actor,*selector;
  const gh_actor_model *model;const gh_actor_part *part;uint32_t serial;
@@ -48,6 +58,7 @@ gh_effect_status gh_effect_create_bind_frame_globals(gh_game_effects *,struct gh
 gh_effect_status gh_effect_create_bind_frame_actors(gh_game_effects *,gh_game_scene_tables *);
 /* Called only after actualtype6 virtualInit computation has returned1. */
 gh_effect_status gh_effect_create_esp_commit_type6(gh_game_effects *,unsigned,uint32_t);
+gh_effect_status gh_effect_create_esp_commit_12(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_1a(gh_game_effects *,unsigned,uint32_t);
 /* Explicit host destruction after this slot's tasks/jobs stop; onlyverified
  * type6 NULLactor domain, never originalruntimeESP dtor. */

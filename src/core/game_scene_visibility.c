@@ -36,7 +36,14 @@ static gh_scene_post_status report(gh_scene_visibility*s,const gh_room_vector*v,
  }return GH_POST_OK;
 }
 gh_scene_post_status gh_scene_visibility_step_00307b28(gh_scene_visibility*s,const gh_scene_visibility_bindings*b,uint32_t*f){
- if(f)*f=0;if(!s||s->identity!=s||!b||!b->scene.work||!b->scene.pools||!b->scene.tables)return GH_POST_ARGUMENT;if(s->bound){if(!same(&s->b,b))return GH_POST_ARGUMENT;}else{s->b=*b;s->bound=1;}if(s->complete)return GH_POST_OK;
+ if(f)*f=0;if(!s||s->identity!=s||!b||!b->scene.work||!b->scene.pools||!b->scene.tables)return GH_POST_ARGUMENT;
+ if(s->bound){
+  gh_scene_visibility_bindings previous=s->b;
+  if(!s->phase&&!s->complete)previous.scene.camera=b->scene.camera;
+  if(!same(&previous,b))return GH_POST_ARGUMENT;
+  s->b.scene.camera=previous.scene.camera;
+ }else{s->b=*b;s->bound=1;}
+ if(s->complete)return GH_POST_OK;
  if(!s->phase){if(word((const uint8_t*)b->scene.work+0x5d8)&0x200000u){s->complete=1;return GH_POST_OK;}s->phase=1;}
  if(s->phase==1){while(s->previous<32){uint32_t h=b->scene.tables->scroll_link_words[s->previous];if(h){if(s->known_previous[s->previous]!=h)return fail(f,0x14b6f8,GH_POST_UNSUPPORTED);gh_scene_post_status e=mask(s,h,0,f);if(e)return e;}s->previous++;}s->phase=2;}
  const gh_room_vector*v;gh_scene_post_status e=registry(s,&v,f);if(e)return e;

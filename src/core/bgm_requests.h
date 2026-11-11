@@ -49,6 +49,7 @@ gh_bgm_status gh_bgm_event_start_002d1d00(gh_bgm_requests *,unsigned channel,uin
     int32_t delay,int *original);
 gh_bgm_status gh_bgm_event_wait_002d1dd0(const gh_bgm_requests *,unsigned channel,uint32_t row,int *ready);
 gh_bgm_status gh_bgm_event_fade_002d1e18(gh_bgm_requests *,unsigned channel,int32_t row);
+gh_bgm_status gh_bgm_event_data_end_fade_002d1958(gh_bgm_requests *);
 /* Full immediate mode5 R020event0 path, including realnativeprepare,original
  * update andlistinsert. Doesnotstartplayback untiloriginalflagsrequest it. */
 gh_bgm_status gh_bgm_event_set_002d15a8(gh_bgm_requests *,uint32_t event,int16_t arg3,int16_t arg4);

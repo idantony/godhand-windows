@@ -28,6 +28,8 @@ gh_actor_model_status gh_actor_model_object_program_reset(gh_actor_model *,unsig
 gh_actor_model_status gh_actor_model_node_or_flags(gh_actor_model *,unsigned index,uint16_t offset,uint32_t value);
 /* Same bounded node owner, for original visibility bit set/clear consumers. */
 gh_actor_model_status gh_actor_model_node_mask_flags(gh_actor_model *,unsigned index,uint16_t offset,uint32_t and_mask,uint32_t or_mask);
+/* Actual REL3258 no-secondary path: same native nodes' four tint words. */
+gh_actor_model_status gh_actor_model_set_all_node_tints(gh_actor_model *, const uint32_t rgba_bits[4]);
 /* Shared149738 continuation. Public callers use initialize, not a second init. */
 gh_actor_model_status gh_actor_model_build_nodes(gh_actor_model *,gh_static_transform_policy,int *);
 gh_actor_model_status gh_actor_model_release_nodes(gh_actor_model *);

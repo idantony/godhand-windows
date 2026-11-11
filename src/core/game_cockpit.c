@@ -255,7 +255,9 @@ static gh_id_error frame_move_base(gh_game_cockpit*s,unsigned o,const gh_cockpit
 static float frame_number(const uint8_t*p){uint32_t n=u32(p);float f;memcpy(&f,&n,4);return f;}
 gh_id_error gh_game_cockpit_bind_gameplay(gh_game_cockpit*s,const gh_cockpit_gameplay_bindings*b){
  if(!s||!b||!b->init||!b->pools||b->player_known>1||(b->player&&(!b->player->bytes||b->player->size<0x300)))return GH_ID_ARGUMENT;
- if(s->gameplay_bound){const gh_cockpit_gameplay_bindings*a=&s->gameplay;int same=a->init==b->init&&a->pools==b->pools&&a->camera==b->camera&&a->resolve_handle==b->resolve_handle&&a->context==b->context;if(!same)return GH_ID_BUSY;if(a->player_known&&(a->player_known!=b->player_known||a->player!=b->player))return GH_ID_BUSY;if(!a->player_known&&s->radar_move_stage)return GH_ID_BUSY;}
+ if(s->gameplay_bound){const gh_cockpit_gameplay_bindings*a=&s->gameplay;int same=a->init==b->init&&a->pools==b->pools&&a->resolve_handle==b->resolve_handle&&a->context==b->context;if(!same)return GH_ID_BUSY;
+  if(a->camera!=b->camera&&(s->update_stage||s->draw_stage||!b->camera||b->camera->identity!=b->init->active_camera))return GH_ID_BUSY;
+  if(a->player_known&&(a->player_known!=b->player_known||a->player!=b->player))return GH_ID_BUSY;if(!a->player_known&&s->radar_move_stage)return GH_ID_BUSY;}
  s->gameplay=*b;s->gameplay_bound=1;return GH_ID_OK;
 }
 static gh_id_error gameplay_move_base(gh_game_cockpit*s,unsigned o,const gh_cockpit_frame_callbacks*c){

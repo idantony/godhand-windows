@@ -231,6 +231,9 @@ struct WorldSampler {
 };
 struct PostFrame {
     std::vector<uint8_t> pixels[4];
+    std::vector<uint8_t> warp_capture;
+    uint32_t capture_serial=0,capture_slot=0;
+    int capture_first_row_known=0;
     gh_effect_post_context context={};
     unsigned cleared=0;
     void initialize(uint32_t x,uint32_t y){
@@ -244,10 +247,68 @@ struct PostFrame {
         context.visible_width=512;context.visible_height=448;context.colclamp=1;
     }
 };
+static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packet &packet,
+    WorldSampler &sampler,PostFrame &post,uint32_t x,uint32_t y)
+{
+    if(!sampler.known()||!packet.inherited_sampler||packet.writes_clamp)return GH_ID_UNSUPPORTED;
+    if(packet.kind==GH_EFFECT_PASS_SCENE_CAPTURE){
+        if(packet.writes_texa||!packet.serial)return GH_ID_UNSUPPORTED;
+        post.initialize(x,y);
+        post.warp_capture.resize(256*448*4);
+        auto &scene=post.pixels[0];
+        app.world_gpu_error=gh_model_renderer_readback(app.world_renderer,scene.data(),scene.size(),nullptr,0);
+        if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+        gh_effect_post_surface target={post.warp_capture.data(),post.warp_capture.size(),256*4,256,448};
+        const gh_effect_post_sampler state={sampler.tex1,sampler.clamp,1,GH_EFFECT_SAMPLE_NATIVE_SEPARABLE_4BIT};
+        app.effect_post_error=gh_effect_postprocess_capture_scene(&packet,&state,&post.context.surfaces[0],&target,
+            x,y,&post.capture_first_row_known);
+        if(app.effect_post_error!=GH_EFFECT_POST_OK)return GH_ID_UNSUPPORTED;
+        post.capture_serial=packet.serial;
+        post.capture_slot=packet.slot;
+    }else{
+        if(packet.original_callee!=0x2f02b8||!packet.serial||post.capture_serial!=packet.serial||
+           post.capture_slot!=packet.slot||!packet.writes_tex0||!packet.writes_texa||packet.texa!=0x80||
+           packet.tex0!=UINT64_C(0x2000000620113c00)||packet.source!=GH_EFFECT_SURFACE_3C00||
+           packet.destination!=GH_EFFECT_SURFACE_SCENE_COLOR||packet.quad_count!=1||
+           packet.quads[0].vertex_count!=6||!packet.restores_scene_target||
+           packet.restore_frame_mask||packet.restore_zbuf!=0x3a0000f8||
+           (packet.zbuf!=0x3a0000f8&&packet.zbuf!=UINT64_C(0x13a0000f8)))
+            return GH_ID_UNSUPPORTED;
+        gh_static_gs_vertex vertices[6]={};
+        for(unsigned i=0;i<6;i++){
+            const auto &v=packet.quads[0].vertices[i];
+            if(v.q!=1||v.z!=0xfff0||v.u12_4||v.v12_4)return GH_ID_UNSUPPORTED;
+            // Q is one, so every interpolated T lies within the fan's
+            // vertex range. These bounds leave room for linear neighbors.
+            if(!post.capture_first_row_known&&!(v.t>=2.0f/256&&v.t<=255.0f/256)){
+                app.effect_post_error=GH_EFFECT_POST_BOUNDS;
+                return GH_ID_UNSUPPORTED;
+            }
+            vertices[i].stq[0]=v.s;vertices[i].stq[1]=v.t;vertices[i].stq[2]=v.q;
+            vertices[i].xyz_fixed4[0]=v.x12_4;vertices[i].xyz_fixed4[1]=v.y12_4;
+            vertices[i].xyz_fixed4[2]=(int32_t)(v.z<<4);
+            for(unsigned channel=0;channel<4;channel++)vertices[i].rgba[channel]=(v.rgba>>(channel*8))&255;
+        }
+        gh_model_draw_state state={};
+        state.test=packet.test;state.alpha=packet.alpha;state.tex1=sampler.tex1;state.clamp=sampler.clamp;
+        state.primitive=(uint16_t)packet.prim;state.frame_mask=packet.frame_mask;
+        state.xy_offset_x16=x;state.xy_offset_y16=y;state.zbuf_psm=58;
+        state.z_write=(uint8_t)((packet.zbuf>>32)==0);state.colclamp=state.native_float_reference=1;
+        app.world_gpu_error=gh_model_renderer_draw_scene_warp(app.world_renderer,&state,post.warp_capture.data(),
+            post.warp_capture.size(),packet.texa,vertices);
+        if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+        post.capture_serial=0;
+    }
+    ++app.effect_post_packets;
+    app.world_frontier=0;
+    return GH_ID_OK;
+}
 static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p,WorldSampler &sampler,
     PostFrame &post,uint32_t x,uint32_t y)
 {
     app.world_frontier=p.original_callee;
+    if(p.kind==GH_EFFECT_PASS_SCENE_CAPTURE||p.kind==GH_EFFECT_PASS_SCENE_WARP)
+        return consume_scene_warp(app,p,sampler,post,x,y);
     if(p.kind==GH_EFFECT_PASS_SPRITE){
         // 2FEC38 writes CLAMP_1, but consumes the current TEX1_1.
         if(!p.writes_clamp||p.clamp||!p.inherited_sampler||!p.writes_tex0||p.prim!=0x54||
@@ -680,6 +741,13 @@ int main(int argc,char **argv)
             d.event_actor_handle,d.event_actor_parts,d.event_actors_initialized,d.event_actor_accessory_handle,
             (unsigned)d.event_actor_jacket_attached,(unsigned)fade.state,(unsigned)fade.count,(unsigned)fade.time,
             fade.color_from,fade.color_to,shift);
+        std::fprintf(stderr,"QA_EVENT_PLAYBACK cut%d frame%.3f motionCamera%u\n",
+            d.event_cut,(double)d.event_cut_frame,(unsigned)d.event_motion_camera_active);
+        if(d.effect_frontier)std::fprintf(stderr,
+            "QA_EFFECT_FRONTIER {\"pc\":\"%08X\",\"emitter_slot\":%u,\"emitter_serial\":%u,"
+            "\"emitter_mode\":%u,\"particle_class\":%u,\"emitter_step\":%u,\"esp_slot\":%u,\"esp_step\":%u}\n",
+            d.effect_frontier,d.effect_emitter_slot,d.effect_emitter_serial,d.effect_emitter_mode,
+            d.effect_emitter_class,d.effect_emitter_step,d.effect_esp_slot,d.effect_esp_step);
     }
     if(qa_new_game)for(unsigned i=0;i<app.snapshot.emitter_samples;i++)std::fprintf(stderr,"QA Emitter slot%u bank%u kind%u flags%08X known%u type%u\n",app.snapshot.emitter_slots[i],app.snapshot.emitter_banks[i],app.snapshot.emitter_kinds[i],app.snapshot.emitter_flags[i],app.snapshot.emitter_known[i],app.snapshot.emitter_types[i]);
     if(qa_new_game&&app.snapshot.current_actor_ready){

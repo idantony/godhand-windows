@@ -2,6 +2,7 @@
 #define GH_GAME_EVENT_PLAY_ENV_H
 
 #include "game_event_components.h"
+#include "game_event_data_prefix.h"
 #include "game_event_environment.h"
 #include "game_init.h"
 
@@ -15,6 +16,13 @@ gh_game_event_status gh_event_env_init_play_00005930(
     gh_event_components *components, const gh_game_event_config *config,
     gh_boot_work *work, gh_screen_fade *fade, const gh_display_state *display,
     uint32_t *frontier);
+
+gh_game_event_status gh_event_env_move_play_000059a0(
+    gh_event_components *, gh_boot_work *, uint32_t *frontier, int *relative);
+gh_game_event_status gh_event_env_extra_move_00006ad8(
+    gh_event_components *, uint32_t *frontier);
+gh_game_event_status gh_event_se_init_absent_00009a88(
+    gh_event_components *, const gh_event_data_prefix *, uint32_t *frontier);
 
 typedef struct {
     const gh_game_event *event;

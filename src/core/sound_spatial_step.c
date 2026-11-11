@@ -20,7 +20,7 @@ gh_sound_scene_status gh_sound_listener_update_002cc150(gh_sound_control*s,const
  uint32_t flags=word((const uint8_t*)w+0x5e4);s->listener_mode110=(flags&0x20080040u)?0:1;
  int effective=player?s->listener_mode110:0;
  if(!effective){
-  if(!camera||!camera->constructed||camera->identity!=&init->camera||init->active_camera!=camera->identity)return fail(f,0x2cc150,GH_SOUND_SCENE_UNSUPPORTED);
+  if(!camera||!camera->constructed||!camera->identity||init->active_camera!=camera->identity)return fail(f,0x2cc150,GH_SOUND_SCENE_UNSUPPORTED);
   for(unsigned i=0;i<4;i++)s->listener_position_c0[i]=word(camera->fields+0x210+i*4);
   for(unsigned i=0;i<16;i++)s->listener_matrix_d0[i]=word(camera->fields+0x140+i*4);
   return GH_SOUND_SCENE_OK;

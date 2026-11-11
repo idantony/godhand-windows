@@ -8,10 +8,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-typedef enum {GH_EFFECT_SURFACE_SCENE_COLOR,GH_EFFECT_SURFACE_3900,GH_EFFECT_SURFACE_3A00,GH_EFFECT_SURFACE_3B00,GH_EFFECT_SURFACE_MATERIAL} gh_effect_surface;
-typedef enum {GH_EFFECT_PASS_CLEAR,GH_EFFECT_PASS_DOWNSAMPLE,GH_EFFECT_PASS_GAUSSIAN,GH_EFFECT_PASS_COMPOSITE,GH_EFFECT_PASS_SPRITE} gh_effect_pass_kind;
+typedef enum {GH_EFFECT_SURFACE_SCENE_COLOR,GH_EFFECT_SURFACE_3900,GH_EFFECT_SURFACE_3A00,GH_EFFECT_SURFACE_3B00,GH_EFFECT_SURFACE_MATERIAL,GH_EFFECT_SURFACE_3C00} gh_effect_surface;
+typedef enum {GH_EFFECT_PASS_CLEAR,GH_EFFECT_PASS_DOWNSAMPLE,GH_EFFECT_PASS_GAUSSIAN,GH_EFFECT_PASS_COMPOSITE,GH_EFFECT_PASS_SPRITE,GH_EFFECT_PASS_SCENE_WARP,GH_EFFECT_PASS_SCENE_CAPTURE} gh_effect_pass_kind;
 typedef struct {int32_t x12_4,y12_4;uint32_t z;uint16_t u12_4,v12_4;uint32_t rgba;float q;float s,t;} gh_effect_trans_vertex;
-typedef struct {uint8_t vertex_count;gh_effect_trans_vertex vertices[4];} gh_effect_trans_quad;
+typedef struct {uint8_t vertex_count;gh_effect_trans_vertex vertices[6];} gh_effect_trans_quad;
 /* Restricted semantic nativepasses, not a generic GIF/GS interpreter. Surface
  * names refer to frontend-owned resources in the ONE renderer. Coordinates
  * preserve originalGS12.4 and FST UV12.4; sampler state is INHERITED (noTEX1
@@ -22,7 +22,7 @@ typedef struct {gh_ui_order_group order;uint32_t original_callee,slot,serial;
  uint8_t writes_tex0,inherited_sampler,quad_count;
  uint8_t restores_scene_target,texture_flush_after;uint32_t restore_frame_mask;uint64_t restore_zbuf;
  gh_effect_trans_quad quads[25];
- uint8_t writes_clamp;uint64_t clamp;const gh_stage_material *material;} gh_effect_trans_packet;
+ uint8_t writes_clamp,writes_texa;uint64_t clamp,texa;const gh_stage_material *material;} gh_effect_trans_packet;
 typedef gh_effect_status (*gh_effect_trans_emit)(void *,const gh_effect_trans_packet *);
 typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;gh_effects_frame_globals *globals;const gh_display_state *display;
  gh_static_transform_policy policy;gh_frame_numeric_policy cvt_policy;

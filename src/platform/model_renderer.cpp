@@ -22,6 +22,8 @@ struct gh_model_renderer{
  Owned<ID3D11Buffer> parameters;Owned<ID3D11Texture2D> color,depth,color_readback,depth_readback;
  Owned<ID3D11UnorderedAccessView> color_target,depth_target;
  std::vector<std::unique_ptr<Material>> materials;
+ std::unique_ptr<Material> scene_capture;
+ std::vector<uint8_t> scene_capture_pixels;
 };
 #define GPU(call) do{HRESULT model_gpu_hr=(call);if(FAILED(model_gpu_hr)){std::fprintf(stderr,"model GPU failure %d %08lx\n",__LINE__,(unsigned long)model_gpu_hr);return GH_MODEL_GPU_FAILURE;}}while(0)
 /* Authored bounded reference raster, independently tested against CPU math.
@@ -144,11 +146,12 @@ static gh_model_gpu_error structured(gh_model_renderer*r,const void*data,UINT st
  D3D11_BUFFER_DESC bd={};bd.ByteWidth=stride*count;bd.Usage=D3D11_USAGE_IMMUTABLE;bd.BindFlags=D3D11_BIND_SHADER_RESOURCE;bd.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;bd.StructureByteStride=stride;
  D3D11_SUBRESOURCE_DATA initial={data,0,0};GPU(r->device.p->CreateBuffer(&bd,&initial,buffer.out()));D3D11_SHADER_RESOURCE_VIEW_DESC vd={};vd.Format=DXGI_FORMAT_UNKNOWN;vd.ViewDimension=D3D11_SRV_DIMENSION_BUFFER;vd.Buffer.NumElements=count;GPU(r->device.p->CreateShaderResourceView(buffer.p,&vd,view.out()));return GH_MODEL_GPU_OK;
 }
-extern "C" gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer*r,const gh_model_draw_state*s,uint32_t texture,const gh_static_gs_vertex*input,size_t count,const uint32_t*indices,size_t n){
- if(!r||!s||!input||!indices||!r->begun||r->thread!=GetCurrentThreadId()||!texture||texture>r->materials.size()||count>1024||n>4096||!count||n%3)return GH_MODEL_GPU_ARGUMENT;
+static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_state*s,const Material&m,
+ const gh_static_gs_vertex*input,size_t count,const uint32_t*indices,size_t n,bool scene_warp){
+ if(!s||!input||!indices||!r->begun||r->thread!=GetCurrentThreadId()||count>1024||n>4096||!count||n%3)return GH_MODEL_GPU_ARGUMENT;
  const bool flat_strip = s->primitive == 0x54;
  unsigned prim=s->primitive&7;if((prim!=3&&prim!=4&&prim!=5)||(!(s->primitive&8)&&!flat_strip)||!(s->primitive&16)||(s->primitive&~0x7fu)||!s->native_float_reference||s->frame_psm||s->zbuf_psm!=58||s->dthe||s->colclamp!=1||s->clamp||s->fba>1||s->pabe>1||s->z_write>1||s->xy_offset_x16>65535||s->xy_offset_y16>65535||(s->texture_function!=0&&s->texture_function!=3))return GH_MODEL_GPU_UNSUPPORTED;
- if(s->frame_mask && (!flat_strip || s->frame_mask != 0xff000000u))return GH_MODEL_GPU_UNSUPPORTED;
+ if(s->frame_mask && ((!flat_strip&&!scene_warp) || s->frame_mask != 0xff000000u))return GH_MODEL_GPU_UNSUPPORTED;
  if (flat_strip) {
   // The original packet is one four-vertex strip with the same RGBA on all
   // vertices, so provoking-vertex selection cannot change its flat color.
@@ -180,11 +183,49 @@ extern "C" gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer*r,const g
   for(unsigned c=0;c<4;c++){if(v.rgba[c]>255)return GH_MODEL_GPU_UNSUPPORTED;out.rgba[c]=v.rgba[c];}
  }
  Owned<ID3D11Buffer> vb,ib;Owned<ID3D11ShaderResourceView> vv,iv;gh_model_gpu_error e=structured(r,vertices.data(),sizeof(Vertex),(UINT)count,vb,vv);if(e)return e;e=structured(r,indices,4,(UINT)n,ib,iv);if(e)return e;
- const Material&m=*r->materials[texture-1];Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)|(s->frame_mask?0x01000000u:0u)},
+ Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)|(s->frame_mask?0x01000000u:0u)},
   {(uint32_t)s->alpha&3,((uint32_t)s->alpha>>2)&3,((uint32_t)s->alpha>>4)&3,((uint32_t)s->alpha>>6)&3},{m.width,m.height,(uint32_t)((s->tex1>>5)&1),(uint32_t)(s->alpha>>32)&255}};
  r->context.p->UpdateSubresource(r->parameters.p,0,nullptr,&p,0,0);ID3D11Buffer*constant=r->parameters.p;ID3D11ShaderResourceView*views[]={m.view.p,vv.p,iv.p};ID3D11UnorderedAccessView*targets[]={r->color_target.p,r->depth_target.p};
  r->context.p->CSSetShader(r->shader.p,nullptr,0);r->context.p->CSSetConstantBuffers(0,1,&constant);r->context.p->CSSetShaderResources(0,3,views);r->context.p->CSSetUnorderedAccessViews(0,2,targets,nullptr);r->context.p->Dispatch((r->width+7)/8,(r->height+7)/8,1);
  ID3D11ShaderResourceView*emptyViews[3]={};ID3D11UnorderedAccessView*emptyTargets[2]={};r->context.p->CSSetShaderResources(0,3,emptyViews);r->context.p->CSSetUnorderedAccessViews(0,2,emptyTargets,nullptr);return GH_MODEL_GPU_OK;
+}
+extern "C" gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer*r,const gh_model_draw_state*s,uint32_t texture,
+ const gh_static_gs_vertex*input,size_t count,const uint32_t*indices,size_t n){
+ if(!r||r->thread!=GetCurrentThreadId()||!texture||texture>r->materials.size())return GH_MODEL_GPU_ARGUMENT;
+ return draw_material(r,s,*r->materials[texture-1],input,count,indices,n,false);
+}
+extern "C" gh_model_gpu_error gh_model_renderer_draw_scene_warp(gh_model_renderer *r,
+ const gh_model_draw_state *state,const uint8_t *capture,size_t bytes,uint64_t texa,
+ const gh_static_gs_vertex vertices[6])
+{
+ constexpr unsigned width=256,height=256,captured_height=448;
+ constexpr size_t row_bytes=width*4;
+ if(!r||!r->begun||!state||!capture||!vertices||r->thread!=GetCurrentThreadId()||
+    bytes!=row_bytes*captured_height)return GH_MODEL_GPU_ARGUMENT;
+ if(texa!=0x80||state->primitive!=0x5d||state->test!=0x5000c||
+    state->frame_mask!=0xff000000u||state->texture_function)return GH_MODEL_GPU_UNSUPPORTED;
+ if(!r->scene_capture){
+  auto texture=std::unique_ptr<Material>(new(std::nothrow) Material{});
+  if(!texture)return GH_MODEL_GPU_MEMORY;
+  try{r->scene_capture_pixels.resize(row_bytes*height);}catch(const std::bad_alloc&){return GH_MODEL_GPU_MEMORY;}
+  texture->width=width;
+  texture->height=height;
+  D3D11_TEXTURE2D_DESC td={};
+  td.Width=width;td.Height=height;td.MipLevels=1;td.ArraySize=1;
+  td.Format=DXGI_FORMAT_R8G8B8A8_UINT;td.SampleDesc.Count=1;
+  td.Usage=D3D11_USAGE_DEFAULT;td.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+  GPU(r->device.p->CreateTexture2D(&td,nullptr,texture->image.out()));
+  GPU(r->device.p->CreateShaderResourceView(texture->image.p,nullptr,texture->view.out()));
+  r->scene_capture=std::move(texture);
+ }
+ auto &pixels=r->scene_capture_pixels;
+ for(size_t i=0;i<pixels.size();i+=4){
+  std::memcpy(pixels.data()+i,capture+i,3);
+  pixels[i+3]=(uint8_t)texa;
+ }
+ r->context.p->UpdateSubresource(r->scene_capture->image.p,0,nullptr,pixels.data(),row_bytes,0);
+ static const uint32_t indices[]={0,1,2,0,2,3,0,3,4,0,4,5};
+ return draw_material(r,state,*r->scene_capture,vertices,6,indices,12,true);
 }
 extern "C" gh_model_gpu_error gh_model_renderer_readback(gh_model_renderer*r,uint8_t*rgba,size_t bytes,uint32_t*z,size_t count){
  if(!r||!rgba||!r->begun||r->thread!=GetCurrentThreadId()||bytes!=(size_t)r->width*r->height*4||(z&&count!=(size_t)r->width*r->height))return GH_MODEL_GPU_ARGUMENT;

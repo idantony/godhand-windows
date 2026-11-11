@@ -204,7 +204,16 @@ gh_scene_step_status gh_game_scene_step_002a6690(gh_game_scene_step*s,const gh_g
   else if(i==1)e=actors(s,b);else if(i==2){world_clock(b);e=GH_SCENE_STEP_OK;}
   else if(a==0x296530){if(!b->event)return fail(s,a,GH_SCENE_STEP_UNSUPPORTED,0);gh_game_event_status r=gh_game_event_update_00296530(b->event);e=r?fail(s,b->event->frontier?b->event->frontier:a,GH_SCENE_STEP_CALLEE,r):GH_SCENE_STEP_OK;}
   else if(a==0x2c3500)e=gh_game_scene_scenario_before_002c3500(s,b);
-  else if(a==0x138f98){uint32_t f=0;gh_camera_status r=gh_game_camera_before_move_00138f98(b->init,&f);e=r?fail(s,f?f:a,GH_SCENE_STEP_CALLEE,r):GH_SCENE_STEP_OK;}
+  else if(a==0x138f98){
+   const int live_motion_camera=((uint32_t)b->init->camera.mode&4u)&&b->init->active_camera&&
+    b->init->active_camera!=&b->init->camera;
+   if(live_motion_camera&&b->external)e=call(s,b,a,updates[i][1]);
+   else{
+    uint32_t f=0;
+    gh_camera_status status=gh_game_camera_before_move_00138f98(b->init,&f);
+    e=status?fail(s,f?f:a,GH_SCENE_STEP_CALLEE,status):GH_SCENE_STEP_OK;
+   }
+  }
   else if(a==0x290250)e=enemies(s,b);
   else if(a==0x2d7560&&((w(raw+0x5d8)&0x4000)||(w(raw+0x5e0)&0x80000)))e=GH_SCENE_STEP_OK;
   else if(a==0x1fdfd8)e=object_pool(s,b);

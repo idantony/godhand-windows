@@ -42,6 +42,7 @@ typedef struct {
     gh_event_audio_prefetch_provider prefetch;
     void *prefetch_context;
     struct gh_bgm_requests *requests;
+    uint8_t data_end_faded;
 } gh_event_audio_channel1;
 
 gh_game_event_status gh_event_audio_channel1_bind(gh_event_audio_channel1 *,
@@ -55,6 +56,7 @@ gh_game_event_status gh_event_audio_channel1_service(void *,gh_event_audio_opera
 /* Call in 2CA558 after SE bank updates. DVD is pumped by the ordinary host. */
 gh_game_event_status gh_event_audio_channel1_tick_002d0068(gh_event_audio_channel1 *);
 gh_game_event_status gh_event_audio_channel1_shutdown(gh_event_audio_channel1 *);
+gh_game_event_status gh_event_audio_channel1_data_end_002d1958(gh_event_audio_channel1 *);
 
 #ifdef __cplusplus
 }

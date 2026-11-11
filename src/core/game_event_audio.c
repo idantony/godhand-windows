@@ -239,3 +239,18 @@ gh_game_event_status gh_event_audio_channel1_shutdown(gh_event_audio_channel1 *s
     if(!status)*s=(gh_event_audio_channel1){0};
     return status;
 }
+
+gh_game_event_status gh_event_audio_channel1_data_end_002d1958(gh_event_audio_channel1 *s)
+{
+    if(!s||!s->control)return GH_EVENT_ARGUMENT;
+    if(!s->requests)return fail(s,0x2d1958,0,GH_EVENT_UNSUPPORTED);
+    if(!s->data_end_faded){
+        gh_bgm_status status=gh_bgm_event_data_end_fade_002d1958(s->requests);
+        if(status){
+            uint32_t frontier=gh_bgm_requests_frontier(s->requests);
+            return fail(s,frontier?frontier:0x2d1958,status,GH_EVENT_CALLEE);
+        }
+        s->data_end_faded=1;
+    }
+    return reset_channel(s);
+}

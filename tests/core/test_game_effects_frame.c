@@ -48,6 +48,22 @@ gh_esp_create_call no_reference={0};gh_esp_create_bindings no_reference_bind=par
   * With the original source count set0, its real no-emission path completes. */
  call=(gh_game_effects_frame){0};profile.effect_stage=0;for(unsigned i=0;i<=ambient_rows;i++){gh_effect_emitter_view v;C(!gh_effect_create_emitter_at(effects,i,&v));((uint8_t*)v.record.bytes)[0xbc]=0;}
  C(!gh_game_effects_frame_update_0030f228(&call,&b)&&!call.stage&&w(emit+0x180)==0x40000000&&w(emit+0x228)==0x40000000&&globals.factor_741dc0==0x3f800000);
+ /* Exercise the original scaled clock through the real initialized R100
+  * emitter. Two half rates yield 25 centiframes, 2.125 quantizes to 213. */
+ uint8_t *clock_source=private_ssd+first_est+16;
+ uint8_t old_period=clock_source[0xbd],old_variation=clock_source[0x137];
+ uint32_t old_interval=w(emit+0x17c),old_flags=w(emit+0x114),old_lifetime=w(emit+0x188);
+ clock_source[0xbd]=3;clock_source[0x137]=0;
+ put((uint8_t*)&work+0x5e4,0x20000);put((uint8_t*)&work+0x574,0x3f000000);
+ globals.factor_741dc0=0x3f000000;
+ put(emit+0x114,old_flags&~0x40000000u);put(emit+0x188,(old_lifetime&0xffff0000u)|4u);
+ put(emit+0x180,0x40080000);put(emit+0x17c,0x40200000);
+ C(!gh_game_effects_frame_update_0030f228(&call,&b)&&!call.stage);
+ const float expected_clock=2.38f,expected_quarter=2.25f;
+ C(w(emit+0x180)==w(&expected_clock)&&w(emit+0x228)==w(&expected_quarter)&&w(emit+0x17c)==w(&expected_quarter));
+ clock_source[0xbd]=old_period;clock_source[0x137]=old_variation;
+ put(emit+0x114,old_flags);put(emit+0x188,old_lifetime);
+ put(emit+0x17c,old_interval);put((uint8_t*)&work+0x5e4,0);put((uint8_t*)&work+0x574,0);
  for(unsigned i=0;i<8;i++)put(emit+0x26020+i*4,w(emit+0x26000+i*4));C(!gh_game_effects_frame_update_0030f228(&call,&b));C(!gh_game_effects_frame_update_0030f228(&call,&b)&&!w(emit+0x26000));
  /* Independent source-state fixture disables ambient groups; this tests
   * empty emitter/ESP/pool completion, not a claim about the actual first run. */

@@ -44,7 +44,7 @@ static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const uint8
 }
 static float random_range(uint8_t*p,float minimum,float maximum){float half=mul(add(maximum,-minimum),0.5f),midpoint=add(minimum,half);float product=mul(half,random_signed(p));return add(product,midpoint);}
 static gh_effect_status initial_transform(gh_esp_create_call*c,uint8_t*p,const uint8_t*r,const uint8_t*source){
- if(r[0x291]>1||r[0x292]>1)return fail(c,0x30187c,GH_EFFECT_UNSUPPORTED);int part=(int8_t)r[0xbe],override=(int8_t)source[0x1ec];if(override>=-3&&override!=-1)part=override;if(part==-4)return fail(c,0x301bf8,GH_EFFECT_UNSUPPORTED);if(w(r+4)&0x200000u)return fail(c,0x301c80,GH_EFFECT_UNSUPPORTED);
+ if(r[0x291]>1||r[0x292]>1)return fail(c,0x30187c,GH_EFFECT_UNSUPPORTED);int part=(int8_t)r[0xbe],override=(int8_t)source[0x1ec];if(override>=-3&&override!=-1)part=override;/* With source bit 23 set, screen-space rows keep their authored origin. */if(part==-4&&!(w(r+4)&0x800000u))return fail(c,0x301bf8,GH_EFFECT_UNSUPPORTED);if(w(r+4)&0x200000u)return fail(c,0x301c80,GH_EFFECT_UNSUPPORTED);
  for(unsigned offset=0x48;offset<=0x90;offset+=4)if(!isfinite(floating(r+offset)))return fail(c,0x30187c,GH_EFFECT_UNSUPPORTED);if(floating(source+0x1e0)!=1.0f)return fail(c,0x301cf4,GH_EFFECT_UNSUPPORTED);if(w(p+8)||w(p+0x10))return fail(c,0x2b6370,GH_EFFECT_UNSUPPORTED);
  uint8_t next[0x400];memcpy(next,p,sizeof(next));float angles[3],velocity[3],position[3];memcpy(angles,r+0x48,12);memcpy(velocity,r+0x54,12);memcpy(position,r+0x7c,12);uint32_t first=w(r);int mirrored=(source[0x1e8]&0x80u)!=0;
  if(!r[0x292]){float variation=random_range(next,floating(r+0x64),floating(r+0x68));for(unsigned axis=0;axis<3;axis++)if(first&(0x40u>>axis))angles[axis]=add(angles[axis],variation);}else {for(unsigned axis=0;axis<3;axis++)angles[axis]=add(angles[axis],mul(random_signed(next),floating(r+0x64+axis*4)));for(unsigned axis=0;axis<3;axis++)velocity[axis]=add(velocity[axis],mul(random_signed(next),floating(r+0x70+axis*4)));}
@@ -89,6 +89,30 @@ static gh_effect_status initialize_type6(gh_esp_create_call*c,uint8_t*p){
  for(unsigned i=1;i<count;i++){float signed_distance=(i&1)?distance:-distance;if(!isfinite(signed_distance)||signed_distance < -2147483648.0f||signed_distance>=2147483648.0f)return fail(c,0x2e8168,GH_EFFECT_UNSUPPORTED);int32_t integer=(int32_t)signed_distance;memcpy(offsets+i,&integer,4);if(i&1)distance=add(distance,spacing);}
  memcpy(g->gaussian_weights_61b5c0,weights,count*4);memcpy(g->gaussian_offsets_61b540,offsets,count*4);return GH_EFFECT_OK;
 }
+/* 2F00E0 initializes the framebuffer-sampling offset and oscillation data. */
+static gh_effect_status initialize_12(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
+ if(w(p+0xf0)!=0x44eb70u)return fail(c,0x2f00e0,GH_EFFECT_UNSUPPORTED);
+ if(r[0x18c]>2)return fail(c,0x2d9f68,GH_EFFECT_UNSUPPORTED);
+ if((int8_t)r[0xbe]!=-4||!(w(r+4)&0x800000u)||w(p+0x114))
+    return fail(c,0x2f00e0,GH_EFFECT_UNSUPPORTED);
+
+ const unsigned offsets[]={0x2b0,0x2b4,0x2d0,0x2c8,0x2cc,0x2dc};
+ float values[6];
+ for(unsigned i=0;i<6;i++){
+    values[i]=mul(floating(r+0x13c+i*4),i<3?0.01f:0.1f);
+    if(!isfinite(values[i]))return fail(c,0x2f00e0,GH_EFFECT_UNSUPPORTED);
+ }
+ gh_effect_status status=gh_effect_create_esp_commit_12(c->b.storage.effects,c->slot,c->serial);
+ if(status)return fail(c,0x2f00e0,status);
+ for(unsigned i=0;i<6;i++)store_float(p+offsets[i],values[i]);
+ memcpy(p+0x2e0,r+0x18c,3);
+ store_float(p+0x2b8,values[0]);
+ store_float(p+0x2d4,values[2]);
+ store_float(p+0x2bc,values[1]);
+ c->stage=12;
+ c->complete=1;
+ return GH_EFFECT_OK;
+}
 static gh_effect_status initialize_1a(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
  uint32_t frontier=0;gh_effect_status status;
  if(c->stage==10){if(w(p+0xf0)!=0x44f270u)return fail(c,0x2f4be0,GH_EFFECT_UNSUPPORTED);status=gh_effect_node_detach_update_002fcb88(&c->detach,c->b.storage.effects,c->slot,c->serial,c->b.atan_coeff,c->b.policy,&frontier);if(status)return fail(c,frontier?frontier:0x2fcb88,status);if(!c->detach.complete)return fail(c,0x2fcb88,GH_EFFECT_ARGUMENT);c->stage=13;}
@@ -117,6 +141,7 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
  if(c->stage==7){status=initial_direction(c,p,r,source);if(status)return status;c->stage=8;}
  if(c->stage==8){status=initial_colour(c,p,r,source);if(status)return status;c->stage=9;}
  if(c->stage==9){status=finish_source(c,p,r);if(status)return status;c->stage=10;}
+ if(view.type==0x12&&c->stage==10)return initialize_12(c,p,r);
  if(view.type==0x1a&&c->stage>=10)return initialize_1a(c,p,r);
  if(c->stage==10){
   if(w(p+0xf0)!=0x44e6d8u)return fail(c,0x2e8210,GH_EFFECT_UNSUPPORTED);put(p+0x2b0,w(r+0x16c));uint32_t count=w(r+0x170);int32_t signed_count;memcpy(&signed_count,&count,4);if(signed_count<1)count=25;if(count>32)count=32;put(p+0x2bc,count);put(p+0x2b4,w(r+0x13c));put(p+0x2b8,w(r+0x140));c->stage=11;

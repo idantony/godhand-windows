@@ -1,4 +1,6 @@
 #include "game_event_play_env.h"
+#include "game_scenario_soft_event.h"
+#include <string.h>
 
 static uint32_t read_word(const uint8_t *bytes) {
     return (uint32_t)bytes[0] | (uint32_t)bytes[1] << 8 |
@@ -55,6 +57,63 @@ gh_game_event_status gh_event_env_init_play_00005930(
     write_word(env.bytes + 0x2c, 255);
     if (start_fade) *fade = next_fade;
     if (frontier) *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+gh_game_event_status gh_event_env_move_play_000059a0(
+    gh_event_components *components, gh_boot_work *work, uint32_t *frontier, int *relative)
+{
+    if (!frontier || !relative || !work) return GH_EVENT_ARGUMENT;
+    *frontier = 0x59a0;
+    *relative = 1;
+    gh_event_component_view env;
+    gh_game_event_status status = component(components, 0, 0xd200, 0x44, &env);
+    if (status) return status;
+    write_word(env.bytes + 0x28, read_word(env.bytes + 0x28) & ~8u);
+    uint32_t mode = read_word(env.bytes + 0x0c);
+    if (mode < 1 || mode > 3) {
+        uint8_t *raw_work = (uint8_t *)work;
+        write_word(raw_work + 0x5e4, read_word(raw_work + 0x5e4) | 0x40000000u);
+        *frontier = 0x31afa0;
+        *relative = 0;
+        if (gh_scenario_stop_input_0031afa0(work)) return GH_EVENT_CALLEE;
+        write_word(raw_work + 0x5d8, read_word(raw_work + 0x5d8) & ~0x10u);
+    }
+    *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+gh_game_event_status gh_event_env_extra_move_00006ad8(
+    gh_event_components *components, uint32_t *frontier)
+{
+    if (!frontier) return GH_EVENT_ARGUMENT;
+    *frontier = 0x6ad8;
+    gh_event_component_view env;
+    gh_game_event_status status = component(components, 0, 0xd200, 0x44, &env);
+    if (status) return status;
+    if (read_word(env.bytes + 0x30)) return GH_EVENT_UNSUPPORTED;
+    *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+gh_game_event_status gh_event_se_init_absent_00009a88(
+    gh_event_components *components, const gh_event_data_prefix *data, uint32_t *frontier)
+{
+    if (!frontier) return GH_EVENT_ARGUMENT;
+    *frontier = 0x9a88;
+    if (!data || data->components != components) return GH_EVENT_ARGUMENT;
+    gh_event_component_view sound;
+    gh_game_event_status status = component(components, 8, 0xd9f0, 0x18, &sound);
+    if (status) return status;
+    gh_event_sequence_view sequence;
+    status = gh_event_sequence_at(data, 8, &sequence);
+    if (status) return status;
+    if (sequence.count || read_word(sound.bytes + 0x14)) {
+        *frontier = 0xb388;
+        return GH_EVENT_UNSUPPORTED;
+    }
+    memcpy(sound.bytes, "SE", 3);
+    *frontier = 0;
     return GH_EVENT_OK;
 }
 

@@ -1,4 +1,6 @@
 #include "game_effects_trans.h"
+#include "game_effect_node.h"
+#include "game_scene_at_geometry.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -31,12 +33,154 @@ static gh_effect_status packet_sprite(gh_game_effects_trans*s,const gh_effect_es
  uint32_t bank=2;int depth=s->sprite.original_depth;if(!(flags&0x1000000u)){bank=4;switch(cls){case -2:depth=12;break;case -1:depth=11;break;case 0:depth=10;break;case 1:depth=9;break;case 2:depth=8;break;case 3:bank=6;depth=7;break;case 4:bank=6;depth=3;break;default:return fail(s,0x2ff748,GH_EFFECT_UNSUPPORTED);}}else {if(depth>1020)depth=1020;if(depth<0)depth=0;}if(flags&0x2000u){bank=3;depth=flags&0x4000u?1:2;}else if(flags&0x4000u){bank=3;depth=5;}if(cls>2){if(cls==3){bank=6;depth=7;}else if(cls==4){bank=6;depth=3;}}if(depth==0)return fail(s,0x14ff00,GH_EFFECT_UNSUPPORTED);packet.order=(gh_ui_order_group){.bank=bank,.depth=(uint32_t)depth,.identity=((uint64_t)v->serial<<32)|((uint64_t)s->esp_index<<8)};s->packet=packet;s->pending=1;}
  return GH_EFFECT_OK;
 }
+static gh_effect_status warp_coordinates(gh_game_effects_trans*s,const gh_effect_esp_view*v,
+    gh_effect_trans_quad*fan,uint32_t center_rgba,uint32_t edge_rgba)
+{
+ const uint8_t*p=v->payload;
+ const gh_display_state*d=s->b.display;
+ float matrix[16];
+ uint32_t pc=0;
+ gh_effect_status status=gh_effect_node_world_matrix_native(s->b.storage.effects,0,s->esp_index,
+    v->serial,matrix,s->b.policy,&pc);
+ if(status)return fail(s,pc?pc:0x2b6328,status);
+ float aspect=number(p+0x210),anchor_x=number(p+0x214),anchor_y=number(p+0x218);
+ float left=multiply(-anchor_x,aspect),right=multiply(add(1,-anchor_x),aspect);
+ float top=-anchor_y,bottom=add(1,-anchor_y);
+ const float points[5][3]={{left,top,0},{right,top,0},{left,bottom,0},{right,bottom,0},{0,0,0}};
+ const unsigned sequence[]={4,0,1,3,2,0};
+ int origin_x=(2048-d->screen_width/2)*16,origin_y=d->gs_y_origin*16;
+ float offset=number(p+0x2d4);
+ if(!isfinite(offset))return fail(s,0x2f07ac,GH_EFFECT_UNSUPPORTED);
+
+ for(unsigned i=0;i<6;i++){
+    unsigned k=sequence[i];
+    float transformed[4];
+    if(gh_scene_at_apply_world_001508d8(matrix,points[k],transformed))
+       return fail(s,0x30a2b0,GH_EFFECT_UNSUPPORTED);
+    float x=multiply(transformed[0],16),y=multiply(transformed[1],16);
+    if(!isfinite(x)||!isfinite(y)||x<-65536.0f||x>=65536.0f||y<-65536.0f||y>=65536.0f)
+       return fail(s,0x2fe9c0,GH_EFFECT_UNSUPPORTED);
+    int32_t gs_x=(int32_t)x+origin_x,gs_y=(int32_t)y+origin_y;
+    if(gs_x<0xa0||gs_x>0xff60||gs_y<0xa0||gs_y>0xff60)
+       return fail(s,0x2feab8,GH_EFFECT_UNSUPPORTED);
+
+    float sx=(float)(gs_x/16-2048+d->screen_width/2);
+    float sy=(float)(gs_y/16-2048+d->screen_lines/2);
+    float ds=k==4?number(p+0x2b8):(k==0||k==2?offset:-offset);
+    float dt=k==4?number(p+0x2bc):(k==0||k==1?offset:-offset);
+    if(!isfinite(ds)||!isfinite(dt))return fail(s,0x2f07ac,GH_EFFECT_UNSUPPORTED);
+    gh_effect_trans_vertex*out=fan->vertices+i;
+    vertex(out,gs_x,gs_y,0,0,i?edge_rgba:center_rgba,0xfff0);
+    out->s=add(add(ds,divide(sx,512)),0.001953125f);
+    out->t=add(add(dt,divide(sy,512)),0.001953125f);
+ }
+ fan->vertex_count=6;
+ return GH_EFFECT_OK;
+}
+
+static gh_effect_status packet_type12(gh_game_effects_trans*s,const gh_effect_esp_view*v)
+{
+ const uint8_t*p=v->payload;
+ const gh_display_state*d=s->b.display;
+ if(!d||!d->initialized)return fail(s,0x2f02b8,GH_EFFECT_ARGUMENT);
+ if(d->screen_width!=512||d->screen_lines!=448||d->gs_y_origin!=1824||
+    s->b.policy!=GH_STATIC_BINARY32_REFERENCE||s->b.cvt_policy!=GH_FRAME_CHOP_REFERENCE||
+    word(p+0xf0)!=0x44eb70u||(word(p+0x11c)&0x1000000u)||
+    v->parent_emitter!=-1||!v->target120_known_null||word(p+0x120)||
+    p[0x24a]||half(p+0x276)||p[0x24c]||p[0x2e0]||p[0x2e2]!=1)
+    return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
+
+ int cls=(int8_t)p[0x101];
+ if(cls<-2||cls>4||p[0x247]>10)return fail(s,0x2ff8a0,GH_EFFECT_UNSUPPORTED);
+ unsigned bank=4,depth=(unsigned)(10-cls);
+ uint32_t flags=word(p+0x11c);
+ if(flags&0x2000u){bank=3;depth=flags&0x4000u?1:2;}
+ else if(flags&0x4000u){bank=3;depth=5;}
+ if(cls>2){bank=6;depth=cls==3?7:3;}
+
+ gh_effect_trans_packet packet={0};
+ packet.order=(gh_ui_order_group){.bank=bank,.depth=depth,
+    .identity=((uint64_t)v->serial<<32)|((uint64_t)s->esp_index<<8)|s->call_stage};
+ packet.slot=s->esp_index;
+ packet.serial=v->serial;
+ packet.writes_tex0=packet.inherited_sampler=packet.restores_scene_target=1;
+ packet.frame_mask=0xff000000;
+ packet.restore_zbuf=0x3a0000f8;
+ packet.zbuf=UINT64_C(0x13a0000f8);
+ if(s->call_stage==0){
+    static const uint64_t alpha[]={0x8000000044,0x8000000048,0x80000000a1,0x8000000041,0x8000000049,
+       0x8000000068,0x8000000009,0x8000000046,0x80000000a4,0x8000000042,0x8000000006};
+    packet.original_callee=0x2f02b8;
+    packet.kind=GH_EFFECT_PASS_SCENE_WARP;
+    packet.source=GH_EFFECT_SURFACE_3C00;
+    packet.destination=GH_EFFECT_SURFACE_SCENE_COLOR;
+    packet.prim=0x5d;
+    packet.test=0x5000c;
+    packet.tex0=UINT64_C(0x2000000620113c00);
+    packet.writes_texa=1;
+    packet.texa=0x80;
+    packet.alpha=alpha[p[0x247]];
+    packet.quad_count=1;
+    packet.zbuf=UINT64_C(0x3a0000f8)|((flags&0x80000u)?0:UINT64_C(1)<<32);
+    uint8_t colour[4];
+    for(unsigned j=0;j<4;j++){
+       float value=multiply(number(p+0x188+j*4),128);
+       if(!isfinite(value))return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
+       if(value<0)value=0;
+       if(value>255)value=255;
+       if(!cvt_byte(value,colour+j))return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
+    }
+    uint8_t edge_alpha;
+    float center_alpha=multiply(number(p+0x194),128);
+    if(center_alpha<0)center_alpha=0;
+    if(center_alpha>255)center_alpha=255;
+    if(!cvt_byte(multiply(multiply(center_alpha,(float)p[0x2e1]),0.003921568859368563f),
+        &edge_alpha))return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
+    uint32_t rgb=colour[0]|(uint32_t)colour[1]<<8|(uint32_t)colour[2]<<16;
+    gh_effect_status status=warp_coordinates(s,v,packet.quads,
+       rgb|(uint32_t)colour[3]<<24,rgb|(uint32_t)edge_alpha<<24);
+    if(status)return status;
+ }else{
+    packet.original_callee=0x2fa620;
+    packet.kind=GH_EFFECT_PASS_SCENE_CAPTURE;
+    packet.source=GH_EFFECT_SURFACE_SCENE_COLOR;
+    packet.destination=GH_EFFECT_SURFACE_3C00;
+    packet.prim=0x116;
+    packet.test=0x30000;
+    packet.tex0=UINT64_C(0x2000000664020e00);
+    packet.alpha=UINT64_C(0x8000000044);
+    packet.texture_flush_after=1;
+    packet.quad_count=8;
+    int x=(2048-d->screen_width/2)*16,y=(2048-d->screen_lines/2)*16;
+    for(unsigned i=0;i<8;i++){
+       gh_effect_trans_quad*q=packet.quads+i;
+       q->vertex_count=2;
+       vertex(q->vertices,x+(int)i*32*16,y,i*64*16+8,4,0x80808080,0xffff);
+       vertex(q->vertices+1,x+(int)(i+1)*32*16,y+d->screen_lines*16,
+          (i+1)*64*16+8,(unsigned)d->screen_lines*16+4,0x80808080,0xffff);
+    }
+ }
+ s->packet=packet;
+ s->pending=1;
+ return GH_EFFECT_OK;
+}
+
 gh_effect_status gh_effects_trans_begin_002fb310(gh_game_effects_trans*s){if(!s)return GH_EFFECT_ARGUMENT;if(s->identity&&(s->identity!=s||!s->complete))return GH_EFFECT_ARGUMENT;*s=(gh_game_effects_trans){.identity=s};return GH_EFFECT_OK;}
 static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bindings*b){
  if(!s||!b||!b->work)return GH_EFFECT_ARGUMENT;if(s->identity&&s->identity!=s)return GH_EFFECT_ARGUMENT;if(s->bound&&!same(&s->b,b))return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);if(s->bound&&!s->b.emit&&b->emit){s->b.emit=b->emit;s->b.context=b->context;}if(s->bound){if(!s->b.camera)s->b.camera=b->camera;if(!s->b.init)s->b.init=b->init;if(!s->b.textures)s->b.textures=b->textures;}s->frontier=0;if(s->complete)return GH_EFFECT_OK;if(!s->bound){s->identity=s;s->b=*b;s->bound=1;}if(!s->entered){s->gate_10000=word((const uint8_t*)b->work+0x5e4)&0x10000u;if((word((const uint8_t*)b->work+0x5e0)&0x10000000u)||(word((const uint8_t*)b->work+0x58c)&0x400u)){s->complete=1;return GH_EFFECT_OK;}s->entered=1;}
  if(!b->storage.effects||!b->storage.effects->ready||!b->storage.esp||b->storage.esp_bytes<0x100180||!b->globals||!b->globals->initialized)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);uint8_t*base=b->storage.esp;
  for(;s->esp_index<1024;s->esp_index++){unsigned index=s->esp_index,offset=(index>>5)*4;uint32_t mask=0x80000000u>>(index&31);if(!(word(base+0x100000+offset)&mask)||(word(base+0x100080+offset)&mask)||(word(base+0x100100+offset)&mask)){if(s->serial)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);continue;}gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,index,&v)||!v.initialized||v.payload!=base+(size_t)index*0x400||v.globals!=b->globals)return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);if(s->serial&&s->serial!=v.serial)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);if(v.actor||v.selector||word(v.payload+0x114))return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);uint32_t flags=word((const uint8_t*)b->work+0x5e4),config=word(v.payload+0x104);if(!s->serial&&s->gate_10000&&!(config&2u)&&!((config&0x40u)&&(flags&0x4000000u)))continue;if(!s->serial)s->serial=v.serial;
- if(!s->call_stage&&!s->pending&&(word(v.payload+0x11c)&0x800000u)){s->serial=s->call_stage=0;continue;}if(v.type==0x1a){gh_effect_status status=packet_sprite(s,&v);if(status)return status;if(s->pending){if(!b->emit)return fail(s,s->packet.original_callee,GH_EFFECT_UNSUPPORTED);status=b->emit(b->context,&s->packet);if(status)return fail(s,s->packet.original_callee,status);s->pending=0;s->enqueued++;}s->serial=s->call_stage=0;s->sprite_material=NULL;continue;}if(v.type!=6||word(v.payload+0xf0)!=0x44e6d8u)return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);
+ if(!s->call_stage&&!s->pending&&(word(v.payload+0x11c)&0x800000u)){s->serial=s->call_stage=0;continue;}if(v.type==0x1a){gh_effect_status status=packet_sprite(s,&v);if(status)return status;if(s->pending){if(!b->emit)return fail(s,s->packet.original_callee,GH_EFFECT_UNSUPPORTED);status=b->emit(b->context,&s->packet);if(status)return fail(s,s->packet.original_callee,status);s->pending=0;s->enqueued++;}s->serial=s->call_stage=0;s->sprite_material=NULL;continue;}if(v.type==0x12){
+   while(s->call_stage<2){
+     if(!s->pending){gh_effect_status status=packet_type12(s,&v);if(status)return status;}
+     if(!b->emit)return fail(s,s->packet.original_callee,GH_EFFECT_UNSUPPORTED);
+     gh_effect_status status=b->emit(b->context,&s->packet);
+     if(status)return fail(s,s->packet.original_callee,status);
+     s->pending=0;s->enqueued++;s->call_stage++;
+   }
+   s->serial=s->call_stage=0;
+   continue;
+ }if(v.type!=6||word(v.payload+0xf0)!=0x44e6d8u)return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);
  while(s->call_stage<7){if(!s->pending){gh_effect_status status=packet_type6(s,&v);if(status)return status;}if(!b->emit)return fail(s,s->packet.original_callee,GH_EFFECT_UNSUPPORTED);gh_effect_status status=b->emit(b->context,&s->packet);if(status)return fail(s,s->packet.original_callee,status);s->pending=0;s->enqueued++;s->call_stage++;}s->serial=s->call_stage=0;
  }s->complete=1;return GH_EFFECT_OK;
 }

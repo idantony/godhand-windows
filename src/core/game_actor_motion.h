@@ -31,6 +31,10 @@ typedef struct {gh_actor_motion_bindings b;gh_motion_view motion;size_t sequence
 /* start0,flags0 native domain; positiveblend uses original SAMEpart+40
  * capturedlocalmatrices and438/43C counters, sameIKglobals binding. */
 gh_actor_motion_status gh_actor_motion_begin_parameters_002a8578(gh_actor_motion *,const gh_actor_motion_bindings *,size_t motion_offset,size_t raw_a2_candidate_offset,uint32_t start_frame_bits,uint32_t blend_frames,uint16_t flags);
+/* Direct 157568 initial call: f12=1, f13=0, a3/t0=0. Start with a fresh
+ * owner and retry through this same entry. No old-SEQ/effect release. */
+gh_actor_motion_status gh_actor_motion_begin_initial_00157568(gh_actor_motion *,
+ const gh_actor_motion_bindings *,size_t motion_offset,size_t raw_a2_candidate_offset);
 gh_actor_motion_status gh_actor_motion_begin_002a8578(gh_actor_motion *,const gh_actor_motion_bindings *,size_t motion_offset,size_t sequence_offset,uint16_t flags);
 #ifdef __cplusplus
 }

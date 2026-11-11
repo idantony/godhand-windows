@@ -1,4 +1,5 @@
 #include "game_scene_ui.h"
+#include <string.h>
 gh_scene_ui_status gh_scene_font_bind_002a4c38(gh_font_state*s,const gh_bundle*b,int32_t language){
  if(!s||!b)return GH_SCENE_UI_ARGUMENT;gh_bundle_entry mst={0},msa={0};
  gh_bundle_error a=gh_bundle_find(b,"MST",(unsigned)language,&mst),c=gh_bundle_find(b,"MSA",(unsigned)language,&msa);
@@ -13,5 +14,6 @@ gh_scene_ui_status gh_scene_message_initialize_002aea18(gh_game_scene_ui*s,gh_me
   if(i<15)s->blocks[i+1].previous=(int32_t)i; /*2B22E8 firstwritesnext.prev*/
   s->blocks[i].flags=s->blocks[i].mode=0;s->blocks[i].previous=-1;s->blocks[i].next=i<15?(int32_t)i+1:-1;
  }
+ memset(s->sources,0,sizeof(s->sources));
  s->generation_bd8=1;s->free_head=0;s->active_head=-1;s->ready=1;s->frontier=0;return GH_SCENE_UI_OK;
 }

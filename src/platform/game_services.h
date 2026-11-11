@@ -119,8 +119,10 @@ typedef struct {
  gh_game_effects *effects;gh_scene_filters *filters;
  gh_game_world_light *world_light;gh_game_model_packets *model_packets;
  gh_game_player_child **work5f8; /*canonical typed child publication*/
+ const gh_event_weapon_slot *event_weapon; /*canonical player+6A8 provenance*/
  gh_game_collision_solids *collision_solids;gh_game_scene_tables *scene_tables;
  gh_game_title_player *title_player; /*canonicaltypedWork.playerObj*/
+ const gh_actor_model *player_model;
  gh_game_checkpoint *checkpoint;gh_game_scene_ui *scene_ui;
  gh_scene_at_manager *scene_at;gh_game_action_buttons *action_buttons;
  gh_em_scene_placements *em_placements;gh_om_scene_placements *om_placements;gh_acd_scene_binding *acd;
@@ -159,7 +161,7 @@ gh_game_services_status gh_game_services_move_actor(gh_game_services *,uint32_t 
  int16_t this_delta,const gh_title_player_view *,const gh_boot_work *,uint32_t *frontier);
 typedef struct {const uint8_t *depth_shift;const gh_shadow_templates *shadow_templates;
  gh_shadow_emit shadow_emit;void *shadow_context;
- gh_actor_draw_emit actor_emit;void *actor_context;} gh_game_actor_render_provider;
+ gh_actor_draw_emit actor_emit;void *actor_context;const gh_game_pl_camera *camera;} gh_game_actor_render_provider;
 /* Actual nonstatic Trans descriptor on the SAME registered model. Draw
  * continuations live with that model; unsupported alternate/destructor bodies
  * retain their exact original entry. The provider borrows Root's one OT. */

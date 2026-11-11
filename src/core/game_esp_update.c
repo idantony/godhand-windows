@@ -23,13 +23,39 @@ static int same(const gh_esp_update_bindings*a,const gh_esp_update_bindings*b){r
 static int scaled(const gh_esp_update_call*c,const uint8_t*p,const uint8_t*r){return (!(w(r+4)&0x2000u)&&(w(p+0x11c)&0x100u))||(w((const uint8_t*)c->b.work+0x5e4)&0x20000u);}
 static int advance(gh_esp_update_call*c,float old,int scale,float*out){if(!isfinite(old))return 0;if(!scale){*out=add(old,1);return isfinite(*out);}float hundred=mul(old,100);if(!isfinite(hundred)||hundred < -2147483648.0f||hundred>=2147483648.0f)return 0;int whole;if(!integer(hundred,&whole))return 0;float speed=mul(mul(rf(&c->b.globals->factor_741dc0),rf((const uint8_t*)c->b.work+0x574)),100);int delta;if(!integer(speed,&delta))return 0;int64_t total=(int64_t)whole+delta;if(total<INT32_MIN||total>INT32_MAX)return 0;*out=divide((float)(int32_t)total,100);return isfinite(*out);}
 static gh_effect_status retire(gh_esp_update_call*c){uint32_t f;gh_effect_status s=gh_effect_create_esp_pause_002fbe50(c->b.storage.effects,c->slot,c->serial,&f);if(s)return stop(c,f?f:0x2fbe50,s);c->retired=1;c->stage=15;return GH_EFFECT_OK;}
+static int colour_curve(const uint8_t*p,unsigned base,unsigned channels,int length,float *out){
+ float time=rf(p+0x234);
+ if(!length||!isfinite(time)||time<0.0f||time>=2147483648.0f)return 0;
+ unsigned stride=(channels+1)*4;
+ for(unsigned key=0;key<3;key++){
+    const uint8_t *first=p+base+key*stride,*next=first+stride;
+    float begin=rf(first),end=rf(next);
+    float threshold=add(mul(end,(float)length),0.0001f);
+    if(!isfinite(threshold)||threshold<-2147483648.0f||threshold>=2147483648.0f)return 0;
+    if((int32_t)time>(int32_t)threshold)continue;
+    if(!isfinite(begin)||end==begin)return 0;
+    float ratio=divide(add(divide(time,(float)length),-begin),add(end,-begin));
+    float remaining=add(1.0f,-ratio);
+    for(unsigned j=0;j<channels;j++)
+       out[j]=add(mul(rf(first+4+j*4),remaining),mul(rf(next+4+j*4),ratio));
+    return 1;
+ }
+ for(unsigned j=0;j<channels;j++)out[j]=1.0f;
+ return 1;
+}
+
 static gh_effect_status colour(gh_esp_update_call*c,uint8_t*p,const uint8_t*r){
- if(p[0x187]==1){uint32_t fade=w(r+0x2c0),hold=w(r+0x2c4);int elapsed=sh(p+0x22e);if(fade>INT32_MAX||hold>INT32_MAX||elapsed<0)return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);if(fade<(uint32_t)elapsed){if((uint32_t)elapsed<fade+hold)return GH_EFFECT_OK;float rgba[4];for(unsigned j=0;j<4;j++){rgba[j]=scaled(c,p,r)?add(rf(p+0x188+j*4),-mul(mul(rf(p+0x1c8+j*4),rf(&c->b.globals->factor_741dc0)),rf((const uint8_t*)c->b.work+0x574))):mul(rf(p+0x188+j*4),rf(p+0x1a8+j*4));if(rgba[j]>1)rgba[j]=1;if(!isfinite(rgba[j]))return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);}if(rgba[3]<0.005f){memcpy(p+0x188,rgba,16);return retire(c);}memcpy(p+0x188,rgba,16);if(!(w(r+4)&0x2000u))for(unsigned j=0;j<4;j++)sf(p+0x1c8+j*4,add(rgba[j],-mul(rgba[j],rf(p+0x1a8+j*4))));return GH_EFFECT_OK;}if(fade){float progress=divide(rf(p+0x234),(float)fade);if(progress>1)progress=1;float alpha=mul(rf(p+0x1a4),progress);if(!isfinite(alpha))return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);sf(p+0x194,alpha);}return GH_EFFECT_OK;}if(p[0x187]!=0)return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);int length=sh(p+0x238);if(length<0)return GH_EFFECT_OK;float rgba[4];if(rf(p+0x1b8)==1)memcpy(rgba,p+0x1bc,12);else if(rf(p+0x208)>0)memcpy(rgba,p+0x1f8,12);else return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);
- if(rf(p+0x198)!=1)return stop(c,0x2fc644,GH_EFFECT_UNSUPPORTED);rgba[3]=rf(p+0x19c);for(unsigned j=0;j<4;j++)if(!isfinite(rgba[j]))return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);if(p[0x186]&1)for(unsigned j=0;j<4;j++)rgba[j]=mul(mul(rgba[j],(float)p[0x20c+j]),0.003921568859368563f);memcpy(p+0x188,rgba,16);(void)r;return GH_EFFECT_OK;
+ if(p[0x187]==1){uint32_t fade=w(r+0x2c0),hold=w(r+0x2c4);int elapsed=sh(p+0x22e);if(fade>INT32_MAX||hold>INT32_MAX||elapsed<0)return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);if(fade<(uint32_t)elapsed){if((uint32_t)elapsed<fade+hold)return GH_EFFECT_OK;float rgba[4];for(unsigned j=0;j<4;j++){rgba[j]=scaled(c,p,r)?add(rf(p+0x188+j*4),-mul(mul(rf(p+0x1c8+j*4),rf(&c->b.globals->factor_741dc0)),rf((const uint8_t*)c->b.work+0x574))):mul(rf(p+0x188+j*4),rf(p+0x1a8+j*4));if(rgba[j]>1)rgba[j]=1;if(!isfinite(rgba[j]))return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);}if(rgba[3]<0.005f){memcpy(p+0x188,rgba,16);return retire(c);}memcpy(p+0x188,rgba,16);if(!(w(r+4)&0x2000u))for(unsigned j=0;j<4;j++)sf(p+0x1c8+j*4,add(rgba[j],-mul(rgba[j],rf(p+0x1a8+j*4))));return GH_EFFECT_OK;}if(fade){float progress=divide(rf(p+0x234),(float)fade);if(progress>1)progress=1;float alpha=mul(rf(p+0x1a4),progress);if(!isfinite(alpha))return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);sf(p+0x194,alpha);}return GH_EFFECT_OK;}if(p[0x187]!=0)return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);int length=sh(p+0x238);if(length<0)return GH_EFFECT_OK;float rgba[4];if(rf(p+0x1b8)==1)memcpy(rgba,p+0x1bc,12);else if(rf(p+0x208)>0)memcpy(rgba,p+0x1f8,12);else if(!colour_curve(p,0x1b8,3,length,rgba))return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);
+ if(rf(p+0x198)==1.0f)rgba[3]=rf(p+0x19c);else if(!colour_curve(p,0x198,1,length,rgba+3))return stop(c,0x2fc644,GH_EFFECT_UNSUPPORTED);for(unsigned j=0;j<4;j++)if(!isfinite(rgba[j]))return stop(c,0x2fc1a0,GH_EFFECT_UNSUPPORTED);if(p[0x186]&1)for(unsigned j=0;j<4;j++)rgba[j]=mul(mul(rgba[j],(float)p[0x20c+j]),0.003921568859368563f);memcpy(p+0x188,rgba,16);(void)r;return GH_EFFECT_OK;
 }
 static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b,unsigned slot,uint32_t serial){
  if(!c||!b||!b->work||!b->globals||!b->globals->initialized||!b->storage.effects||!b->storage.esp||!b->storage.emitters||b->storage.esp_bytes<0x100180||b->storage.emitter_bytes<0x26060)return GH_EFFECT_ARGUMENT;if(c->identity&&(c->identity!=c||c->slot!=slot||c->serial!=serial||!same(&c->b,b)))return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);if(b->policy!=GH_STATIC_BINARY32_REFERENCE)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);c->frontier=0;if(c->complete)return GH_EFFECT_OK;
- gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,slot,&v)||v.serial!=serial||!v.initialized||v.globals!=b->globals||v.payload!=b->storage.esp+(size_t)slot*0x400||v.payload_size!=0x400||v.record.size!=0x2f0)return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;const uint8_t*r=v.record.bytes;if((v.type!=6&&v.type!=0x1a)||w(p+0xf0)!=(v.type==6?0x44e6d8u:0x44f270u))return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);if(!c->identity){c->identity=c;c->b=*b;c->slot=slot;c->serial=serial;c->stage=1;}
+ gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,slot,&v)||v.serial!=serial||!v.initialized||v.globals!=b->globals||v.payload!=b->storage.esp+(size_t)slot*0x400||v.payload_size!=0x400||v.record.size!=0x2f0)return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;const uint8_t*r=v.record.bytes;uint32_t vtable=v.type==6?0x44e6d8u:v.type==0x12?0x44eb70u:v.type==0x1a?0x44f270u:0;
+ if(!vtable||w(p+0xf0)!=vtable)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);
+ /* 2F01B8 calls the base Move before three optional oscillations. */
+ if(v.type==0x12&&(rf(p+0x2c8)!=0.0f||rf(p+0x2cc)!=0.0f||rf(p+0x2dc)!=0.0f))
+    return stop(c,0x2f01b8,GH_EFFECT_UNSUPPORTED);
+ if(!c->identity){c->identity=c;c->b=*b;c->slot=slot;c->serial=serial;c->stage=1;}
  if(c->stage==1){if(v.actor||v.selector||w(p+0x114))return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);if(v.parent_emitter>=0){gh_effect_emitter_view parent;if(gh_effect_create_emitter_at(b->storage.effects,(unsigned)v.parent_emitter,&parent)||parent.serial!=v.parent_serial)return stop(c,0x2b5e50,GH_EFFECT_ARGUMENT);}c->stage=2;}
  if(c->stage==2){float time;int n;if(!advance(c,rf(p+0x228),scaled(c,p,r),&time)||!integer(time,&n))return stop(c,0x2fa350,GH_EFFECT_UNSUPPORTED);sf(p+0x228,time);half(p+0x224,n);c->stage=3;}
  if(c->stage==3){if(uh(p+0x22c)&&uh(p+0x224)>=uh(p+0x22c)){gh_effect_status status=retire(c);if(status)return status;}else c->stage=4;}

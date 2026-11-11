@@ -22,9 +22,38 @@ static gh_effect_status emitter_view(gh_game_effects_frame*s,unsigned i,gh_effec
 static gh_effect_status destroy_emitter(gh_game_effects_frame*s,unsigned i){gh_effect_emitter_view v;gh_effect_status e=emitter_view(s,i,&v);if(e)return e;if(v.first_esp_child!=-1)return fail(s,0x3028e8,GH_EFFECT_UNSUPPORTED);if(w(v.payload+0xf0)!=0x44fd58)return fail(s,0x3028e8,GH_EFFECT_UNSUPPORTED);put(v.payload+0xf0,0x44b310);return GH_EFFECT_OK;}
 static float number(const void*p){float n;memcpy(&n,p,4);return n;}
 static void store_number(void*p,float n){memcpy(p,&n,4);}
-/* Original CVT.W.S is currently admitted only for integral, in-range values;
- * fractional EE conversion policy is not guessed for a new timing domain. */
-static int exact_integer(float n,int32_t*out){if(!isfinite(n)||n < -2147483648.0f||n>=2147483648.0f)return 0;int32_t i=(int32_t)n;if((float)i!=n)return 0;*out=i;return 1;}
+static int clock_integer(float value,int32_t *result)
+{
+ if(!isfinite(value)||value < -2147483648.0f||value>=2147483648.0f)return 0;
+ *result=(int32_t)value;
+ return 1;
+}
+static int scaled_emitter_clock(const gh_game_effects_frame *s,const uint8_t *p,const uint8_t *r)
+{
+ return (!(w(r+4)&0x2000u)&&(w(p+0x114)&0x01000000u))||
+        (w((const uint8_t*)s->b.work+0x5e4)&0x20000u);
+}
+/* 2FA350 and 2FA3E0 round the existing clock up in centiframe units, then
+ * add or subtract the chopped product of the live effect and Work rates. */
+static int emitter_clock(const gh_game_effects_frame *s,float old,int direction,int scaled,float *result)
+{
+ if(!scaled){
+  *result=old+(float)direction;
+  return isfinite(old)&&isfinite(*result);
+ }
+ const volatile float hundred=old*100.0f;
+ const volatile float speed=number(&s->b.globals->factor_741dc0)*number((const uint8_t*)s->b.work+0x574);
+ const volatile float scaled_speed=speed*100.0f;
+ int32_t whole,delta;
+ if(!clock_integer(hundred,&whole)||!clock_integer(scaled_speed,&delta))return 0;
+ uint32_t bits=(uint32_t)whole+(uint32_t)(hundred!=(float)whole);
+ bits+=direction>0?(uint32_t)delta:0u-(uint32_t)delta;
+ int32_t signed_clock;
+ memcpy(&signed_clock,&bits,sizeof(signed_clock));
+ const volatile float frame=(float)signed_clock/100.0f;
+ *result=frame;
+ return 1;
+}
 static gh_effect_status parentless_transform(gh_game_effects_frame*s,uint8_t*p,const uint8_t*r){
  if((int8_t)r[0]<0)return fail(s,0x3033a8,GH_EFFECT_UNSUPPORTED);
  if(s->emitter.actor||s->emitter.part||w(p+4)||w(p+8)||w(p+0x10))return fail(s,0x2b61b0,GH_EFFECT_UNSUPPORTED);
@@ -42,18 +71,55 @@ static gh_effect_status emitter_update(gh_game_effects_frame*s,unsigned i){
  if(s->emitter_stage==2){float time=number(p+0x180);if(!isfinite(time))return fail(s,0x302ab0,GH_EFFECT_UNSUPPORTED);if((float)(int16_t)h(p+0x186)<=time){e=parentless_transform(s,p,r);if(e)return e;}s->emitter_stage=3;}
  if(s->emitter_stage==3){
   if(w(p+0x114)&0x40000000u){if(current.first_esp_child>=0){gh_effect_esp_view child;if(gh_effect_create_esp_at(s->b.storage.effects,(unsigned)current.first_esp_child,&child)||child.parent_emitter!=(int32_t)i||child.parent_serial!=current.serial)return fail(s,0x2b5e58,GH_EFFECT_UNSUPPORTED);return GH_EFFECT_OK;}if(current.actor||current.selector||current.model||current.part)return fail(s,0x2b5cf0,GH_EFFECT_UNSUPPORTED);if(w(p+8))return fail(s,0x2b5e58,GH_EFFECT_UNSUPPORTED);if(w(p+4))return fail(s,0x2b5cf0,GH_EFFECT_UNSUPPORTED);unsigned off=(i>>5)*4;uint8_t*mask=s->b.storage.emitters+0x26020+off;put(mask,w(mask)|(UINT32_C(0x80000000)>>(i&31)));return GH_EFFECT_OK;}
-  if(((!(w(r+4)&0x2000))&&(w(p+0x114)&0x1000000u))||(w((const uint8_t*)s->b.work+0x5e4)&0x20000u))return fail(s,0x2fa350,GH_EFFECT_UNSUPPORTED);
-  float a=number(p+0x180),b=number(p+0x228);if(!isfinite(a)||!isfinite(b)||!isfinite(a+1.0f)||!isfinite(b+1.0f))return fail(s,0x302c18,GH_EFFECT_UNSUPPORTED);store_number(p+0x180,a+1.0f);store_number(p+0x228,b+1.0f);s->emitter_stage=4;
+  const int scaled=scaled_emitter_clock(s,p,r);
+  float time,elapsed;
+  if(!emitter_clock(s,number(p+0x180),1,scaled,&time)||
+     !emitter_clock(s,number(p+0x228),1,scaled,&elapsed))
+   return fail(s,scaled?0x2fa350:0x302c18,GH_EFFECT_UNSUPPORTED);
+  store_number(p+0x180,time);
+  store_number(p+0x228,elapsed);
+  s->emitter_stage=4;
  }
  if(s->emitter_stage==4){
-  int32_t time,elapsed;if(!exact_integer(number(p+0x180),&time)||!exact_integer(number(p+0x228),&elapsed))return fail(s,0x3035d0,GH_EFFECT_UNSUPPORTED);
+  int32_t time,elapsed;if(!clock_integer(number(p+0x180),&time)||!clock_integer(number(p+0x228),&elapsed))return fail(s,0x3035d0,GH_EFFECT_UNSUPPORTED);
   unsigned duration=h(p+0x224);if(duration&&(int16_t)(uint16_t)elapsed>=(int32_t)duration){put(p+0x114,w(p+0x114)|0x40000000u);return GH_EFFECT_OK;}
   s->emitter_spawn_count=0;
   if((int16_t)h(p+0x186)<time){if((int16_t)h(p+0x188)>0&&(int16_t)h(p+0x188)<time){put(p+0x114,w(p+0x114)|0x40000000u);return GH_EFFECT_OK;}
    if(w(r)&0x10000u)return fail(s,0x31d098,GH_EFFECT_UNSUPPORTED);
    if(!(w(p+0x114)&0x800000u)){e=parentless_transform(s,p,r);if(e)return e;}
-   if(!r[0x137]&&!r[0xbd]){if((int8_t)r[0xbc]>0)s->emitter_spawn_count=(int8_t)r[0xbc];}
-   else {float rate=number(p+0x17c);if(!isfinite(rate)||!isfinite(rate-1.0f))return fail(s,0x303820,GH_EFFECT_UNSUPPORTED);rate-=1.0f;if(rate<=0){rate=(float)r[0xbd];if(r[0x137])return fail(s,0x3038b0,GH_EFFECT_UNSUPPORTED);if((int8_t)r[0xbc]>0)s->emitter_spawn_count=(int8_t)r[0xbc];}store_number(p+0x17c,rate);}
+   const int scaled=scaled_emitter_clock(s,p,r);
+   const int spawn=(int8_t)r[0xbc];
+   if(!r[0x137]&&!r[0xbd]){
+    if(!scaled){
+     if(spawn>0)s->emitter_spawn_count=spawn;
+    }else{
+     float interval;
+     if(!emitter_clock(s,number(p+0x22c),1,1,&interval))
+      return fail(s,0x2fa350,GH_EFFECT_UNSUPPORTED);
+     store_number(p+0x22c,interval<1?interval:0);
+     if(interval>=1&&spawn>0)s->emitter_spawn_count=spawn;
+    }
+   }else{
+    float interval;
+    if(!emitter_clock(s,number(p+0x17c),-1,scaled,&interval))
+     return fail(s,scaled?0x2fa3e0:0x303820,GH_EFFECT_UNSUPPORTED);
+    if(interval<=0){
+     interval=(float)r[0xbd];
+     const int variation=(int8_t)r[0x137];
+     if(variation){
+      const int duration=(int16_t)h(p+0x188);
+      if(!duration)return fail(s,0x3038b0,GH_EFFECT_UNSUPPORTED);
+      const volatile float progress=number(p+0x180)/(float)duration;
+      const volatile float adjusted=progress*(float)variation;
+      int32_t offset;
+      if(!clock_integer(adjusted,&offset))return fail(s,0x3038b0,GH_EFFECT_UNSUPPORTED);
+      interval+=(float)offset;
+      if(interval<0)interval=0;
+     }
+     if(spawn>0)s->emitter_spawn_count=spawn;
+    }
+    store_number(p+0x17c,interval);
+   }
   }s->emitter_stage=5;
  }
  if(s->emitter_stage==5){while(s->emitter_spawn_count>0){if(!s->esp_started){e=gh_esp_create_begin_00300e30(&s->esp_call,i,s->emitter_serial);if(e)return fail(s,0x300e30,e);s->esp_started=1;}gh_esp_create_bindings b={.storage=s->b.storage,.random=s->b.init?&s->b.init->random:NULL,.work=s->b.work,.policy=s->b.policy,.globals=s->b.globals,.actors=s->b.actors,.atan_coeff=s->b.atan_coeff};e=gh_game_esp_create_00300e30(&s->esp_call,&b);if(e)return fail(s,s->esp_call.frontier?s->esp_call.frontier:0x300e30,e);if(!s->esp_call.complete)return fail(s,0x300e30,GH_EFFECT_ARGUMENT);s->esp_started=0;s->emitter_spawn_count--;}}
@@ -85,7 +151,17 @@ static gh_effect_status regions(gh_game_effects_frame*s){gh_game_effects*effects
   }s->region_stage=4;
  }return GH_EFFECT_OK;
 }
-static gh_effect_status esps(gh_game_effects_frame*s){uint8_t*base=s->b.storage.esp;for(;s->esp_index<1024;s->esp_index++){unsigned i=s->esp_index,off=(i>>5)*4;uint32_t mask=UINT32_C(0x80000000)>>(i&31);if(!(w(base+0x100000+off)&mask))continue;if(w(base+0x100100+off)&mask){gh_effect_esp_view hidden;if(gh_effect_create_esp_at(s->b.storage.effects,i,&hidden))return fail(s,0x2fb0e8,GH_EFFECT_UNSUPPORTED);uint32_t f=0;gh_effect_status status=gh_effect_create_esp_destroy_hidden_native(s->b.storage.effects,i,hidden.serial,&f);if(status)return fail(s,f?f:0x2fb0e8,status);put(base+0x100000+off,w(base+0x100000+off)&~mask);continue;}if(w(base+0x100080+off)&mask){put(base+0x100100+off,w(base+0x100100+off)|mask);continue;}gh_effect_esp_view v={0};if(gh_effect_create_esp_at(s->b.storage.effects,i,&v)||v.payload!=base+(size_t)i*0x400||!v.initialized||v.globals!=s->b.globals||(v.type!=6&&v.type!=0x1a)||w(v.payload+0xf0)!=(v.type==6?0x44e6d8u:0x44f270u))return fail(s,0x2fb2b0,GH_EFFECT_UNSUPPORTED);if(!s->esp_stage){/* Original2FB0E8 gate precedes VT+24=2FBE88; native pointer
+static int esp_update_class(const gh_effect_esp_view *view)
+{
+ const uint32_t vtable=w(view->payload+0xf0);
+ switch(view->type){
+ case 6: return vtable==0x44e6d8;
+ case 0x12: return vtable==0x44eb70;
+ case 0x1a: return vtable==0x44f270;
+ default: return 0;
+ }
+}
+static gh_effect_status esps(gh_game_effects_frame*s){uint8_t*base=s->b.storage.esp;for(;s->esp_index<1024;s->esp_index++){unsigned i=s->esp_index,off=(i>>5)*4;uint32_t mask=UINT32_C(0x80000000)>>(i&31);if(!(w(base+0x100000+off)&mask))continue;if(w(base+0x100100+off)&mask){gh_effect_esp_view hidden;if(gh_effect_create_esp_at(s->b.storage.effects,i,&hidden))return fail(s,0x2fb0e8,GH_EFFECT_UNSUPPORTED);uint32_t f=0;gh_effect_status status=gh_effect_create_esp_destroy_hidden_native(s->b.storage.effects,i,hidden.serial,&f);if(status)return fail(s,f?f:0x2fb0e8,status);put(base+0x100000+off,w(base+0x100000+off)&~mask);continue;}if(w(base+0x100080+off)&mask){put(base+0x100100+off,w(base+0x100100+off)|mask);continue;}gh_effect_esp_view v={0};if(gh_effect_create_esp_at(s->b.storage.effects,i,&v)||v.payload!=base+(size_t)i*0x400||!v.initialized||v.globals!=s->b.globals||!esp_update_class(&v))return fail(s,0x2fb2b0,GH_EFFECT_UNSUPPORTED);if(!s->esp_stage){/* Original2FB0E8 gate precedes VT+24=2FBE88; native pointer
  * tokens are resolved only through SAME creator metadata. */
  if(v.actor||v.selector||w(v.payload+0x114))return fail(s,0x2fb0e8,GH_EFFECT_UNSUPPORTED);uint32_t work_flags=w((const uint8_t*)s->b.work+0x5e4),config=w(v.payload+0x104);if((work_flags&0x10000u)&&!(config&2u)&&!((config&0x40u)&&(work_flags&0x4000000u)))continue;s->esp_count++;s->esp_stage=1;}
  /* Original wrapper2FBE88 counts the call but skips virtualUpdate whenfrozen. */

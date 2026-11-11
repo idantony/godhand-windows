@@ -1,6 +1,8 @@
 #include "game_event_actor_create.h"
 #include "game_event_actor_factory.h"
 #include "game_event_actor_extra.h"
+#include "game_event_actor_play.h"
+#include "game_actor_motion_ik.h"
 #include "game_player_node_cache.h"
 
 
@@ -378,6 +380,78 @@ int main(int argc, char **argv) {
         CHECK(gh_event_actor_create_work_at(&state, i, &row, &cut) == GH_EVENT_OK);
         CHECK(word(row + 4) == ids[i] && word(row + 0x40) == ids[i]);
     }
+    gh_event_actor_play play = {0};
+    gh_event_actor_play_bindings play_bindings = {.creation = &state, .roster = &roster, .extra = &extra};
+    CHECK(gh_event_actor_play_init_00001468(&play, &play_bindings, &frontier) == GH_EVENT_OK);
+    CHECK(gh_event_actor_play_move_000014c8(&play, &play_bindings, &frontier) == GH_EVENT_OK && !play.active);
+    CHECK(!(word(extra.olivia_accessory.object.view.bytes + 0x250) & 0x8000));
+    put_word(env.bytes + 0x28, 0);
+    put_word(env.bytes + 0x10, 0);
+    put_word(env.bytes + 0x14, 0);
+    CHECK(gh_event_actor_play_move_000014c8(&play, &play_bindings, &frontier) == GH_EVENT_OK && !frontier);
+    for (unsigned i = 0; i < 9; ++i) {
+        CHECK(gh_event_actor_create_work_at(&state, i, &row, &cut) == GH_EVENT_OK);
+        CHECK(row[9] == 0xff && !word(row + 0x10) && !word(row + 0x1c));
+        CHECK((word(rows[i].object.view.bytes + 0x250) & 0x8002) == 0x8002);
+    }
+    CHECK((word(extra.olivia_accessory.object.view.bytes + 0x250) & 0x8002) == 0x8002);
+    CHECK((word(child.object.view.bytes + 0x250) & 0x8002) == 2);
+    put_word(env.bytes + 0x10, 1);
+    gh_event_actor_cut first_active;
+    CHECK(gh_event_actor_cut_at(&prefix, 0, 1, &first_active) == GH_EVENT_OK && first_active.lanes[0].primary);
+    CHECK(gh_event_actor_play_move_000014c8(&play, &play_bindings, &frontier) == GH_EVENT_UNSUPPORTED);
+    CHECK(frontier == 0x157568 && !play.frontier_relative && play.active && !play.row && play.row_stage == 2);
+    CHECK(play.rows[0].primary_offset == first_active.lanes[0].primary_offset && !play.rows[0].frame_bits);
+    CHECK(rows[0].object.view.bytes[0x2f4] == 4 && !(word(rows[0].object.view.bytes + 0x250) & 0x8002));
+    CHECK(word(rows[1].object.view.bytes + 0x250) & 0x8000);
+    CHECK(gh_event_actor_play_move_000014c8(&play, &play_bindings, &frontier) == GH_EVENT_UNSUPPORTED &&
+          frontier == 0x157568 && play.row_stage == 2);
+    gh_event_actor_play motion_play = {0};
+    gh_actor_motion *motions = calloc(9, sizeof(*motions));
+    CHECK(motions);
+    const float rate = 1;
+    gh_motion_ik_globals ik = {0};
+    CHECK(gh_motion_ik_globals_from_elf(&ik, elf, elf_bytes) == GH_ACTOR_MOTION_OK);
+    play_bindings.motions = motions;
+    play_bindings.motion_capacity = 9;
+    play_bindings.rate = &rate;
+    play_bindings.ik_globals = &ik;
+    put_word(env.bytes + 0x34, 0x298088);
+    CHECK(gh_event_actor_play_init_00001468(&motion_play, &play_bindings, &frontier) == GH_EVENT_OK);
+    put_word(env.bytes + 0x10, 0);
+    CHECK(gh_event_actor_play_move_000014c8(&motion_play, &play_bindings, &frontier) == GH_EVENT_OK);
+    put_word(env.bytes + 0x10, 1);
+    gh_game_event_status motion_result = gh_event_actor_play_move_000014c8(&motion_play, &play_bindings, &frontier);
+    if (motion_result) fprintf(stderr, "cut1 Motion status=%u pc=%x row=%zu stage=%u detail=%u\n",
+        motion_result, frontier, motion_play.row, motion_play.row_stage, motions[motion_play.row].detail);
+    CHECK(motion_result == GH_EVENT_OK);
+    CHECK(motions[0].complete && motions[0].motion.offset == first_active.lanes[0].primary_offset &&
+          word(rows[0].object.view.bytes + 0x430) == 0x3f800000);
+    CHECK(motions[8].complete && !motions[6].bound && !motions[7].bound);
+    CHECK(!(word(child.object.view.bytes + 0x250) & 0x8002));
+    CHECK(!(word(extra.olivia_accessory.object.view.bytes + 0x250) & 0x8002));
+    put_word(env.bytes + 0x14, 0x3f800000);
+    CHECK(gh_event_actor_play_move_000014c8(&motion_play, &play_bindings, &frontier) == GH_EVENT_OK);
+    CHECK(word(rows[0].object.view.bytes + 0x430) == 0x40000000);
+    unsigned played = 2;
+    for (unsigned scene_cut = 1; scene_cut < prefix.camera_count; ++scene_cut) {
+        uint16_t length;
+        CHECK(gh_event_camera_cut_length_00004e60(&prefix, scene_cut, &length) == GH_EVENT_OK);
+        put_word(env.bytes + 0x10, scene_cut);
+        for (unsigned frame = scene_cut == 1 ? 2 : 0; frame < length; ++frame) {
+            float value = (float)frame;
+            uint32_t raw_frame;
+            memcpy(&raw_frame, &value, 4);
+            put_word(env.bytes + 0x14, raw_frame);
+            motion_result = gh_event_actor_play_move_000014c8(&motion_play, &play_bindings, &frontier);
+            if (motion_result) fprintf(stderr, "cut%u frame%u row%zu status%u pc%x detail%u\n",
+                scene_cut, frame, motion_play.row, motion_result, frontier, motions[motion_play.row].detail);
+            CHECK(motion_result == GH_EVENT_OK);
+            ++played;
+        }
+    }
+    CHECK(played > 100);
+    free(motions);
     CHECK(rows[6].object.view.bytes[0x4d8] == 1 && rows[7].object.view.bytes[0x4d8] == 1);
     CHECK(rows[8].kind == 0x667 && rows[8].model.ready && !rows[8].object.view.bytes[0x4d8]);
     gh_actor_external_parent_set rejected = {0};
@@ -430,6 +504,6 @@ int main(int argc, char **argv) {
     free(pl01);
     free(elf);
     gh_disc_close(disc);
-    printf("PASS EV01 nine original actors and EL0D, EL00 parts=%u, pendulum and final ready\n", model_parts);
+    printf("PASS EV01 nine actors and EL0D, EL00 parts=%u, ready, cut0 plus %u positive-cut ActorMove frames\n", model_parts, played);
     return 0;
 }

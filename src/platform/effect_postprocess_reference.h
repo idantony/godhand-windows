@@ -29,6 +29,12 @@ gh_effect_post_status gh_effect_post_sample(const gh_effect_post_surface *,uint3
  * Tail restore metadata is returned for the ONE frontend state owner. */
 gh_effect_post_status gh_effect_postprocess_apply(const gh_effect_trans_packet *,
  const gh_effect_post_sampler *,gh_effect_post_context *,gh_effect_post_receipt *,uint32_t *frontier);
+/* Original 2FA620 copies eight source strips into the 256x448 warp surface.
+ * A linear top sample can borrow an unavailable GS row. Leave that target
+ * row untouched and let the warp consumer prove its footprint avoids it. */
+gh_effect_post_status gh_effect_postprocess_capture_scene(const gh_effect_trans_packet *,
+ const gh_effect_post_sampler *, const gh_effect_post_surface *scene,
+ gh_effect_post_surface *capture, uint32_t x_origin, uint32_t y_origin, int *first_row_known);
 #ifdef __cplusplus
 }
 #endif

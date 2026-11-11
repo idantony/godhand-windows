@@ -45,7 +45,7 @@ void gh_scene_hidden_clear_00308d40(gh_game_scene_tables*t){if(t)for(unsigned i=
 gh_scene_post_status gh_scene_model_rays_00307b28(const gh_scene_post_bindings*b,gh_scene_model_ray rays[5],size_t*count,uint32_t*f){
  if(f)*f=0;if(!b||!rays||!count||!b->init||!b->camera||!b->player||!b->player->bytes||b->player->size<GH_TITLE_PLAYER_BYTES||b->player->alias_f0!=b->player->bytes+0xb0)return GH_POST_ARGUMENT;
  *count=0;if(b->policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE)return fail(f,0x307b28,GH_POST_UNSUPPORTED);
- if(!b->camera->constructed||b->camera->identity!=&b->init->camera||b->init->active_camera!=b->camera->identity)return fail(f,0x138f88,GH_POST_UNSUPPORTED);
+ if(!b->camera->constructed||!b->camera->identity||b->init->active_camera!=b->camera->identity)return fail(f,0x138f88,GH_POST_UNSUPPORTED);
  fenv_t env;if(feholdexcept(&env))return GH_POST_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_POST_NUMERIC;}
  gh_scene_model_ray temp[5]={0};float from[4],to[4],direction[4],side[4],length;int mode=(uint32_t)b->init->camera.mode&1;int good=1;uint32_t pc=0;
  for(unsigned i=0;i<3;i++){from[i]=readf(mode?b->player->alias_f0+i*4:b->camera->fields+0x200+i*4);to[i]=readf(b->camera->fields+0x210+i*4);if(!isfinite(from[i])||!isfinite(to[i]))good=0;}from[3]=to[3]=1;

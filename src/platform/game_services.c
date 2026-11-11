@@ -1097,7 +1097,7 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh
  gh_actor_model_status auxiliary=gh_actor_model_aux_bind_constructor_empty_001495a0(model);
  if(auxiliary){*f=0x31a600;return auxiliary==GH_ACTOR_MODEL_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;}
  if(call->trans.complete&&gh_actor_render_next_call(call)){*f=0x14a3e8;return GH_SERVICES_BUSY;}
- gh_actor_render_bindings b={.work=work,.camera=&s->camera,.light=&s->world_light,.depth_shift=provider->depth_shift,
+ gh_actor_render_bindings b={.work=work,.camera=provider->camera?provider->camera:&s->camera,.light=&s->world_light,.depth_shift=provider->depth_shift,
   .elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes,.shadow=shadow,.actors=&s->scene_tables,
   .up_owner=s->b.camera_follow,.pivot_owner=s->b.player_shared_vector,.templates=provider->shadow_templates,
   .textures=s->b.stage->textures,.emit_shadow=provider->shadow_emit,.emit_context=provider->shadow_context,.policy=GH_STATIC_BINARY32_REFERENCE,
@@ -1169,7 +1169,7 @@ gh_game_services_status gh_game_services_get_scene_view(gh_game_services*s,gh_ga
   .module=&s->module,.sound_scene=s->b.sound_scene,.collision_pairs=&s->collision_pairs,
   .effects=&s->effects,.filters=&s->filters,
   .world_light=&s->world_light,.model_packets=&s->model_packets,
-  .work5f8=&s->work5f8,
+  .work5f8=&s->work5f8,.event_weapon=&s->player_weapon,.player_model=&s->player_model,
   .collision_solids=&s->collision_solids,.scene_tables=&s->scene_tables,.title_player=&s->title_player,
   .checkpoint=&s->checkpoint,.scene_ui=&s->scene_ui,.scene_at=&s->scene_at,.action_buttons=&s->action_buttons,
   .em_placements=&s->em_placements,.om_placements=&s->om_placements,.acd=&s->acd,.step=&s->step,.event=s->b.event,.display=s->b.display,.title=s->title,

@@ -219,6 +219,24 @@ gh_bgm_status gh_bgm_event_fade_002d1e18(gh_bgm_requests *s,unsigned channel,int
     return GH_BGM_OK;
 }
 
+gh_bgm_status gh_bgm_event_data_end_fade_002d1958(gh_bgm_requests *s)
+{
+    if(!own(s))return GH_BGM_ARGUMENT;
+    for(int i=s->head;i>=0;i=s->requests[i].next){
+        const request *q=&s->requests[i];
+        if(u32(q->scalar+0x8c)!=0x81 || !(u32(q->scalar+0x98)&4))continue;
+        float frames=rf(q->scalar+0xc4);
+        if(!isfinite(frames)||frames<0)return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);
+    }
+    for(int i=s->head;i>=0;i=s->requests[i].next){
+        request *q=&s->requests[i];
+        if(u32(q->scalar+0x8c)!=0x81)continue;
+        fade(q,0,(u32(q->scalar+0x98)&4)?rf(q->scalar+0xc4):10);
+    }
+    s->frontier=0;
+    return GH_BGM_OK;
+}
+
 static gh_bgm_status tick_paused_event_prefetch(gh_bgm_requests *s,request *q)
 {
     if(u32(q->scalar+0x8c)!=0x81 || u32(q->scalar+0x94)!=4 ||

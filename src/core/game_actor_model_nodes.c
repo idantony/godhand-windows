@@ -42,6 +42,14 @@ gh_actor_model_status gh_actor_model_object_packet(const gh_actor_model*s,const 
 gh_actor_model_status gh_actor_model_node_mask_flags(gh_actor_model*s,unsigned i,uint16_t offset,uint32_t and_mask,uint32_t or_mask){if(!s||!s->bound)return GH_ACTOR_MODEL_ARGUMENT;if(offset!=0x380&&offset!=0x410)return GH_ACTOR_MODEL_ARGUMENT;if(!s->ready||!s->nodes)return GH_ACTOR_MODEL_BUSY;if(i>=s->nodes->complete)return GH_ACTOR_MODEL_BOUNDS;uint8_t*p=s->nodes->entries[i].bytes;put(p,offset,(w(p+offset)&and_mask)|or_mask);return GH_ACTOR_MODEL_OK;}
 gh_actor_model_status gh_actor_model_node_or_flags(gh_actor_model*s,unsigned i,uint16_t offset,uint32_t value){return gh_actor_model_node_mask_flags(s,i,offset,UINT32_MAX,value);}
 
+gh_actor_model_status gh_actor_model_set_all_node_tints(gh_actor_model *s, const uint32_t rgba_bits[4]) {
+ if(!s||!rgba_bits||s->native_identity!=s)return GH_ACTOR_MODEL_ARGUMENT;
+ if(!s->ready||!s->nodes||s->nodes->complete!=s->root.bytes[0x2b1])return GH_ACTOR_MODEL_BUSY;
+ for(size_t i=0;i<s->nodes->complete;i++)if(!s->nodes->entries[i].bytes)return GH_ACTOR_MODEL_BOUNDS;
+ for(size_t i=0;i<s->nodes->complete;i++)memcpy(s->nodes->entries[i].bytes+0x3a0,rgba_bits,16);
+ return GH_ACTOR_MODEL_OK;
+}
+
 gh_actor_model_status gh_actor_model_object_span(gh_actor_model*s,size_t offset,size_t bytes,uint8_t**out){
  if(!s||!out||!s->bound||s->native_identity!=s)return GH_ACTOR_MODEL_ARGUMENT;
  if(!s->ready||!s->nodes||!s->nodes->object_ready)return GH_ACTOR_MODEL_BUSY;

@@ -42,6 +42,12 @@ gh_model_gpu_error gh_model_renderer_begin(gh_model_renderer *,uint32_t clear_rg
  * integer edge tests preserve coverage for large/offscreen triangles. */
 gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer *,const gh_model_draw_state *,uint32_t texture,
  const gh_static_gs_vertex *,size_t vertex_count,const uint32_t *indices,size_t index_count);
+/* The original mode1 warp reads the first 256 rows of its 256x448 CT24
+ * capture with TEXA TA0=128 and AEM=0. Draw the original four fan triangles
+ * using the same scene color, depth and rasterization as world packets. */
+gh_model_gpu_error gh_model_renderer_draw_scene_warp(gh_model_renderer *,
+ const gh_model_draw_state *, const uint8_t *captured_rgba, size_t bytes, uint64_t texa,
+ const gh_static_gs_vertex vertices[6]);
 /* Packed RGBA8 in top-to-bottom row order. Pass NULL and zero for color-only readback. */
 gh_model_gpu_error gh_model_renderer_readback(gh_model_renderer *,uint8_t *rgba,size_t rgba_bytes,uint32_t *z,size_t z_count);
 /* Replace the active scene color with a complete packed RGBA8 image. All
