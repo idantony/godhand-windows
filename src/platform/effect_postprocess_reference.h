@@ -35,8 +35,8 @@ gh_effect_post_status gh_effect_postprocess_apply(const gh_effect_trans_packet *
 gh_effect_post_status gh_effect_postprocess_capture_scene(const gh_effect_trans_packet *,
  const gh_effect_post_sampler *, const gh_effect_post_surface *scene,
  gh_effect_post_surface *capture, uint32_t x_origin, uint32_t y_origin, int *first_row_known);
-/* Validate source-known rows only for raster-covered, source-dependent
- * samples of the original mode1 fan. Uses the shared native raster profile. */
+/* Validate source-known rows for raster-covered, source-dependent samples
+ * of the scene capture and player-impact fans. */
 gh_effect_post_status gh_effect_postprocess_warp_source_known(const gh_effect_trans_packet *,
  const gh_effect_post_sampler *,uint32_t width,uint32_t height,uint32_t x_origin,uint32_t y_origin,
  int first_row_known);

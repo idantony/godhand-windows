@@ -3,6 +3,7 @@
 #include "platform/startup_host.h"
 #ifdef GH_NATIVE_STARTUP_QA
 #include "platform/startup_qa_repeat_square.h"
+#include "platform/startup_qa_title.h"
 #endif
 #include "platform/window_host.h"
 #include "platform/mc_renderer.h"
@@ -298,9 +299,9 @@ struct PostFrame {
 static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packet &packet,
     WorldSampler &sampler,PostFrame &post,uint32_t x,uint32_t y)
 {
-    if(!sampler.known()||!packet.inherited_sampler||packet.writes_clamp)return GH_ID_UNSUPPORTED;
+    if(!sampler.known()||!packet.inherited_sampler)return GH_ID_UNSUPPORTED;
     if(packet.kind==GH_EFFECT_PASS_SCENE_CAPTURE){
-        if(packet.writes_texa||!packet.serial)return GH_ID_UNSUPPORTED;
+        if(packet.writes_clamp||packet.writes_texa||!packet.serial)return GH_ID_UNSUPPORTED;
         post.initialize(x,y);
         post.warp_capture.resize(256*448*4);
         auto &scene=post.pixels[0];
@@ -314,15 +315,18 @@ static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packe
         post.capture_serial=packet.serial;
         post.capture_slot=packet.slot;
     }else{
+        const bool impact=packet.original_callee==0x2e9d48;
         const bool display_base0=packet.source==GH_EFFECT_SURFACE_DISPLAY_BASE0;
-        if(packet.original_callee!=0x2f02b8||!packet.serial||!packet.writes_tex0||!packet.writes_texa||packet.texa!=0x80||
+        if((!impact&&packet.original_callee!=0x2f02b8)||!packet.serial||!packet.writes_tex0||!packet.writes_texa||packet.texa!=0x80||
            packet.destination!=GH_EFFECT_SURFACE_SCENE_COLOR||packet.quad_count!=1||
            packet.quads[0].vertex_count!=6||!packet.restores_scene_target||
-           packet.restore_frame_mask||packet.restore_zbuf!=0x3a0000f8||
+           packet.restore_frame_mask||packet.restore_zbuf!=(impact?0u:0x3a0000f8u)||
+           (impact?(!packet.writes_clamp||packet.clamp):packet.writes_clamp)||
            (packet.zbuf!=0x3a0000f8&&packet.zbuf!=UINT64_C(0x13a0000f8)))
             return GH_ID_UNSUPPORTED;
+        const uint64_t clamp=impact?packet.clamp:sampler.clamp;
         if(display_base0){
-            if(packet.tex0!=UINT64_C(0x2000000664120000)||!app.display_base0_known||sampler.clamp)
+            if(packet.tex0!=UINT64_C(0x2000000664120000)||!app.display_base0_known||clamp)
                 return GH_ID_UNSUPPORTED;
         }else if(packet.tex0!=UINT64_C(0x2000000620113c00)||packet.source!=GH_EFFECT_SURFACE_3C00||
                  post.capture_serial!=packet.serial||post.capture_slot!=packet.slot){
@@ -332,7 +336,7 @@ static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packe
         for(unsigned i=0;i<6;i++){
             const auto &v=packet.quads[0].vertices[i];
             if(v.u12_4||v.v12_4||v.z>0xffff)return GH_ID_UNSUPPORTED;
-            if(display_base0){
+            if(display_base0&&!impact){
                 // Positive Q bounds the perspective ratio by its corner ratios.
                 // Keep even bilinear neighbors inside the display's 448 rows.
                 if(!(v.q>0)||!(v.t>=v.q*(1.0f/512.0f)&&v.t<=v.q*(447.0f/512.0f))){
@@ -345,9 +349,9 @@ static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packe
             vertices[i].xyz_fixed4[2]=(int32_t)(v.z<<4);
             for(unsigned channel=0;channel<4;channel++)vertices[i].rgba[channel]=(v.rgba>>(channel*8))&255;
         }
-        const gh_effect_post_sampler source_sampler={sampler.tex1,sampler.clamp,1,
+        const gh_effect_post_sampler source_sampler={sampler.tex1,clamp,1,
             GH_EFFECT_SAMPLE_NATIVE_SEPARABLE_4BIT};
-        app.effect_post_error=display_base0?GH_EFFECT_POST_OK:
+        app.effect_post_error=display_base0&&!impact?GH_EFFECT_POST_OK:
             gh_effect_postprocess_warp_source_known(&packet,&source_sampler,512,448,x,y,post.capture_first_row_known);
         if(app.effect_post_error!=GH_EFFECT_POST_OK){
 #ifdef GH_NATIVE_STARTUP_QA
@@ -367,7 +371,7 @@ static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packe
             return GH_ID_UNSUPPORTED;
         }
         gh_model_draw_state state={};
-        state.test=packet.test;state.alpha=packet.alpha;state.tex1=sampler.tex1;state.clamp=sampler.clamp;
+        state.test=packet.test;state.alpha=packet.alpha;state.tex1=sampler.tex1;state.clamp=clamp;
         state.primitive=(uint16_t)packet.prim;state.frame_mask=packet.frame_mask;
         state.xy_offset_x16=x;state.xy_offset_y16=y;state.zbuf_psm=58;
         state.z_write=(uint8_t)((packet.zbuf>>32)==0);state.colclamp=state.native_float_reference=1;
@@ -385,6 +389,7 @@ static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packe
             post.capture_serial=0;
         }
         if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+        if(impact){sampler.clamp=clamp;sampler.clamp_known=true;}
     }
     ++app.effect_post_packets;
     app.world_frontier=0;
@@ -401,6 +406,7 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
         // ESP 2FEC38 instead inherits TEX1_1 and restores FRAME/ZBUF.
         const bool marker=p.original_callee==0x15bcf0;
         const bool trail=p.original_callee==0x2ec398||p.original_callee==0x2edf70;
+        const bool wave=p.original_callee==0x2eaf70;
         if(!p.writes_clamp||p.clamp||!p.writes_tex0||p.prim!=0x54||
             p.source!=GH_EFFECT_SURFACE_MATERIAL||p.destination!=GH_EFFECT_SURFACE_SCENE_COLOR||
             !p.material||p.tex0!=p.material->source_tex0||
@@ -412,6 +418,12 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
                 p.frame_mask||p.zbuf||p.restores_scene_target)
                 return GH_ID_UNSUPPORTED;
             sampler.write(p.tex1,p.clamp);
+        }else if(wave){
+            if(!p.inherits_scene_target||!p.inherited_sampler||p.writes_tex1||p.restores_scene_target||
+                p.order.bank!=4||p.order.depth!=10||p.test!=0x5000d||p.alpha!=UINT64_C(0x8000000044)||
+                p.frame_mask||p.zbuf!=UINT64_C(0x13a0000f8)||p.restore_zbuf!=0x3a0000f8)
+                return GH_ID_UNSUPPORTED;
+            sampler.clamp=p.clamp;sampler.clamp_known=true;
         }else{
             if(!p.inherited_sampler||p.inherits_scene_target||p.writes_tex1||
                 !p.restores_scene_target||p.restore_frame_mask)
@@ -428,7 +440,7 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
         if(!sampler.known())return GH_ID_UNSUPPORTED;
         gh_model_draw_state state={};state.test=p.test;state.alpha=p.alpha;
         state.tex1=sampler.tex1;state.clamp=sampler.clamp;state.primitive=(uint16_t)p.prim;
-        state.xy_offset_x16=x;state.xy_offset_y16=y;state.frame_mask=marker?scene_frame_mask:p.frame_mask;
+        state.xy_offset_x16=x;state.xy_offset_y16=y;state.frame_mask=marker||wave?scene_frame_mask:p.frame_mask;
         state.texture_function=(uint8_t)((p.tex0>>35)&3);
         state.zbuf_psm=58;state.z_write=(uint8_t)((p.zbuf>>32)==0);state.colclamp=state.native_float_reference=1;
         if(trail){
@@ -859,7 +871,8 @@ int main(int argc,char **argv)
     const char *iso=nullptr,*profile=nullptr,*ffmpeg=nullptr;
     bool show=false,muted=false,prefix=false;uint64_t max_ticks=0;
 #ifdef GH_NATIVE_STARTUP_QA
-    bool qa_confirm=false,qa_new_game=false,qa_load=false;unsigned qa_choice_step=0,qa_captured=0,qa_capture_count=1;gh_native_input qa_input={};
+    bool qa_confirm=false,qa_new_game=false,qa_load=false;unsigned qa_captured=0,qa_capture_count=1;gh_native_input qa_input={};
+    QAStartupTitleProbe qa_title;
     QAControlProbe qa_control;
     QARepeatSquareProbe qa_repeat_square;
     const char *qa_capture=nullptr;uint64_t qa_capture_frame=1,qa_last_capture_scene=0;
@@ -873,12 +886,13 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-load")){qa_load=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-control")&&i+1<argc){
             const char *mode=argv[++i];
-            qa_repeat_square.pair=!std::strcmp(mode,"repeat-triangle-pair");
+            qa_repeat_square.continue_after_pair=!std::strcmp(mode,"repeat-triangle-pair-continue");
+            qa_repeat_square.pair=qa_repeat_square.continue_after_pair||!std::strcmp(mode,"repeat-triangle-pair");
             qa_repeat_square.triangle=qa_repeat_square.pair||!std::strcmp(mode,"repeat-triangle");
             qa_repeat_square.enabled=qa_repeat_square.triangle||!std::strcmp(mode,"repeat-square");
             qa_control.mode=qa_repeat_square.enabled?nullptr:mode;
             if(qa_control.mode&&std::strcmp(qa_control.mode,"walk")&&std::strcmp(qa_control.mode,"run")&&!qa_control.attacks()){
-                std::fprintf(stderr,"QA control mode must be walk, run, square, approach-square, repeat-square, repeat-triangle or repeat-triangle-pair.\n");return 2;
+                std::fprintf(stderr,"QA control mode must be walk, run, square, approach-square, repeat-square, repeat-triangle, repeat-triangle-pair or repeat-triangle-pair-continue.\n");return 2;
             }
         }
         else if(!std::strcmp(argv[i],"--qa-capture")&&i+1<argc)qa_capture=argv[++i];
@@ -993,32 +1007,14 @@ int main(int argc,char **argv)
                     qa_repeat_square.presented(app.prepared_scene_serial);
                     if(app.prepared_scene_serial>=qa_capture_frame&&app.prepared_scene_serial<=qa_last_capture_scene)
                         std::fprintf(stderr,"QA_CAPTURE_PRESENTED %llu\n",(unsigned long long)app.prepared_scene_serial);
-                    if(qa_repeat_square.defeat_scene){result=0;break;}
+                    if(qa_repeat_square.complete()){result=0;break;}
                 }
 #endif
                 app.display_pending=false;
             }
 #ifdef GH_NATIVE_STARTUP_QA
             if(qa_confirm){
-                unsigned key=0;
-                if(app.snapshot.mc_load_mode){
-                    const bool choosing=app.snapshot.mc_phase==3||app.snapshot.mc_phase==4;
-                    const bool ready=app.snapshot.mc_subphase==1||app.snapshot.mc_subphase==2;
-                    if(qa_load&&choosing&&ready&&app.snapshot.mc_present_mask&&app.snapshot.ticks%6==0)key='Z';
-                }else if(app.snapshot.mc_phase==3&&app.snapshot.mc_subphase==1)key='Z';
-                else if(app.snapshot.mc_phase==3&&app.snapshot.mc_subphase==2){
-                    if(qa_choice_step==0){key=39;++qa_choice_step;}
-                    else if(qa_choice_step==1){key='Z';++qa_choice_step;}
-                }else qa_choice_step=0;
-                if((qa_new_game||qa_load)&&app.snapshot.title_live){
-                    if(app.snapshot.title_mode==1&&app.snapshot.ticks%30==0)key='Z';
-                    else if(app.snapshot.title_mode==3&&app.snapshot.title_phase>=1&&app.snapshot.title_phase<=3
-                        &&app.snapshot.title_subphase==1&&(app.snapshot.title_phase==1||app.snapshot.title_timer>=5)&&app.snapshot.ticks%6==0){
-                        if(!qa_load||app.snapshot.title_phase==1||app.snapshot.title_game_selection==1)key='Z';
-                        else if(app.snapshot.title_phase==2&&app.snapshot.title_game_selection==0)key=39;
-                    }
-                }
-                gh_native_input_key(&qa_input,'Z',key=='Z');gh_native_input_key(&qa_input,39,key==39);
+                qa_title.sample(app.snapshot,qa_input,qa_new_game,qa_load);
                 const gh_native_gamepad_sample pad=qa_repeat_square.enabled?qa_repeat_square.sample(app.snapshot):
                     qa_control.sample(app.snapshot);
                 if(!gh_native_input_tick_device(&qa_input,app.snapshot.work,&pad,&input))break;

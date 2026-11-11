@@ -1,5 +1,6 @@
 /* Original1BD228 readable nativecaller, noquery/geometryupdateack.*/
 #include "game_om_door_geometry.h"
+#include "id_layout_rotation.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -40,5 +41,39 @@ gh_scene_placement_status gh_om_door_release_collision_001bd3f0(gh_om_door_geome
        this box. The native owner uses the same unlink/free primitive. */
     if(gh_scene_dynamic_box_abort(state->owner,state->box))return GH_PLACE_BUSY;
     state->box=NULL;
+    return GH_PLACE_OK;
+}
+
+gh_scene_placement_status gh_om_door_set_open_001bcfb0(gh_om_door_geometry *state,
+    int direction,int immediate)
+{
+    if(!initialized_door(state))return GH_PLACE_ARGUMENT;
+    uint8_t *p=state->object->view.bytes;
+    uint32_t flags=w(p+0x620);
+    if((flags&3)||p[0x2f4]>1)return GH_PLACE_OK;
+    float yaw,target;
+    memcpy(&yaw,p+0x104,sizeof(yaw));
+    if(direction==0||direction==1){
+        const uint32_t magnitude_bits=state->object->source.type==0x354?0x3fc90fdbu:0x3fdf66f3u;
+        float magnitude;
+        memcpy(&magnitude,&magnitude_bits,sizeof(magnitude));
+        if(!isfinite(yaw))return GH_PLACE_UNSUPPORTED;
+        fenv_t env;
+        if(fegetenv(&env)||fesetround(FE_TONEAREST))return GH_PLACE_UNSUPPORTED;
+        float rotated=add(yaw,direction?magnitude:-magnitude);
+        gh_id_error status=gh_id_angle_reference_001f7d48(rotated,&target);
+        if(fesetenv(&env)||status)return GH_PLACE_UNSUPPORTED;
+    }else memcpy(&target,p+0x640,sizeof(target));
+    memcpy(p+0x638,&yaw,sizeof(yaw));
+    if(direction==0||direction==1)memcpy(p+0x640,&target,sizeof(target));
+    flags|=1;
+    memcpy(p+0x620,&flags,sizeof(flags));
+    if(immediate)memcpy(p+0x104,&target,sizeof(target));
+    else{
+        p[0x2f4]=0;
+        p[0x2f5]=1;
+        p[0x2f6]=0;
+        p[0x2f7]=0;
+    }
     return GH_PLACE_OK;
 }

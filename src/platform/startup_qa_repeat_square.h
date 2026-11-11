@@ -2,22 +2,27 @@
 #define GH_STARTUP_QA_REPEAT_SQUARE_H
 
 #include "startup_host.h"
+#include "startup_qa_r100_exit.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 
 struct QARepeatSquareProbe {
-    bool enabled=false,triangle=false,pair=false;
+    bool enabled=false,triangle=false,pair=false,continue_after_pair=false,packet_only=false;
     bool saw_event=false;
     unsigned attempts=0,edges=0,animations=0,hits=0;
     uint32_t player_handle=0,enemy_handle=0;
     uint64_t defeat_scene=0;
+    QAR100ExitProbe exit;
+
+    bool complete() const {return continue_after_pair?exit.room3_scene!=0:defeat_scene!=0;}
 
     gh_native_gamepad_sample sample(const gh_startup_snapshot &s)
     {
         gh_native_gamepad_sample pad={};
-        if(!enabled||defeat_scene)return pad;
+        if(!enabled)return pad;
+        if(defeat_scene)return continue_after_pair?exit.sample(s):pad;
         pad.connected=1;
         if(s.current_room==0x100&&s.event_number==1&&s.event_state)saw_event=true;
         uint32_t flags=0;
@@ -97,6 +102,7 @@ struct QARepeatSquareProbe {
 
     void observe(const gh_startup_snapshot &s,const gh_native_input_snapshot &input)
     {
+        if(enabled&&continue_after_pair&&defeat_scene){exit.observe(s,input);return;}
         if(!enabled||!player_handle||s.player_handle!=player_handle)return;
         if(attack_pending&&!edge_seen&&s.ticks==press_tick+1&&(input.raw_pressed&(triangle?0x10u:0x80u))){
             edge_seen=true;
@@ -110,6 +116,9 @@ struct QARepeatSquareProbe {
         frame.serial=s.scene_frame_serial;
         frame.tick=s.ticks;
         frame.attempt=attempts;
+        frame.player_hp=s.player_hp;
+        frame.player_state=s.player_state[0];
+        frame.player_reaction=s.player_state[1];
         frame.hp=enemy.hp;
         frame.hit_kind=enemy.hit_kind;
         frame.hit_power=enemy.hit_power;
@@ -130,20 +139,30 @@ struct QARepeatSquareProbe {
 
     void presented(uint64_t serial)
     {
+        if(enabled&&continue_after_pair&&defeat_scene){exit.presented(serial);return;}
         if(!enabled||defeat_scene||serial<=last_presented)return;
+        const bool consecutive=serial-last_presented==1;
         last_presented=serial;
         if(pending.serial!=serial){
-            hp_known=false;
+            hp_known=player_hp_known=false;
             motion_attempt=0;
             return;
         }
+        if(consecutive&&player_hp_known&&pending.player_hp<last_player_hp){
+            std::fprintf(stderr,"QA_PLAYER_HP_%s scene=%llu tick=%llu player=%u hp=%u->%u state=%u/%u\n",
+                frame_label(),(unsigned long long)serial,(unsigned long long)pending.tick,player_handle,
+                (unsigned)last_player_hp,(unsigned)pending.player_hp,(unsigned)pending.player_state,
+                (unsigned)pending.player_reaction);
+        }
+        player_hp_known=true;
+        last_player_hp=pending.player_hp;
         if(pair&&kill_scene[1]){
             if((pending.placement_known&3u)==3u&&(pending.placement_dead&3u)==3u){
                 defeat_scene=serial;
                 room_dead_mask=pending.placement_dead&3u;
                 scenario_flags=pending.scenario_flags;
-                std::fprintf(stderr,"QA_REPEAT_PAIR_PRESENTED scene=%llu stamp19_scene=%llu stamp20_scene=%llu scenario=%08x\n",
-                    (unsigned long long)serial,(unsigned long long)kill_scene[0],
+                std::fprintf(stderr,"QA_REPEAT_PAIR_%s scene=%llu stamp19_scene=%llu stamp20_scene=%llu scenario=%08x\n",
+                    frame_label(),(unsigned long long)serial,(unsigned long long)kill_scene[0],
                     (unsigned long long)kill_scene[1],pending.scenario_flags);
             }
             return;
@@ -151,16 +170,16 @@ struct QARepeatSquareProbe {
         if(pending.motion&&!motion_reported&&motion_attempt==pending.attempt&&pending.sample>last_sample){
             motion_reported=true;
             ++animations;
-            std::fprintf(stderr,"QA_REPEAT_ATTACK_PRESENTED scene=%llu tick=%llu attempt=%u player=%u enemy=%u sample=%.9g\n",
-                (unsigned long long)serial,(unsigned long long)pending.tick,pending.attempt,player_handle,enemy_handle,
+            std::fprintf(stderr,"QA_REPEAT_ATTACK_%s scene=%llu tick=%llu attempt=%u player=%u enemy=%u sample=%.9g\n",
+                frame_label(),(unsigned long long)serial,(unsigned long long)pending.tick,pending.attempt,player_handle,enemy_handle,
                 (double)pending.sample);
         }
         motion_attempt=pending.motion?pending.attempt:0;
         last_sample=pending.sample;
         if(hp_known&&pending.attributed&&pending.hp<last_hp&&pending.hit_kind&&(triangle?pending.hit_power==12:pending.hit_power>0)){
             ++hits;
-            std::fprintf(stderr,"QA_REPEAT_HIT_PRESENTED scene=%llu tick=%llu attempt=%u player=%u enemy=%u hp=%u->%u kind=%u power=%d\n",
-                (unsigned long long)serial,(unsigned long long)pending.tick,pending.attempt,player_handle,enemy_handle,
+            std::fprintf(stderr,"QA_REPEAT_HIT_%s scene=%llu tick=%llu attempt=%u player=%u enemy=%u hp=%u->%u kind=%u power=%d\n",
+                frame_label(),(unsigned long long)serial,(unsigned long long)pending.tick,pending.attempt,player_handle,enemy_handle,
                 (unsigned)last_hp,(unsigned)pending.hp,(unsigned)pending.hit_kind,(int)pending.hit_power);
             if(!pending.hp)lethal_hit_scene=serial;
         }
@@ -168,8 +187,8 @@ struct QARepeatSquareProbe {
             const unsigned index=kill_scene[0]?1:0;
             kill_scene[index]=serial;
             kill_handle[index]=enemy_handle;
-            std::fprintf(stderr,"QA_REPEAT_DEFEAT_PRESENTED scene=%llu tick=%llu lethal_scene=%llu player=%u enemy=%u stamp=%u hp=0\n",
-                (unsigned long long)serial,(unsigned long long)pending.tick,(unsigned long long)lethal_hit_scene,
+            std::fprintf(stderr,"QA_REPEAT_DEFEAT_%s scene=%llu tick=%llu lethal_scene=%llu player=%u enemy=%u stamp=%u hp=0\n",
+                frame_label(),(unsigned long long)serial,(unsigned long long)pending.tick,(unsigned long long)lethal_hit_scene,
                 player_handle,enemy_handle,19+index);
             if(!pair)defeat_scene=serial;
             else{
@@ -194,9 +213,17 @@ struct QARepeatSquareProbe {
             saw_event?"true":"false",player_handle,enemy_handle,attempts,edges,animations,hits,
             hp_known?(int)last_hp:-1,(unsigned long long)defeat_scene,
             (unsigned long long)kill_scene[0],(unsigned long long)kill_scene[1],kill_handle[0],kill_handle[1],room_dead_mask,scenario_flags);
+        if(continue_after_pair)std::fprintf(stderr,
+            "QA_R100_EXIT_STATUS {\"door_tick\":%llu,\"continue_scene\":%llu,\"state5_tick\":%llu,"
+            "\"room3_scene\":%llu,\"door_presses\":%u,\"continue_presses\":%u,\"route_index\":%u,\"battle_gate_waiting\":%u}\n",
+            (unsigned long long)exit.door_tick,(unsigned long long)exit.continue_scene,
+            (unsigned long long)exit.state5_tick,(unsigned long long)exit.room3_scene,
+            exit.door_presses,exit.continue_presses,exit.route_index,(unsigned)exit.battle_gate_waiting);
     }
 
 private:
+    const char *frame_label() const {return packet_only?"PACKET_COMPLETE":"PRESENTED";}
+
     struct Enemy {
         uint32_t handle;
         uint16_t hp,hit_kind;
@@ -217,8 +244,8 @@ private:
         uint64_t serial=0,tick=0;
         unsigned attempt=0;
         uint32_t scenario_flags=0;
-        uint8_t placement_known=0,placement_dead=0;
-        uint16_t hp=0,hit_kind=0;
+        uint8_t placement_known=0,placement_dead=0,player_state=0,player_reaction=0;
+        uint16_t hp=0,hit_kind=0,player_hp=0;
         int32_t hit_power=0;
         float sample=0;
         bool dead=false,attributed=false,motion=false;
@@ -227,10 +254,10 @@ private:
     uint64_t approach_start=0,next_square=0,press_tick=0,last_presented=0,lethal_hit_scene=0;
     uint64_t kill_scene[2]={};
     uint32_t kill_handle[2]={},room_dead_mask=0,scenario_flags=0;
-    uint16_t last_hp=0;
+    uint16_t last_hp=0,last_player_hp=0;
     float last_sample=0;
     unsigned motion_attempt=0;
-    bool attack_pending=false,edge_seen=false,target_seen=false,motion_reported=false,hp_known=false;
+    bool attack_pending=false,edge_seen=false,target_seen=false,motion_reported=false,hp_known=false,player_hp_known=false;
 };
 
 #endif

@@ -2766,6 +2766,35 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     motion->b.sound_context=NULL;
 
     CHECK(!enemy_give_player_take(disc,room_bundle,first->enemy202,&player,&tail,&setup.model,pl,pl_size,&lb,&ledger,effect_bind));
+    if(!attack_effect){
+        /* Start at the original lethal dispatcher with the actual R100
+         * placement and EM02 model. No synthetic child can pass 2905D0. */
+        gh_enemy_actor *dying=selector1->enemy202;
+        uint8_t *p=selector1->actor->view.bytes;
+        CHECK(p[0x640]==8&&word(p+0x564)==0x200&&!(word(p+0x16d4)&0x20));
+        const uint8_t lethal_state[]={2,3,0,0};
+        memcpy(p+0x2f4,lethal_state,sizeof(lethal_state));
+        p[0x54a]=p[0x54b]=0;
+        p[0x3ad]|=2;
+        init->enemies[0x53e]=0;
+        gh_game_mt predicted=init->random;
+        uint32_t draw;
+        CHECK(!gh_game_mt_next_0030f348(&predicted,&draw));
+        gh_enemy202_move death={0};
+        gh_actor_motion_status status=gh_enemy202_move_00208be0(&death,dying,&player.view,elf,elf_size);
+        fprintf(stderr,"stamp8 transform status%d frontier%08x phase%u\n",status,death.frontier,death.death_phase);
+        CHECK(status==GH_ACTOR_MOTION_UNSUPPORTED&&death.frontier==0x2905d0&&death.death_phase==3);
+        CHECK(!memcmp(p+0x2f4,lethal_state,sizeof(lethal_state))&&word(p+0x54c)==0x40400000&&
+            p[0x617]==1&&!(p[0x3ad]&2)&&init->enemies[0x53e]==7);
+        const gh_enemy_request *child=&death.death_transform_request;
+        CHECK(child->object_kind==0x220&&child->dependency_kind==0x220&&child->entry_number==0xff&&
+            child->flags==0x400000&&!child->dependency_flags&&!child->appearance&&
+            child->yaw_bits==word(p+0x104)&&!memcmp(child->position_xyz,selector1->actor->view.alias_f0,12));
+        CHECK(!memcmp(&init->random,&predicted,sizeof(predicted)));
+        status=gh_enemy202_move_00208be0(&death,dying,&player.view,elf,elf_size);
+        CHECK(status==GH_ACTOR_MOTION_UNSUPPORTED&&death.frontier==0x2905d0&&
+            !memcmp(&init->random,&predicted,sizeof(predicted)));
+    }
 release_player:
     for (unsigned i=0;i<5;i++) {
         CHECK(!gh_hitarea_shapes_abort_object(&tail.give_objects[i],&frontier));

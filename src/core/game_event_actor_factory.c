@@ -67,13 +67,16 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
     *original_nonnull = 0;
     const uint16_t kind = request->create_kind;
     const uint16_t source = request->source_kind;
-    const int variant = (source == 0x607 && (kind == 0x691 || kind == 0x694 || kind == 0x697)) ||
+    const int variant = (source == 0x652 && (kind == 0x692 || kind == 0x695 || kind == 0x698)) ||
+                        (source == 0x607 && (kind == 0x691 || kind == 0x694 || kind == 0x697)) ||
                         (source == 0x605 && (kind == 0x690 || kind == 0x693 || kind == 0x696)) ||
                         (source == 0x600 && (kind == 0x6f0 || kind == 0x6f2 || kind == 0x6f6)) ||
                         (source == 0x602 && (kind == 0x6f1 || kind == 0x6f3 || kind == 0x6f7)) ||
                         (source == 0x60a && (kind == 0x609 || kind == 0x6f4));
     if (((source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60d) &&
-        (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x667) ||
+        (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x634 && source != 0x639 &&
+        source != 0x641 && source != 0x642 && source != 0x646 && source != 0x647 &&
+        (source < 0x650 || source > 0x652) && source != 0x659 && source != 0x667 && source != 0x367) ||
         request->resource_kind != source ||
         request->create_argument != 0xffff || (kind != source && !variant)) {
         return GH_EVENT_UNSUPPORTED;
@@ -102,7 +105,7 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
         p[0x2fc] = (*b->factory_serial)++;
         memcpy(p + 0x2fe, &kind, sizeof(kind));
         memcpy(p + 0x300, &kind, sizeof(kind));
-        put(p + 0x2d0, 0x800000);
+        put(p + 0x2d0, kind == 0x367 ? 0x20000000 : 0x800000);
         s->stage = 1;
     }
     if (s->stage == 1) {
@@ -182,7 +185,7 @@ gh_game_event_status gh_event_actor_factory_initialize_model(gh_event_actor_fact
         // EL02 (+variants) are absent from all three tables and take profile 0.
         const unsigned profile = request->source_kind == 0x600 || request->source_kind == 0x605 ||
             s->kind == 0x60a || s->kind == 0x6f4 ||
-            s->kind == 0x630 || s->kind == 0x631 ? 3 : 0;
+            s->kind == 0x630 || s->kind == 0x631 || s->kind == 0x634 || s->kind == 0x639 || s->kind == 0x641 || s->kind == 0x646 ? 3 : 0;
         put(p + 0x4dc, profile);
         if (profile == 3) {
             if (frontier) *frontier = 0x14ef50;

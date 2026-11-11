@@ -1,4 +1,4 @@
-/* Original 001C9268, bounded to the real kind-363 weapon class. */
+/* Original 001C9268, bounded to the original 361–363 weapon class. */
 #include "game_enemy_weapon.h"
 #include "game_actor_model_nodes.h"
 #include "game_actor_external_parent.h"
@@ -128,8 +128,9 @@ gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *
         return GH_ACTOR_MODEL_BUSY;
     gh_title_player_view *object=&weapon->object.view;
     uint8_t *p=object->bytes;
-    if(object->size<GH_ENEMY_WEAPON_363_BYTES||object->original_vtable214!=0x42aa98||
-        (word(p+0x2fc)>>16)!=0x363)return stop(s,0x1c9268,GH_ACTOR_MODEL_UNSUPPORTED);
+    const uint16_t kind=weapon->kind;
+    if(kind<0x361||kind>0x363||object->size<GH_ENEMY_WEAPON_363_BYTES||object->original_vtable214!=0x42aa98||
+        (word(p+0x2fc)>>16)!=kind)return stop(s,0x1c9268,GH_ACTOR_MODEL_UNSUPPORTED);
     void *identity=NULL;
     if(gh_room_object_lookup(weapon->bindings.pools,weapon->handle,GH_ROOM_OBJECT_ENEMY_WEAPON,
         weapon,&identity)||identity!=&weapon->object)return GH_ACTOR_MODEL_BUSY;
@@ -139,7 +140,7 @@ gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *
 
     if(!s->stage){
         gh_object_view resource;
-        if(!weapon->resource_owner||gh_game_objects_find(weapon->resource_owner,0x363,&resource)||
+        if(!weapon->resource_owner||gh_game_objects_find(weapon->resource_owner,kind,&resource)||
             resource.bytes!=weapon->resource.bytes||!resource.file_extent_known||
             resource.file_extent>resource.size)return stop(s,0x31ccf0,GH_ACTOR_MODEL_BOUNDS);
         gh_bundle bundle;
@@ -182,7 +183,7 @@ gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *
         put(p+0x600,0);
         put(p+0x604,0);
         put(p+0x630,0);
-        put(p+0x668,60);
+        put(p+0x668,(uint32_t)(120-30*(kind-0x361)));
         s->stage=MODEL_READY;
     }
 
@@ -226,13 +227,15 @@ gh_actor_model_status gh_enemy_weapon_attach_0026ab20(gh_enemy_weapon_init *s,
         return GH_ACTOR_MODEL_ARGUMENT;
     if(s->attach_stage&&(s->parent!=parent||s->parent_model!=parent_model||
         s->actors!=actors||s->scroll!=scroll))return GH_ACTOR_MODEL_BUSY;
-    if(word(parent->bytes+0x564)!=0x202||parent->bytes[0x17c3])
+    const uint32_t parent_kind=word(parent->bytes+0x564);
+    if((parent_kind!=0x202&&(s->weapon->kind!=0x361||parent_kind!=0x203))||
+        (s->weapon->kind==0x363&&parent->bytes[0x17c3]))
         return stop(s,0x26acdc,GH_ACTOR_MODEL_UNSUPPORTED);
 
     gh_title_player_view *weapon=&s->weapon->object.view;
     uint8_t *p=weapon->bytes;
     const gh_static_transform_policy policy=s->weapon->bindings.policy;
-    const unsigned parent_index=16;
+    const unsigned parent_index=parent->bytes[0x17c3]?10:16;
     const gh_actor_part *hand,*child;
     if(gh_actor_model_part_at(parent_model,parent_index,&hand)||
         gh_actor_model_part_at(&s->model,0,&child)||!hand->bytes||!child->bytes||!child->alias_d0)
@@ -253,8 +256,15 @@ gh_actor_model_status gh_enemy_weapon_attach_0026ab20(gh_enemy_weapon_init *s,
         gh_actor_model_status status=gh_actor_model_bind_external_parent(&s->model,0,parent_model,
             parent_index,s);
         if(status)return stop(s,0x1cf160,status);
-        const uint32_t xyz[]={0x3e99999a,0xbd8f5c29,0x3f19999a};
-        const uint32_t angles[]={0,0x3eb2b8c2,0};
+        const uint32_t xyz_361_362[]={0x3e4ccccd,0xbcf5c28f,0x3e99999a};
+        const uint32_t xyz_363[]={0x3e99999a,0xbd8f5c29,0x3f19999a};
+        uint32_t xyz[3];
+        memcpy(xyz,s->weapon->kind==0x363?xyz_363:xyz_361_362,sizeof(xyz));
+        uint32_t angles[]={0,0x3eb2b8c2,0};
+        if(parent_index==10){
+            xyz[0]^=0x80000000u;
+            angles[1]^=0x80000000u;
+        }
         memcpy(child->alias_d0,xyz,12);
         memcpy(child->bytes+0x100,angles,12);
         put(p+0x604,parent_index);

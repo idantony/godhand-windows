@@ -299,19 +299,31 @@ gh_scene_placement_status gh_enemy_ems_set_002952d0(gh_enemy_ems *owner,
         call->index=(uint8_t)index;call->stage=1;
     }
     ems_entry *entry=&owner->entries[call->index];
-    if(!gh_enemy202_is_r100_supported_profile(&call->request)){
+    const gh_enemy_request *request=&call->request;
+    const int heavy=request->entry_number==14&&request->object_kind==0x2a2&&
+        request->dependency_kind==0x2a3&&!request->appearance&&!request->flags&&!request->dependency_flags;
+    if(!gh_enemy202_is_r100_supported_profile(request)&&(!heavy||!owner->bindings->names_2a2)){
         *frontier=0x2905d0;return GH_PLACE_UNSUPPORTED;
     }
-    gh_actor_motion_status status=enter_202(entry,owner->bindings,&call->request,frontier);
+    if(heavy&&!entry->enemy2a2){
+        entry->enemy2a2=calloc(1,sizeof(*entry->enemy2a2));
+        if(!entry->enemy2a2){*frontier=0x2905d0;return GH_PLACE_MEMORY;}
+    }
+    gh_actor_motion_status status=heavy?enter_2a2(entry,owner->bindings,request,frontier):
+        enter_202(entry,owner->bindings,request,frontier);
     if(status){
         if(!*frontier)*frontier=0x2905d0;
-        return entry->enemy202?motion_error(status):GH_PLACE_MEMORY;
+        return entry->enemy202||entry->enemy2a2?motion_error(status):GH_PLACE_MEMORY;
     }
     if(entry->actor&&!actor_registered(owner,entry))return GH_PLACE_BUSY;
     if(!entry->actor&&entry->enemy202){
         status=gh_enemy_actor_shutdown_native(entry->enemy202);
         if(status)return motion_error(status);
         free(entry->enemy202);entry->enemy202=NULL;
+    }
+    if(!entry->actor&&entry->enemy2a2){
+        status=release_2a2(entry,frontier);
+        if(status)return motion_error(status);
     }
     entry->entered=entry->actor!=NULL;
     *original=entry->actor;
@@ -520,6 +532,25 @@ static gh_actor_motion_status find_stamp_entry(const gh_enemy_ems *owner,
         if(!candidate->entered||!actor_registered(owner,candidate))return GH_ACTOR_MOTION_UNSUPPORTED;
         *entry=candidate;
         return GH_ACTOR_MOTION_OK;
+    }
+    return GH_ACTOR_MOTION_UNSUPPORTED;
+}
+
+gh_actor_motion_status gh_enemy_ems_set_actor_suspend_00275308(const gh_enemy_ems *owner,
+    const gh_game_init_state *manager,const gh_game_title_player *actor,int suspend,uint32_t *frontier)
+{
+    if(!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x275308;
+    if(!manager||!actor||(suspend!=0&&suspend!=1))return GH_ACTOR_MOTION_ARGUMENT;
+    if(!owner||owner->running||owner->closing||owner->bindings->actor.entry.init!=manager||
+       actor->view.original_vtable214!=0x4479c8)return GH_ACTOR_MOTION_UNSUPPORTED;
+    for(unsigned i=0;i<EMS_ROWS;++i){
+        const ems_entry *entry=owner->entries+i;
+        if(entry->actor!=actor)continue;
+        if(!entry->entered||!actor_registered(owner,entry))return GH_ACTOR_MOTION_BUSY;
+        gh_actor_motion_status status=set_entry_suspend(entry,suspend,frontier);
+        if(!status)*frontier=0;
+        return status;
     }
     return GH_ACTOR_MOTION_UNSUPPORTED;
 }
@@ -1067,7 +1098,8 @@ gh_actor_motion_status gh_enemy_ems_mark_held_weapon_00312708(gh_enemy_ems *owne
     uint8_t *actor=held->weapon->object.view.bytes;
     if(!actor||held->weapon->object.view.size!=GH_ENEMY_WEAPON_363_BYTES||
        held->model.root.bytes!=actor||object_word(actor+0x214)!=0x42aa98||
-       (object_word(actor+0x2fc)>>16)!=0x363)
+       held->weapon->kind<0x361||held->weapon->kind>0x363||
+       (object_word(actor+0x2fc)>>16)!=held->weapon->kind)
         return retire_stop(frontier,0x312748);
     if(!(object_word(actor+0x250)&0x80000000u)){
         if(gh_se_voice_detach_actor_002ce488(voices,&held->model)){
@@ -1124,10 +1156,13 @@ gh_actor_motion_status gh_enemy_ems_retire_weapon_0030f8b0(gh_enemy_ems *owner,
     gh_enemy_weapon *weapon=held->weapon;
     gh_title_player_view *view=&weapon->object.view;
     uint8_t *actor=view->bytes;
+    const uint16_t kind=weapon->kind;
     gh_room_pools *pools=weapon->bindings.pools;
+    if(kind<0x361||kind>0x363)return retire_stop(frontier,0x1c91b0);
     if(!call->stage){
         const gh_room_vector *primary,*secondary;
         if(!actor||view->size!=GH_ENEMY_WEAPON_363_BYTES||object_word(actor+0x214)!=0x42aa98||
+           (object_word(actor+0x2fc)>>16)!=kind||
            (object_word(actor+0x250)&0xa0000000u)!=0xa0000000u||object_word(actor+0x650)||
            !held->model.ready||held->model.external_owner||held->model.external_borrowers||
            held->model.sound_borrowers||gh_room_registry_view(pools,0x754c30,&primary)||
@@ -1175,16 +1210,16 @@ gh_actor_motion_status gh_enemy_ems_retire_weapon_0030f8b0(gh_enemy_ems *owner,
     if(call->stage==4){
         gh_game_objects *resources=weapon->bindings.room_objects;
         int ready=0;
-        gh_object_status status=gh_game_objects_check_ready_001ff238(resources,0x363,
+        gh_object_status status=gh_game_objects_check_ready_001ff238(resources,kind,
             &weapon->bindings.resources,&ready,frontier);
         if(status!=GH_OBJECT_OK&&status!=GH_OBJECT_MISSING)return retire_stop(frontier,*frontier?*frontier:0x1fe9b8);
         if(!ready){
             resources=weapon->bindings.global_objects;
-            status=gh_game_objects_check_ready_001ff238(resources,0x363,&weapon->bindings.resources,&ready,frontier);
+            status=gh_game_objects_check_ready_001ff238(resources,kind,&weapon->bindings.resources,&ready,frontier);
             if(status!=GH_OBJECT_OK&&status!=GH_OBJECT_MISSING)return retire_stop(frontier,*frontier?*frontier:0x1fe9b8);
         }
         if(!ready||resources!=weapon->resource_owner)return retire_stop(frontier,0x1fe9b8);
-        if(gh_game_objects_release_event_001fed78(resources,0x363,weapon->resource.bytes,
+        if(gh_game_objects_release_event_001fed78(resources,kind,weapon->resource.bytes,
             bindings->release_sound_slot,bindings->sound_context,frontier))
             return retire_stop(frontier,*frontier?*frontier:0x1fed78);
         weapon->resource_owner=NULL;

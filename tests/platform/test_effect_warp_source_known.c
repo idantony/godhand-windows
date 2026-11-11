@@ -7,6 +7,7 @@
 static gh_effect_trans_packet packet(void){
  gh_effect_trans_packet p={0};
  p.kind=GH_EFFECT_PASS_SCENE_WARP;p.original_callee=0x2f02b8;p.quad_count=1;
+ p.source=GH_EFFECT_SURFACE_3C00;
  p.quads[0].vertex_count=6;p.prim=0x5d;p.test=0x5000c;
  p.tex0=UINT64_C(0x2000000620113c00);p.writes_texa=1;p.texa=0x80;
  p.alpha=UINT64_C(0x8000000044);p.frame_mask=0xff000000;p.zbuf=UINT64_C(0x13a0000f8);

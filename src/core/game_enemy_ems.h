@@ -64,6 +64,10 @@ gh_actor_motion_status gh_enemy_manager_get_00290868(const gh_game_init_state *,
 gh_actor_motion_status gh_enemy2a2_set_escape_position_00289038(gh_game_title_player *,
     const float position[4]);
 /* cEmWrap::setSuspend resolves the stamp through the canonical EnemyM. */
+/* Original direct cEm00 VT+64. Resolve by actor identity because
+ * transformation actors can carry the original 0xFF placement stamp. */
+gh_actor_motion_status gh_enemy_ems_set_actor_suspend_00275308(const gh_enemy_ems *,
+    const gh_game_init_state *,const gh_game_title_player *,int suspend,uint32_t *);
 gh_actor_motion_status gh_enemy_ems_set_stamp_suspend_00295bc0(const gh_enemy_ems *,
     const gh_game_init_state *,uint8_t stamp,int suspend,uint32_t *frontier);
 /* One cEmWrap SetPos on a registered weaponless EM02. The wrapper applies

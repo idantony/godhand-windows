@@ -11,8 +11,9 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
  if(!s||!b||!ready||!b->init||!b->pools||!b->room_objects||!b->global_objects||!b->work||!b->room_heap||!b->packet_heap||!b->fog_rgb||!b->factory_serial||!b->scenario14||!b->save.bytes)return GH_ACTOR_MODEL_ARGUMENT;
  *ready=0;if(!r||kind< -1)return GH_ACTOR_MODEL_OK;
  if(heavy){
-  if(r->object_kind!=0x2a2||r->dependency_kind!=0x2a2||r->appearance||r->entry_number!=6||
-     r->flags||r->dependency_flags)return fail(s,0x2905d0);
+  if(r->object_kind!=0x2a2||r->appearance||r->flags||r->dependency_flags||
+     !((r->dependency_kind==0x2a2&&r->entry_number==6)||
+       (r->dependency_kind==0x2a3&&r->entry_number==14)))return fail(s,0x2905d0);
  }else if(r->object_kind!=0x202||(r->dependency_kind!=0x20a&&!gh_enemy202_is_r100_supported_profile(r)))return fail(s,0x2905d0);
  if(s->stage&&(s->b.init!=b->init||s->b.pools!=b->pools||s->b.work!=b->work||s->b.room_objects!=b->room_objects||s->b.global_objects!=b->global_objects||s->manager_kind!=kind||s->argument!=argument||s->b.room_heap!=b->room_heap||s->b.packet_heap!=b->packet_heap||s->b.factory_serial!=b->factory_serial||!same_request(&s->request,r)))return GH_ACTOR_MODEL_BUSY;
  if(!s->stage){int slot;if(gh_enemy_manager_find_free_00290958(b->init,&slot))return GH_ACTOR_MODEL_ARGUMENT;if(slot<0)return GH_ACTOR_MODEL_OK;s->slot=slot;s->b=*b;s->request=*r;s->manager_kind=kind;s->argument=argument;s->stage=1;}

@@ -30,7 +30,10 @@ static gh_game_event_status get_component(const gh_event_data_prefix *data, unsi
     *out = data->components->components[index];
     if (!out->bytes || out->original_offset != address || out->size != size)
         return GH_EVENT_ARGUMENT;
-    return data->components->event_no == 1 ? GH_EVENT_OK : GH_EVENT_UNSUPPORTED;
+    if (data->components->event_no == 1 ||
+        (data->components->event_no == 2 &&
+         (index == 0 || index == 5 || index == 9 || index == 10))) return GH_EVENT_OK;
+    return GH_EVENT_UNSUPPORTED;
 }
 
 static gh_game_event_status get_absent(const gh_event_data_prefix *data, unsigned index,
@@ -43,6 +46,39 @@ static gh_game_event_status get_absent(const gh_event_data_prefix *data, unsigne
     if (status) return status;
     if (track.records || track.count || word(out->bytes + 0x10) || word(out->bytes + 0x14))
         return GH_EVENT_UNSUPPORTED;
+    return GH_EVENT_OK;
+}
+
+static gh_game_event_status scroll_light_track(const gh_event_data_prefix *data,
+    gh_event_component_view *component, gh_event_sequence_view *track)
+{
+    gh_game_event_status status = get_component(data, 5, 0xd910, 0xdc, component);
+    if (status) return status;
+    status = gh_event_sequence_at(data, 5, track);
+    if (status) return status;
+    if (word(component->bytes + 0x10) || word(component->bytes + 0x14) != track->count)
+        return GH_EVENT_UNSUPPORTED;
+    if (data->components->event_no == 1)
+        return !track->records && !track->count ? GH_EVENT_OK : GH_EVENT_UNSUPPORTED;
+    if (!track->records || track->count != 2 || track->stride != 0x60 || track->bytes != 0xc0)
+        return GH_EVENT_UNSUPPORTED;
+
+    /* EV02 supplies two camera keys, with no interpolation or origin
+     * substitution. B770 normalizes their anonymous actor index to -1. */
+    for (unsigned i = 0; i < track->count; ++i) {
+        const uint8_t *row = track->records + i * track->stride;
+        if (word(row) != ((26u + i) << 24 | 0xffffu) || word(row + 4) || word(row + 8) ||
+            word(row + 0x28) != 0x3f800000u)
+            return GH_EVENT_UNSUPPORTED;
+        for (unsigned offset = 0x40; offset < 0x60; offset += 8) {
+            if (!(word(row + offset) & 0x7fffffffu) &&
+                !(word(row + offset + 4) & 0x7fffffffu)) return GH_EVENT_UNSUPPORTED;
+        }
+        gh_event_camera_cut camera;
+        status = gh_event_camera_cut_at(data, row[3], &camera);
+        if (status) return status;
+        if (!camera.primary) return GH_EVENT_UNSUPPORTED;
+    }
     return GH_EVENT_OK;
 }
 
@@ -74,7 +110,8 @@ gh_game_event_status gh_event_scr_light_init_00008b20(gh_event_scr_light *state,
         return GH_EVENT_ARGUMENT;
     gh_event_component_view component;
     *frontier = 0xb770;
-    gh_game_event_status status = get_absent(data, 5, 0xd910, 0xdc, &component);
+    gh_event_sequence_view track;
+    gh_game_event_status status = scroll_light_track(data, &component, &track);
     if (status) return status;
     if (!state->stage) {
         memcpy(component.bytes, "SCRLIGHT", sizeof("SCRLIGHT"));
@@ -110,9 +147,22 @@ gh_game_event_status gh_event_scr_light_move_00008ef8(gh_event_scr_light *state,
     if (!state || state->stage != 2 || !state->world || !state->world->ready)
         return GH_EVENT_ARGUMENT;
     gh_event_component_view component;
-    gh_game_event_status status = get_absent(state->data, 5, 0xd910, 0xdc, &component);
+    gh_event_sequence_view track;
+    gh_game_event_status status = scroll_light_track(state->data, &component, &track);
     if (status) return status;
     const uint8_t *key = component.bytes + 0x1c;
+    if (track.count) {
+        gh_event_component_view camera;
+        if (gh_event_component_at((gh_event_components *)state->data->components, 1, &camera) ||
+            !camera.bytes || camera.original_offset != 0xd1c8 || camera.size != 0x18)
+            return GH_EVENT_ARGUMENT;
+        const unsigned cut = half(camera.bytes + 6);
+        if (camera.bytes[4] || cut >= state->data->camera_count) return GH_EVENT_UNSUPPORTED;
+        for (unsigned i = 0; i < track.count; ++i) {
+            const uint8_t *row = track.records + i * track.stride;
+            if (row[3] <= cut) key = row;
+        }
+    }
     uint8_t *world = state->world->scalar;
     memcpy(world + 0x30, key + 0x0c, 0x0c);
     put(world + 0x3c, 0x3f800000);

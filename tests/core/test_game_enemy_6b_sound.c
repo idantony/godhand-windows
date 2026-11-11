@@ -278,6 +278,38 @@ int main(int argc,char **argv)
      &req,&spawn,&saved,&frontier)&&spawn&&req.entry_number==19&&req.dependency_kind==0x203);
  dep=req.dependency_kind;
  memcpy(enemy.view.bytes+0x564,&dep,4);
+ int32_t em03_bank;
+ C(!gh_enemy_se_request_002cb278(banks,&work,dep,&em03_bank)&&em03_bank>=1&&em03_bank!=bank);
+ ready=0;
+ for(unsigned n=0;n<16&&!ready;++n){
+  C(!gh_dvd_pump(&dvd)&&!gh_enemy_se_banks_update_002cf440(banks));
+  C(!gh_enemy_se_ready_002cb778(banks,em03_bank,&ready));
+ }
+ C(ready&&!gh_enemy_se_resolve_002cb418(banks,dep,&resolved)&&resolved==em03_bank);
+ const size_t em03_frames[]={7028,9408};
+ for(unsigned i=0;i<2;++i){
+  const int16_t program=(int16_t)(0x0a+i);
+  check_program(registry,(int16_t)em03_bank,program,9+i,11025,em03_frames[i]);
+  C(!gh_actor_attached_sound_bind(&source,&binding));
+  C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+  gh_motion_sound_request cue={.model=&model.model,.actor=&enemy.view,.bank=1,.program=program};
+  uint32_t original_handle=0,duplicate=99;
+  expected=random;
+  const unsigned before=submissions;
+  C(!gh_actor_attached_sound_motion(&source,&cue,&original_handle,&frontier)&&original_handle&&!frontier);
+  C(!gh_actor_attached_sound_motion(&source,&cue,&duplicate,&frontier)&&!duplicate&&!frontier);
+  C(!memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_attached_reservations(voices)&&
+    model.model.sound_borrowers==1);
+  C(!gh_se_voice_update(voices));
+  gh_se_voice_info info;
+  C(!gh_se_voice_query(voices,original_handle,&info)&&info.bank==em03_bank&&info.program==program&&
+    !info.pending&&info.native_voice&&info.position_mode==2&&info.distance==3&&
+    info.sample_slot==9+i&&info.rate==11025&&info.adsr2==0x5fcb&&info.channel>=45&&info.channel<=47);
+  C(submissions==before+1&&submitted[before].frames>em03_frames[i]&&(info.left_q14||info.right_q14));
+  printf("EM03 cue %02X slot %u pitch %u channel %u PCM %zu\n",program,
+      info.sample_slot,info.pitch_q12,info.channel,submitted[before].frames);
+  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
+ }
  C(!gh_actor_attached_sound_bind(&source,&binding));
  C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
  gh_motion_sound_request shared_attack={.model=&model.model,.actor=&enemy.view,.bank=0,.program=0x83};
@@ -312,6 +344,6 @@ int main(int argc,char **argv)
  gh_disc_close(disc);
  free(resource_bytes);
  free(room);
- puts("PASS actual R100 EM00 selector6B and selector15 attached cues, MT, and PCM commands");
+ puts("PASS actual R100 EM00/EM03 selector6B and selector15 attached cues, MT, and PCM commands");
  return 0;
 }

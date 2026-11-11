@@ -673,6 +673,7 @@ def main():
         ("game-om-damage-frame", "tests/core/test_game_om_damage_frame.c", "iso"),
         ("game-object-opacity", "tests/core/test_game_object_opacity.c", "none"),
         ("game-effects-frame", "tests/core/test_game_effects_frame.c", "both"),
+        ("game-esp07", "tests/core/test_game_esp07.c", "iso"),
         ("game-esp14", "tests/core/test_game_esp14.c", "iso"),
         ("game-effect-exp", "tests/core/test_game_effect_exp.c", "none"),
         ("game-effect-node", "tests/core/test_game_effect_node.c", "both"),
@@ -724,6 +725,7 @@ def main():
         ("game-om324-started-pitch", "tests/core/test_game_om324_started_pitch.c", "both"),
         ("game-enemy-started-pitch", "tests/core/test_game_enemy_started_pitch.c", "iso"),
         ("game-ema2-impact-sound", "tests/core/test_game_ema2_impact_sound.c", "iso"),
+        ("game-enemy-impact-sound", "tests/core/test_game_enemy_impact_sound.c", "iso"),
         ("game-enemy-state71-sound", "tests/core/test_game_enemy_state71_sound.c", "iso"),
         ("game-enemy-6b-sound", "tests/core/test_game_enemy_6b_sound.c", "iso"),
         ("se-pitch", "tests/assets/test_se_pitch.c", "iso"),
@@ -804,7 +806,7 @@ def main():
         parser.error("Unknown manifest test: " + ", ".join(sorted(missing_focus)))
     focused = [by_name[name] for name in dict.fromkeys(args.focus)]
     recording_transport_tests = {
-        "game-om324-started-pitch", "game-enemy-started-pitch", "game-ema2-impact-sound",
+        "game-om324-started-pitch", "game-enemy-started-pitch", "game-ema2-impact-sound", "game-enemy-impact-sound",
         "game-enemy-state71-sound", "game-enemy-6b-sound", "se-adx-sequence",
         "save-map-sound",
     }

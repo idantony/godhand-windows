@@ -9,6 +9,11 @@ static uint32_t word(const uint8_t *p)
     return value;
 }
 
+static uint16_t half(const uint8_t *p)
+{
+    return (uint16_t)(p[0] | (unsigned)p[1] << 8);
+}
+
 static void put(uint8_t *p, uint32_t value)
 {
     memcpy(p, &value, sizeof(value));
@@ -24,7 +29,8 @@ static gh_game_event_status absent(const gh_event_data_prefix *data, unsigned in
     gh_event_sequence_view track;
     gh_game_event_status status = gh_event_sequence_at(data, index, &track);
     if (status) return status;
-    if (data->components->event_no != 1 || track.records || track.count ||
+    if ((data->components->event_no != 1 && !(index == 3 && data->components->event_no == 2)) ||
+        track.records || track.count ||
         word(view->bytes + 0x10) || word(view->bytes + 0x14))
         return GH_EVENT_UNSUPPORTED;
     return GH_EVENT_OK;
@@ -64,6 +70,44 @@ static int same_bank(const gh_event_data_prefix *data, const gh_game_effects *ef
            effects->event_data.size <= data->bytes - offset;
 }
 
+static gh_game_event_status effect_sequence(const gh_event_data_prefix *data,
+    gh_event_component_view *component, const uint8_t **row)
+{
+    *row = NULL;
+    if (!data->components || !data->components->constructed) return GH_EVENT_ARGUMENT;
+    if (data->components->event_no == 1) return absent(data, 4, 0xd1e8, component);
+    if (data->components->event_no != 2) return GH_EVENT_UNSUPPORTED;
+    if (gh_event_component_at((gh_event_components *)data->components, 4, component) ||
+        !component->bytes || component->original_offset != 0xd1e8 || component->size != 0x18)
+        return GH_EVENT_ARGUMENT;
+
+    gh_event_sequence_view track;
+    gh_game_event_status status = gh_event_sequence_at(data, 4, &track);
+    if (status) return status;
+    const uint8_t *record = track.records;
+    if (!record || track.count != 1 || track.stride != 0x2c || track.bytes != 0x2c ||
+        word(component->bytes + 0x10) || word(component->bytes + 0x14) != 1)
+        return GH_EVENT_UNSUPPORTED;
+
+    /* C728 resolves the two -1 actor keys to the camera timeline and NULL.
+     * The authored action is a single parentless create with loop-zero gate. */
+    if (half(record) != 0xffff || record[2] || record[4] || record[5] ||
+        word(record + 8) != 0xffff || word(record + 0xc) != 1 ||
+        word(record + 0x10) != 0x02000001u)
+        return GH_EVENT_UNSUPPORTED;
+    gh_event_camera_cut camera;
+    status = gh_event_camera_cut_at(data, record[3], &camera);
+    if (status) return status;
+    uint16_t duration;
+    status = gh_event_camera_cut_length_00004e60(data, record[3], &duration);
+    if (status) return status;
+    if (!camera.primary || half(record + 6) >= duration)
+        return GH_EVENT_UNSUPPORTED;
+
+    *row = record;
+    return GH_EVENT_OK;
+}
+
 gh_game_event_status gh_event_effect_init_00005000(gh_event_effect_play *state,
     const gh_event_data_prefix *data, const gh_game_event_config *config, gh_boot_work *work,
     gh_game_effects *effects, uint32_t *frontier)
@@ -74,7 +118,8 @@ gh_game_event_status gh_event_effect_init_00005000(gh_event_effect_play *state,
         (state->effects && state->effects != effects)) return GH_EVENT_ARGUMENT;
     gh_event_component_view component;
     *frontier = 0xc728;
-    gh_game_event_status status = absent(data, 4, 0xd1e8, &component);
+    const uint8_t *sequence;
+    gh_game_event_status status = effect_sequence(data, &component, &sequence);
     if (status) return status;
     memcpy(component.bytes, "EFFECT", sizeof("EFFECT"));
     uint8_t *system = (uint8_t *)work + 0x5e4;
@@ -153,14 +198,28 @@ gh_game_event_status gh_event_effect_move_00005050(gh_event_effect_play *state,
         !same_bank(state->data, state->effects) || state->work != bindings->work ||
         state->effects != bindings->storage.effects) return GH_EVENT_ARGUMENT;
     gh_event_component_view component, env;
-    gh_game_event_status status = absent(state->data, 4, 0xd1e8, &component);
+    const uint8_t *sequence;
+    gh_game_event_status status = effect_sequence(state->data, &component, &sequence);
     if (status) return status;
     if (gh_event_component_at((gh_event_components *)state->data->components, 0, &env) ||
         !env.bytes || env.size != 0x44 || env.original_offset != 0xd200) return GH_EVENT_ARGUMENT;
     float frame;
     memcpy(&frame, env.bytes + 0x14, sizeof(frame));
-    const int cut_start = (word(env.bytes + 0x28) & 1) && frame == 0;
-    if (!cut_start) {
+    const int play = (word(env.bytes + 0x28) & 1) != 0;
+    const int cut_start = play && frame == 0;
+    int sequence_due = 0;
+    if (play && sequence) {
+        gh_event_component_view camera;
+        *frontier = 0x4ed0;
+        if (gh_event_component_at((gh_event_components *)state->data->components, 1, &camera) ||
+            !camera.bytes || camera.original_offset != 0xd1c8 || camera.size != 0x18)
+            return GH_EVENT_ARGUMENT;
+        float camera_frame;
+        memcpy(&camera_frame, camera.bytes + 0x0c, sizeof(camera_frame));
+        sequence_due = half(camera.bytes + 6) == sequence[3] &&
+            camera_frame == (float)half(sequence + 6) && !word(camera.bytes + 8);
+    }
+    if (!cut_start && !sequence_due) {
         if (state->stage) return GH_EVENT_ARGUMENT;
         *frontier = 0;
         return GH_EVENT_OK;
@@ -177,7 +236,9 @@ gh_game_event_status gh_event_effect_move_00005050(gh_event_effect_play *state,
         state->esp = storage->esp;
         state->emitters = storage->emitters;
         state->next_esp = 0;
-        state->stage = 1;
+        state->stage = cut_start ? 1 : 4;
+    } else if ((state->stage <= 3 && !cut_start) || (state->stage == 5 && !sequence_due)) {
+        return GH_EVENT_ARGUMENT;
     }
     *relative = 0;
     if (state->stage == 1) {
@@ -195,9 +256,25 @@ gh_game_event_status gh_event_effect_move_00005050(gh_event_effect_play *state,
             child = gh_effect_create_event_cut_begin_002fa158(&state->create, cut);
             if (child) return effect_status(child);
             state->stage = 3;
+        } else {
+            state->stage = 4;
         }
     }
     if (state->stage == 3) {
+        gh_effect_status child = gh_game_effect_create_00306528(&state->create, bindings);
+        if (child || !state->create.complete) {
+            *frontier = state->create.frontier ? state->create.frontier : 0x306528;
+            return child ? effect_status(child) : GH_EVENT_CALLEE;
+        }
+        state->stage = 4;
+    }
+    if (state->stage == 4 && sequence_due) {
+        *frontier = 0x306528;
+        gh_effect_status child = gh_effect_create_event_sequence_00005288(&state->create);
+        if (child) return effect_status(child);
+        state->stage = 5;
+    }
+    if (state->stage == 5) {
         gh_effect_status child = gh_game_effect_create_00306528(&state->create, bindings);
         if (child || !state->create.complete) {
             *frontier = state->create.frontier ? state->create.frontier : 0x306528;

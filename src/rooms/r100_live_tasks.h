@@ -17,7 +17,7 @@ typedef struct {
     gh_room_state *room;
     gh_scene_at_manager *at;
     gh_game_init_state *init;
-    const gh_boot_work *work;
+    gh_boot_work *work;
     const gh_title_player_view *player;
     gh_enemy_ems **enemies;
     gh_r100_script_leaf checkpoint;
@@ -34,6 +34,7 @@ typedef struct {
     gh_r100_script_status (*camera_ended)(void *,int *,uint32_t *);
     gh_r100_script_status (*end_soft_event)(void *,gh_soft_event_end *,uint32_t *);
 } gh_r100_live_bindings;
+struct gh_r100_live_tasks;
 typedef struct {
     gh_r100_live_bindings b;
     uint32_t entry,frontier;
@@ -45,8 +46,10 @@ typedef struct {
     gh_room_camera_start camera_start;
     gh_enemy_stamp_pose at1_pose;
     gh_soft_event_end soft_end;
+    uint8_t devil_event_stage,battle_stage,battle_spawn_index,post_devil_stage;
+    struct gh_r100_live_tasks *owner;
 } gh_r100_live_task;
-typedef struct {gh_r100_live_task tasks[8];} gh_r100_live_tasks;
+typedef struct gh_r100_live_tasks {gh_r100_live_task tasks[9];} gh_r100_live_tasks;
 /* Original BC0 registrations. The supported wait paths run real scenario
  * fibers and native gates. The first unrecovered positive branch is explicit. */
 int gh_r100_live_entry(uint32_t entry);

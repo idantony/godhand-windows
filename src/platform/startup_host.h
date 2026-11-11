@@ -104,6 +104,7 @@ typedef struct gh_startup_snapshot {
     uint32_t last_move_handle,last_move_entry,player_update_stage,child_update_stage;
     uint32_t player_handle,player_state_entry,player_update_frontier,player_attack_target,player_attack_skill;
     float player_world_position[3],player_motion_sample;
+    uint16_t player_hp;
     uint8_t player_pose_ready,player_state[4],player_square_buffer;
     /* Both original opening EMS stamps. Bits 0/1 correspond to 19/20. */
     uint32_t r100_second_enemy_handle,r100_scenario_flags;

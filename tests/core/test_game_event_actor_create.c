@@ -14,6 +14,7 @@
 #include "game_event_actor_factory.h"
 #include "game_event_actor_extra.h"
 #include "game_event_actor_play.h"
+#include "game_event_play_env.h"
 #include "game_event_actor_release.h"
 #include "game_event_release_stage.h"
 #include "game_actor_motion_ik.h"
@@ -817,18 +818,83 @@ int main(int argc, char **argv) {
         CHECK(gh_event_actor_creation_poll_00297a68(&components, &ready) == GH_EVENT_OK);
     }
     if (ev02) {
-        if (task_status != GH_EVENT_UNSUPPORTED || state.actor_cursor != 11)
+        if (task_status || state.actor_cursor != 22)
             fprintf(stderr, "EV02 ActorCreate status %u frontier %08x REL %04x row %zu model detail %u\n",
                 task_status, frontier, state.frontier_rel, state.actor_cursor, state.actor_cursor < roster_capacity ? rows[state.actor_cursor].model.detail : 0);
-        CHECK(task_status == GH_EVENT_UNSUPPORTED && frontier == 0x297a48 &&
-              state.frontier_rel == 0x04d0 && state.actor_cursor == 11 && !ready);
-        for (unsigned i = 0; i < 11; ++i)
+        CHECK(!task_status && !frontier && !state.frontier_rel && state.actor_cursor == 22 && ready && !state.task_live);
+        for (unsigned i = 0; i < 22; ++i)
             CHECK(state.actor_handles[i] && rows[i].handle == state.actor_handles[i] && rows[i].init_stage == 4);
         CHECK(rows[0].kind == 0x600 && rows[1].kind == 0x601 && rows[2].kind == 0x602 && rows[3].kind == 0x605);
         CHECK(rows[6].kind == 0x60a && rows[10].kind == 0x631 && extra.accessory_handle &&
               extra.olivia_accessory.actor_index == 6 && extra.accessory_parts.parent == &rows[6].model);
         CHECK(rows[4].kind == 0x606 && rows[5].kind == 0x607);
+        const char *crowd_files[] = {"el/el34.dat", "el/el39.dat"};
+        for (unsigned i = 0; i < 2; ++i) {
+            const unsigned actor_index = 11 + i;
+            const unsigned kind = i ? 0x639 : 0x634;
+            const gh_event_actor_factory *crowd = &rows[actor_index];
+            const uint8_t *actor_bytes = crowd->object.view.bytes;
+            CHECK(crowd->kind == kind && crowd->shadow.initialized && word(actor_bytes + 0x4dc) == 3);
+            CHECK(actor_bytes[0x4d8] == 1 && actor_bytes[0x2fe] == (uint8_t)kind &&
+                  actor_bytes[0x2ff] == 6 && !crowd->model.external_parent);
+            CHECK(!gh_event_actor_create_work_at(&state, actor_index, &row, &cut));
+            CHECK(word(row + 4) == kind && word(row + 0x34) == 0xffff && !word(row + 0x38));
+            size_t bytes;
+            uint8_t *asset = load(disc, crowd_files[i], &bytes);
+            CHECK(crowd->resource.file_extent == bytes && !memcmp(crowd->resource.bytes, asset, bytes));
+            free(asset);
+        }
         CHECK(!word(rows[4].object.view.bytes + 0x4dc) && !word(rows[5].object.view.bytes + 0x4dc));
+        const gh_event_actor_factory *prop = &rows[21];
+        CHECK(prop->kind == 0x367 && prop->model.ready && !prop->shadow.initialized &&
+              word(prop->object.view.bytes + 0x2d0) == 0x20000000 && !prop->object.view.bytes[0x4d8]);
+        CHECK(!gh_event_actor_create_work_at(&state, 21, &row, &cut));
+        CHECK(word(row + 4) == 0x367 && word(row + 0x40) == 0x367 && word(row + 0x34) == 0xffff);
+        size_t prop_size;
+        uint8_t *prop_asset = load(disc, "om/om67.dat", &prop_size);
+        CHECK(prop->resource.file_extent == prop_size && !memcmp(prop->resource.bytes, prop_asset, prop_size));
+        free(prop_asset);
+        for (unsigned i = 0; i < prop->object.view.bytes[0x2b1]; ++i) {
+            const uint8_t *node;
+            size_t mesh;
+            CHECK(!gh_actor_model_node_at(&prop->model, i, &node, &mesh));
+            fprintf(stderr, "OM67 node%u layer%u flags%08x\n", i, node[0x40c], word(node + 0x380));
+            if (node[0x40c] >= 0x40) CHECK(word(node + 0x380) & 1);
+        }
+        const uint16_t tail_kinds[] = {0x650, 0x651, 0x652, 0x659};
+        const char *tail_files[] = {"el/el50.dat", "el/el51.dat", "el/el52.dat", "el/el59.dat"};
+        for (unsigned i = 0; i < 4; ++i) {
+            const unsigned actor_index = 17 + i;
+            const gh_event_actor_factory *tail = &rows[actor_index];
+            CHECK(tail->kind == tail_kinds[i] && !tail->shadow.initialized &&
+                  !word(tail->object.view.bytes + 0x4dc) && !tail->object.view.bytes[0x4d8] &&
+                  !tail->model.external_parent);
+            CHECK((int8_t)tail->object.view.bytes[0x2b5] == (i == 0 ? -10 : 0));
+            CHECK(!gh_event_actor_create_work_at(&state, actor_index, &row, &cut));
+            CHECK(word(row + 4) == tail_kinds[i] && word(row + 0x40) == tail_kinds[i] &&
+                  word(row + 0x34) == 0xffff && !word(row + 0x38));
+            size_t bytes;
+            uint8_t *asset = load(disc, tail_files[i], &bytes);
+            CHECK(tail->resource.file_extent == bytes && !memcmp(tail->resource.bytes, asset, bytes));
+            free(asset);
+        }
+        static const uint16_t paired_kinds[][2] = {{0x641, 0x642}, {0x646, 0x647}};
+        static const unsigned child_parts[] = {0, 1, 17, 18}, parent_parts[] = {15, 16, 9, 10};
+        for (unsigned i = 0; i < 2; ++i) {
+            const gh_event_actor_factory *parent_actor = &rows[13 + i * 2];
+            const gh_event_actor_factory *child_actor = &rows[14 + i * 2];
+            CHECK(parent_actor->kind == paired_kinds[i][0] && child_actor->kind == paired_kinds[i][1]);
+            CHECK(parent_actor->shadow.initialized && word(parent_actor->object.view.bytes + 0x4dc) == 3);
+            CHECK(!child_actor->shadow.initialized && !word(child_actor->object.view.bytes + 0x4dc));
+            CHECK(!parent_actor->object.view.bytes[0x4d8] && !child_actor->object.view.bytes[0x4d8]);
+            CHECK(word(child_actor->object.view.bytes + 0x30a4) == 1 && extra.row_parts[6 + i].count == 4);
+            CHECK(extra.row_parts[6 + i].parent == &parent_actor->model);
+            for (unsigned j = 0; j < 4; ++j) {
+                const uint8_t *world;
+                CHECK(!gh_actor_model_external_parts_at(&child_actor->model, child_parts[j], &world));
+                CHECK(world == parent_actor->model.parts[parent_parts[j]].bytes);
+            }
+        }
         static const uint8_t parts[][4] = {{0, 1, 2, 0}, {0, 1, 17, 18}};
         static const uint8_t parents[][4] = {{2, 3, 4, 0}, {15, 16, 9, 10}};
         for (unsigned i = 0; i < 2; ++i) {
@@ -849,6 +915,24 @@ int main(int argc, char **argv) {
         const uint8_t right_hand_name[8] = "RH_01";
         CHECK(!gh_actor_model_find_mesh_0014b730(&rows[3].model, right_hand_name, 8, &right_hand, &original) &&
               original && (word(right_hand.bytes + 0x380) & 1));
+        gh_event_component_view event_env;
+        CHECK(!gh_event_component_at(&components, 0, &event_env));
+        put_word(event_env.bytes + 0x34, 0x298110);
+        const uint8_t closed_hand_name[8] = "RH_00";
+        gh_player_mesh_reference closed_hand;
+        CHECK(!gh_actor_model_find_mesh_0014b730(&rows[3].model, closed_hand_name, 8, &closed_hand, &original) &&
+              original && !(word(closed_hand.bytes + 0x380) & 1));
+        put_word(event_env.bytes + 0x10, 15);
+        CHECK(!gh_event_env_extra_move_object_00006b08(&components, &rows[3].model, bindings.save, &frontier));
+        CHECK(!(word(closed_hand.bytes + 0x380) & 1) && (word(right_hand.bytes + 0x380) & 1));
+        put_word(event_env.bytes + 0x10, 16);
+        CHECK(!gh_event_env_extra_move_object_00006b08(&components, &rows[3].model, bindings.save, &frontier));
+        CHECK((word(closed_hand.bytes + 0x380) & 1) && !(word(right_hand.bytes + 0x380) & 1));
+        CHECK(!gh_event_env_extra_move_object_00006b08(&components, &rows[5].model, bindings.save, &frontier));
+        CHECK(!gh_actor_model_find_mesh_0014b730(&rows[5].model, closed_hand_name, 8, &closed_hand, &original));
+        if (original) CHECK(word(closed_hand.bytes + 0x380) & 1);
+        put_word(event_env.bytes + 0x34, 0);
+        put_word(event_env.bytes + 0x10, 0);
         CHECK(!gh_event_actor_create_work_at(&state, 3, &row, &cut));
         CHECK(word(row + 0x30) == 0x102 && word(row + 0x34) == 0xffff && !word(row + 0x38));
         CHECK(child.model.external_parent == &rows[3].model && attachment.parent_model == &rows[3].model &&
@@ -859,7 +943,7 @@ int main(int argc, char **argv) {
         CHECK(!gh_event_actor_create_abort(&state));
         CHECK(!gh_event_actor_extra_abort(&extra));
         CHECK(child.model.external_parent == &parent_model && attachment.parent_model == &parent_model &&
-              parent_model.external_borrowers == 1 && !rows[3].model.external_borrowers);
+              parent_model.external_borrowers == 1 && !rows[3].model.external_borrowers && !rows[13].model.external_borrowers && !rows[15].model.external_borrowers);
         CHECK(!gh_event_actor_roster_abort(&roster));
         free(rows);
         gh_game_player_child_attachment_clear(&attachment);
@@ -880,7 +964,7 @@ int main(int argc, char **argv) {
         free(pl01);
         free(elf);
         gh_disc_close(disc);
-        puts("PASS R003 EV02 EL00 through EL31 creation, jacket and EL06/07 borrows, rollback; EL34 strict");
+        puts("PASS R003 EV02 22 actors including OM67 and all EL rows, actor readiness and rollback");
         return 0;
     }
     if (task_status || state.actor_cursor != 9) {

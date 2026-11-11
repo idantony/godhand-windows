@@ -439,7 +439,7 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
    }
   }else if(w(p+0x15b0)){
    const int32_t residual=(int32_t)w(p+0x160c);
-   if(residual!=0&&residual!=15)return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
+   if(residual!=0&&residual!=15&&residual!=7)return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
    gh_player_frame_status status=damage_hp_0012c0f8(s,residual);
    if(status)return status;
    if((int16_t)half(p+0x54a)<1)sh(p+0x54a,1);
@@ -523,7 +523,7 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
   const int close_enemy=(dependency==0x203&&stamp==19)||(dependency==0x200&&stamp==20);
   const int short_hit=s->pending_damage_kind==0x37&&
     ((s->pending_damage==15&&dependency==0x20a)||(s->pending_damage==20&&close_enemy));
-  const int stamp19_fall=s->pending_damage_kind==0x3e&&s->pending_damage==45&&
+  const int stamp19_fall=s->pending_damage_kind==0x3e&&(s->pending_damage==45||s->pending_damage==23)&&
     dependency==0x203&&stamp==19;
   if(!short_hit&&!stamp19_fall)return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   gh_player_frame_status status=damage_hp_0012c0f8(s,s->pending_damage);

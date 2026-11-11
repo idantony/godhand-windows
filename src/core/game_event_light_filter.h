@@ -17,7 +17,7 @@ typedef struct {
     gh_scene_filters *filters;
 } gh_event_light_filter;
 
-/* Canonical component scratch holds the original origin keys. The EV01 mapping
+/* Canonical component scratch holds the original origin keys. The EV01/EV02 mapping
  * is validated without rewriting serialized SEQ bytes. Frontiers are REL offsets. */
 gh_game_event_status gh_event_object_light_init_00008648(gh_event_light_filter *,
     gh_event_components *, const gh_event_data_prefix *, gh_game_world_light *, uint32_t *);

@@ -46,6 +46,29 @@ static int authored_actor_scale(const gh_esp_create_call *c,float scale)
     emitter.serial==c->emitter_serial&&gh_effect_em00_attack_emitter_is_bound(&emitter);
 }
 static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const uint8_t*r,const uint8_t*source){
+ if(r[0x290]==1&&gh_effect_r003_esp08_row((gh_effect_view){r,0x2f0})){
+  /* 301648–301878 scale mode1 seeds the local transform from the first
+   * authored scale key and the curve magnitude from two RNG draws. */
+  for(unsigned offset=0x18;offset<=0x44;offset+=4)
+   if(!isfinite(floating(r+offset)))return fail(c,0x301648,GH_EFFECT_UNSUPPORTED);
+  const float scale=floating(source+0x1e0);
+  if(scale!=1.0f||w(p+8)||w(p+0x10))return fail(c,0x301648,GH_EFFECT_UNSUPPORTED);
+  uint8_t next[0x400];
+  memcpy(next,p,sizeof(next));
+  float local[2]={mul(floating(r+0x18),floating(r+0x2c)),mul(floating(r+0x1c),floating(r+0x2c))};
+  float x=add(floating(r+0x18),mul(floating(r+0x20),random_signed(next)));
+  float y=add(floating(r+0x1c),mul(floating(r+0x24),random_signed(next)));
+  if(r[1]&0x80u){local[1]=local[0];y=x;}
+  if(!isfinite(local[0])||!isfinite(local[1])||!isfinite(x)||!isfinite(y))
+   return fail(c,0x301648,GH_EFFECT_UNSUPPORTED);
+  if(local[0]==0.0f&&local[1]==0.0f){uint32_t tiny=0x3727c5ac;memcpy(local,&tiny,4);local[1]=local[0];}
+  next[0x16]=0;put(next+0x90,w(next+0x90)&~1u);
+  memcpy(next+0x20,local,sizeof(local));put(next+0x28,0x3f800000u);
+  put(next+0x11c,w(next+0x11c)|0x400000u);memcpy(next+0x14c,r+0x28,0x20);
+  store_float(next+0x144,x);store_float(next+0x148,y);
+  memcpy(p,next,sizeof(next));
+  return GH_EFFECT_OK;
+ }
  if(r[0x290]!=2)return fail(c,0x301648,GH_EFFECT_UNSUPPORTED);
  const float scale=floating(source+0x1e0);
  if(!authored_actor_scale(c,scale))return fail(c,0x301554,GH_EFFECT_UNSUPPORTED);
@@ -85,7 +108,7 @@ static gh_effect_status initial_transform(gh_esp_create_call*c,uint8_t*p,const u
  if(!r[0x292]){float variation=random_range(next,floating(r+0x64),floating(r+0x68));for(unsigned axis=0;axis<3;axis++)if(first&(0x40u>>axis))angles[axis]=add(angles[axis],variation);}else {for(unsigned axis=0;axis<3;axis++)angles[axis]=add(angles[axis],mul(random_signed(next),floating(r+0x64+axis*4)));for(unsigned axis=0;axis<3;axis++)velocity[axis]=add(velocity[axis],mul(random_signed(next),floating(r+0x70+axis*4)));}
  if(mirrored){velocity[1]=-velocity[1];velocity[2]=-velocity[2];angles[1]=-angles[1];angles[2]=-angles[2];}
  if(!r[0x291]){for(unsigned axis=0;axis<3;axis++)if(first&(UINT32_C(0x80000000)>>axis))position[axis]=add(position[axis],random_range(next,floating(r+0x88),floating(r+0x8c)));}else for(unsigned axis=0;axis<3;axis++)position[axis]=add(position[axis],mul(random_signed(next),floating(r+0x88+axis*4)));
- if(w(r+4)&0x200000u){uint32_t f=0;gh_effect_status status=(r[0x133]==9?gh_effect_position_init_scaled_00301c20(next,(gh_effect_view){r,0x2f0},mirrored,scale,position,&f):gh_esp14_position_init_00301c20(next,(gh_effect_view){r,0x2f0},mirrored,position,&f));if(status)return fail(c,f?f:0x301c20,status);}
+ if(w(r+4)&0x200000u){uint32_t f=0;gh_effect_status status=((r[0x133]==9||r[0x133]==8)?gh_effect_position_init_scaled_00301c20(next,(gh_effect_view){r,0x2f0},mirrored,scale,position,&f):gh_esp14_position_init_00301c20(next,(gh_effect_view){r,0x2f0},mirrored,position,&f));if(status)return fail(c,f?f:0x301c20,status);}
  else if(mirrored){position[0]=-position[0];store_float(next+0x26c,-floating(next+0x26c));}if(scale!=1.0f){
   for(unsigned axis=0;axis<3;axis++)position[axis]=mul(position[axis],scale);
   const float radial=mul(floating(next+0x26c),scale);
@@ -160,6 +183,24 @@ static gh_effect_status initialize_12(gh_esp_create_call*c,uint8_t*p,const uint8
  c->complete=1;
  return GH_EFFECT_OK;
 }
+static gh_effect_status initialize_8(gh_esp_create_call *c,uint8_t *p,gh_effect_view record)
+{
+ if(w(p+0xf0)!=0x44e820u||w(p+0x114)||!gh_effect_r003_esp08_row(record))
+  return fail(c,0x2ea908,GH_EFFECT_UNSUPPORTED);
+ const uint8_t *r=record.bytes;
+ float u_rate=mul(floating(r+0x13c),.1f),v_rate=mul(floating(r+0x140),.1f);
+ if(!isfinite(u_rate)||!isfinite(v_rate))return fail(c,0x2ea908,GH_EFFECT_UNSUPPORTED);
+ gh_effect_status status=gh_effect_create_esp_commit_8(c->b.storage.effects,c->slot,c->serial);
+ if(status)return fail(c,0x2ea908,status);
+ store_float(p+0x2b0,add(mul((float)(int8_t)r[0x18d],.1f),1));
+ store_float(p+0x2b4,add(mul((float)(int8_t)r[0x18e],.1f),1));
+ put(p+0x2b8,0);put(p+0x2bc,0);
+ store_float(p+0x2c0,u_rate);store_float(p+0x2c4,v_rate);
+ put(p+0x2c8,2);put(p+0x2cc,0);
+ c->complete=1;c->stage=12;
+ return GH_EFFECT_OK;
+}
+
 static gh_effect_status initialize_13(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
  if(w(p+0xf0)!=0x44ec68u||r[0x16c]!=0||r[0x170]!=12||w(p+0x114))
     return fail(c,0x2f11f0,GH_EFFECT_UNSUPPORTED);
@@ -182,12 +223,17 @@ static gh_effect_status initialize_13(gh_esp_create_call*c,uint8_t*p,const uint8
  return GH_EFFECT_OK;
 }
 /* 2F3E68 compares the particle world position to the selected camera eye. */
-static gh_effect_status shake_range(gh_esp_create_call*c,const gh_game_pl_camera*camera,float radius,int*near){
+gh_effect_status gh_esp18_shake_range_002f3e68(gh_game_effects *effects,unsigned slot,uint32_t serial,
+ const gh_game_pl_camera *camera,float radius,gh_static_transform_policy policy,int *near,uint32_t *frontier)
+{
+ if(!frontier)return GH_EFFECT_ARGUMENT;
+ *frontier=0x2f3e68;
+ if(!camera||!camera->constructed||!near||!isfinite(radius)||radius<0)
+    return GH_EFFECT_ARGUMENT;
  float position[4];
- uint32_t pc=0;
- gh_effect_status status=gh_effect_node_world_position_native(c->b.storage.effects,0,c->slot,c->serial,
-     position,c->b.policy,&pc);
- if(status)return fail(c,pc?pc:0x2b6160,status);
+ gh_effect_status status=gh_effect_node_world_position_native(effects,0,slot,serial,
+     position,policy,frontier);
+ if(status){if(!*frontier)*frontier=0x2b6160;return status;}
  *near=1;
  if(radius==0.0f)return GH_EFFECT_OK;
  float delta[3];
@@ -195,27 +241,34 @@ static gh_effect_status shake_range(gh_esp_create_call*c,const gh_game_pl_camera
     delta[i]=mul(add(position[i],-floating(camera->fields+0x210+i*4)),1000.0f);
  float squared=add(add(mul(delta[0],delta[0]),mul(delta[1],delta[1])),mul(delta[2],delta[2]));
  float distance=sqrtf(squared);
- if(!isfinite(distance))return fail(c,0x1f7df8,GH_EFFECT_UNSUPPORTED);
+ if(!isfinite(distance)){*frontier=0x1f7df8;return GH_EFFECT_UNSUPPORTED;}
  *near=distance<=radius;
  return GH_EFFECT_OK;
 }
 
-/* Cut2 uses two one-shot counters. Continuous (-1) shake stays at 2F40C0. */
 static gh_effect_status initialize_18(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
  gh_game_pl_camera *camera=c->b.camera;
  if(!camera||!camera->constructed||camera->identity!=c->b.active_camera||
     camera->policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE)
     return fail(c,0x2f3f30,GH_EFFECT_ARGUMENT);
  int horizontal=(int8_t)r[0x18c],vertical=(int8_t)r[0x18d];
- if(w(p+0xf0)!=0x44f078u||horizontal<0||vertical<0||w(p+0x114))
+ if(w(p+0xf0)!=0x44f078u||horizontal<-1||vertical<-1||w(p+0x114))
     return fail(c,0x2f3f30,GH_EFFECT_UNSUPPORTED);
+ if(horizontal<0||vertical<0){
+    gh_effect_view impact;
+    if(horizontal!=-1||vertical!=0||gh_effect_est_at_00306030(c->b.storage.effects,0,3,&impact)||
+       !impact.bytes||impact.size<16+2*0x2f0||r!=impact.bytes+16+0x2f0)
+       return fail(c,0x2f3f30,GH_EFFECT_UNSUPPORTED);
+ }
  float radius=mul(floating(r+0x15c),1000.0f);
  if(!isfinite(radius)||radius<0.0f)return fail(c,0x2f3e68,GH_EFFECT_UNSUPPORTED);
  for(unsigned i=0;i<8;i++)
     if(!isfinite(floating(r+0x13c+i*4)))return fail(c,0x2f3f30,GH_EFFECT_UNSUPPORTED);
  int near=0;
- gh_effect_status status=shake_range(c,camera,radius,&near);
- if(status)return status;
+ uint32_t frontier=0;
+ gh_effect_status status=gh_esp18_shake_range_002f3e68(c->b.storage.effects,c->slot,c->serial,
+    camera,radius,c->b.policy,&near,&frontier);
+ if(status)return fail(c,frontier,status);
  status=gh_effect_create_esp_commit_18(c->b.storage.effects,c->slot,c->serial);
  if(status)return fail(c,0x2f3f30,status);
  memcpy(camera->fields+0x268,r+0x13c,16);
@@ -224,8 +277,8 @@ static gh_effect_status initialize_18(gh_esp_create_call*c,uint8_t*p,const uint8
  half(p+0x2b0,(uint16_t)horizontal);
  half(p+0x2b2,(uint16_t)vertical);
  if(near){
-    camera->fields[0x278]=(uint8_t)horizontal;
-    camera->fields[0x264]=(uint8_t)vertical;
+    camera->fields[0x278]=horizontal<0?0:(uint8_t)horizontal;
+    camera->fields[0x264]=vertical<0?0:(uint8_t)vertical;
  }
  c->stage=12;
  c->complete=1;
@@ -269,6 +322,31 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
   c->stage=12;
   return GH_EFFECT_OK;
  }
+ if(view.type==7&&c->stage==10){
+  gh_effect_view impact;
+  if(view.actor||view.selector||w(p+0xf0)!=0x44e770u||!b->globals||
+     gh_effect_est_at_00306030(b->storage.effects,0,3,&impact)||!impact.bytes||
+     impact.size<0x300||r!=impact.bytes+16)
+     return fail(c,0x2e9ba0,GH_EFFECT_UNSUPPORTED);
+  const float radius=mul(floating(r+0x144),0.01f);
+  const float extent=mul(floating(r+0x150),0.1f);
+  const float falloff=mul(floating(r+0x13c),1000.0f);
+  if(!isfinite(radius)||!isfinite(extent)||!isfinite(falloff))
+     return fail(c,0x2e9ba0,GH_EFFECT_UNSUPPORTED);
+  put(p+0x11c,w(p+0x11c)&~0x01000000u);
+  store_float(p+0x2b0,radius);
+  store_float(p+0x2b4,radius);
+  store_float(p+0x2bc,extent);
+  store_float(p+0x2c8,falloff);
+  put(p+0x2d0,w(r+0x140));
+  p[0x2cc]=r[0x16c];
+  p[0x2ce]=(uint8_t)(r[0x170]+1);
+  b->globals->distortion_ready_61b644=0;
+  status=gh_effect_create_esp_commit_type7(b->storage.effects,c->slot,c->serial);
+  if(status)return fail(c,0x2e9ba0,status);
+  c->stage=12;c->complete=1;
+  return GH_EFFECT_OK;
+ }
  if(view.type==0x14&&c->stage==10){
   const gh_esp14_provider *provider=b->model_effect;
   if(!provider||!provider->initialize)return fail(c,0x2f1d58,GH_EFFECT_UNSUPPORTED);
@@ -285,6 +363,7 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
  }
  if(view.type==0x18&&c->stage==10)return initialize_18(c,p,r);
  if(view.type==0x13&&c->stage==10)return initialize_13(c,p,r);
+ if(view.type==8&&c->stage==10)return initialize_8(c,p,view.record);
  if(view.type==9&&c->stage==10){
   uint32_t pc=0;
   float position[4];

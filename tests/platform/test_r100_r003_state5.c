@@ -8,80 +8,7 @@
 
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"fixture line %d: %s\n",__LINE__,#x);exit(1);}}while(0)
 
-/* CPU sink for real PCM buffers. All decoder, voice and queue work still runs.
- * Audio devices and rendering/presentation APIs are never called. */
-static MMRESULT WINAPI sink_open(LPHWAVEOUT out,UINT device,LPCWAVEFORMATEX format,
- DWORD_PTR callback,DWORD_PTR user,DWORD flags)
-{
- (void)device;(void)callback;(void)user;(void)flags;
- CHECK(out&&format&&format->nSamplesPerSec);
- *out=(HWAVEOUT)(uintptr_t)1;
- return MMSYSERR_NOERROR;
-}
-static MMRESULT WINAPI sink_prepare(HWAVEOUT device,LPWAVEHDR header,UINT size)
-{
- CHECK(device&&header&&size==sizeof(*header));
- header->dwFlags|=WHDR_PREPARED;
- return MMSYSERR_NOERROR;
-}
-static MMRESULT WINAPI sink_unprepare(HWAVEOUT device,LPWAVEHDR header,UINT size)
-{
- CHECK(device&&header&&size==sizeof(*header));
- header->dwFlags&=~WHDR_PREPARED;
- return MMSYSERR_NOERROR;
-}
-static MMRESULT WINAPI sink_write(HWAVEOUT device,LPWAVEHDR header,UINT size)
-{
- CHECK(device&&header&&size==sizeof(*header)&&header->lpData&&header->dwBufferLength);
- header->dwFlags|=WHDR_DONE;
- return MMSYSERR_NOERROR;
-}
-static MMRESULT WINAPI sink_device(HWAVEOUT device){CHECK(device);return MMSYSERR_NOERROR;}
-__typeof__(&waveOutOpen) __imp_waveOutOpen=sink_open;
-__typeof__(&waveOutPrepareHeader) __imp_waveOutPrepareHeader=sink_prepare;
-__typeof__(&waveOutUnprepareHeader) __imp_waveOutUnprepareHeader=sink_unprepare;
-__typeof__(&waveOutWrite) __imp_waveOutWrite=sink_write;
-__typeof__(&waveOutClose) __imp_waveOutClose=sink_device;
-__typeof__(&waveOutReset) __imp_waveOutReset=sink_device;
-__typeof__(&waveOutPause) __imp_waveOutPause=sink_device;
-__typeof__(&waveOutRestart) __imp_waveOutRestart=sink_device;
-
-typedef struct {
- unsigned world,actor,shadow,effects,ui,movie;
-} fixture_sink;
-static gh_id_error begin(void *p){CHECK(p);return GH_ID_OK;}
-static gh_id_error mc_draw(void *p,const gh_id_draw_job *job)
-{fixture_sink *f=p;CHECK(job&&job->entry);f->ui++;return GH_ID_OK;}
-static gh_id_error post(void *p,uint16_t message){CHECK(p&&message);return GH_ID_OK;}
-static gh_id_error fade_draw(void *p,const gh_fade_draw *draw)
-{CHECK(p&&draw&&draw->visible);return GH_ID_OK;}
-static gh_id_error scene_begin(void *p,uint32_t *frontier){(void)frontier;return begin(p);}
-static gh_id_error scene_draw(void *p,const gh_id_base *base,const gh_id_draw_job *job,uint32_t *frontier)
-{(void)frontier;CHECK(base&&job&&job->entry_index<base->entry_count);return mc_draw(p,job);}
-static gh_id_error scene_fan(void *p,const gh_cockpit_fan *fan,uint32_t *frontier)
-{(void)frontier;CHECK(p&&fan&&fan->ready);return GH_ID_OK;}
-static gh_id_error scene_cover(void *p,const gh_child_cover_quad *quad,uint32_t *frontier)
-{(void)frontier;CHECK(p&&quad);return GH_ID_OK;}
-static gh_id_error scene_radar(void *p,const gh_cockpit_radar_quad *quad,uint32_t *frontier)
-{(void)frontier;CHECK(p&&quad);return GH_ID_OK;}
-static gh_scene_ui_status scene_message(void *p,const gh_scene_message_glyph_pair *pair,uint32_t *frontier)
-{(void)frontier;CHECK(p&&pair);return GH_SCENE_UI_OK;}
-static gh_object_step_status world(void *p,const gh_object_static_command *command,uint32_t *frontier)
-{(void)frontier;fixture_sink *f=p;CHECK(command);f->world++;return GH_OBJSTEP_OK;}
-static gh_actor_model_status actor(void *p,const gh_actor_draw_command *command,uint32_t *frontier)
-{(void)frontier;fixture_sink *f=p;CHECK(command);f->actor++;return GH_ACTOR_MODEL_OK;}
-static gh_actor_model_status shadow(void *p,const gh_shadow_group *command,uint32_t *frontier)
-{(void)frontier;fixture_sink *f=p;CHECK(command);f->shadow++;return GH_ACTOR_MODEL_OK;}
-static gh_effect_status effect(void *p,const gh_effect_trans_packet *packet)
-{fixture_sink *f=p;CHECK(packet);f->effects++;return GH_EFFECT_OK;}
-static gh_id_error save_map_draw(void *p,const gh_id_base *base,const gh_id_draw_job *job,
- const gh_packed_message_state *packed,uint16_t chapter,uint32_t *frontier)
-{
- CHECK(packed&&chapter);
- return scene_draw(p,base,job,frontier);
-}
-static int movie(void *p,const unsigned char *rgba,size_t bytes,unsigned width,unsigned height,uint64_t pts)
-{(void)pts;fixture_sink *f=p;CHECK(rgba&&width&&height&&bytes==(size_t)width*height*4);f->movie++;return 1;}
+#include "startup_cpu_sink.h"
 
 static void request_r003(gh_startup_host *host)
 {
@@ -155,17 +82,7 @@ int main(int argc,char **argv)
  gh_startup_host *host;
  CHECK(!gh_startup_host_create_with_profile(argv[1],argv[3],1,0,64*1024*1024,&host));
  fixture_sink sink={0};
- gh_startup_continuation continuation={1,1,GH_SE_DSP_NATIVE_LINEAR_REFERENCE,argv[2],movie,&sink};
- CHECK(!gh_startup_host_set_continuation(host,&continuation));
- CHECK(!gh_startup_host_set_mc_consumers(host,mc_draw,&sink,post,&sink));
- CHECK(!gh_startup_host_set_mc_frame_begin(host,begin,&sink));
- CHECK(!gh_startup_host_set_fade_consumer(host,fade_draw,&sink));
- gh_host_scene_ui_callbacks callbacks={&sink,scene_begin,scene_draw,scene_fan,scene_cover,scene_message,scene_radar,save_map_draw};
- CHECK(!gh_startup_host_set_scene_ui_consumers(host,&callbacks));
- CHECK(!gh_startup_host_set_world_consumer(host,world,&sink));
- CHECK(!gh_startup_host_set_actor_consumer(host,actor,&sink));
- CHECK(!gh_startup_host_set_shadow_consumer(host,shadow,&sink));
- CHECK(!gh_startup_host_set_effect_consumer(host,effect,&sink));
+ CHECK(configure_cpu_sink(host,&sink,argv[2]));
 
  size_t elf_size=(size_t)gh_disc_boot_elf_size(host->disc);
  uint8_t *elf=malloc(elf_size);

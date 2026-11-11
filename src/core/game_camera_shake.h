@@ -6,8 +6,7 @@ extern "C" {
 #endif
 /* Actual138558 parameter progression only: amplitude decay, phase addition
  * and1F7D48 wrap, then byte counter decrement, vertical before horizontal.
- * Does not apply view offset or complete138740 projection. Active shake
- * remains a strict frontier in the existing projector until separately ported.
+ * The projection step applies offsets after these counters are updated.
  * Finite binary32 reference; restores caller FEnv, no libc fmod substitution. */
 gh_camera_status gh_game_camera_shake_step_00138558(gh_game_pl_camera *,uint32_t *frontier);
 /* Decode actual138740 post-view offsets without mutating camera matrices.

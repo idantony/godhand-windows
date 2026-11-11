@@ -157,6 +157,8 @@ static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
         case 0x60c: variant = 3; source = 0x60a; break;
         case 0x606: variant = 4; source = 0x605; break;
         case 0x607: variant = 5; source = 0x605; break;
+        case 0x642: variant = 6; source = 0x641; break;
+        case 0x647: variant = 7; source = 0x646; break;
         default: return GH_EVENT_ARGUMENT;
     }
     gh_event_actor_factory *child = &b->roster->rows[request->actor_index];
@@ -206,7 +208,7 @@ static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
         if (!b->math || !b->math->initialized) return GH_EVENT_UNSUPPORTED;
         static const gh_actor_external_part_pair el01[] = {{0, 2}, {1, 3}, {2, 4}};
         static const gh_actor_external_part_pair el02[] = {{0, 15}, {1, 16}, {17, 9}, {18, 10}};
-        const int wide = variant & 1;
+        const int wide = variant >= 6 || (variant & 1);
         const gh_actor_external_part_pair *pairs = wide ? el02 : el01;
         if (gh_actor_model_bind_external_parts(&s->row_parts[variant], &child->model, &parent->model,
             pairs, wide ? 4 : 3)) return GH_EVENT_CALLEE;
@@ -311,11 +313,23 @@ static gh_game_event_status extra_standalone(gh_event_actor_extra *s,
     put(request->work + 0x34, 0xffff);
     put(request->work + 0x38, 0);
     p[0x2fe] = (uint8_t)request->source_kind;
-    p[0x2ff] = 6;
-    put(p + 0x2d0, 0x800000);
-    if (request->source_kind != 0x667) {
+    p[0x2ff] = (uint8_t)(request->source_kind >> 8);
+    put(p + 0x2d0, request->source_kind == 0x367 ? 0x20000000 : 0x800000);
+    if (request->source_kind == 0x367) {
+        if (frontier) *frontier = 0x14b6f8;
+        for (unsigned i = 0; i < p[0x2b1]; ++i) {
+            const uint8_t *node;
+            size_t mesh;
+            if (gh_actor_model_node_at(&actor->model, i, &node, &mesh)) return GH_EVENT_BOUNDS;
+            if (node[0x40c] >= 0x40 && gh_actor_model_node_or_flags(&actor->model, i, 0x380, 1))
+                return GH_EVENT_CALLEE;
+        }
+    }
+    if (request->source_kind == 0x650) p[0x2b5] = (uint8_t)-10;
+    if (request->source_kind == 0x630 || request->source_kind == 0x631 ||
+        request->source_kind == 0x634 || request->source_kind == 0x639) p[0x4d8] = 1;
+    if (request->source_kind == 0x630 || request->source_kind == 0x631) {
         if (frontier) *frontier = 0x14a338;
-        p[0x4d8] = 1;
         static const uint8_t names[][9] = {"HD_01", "z_hana", "z_hana_m"};
         uint8_t *cursor = &s->one_body_mesh[request->source_kind - 0x630];
         for (; *cursor < sizeof(names) / sizeof(*names); ++*cursor) {
@@ -382,7 +396,8 @@ gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor
     const gh_event_actor_extra_bindings *b = &s->bindings;
     if (request->source_kind == 0x601 || request->source_kind == 0x602 ||
         request->source_kind == 0x60b || request->source_kind == 0x60c ||
-        request->source_kind == 0x606 || request->source_kind == 0x607) {
+        request->source_kind == 0x606 || request->source_kind == 0x607 ||
+        request->source_kind == 0x642 || request->source_kind == 0x647) {
         return attach_el_pair(s, request, handle, original_success, frontier);
     }
     if (request->source_kind == 0x605) {
@@ -391,7 +406,11 @@ gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor
     if (request->source_kind == 0x60a) {
         return attach_olivia_accessory(s, request, handle, original_success, frontier);
     }
-    if (request->source_kind == 0x630 || request->source_kind == 0x631 || request->source_kind == 0x667) {
+    if (request->source_kind == 0x630 || request->source_kind == 0x631 ||
+        request->source_kind == 0x634 || request->source_kind == 0x639 ||
+        request->source_kind == 0x641 || request->source_kind == 0x646 ||
+        (request->source_kind >= 0x650 && request->source_kind <= 0x652) ||
+        request->source_kind == 0x659 || request->source_kind == 0x667 || request->source_kind == 0x367) {
         return extra_standalone(s, request, handle, original_success, frontier);
     }
     gh_event_actor_factory *factory = b->factory;

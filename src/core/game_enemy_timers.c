@@ -55,7 +55,7 @@ static gh_actor_motion_status weapon_error(gh_enemy_timers *s,uint32_t pc,gh_act
  }
 }
 
-static gh_actor_motion_status equip_363(gh_enemy_timers *s,gh_enemy_entry *e,
+static gh_actor_motion_status equip_weapon(gh_enemy_timers *s,gh_enemy_entry *e,uint16_t kind,
  gh_game_scene_tables *actors,gh_collision_scroll_mutation *scroll,const gh_hitarea_shape_bindings *shapes)
 {
  if(!actors||!scroll){s->frontier=0x26aa30;return GH_ACTOR_MOTION_UNSUPPORTED;}
@@ -70,7 +70,7 @@ static gh_actor_motion_status equip_363(gh_enemy_timers *s,gh_enemy_entry *e,
  if(held->finished)return GH_ACTOR_MOTION_OK;
 
  int present;
- gh_actor_model_status status=gh_enemy_weapon_create_0030fa98(&held->factory,&e->b,&present);
+ gh_actor_model_status status=gh_enemy_weapon_create_kind_0030fa98(&held->factory,&e->b,kind,&present);
  if(status)return weapon_error(s,held->factory.frontier?held->factory.frontier:0x30fa98,status);
  if(present){
   /* Same collision-pair and math providers used by the original scene. */
@@ -145,12 +145,20 @@ gh_actor_motion_status gh_enemy_timers_with_weapon_00205ae4(gh_enemy_timers*s,
   if(word(p,0x6ec)||word(p,0x6f0))return GH_ACTOR_MOTION_BUSY;
   unsigned items=word(p,0x1644)&255u;
   if(items){
-   if(items!=4||e->request.object_kind!=0x202||e->request.dependency_kind!=0x202||
-       e->request.entry_number!=18||e->request.appearance!=9||!shapes||!actors||!scroll){
+   uint16_t kind=0;
+   if(e->request.object_kind==0x202){
+    if(items==1&&e->request.dependency_kind==0x203&&e->request.entry_number==2&&e->request.appearance==0)
+     kind=0x361;
+    else if(items==2&&e->request.dependency_kind==0x202&&e->request.entry_number==16&&e->request.appearance==0)
+     kind=0x362;
+    else if(items==4&&e->request.dependency_kind==0x202&&e->request.entry_number==18&&e->request.appearance==9)
+     kind=0x363;
+   }
+   if(!kind||!shapes||!actors||!scroll){
     s->frontier=0x26aa30;return GH_ACTOR_MOTION_UNSUPPORTED;
    }
    s->nodes=nodes;
-   gh_actor_motion_status status=equip_363(s,e,actors,scroll,shapes);
+   gh_actor_motion_status status=equip_weapon(s,e,kind,actors,scroll,shapes);
    if(status)return status;
   }
   static const uint16_t clear[]={0x6f8,0x6fc,0x700,0x708,0x704,0x738,0x734,0x6f4,0x70c,0x1964,0x1968,0x196c,0x740,0x744,0x748,0x74c,0x750,0x1970,0x1974};

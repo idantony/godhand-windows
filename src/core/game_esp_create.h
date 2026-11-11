@@ -13,6 +13,8 @@ typedef struct {gh_effect_release_bindings storage;gh_game_mt *random;const gh_b
 } gh_esp_create_bindings;
 typedef struct {const void *identity;gh_esp_create_bindings b;unsigned emitter_slot,slot;uint32_t emitter_serial,serial,stage,frontier;uint8_t active,complete,allocated;
  float ground_position[4],ground_from[4],ground_to[4],ground_hit[4];int ground_ray_hit;gh_effect_node_detach_call detach;} gh_esp_create_call;
+gh_effect_status gh_esp18_shake_range_002f3e68(gh_game_effects *,unsigned slot,uint32_t serial,
+ const gh_game_pl_camera *,float radius,gh_static_transform_policy,int *near,uint32_t *frontier);
 /* One original3029C0 emission iteration:2FAA88 ->300E30 ->virtualInit.
  * Entry spelling keeps the original producer address. Only continuation state
  * is private; original bitmap/payload are SAME1024 pool. Ready is not inferred. */

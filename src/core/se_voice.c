@@ -181,28 +181,33 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
     w(sample+8)==0x5fcb80ffu&&!w(sample+12));
 }
 
-/* Actual EM00 selector6B cues. Logical bank1 is already resolved by
- * the live dependency-bank owner. Both exact rows use the existing 5FCB
- * one-shot reference and the same original age/mix/pitch pipeline. */
-static int em00_selector6b_profile(const struct voice *v,int16_t bank,int16_t program,
+/* Logical bank 1 resolves through the live dependency bank. Validate the
+ * two actual selector 6B cue rows before sharing duplicate and PCM handling. */
+static int enemy_selector6b_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
  if(!v->source_owner||bank<1||bank==2||bank==3||
     (program!=0x0a&&program!=0x0b)||v->requested_program!=program||
     h(p)!=(unsigned)bank||h(p+2)!=(unsigned)program)return 0;
+ uint32_t dependency=0;
  if(v->model){
   const gh_title_player_view *root=&v->model->root;
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
-     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=0x200)return 0;
+     h(root->bytes+0x2fe)!=0x202)return 0;
+  dependency=w(root->bytes+0x564);
+  if(dependency!=0x200&&dependency!=0x203)return 0;
  }else if(!v->combat_profile)return 0;
- const int alternate=program==0x0b;
- if(h(p+4)!=9u+(unsigned)alternate||w(p+6)!=0x0255022d||h(p+0xe)!=0x20||
-    w(p+0x10)!=0x007d007d||w(p+0x14)!=0x005a0040||
-    w(p+0x18)!=(alternate?0x0064ff38u:0x00640000u)||
+ const unsigned alternate=program==0x0b;
+ if(h(p+4)!=9u+alternate||w(p+6)!=0x0255022d||h(p+0xe)!=0x20||
+    w(p+0x10)!=0x007d007d||w(p+0x14)!=0x005a0040||h(p+0x1a)!=100||
     w(p+0x1c)!=0x00030000||w(p+0x20)!=0x00010085||
     w(p+0x24)!=0x400||w(p+0x28)!=0xffff||w(p+0x2c))return 0;
- return !sample||(w(sample)==(alternate?0x11bc0u:0xff80u)&&
-    w(sample+4)==11025&&w(sample+8)==0x5fcb80ff&&!w(sample+12));
+ if(sample&&(w(sample+4)!=11025||w(sample+8)!=0x5fcb80ff||w(sample+12)))return 0;
+ const int em00=dependency!=0x203&&h(p+0x18)==(alternate?0xff38:0)&&
+    (!sample||w(sample)==(alternate?0x11bc0u:0xff80u));
+ const int em03=dependency!=0x200&&h(p+0x18)==0xff38&&
+    (!sample||w(sample)==(alternate?0x10be0u:0xfc20u));
+ return em00||em03;
 }
 
 /* Actual 288F00 cEma2 impact selects one of three CORE.SES recordings. */
@@ -359,6 +364,24 @@ static int player_fall_impact_profile(const struct voice *v,const uint8_t *p)
     !w(p+0x24)&&w(p+0x28)==0xffffu&&!w(p+0x2c);
 }
 
+/* The player's original request is CORE 6E. The original RNG selects one of nine
+ * program rows before the pending 308DA8 line test, even in mode zero. */
+static int player_hurt_profile(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ if(!player_fall_voice_model(v)||v->part_index!=-1||v->requested_bank||
+    v->requested_program!=0x6e||v->variants!=8||bank||program<0x6e||program>0x76)return 0;
+ static const uint16_t pitch_min[]={0xff80,0,0,0,0xff80,0xff80,0,0xff80,0};
+ static const uint32_t sample_offset[]={0x54300,0x56490,0x78450,0x82bc0,0x841f0,0x854b0,0x86830,0x878b0,0x88600};
+ const unsigned variant=(unsigned)(program-0x6e);
+ return !h(p)&&h(p+2)==(unsigned)program&&h(p+4)==0x48+variant&&
+    w(p+6)==0x00500406u&&h(p+0xe)==0x21&&w(p+0x10)==0x007f007fu&&
+    w(p+0x14)==0x005a0040u&&w(p+0x18)==(0x00800000u|pitch_min[variant])&&
+    w(p+0x1c)==0x00ff0000u&&w(p+0x20)==(variant?4u:0x804u)&&w(p+0x24)==1&&
+    w(p+0x28)==0xffffu&&!w(p+0x2c)&&w(sample)==sample_offset[variant]&&
+    w(sample+4)==22050&&w(sample+8)==0x5fc080ffu&&!w(sample+12);
+}
+
 /* Original 25E790 voice for the two R100 opening enemies. Actor bank1
  * resolves to EM03.SES (stamp19) or EM00.SES (stamp20). */
 static int r100_death_profile(const struct voice *v,int16_t bank,int16_t program,
@@ -429,11 +452,12 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  if(player_fall_impact_profile(candidate,p)&&(w(descriptor.data)!=0x35460||
     w(descriptor.data+4)!=18000||w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))
   return unsupported(s,0x35fc);
+ const int player_hurt=player_hurt_profile(candidate,bank,program,p,descriptor.data);
  int impact_voice=adsr2==0x5fcb&&em0a_impact_profile(candidate,bank,program,p)&&
                   w(descriptor.data)==(program==0x2a?0u:0x2b80u)&&w(descriptor.data+4)==16000;
  int reaction_voice=adsr2==0x5fcb&&enemy_reaction_profile(candidate,bank,program,p,descriptor.data);
  int sequence_voice=adsr2==0x5fcb&&enemy_state71_sequence_profile(candidate,bank,program,p,descriptor.data);
- int selector6b_voice=adsr2==0x5fcb&&em00_selector6b_profile(candidate,bank,program,p,descriptor.data);
+ int selector6b_voice=adsr2==0x5fcb&&enemy_selector6b_profile(candidate,bank,program,p,descriptor.data);
  int attack_voice=adsr2==0x5fcb&&enemy_attack_sequence_profile(candidate,bank,program,p,descriptor.data);
  int death_voice=adsr2==0x5fcb&&r100_death_profile(candidate,bank,program,p,descriptor.data);
  int timed_voice=adsr2==0x5fcb&&em0a_timed_profile(candidate,bank,program,p)&&
@@ -456,7 +480,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  if(attack_core&&!core_enemy_attack_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
  if(impact_voice||reaction_voice||ema2_voice||ema2_timer_voice||timed_voice||footstep||sequence_voice||attack_core||
-    selector6b_voice||turn_core||attack_voice||death_voice||knockdown_core)candidate->combat_profile=1;
+    selector6b_voice||turn_core||attack_voice||death_voice||knockdown_core||player_hurt)candidate->combat_profile=1;
  rate=w(descriptor.data+4);if(rate<1000 || rate>48000)return unsupported(s,0x38e4);
  candidate->info.pitch_q12=selected_pitch?selected_pitch:(uint16_t)((uint64_t)rate*4096/48000);
  result=gh_audio_decode_ps_adpcm(tail.data,tail.size,&candidate->pcm);if(result){s->frontier=0x35fc;return result;}
@@ -679,7 +703,7 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
  if(candidate->info.bank!=2||candidate->info.program!=10||candidate->descriptor[0x22]!=3){
   if(!enemy_reaction_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_state71_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
-     !em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !enemy_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_attack_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !r100_death_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_r100_knockdown_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&

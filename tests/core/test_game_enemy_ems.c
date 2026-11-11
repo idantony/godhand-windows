@@ -9,6 +9,9 @@
 #include "game_world_light.h"
 #include "game_ray_static.h"
 #include "disc.h"
+#include "audio_startup.h"
+#include "se_voice.h"
+#include "game_enemy_retire.h"
 #include "display_state.h"
 #include <fenv.h>
 #include <math.h>
@@ -88,6 +91,42 @@ static gh_r100_script_status watch_camera(void *context,gh_room_camera_start *st
     return !status&&started?GH_R100_SCRIPT_OK:GH_R100_SCRIPT_CALLEE;
 }
 
+static gh_r100_script_status battle_checkpoint(void *context,uint32_t *frontier)
+{
+    ++*(unsigned *)context;
+    *frontier=0;
+    return GH_R100_SCRIPT_OK;
+}
+typedef struct {
+    unsigned calls,camera_calls;
+    gh_room_camera_bindings camera;
+} devil_probe;
+
+static gh_r100_script_status devil_camera(void *context,gh_room_camera_start *state,
+    const char *name,uint32_t *frontier)
+{
+    devil_probe *probe=context;
+    if(probe->calls!=3||strcmp(name,"A07"))return GH_R100_SCRIPT_CALLEE;
+    ++probe->camera_calls;
+    int started=0;
+    gh_camera_status status=gh_game_room_camera_start_002c3ed8(state,&probe->camera,name,&started,frontier);
+    return !status&&started?GH_R100_SCRIPT_OK:GH_R100_SCRIPT_CALLEE;
+}
+static gh_r100_script_status devil_soft(void *context,gh_soft_event_start *start,
+    unsigned kind,uint32_t *frontier)
+{
+    if(!start||kind)return GH_R100_SCRIPT_ARGUMENT;
+    ++((devil_probe *)context)->calls;
+    *frontier=0;
+    return GH_R100_SCRIPT_OK;
+}
+static gh_r100_script_status devil_end(void *context,gh_soft_event_end *end,uint32_t *frontier)
+{
+    if(!end)return GH_R100_SCRIPT_ARGUMENT;
+    ++((devil_probe *)context)->calls;
+    *frontier=0;
+    return GH_R100_SCRIPT_OK;
+}
 int main(int argc,char **argv)
 {
     CHECK(argc==2);
@@ -166,6 +205,12 @@ int main(int argc,char **argv)
     size_t weapon_extent;
     uint8_t *weapon_data=load(disc,"om/om63.dat",&weapon_extent);
     CHECK(weapon_data);
+    size_t weapon361_extent,weapon362_extent;
+    uint8_t *weapon361=load(disc,"om/om61.dat",&weapon361_extent);
+    uint8_t *weapon362=load(disc,"om/om62.dat",&weapon362_extent);
+    CHECK(weapon361&&weapon362);
+    CHECK(!gh_game_objects_add_pinned_001fece0(global,0x361,weapon361,weapon361_extent,&pinned)&&pinned);
+    CHECK(!gh_game_objects_add_pinned_001fece0(global,0x362,weapon362,weapon362_extent,&pinned)&&pinned);
     CHECK(!gh_game_objects_add_pinned_001fece0(global,0x363,weapon_data,weapon_extent,&pinned)&&pinned);
     gh_enemy2a2_node_names heavy_names={0};
     gh_enemy_ems_bindings bindings={.actor={
@@ -211,6 +256,8 @@ int main(int argc,char **argv)
     CHECK(!gh_room_registry_view(&pools,0x754c58,&paused_registry)&&paused_registry->count==10);
     uint32_t pending_weapon=word((uint8_t*)paused_registry->allocation.pointer+9*4);
     CHECK(!gh_enemy_ems_held_weapon(owner,0,pending_weapon));
+    CHECK(!gh_game_objects_set_file_extent(global,0x361,weapon361,weapon361_extent));
+    CHECK(!gh_game_objects_set_file_extent(global,0x362,weapon362,weapon362_extent));
     CHECK(!gh_game_objects_set_file_extent(global,0x363,weapon_data,weapon_extent));
     gh_scene_placement_status completion=gh_enemy_ems_spawn_00294ca0(&owner,&prefix,&room,&bindings,&frontier,&detail);
     if(completion)fprintf(stderr,"actual stop %08x detail %d row %u\n",frontier,detail,prefix.spawn_cursor);
@@ -366,7 +413,6 @@ int main(int argc,char **argv)
     gh_enemy_other_move next_weapon={0};
     CHECK(!gh_enemy363_move_001c9860(&next_weapon,weapon_live.weapon,release_effect,&effect_bindings));
     CHECK(next_weapon.original_returned&&!next_weapon.frontier&&held->weapon->object.view.bytes[0x2f6]==1);
-    free(effects);free(emitters);free(esp);free(core);
     CHECK(held&&held->parent==&paused->view&&held->weapon->resource.bytes==weapon_data);
     CHECK(held->model.external_parent==held->parent_model&&held->parent_model->root.bytes==paused_bytes);
     CHECK(!word(paused_bytes+0x6ec)&&held->attach_stage==5&&held->hit_owned==3);
@@ -632,9 +678,223 @@ int main(int argc,char **argv)
         CHECK(!gh_enemy_ems_set_002952d0(owner,&duplicate,(uint8_t)(31+i),&none,&frontier)&&!none);
     }
     CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK&&word(room_runtime.work.pointer)==9);
+    /* Controlled prerequisite fixture. All subsequent placements and actor
+       publication consume the authentic ISO EMS, EM02 and live registries. */
+    gh_at_native_unit battle_at={0};
+    CHECK(!gh_scene_at_first_unit_002c30c0(&at,&battle_at));
+    while(battle_at.bytes&&(battle_at.bytes[0x36]!=10||battle_at.bytes[0x37]))
+        CHECK(!gh_scene_at_next_unit_002c30c8(&at,battle_at,&battle_at));
+    CHECK(battle_at.bytes);
+    uint32_t battle_hit=word(battle_at.bytes+0x50)|0x80000000u;
+    memcpy(battle_at.bytes+0x50,&battle_hit,4);
+    unsigned checkpoint_calls=0;
+    gh_r100_live_bindings battle_b=live_b;
+    battle_b.context=&checkpoint_calls;
+    battle_b.checkpoint=battle_checkpoint;
+    const uint32_t primed_flags=0x02000000,need=12;
+    uint32_t observed=need-1;
+    memcpy(room.active+4,&primed_flags,4);
+    memcpy(room.active+0x1610,&observed,4);
+    CHECK(!gh_r100_live_register(&tasks,&battle_b,0x1bd0,-1,&frontier));
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK&&
+          !tasks.tasks[7].status&&!tasks.tasks[7].battle_stage&&!checkpoint_calls);
+    memcpy(room.active+0x1610,&need,4);
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    fprintf(stderr,"REL1BD0 stage%u spawn%u status%u frontier%08x checkpoint%u\n",
+        tasks.tasks[7].battle_stage,tasks.tasks[7].battle_spawn_index,tasks.tasks[7].status,
+        tasks.tasks[7].frontier,checkpoint_calls);
+    CHECK(tasks.tasks[7].battle_stage==2&&tasks.tasks[7].battle_spawn_index==8&&
+          tasks.tasks[7].frontier_relative&&tasks.tasks[7].frontier==0x1e80&&checkpoint_calls==1&&
+          word(room.active+4)==0xc2000000&&word(room_runtime.work.pointer)==16);
+    for(unsigned i=0;i<3;i++){
+        gh_game_title_player *spawned=NULL;
+        const uint8_t *row=room.active+12+(21+i)*24;
+        CHECK(row[0x13]==26+i&&word(row+8)==0x04000000u&&
+            !gh_enemy_manager_get_00290868(init,(uint8_t)(26+i),&spawned)&&spawned);
+        uint32_t handle=0;
+        CHECK(!gh_enemy_ems_handle_for_actor(owner,spawned,&handle)&&handle&&
+            gh_enemy_ems_lookup(owner,handle)==spawned);
+    }
+    CHECK(!tasks.tasks[7].set_enemy.stage);
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK&&checkpoint_calls==1&&
+          tasks.tasks[7].battle_spawn_index==8&&word(room_runtime.work.pointer)==16);
+
+    gh_game_title_player *stamp2=NULL;
+    uint32_t stamp2_handle=0;
+    CHECK(!gh_enemy_manager_get_00290868(init,2,&stamp2)&&stamp2&&
+          !gh_enemy_ems_handle_for_actor(owner,stamp2,&stamp2_handle));
+    const gh_enemy_weapon_init *held361=gh_enemy_ems_held_weapon(owner,stamp2_handle,0);
+    CHECK(held361&&held361->weapon->kind==0x361&&held361->weapon->resource.bytes==weapon361&&
+          held361->parent==&stamp2->view&&held361->attach_stage==5);
+    const uint8_t *bytes361=held361->weapon->object.view.bytes;
+    fprintf(stderr,"361 life%u hand%u mirror%u xyz%08x/%08x/%08x yaw%08x\n",
+        word(bytes361+0x668),word(bytes361+0x604),stamp2->view.bytes[0x17c3],
+        word(bytes361+0x610),word(bytes361+0x614),word(bytes361+0x618),word(bytes361+0x624));
+    CHECK(word(bytes361+0x668)==120&&word(bytes361+0x614)==0xbcf5c28f&&word(bytes361+0x618)==0x3e99999a);
+    CHECK(word(bytes361+0x604)==(stamp2->view.bytes[0x17c3]?10u:16u)&&
+          word(bytes361+0x610)==(stamp2->view.bytes[0x17c3]?0xbe4ccccd:0x3e4ccccd)&&
+          word(bytes361+0x624)==(stamp2->view.bytes[0x17c3]?0xbeb2b8c2:0x3eb2b8c2));
+    gh_game_title_player *stamp14=NULL;
+    uint32_t stamp14_handle=0;
+    gh_enemy_ems_live live14;
+    CHECK(!gh_enemy_manager_get_00290868(init,14,&stamp14)&&stamp14&&
+          !gh_enemy_ems_handle_for_actor(owner,stamp14,&stamp14_handle)&&
+          !gh_enemy_ems_live_at(owner,stamp14_handle,&live14)&&live14.enemy2a2&&
+          live14.model&&live14.model->ready&&word(stamp14->view.bytes+0x564)==0x2a3);
+    gh_enemy_ems_set_call duplicate14={0};
+    gh_game_title_player *none14=stamp14;
+    const uint8_t prior_serial14=serial;
+    CHECK(!gh_enemy_ems_set_002952d0(owner,&duplicate14,14,&none14,&frontier)&&!none14&&
+          serial==prior_serial14);
+    gh_game_title_player *stamp17=NULL;
+    uint32_t stamp17_handle=0;
+    gh_enemy_ems_live live17;
+    CHECK(!gh_enemy_manager_get_00290868(init,17,&stamp17)&&stamp17&&
+          !gh_enemy_ems_handle_for_actor(owner,stamp17,&stamp17_handle)&&
+          !gh_enemy_ems_live_at(owner,stamp17_handle,&live17)&&live17.enemy202);
+    const gh_enemy_motion *motion17=&live17.enemy202->motion;
+    CHECK(motion17->stage>=2&&motion17->motion_offset==word(model_data+0x40c)&&
+          motion17->sequence_offset==word(model_data+0x410)&&stamp17->view.bytes[0x2f7]==1);
+    gh_game_title_player *stamp13=NULL,*stamp16=NULL;
+    uint32_t stamp13_handle=0,stamp16_handle=0;
+    gh_enemy_ems_live live13,live361,live362;
+    CHECK(!gh_enemy_manager_get_00290868(init,13,&stamp13)&&stamp13&&
+          !gh_enemy_ems_handle_for_actor(owner,stamp13,&stamp13_handle)&&
+          !gh_enemy_ems_live_at(owner,stamp13_handle,&live13)&&live13.enemy202);
+    const gh_enemy_motion *motion13=&live13.enemy202->motion;
+    CHECK(motion13->stage>=2&&motion13->motion_offset==word(model_data+0xbd8)&&
+          motion13->sequence_offset==word(model_data+0xbdc)&&stamp13->view.bytes[0x2f7]==2);
+    CHECK(!gh_enemy_manager_get_00290868(init,16,&stamp16)&&stamp16&&
+          !gh_enemy_ems_handle_for_actor(owner,stamp16,&stamp16_handle));
+    const gh_enemy_weapon_init *held362=gh_enemy_ems_held_weapon(owner,stamp16_handle,0);
+    CHECK(held362&&held362->weapon->kind==0x362&&held362->weapon->resource.bytes==weapon362&&
+          held362->parent==&stamp16->view&&held362->attach_stage==5&&
+          word(held362->weapon->object.view.bytes+0x668)==90);
+    gh_enemy_other_move move361={0},move362={0};
+    CHECK(!gh_enemy_ems_live_at(owner,held361->weapon->handle,&live361)&&live361.weapon==held361);
+    CHECK(!gh_enemy_ems_live_at(owner,held362->weapon->handle,&live362)&&live362.weapon==held362);
+    CHECK(!gh_enemy363_move_001c9860(&move361,live361.weapon,release_effect,&effect_bindings)&&
+          move361.original_returned&&bytes361[0x2f6]==1);
+    CHECK(!gh_enemy363_move_001c9860(&move362,live362.weapon,release_effect,&effect_bindings)&&
+          move362.original_returned&&held362->weapon->object.view.bytes[0x2f6]==1);
+    gh_audio_registry *registry=NULL;
+    gh_se_voice_engine *voices=NULL;
+    gh_se_mix mix;
+    int unused_transport;
+    CHECK(!gh_audio_registry_create(&registry)&&!gh_audio_startup_load(registry,disc)&&
+          !gh_se_mix_boot_defaults_002c9e78(&mix,0,GH_SE_DSP_NATIVE_LINEAR_REFERENCE)&&
+          !gh_se_voice_create(registry,(gh_audio_output *)&unused_transport,&mix,&voices));
+    const uint32_t handle361=held361->weapon->handle;
+    uint8_t *retiring361=held361->weapon->object.view.bytes;
+    CHECK(!gh_enemy_ems_mark_held_weapon_00312708(owner,stamp2_handle,voices,&frontier)&&
+          (word(retiring361+0x250)&0x80000002u)==0x80000002u);
+    CHECK(!gh_enemy_ems_held_weapon(owner,stamp2_handle,0)&&!held361->model.external_owner);
+    gh_enemy_full_retirement retire361={0};
+    gh_enemy_retire_bindings retire_bindings={.release_effect=release_effect,.effect_context=&effect_bindings};
+    CHECK(gh_enemy_ems_retire_weapon_0030f8b0(owner,&retire361,handle361,&retire_bindings,&frontier)==GH_ACTOR_MOTION_UNSUPPORTED&&
+          frontier==0x1c91b0&&!retire361.stage);
+    /* Supply the dispatcher-completed phase to this isolated destructor fixture. */
+    uint32_t aged_flags=word(retiring361+0x250)|0x60000000u;
+    memcpy(retiring361+0x250,&aged_flags,4);
+    gh_actor_motion_status retire_status=gh_enemy_ems_retire_weapon_0030f8b0(owner,&retire361,handle361,&retire_bindings,&frontier);
+    fprintf(stderr,"361 retire status%d frontier%08x stage%u\n",retire_status,frontier,retire361.stage);
+    CHECK(!retire_status&&retire361.stage==7);
+    CHECK(!gh_enemy_ems_live_at(owner,handle361,&live361)&&!live361.actor);
+    gh_object_view still_pinned;
+    CHECK(!gh_game_objects_find(global,0x361,&still_pinned)&&still_pinned.bytes==weapon361&&still_pinned.use_count<0);
+    const uint32_t handle362=held362->weapon->handle;
+    uint8_t *retiring362=held362->weapon->object.view.bytes;
+    CHECK(!gh_enemy_ems_mark_held_weapon_00312708(owner,stamp16_handle,voices,&frontier)&&
+          !gh_enemy_ems_held_weapon(owner,stamp16_handle,0)&&!held362->model.external_owner);
+    aged_flags=word(retiring362+0x250)|0x60000000u;
+    memcpy(retiring362+0x250,&aged_flags,4);
+    gh_enemy_full_retirement retire362={0};
+    CHECK(!gh_enemy_ems_retire_weapon_0030f8b0(owner,&retire362,handle362,&retire_bindings,&frontier)&&retire362.stage==7);
+    CHECK(!gh_enemy_ems_live_at(owner,handle362,&live362)&&!live362.actor&&
+          !gh_game_objects_find(global,0x362,&still_pinned)&&still_pinned.bytes==weapon362&&still_pinned.use_count<0);
+    gh_se_voice_destroy(voices);
+    gh_audio_registry_destroy(registry);
+    free(effects);free(emitters);free(esp);free(core);
+    puts("PASS REL1BD0 stamps13/16, 0361/0362 first held Moves and marked physical retirements");
+    CHECK(!gh_task_threads_cancel(scenario_threads,tasks.tasks[7].slot));
+    gh_game_title_player *devil=NULL;
+    CHECK(!gh_enemy_manager_get_00290868(init,8,&devil)&&devil);
+    uint8_t *devil_bytes=devil->view.bytes;
+    uint16_t original_stamp;
+    memcpy(&original_stamp,devil_bytes+0x640,2);
+    const uint16_t unstamped=0xff;
+    memcpy(devil_bytes+0x640,&unstamped,2);
+    CHECK(!gh_enemy_ems_set_actor_suspend_00275308(owner,init,devil,1,&frontier)&&
+        (word(devil_bytes+0x250)&0x8000u)&&(word(devil_bytes+0x5a0)&8u));
+    gh_game_title_player copied_actor=*devil;
+    CHECK(gh_enemy_ems_set_actor_suspend_00275308(owner,init,&copied_actor,0,&frontier)==GH_ACTOR_MOTION_UNSUPPORTED&&
+        frontier==0x275308&&(word(devil_bytes+0x250)&0x8000u));
+    CHECK(!gh_enemy_ems_set_actor_suspend_00275308(owner,init,devil,0,&frontier)&&
+        !(word(devil_bytes+0x250)&0x8000u)&&!(word(devil_bytes+0x5a0)&8u));
+    memcpy(devil_bytes+0x640,&original_stamp,2);
+    uint8_t prior_state[3],prior_dev=devil_bytes[0x614];
+    memcpy(prior_state,devil_bytes+0x2f4,3);
+    const uint32_t prior_dev_work=word((const uint8_t *)&work+0x5ec);
+    uint32_t wait_bit=0x40000000u;
+    memcpy((uint8_t *)&work+0x5ec,&wait_bit,4);
+    memcpy(room.active+4,&saved_room_flags,4);
+    devil_probe devil_events={.camera=soft_probe.camera};
+    gh_r100_live_bindings devil_b=live_b;
+    devil_b.context=&devil_events;
+    devil_b.set_room_camera=devil_camera;
+    devil_b.start_soft_event=devil_soft;
+    devil_b.end_soft_event=devil_end;
+    CHECK(!gh_r100_live_register(&tasks,&devil_b,0x2d68,-1,&frontier));
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(!devil_events.calls&&!tasks.tasks[6].devil_event_stage);
+    devil_bytes[0x614]=1;
+    memcpy(devil_bytes+0x2f4,(uint8_t[]){0,4,2},3); /* controlled original positive state */
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(!devil_events.calls&&tasks.tasks[6].devil_event_stage==1&&
+        word(room.active+4)==(saved_room_flags|0x02000000u)&&
+        word((const uint8_t *)&work+0x5ec)==0x60000000u);
+    wait_bit=0x20000000u;
+    memcpy((uint8_t *)&work+0x5ec,&wait_bit,4);
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(devil_events.calls==1&&tasks.tasks[6].devil_event_stage==4&&!tasks.tasks[6].frontier);
+    CHECK(!(word(devil_bytes+0x250)&0x8000u)&&!(word(devil_bytes+0x5a0)&8u));
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK&&devil_events.calls==1);
+    devil_bytes[0x2f6]=1;
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK&&devil_events.calls==2&&
+          tasks.tasks[6].finished&&!tasks.tasks[6].frontier&&tasks.tasks[8].registered&&
+          !(word((uint8_t *)&work+0x5ec)&0x20000000u));
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK&&tasks.tasks[8].entered);
+    gh_at_native_unit post_devil={0};
+    CHECK(!gh_scene_at_first_unit_002c30c0(&at,&post_devil));
+    while(post_devil.bytes&&(post_devil.bytes[0x36]!=22||post_devil.bytes[0x37]))
+        CHECK(!gh_scene_at_next_unit_002c30c8(&at,post_devil,&post_devil));
+    CHECK(post_devil.bytes);
+    const uint32_t post_hit=word(post_devil.bytes+0x50)|0x80000000u;
+    memcpy(post_devil.bytes+0x50,&post_hit,4);
+    uint8_t *row10=room.active+12+24*7,*row11=room.active+12+24*8;
+    CHECK(row10[0x13]==10&&row11[0x13]==11&&!row10[0x14]&&!row11[0x14]);
+    row10[0x14]=1;
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK&&devil_events.calls==2);
+    row11[0x14]=1;
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    fprintf(stderr,"REL11B0 stage%u status%u pc%08x camera%u\n",tasks.tasks[8].post_devil_stage,
+        tasks.tasks[8].status,tasks.tasks[8].frontier,devil_events.camera_calls);
+    CHECK(devil_events.calls==3&&devil_events.camera_calls==1&&
+          tasks.tasks[8].post_devil_stage==3&&tasks.tasks[8].frontier==0x2905d0&&
+          tasks.tasks[8].set_enemy.request.entry_number==33&&
+          (word(room.active+4)&0x00800000u));
+    row10[0x14]=row11[0x14]=0;
+    CHECK(!gh_task_threads_cancel(scenario_threads,tasks.tasks[8].slot));
+    memcpy(devil_bytes+0x2f4,prior_state,3);
+    devil_bytes[0x614]=prior_dev;
+    memcpy((uint8_t *)&work+0x5ec,&prior_dev_work,4);
+    memcpy(room.active+4,&saved_room_flags,4);
+    puts("PASS original REL2D68 flag/order and stamp8 unsuspend and original virtual275308, wait until DevilEvent clears, and register the real REL11B0 successor");
     CHECK(!gh_task_threads_destroy(scenario_threads)&&!gh_r100_init_release(&room_runtime));
     CHECK(!gh_scene_at_units_release(&at));
     CHECK(!gh_enemy_ems_release_native(&owner,&frontier)&&!owner&&!frontier);
+    CHECK(!gh_collision_pairs_sweep_002ba250(&pairs,&frontier));
+    CHECK(!gh_collision_pairs_sweep_002ba250(&pairs,&frontier));
     CHECK(!init->enemy_top&&!init->enemy_last&&gh_collision_solid_units_empty(&solids)&&!gh_collision_pair_shapes_have_live(&pairs));
     CHECK(gh_heap_used(heap)==baseline&&!fesetround(FE_TONEAREST));
     CHECK(!gh_collision_scroll_mutation_release(&scroll));
@@ -646,7 +906,7 @@ int main(int argc,char **argv)
     gh_game_objects_destroy(global);
     CHECK(!gh_game_world_light_release_presets(&light)&&!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));
     gh_disc_close(disc);
-    free(weapon_data);free(aux);free(heavy);free(init);free(id);free(elf);free(language_data);free(model_data);free(room_data);
+    free(weapon361);free(weapon362);free(weapon_data);free(aux);free(heavy);free(init);free(id);free(elf);free(language_data);free(model_data);free(room_data);
     puts("PASS actual R100 BGM roster/death/priority and eleven EMS actors, attached weapon, retry, full 2A2/held363 Moves, AT1 live/absent GetPos, AT1/AT2 survivor gates, kind0 and the real A00 room camera, and AT3 SetEm31/32, Goto, unsuspend, duplicate gates and scoped release");
     return 0;
 }

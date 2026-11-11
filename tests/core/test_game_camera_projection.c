@@ -37,6 +37,21 @@ int main(int argc,char**argv){
  gh_acd_scene_binding path;gh_game_camera_path_construct_00137a48(&path);int original;C(gh_acd_scene_bind_00137ae8(&path,&acd,&original)==GH_PLACE_OK&&original==1);
  uint8_t raw[GH_TITLE_PLAYER_BYTES]={0};gh_title_player_view player;C(gh_title_player_construct_00107e40(raw,sizeof(raw),&player)==GH_PLAYER_OK);player.initial_memory=GH_TITLE_MEMORY_ZERO_REFERENCE;gh_boot_work work={0};put((uint8_t*)&work+0x5d8,0xf00c6000);init.camera.mode=1;init.active_camera=&init.camera;
  C(gh_game_camera_step_projected_00138fc8(&camera,&init,&path,&player,&work,&config,&frontier)==GH_CAMERA_OK&&!frontier&&w(camera.fields+0x444)==0x3f87ae14);
+ memcpy(before,camera.fields,sizeof(before));
+ const unsigned amplitude[]={0x254,0x268},decay[]={0x25c,0x270},phase[]={0x260,0x274};
+ for(unsigned i=0;i<2;i++){
+  put(camera.fields+amplitude[i],i?0xbf800000:0x40000000);
+  put(camera.fields+decay[i],0x3f000000);
+  put(camera.fields+phase[i],0x3f000000);
+ }
+ camera.fields[0x264]=camera.fields[0x278]=2;
+ C(gh_game_camera_step_projected_00138fc8(&camera,&init,&path,&player,&work,&config,&frontier)==GH_CAMERA_OK&&!frontier);
+ C(camera.fields[0x264]==1&&camera.fields[0x278]==1);
+ C(fabs(value(camera.fields+0x170)-value(before+0x170)-sin(.5))<1e-5);
+ C(fabs(value(camera.fields+0x174)-value(before+0x174)+.5*sin(.5))<1e-5);
+ C(!memcmp(camera.fields+0x100,before+0x100,64)&&memcmp(camera.fields,before,0x100));
+ C(gh_game_camera_step_projected_00138fc8(&camera,&init,&path,&player,&work,&config,&frontier)==GH_CAMERA_OK&&!frontier);
+ C(!camera.fields[0x264]&&!camera.fields[0x278]&&!memcmp(camera.fields,before,0x180));
  /* Unsupported large-angle reduction never writes stale/partial matrices. */
  put(camera.fields+0x250,0x42b40000);memcpy(before,camera.fields,sizeof(before));C(gh_game_camera_project_00138740(&camera,&config,&frontier)==GH_CAMERA_UNSUPPORTED&&frontier==0x3a4830&&!memcmp(before,camera.fields,sizeof(before)));
  free(r);gh_disc_close(d);puts("PASS actualR020 full camera late path + native projection/view/clip matrices; real displayELF, geometric near/far/center invariants, FEnv restoration");return 0;

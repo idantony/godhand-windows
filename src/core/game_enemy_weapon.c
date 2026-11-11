@@ -65,13 +65,15 @@ static gh_actor_model_status resource_status(gh_object_status status)
     }
 }
 
-gh_actor_model_status gh_enemy_weapon_create_0030fa98(gh_enemy_weapon *weapon,
-    const gh_enemy_entry_bindings *binding,int *nonnull)
+gh_actor_model_status gh_enemy_weapon_create_kind_0030fa98(gh_enemy_weapon *weapon,
+    const gh_enemy_entry_bindings *binding,uint16_t kind,int *nonnull)
 {
     if(!weapon||!binding||!binding->pools||!binding->work||!binding->factory_serial||
         !binding->room_objects||!binding->global_objects||!nonnull)return GH_ACTOR_MODEL_ARGUMENT;
     *nonnull=0;
-    if(weapon->stage&&!same_bindings(&weapon->bindings,binding))return GH_ACTOR_MODEL_BUSY;
+    if(weapon->stage&&(weapon->kind!=kind||!same_bindings(&weapon->bindings,binding)))
+        return GH_ACTOR_MODEL_BUSY;
+    if(kind<0x361||kind>0x363)return stop(weapon,0x30fb70,GH_ACTOR_MODEL_UNSUPPORTED);
     weapon->frontier=0;
     if(weapon->stage==ORIGINAL_NULL)return GH_ACTOR_MODEL_OK;
 
@@ -81,6 +83,7 @@ gh_actor_model_status gh_enemy_weapon_create_0030fa98(gh_enemy_weapon *weapon,
             gh_room_registry_view(binding->pools,0x754c58,&named))
             return stop(weapon,0x30fb70,GH_ACTOR_MODEL_ARGUMENT);
         weapon->bindings=*binding;
+        weapon->kind=kind;
         uint32_t flags=word((const uint8_t*)binding->work+0x594);
         if(all->count>=all->capacity||named->count>=named->capacity||(flags&0x10000u)){
             weapon->stage=ORIGINAL_NULL;
@@ -105,15 +108,15 @@ gh_actor_model_status gh_enemy_weapon_create_0030fa98(gh_enemy_weapon *weapon,
             return stop(weapon,0x1c9140,GH_ACTOR_MODEL_ARGUMENT);
         weapon->object.view.initial_memory=GH_TITLE_MEMORY_ORIGINAL_FACTORY_ZERO;
         bytes[0x2fc]=(*binding->factory_serial)++;
-        half(bytes+0x2fe,0x363);
-        half(bytes+0x300,0x363);
+        half(bytes+0x2fe,kind);
+        half(bytes+0x300,kind);
         put(bytes+0x2d0,0x20000000);
         weapon->stage=STAMPED;
     }
 
     if(weapon->stage==STAMPED){
         if(!weapon->resource_owner && !weapon->load.stage){
-            gh_object_status status=gh_game_objects_acquire_001fea48(binding->room_objects,0x363,&weapon->resource);
+            gh_object_status status=gh_game_objects_acquire_001fea48(binding->room_objects,kind,&weapon->resource);
             if(status==GH_OBJECT_OK)weapon->resource_owner=binding->room_objects;
             else if(status!=GH_OBJECT_MISSING)return stop(weapon,0x1fea48,resource_status(status));
         }
@@ -122,7 +125,7 @@ gh_actor_model_status gh_enemy_weapon_create_0030fa98(gh_enemy_weapon *weapon,
                 return stop(weapon,0x1fea48,GH_ACTOR_MODEL_UNSUPPORTED);
             uint32_t frontier=0;
             gh_object_status status=gh_game_objects_load_wait_001fe8a0(&weapon->load,
-                binding->global_objects,0x363,&binding->resources,1,&weapon->resource,&frontier);
+                binding->global_objects,kind,&binding->resources,1,&weapon->resource,&frontier);
             if(status)return stop(weapon,frontier?frontier:0x1fe8a0,resource_status(status));
             if(!weapon->resource.bytes)return stop(weapon,0x312778,GH_ACTOR_MODEL_UNSUPPORTED);
             weapon->resource_owner=binding->global_objects;
@@ -143,6 +146,12 @@ gh_actor_model_status gh_enemy_weapon_create_0030fa98(gh_enemy_weapon *weapon,
     return GH_ACTOR_MODEL_OK;
 }
 
+gh_actor_model_status gh_enemy_weapon_create_0030fa98(gh_enemy_weapon *weapon,
+    const gh_enemy_entry_bindings *binding,int *nonnull)
+{
+    return gh_enemy_weapon_create_kind_0030fa98(weapon,binding,0x363,nonnull);
+}
+
 gh_actor_model_status gh_enemy_weapon_release_factory(gh_enemy_weapon *weapon)
 {
     if(!weapon)return GH_ACTOR_MODEL_ARGUMENT;
@@ -152,7 +161,7 @@ gh_actor_model_status gh_enemy_weapon_release_factory(gh_enemy_weapon *weapon)
         weapon->handle=0;
     }
     if(weapon->resource_owner){
-        if(gh_game_objects_release_reference_001ff0b0(weapon->resource_owner,0x363))
+        if(gh_game_objects_release_reference_001ff0b0(weapon->resource_owner,weapon->kind))
             return stop(weapon,0x1ff0b0,GH_ACTOR_MODEL_BUSY);
         weapon->resource_owner=NULL;
     }

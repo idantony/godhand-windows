@@ -63,12 +63,44 @@ static void check_scene_capture(const gh_effect_post_sampler *nearest,const gh_e
  C(row==-1&&target.rgba[256*4]==0xa5);
  free(target.rgba);free(source.rgba);
 }
+static void check_impact_warp(const gh_effect_post_sampler *nearest,const gh_effect_post_sampler *linear)
+{
+ gh_effect_trans_packet packet={
+  .original_callee=0x2e9d48,.kind=GH_EFFECT_PASS_SCENE_WARP,
+  .source=GH_EFFECT_SURFACE_DISPLAY_BASE0,.destination=GH_EFFECT_SURFACE_SCENE_COLOR,
+  .frame_mask=0xff000000u,.prim=0x5d,.alpha=UINT64_C(0x8000000044),
+  .test=0x5000c,.zbuf=UINT64_C(0x13a0000f8),.tex0=UINT64_C(0x2000000664120000),
+  .writes_texa=1,.texa=0x80,.quad_count=1
+ };
+ const int x[]={2,0,4,4,0,0},y[]={2,0,0,4,4,0};
+ packet.quads[0].vertex_count=6;
+ for(unsigned i=0;i<6;i++){
+  packet.quads[0].vertices[i]=(gh_effect_trans_vertex){
+   .x12_4=x[i]*16,.y12_4=y[i]*16,.q=1,.t=447.0f/512.0f,.rgba=0x80808080u
+  };
+ }
+ C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,0));
+ for(unsigned i=0;i<6;i++)packet.quads[0].vertices[i].t=448.0f/512.0f;
+ C(gh_effect_postprocess_warp_source_known(&packet,nearest,4,4,0,0,1)==GH_EFFECT_POST_BOUNDS);
+ C(gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1)==GH_EFFECT_POST_BOUNDS);
+ for(unsigned i=0;i<6;i++)packet.quads[0].vertices[i].rgba=0x00808080u;
+ C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1));
+ packet.source=GH_EFFECT_SURFACE_3C00;
+ packet.tex0=UINT64_C(0x2000000620113c00);
+ for(unsigned i=0;i<6;i++){
+  packet.quads[0].vertices[i].t=.5f/256.0f;
+  packet.quads[0].vertices[i].rgba=0x80808080u;
+ }
+ C(gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,0)==GH_EFFECT_POST_BOUNDS);
+ C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1));
+}
 int main(int argc,char**argv){
  C(argc==2||argc==3);uint8_t one[4]={9,7,3,255},sample[4]={99,99,99,99};gh_effect_post_surface tiny={one,4,4,1,1};gh_effect_post_sampler linear={.tex1=0x60,.known=1,.policy=GH_EFFECT_SAMPLE_NATIVE_SEPARABLE_4BIT},nearest={.known=1,.policy=GH_EFFECT_SAMPLE_NATIVE_SEPARABLE_4BIT};
  C(!gh_effect_post_sample(&tiny,512,512,&linear,8,8,sample)&&!memcmp(one,sample,4));memset(sample,99,4);C(gh_effect_post_sample(&tiny,512,512,&linear,9,8,sample)==GH_EFFECT_POST_BOUNDS&&sample[0]==99);C(gh_effect_post_sample(&tiny,512,512,&linear,8,9,sample)==GH_EFFECT_POST_BOUNDS&&sample[0]==99);
  uint8_t four[16]={0,0,0,255,1,0,0,255,0,0,0,255,3,0,0,255};gh_effect_post_surface bilinear={four,16,8,2,2};C(!gh_effect_post_sample(&bilinear,2,2,&linear,16,16,sample)&&sample[0]==0&&sample[3]==255); /* separablefloors: floor((floor(.5)+floor(1.5))/2)=0, notsingle-round1 */
  C(!gh_effect_post_sample(&bilinear,2,2,&nearest,-1,-1,sample)&&sample[0]==3);linear.clamp=1;C(gh_effect_post_sample(&tiny,512,512,&linear,8,8,sample)==GH_EFFECT_POST_UNSUPPORTED);linear.clamp=0;
  check_scene_capture(&nearest,&linear);
+ check_impact_warp(&nearest,&linear);
  gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t en=(size_t)gh_disc_boot_elf_size(d);uint8_t*elf=malloc(en);C(elf&&!gh_disc_read_boot_elf(d,0,elf,en));size_t cn,rn;uint8_t*core=load(d,"etc/core.dat",&cn),*roombytes=load(d,"st1/r100.dat",&rn);gh_bundle room;C(!gh_bundle_open(roombytes,rn,&room));gh_effects_frame_globals globals={0};gh_camera_envelope envelope={0};uint32_t f;C(!gh_effects_frame_globals_from_elf(&globals,elf,en)&&!gh_game_camera_envelope_from_elf(&envelope,elf,en,&f));
  gh_game_effects*effects=calloc(1,sizeof(*effects));uint8_t*esp=calloc(1,0x100180),*emitters=calloc(1,0x26060);C(effects&&esp&&emitters&&!gh_game_effects_initialize_00305a68(effects,esp,0x100180,emitters,0x26060,core,cn,&room));gh_boot_work work={0};gh_game_mt random;gh_game_mt_seed_0030f2b0(&random,123);gh_effect_release_bindings storage={.effects=effects,.esp=esp,.esp_bytes=0x100180,.emitters=emitters,.emitter_bytes=0x26060};gh_effect_create_bindings producer={.storage=storage,.work=&work,.random=&random};gh_effect_create_call create={0};C(!gh_effect_create_ambient_begin_00305e88(&create,0)&&!gh_game_effect_create_00306528(&create,&producer)&&create.complete);
  gh_effect_emitter_view source;C(!gh_effect_create_emitter_at(effects,create.slot,&source));gh_esp_create_bindings eb={.storage=storage,.random=&random,.work=&work,.policy=GH_STATIC_BINARY32_REFERENCE,.globals=&globals,.atan_coeff=envelope.atan_coeff};gh_esp_create_call ec={0};C(!gh_esp_create_begin_00300e30(&ec,create.slot,source.serial)&&!gh_game_esp_create_00300e30(&ec,&eb)&&ec.complete);

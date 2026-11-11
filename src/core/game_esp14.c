@@ -531,7 +531,7 @@ gh_effect_status gh_effect_position_init_scaled_00301c20(uint8_t p[0x400], gh_ef
     *frontier = 0x301c20;
     if (!p || !record.bytes || record.size < 0x2f0 || !position) return GH_EFFECT_ARGUMENT;
     const uint8_t *r = record.bytes;
-    if ((r[0x133] != 0x14 && r[0x133] != 9) || !isfinite(amplitude_scale) ||
+    if ((r[0x133] != 0x14 && r[0x133] != 9 && !gh_effect_r003_esp08_row(record)) || !isfinite(amplitude_scale) ||
         !(word(r + 4) & 0x200000u)) return GH_EFFECT_UNSUPPORTED;
     uint32_t seed = word(p + 0x220);
     float random = take_random_signed(&seed);
@@ -614,7 +614,9 @@ static gh_effect_status position_move(gh_game_effects *effects, unsigned slot,
         (scaled != 0 && scaled != 1) || !isfinite(factor)) return GH_EFFECT_ARGUMENT;
     const uint8_t *r = v->record.bytes;
     const uint32_t flags = word(r + 4);
-    if ((v->type != 0x14 && !(v->type==9&&gh_effect_esp_trail_is_bound(effects,v))) || (flags & 0x10200000u) != 0x00200000u || (flags & 0x100000u))
+    int supported=v->type==0x14||(v->type==9&&gh_effect_esp_trail_is_bound(effects,v))||
+        (v->type==8&&gh_effect_r003_esp08_row(v->record)&&!v->actor&&!v->selector&&v->parent_emitter==-1);
+    if (!supported || (flags & 0x10200000u) != 0x00200000u || (flags & 0x100000u))
         return GH_EFFECT_UNSUPPORTED;
     gh_effect_esp_view canonical;
     if (gh_effect_create_esp_at(effects, slot, &canonical) ||

@@ -25,7 +25,7 @@ typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_req
  uint32_t configuration_nested_scale,configuration_nested_flags;
  const float *configuration_positioned_atan_coeff;
  uint32_t configuration_positioned_position[3],configuration_positioned_yaw;
- uint8_t configuration_positioned,configuration_death_part_zero;} gh_effect_create_call;
+ uint8_t configuration_positioned,configuration_death_part_zero,configuration_05288;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
 /* Only the known non-NULL305E88 configuration (unit scales/VF0 vectors,
@@ -59,6 +59,8 @@ gh_effect_status gh_effect_create_player_impact_begin_00306838(gh_effect_create_
 /* 2FA158's explicit configuration and camera cut -> bank 6 index. The
  * 2FA240 row actor is distinct from the original NULL selector argument. */
 gh_effect_status gh_effect_create_event_cut_begin_002fa158(gh_effect_create_call *,uint32_t cut);
+/* EV02's original bank1:1 parentless sequence, mode0, config flags2. */
+gh_effect_status gh_effect_create_event_sequence_00005288(gh_effect_create_call *);
 gh_effect_status gh_effect_event_cut_present_002fa128(const gh_game_effects *,uint32_t cut,int *present);
 gh_effect_status gh_game_effect_create_00306528(gh_effect_create_call *,const gh_effect_create_bindings *);
 typedef struct {gh_effect_view record;const gh_title_player_view *actor,*selector;
@@ -108,6 +110,10 @@ gh_effect_status gh_effect_create_bind_frame_actors(gh_game_effects *,gh_game_sc
 /* Called only after actualtype6 virtualInit computation has returned1. */
 gh_effect_status gh_effect_create_esp_commit_base(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_type6(gh_game_effects *,unsigned,uint32_t);
+/* R003 SSD bank3/index0 parentless class08, original 2FFC20/2EA908. */
+int gh_effect_r003_esp08_row(gh_effect_view);
+gh_effect_status gh_effect_create_esp_commit_8(gh_game_effects *,unsigned,uint32_t);
+gh_effect_status gh_effect_create_esp_commit_type7(gh_game_effects *,unsigned slot,uint32_t serial);
 gh_effect_status gh_effect_create_esp_commit_14(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_12(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_13(gh_game_effects *,unsigned,uint32_t);

@@ -19,7 +19,8 @@ DEFAULT_SCRATCH = Path(r"G:\middle_thing\godhand_windows")
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target", choices=("mc-frame", "title-ui", "native", "startup-qa", "model-qa", "world-qa", "scene-message-qa", "save-map-qa"), default="mc-frame")
+    parser.add_argument("--target", choices=("mc-frame", "title-ui", "native", "startup-qa", "startup-cpu-qa",
+                        "model-qa", "world-qa", "scene-message-qa", "save-map-qa"), default="mc-frame")
     parser.add_argument("--scratch", type=Path, default=DEFAULT_SCRATCH)
     parser.add_argument("--jobs", type=int, default=4, help="Independent C compiler processes (1..16)")
     parser.add_argument("--compiler-cache", type=Path, default=DEFAULT_SCRATCH / "cache/zig-global",
@@ -73,13 +74,16 @@ def main():
         cpp_sources += ["tests/platform/test_scene_message_depth.cpp"]
     elif args.target == "save-map-qa":
         modules.append(("test_save_map_chapter", "tests/core/test_save_map_chapter.c"))
-    elif args.target in ("native", "startup-qa"):
+    elif args.target in ("native", "startup-qa", "startup-cpu-qa"):
         for source in ("src/platform/native_input.c", "src/platform/video_player.c", "src/platform/audio_events.c",
                        "src/core/se_voice.c", "src/core/sound_control.c", "src/core/mc_exit.c",
                        "src/core/game_camera.c", "src/core/game_movie_pool.c", "src/platform/game_services.c"):
             if source not in {s for _, s in modules}:
                 modules.append((Path(source).stem, source))
-        cpp_sources += ["src/platform/model_renderer.cpp", "src/platform/window_host.cpp", "src/main.cpp"]
+        if args.target == "startup-cpu-qa":
+            cpp_sources = ["tools/probe-startup-cpu.cpp"]
+        else:
+            cpp_sources += ["src/platform/model_renderer.cpp", "src/platform/window_host.cpp", "src/main.cpp"]
     elif args.target == "title-ui":
         cpp_sources += ["tools/probe-title-ui.cpp"]
     else:
@@ -158,7 +162,11 @@ def main():
         return obj
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
         objects = list(executor.map(compile_module, modules))
-    exe = build / {"native": "godhand-windows.exe", "startup-qa": "probe-native-startup.exe", "mc-frame": "probe-mc-frame.exe", "title-ui": "probe-title-ui.exe", "model-qa": "test-model-renderer.exe", "world-qa": "test-world-composition.exe", "scene-message-qa": "test-scene-message-depth.exe", "save-map-qa": "test-save-map-chapter.exe"}[args.target]
+    exe = build / {"native": "godhand-windows.exe", "startup-qa": "probe-native-startup.exe",
+                   "startup-cpu-qa": "probe-startup-cpu.exe", "mc-frame": "probe-mc-frame.exe",
+                   "title-ui": "probe-title-ui.exe", "model-qa": "test-model-renderer.exe",
+                   "world-qa": "test-world-composition.exe", "scene-message-qa": "test-scene-message-depth.exe",
+                   "save-map-qa": "test-save-map-chapter.exe"}[args.target]
     if args.target == "startup-qa":
         flags.append("-DGH_NATIVE_STARTUP_QA=1")
     def compile_cpp(source):
@@ -168,8 +176,9 @@ def main():
         return obj
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
         cpp_objects = list(executor.map(compile_cpp, cpp_sources))
+    graphics_libraries = [] if args.target == "startup-cpu-qa" else ["-ld3d11", "-ldxgi", "-ld3dcompiler", "-luser32"]
     run("link", [compiler, "c++", "-std=c++17", *flags, *objects, *cpp_objects,
-                 "-L" + str(sdk), "-ld3d11", "-ldxgi", "-ld3dcompiler", "-luser32", "-lwinmm", "-o", exe])
+                 "-L" + str(sdk), *graphics_libraries, "-lwinmm", "-o", exe])
     if source_hashes(PROJECT, initial) != initial:
         report["status"] = "failed-source-changed-during-build"
         save()

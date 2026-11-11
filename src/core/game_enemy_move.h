@@ -60,6 +60,7 @@ typedef struct {
     void *near_sound_context;
     const gh_room_state *room_state;
     gh_player_target_bindings targets;
+    gh_enemy_request death_transform_request;
     uint8_t death_phase,death_effect_cursor,death_ground_cursor;
     float death_ground[2][4];
     gh_enemy202_death_release death_release;

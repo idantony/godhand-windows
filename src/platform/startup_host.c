@@ -2533,6 +2533,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
                 memcpy(out->player_world_position,player->alias_f0,sizeof(out->player_world_position));
                 memcpy(&out->player_yaw,player->bytes+0x104,sizeof(out->player_yaw));
                 memcpy(out->player_state,player->bytes+0x2f4,sizeof(out->player_state));
+                memcpy(&out->player_hp,player->bytes+0x54a,sizeof(out->player_hp));
                 out->player_square_buffer=player->bytes[0x621];
                 memcpy(&out->player_motion_sample,player->bytes+0x430,sizeof(out->player_motion_sample));
                 memcpy(&out->player_attack_target,player->bytes+0x640,sizeof(out->player_attack_target));

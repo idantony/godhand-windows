@@ -35,6 +35,10 @@ gh_actor_model_status gh_enemy202_appearance5_select_00203b3c(
 /* R100 appearance9 uses the dependency's already selected directory. */
 gh_actor_model_status gh_enemy202_appearance9_select_0020393c(
     const gh_enemy_request *, const gh_object_view *, gh_enemy_initial_motion_selection *);
+gh_actor_model_status gh_enemy202_appearance1_select_00203a9c(
+    const gh_enemy_request *, const gh_object_view *, gh_enemy_initial_motion_selection *);
+gh_actor_model_status gh_enemy202_appearance4_select_00203a18(
+    const gh_enemy_request *, const gh_object_view *, gh_enemy_initial_motion_selection *);
 gh_actor_model_status gh_enemy202_appearance0_select_0020393c(
     const gh_enemy_request *, const gh_object_view *, gh_enemy_initial_motion_selection *);
 #ifdef __cplusplus

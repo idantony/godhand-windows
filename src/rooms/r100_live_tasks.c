@@ -5,7 +5,7 @@
 #include <fenv.h>
 #include <math.h>
 
-static const uint32_t entries[]={0x2920,0x2650,0x2490,0x2288,0x2198,0x15b0,0x2d68,0x1bd0};
+static const uint32_t entries[]={0x2920,0x2650,0x2490,0x2288,0x2198,0x15b0,0x2d68,0x1bd0,0x11b0};
 static uint32_t rd(const void *p){uint32_t n;memcpy(&n,p,4);return n;}
 static uint16_t half(const void *p){uint16_t n;memcpy(&n,p,2);return n;}
 static void wr(void *p,uint32_t n){memcpy(p,&n,4);}
@@ -76,7 +76,7 @@ static gh_r100_script_status center(gh_r100_live_task *s,unsigned id,float desti
     return GH_R100_SCRIPT_OK;
 }
 
-static gh_r100_script_status set_enemy(gh_r100_live_task *s,gh_enemy_ems *owner,uint8_t stamp)
+static gh_r100_script_status set_enemy(gh_r100_live_task *s,gh_enemy_ems *owner,uint8_t stamp,int increment)
 {
     gh_game_title_player *ignored;
     uint32_t frontier=0;
@@ -84,8 +84,10 @@ static gh_r100_script_status set_enemy(gh_r100_live_task *s,gh_enemy_ems *owner,
     if(status)return fail(s,frontier?frontier:0x2952d0,
         status==GH_PLACE_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE);
     uint8_t *counter=s->b.room_init->work.pointer;
-    wr(counter,rd(counter)+1u); /* Increment after each call, including original null result. */
-    s->b.room_init->known_work_bytes|=15u;
+    if(increment){
+        wr(counter,rd(counter)+1u); /* Includes an original null result. */
+        s->b.room_init->known_work_bytes|=15u;
+    }
     s->set_enemy=(gh_enemy_ems_set_call){0};
     return GH_R100_SCRIPT_OK;
 }
@@ -95,7 +97,7 @@ static gh_r100_script_status at3_payload(gh_r100_live_task *s)
     if(!s->b.enemies||!*s->b.enemies)return fail(s,0x2952d0,GH_R100_SCRIPT_UNSUPPORTED);
     gh_enemy_ems *owner=*s->b.enemies;
     while(s->at3_stage<2){
-        gh_r100_script_status status=set_enemy(s,owner,(uint8_t)(31+s->at3_stage));
+        gh_r100_script_status status=set_enemy(s,owner,(uint8_t)(31+s->at3_stage),1);
         if(status)return status;
         ++s->at3_stage;
     }
@@ -314,7 +316,7 @@ static gh_r100_script_status at2_payload(gh_r100_live_task *s)
     if(!s->b.enemies||!*s->b.enemies)return fail(s,0x2952d0,GH_R100_SCRIPT_UNSUPPORTED);
     gh_enemy_ems *owner=*s->b.enemies;
     for(uint8_t stamp=29;stamp<=30;stamp++){
-        gh_r100_script_status status=set_enemy(s,owner,stamp); /* REL27C0, REL27E0 */
+        gh_r100_script_status status=set_enemy(s,owner,stamp,1); /* REL27C0, REL27E0 */
         if(status)return status;
     }
     float destination[3];
@@ -409,31 +411,129 @@ static gh_r100_script_status watch(gh_r100_live_task *s)
     }
     case 0x2d68:{
         if(!s->entered)return GH_R100_SCRIPT_ARGUMENT;
+        if(!s->devil_event_stage){
+            const gh_game_title_player *flagged;
+            status=gh_r100_first_flagged_00002cb0(s->b.init,s->b.room,&flagged);
+            if(status)return fail(s,0x28fb38,status);
+            if(!flagged)return GH_R100_SCRIPT_OK;
+            const uint8_t *p=flagged->view.bytes;
+            /* Original imported CkDevilEvent at 273640. */
+            if(p[0x2f4]!=0||p[0x2f5]!=4||p[0x2f6]<2)return GH_R100_SCRIPT_OK;
+            wr(s->b.room->active+4,rd(s->b.room->active+4)|0x02000000u);
+            uint8_t *flags=(uint8_t*)s->b.work+0x5ec;
+            wr(flags,rd(flags)|0x20000000u);
+            s->devil_event_stage=1;
+        }
+        if(s->devil_event_stage==1){
+            if(rd((const uint8_t*)s->b.work+0x5ec)&0x40000000u)return GH_R100_SCRIPT_OK;
+            status=start_soft_event(s);
+            if(status)return status;
+            s->devil_event_stage=2;
+        }
+        if(s->devil_event_stage==2){
+            const gh_enemy_ems *owner=s->b.enemies?*s->b.enemies:NULL;
+            uint32_t frontier=0;
+            gh_actor_motion_status result=gh_enemy_ems_set_stamp_suspend_00295bc0(owner,s->b.init,8,0,&frontier);
+            if(result)return fail(s,frontier?frontier:0x295bc0,GH_R100_SCRIPT_CALLEE);
+            s->devil_event_stage=3;
+        }
         const gh_game_title_player *flagged;
         status=gh_r100_first_flagged_00002cb0(s->b.init,s->b.room,&flagged);
         if(status)return fail(s,0x28fb38,status);
-        if(!flagged)return GH_R100_SCRIPT_OK;
-        const uint8_t *p=flagged->view.bytes;
-        if(p[0x2f4]!=0||p[0x2f5]!=4||p[0x2f6]<2)return GH_R100_SCRIPT_OK;
+        if(s->devil_event_stage==3){
+            if(flagged){
+                if(flagged->view.original_vtable214!=0x4479c8){
+                    s->frontier_relative=1;
+                    return fail(s,0x2e94,GH_R100_SCRIPT_UNSUPPORTED);
+                }
+                /* The authentic cEm00 VT+64 target is 275308, the same
+                   leaf reached by the typed EmWrap suspend operation. */
+                const gh_enemy_ems *owner=s->b.enemies?*s->b.enemies:NULL;
+                uint32_t frontier=0;
+                gh_actor_motion_status result=gh_enemy_ems_set_actor_suspend_00275308(
+                    owner,s->b.init,flagged,0,&frontier);
+                if(result)return fail(s,frontier?frontier:0x275308,GH_R100_SCRIPT_CALLEE);
+            }
+            s->devil_event_stage=4;
+        }
+        if(flagged){
+            const uint8_t *p=flagged->view.bytes;
+            if(p[0x2f4]==0&&p[0x2f5]==4&&p[0x2f6]>=2)return GH_R100_SCRIPT_OK;
+        }
+        if(!s->b.end_soft_event)return fail(s,0x2c3c10,GH_R100_SCRIPT_UNSUPPORTED);
+        uint32_t frontier=0;
+        status=s->b.end_soft_event(s->b.context,&s->soft_end,&frontier);
+        if(status)return fail(s,frontier?frontier:0x2c3c10,status);
+        uint8_t *flags=(uint8_t*)s->b.work+0x5ec;
+        wr(flags,rd(flags)&~0x20000000u);
+        status=gh_r100_live_register(s->owner,&s->b,0x11b0,-1,&frontier);
+        if(status)return fail(s,frontier?frontier:0x2c3890,status);
+        s->finished=1;
+        return GH_R100_SCRIPT_OK;
+    }
+    case 0x11b0:{
+        if(!s->post_devil_stage){
+            status=hit(s,22,&triggered);
+            if(status||!triggered||((const uint8_t*)s->b.room_init->work.pointer)[5])return status;
+            for(uint8_t stamp=10;stamp<=11;stamp++){
+                status=dead(s,stamp,NULL,&died);
+                if(status||!died)return status;
+            }
+            status=event_ready(s,&ready);
+            if(status||!ready)return status;
+            wr(s->b.room->active+4,rd(s->b.room->active+4)|0x00800000u);
+            s->post_devil_stage=1;
+        }
+        if(s->post_devil_stage==1){
+            status=start_soft_event(s);
+            if(status)return status;
+            s->post_devil_stage=2;
+        }
+        if(s->post_devil_stage==2){
+            status=set_room_camera(s,"A07");
+            if(status)return status;
+            s->post_devil_stage=3;
+        }
+        if(!s->b.enemies||!*s->b.enemies)return fail(s,0x2952d0,GH_R100_SCRIPT_UNSUPPORTED);
+        while(s->post_devil_stage<=4){
+            status=set_enemy(s,*s->b.enemies,(uint8_t)(33+s->post_devil_stage-3),1);
+            if(status)return status;
+            ++s->post_devil_stage;
+        }
         s->frontier_relative=1;
-        return fail(s,0x2e04,GH_R100_SCRIPT_UNSUPPORTED);
+        return fail(s,0x1318,GH_R100_SCRIPT_UNSUPPORTED); /* next original EmWrap action */
     }
     case 0x1bd0:{
-        const uint32_t flags=rd(s->b.room->active+4);
-        if(!(flags&0x80000000u)){
-            if(!(flags&0x02000000u)||((const uint8_t*)s->b.room_init->work.pointer)[5])return GH_R100_SCRIPT_OK;
-            status=event_ready(s,&ready);if(status||!ready)return status;
-            status=hit(s,10,&triggered);if(status||!triggered)return status;
-            unsigned need=rd((const uint8_t*)s->b.work+0x594)&0x800u?9:12;
-            if(rd(s->b.room->active+0x1610)<need)return GH_R100_SCRIPT_OK;
+        if(!s->battle_stage){
+            const uint32_t flags=rd(s->b.room->active+4);
+            if(!(flags&0x80000000u)){
+                if(!(flags&0x02000000u)||((const uint8_t*)s->b.room_init->work.pointer)[5])return GH_R100_SCRIPT_OK;
+                status=event_ready(s,&ready);if(status||!ready)return status;
+                status=hit(s,10,&triggered);if(status||!triggered)return status;
+                unsigned need=rd((const uint8_t*)s->b.work+0x594)&0x800u?9:12;
+                if(rd(s->b.room->active+0x1610)<need)return GH_R100_SCRIPT_OK;
+            }
+            wr(s->b.room->active+4,flags|0x80000000u);
+            s->battle_stage=1;
         }
-        wr(s->b.room->active+4,flags|0x80000000u);
-        if(!s->b.checkpoint)return fail(s,0x2c05b0,GH_R100_SCRIPT_UNSUPPORTED);
-        uint32_t pc=0;
-        status=s->b.checkpoint(s->b.context,&pc);
-        if(status)return fail(s,pc?pc:0x2c05b0,status);
-        wr(s->b.room->active+4,rd(s->b.room->active+4)|0x40000000u);
-        return fail(s,0x2952d0,GH_R100_SCRIPT_UNSUPPORTED);
+        if(s->battle_stage==1){
+            if(!s->b.checkpoint)return fail(s,0x2c05b0,GH_R100_SCRIPT_UNSUPPORTED);
+            uint32_t pc=0;
+            status=s->b.checkpoint(s->b.context,&pc);
+            if(status)return fail(s,pc?pc:0x2c05b0,status);
+            wr(s->b.room->active+4,rd(s->b.room->active+4)|0x40000000u);
+            s->battle_stage=2;
+        }
+        static const uint8_t stamps[]={26,27,28,2,13,16,17,14};
+        if(!s->b.enemies||!*s->b.enemies)return fail(s,0x2952d0,GH_R100_SCRIPT_UNSUPPORTED);
+        while(s->battle_spawn_index<sizeof(stamps)){
+            status=set_enemy(s,*s->b.enemies,stamps[s->battle_spawn_index],
+                s->battle_spawn_index+1u<sizeof(stamps));
+            if(status)return status;
+            ++s->battle_spawn_index;
+        }
+        s->frontier_relative=1;
+        return fail(s,0x1e80,GH_R100_SCRIPT_UNSUPPORTED); /* next original door lookup */
     }
     default:return fail(s,s->entry,GH_R100_SCRIPT_UNSUPPORTED);
     }
@@ -475,7 +575,7 @@ gh_r100_script_status gh_r100_live_register(gh_r100_live_tasks *owner,
         return GH_R100_SCRIPT_ARGUMENT;
     gh_r100_live_task *s=&owner->tasks[index];
     if(s->registered)return GH_R100_SCRIPT_OK;
-    s->entry=entry;s->b=*b;
+    s->entry=entry;s->b=*b;s->owner=owner;
     gh_scenario_exec_status status=gh_scenario_exec_002c3890(b->scenario,b->threads,request,
         run,s,0,&s->slot,frontier);
     if(status)return GH_R100_SCRIPT_THREAD;

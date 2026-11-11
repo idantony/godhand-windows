@@ -32,9 +32,30 @@ static gh_effect_status body(gh_game_effects*e,unsigned slot,uint32_t serial,con
   * are not accepted as a completedprojection. No second ready flag/owner. */
  if(projection[8]!=2048||projection[9]!=2048||projection[11]!=1||projection[15]!=0)return fail(f,0x138740,GH_EFFECT_UNSUPPORTED);
  gh_effect_status status=gh_effect_node_world_matrix_native(e,0,slot,serial,world,b->policy,f);if(status)return status;
- if((flags&0xe0000000u)==0xe0000000u){if(!p[0x16])return fail(f,0x2b6328,GH_EFFECT_UNSUPPORTED);float local[16],position[4];memcpy(local,p+0x50,64);if(gh_scene_at_apply_world_001508d8(view,world+12,position))return fail(f,0x30a2b0,GH_EFFECT_UNSUPPORTED);memcpy(local+12,position,12);if(gh_actor_matrix_product_00147548(projection,local,transform,b->policy,f))return fail(f,*f?*f:0x147548,GH_EFFECT_UNSUPPORTED);}
- else if(!(flags&0x40000000u)){float combined[16];memcpy(combined,b->camera->fields,64);if(gh_actor_matrix_product_00147548(combined,world,transform,b->policy,f))return fail(f,*f?*f:0x147548,GH_EFFECT_UNSUPPORTED);}
- else return fail(f,0x147b60,GH_EFFECT_UNSUPPORTED);
+ if(flags&0x40000000u){
+  if(!p[0x16])return fail(f,0x2b6328,GH_EFFECT_UNSUPPORTED);
+  float local[16],position[4];
+  memcpy(local,p+0x50,64);
+  if(gh_scene_at_apply_world_001508d8(view,world+12,position))
+   return fail(f,0x30a2b0,GH_EFFECT_UNSUPPORTED);
+  if((flags&0xe0000000u)!=0xe0000000u){
+   /* 147B60 appends the camera's pitch and roll in rotation order 4. */
+   float camera_angles[3],rotation[16];
+   memcpy(camera_angles,b->camera->fields+0x220,12);
+   camera_angles[1]=0;
+   if(gh_actor_matrix_rotation_00147728(camera_angles,4,rotation,b->policy,f)||
+      gh_actor_matrix_product_00147548(local,rotation,local,b->policy,f))
+    return fail(f,*f?*f:0x147b60,GH_EFFECT_UNSUPPORTED);
+  }
+  memcpy(local+12,position,12);
+  if(gh_actor_matrix_product_00147548(projection,local,transform,b->policy,f))
+   return fail(f,*f?*f:0x147548,GH_EFFECT_UNSUPPORTED);
+ }else{
+  float combined[16];
+  memcpy(combined,b->camera->fields,64);
+  if(gh_actor_matrix_product_00147548(combined,world,transform,b->policy,f))
+   return fail(f,*f?*f:0x147548,GH_EFFECT_UNSUPPORTED);
+ }
  if(b->cvt_policy!=GH_FRAME_CHOP_REFERENCE)return fail(f,0x2fddf8,GH_EFFECT_UNSUPPORTED);
  gh_effect_sprite_projection result={0};
  float center[4]={transform[12],transform[13],transform[14],transform[15]},q;

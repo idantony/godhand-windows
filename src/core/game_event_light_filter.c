@@ -36,20 +36,24 @@ static gh_game_event_status read_track(const gh_event_light_filter *state,
     return GH_EVENT_OK;
 }
 
-/* For EV01 all keys are camera-global (original 8378 maps FFFF to lane FF),
- * primary, and frame zero. Each key falls inside its existing primary cut,
- * so the four key repair calls in BE58/C250 leave its timing untouched. */
+/* EV01/EV02 keys use the primary camera at frame zero. Original 8378
+ * maps FFFF to lane FF, and the four timing repair calls keep these times. */
 static gh_game_event_status mapped_keys(const gh_event_data_prefix *data,
                                         const gh_event_sequence_view *track, unsigned index)
 {
-    const unsigned count = index == OBJECT_LIGHT ? 1 : 10;
-    const size_t stride = index == OBJECT_LIGHT ? 0x1c : 0x2e8;
-    if (data->components->event_no != 1 || data->camera_count != 10 ||
-        !track->records || track->count != count || track->stride != stride ||
+    const unsigned event = data->components->event_no;
+    const int object_light = index == OBJECT_LIGHT;
+    if ((event != 1 && event != 2) || data->camera_count != (event == 1 ? 10 : 28))
+        return GH_EVENT_UNSUPPORTED;
+    const unsigned count = object_light ? event : event == 1 ? 10 : 25;
+    const size_t stride = object_light ? 0x1c : 0x2e8;
+    if (!track->records || track->count != count || track->stride != stride ||
         track->bytes != count * stride) return GH_EVENT_UNSUPPORTED;
     for (unsigned i = 0; i < count; ++i) {
         const uint8_t *key = track->records + i * stride;
-        unsigned cut = index == OBJECT_LIGHT ? 1 : i;
+        unsigned cut = i;
+        if (object_light && event == 1) cut = 1;
+        if (!object_light && event == 2 && i >= 16) cut += 3;
         uint16_t length;
         gh_event_camera_cut camera;
         if (read_word(key) != (0xffffu | cut << 24) || read_word(key + 4) ||
@@ -138,13 +142,13 @@ static gh_game_event_status previous_key(gh_event_light_filter *state, unsigned 
         return GH_EVENT_UNSUPPORTED;
     *key = component->bytes + 0x18;
     const uint8_t *next = NULL;
-    if (index == FILTER) {
-        *key = track.records + cut * track.stride;
-        if (frame == 0) next = *key;
-        else if (cut + 1 < track.count) next = *key + track.stride;
-    } else {
-        if (cut >= 1) *key = track.records;
-        if (cut == 0 || (cut == 1 && frame == 0)) next = track.records;
+    for (unsigned i = 0; i < track.count; ++i) {
+        const uint8_t *candidate = track.records + i * track.stride;
+        if (candidate[3] <= cut) *key = candidate;
+        if (candidate[3] > cut || (candidate[3] == cut && frame == 0)) {
+            next = candidate;
+            break;
+        }
     }
     if (((*key)[8] & 2u) || (next && (next[8] & 2u))) {
         *frontier = index == OBJECT_LIGHT ? 0x88b0 : 0x75d0;

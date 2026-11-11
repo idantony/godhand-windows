@@ -19,8 +19,8 @@ typedef struct {
     uint8_t stage, quit_stage;
 } gh_event_scr_light;
 
-/* Main 296D38 / 296E48. The absent EV01 track still installs and writes
- * its origin key in the same WorldLight, scroll counter and CoreSave. */
+/* Main 296D38 / 296E48. Install the origin and apply the current EV01
+ * or EV02 key to the canonical WorldLight, scroll counter and CoreSave. */
 gh_game_event_status gh_event_scr_light_init_00008b20(gh_event_scr_light *,
     const gh_event_data_prefix *, gh_game_world_light *, gh_game_init_state *,
     gh_core_save_view, const gh_light_player_parts *, uint32_t *, int *relative);

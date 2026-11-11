@@ -278,10 +278,11 @@ int main(int argc, char **argv) {
     object_bytes[0x250] = 0x40;
     gh_title_player_view object = {.bytes=object_bytes,.size=sizeof(object_bytes)};
     gh_core_save_view save = {save_bytes, sizeof(save_bytes)};
-    CHECK(!gh_event_env_extra_move_object_00006b08(components, &object, save, &frontier));
+    gh_actor_model object_model = {.root = object};
+    CHECK(!gh_event_env_extra_move_object_00006b08(components, &object_model, save, &frontier));
     CHECK(object_bytes[0x250] == 0x40);
     save_bytes[0xae] = 1;
-    CHECK(!gh_event_env_extra_move_object_00006b08(components, &object, save, &frontier));
+    CHECK(!gh_event_env_extra_move_object_00006b08(components, &object_model, save, &frontier));
     CHECK(object_bytes[0x250] == 0x42);
     CHECK(!gh_game_event_resource_abort(&loaded));
 

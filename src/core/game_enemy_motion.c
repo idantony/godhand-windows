@@ -15,8 +15,12 @@ gh_actor_motion_status gh_enemy_motion_initialize_002036b0(gh_enemy_motion*s,gh_
    gh_actor_model_status status;
    uint32_t selection_pc;
    switch(e->request.appearance){
+   case 1:
+    selection_pc=0x203a9c;status=gh_enemy202_appearance1_select_00203a9c(&e->request,r,&selected);break;
    case 0:
     selection_pc=0x20393c;status=gh_enemy202_appearance0_select_0020393c(&e->request,r,&selected);break;
+   case 4:
+    selection_pc=0x203a18;status=gh_enemy202_appearance4_select_00203a18(&e->request,r,&selected);break;
    case 5:
     selection_pc=0x203b3c;status=gh_enemy202_appearance5_select_00203b3c(&e->request,r,&selected);break;
    case 9:

@@ -17,7 +17,7 @@ spec.loader.exec_module(proof)
 
 
 MAX_CAPTURE_COUNT = 120
-CONTROL_PROBES = ("walk", "run", "square", "approach-square", "repeat-square", "repeat-triangle", "repeat-triangle-pair")
+CONTROL_PROBES = ("walk", "run", "square", "approach-square", "repeat-square", "repeat-triangle", "repeat-triangle-pair", "repeat-triangle-pair-continue")
 
 
 def now():
@@ -118,7 +118,8 @@ def run(prepared):
     proof.require(qa.get("hidden") is True and qa.get("muted") is True and qa.get("synthetic_input") is True
                   and qa.get("prefix_mode") is False, "QA did not confirm expected execution flags")
     control = prepared.get("control_probe")
-    pair = control == "repeat-triangle-pair"
+    continue_after_pair = control == "repeat-triangle-pair-continue"
+    pair = continue_after_pair or control == "repeat-triangle-pair"
     repeated_attack = pair or control in ("repeat-square", "repeat-triangle")
     valid_exit_codes = (0, 3, 4) if repeated_attack else (0, 4)
     proof.require(qa.get("exit_code") == receipt["exit_code"] and receipt["exit_code"] in valid_exit_codes,
@@ -135,7 +136,7 @@ def run(prepared):
         status = json.loads(status_lines[0])
         defeat_scene = status.get("defeat_scene")
         proof.require(type(defeat_scene) is int and defeat_scene >= 0
-                      and bool(defeat_scene) == (receipt["exit_code"] == 0),
+                      and (continue_after_pair or bool(defeat_scene) == (receipt["exit_code"] == 0)),
                       "repeated attack exit and presented defeat disagree")
         if pair and defeat_scene:
             first, second = (status.get(key) for key in ("stamp19_scene", "stamp20_scene"))
@@ -145,6 +146,24 @@ def run(prepared):
                           and first_handle > 0 and second_handle > 0 and first_handle != second_handle
                           and status.get("room_dead_mask") == 3,
                           "pair success lacks two ordered presented defeats")
+        if continue_after_pair:
+            with (scratch / "startup-newgame.stderr.log").open(encoding="utf-8", errors="replace") as stream:
+                marker = "QA_R100_EXIT_STATUS "
+                exit_lines = [line[len(marker):] for line in stream if line.startswith(marker)]
+            proof.require(len(exit_lines) == 1, "missing or duplicate R100 exit status")
+            exit_status = json.loads(exit_lines[0])
+            fields = ("door_tick", "continue_scene", "state5_tick", "room3_scene",
+                      "door_presses", "continue_presses", "route_index", "battle_gate_waiting")
+            proof.require(all(type(exit_status.get(k)) is int and exit_status[k] >= 0 for k in fields),
+                          "invalid R100 exit status")
+            door, menu, state5, room3 = (exit_status[k] for k in fields[:4])
+            proof.require((not door or (defeat_scene and exit_status["door_presses"])) and
+                          (not menu or (door and menu > defeat_scene)) and
+                          (not state5 or (door and menu and state5 > door and exit_status["continue_presses"])) and
+                          (not room3 or (state5 and room3 > menu)) and
+                          bool(room3) == (receipt["exit_code"] == 0),
+                          "R100 continuation lacks ordered A38, presented Continue, state5 and R003 proof")
+            status["r100_exit"] = exit_status
         summary[control.replace("-", "_")] = status
     return summary
 

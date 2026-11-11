@@ -233,7 +233,7 @@ static gh_game_event_status move_active(gh_event_actor_play *s, gh_actor_model *
     }
     uint32_t child = 0;
     gh_game_event_status status = gh_event_env_extra_move_object_00006b08(b->creation->bindings.components,
-        &model->root, b->creation->bindings.save, &child);
+        model, b->creation->bindings.save, &child);
     if (status) return fail(s, frontier, child ? child : 0x6b08, child ? 0 : 1, status);
     play_row->previous_present = 1;
     return GH_EVENT_OK;

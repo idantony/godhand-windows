@@ -21,12 +21,16 @@ typedef struct {
     gh_object_resource_load load;
     uint32_t handle, frontier;
     uint8_t stage;
+    uint16_t kind;
 } gh_enemy_weapon;
 
 /* Original 30FA98(363,FFFF) for the weapon's factory and dual publication.
  * A true OK/non-null here owns the object before its separate VT+44 call. */
 gh_actor_model_status gh_enemy_weapon_create_0030fa98(gh_enemy_weapon *,
     const gh_enemy_entry_bindings *, int *original_nonnull);
+/* Same original weapon class for kinds 361 through 363. */
+gh_actor_model_status gh_enemy_weapon_create_kind_0030fa98(gh_enemy_weapon *,
+    const gh_enemy_entry_bindings *, uint16_t kind, int *original_nonnull);
 /* Native failure/cancellation only, for the pre-virtual factory owner. */
 gh_actor_model_status gh_enemy_weapon_release_factory(gh_enemy_weapon *);
 
@@ -50,10 +54,10 @@ gh_actor_model_status gh_om_weapon_spheres_001c9268(gh_actor_model *,gh_title_pl
     const gh_hitarea_shape_bindings *,gh_hitarea_object[2],int[2],uint8_t *owned,uint8_t *phase,uint32_t *frontier);
 gh_actor_model_status gh_om_weapon_spheres_release(gh_hitarea_object[2],uint8_t *owned,uint32_t *frontier);
 
-/* Actual VT42AA98+44, narrowly for factory 363. */
+/* Actual VT42AA98+44, for factory kinds 361 through 363. */
 gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *,
     gh_enemy_weapon *, const gh_hitarea_shape_bindings *, int *original_return);
-/* Original 26AA30 nonnull transform copy, then the kind363/dep202
+/* Original 26AA30 nonnull transform copy, then the bounded enemy-202 weapon
  * 26AB20 -> 1CF160 attachment. No raw guest pointer is published. */
 gh_actor_model_status gh_enemy_weapon_attach_0026ab20(gh_enemy_weapon_init *,
     const gh_title_player_view *parent, gh_actor_model *parent_model,

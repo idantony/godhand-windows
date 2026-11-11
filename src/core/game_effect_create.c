@@ -69,6 +69,14 @@ gh_effect_status gh_effect_create_event_cut_begin_002fa158(gh_effect_create_call
  return status;
 }
 
+gh_effect_status gh_effect_create_event_sequence_00005288(gh_effect_create_call *call)
+{
+ const gh_effect_create_request request={.bank=1,.index=1,.mode=0,.selector=-1};
+ gh_effect_status status=gh_effect_create_begin(call,&request);
+ if(!status)call->configuration_05288=1;
+ return status;
+}
+
 static gh_effect_status positioned_begin(gh_effect_create_call *call,uint32_t bank,uint32_t index,
  const uint32_t world_xyz[3],uint32_t yaw_bits)
 {
@@ -185,6 +193,7 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
  if(entry.size<16||w(entry.bytes)!=0x545345){c->original_return=0;c->complete=1;return GH_EFFECT_OK;}
  c->est=entry;c->count=w(c->est.bytes+4);if(c->count>(c->est.size-16)/0x2f0)return fail(c,0x3066d0,GH_EFFECT_BOUNDS);c->config_flags=(w((const uint8_t*)b->work+0x5e4)&0x40)?2:0;
  if(c->configuration_2fa158)c->config_flags|=0xe;
+ if(c->configuration_05288)c->config_flags|=2;
  if(c->configuration_nested_group)c->config_flags|=c->configuration_nested_flags;
  if(c->request.bank==0x58&&(c->request.index==0x2c||c->request.index==0x5a)&&
     c->configuration_nested_scale){
@@ -408,6 +417,8 @@ static uint32_t esp_vtable(unsigned type){
  switch(type){
  case 0: return 0x44fad0u;
  case 6: return 0x44e6d8u;
+ case 7: return 0x44e770u;
+ case 8: return 0x44e820u;
  case 9: return 0x44e8c8u;
  case 0x12: return 0x44eb70u;
  case 0x13: return 0x44ec68u;
@@ -476,6 +487,13 @@ int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *owner,const gh_eff
  return 0;
 }
 
+int gh_effect_r003_esp08_row(gh_effect_view row)
+{
+ const uint8_t *r=row.bytes;
+ return r&&row.size==0x2f0&&w(r)==0x1e3e8010u&&w(r+4)==0x00a00000u&&
+    r[0xbe]==0xfcu&&r[0x133]==8&&r[0x18c]==0&&r[0x18f]==0;
+}
+
 gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_bindings*b,unsigned source_slot,uint32_t source_serial,unsigned*slot,uint32_t*serial,int*allocated,uint32_t*f){
  if(!b||!slot||!serial||!allocated||!f)return GH_EFFECT_ARGUMENT;*f=0;*allocated=0;*slot=0;*serial=0;
  gh_game_effects*e=b->effects;if(!e||!e->native||e->native->owner!=e||e->native->esp!=b->esp||e->native->emitters!=b->emitters||b->esp_bytes<0x100180||b->emitter_bytes<0x26060)return GH_EFFECT_ARGUMENT;
@@ -491,7 +509,9 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
  const int bound=attack||knock||death_ground||sprite_binding(source.record,source.actor,source.selector);
  if((!bound&&(source.actor||source.selector))||(event_part?(!source.model||!source.part):(source.model||source.part))){*f=0x2faa88;return GH_EFFECT_UNSUPPORTED;}
  unsigned i;for(i=0;i<1024;i++)if(!(w(b->esp+0x100000+(i>>5)*4)&(UINT32_C(0x80000000)>>(i&31))))break;if(i==1024)return GH_EFFECT_OK;
- unsigned type=source.record.bytes[0x133];uint32_t vtable=esp_vtable(type);if(!vtable){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}if(e->native->serial==UINT32_MAX){*f=0x2faa88;return GH_EFFECT_UNSUPPORTED;}
+ unsigned type=source.record.bytes[0x133];uint32_t vtable=esp_vtable(type);
+ if(!vtable||(type==8&&(!gh_effect_r003_esp08_row(source.record)||source.actor||source.selector||
+    w(source.payload+0x18c)!=3))){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}if(e->native->serial==UINT32_MAX){*f=0x2faa88;return GH_EFFECT_UNSUPPORTED;}
  uint8_t*p=b->esp+(size_t)i*0x400;memset(p,0,0x400);construct_esp_base(p,type,vtable);if(type==9)ww(p+0x2d4,0x3f800000);if(type==0x14)gh_esp14_construct_tail_002ffd88(p);uint32_t id=++e->native->serial;esp_metadata*m=&e->native->esps[i];*m=(esp_metadata){.record=source.record,.actor=source.actor,.selector=source.selector,.serial=id,.emitter_serial=source_serial,.emitter_slot=source_slot,.associated=1,.type=(uint8_t)type,.parent_emitter=-1,.previous=-1,.next=-1,.knockdown=(uint8_t)(knock||death_ground),.target120_known_null=(uint8_t)((bound||(!source.actor&&!source.selector))&&!w(source.payload+0x218))};unsigned off=(i>>5)*4;uint32_t mask=UINT32_C(0x80000000)>>(i&31);ww(b->esp+0x100000+off,w(b->esp+0x100000+off)|mask);ww(b->esp+0x100080+off,w(b->esp+0x100080+off)&~mask);ww(b->esp+0x100100+off,w(b->esp+0x100100+off)&~mask);*slot=i;*serial=id;*allocated=1;return GH_EFFECT_OK;
 }
 gh_effect_status gh_effect_create_esp_at(const gh_game_effects*e,unsigned slot,gh_effect_esp_view*out){
@@ -516,6 +536,29 @@ gh_effect_status gh_effect_create_esp_commit_base(gh_game_effects*e,unsigned slo
  return GH_EFFECT_OK;
 }
 gh_effect_status gh_effect_create_esp_commit_type6(gh_game_effects*e,unsigned slot,uint32_t serial){gh_effect_esp_view v;gh_effect_status status=gh_effect_create_esp_at(e,slot,&v);if(status||v.serial!=serial||v.type!=6||v.initialized||w(v.payload+0xf0)!=0x44e6d8u||!v.globals||!v.globals->initialized||v.actor||v.selector)return GH_EFFECT_ARGUMENT;e->native->esps[slot].initialized=1;return GH_EFFECT_OK;}
+gh_effect_status gh_effect_create_esp_commit_8(gh_game_effects *e,unsigned slot,uint32_t serial)
+{
+ gh_effect_esp_view view;
+ gh_effect_status status=gh_effect_create_esp_at(e,slot,&view);
+ if(status||view.serial!=serial||view.type!=8||view.initialized||
+    w(view.payload+0xf0)!=esp_vtable(8)||!view.globals||!view.globals->initialized||
+    view.actor||view.selector||view.parent_emitter!=-1||!gh_effect_r003_esp08_row(view.record))
+  return GH_EFFECT_ARGUMENT;
+ e->native->esps[slot].initialized=1;
+ return GH_EFFECT_OK;
+}
+gh_effect_status gh_effect_create_esp_commit_type7(gh_game_effects *e,unsigned slot,uint32_t serial)
+{
+ gh_effect_esp_view v;
+ gh_effect_view est;
+ if(gh_effect_create_esp_at(e,slot,&v)||v.serial!=serial||v.type!=7||v.initialized||
+    w(v.payload+0xf0)!=esp_vtable(7)||!v.globals||!v.globals->initialized||v.actor||v.selector||
+    gh_effect_est_at_00306030(e,0,3,&est)||!est.bytes||est.size<0x300||
+    v.record.bytes!=est.bytes+16)
+    return GH_EFFECT_ARGUMENT;
+ e->native->esps[slot].initialized=1;
+ return GH_EFFECT_OK;
+}
 gh_effect_status gh_effect_create_esp_commit_14(gh_game_effects *e,unsigned slot,uint32_t serial){
  gh_effect_esp_view view;
  gh_effect_status status=gh_effect_create_esp_at(e,slot,&view);

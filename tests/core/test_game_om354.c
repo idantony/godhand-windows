@@ -1,3 +1,4 @@
+#include "game_om_door_geometry.h"
 #include "game_om354.h"
 #include "game_om324.h"
 #include "game_om310.h"
@@ -27,10 +28,18 @@ int main(int argc,char**argv){C(argc==3);FILE*ef=fopen(argv[2],"rb");C(ef&&!fsee
   uint32_t old=w(bytes+0x620);
   uint32_t count=tables.pending_actor_count;
   C(!gh_om_door_set_lock_001bd178(geometry,1)&&w(bytes+0x620)==(old|2u));
+  C(!gh_om_door_set_open_001bcfb0(geometry,ri!=64,0)&&w(bytes+0x620)==(old|2u));
+  C(!gh_om_door_set_lock_001bd178(geometry,0));
+  uint32_t yaw=w(bytes+0x104);
+  C(!gh_om_door_set_open_001bcfb0(geometry,ri!=64,0));
+  C(w(bytes+0x638)==yaw&&w(bytes+0x104)==yaw&&
+    (w(bytes+0x620)&3)==1&&bytes[0x2f5]==1);
+  C(!gh_om_door_set_lock_001bd178(geometry,1));
+
   C(!gh_om_door_release_collision_001bd3f0(geometry)&&!geometry->box&&
     geometry->complete&&tables.pending_actor_count==count-1);
   C(!gh_om_door_release_collision_001bd3f0(geometry)&&tables.pending_actor_count==count-1);
-  C(!gh_om_door_set_lock_001bd178(geometry,0)&&w(bytes+0x620)==(old&~2u));
+  C(!gh_om_door_set_lock_001bd178(geometry,0)&&w(bytes+0x620)==((old&~2u)|1u));
  }
  C(gates==2&&tables.pending_actor_count==3);
  gh_om_placement_record next;C(!gh_om_scene_record_at(&placement,end324,&next));C(next.type==0x35d&&gh_om_factory_create_record(&factory,&next,&original)==GH_PLACE_UNSUPPORTED&&factory.frontier==0x1fe8a0&&factory.count==66);C(!gh_om_factory_release(&factory)&&!pools.blocks[0].used_count&&!pools.blocks[1].used_count&&!pools.vectors[0].count&&!pools.arenas[2].live_allocations&&gh_heap_used(heap)==baseline&&!tables.pending_actor_head&&!tables.pending_actor_count&&foreign_unit.bytes[0x4a]&&w(foreign_shape.record)==3);}

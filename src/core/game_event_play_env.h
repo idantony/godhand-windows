@@ -1,6 +1,7 @@
 #ifndef GH_GAME_EVENT_PLAY_ENV_H
 #define GH_GAME_EVENT_PLAY_ENV_H
 
+#include "game_actor_model.h"
 #include "game_event_components.h"
 #include "game_event_data_prefix.h"
 #include "game_event_environment.h"
@@ -50,10 +51,10 @@ typedef struct {
 gh_game_event_status gh_event_play_00296c28(gh_event_play_state *,
     const gh_event_play_bindings *, int *original_done, uint32_t *frontier);
 
-/* The EV01 typed callback selected by 298060 -> 297B40 -> REL+6A80.
- * The actual call site in REL+6B08 supplies the current cut and actor. */
+/* REL+6B08 passes the current Env cut and the live actor to the selected
+ * EV01 or EV02 callback. */
 gh_game_event_status gh_event_env_extra_move_object_00006b08(
-    gh_event_components *, gh_title_player_view *, gh_core_save_view, uint32_t *frontier);
+    gh_event_components *, gh_actor_model *, gh_core_save_view, uint32_t *frontier);
 
 /* Bind the absent EventFade track via 2979A0/297F80, then run the empty
  * mapping/active reset at REL+6C70. A nonzero track remains at 297F80. */

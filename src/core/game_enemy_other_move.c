@@ -617,7 +617,10 @@ gh_actor_motion_status gh_enemy363_move_001c9860(gh_enemy_other_move *s,
     }
     if(s->stage==4){
         if(p[0x2f4]!=0)return stop(s,0x1c9860,GH_ACTOR_MOTION_UNSUPPORTED);
-        if(p[0x2f5]!=1||half(p+0x2fe)!=0x363)return stop(s,0x1c9a50,GH_ACTOR_MOTION_UNSUPPORTED);
+        const uint16_t kind=half(p+0x2fe);
+        /* PMF 3BDEA0 selects 1CA040 for all three held weapon kinds. */
+        if(p[0x2f5]!=1||kind<0x361||kind>0x363||kind!=actor->weapon->kind)
+            return stop(s,0x1c9a50,GH_ACTOR_MOTION_UNSUPPORTED);
         if(p[0x2f6]==0){
             p[0x531]=0xff;
             s->stage=5;

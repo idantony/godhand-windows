@@ -38,8 +38,8 @@ typedef struct {
     uint32_t old_250, old_2f0, old_2088, old_20d4;
     const gh_event_weapon_attachment *weapon;
     uint8_t bound, stage, mesh_cursor, retargeted, weapon_started;
-    gh_actor_external_parent_set row_parts[6];
-    uint8_t row_stage[6], row_mesh_cursor[6];
+    gh_actor_external_parent_set row_parts[8];
+    uint8_t row_stage[8], row_mesh_cursor[6];
     gh_event_actor_factory olivia_accessory;
     gh_actor_external_parent_set accessory_parts;
     uint32_t accessory_handle;

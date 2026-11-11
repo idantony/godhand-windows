@@ -1,5 +1,6 @@
 #include "game_event_play_env.h"
 #include "game_scenario_soft_event.h"
+#include "game_player_node_cache.h"
 #include <string.h>
 
 static uint32_t read_word(const uint8_t *bytes) {
@@ -162,17 +163,20 @@ static gh_game_event_status extra_play_init(gh_event_components *components,
     if (!config || !config->initialized || !config->record) return GH_EVENT_ARGUMENT;
     uint32_t callback = read_word(config->record + 8);
     if (!callback) return GH_EVENT_OK;
-    if (callback != 0x298060 || components->event_no != 1 ||
-        config->record_address != 0x3c055c)
+    if (callback == 0x298060 && components->event_no == 1 &&
+        config->record_address == 0x3c055c) {
+        write_word(env.bytes + 0x34, 0x298088);
+    } else if (callback == 0x2980e8 && components->event_no == 2 &&
+               config->record_address == 0x3c0568) {
+        write_word(env.bytes + 0x34, 0x298110);
+    } else {
         return GH_EVENT_UNSUPPORTED;
-
-    /* 298060 supplies the only EV01 ExtraPlayMoveObj identity to REL+6A80. */
-    write_word(env.bytes + 0x34, 0x298088);
+    }
     return GH_EVENT_OK;
 }
 
 gh_game_event_status gh_event_env_extra_move_object_00006b08(
-    gh_event_components *components, gh_title_player_view *object,
+    gh_event_components *components, gh_actor_model *model,
     gh_core_save_view save, uint32_t *frontier)
 {
     if (!frontier) return GH_EVENT_ARGUMENT;
@@ -182,14 +186,28 @@ gh_game_event_status gh_event_env_extra_move_object_00006b08(
     if (status) return status;
     uint32_t callback = read_word(env.bytes + 0x34);
     if (callback) {
-        if (callback != 0x298088 || components->event_no != 1) return GH_EVENT_UNSUPPORTED;
-        if (object) {
-            if (!object->bytes || object->size < 0x300) return GH_EVENT_BOUNDS;
-            if (save.bytes && save.size <= 0xae) return GH_EVENT_BOUNDS;
-            uint8_t *bytes = object->bytes;
+        const int ev02 = callback == 0x298110 && components->event_no == 2;
+        if (!ev02 && (callback != 0x298088 || components->event_no != 1))
+            return GH_EVENT_UNSUPPORTED;
+        if (model) {
+            if (!model->root.bytes || model->root.size < 0x300) return GH_EVENT_BOUNDS;
+            uint8_t *bytes = model->root.bytes;
             uint32_t kind = (uint32_t)bytes[0x2fe] | (uint32_t)bytes[0x2ff] << 8;
-            if (kind == 0x667 && save.bytes && save.bytes[0xae])
-                write_word(bytes + 0x250, read_word(bytes + 0x250) | 2);
+            if (ev02) {
+                if ((int32_t)read_word(env.bytes + 0x10) >= 16 && (kind == 0x605 || kind == 0x607)) {
+                    *frontier = 0x14a338;
+                    if (!model->ready || model->native_identity != model) return GH_EVENT_ARGUMENT;
+                    static const uint8_t hand_closed[8] = "RH_00", hand_open[8] = "RH_01";
+                    int found;
+                    if (gh_actor_model_set_mesh_visible_0014a338(model, hand_closed, 8, 0, &found) ||
+                        (kind == 0x605 && gh_actor_model_set_mesh_visible_0014a338(model, hand_open, 8, 1, &found)))
+                        return GH_EVENT_CALLEE;
+                }
+            } else {
+                if (save.bytes && save.size <= 0xae) return GH_EVENT_BOUNDS;
+                if (kind == 0x667 && save.bytes && save.bytes[0xae])
+                    write_word(bytes + 0x250, read_word(bytes + 0x250) | 2);
+            }
         }
     }
     *frontier = 0;

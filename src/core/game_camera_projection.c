@@ -2,6 +2,7 @@
  * eaae18d0dfab1f9a0df276ae5ca1581ad326faf3. ActualpatchedELF evidence in
  * analysis/game-camera-projection-evidence.json. Explicit native FP reference. */
 #include "game_camera_projection.h"
+#include "game_camera_shake.h"
 #include <math.h>
 #include <string.h>
 #include <fenv.h>
@@ -42,7 +43,6 @@ gh_camera_status gh_game_camera_project_00138740(gh_game_pl_camera*c,const gh_ca
  if(f)*f=0;if(!c||!c->constructed||!d||!d->screen_width||!d->screen_height_bits||!d->pixel_aspect_bits||!d->initialized)return GH_CAMERA_ARGUMENT;
  if(!*d->initialized)return fail(f,0x2a48a8,GH_CAMERA_UNSUPPORTED);
  if(c->policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE||d->policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE)return fail(f,0x138740,GH_CAMERA_UNSUPPORTED);
- if(c->fields[0x278]||c->fields[0x264])return fail(f,0x138740,GH_CAMERA_UNSUPPORTED);
  float fov=readf(c->fields+0x250),height=bits(*d->screen_height_bits),aspect=bits(*d->pixel_aspect_bits);
  if(!(fov>0)||!(height>0)||!(aspect>0)||*d->screen_width<=0||!isfinite(fov)||!isfinite(height)||!isfinite(aspect))return fail(f,0x138740,GH_CAMERA_NUMERIC);
  fenv_t env;if(feholdexcept(&env))return fail(f,0x138740,GH_CAMERA_NUMERIC);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(f,0x138740,GH_CAMERA_NUMERIC);}
@@ -51,6 +51,13 @@ gh_camera_status gh_game_camera_project_00138740(gh_game_pl_camera*c,const gh_ca
  float t=tangent(angle),half_height=mul(divide(height,aspect),.5f),focal=divide(half_height,t);
  float proj[16],view[16],combined[16],clip[3][16];int good=isfinite(focal)&&t>0;
  if(good){float far_depth=divide(bits(0x49f7ff08),add(fov,fov));far_depth=add(far_depth,far_depth);perspective(proj,focal,divide((float)*d->screen_width,640),aspect,far_depth);good=view_matrix(view,c->fields);}
+ if(good&&(c->fields[0x264]||c->fields[0x278])){
+  float offset[2];
+  gh_camera_status status=gh_game_camera_shake_offsets_00138740(c,offset,f);
+  if(status){(void)fesetenv(&env);return status;}
+  if(c->fields[0x264])view[12]=add(view[12],offset[0]);
+  if(c->fields[0x278])view[13]=add(view[13],offset[1]);
+ }
  if(good){matrix(combined,proj,view);for(unsigned k=0;k<3;k++){float m[16];identity(m);m[10]=bits(0x3f800aec);m[14]=bits(0xbe4cd58a);m[11]=1;m[15]=0;
   float fx=k==2?divide(160,focal):divide(51.2f,focal),fy=k==2?fx:divide(44.8f,focal);
   m[0]=-divide(.2f,add(fx,fx));m[5]=-divide(.2f,add(fy,fy));matrix(clip[k],m,view);}
@@ -59,4 +66,15 @@ gh_camera_status gh_game_camera_project_00138740(gh_game_pl_camera*c,const gh_ca
  if(fesetenv(&env))return fail(f,0x138740,GH_CAMERA_NUMERIC);if(!good)return fail(f,0x138740,GH_CAMERA_NUMERIC);
  for(unsigned i=0;i<16;i++){writef(c->fields+0x100+i*4,proj[i]);writef(c->fields+0x140+i*4,view[i]);writef(c->fields+i*4,combined[i]);for(unsigned k=0;k<3;k++)writef(c->fields+0x40+k*0x40+i*4,clip[k][i]);}return GH_CAMERA_OK;
 }
-gh_camera_status gh_game_camera_step_projected_00138fc8(gh_game_pl_camera*c,gh_game_init_state*i,gh_acd_scene_binding*p,const gh_title_player_view*v,const gh_boot_work*w,const gh_camera_projection_display*d,uint32_t*f){uint32_t pc=0;gh_camera_status e=gh_game_camera_step_00138fc8(c,i,p,v,w,&pc);if(e==GH_CAMERA_UNSUPPORTED&&pc==0x138740)e=gh_game_camera_project_00138740(c,d,&pc);if(f)*f=pc;return e;}
+gh_camera_status gh_game_camera_step_projected_00138fc8(gh_game_pl_camera*c,gh_game_init_state*i,gh_acd_scene_binding*p,const gh_title_player_view*v,const gh_boot_work*w,const gh_camera_projection_display*d,uint32_t*f){
+ uint32_t pc=0;
+ gh_camera_status status=gh_game_camera_step_00138fc8(c,i,p,v,w,&pc);
+ if(status==GH_CAMERA_UNSUPPORTED&&pc==0x138558){
+  status=gh_game_camera_shake_step_00138558(c,&pc);
+  if(!status)status=gh_game_camera_project_00138740(c,d,&pc);
+ }else if(status==GH_CAMERA_UNSUPPORTED&&pc==0x138740){
+  status=gh_game_camera_project_00138740(c,d,&pc);
+ }
+ if(f)*f=pc;
+ return status;
+}

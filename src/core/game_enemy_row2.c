@@ -35,16 +35,34 @@ static int is_r100_appearance9_profile(const gh_enemy_request *request)
 
 static int is_r100_appearance0_profile(const gh_enemy_request *request)
 {
-    return request && request->object_kind==0x202 && !request->appearance &&
-        request->flags==0x04000000u && !request->dependency_flags &&
-        (((request->entry_number==19||request->entry_number==30) && request->dependency_kind==0x203) ||
-         ((request->entry_number==20||request->entry_number==31) && request->dependency_kind==0x200) ||
+    if(!request||request->object_kind!=0x202||request->appearance||request->dependency_flags)return 0;
+    if(request->entry_number==2)
+        return request->dependency_kind==0x203&&request->flags==0x04000001u;
+    if(request->entry_number==16)
+        return request->dependency_kind==0x202&&request->flags==0x04000002u;
+    return request->flags==0x04000000u &&
+        (((request->entry_number==19||request->entry_number==26||request->entry_number==30) && request->dependency_kind==0x203) ||
+         ((request->entry_number==20||request->entry_number==27||request->entry_number==28||request->entry_number==31) && request->dependency_kind==0x200) ||
          ((request->entry_number==29||request->entry_number==32) && request->dependency_kind==0x202));
+}
+
+static int is_r100_appearance1_profile(const gh_enemy_request *request)
+{
+    return request&&request->object_kind==0x202&&request->dependency_kind==0x20a&&
+        request->entry_number==13&&request->appearance==1&&request->flags==0x08000000u&&
+        !request->dependency_flags;
+}
+
+static int is_r100_appearance4_profile(const gh_enemy_request *request)
+{
+    return request&&request->object_kind==0x202&&request->dependency_kind==0x200&&
+        request->entry_number==17&&request->appearance==4&&request->flags==0x04000000u&&
+        !request->dependency_flags;
 }
 
 int gh_enemy202_is_r100_supported_profile(const gh_enemy_request *request)
 {
-    return gh_enemy202_is_r100_appearance2_profile(request)||is_r100_appearance5_profile(request)||
+    return is_r100_appearance1_profile(request)||is_r100_appearance4_profile(request)||gh_enemy202_is_r100_appearance2_profile(request)||is_r100_appearance5_profile(request)||
         is_r100_appearance9_profile(request)||is_r100_appearance0_profile(request);
 }
 
@@ -148,4 +166,28 @@ gh_actor_model_status gh_enemy202_appearance0_select_0020393c(
      * the underflow branch 2036EC. 20393C keeps those candidate pairs. */
     size_t directory=request->dependency_kind==0x200?0x98:0x648;
     return select_initial_motion(resource,directory,1,0,out);
+}
+
+gh_actor_model_status gh_enemy202_appearance1_select_00203a9c(
+    const gh_enemy_request *request, const gh_object_view *resource,
+    gh_enemy_initial_motion_selection *out)
+{
+    if (!request || !resource || !out || !resource->bytes || resource->kind!=0x202)
+        return GH_ACTOR_MODEL_ARGUMENT;
+    if (!is_r100_appearance1_profile(request))
+        return GH_ACTOR_MODEL_UNSUPPORTED;
+    /* 42D6C4 -> 203A40, then 42D970 -> 203A9C for dependency 20A. */
+    return select_initial_motion(resource,0xbd8,1,2,out);
+}
+
+gh_actor_model_status gh_enemy202_appearance4_select_00203a18(
+    const gh_enemy_request *request, const gh_object_view *resource,
+    gh_enemy_initial_motion_selection *out)
+{
+    if (!request || !resource || !out || !resource->bytes || resource->kind!=0x202)
+        return GH_ACTOR_MODEL_ARGUMENT;
+    if (!is_r100_appearance4_profile(request))
+        return GH_ACTOR_MODEL_UNSUPPORTED;
+    /* Dependency 200 underflows the original 202-based jump table. */
+    return select_initial_motion(resource,0x40c,1,1,out);
 }

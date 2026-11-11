@@ -131,6 +131,13 @@ python -B .\tools\build-native.py --hardware-audio --movie-codec 'X:\tools\ffmpe
 `--qa-confirm` and `--qa-new-game` exist only in the separate QA target. Real rendering/audio/video
 consumers are required; unknown operations stop at explicit frontiers.
 
+For a fast logic replay, build `--target startup-cpu-qa` and run
+`probe-startup-cpu.exe` with the ISO path, FFmpeg path, absent profile path
+and positive tick limit in that order. It drives the same title
+and battle input, records completed packet frames, and reports the first
+unsupported original operation. This target uses muted XAudio2 for sound
+effects and collects drawing packets without presenting a window.
+
 | Directory | Purpose |
 |---|---|
 | `src/`, `tests/` | Recovered source, native backends and meaningful checks |
@@ -202,6 +209,11 @@ Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音
 当前以退出码 **4** 报告下一个尚未接通的原始调用，并非游戏完成。独立 `startup-qa` 目标才
 包含合成输入选项 `--qa-confirm` 和 `--qa-new-game`；生产目标没有该选项。真实图形、音频或视频消费失败
 会明确停止，不用空回调假装完成。
+
+快速逻辑回放使用 `--target startup-cpu-qa`。运行 `probe-startup-cpu.exe` 时依次传入 ISO、
+FFmpeg、一个不存在的存档目录和正整数 tick 上限。该工具复用标题和战斗的测试输入，
+记录完成的绘制指令帧，并报告第一个尚未接通的原始调用。工具以静音 XAudio2 处理音效，
+收集绘制指令时不呈现窗口。
 
 有用文件保存在 `E:\godhand_windows`，构建、缓存及大日志保存在
 `G:\middle_thing\godhand_windows`。原镜像始终只读，原始反汇编等私有恢复证据及外部工具二进制不进 Git。

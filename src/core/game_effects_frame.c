@@ -231,6 +231,8 @@ static int esp_update_class(const gh_effect_esp_view *view)
  switch(view->type){
  case 0: return vtable==0x44fad0;
  case 6: return vtable==0x44e6d8;
+ case 7: return vtable==0x44e770;
+ case 8: return vtable==0x44e820&&gh_effect_r003_esp08_row(view->record);
  case 9: return vtable==0x44e8c8;
  case 0x12: return vtable==0x44eb70;
  case 0x13: return vtable==0x44ec68;

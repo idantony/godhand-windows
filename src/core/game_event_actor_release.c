@@ -191,7 +191,7 @@ gh_game_event_status gh_event_actor_start_release_00297a88(gh_event_actor_releas
         uint8_t *p = actor->object.view.bytes;
         p[0x2fe] = (uint8_t)actor->kind;
         p[0x2ff] = (uint8_t)(actor->kind >> 8);
-        put(p + 0x2d0, 0x800000);
+        put(p + 0x2d0, actor->kind == 0x367 ? 0x20000000 : 0x800000);
         status = delete_actor(actor, s->bindings.sound, frontier);
         if (status) return status;
         creation->actor_handles[s->row] = 0;

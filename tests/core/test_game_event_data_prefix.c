@@ -250,7 +250,8 @@ int main(int argc, char **argv) {
     CHECK(!gh_event_sequence_at(&prefix, 4, &sequence) && sequence.resource_offset == 0x2218e0 &&
           sequence.stride == 0x2c && sequence.count == 1 && sequence.bytes == 0x2c);
     CHECK(!gh_event_sequence_at(&prefix, 5, &sequence) && sequence.resource_offset == 0x2296b0 &&
-          sequence.stride == 0x28 && sequence.count == 2);
+          sequence.stride == 0x60 && sequence.count == 2 && sequence.bytes == 0xc0);
+    CHECK(sequence.records[3] == 26 && sequence.records[0x63] == 27);
     CHECK(!gh_event_sequence_at(&prefix, 13, &sequence) && sequence.resource_offset == 0x22e090 &&
           sequence.stride == 0x10 && sequence.count == 14);
     CHECK(!gh_event_sequence_at(&prefix, 14, &sequence) && sequence.count == 90);

@@ -62,10 +62,12 @@ static int hex_digit(uint8_t c) {
     return -1;
 }
 
-static gh_game_event_status el_kind(const uint8_t *info, uint16_t *kind) {
+static gh_game_event_status actor_source_kind(const uint8_t *info, uint16_t *kind) {
     const int hi = hex_digit(info[2]), lo = hex_digit(info[3]);
-    if (info[0] != 'e' || info[1] != 'l' || hi < 0 || lo < 0) return GH_EVENT_UNSUPPORTED;
-    *kind = (uint16_t)(0x600 + hi * 16 + lo);
+    if (hi < 0 || lo < 0) return GH_EVENT_UNSUPPORTED;
+    if (info[0] == 'e' && info[1] == 'l') *kind = (uint16_t)(0x600 + hi * 16 + lo);
+    else if (info[0] == 'o' && info[1] == 'm') *kind = (uint16_t)(0x300 + hi * 16 + lo);
+    else return GH_EVENT_UNSUPPORTED;
     return GH_EVENT_OK;
 }
 
@@ -99,7 +101,7 @@ static gh_game_event_status create_row(gh_event_actor_create *s, size_t index) {
     if (gh_event_actor_info_at(b->data, index, &info)) return GH_EVENT_BOUNDS;
     uint16_t source;
     s->frontier = 0x2c4c58;
-    gh_game_event_status status = el_kind(info, &source);
+    gh_game_event_status status = actor_source_kind(info, &source);
     if (status) return status;
     uint8_t *row = (uint8_t *)s->work.pointer + index * 0x48;
     put(row + 4, source);
@@ -108,7 +110,9 @@ static gh_game_event_status create_row(gh_event_actor_create *s, size_t index) {
     s->frontier = 0x297a48;
     s->frontier_rel = 0x04d0;
     if ((source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60c) &&
-        (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x667) return GH_EVENT_UNSUPPORTED;
+        (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x634 && source != 0x639 &&
+        source != 0x641 && source != 0x642 && source != 0x646 && source != 0x647 &&
+        (source < 0x650 || source > 0x652) && source != 0x659 && source != 0x667 && source != 0x367) return GH_EVENT_UNSUPPORTED;
     const unsigned costume = gh_core_save_costume(b->save);
     uint16_t create = source;
     if ((source == 0x600 || source == 0x602) && costume >= 2 && costume < 8) {
@@ -118,6 +122,10 @@ static gh_game_event_status create_row(gh_event_actor_create *s, size_t index) {
     if ((source == 0x605 || source == 0x607) && costume >= 2 && costume < 8) {
         const uint16_t variants[] = {0x690, 0x693, 0x696};
         create = variants[(costume - 2) / 2] + (source == 0x607);
+    }
+    if (source == 0x652 && costume >= 2 && costume < 8) {
+        const uint16_t variants[] = {0x692, 0x695, 0x698};
+        create = variants[(costume - 2) / 2];
     }
     if (source == 0x60a) {
         gh_event_component_view env;
