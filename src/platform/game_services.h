@@ -163,6 +163,10 @@ gh_game_services_status gh_game_services_move_actor(gh_game_services *,uint32_t 
 typedef struct {const uint8_t *depth_shift;const gh_shadow_templates *shadow_templates;
  gh_shadow_emit shadow_emit;void *shadow_context;
  gh_actor_draw_emit actor_emit;void *actor_context;const gh_game_pl_camera *camera;} gh_game_actor_render_provider;
+/* Move may produce an original shadow packet on Root's current OT. */
+gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services *,uint32_t handle,
+ uint32_t original_entry,int16_t this_delta,const gh_title_player_view *,const gh_boot_work *,
+ const gh_game_actor_render_provider *,uint32_t *frontier);
 /* Actual nonstatic Trans descriptor on the SAME registered model. Draw
  * continuations live with that model; unsupported alternate/destructor bodies
  * retain their exact original entry. The provider borrows Root's one OT. */

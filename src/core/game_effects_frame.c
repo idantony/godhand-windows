@@ -141,7 +141,8 @@ static gh_effect_status emitter_update(gh_game_effects_frame*s,unsigned i){
    }
   }s->emitter_stage=5;
  }
- if(s->emitter_stage==5){while(s->emitter_spawn_count>0){if(!s->esp_started){e=gh_esp_create_begin_00300e30(&s->esp_call,i,s->emitter_serial);if(e)return fail(s,0x300e30,e);s->esp_started=1;}gh_esp_create_bindings b={.storage=s->b.storage,.random=s->b.init?&s->b.init->random:NULL,.work=s->b.work,.policy=s->b.policy,.globals=s->b.globals,.actors=s->b.actors,.atan_coeff=s->b.atan_coeff,.model_effect=s->b.model_effect};e=gh_game_esp_create_00300e30(&s->esp_call,&b);if(e)return fail(s,s->esp_call.frontier?s->esp_call.frontier:0x300e30,e);if(!s->esp_call.complete)return fail(s,0x300e30,GH_EFFECT_ARGUMENT);s->esp_started=0;s->emitter_spawn_count--;}}
+ if(s->emitter_stage==5){while(s->emitter_spawn_count>0){if(!s->esp_started){e=gh_esp_create_begin_00300e30(&s->esp_call,i,s->emitter_serial);if(e)return fail(s,0x300e30,e);s->esp_started=1;}gh_esp_create_bindings b={.storage=s->b.storage,.random=s->b.init?&s->b.init->random:NULL,.work=s->b.work,.policy=s->b.policy,.globals=s->b.globals,.actors=s->b.actors,.atan_coeff=s->b.atan_coeff,.model_effect=s->b.model_effect,.camera=s->b.camera,
+ .active_camera=s->b.init?s->b.init->active_camera:NULL};e=gh_game_esp_create_00300e30(&s->esp_call,&b);if(e)return fail(s,s->esp_call.frontier?s->esp_call.frontier:0x300e30,e);if(!s->esp_call.complete)return fail(s,0x300e30,GH_EFFECT_ARGUMENT);s->esp_started=0;s->emitter_spawn_count--;}}
  return GH_EFFECT_OK;
 }
 static gh_effect_status emitters(gh_game_effects_frame*s){uint8_t*base=s->b.storage.emitters;uint32_t sys=w((const uint8_t*)s->b.work+0x5e4);for(;s->emitter_index<256;s->emitter_index++){
@@ -179,6 +180,7 @@ static int esp_update_class(const gh_effect_esp_view *view)
  case 0x12: return vtable==0x44eb70;
  case 0x13: return vtable==0x44ec68;
  case 0x14: return vtable==GH_ESP14_VTABLE;
+ case 0x18: return vtable==0x44f078;
  case 0x1a: return vtable==0x44f270;
  default: return 0;
  }

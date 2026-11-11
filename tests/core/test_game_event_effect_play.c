@@ -384,6 +384,83 @@ static void check_type13(const gh_effect_release_bindings *storage,gh_boot_work 
     CHECK(!gh_effect_create_esp_abort_native(storage->effects,create.slot,create.serial));
 }
 
+static void check_type18(const gh_effect_release_bindings *storage,gh_boot_work *work,
+    gh_effects_frame_globals *globals,const gh_display_state *display,gh_event_link *link,
+    const gh_event_data_prefix *prefix,const uint8_t *elf,size_t elf_bytes,unsigned emitter)
+{
+    uint32_t frontier=0;
+    static gh_game_init_state init;
+    gh_game_init_state_initialize(&init);
+    gh_game_motion_camera camera={0};
+    CHECK(!gh_game_motion_camera_construct_00138be8(&camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+    CHECK(!gh_event_camera_init_play_00004bd8(&link->components,&init,&camera,&frontier));
+    gh_event_camera_track track;
+    CHECK(!gh_event_camera_select_00004c08(link,prefix,&track,&frontier));
+    CHECK(track.apply_motion && track.frame==0.0f);
+    CHECK(!gh_game_motion_camera_set_001390b8(&camera,&track));
+    gh_camera_projection_display cd={&display->screen_width,&display->screen_height_bits,
+       &display->pixel_aspect_bits,&display->initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+    CHECK(!gh_game_motion_camera_move_00138600(&camera,&init,work,&cd,&frontier));
+
+    gh_effect_emitter_view source;
+    CHECK(!gh_effect_create_emitter_at(storage->effects,emitter,&source));
+    const uint8_t *row=source.record.bytes;
+    CHECK(row[0x133]==0x18 && row[0x18c]==5 && !row[0x18d] && (int8_t)row[0xbe]==-1);
+    gh_game_mt random={0};
+    gh_game_mt_seed_0030f2b0(&random,42);
+    gh_camera_envelope envelope={0};
+    CHECK(!gh_game_camera_envelope_from_elf(&envelope,elf,elf_bytes,&frontier));
+    gh_esp_create_bindings cb={.storage=*storage,.globals=globals,.work=work,.random=&random,
+       .policy=GH_STATIC_BINARY32_REFERENCE,.camera=&camera.camera,.active_camera=init.active_camera};
+    gh_esp_update_bindings ub={.storage=*storage,.globals=globals,.work=work,
+       .atan_coeff=envelope.atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE};
+    for(unsigned test=0;test<2;test++){
+        if(test){
+           const float eye[]={3,0,0};
+           memcpy(camera.camera.fields+0x210,eye,sizeof(eye));
+        }
+        camera.camera.fields[0x278]=7;
+        camera.camera.fields[0x264]=9;
+        gh_esp_create_call create={0};
+        CHECK(!gh_esp_create_begin_00300e30(&create,emitter,source.serial));
+        gh_effect_status status=gh_game_esp_create_00300e30(&create,&cb);
+        CHECK(!status && create.complete && create.allocated);
+        gh_effect_esp_view particle;
+        CHECK(!gh_effect_create_esp_at(storage->effects,create.slot,&particle));
+        CHECK(particle.initialized && particle.type==0x18 && word(particle.payload+0xf0)==0x44f078u);
+        CHECK(word(particle.payload+0x2b0)==5 && word(particle.payload+0x2b8)==0x453b8000u);
+        CHECK(!memcmp(camera.camera.fields+0x268,row+0x13c,16));
+        CHECK(!memcmp(camera.camera.fields+0x254,row+0x14c,16));
+        float pos[4],eye[3];
+        CHECK(!gh_effect_node_world_position_native(storage->effects,0,create.slot,create.serial,pos,
+              GH_STATIC_BINARY32_REFERENCE,&frontier));
+        memcpy(eye,camera.camera.fields+0x210,sizeof(eye));
+        CHECK(pos[0]==0 && pos[1]==0 && pos[2]==0);
+        if(test) {
+            CHECK(eye[0]==3 && eye[1]==0 && eye[2]==0);
+            CHECK(camera.camera.fields[0x278]==5 && !camera.camera.fields[0x264]);
+        } else {
+            CHECK(eye[2]>23 && eye[2]<25);
+            CHECK(camera.camera.fields[0x278]==7 && camera.camera.fields[0x264]==9);
+        }
+        gh_effects_trans_bindings tb={.storage=*storage,.work=work,.globals=globals,.display=display,
+           .policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE};
+        gh_game_effects_trans trans={0};
+        CHECK(!gh_effects_trans_begin_002fb310(&trans));
+        CHECK(!gh_game_effects_trans_002fb310(&trans,&tb) && trans.complete && !trans.enqueued);
+        gh_esp_update_call move={0};
+        status=gh_game_esp_update_002fbed0(&move,&ub,create.slot,create.serial);
+        CHECK(!status && move.complete && move.retired);
+        CHECK(word(storage->esp+0x100080)==0x80000000u);
+        put_word(storage->esp+0x100100,0x80000000u);
+        CHECK(!gh_effect_create_esp_destroy_hidden_native(storage->effects,0,create.serial,&frontier));
+        CHECK(!frontier && word(particle.payload+0xf0)==0x44b310u);
+        put_word(storage->esp+0x100000,0);
+        put_word(storage->esp+0x100080,0);
+        put_word(storage->esp+0x100100,0);
+    }
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     gh_disc *disc = NULL;
@@ -494,6 +571,7 @@ int main(int argc, char **argv) {
                 CHECK(gh_event_effect_move_00005050(&state, &producer, &frontier, &relative) == GH_EVENT_UNSUPPORTED);
                 CHECK(!relative && frontier == 0x297c50 && state.stage == 3 && state.create.row == 1);
                 CHECK(live_emitters(effects) == produced + 1);
+                check_type18(&producer.storage,&work,&globals,&display,&link,&prefix,elf,elf_bytes,produced);
                 const gh_game_mt before = rng;
                 for (unsigned retry = 0; retry < 3; ++retry) {
                     CHECK(gh_event_effect_move_00005050(&state, &producer, &frontier, &relative) == GH_EVENT_UNSUPPORTED);
@@ -576,6 +654,6 @@ int main(int argc, char **argv) {
     CHECK(!gh_heap_used(heap) && !gh_heap_destroy(heap));
     gh_disc_close(disc);
     free(elf);
-    puts("PASS actual EV01 1209 frames, 24 emitters, Vertex absence, type12 capture/warp, type0 lifecycles, and type13 actual-camera zero emission");
+    puts("PASS actual EV01 1209 frames, 24 emitters, Vertex absence, type12 capture/warp, type0 lifecycles, and type13 zero emission, and type18 camera shake gate");
     return 0;
 }

@@ -233,7 +233,8 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
    if(status)return fail(s,frontier?frontier:0x2f2758,status);
    s->serial=s->call_stage=0;
    continue;
- }if(v.type==0x1a||v.type==0){gh_effect_status status=packet_sprite(s,&v);if(status)return status;if(s->pending){if(!b->emit)return fail(s,s->packet.original_callee,GH_EFFECT_UNSUPPORTED);status=b->emit(b->context,&s->packet);if(status)return fail(s,s->packet.original_callee,status);s->pending=0;s->enqueued++;}s->serial=s->call_stage=0;s->sprite_material=NULL;continue;}if(v.type==0x13&&word(v.payload+0xf0)==0x44ec68u){s->serial=s->call_stage=0;continue;}
+ }if(v.type==0x1a||v.type==0){gh_effect_status status=packet_sprite(s,&v);if(status)return status;if(s->pending){if(!b->emit)return fail(s,s->packet.original_callee,GH_EFFECT_UNSUPPORTED);status=b->emit(b->context,&s->packet);if(status)return fail(s,s->packet.original_callee,status);s->pending=0;s->enqueued++;}s->serial=s->call_stage=0;s->sprite_material=NULL;continue;}if((v.type==0x13&&word(v.payload+0xf0)==0x44ec68u)||
+    (v.type==0x18&&word(v.payload+0xf0)==0x44f078u)){s->serial=s->call_stage=0;continue;}
  if(v.type==0x12){
    while(s->call_stage<2){
      if(!s->pending){gh_effect_status status=packet_type12(s,&v);if(status)return status;}

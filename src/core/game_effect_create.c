@@ -213,6 +213,7 @@ static uint32_t esp_vtable(unsigned type){
  case 0x12: return 0x44eb70u;
  case 0x13: return 0x44ec68u;
  case 0x14: return GH_ESP14_VTABLE;
+ case 0x18: return 0x44f078u;
  case 0x1a: return 0x44f270u;
  default: return 0;
  }
@@ -282,6 +283,15 @@ gh_effect_status gh_effect_create_esp_commit_13(gh_game_effects*e,unsigned slot,
  gh_effect_status status=gh_effect_create_esp_at(e,slot,&view);
  if(status||view.serial!=serial||view.type!=0x13||view.initialized||
     w(view.payload+0xf0)!=esp_vtable(0x13)||!view.globals||!view.globals->initialized||
+    view.actor||view.selector)return GH_EFFECT_ARGUMENT;
+ e->native->esps[slot].initialized=1;
+ return GH_EFFECT_OK;
+}
+gh_effect_status gh_effect_create_esp_commit_18(gh_game_effects*e,unsigned slot,uint32_t serial){
+ gh_effect_esp_view view;
+ gh_effect_status status=gh_effect_create_esp_at(e,slot,&view);
+ if(status||view.serial!=serial||view.type!=0x18||view.initialized||
+    w(view.payload+0xf0)!=esp_vtable(0x18)||!view.globals||!view.globals->initialized||
     view.actor||view.selector)return GH_EFFECT_ARGUMENT;
  e->native->esps[slot].initialized=1;
  return GH_EFFECT_OK;

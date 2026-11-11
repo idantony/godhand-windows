@@ -69,6 +69,7 @@ gh_effect_status gh_effect_create_esp_commit_12(gh_game_effects *,unsigned,uint3
 gh_effect_status gh_effect_create_esp_commit_13(gh_game_effects *,unsigned,uint32_t);
 /* Non-SSD resource banks use the original one-based EST table index. */
 gh_effect_status gh_effect_est_at_00306030(const gh_game_effects *,uint32_t,uint32_t,gh_effect_view *);
+gh_effect_status gh_effect_create_esp_commit_18(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_1a(gh_game_effects *,unsigned,uint32_t);
 /* Explicit host destruction after this slot's tasks/jobs stop; onlyverified
  * type6 NULLactor domain, never originalruntimeESP dtor. */

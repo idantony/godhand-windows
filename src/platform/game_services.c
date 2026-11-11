@@ -35,6 +35,8 @@
 #include "../core/game_enemy_resources.h"
 #include "../core/game_event_player_reset.h"
 #include "../core/game_event_accessory_move.h"
+#include "../core/game_event_actor_bust.h"
+#include "../core/game_event_pendulum.h"
 #include "../core/game_player_frame.h"
 #include "../core/game_player_idle_input.h"
 #include "../core/game_effect_create.h"
@@ -91,7 +93,11 @@ struct gh_game_services {
  gh_object_resource_bindings object_resources;
  gh_event_actor_roster *event_actor_roster;
  gh_event_actor_extra *event_actor_extra;
- gh_event_accessory_move event_accessory_move;
+ struct {
+  gh_event_accessory_move move;
+  gh_shadow_call shadow;
+  gh_event_pendulum_call pendulum;
+ } event_actor_move[10];
  gh_actor_render_call event_actor_render[10];
  gh_esp14_provider model_effect;
  gh_services_esp14_slot *esp14_slots[1024], *esp14_retired;
@@ -1162,7 +1168,47 @@ static gh_player_frame_status player_frame_door_probe(void*p,const gh_title_play
  if(e)return e==GH_PLAYER_DOOR_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:e==GH_PLAYER_DOOR_NUMERIC?GH_PLAYER_FRAME_NUMERIC:GH_PLAYER_FRAME_CALLEE;
  return s->player_door.complete?GH_PLAYER_FRAME_OK:GH_PLAYER_FRAME_ARGUMENT;
 }
-gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t handle,uint32_t entry,int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,uint32_t*f){
+typedef struct {
+ gh_game_services *services;
+ const gh_game_actor_render_provider *provider;
+ gh_shadow_call *call;
+} gh_services_event_move_shadow;
+
+static gh_game_event_status event_move_shadow(void *context,gh_event_actor_factory *actor,uint32_t *frontier){
+ gh_services_event_move_shadow *move=context;
+ gh_game_services *s=move->services;
+ const gh_game_actor_render_provider *provider=move->provider;
+ gh_shadow_bindings b={.model=&actor->model,.shadow=&actor->shadow,.work=s->b.work,
+  .camera=provider->camera?provider->camera:&s->camera,.world_light=&s->world_light,.actors=&s->scene_tables,
+  .up_owner=s->b.camera_follow,.pivot_owner=s->b.player_shared_vector,.templates=provider->shadow_templates,
+  .emit=provider->shadow_emit,.emit_context=provider->shadow_context,.policy=GH_STATIC_BINARY32_REFERENCE};
+ gh_actor_model_status status=gh_actor_shadow_draw_0014efa8(move->call,&b,frontier);
+ if(status&&!*frontier)*frontier=0x14efa8;
+ return !status?GH_EVENT_OK:status==GH_ACTOR_MODEL_UNSUPPORTED?GH_EVENT_UNSUPPORTED:GH_EVENT_CALLEE;
+}
+
+static gh_game_event_status event_move_tail(void *context,gh_event_actor_factory *actor,
+ uint32_t entry,uint32_t *frontier){
+ gh_game_services *s=context;
+ *frontier=entry;
+ if(entry==0x2df860){
+  size_t index=actor->actor_index;
+  if(index>=sizeof(s->event_actor_move)/sizeof(*s->event_actor_move))return GH_EVENT_ARGUMENT;
+  gh_cloth_step_bindings bindings={.templates=s->b.cloth_templates,.globals=s->b.cloth_globals,
+   .random=&s->b.init->random,.actors=&s->scene_tables,
+   .matrix_policy=GH_STATIC_BINARY32_REFERENCE,.random_policy=GH_FRAME_CHOP_REFERENCE};
+  return gh_game_event_pendulum_002df860(&s->event_actor_move[index].pendulum,actor,
+   s->event_actor_extra,&bindings,s->b.player_shared_vector,frontier);
+ }
+ if(entry!=0x2b6a40)return GH_EVENT_UNSUPPORTED;
+ if(!s->event_actor_extra||!s->event_actor_extra->bindings.creation)return GH_EVENT_ARGUMENT;
+ gh_event_components *components=s->event_actor_extra->bindings.creation->bindings.components;
+ return gh_event_actor_bust_002b6a40(actor,components,frontier);
+}
+
+gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services*s,uint32_t handle,
+ uint32_t entry,int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,
+ const gh_game_actor_render_provider*provider,uint32_t*f){
  if(f)*f=0;if(!s||!v||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
  s->update_diagnostic.last_move_handle=handle;s->update_diagnostic.last_move_entry=entry;
  gh_services_esp14_slot *effect_actor=model_effect_actor(s,handle);
@@ -1174,10 +1220,23 @@ gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t 
   gh_effect_status status=gh_esp14_model_move_002b8850(child,work,GH_STATIC_BINARY32_REFERENCE,f);
   return !status?GH_SERVICES_OK:status==GH_EFFECT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
  }
- if(s->event_actor_extra&&handle&&handle==s->event_actor_extra->accessory_handle){
-  gh_event_actor_factory *actor=&s->event_actor_extra->olivia_accessory;
-  if(entry!=0x2b6930||delta||v->bytes!=actor->object.view.bytes||v->size!=actor->object.view.size){*f=entry;return GH_SERVICES_FRONTIER;}
-  gh_game_event_status status=gh_game_event_accessory_move_002b6930(&s->event_accessory_move,actor,s->b.player_shared_vector,f);
+ gh_event_actor_factory *event_actor=event_actor_for_handle(s,handle);
+ if(event_actor){
+  gh_title_player_view registered;
+  if(entry!=0x2b6930||delta){*f=entry;return GH_SERVICES_FRONTIER;}
+  if(gh_event_actor_factory_view(event_actor,handle,&registered)||v->bytes!=registered.bytes||
+     v->size!=registered.size||v->alias_f0!=registered.alias_f0){*f=entry;return GH_SERVICES_ASSET;}
+  const size_t capacity=sizeof(s->event_actor_move)/sizeof(*s->event_actor_move);
+  const int accessory=s->event_actor_extra&&event_actor==&s->event_actor_extra->olivia_accessory;
+  const size_t index=accessory?capacity-1:event_actor->actor_index;
+  if(!accessory&&index>=capacity-1){*f=entry;return GH_SERVICES_ASSET;}
+  gh_services_event_move_shadow shadow={s,provider,&s->event_actor_move[index].shadow};
+  gh_game_event_status status=gh_game_event_simple_move_with_tails_002b6930(&s->event_actor_move[index].move,
+    event_actor,s->b.player_shared_vector,provider?event_move_shadow:NULL,&shadow,event_move_tail,s,f);
+  if(!status){
+   memset(&s->event_actor_move[index].shadow,0,sizeof(s->event_actor_move[index].shadow));
+   memset(&s->event_actor_move[index].pendulum,0,sizeof(s->event_actor_move[index].pendulum));
+  }
   return !status?GH_SERVICES_OK:status==GH_EVENT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
  }
   if(handle==s->player_child.handle&&s->player_child.complete&&v->bytes==s->player_child.object.view.bytes&&v->size==s->player_child.object.view.size){
@@ -1241,6 +1300,11 @@ gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t 
  if(!e&&s->player_frame.stage==31&&!s->player_frame.bound)s->update_diagnostic.player_updates_completed++;
  return !e?GH_SERVICES_OK:e==GH_PLAYER_FRAME_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
 }
+gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t handle,uint32_t entry,
+ int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,uint32_t*f){
+ return gh_game_services_move_actor_with_render(s,handle,entry,delta,v,work,NULL,f);
+}
+
 static gh_actor_model_status render_other(void*context,const gh_actor_trans_request*r,uint32_t*f){
  gh_game_services*s=context;if(!s||!r||!f)return GH_ACTOR_MODEL_ARGUMENT;*f=0;
  if(r->entry==0x14d828){

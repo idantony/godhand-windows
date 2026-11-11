@@ -9,12 +9,11 @@ static float mul(float a,float b){volatile float r=a*b;return r;}
 static float readf(const uint8_t*p){float f;memcpy(&f,p,4);return f;}
 static int finite_normal(float f){return isfinite(f)&&(f==0||fabsf(f)>=FLT_MIN);}
 static void transform(const uint8_t*m,const float*v,float*out){for(unsigned k=0;k<3;k++){float n=mul(readf(m+k*4),v[0]);n=add(n,mul(readf(m+16+k*4),v[1]));n=add(n,mul(readf(m+32+k*4),v[2]));out[k]=add(n,mul(readf(m+48+k*4),v[3]));}}
-gh_cloth_status gh_cloth_prepare_00106218(gh_cloth_templates*s,const gh_actor_model*m,const gh_cloth_sphere*source,size_t count,gh_static_transform_policy policy,const gh_cloth_geometry**out,uint32_t*f){
+gh_cloth_status gh_cloth_prepare_records_00106218(gh_cloth_templates*s,const gh_actor_model*m,const gh_cloth_sphere*source,size_t count,gh_static_transform_policy policy,const gh_cloth_geometry**out,uint32_t*f){
  if(!s||!s->loaded||!out||!f)return GH_CLOTH_ARGUMENT;*out=NULL;*f=0;
  if(!m||!source||!count)return GH_CLOTH_OK;
  if(!s->initialized||!m->bound||m->native_identity!=m||!m->root.bytes||m->root.size<0x118)return GH_CLOTH_ARGUMENT;
  if(count>12)return GH_CLOTH_BOUNDS;
- int found=0;for(unsigned i=0;i<42;i++)if(source==s->records+i&&count<=42-i)found=1;if(!found)return GH_CLOTH_ARGUMENT;
  if(policy!=GH_STATIC_BINARY32_REFERENCE){*f=0x106218;return GH_CLOTH_UNSUPPORTED;}
  const gh_actor_part*a[12],*b[12];
  for(size_t i=0;i<count;i++){if(source[i].flags==1){*f=0x106468;return GH_CLOTH_UNSUPPORTED;}
@@ -33,4 +32,16 @@ gh_cloth_status gh_cloth_prepare_00106218(gh_cloth_templates*s,const gh_actor_mo
   uint32_t flag=0;memcpy(next.records[i],&flag,4);memcpy(next.records[i]+0x90,center,12);memcpy(next.records[i]+0xb0,&radius,4);
  }
  if(fesetenv(&saved))return GH_CLOTH_NUMERIC;if(status)return status;s->geometry=next;*out=&s->geometry;return GH_CLOTH_OK;
+}
+
+gh_cloth_status gh_cloth_prepare_00106218(gh_cloth_templates*s,const gh_actor_model*m,
+ const gh_cloth_sphere*source,size_t count,gh_static_transform_policy policy,const gh_cloth_geometry**out,uint32_t*f){
+ if(!s||!s->loaded||!out||!f)return GH_CLOTH_ARGUMENT;
+ if(m&&source&&count&&s->initialized&&m->bound&&m->native_identity==m&&m->root.bytes&&
+    m->root.size>=0x118&&count<=12){
+  int found=0;
+  for(unsigned i=0;i<42;i++)if(source==s->records+i&&count<=42-i)found=1;
+  if(!found){*out=NULL;*f=0;return GH_CLOTH_ARGUMENT;}
+ }
+ return gh_cloth_prepare_records_00106218(s,m,source,count,policy,out,f);
 }

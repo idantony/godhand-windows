@@ -304,17 +304,24 @@ static gh_object_step_status move_actor_view(void *context,uint32_t handle,gh_ti
     if(e&&frontier)*frontier=0x30f138;
     return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
 }
+static gh_game_actor_render_provider actor_render_provider(gh_startup_host *h)
+{
+    const gh_game_pl_camera *camera=h->game_init.active_camera==&h->event_camera.identity?&h->event_camera.camera:NULL;
+    return (gh_game_actor_render_provider){.depth_shift=&h->object_step.depth_shift,.shadow_templates=&h->shadow_templates,
+        .shadow_emit=h->shadow_emit,.shadow_context=h->shadow_context,.actor_emit=h->actor_emit,.actor_context=h->actor_context,.camera=camera};
+}
 static gh_object_step_status move_actor_invoke(void *context,const gh_object_move_request*r,const gh_boot_work*work,uint32_t*frontier)
 {
-    gh_startup_host*h=context;gh_game_services_status e=gh_game_services_move_actor(h->services,r->handle,r->original_entry,r->this_delta,&r->actor,work,frontier);
+    gh_startup_host*h=context;
+    gh_game_actor_render_provider provider=actor_render_provider(h);
+    gh_game_services_status e=gh_game_services_move_actor_with_render(h->services,r->handle,r->original_entry,
+        r->this_delta,&r->actor,work,&provider,frontier);
     return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
 }
 static gh_object_step_status trans_actor_invoke(void *context,const gh_object_trans_request*r,const gh_boot_work*work,uint32_t*frontier)
 {
     gh_startup_host*h=context;
-    const gh_game_pl_camera *camera=h->game_init.active_camera==&h->event_camera.identity?&h->event_camera.camera:NULL;
-    gh_game_actor_render_provider provider={.depth_shift=&h->object_step.depth_shift,.shadow_templates=&h->shadow_templates,
-        .shadow_emit=h->shadow_emit,.shadow_context=h->shadow_context,.actor_emit=h->actor_emit,.actor_context=h->actor_context,.camera=camera};
+    gh_game_actor_render_provider provider=actor_render_provider(h);
     gh_game_services_status e=gh_game_services_trans_actor(h->services,r,work,&provider,frontier);
     return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
 }
@@ -750,7 +757,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
 {
     gh_startup_host *h=context;gh_game_services_scene_view s;(void)argument;
     if(gh_game_services_get_scene_view(h->services,&s))return GH_SCENE_STEP_ARGUMENT;
-    const gh_game_pl_camera *camera=h->game_init.active_camera==&h->event_camera.identity?&h->event_camera.camera:s.pl_camera;
+    gh_game_pl_camera *camera=h->game_init.active_camera==&h->event_camera.identity?&h->event_camera.camera:s.pl_camera;
     gh_scene_aux_status aux=GH_AUX_OK;
     if(address==0x138f98){
         gh_camera_projection_display display={&h->display.screen_width,&h->display.screen_height_bits,

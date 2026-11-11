@@ -23,7 +23,7 @@ typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;gh_g
  const gh_title_player_view *current_player;gh_effects_frame_globals *globals;
  gh_game_scene_aux *profile;gh_scene_aux_clock clock;void *clock_context;
  const float *atan_coeff;gh_static_transform_policy policy;
- const gh_game_pl_camera *camera;const gh_display_state *display;
+ gh_game_pl_camera *camera;const gh_display_state *display;
  gh_game_scene_tables *actors; /*borrow ONE scenequery owner; only1A needs it*/
  const struct gh_esp14_provider *model_effect;
 } gh_effects_frame_bindings;

@@ -316,6 +316,8 @@ def main():
                ("game_scene_message_create", "src/core/game_scene_message_create.c"),
                ("game_scene_message_draw", "src/core/game_scene_message_draw.c"),
                ("game_event_accessory_move", "src/core/game_event_accessory_move.c"),
+               ("game_event_actor_bust", "src/core/game_event_actor_bust.c"),
+               ("game_event_pendulum", "src/core/game_event_pendulum.c"),
                ("game_model_texture_scroll", "src/core/game_model_texture_scroll.c"),
                ("game_event_camera_track", "src/core/game_event_camera_track.c"),
                ("game_motion_camera", "src/core/game_motion_camera.c"),

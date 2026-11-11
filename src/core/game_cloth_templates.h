@@ -23,6 +23,9 @@ gh_cloth_status gh_cloth_templates_for_costume(gh_cloth_templates *,unsigned cos
  * this typed borrowed result. flags==1 capsule branch remains strict106468. */
 gh_cloth_status gh_cloth_prepare_00106218(gh_cloth_templates *,const gh_actor_model *,
  const gh_cloth_sphere *,size_t,gh_static_transform_policy,const gh_cloth_geometry **original_result,uint32_t *frontier);
+/* Same shared 461600 output with an explicit original profile's source span. */
+gh_cloth_status gh_cloth_prepare_records_00106218(gh_cloth_templates *,const gh_actor_model *,
+ const gh_cloth_sphere *,size_t,gh_static_transform_policy,const gh_cloth_geometry **,uint32_t *);
 #ifdef __cplusplus
 }
 #endif

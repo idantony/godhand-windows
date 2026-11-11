@@ -1,4 +1,9 @@
+#include "game_event_actor_bust.h"
+#include <fenv.h>
+#include <math.h>
 #include "game_event_actor_create.h"
+#include "game_event_accessory_move.h"
+#include "game_event_pendulum.h"
 #include "game_event_actor_factory.h"
 #include "game_event_actor_extra.h"
 #include "game_event_actor_play.h"
@@ -60,6 +65,23 @@ static gh_game_event_status object_view(void *opaque, uint32_t handle, gh_title_
 
 static uint32_t word(const uint8_t *p) {
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
+
+typedef struct {
+    gh_event_actor_factory *actor;
+    unsigned calls;
+} event_move_shadow_probe;
+
+static gh_game_event_status probe_event_move_shadow(void *opaque, gh_event_actor_factory *actor,
+                                                     uint32_t *frontier) {
+    event_move_shadow_probe *probe = opaque;
+    CHECK(actor == probe->actor && actor->shadow.initialized);
+    CHECK(word(actor->object.view.bytes + 0x4dc) == 3 && *frontier == 0x14efa8);
+    if (++probe->calls == 1) {
+        *frontier = 0x31a600;
+        return GH_EVENT_UNSUPPORTED;
+    }
+    return GH_EVENT_OK;
 }
 
 int main(int argc, char **argv) {
@@ -356,6 +378,62 @@ int main(int argc, char **argv) {
     CHECK(pools.vectors[0].count == 17 && pools.vectors[3].count == 12);
     CHECK(word((uint8_t *)pools.vectors[0].allocation.pointer + 16 * 4) == child.handle);
     CHECK(rows[3].kind == 0x60a && rows[3].shadow.initialized && rows[3].object.view.bytes[0x2fa0] == 1);
+    {
+        gh_event_actor_factory *el0a = &rows[3];
+        CHECK(el0a->model.part_count == 30);
+        const gh_actor_part *origin, *bust;
+        CHECK(!gh_actor_model_part_at(&el0a->model, 0, &origin));
+        CHECK(!gh_actor_model_part_at(&el0a->model, 29, &bust));
+        uint8_t *root = el0a->object.view.bytes;
+        uint8_t saved[0x40], origin_xyz[12], matrix[64], euler_x[4], env_frame[4];
+        memcpy(saved, root + 0x2fb0, sizeof(saved));
+        memcpy(origin_xyz, origin->bytes + 0xb0, sizeof(origin_xyz));
+        memcpy(matrix, bust->bytes + 0x80, sizeof(matrix));
+        memcpy(euler_x, bust->bytes + 0x100, sizeof(euler_x));
+        memcpy(env_frame, env.bytes + 0x14, sizeof(env_frame));
+        uint32_t flags = word(root + 0x2f0);
+        CHECK(!gh_event_actor_bust_002b6a40(el0a, &components, &frontier) && !frontier);
+        CHECK(!memcmp(root + 0x2fd0, origin_xyz, 12) && !memcmp(root + 0x2fe0, origin_xyz, 12));
+
+        /* Explicit numeric pose on the actual actor and component owners.
+         * World translation (1,2,3) maps the input offset to local y=0. */
+        const float identity_translated[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 1,2,3,1};
+        const float current[3] = {2,8,4}, old[3] = {1,1,3};
+        const float offset[4] = {1,2,3,1};
+        const float phase = 1, zero = 0, angle = 0.125f, velocity = 0.125f;
+        memcpy(origin->bytes + 0xb0, current, 12);
+        memcpy(bust->bytes + 0x80, identity_translated, 64);
+        uint32_t no_reset = flags & ~1u;
+        memcpy(root + 0x2f0, &no_reset, 4);
+        const int modes[] = {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO};
+        for (unsigned mode = 0; mode < 4; ++mode) {
+            CHECK(!fesetround(modes[mode]));
+            for (unsigned reset = 0; reset < 2; ++reset) {
+                memcpy(env.bytes + 0x14, reset ? &zero : &phase, 4);
+                memcpy(root + 0x2fb0, offset, 16);
+                memcpy(root + 0x2fc0, &velocity, 4);
+                memcpy(root + 0x2fe0, old, 12);
+                memcpy(bust->bytes + 0x100, &angle, 4);
+                CHECK(!gh_event_actor_bust_002b6a40(el0a, &components, &frontier) && !frontier);
+                CHECK(fegetround() == modes[mode]);
+                CHECK(word(root + 0x2fb0) == 0x3f800000u && word(root + 0x2fb4) == 0x40000000u &&
+                      word(root + 0x2fb8) == 0x4041eb85u && word(root + 0x2fbc) == 0x3f800000u);
+                CHECK(word(bust->bytes + 0x100) == (reset ? 0 : 0x3e800000u));
+                float actual_velocity;
+                memcpy(&actual_velocity, root + 0x2fc0, 4);
+                CHECK(fabsf(actual_velocity - (reset ? 0.0f : -0.025f)) < 1e-7f);
+            }
+        }
+        CHECK(!fesetround(FE_TONEAREST));
+        memcpy(root + 0x2fb0, saved, sizeof(saved));
+        memcpy(root + 0x2f0, &flags, 4);
+        memcpy(origin->bytes + 0xb0, origin_xyz, sizeof(origin_xyz));
+        memcpy(bust->bytes + 0x80, matrix, sizeof(matrix));
+        memcpy(bust->bytes + 0x100, euler_x, sizeof(euler_x));
+        memcpy(env.bytes + 0x14, env_frame, sizeof(env_frame));
+        puts("PASS actual EL0A part29 Bust update, motion and reset branches, four FEnv modes");
+    }
+
     CHECK(extra.accessory_handle && extra.olivia_accessory.kind == 0x60d && extra.olivia_accessory.model.ready);
     CHECK(extra.olivia_accessory.init_stage == 2 && extra.olivia_accessory.object.view.bytes[0x2b5] == 0xfd);
     CHECK(word(extra.olivia_accessory.object.view.bytes + 0x30a4) == 4 && extra.accessory_parts.count == 7);
@@ -427,9 +505,96 @@ int main(int argc, char **argv) {
     CHECK(motion_result == GH_EVENT_OK);
     CHECK(motions[0].complete && motions[0].motion.offset == first_active.lanes[0].primary_offset &&
           word(rows[0].object.view.bytes + 0x430) == 0x3f800000);
+    /* The first actual EV01 cut-1 EL00 record changes this actor to state4.
+     * Main ELF 44B528 +54/+58/+5c prove Move and its state4 selector. */
+    CHECK(elf_bytes > 0x34c588 && word(elf + 0x34c57c) == 0x2b6930 &&
+          word(elf + 0x34c580) == 0 && word(elf + 0x34c584) == 0x14ea50);
+    gh_event_actor_factory *el00 = &rows[0];
+    uint8_t *el00_root = el00->object.view.bytes;
+    CHECK(el00->kind == 0x600 && el00_root[0x2f4] == 4 && el00_root[0x2f5] == 0);
+    CHECK(!el00_root[0x4e0] && !el00_root[0x1390] && !el00_root[0x2fa0] &&
+          !el00_root[0x2ff0] && !el00_root[0x4d8]);
+    gh_event_accessory_move object_move = {0};
+    event_move_shadow_probe shadow_probe = {.actor = el00};
+    CHECK(gh_game_event_simple_move_002b6930(&object_move, el00, NULL, probe_event_move_shadow,
+          &shadow_probe, &frontier) == GH_EVENT_UNSUPPORTED);
+    CHECK(frontier == 0x31a600 && object_move.actor == el00 && object_move.stage == 3 &&
+          object_move.texture_node == el00->model.script.mesh_count && shadow_probe.calls == 1);
+    CHECK(gh_game_event_simple_move_002b6930(&object_move, el00, NULL, probe_event_move_shadow,
+          &shadow_probe, &frontier) == GH_EVENT_OK);
+    CHECK(!frontier && !object_move.actor && !object_move.stage && shadow_probe.calls == 2 &&
+          !memcmp(el00_root + 0x490, el00->model.root.alias_f0, 12));
+    el00_root[0x2f5] = 1;
+    CHECK(gh_game_event_simple_move_002b6930(&object_move, el00, NULL, probe_event_move_shadow,
+          &shadow_probe, &frontier) == GH_EVENT_UNSUPPORTED && frontier == 0x14ead8 &&
+          !object_move.stage && shadow_probe.calls == 2);
+    el00_root[0x2f5] = 0;
+    gh_player_shared_vector shared = {0};
+    CHECK(gh_player_shared_vector_from_elf(&shared, elf, elf_bytes) == GH_PLAYER_OK);
+    static const unsigned attached[] = {1, 2, 4, 5};
+    for (unsigned i = 0; i < sizeof(attached) / sizeof(*attached); ++i) {
+        gh_event_actor_factory *member = rows + attached[i];
+        uint8_t *root = member->object.view.bytes;
+        gh_event_accessory_move move = {0};
+        const int wide = i & 1;
+        static const unsigned narrow_parts[] = {0, 1, 2}, wide_parts[] = {0, 1, 17, 18};
+        const unsigned *parts = wide ? wide_parts : narrow_parts;
+        const gh_event_actor_factory *parent = rows + (i < 2 ? 0 : 3);
+        CHECK(root[0x4e0] && word(root + 0x30a4) == (wide ? 1u : 2u));
+        CHECK(word(root + 0x30b4) == UINT32_MAX && !word(root + 0x4dc));
+        for (unsigned j = 0; j < (wide ? 4u : 3u); ++j) {
+            const gh_actor_part *part;
+            CHECK(!gh_actor_model_part_at(&member->model, parts[j], &part));
+            memset(part->alias_d0, 0xcc, 12);
+            memset(part->bytes + 0xe0, 0xcc, 12);
+        }
+        gh_game_event_status result = gh_game_event_simple_move_002b6930(&move, member, &shared, NULL, NULL, &frontier);
+        if (i == 2) {
+            CHECK(result == GH_EVENT_UNSUPPORTED && frontier == 0x2df860 && move.stage == 4);
+        } else {
+            CHECK(result == GH_EVENT_OK && !frontier && !move.stage);
+        }
+        CHECK(!memcmp(member->model.root.alias_f0, parent->model.root.bytes + 0xb0, 16));
+        CHECK((word(root + 0x250) & 0x10u) == (word(parent->model.root.bytes + 0x250) & 0x10u));
+        CHECK(!memcmp(root + 0x100, parent->model.root.bytes + 0x100, 12));
+        CHECK(!memcmp(root + 0x240, parent->model.root.bytes + 0x240, 16));
+        for (unsigned j = 0; j < (wide ? 4u : 3u); ++j) {
+            const gh_actor_part *part;
+            CHECK(!gh_actor_model_part_at(&member->model, parts[j], &part));
+            CHECK(!memcmp(part->alias_d0, shared.bytes, 12));
+            CHECK(!memcmp(part->bytes + 0xe0, shared.bytes, 12));
+        }
+    }
     CHECK(motions[8].complete && !motions[6].bound && !motions[7].bound);
     CHECK(!(word(child.object.view.bytes + 0x250) & 0x8002));
     CHECK(!(word(extra.olivia_accessory.object.view.bytes + 0x250) & 0x8002));
+    gh_cloth_templates cloth_templates = {0};
+    gh_cloth_runtime_globals cloth_globals = {0};
+    CHECK(gh_cloth_templates_from_elf(&cloth_templates, elf, elf_bytes) == GH_CLOTH_OK);
+    CHECK(gh_cloth_templates_initialize_00100fb8(&cloth_templates, 1, 0xffff) == GH_CLOTH_OK);
+    CHECK(gh_cloth_runtime_from_elf(&cloth_globals, elf, elf_bytes) == GH_CLOTH_OK);
+    CHECK(gh_cloth_runtime_initialize_00107de0(&cloth_globals, 1, 0xffff) == GH_CLOTH_OK);
+    gh_game_mt random;
+    gh_game_mt_seed_0030f2b0(&random, 5489);
+    gh_game_mt expected_random = random;
+    uint32_t expected_word;
+    CHECK(!gh_game_mt_next_0030f348(&expected_random, &expected_word));
+    const gh_cloth_step_bindings cloth = {
+        .templates = &cloth_templates, .globals = &cloth_globals, .random = &random,
+        .matrix_policy = GH_STATIC_BINARY32_REFERENCE, .random_policy = GH_FRAME_CHOP_REFERENCE
+    };
+    gh_event_pendulum_call pendulum_call = {0};
+    gh_game_event_status pendulum_status =
+        gh_game_event_pendulum_002df860(&pendulum_call, &rows[4], &extra, &cloth, &shared, &frontier);
+    if (pendulum_status) fprintf(stderr, "EL0B 104010 status=%u frontier=%x stage=%u\n",
+        pendulum_status, frontier, pendulum_call.prefix.stage);
+    CHECK(pendulum_status == GH_EVENT_OK && !frontier && pendulum_call.finish.complete);
+    CHECK(pendulum_call.prefix.geometry == &cloth_templates.geometry && cloth_templates.geometry.count == 6);
+    CHECK(pendulum_call.prefix.random_words[0] == expected_word && !memcmp(&random, &expected_random, sizeof(random)));
+    CHECK(pendulum_call.prefix.operands.model == &rows[4].model && pendulum_call.prefix.operands.parent == &rows[3].model);
+    CHECK(pendulum_call.distances.iterations == 1);
+    CHECK(gh_game_event_pendulum_002df860(&pendulum_call, &rows[4], &extra, &cloth, &shared, &frontier) == GH_EVENT_OK);
+    CHECK(!memcmp(&random, &expected_random, sizeof(random)));
     put_word(env.bytes + 0x14, 0x3f800000);
     CHECK(gh_event_actor_play_move_000014c8(&motion_play, &play_bindings, &frontier) == GH_EVENT_OK);
     CHECK(word(rows[0].object.view.bytes + 0x430) == 0x40000000);

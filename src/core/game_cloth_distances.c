@@ -21,18 +21,18 @@ static gh_cloth_status correct(gh_cloth_distances*s,uint8_t*a,uint8_t*b,const fl
  lock(a);if(b)lock(b);return GH_CLOTH_OK;
 }
 static gh_cloth_status body(gh_cloth_distances*s,gh_cloth_angles*angles){
- gh_cloth_step_prefix*prefix=angles->forces->prefix;gh_game_player_springs*springs=prefix->bindings.springs;gh_actor_model*model=&springs->child->model;uint8_t*p=model->root.bytes;uint32_t flags=u32(p+0x20ac),iterations=u32(p+0x2094);if((flags&2)||!iterations){s->complete=1;s->frontier=0x105a94;return GH_CLOTH_OK;}if(!(flags&0x100)||u32(p+0x20a4))return fail(s,0x104ec8,GH_CLOTH_UNSUPPORTED);if(iterations>64)return fail(s,0x104ec8,GH_CLOTH_BOUNDS);
+ gh_cloth_step_prefix*prefix=angles->forces->prefix;const gh_cloth_operands*springs=&prefix->operands;gh_actor_model*model=springs->model;uint8_t*p=springs->config;uint32_t flags=u32(p+0x5c),iterations=u32(p+0x44);if((flags&2)||!iterations){s->complete=1;s->frontier=0x105a94;return GH_CLOTH_OK;}if(!(flags&0x100)||u32(p+0x54))return fail(s,0x104ec8,GH_CLOTH_UNSUPPORTED);if(iterations>64)return fail(s,0x104ec8,GH_CLOTH_BOUNDS);
  for(unsigned row=0;row<springs->count;row++){unsigned id=springs->indices[0][row];if(id>=44||id>=model->parts_allocated)return fail(s,0x104f10,GH_CLOTH_BOUNDS);for(unsigned j=1;j<=5;j++)if(springs->indices[j][row]!=255&&springs->indices[j][row]>=44)return fail(s,0x104f10,GH_CLOTH_BOUNDS);if((flags&0x80)&&springs->indices[5][row]==255)return fail(s,0x106bf8,GH_CLOTH_UNSUPPORTED);}
- uint8_t records[44*0xa0];memcpy(records,p+0x4d0,sizeof(records));unsigned queries=0,hits=0;float scale=prefix->radius_scale,stiffness=rf(p+0x209c);
+ uint8_t records[44*0xa0];memcpy(records,springs->records,sizeof(records));unsigned queries=0,hits=0;float scale=prefix->radius_scale,stiffness=rf(p+0x4c);
  for(uint32_t pass=0;pass<iterations;pass++)for(unsigned row=0;row<springs->count;row++){
   unsigned id=springs->indices[0][row];uint8_t*r=records+id*0xa0;
-  if(!(flags&4)){const unsigned order[4]={3,4,1,2};for(unsigned item=0;item<4;item++){unsigned table=order[item],target=springs->indices[table][row];if(!springs->table_addresses[table]||target==255)continue;uint8_t*q=records+target*0xa0;gh_cloth_status e=contact(s,prefix,r,q);if(e)return e;queries++;if(table<3){e=correct(s,r,q,NULL,rf(r+0x20+(table-1)*4),scale,stiffness,1);if(e)return e;}else{lock(r);lock(q);}}}
+  if(!(flags&4)){const unsigned order[4]={3,4,1,2};for(unsigned item=0;item<4;item++){unsigned table=order[item],target=springs->indices[table][row];if(!(springs->tables&(1u<<table))||target==255)continue;uint8_t*q=records+target*0xa0;gh_cloth_status e=contact(s,prefix,r,q);if(e)return e;queries++;if(table<3){e=correct(s,r,q,NULL,rf(r+0x20+(table-1)*4),scale,stiffness,1);if(e)return e;}else{lock(r);lock(q);}}}
   unsigned target=springs->indices[5][row];gh_cloth_status e;
   if(target==255){float point[3],anchor[3];memcpy(point,r+0x40,12);memcpy(anchor,model->parts[id].alias_f0,12);int hit;uint32_t f;e=gh_cloth_point_body_001067b8(prefix->geometry,point,anchor,angles->shared_pivot,prefix->bindings.matrix_policy,&hit,&f);if(e)return fail(s,f,e);memcpy(r+0x40,point,12);if(hit){r[0x90]|=1;hits++;}e=correct(s,r,NULL,anchor,rf(r+0x60),scale,stiffness,0);if(e)return e;}
   else{uint8_t*q=records+target*0xa0;e=contact(s,prefix,r,q);if(e)return e;queries++;e=correct(s,r,q,NULL,rf(r+0x60),scale,stiffness,0);if(e)return e;}
  }
  for(unsigned i=0;i<44;i++)for(unsigned k=0;k<3;k++)if(!isfinite(rf(records+i*0xa0+0x40+4*k)))return fail(s,0x105a90,GH_CLOTH_NUMERIC);
- memcpy(p+0x4d0,records,sizeof(records));s->iterations=iterations;s->pair_queries=queries;s->point_hits=hits;s->complete=1;s->frontier=0x105a94;return GH_CLOTH_OK;
+ memcpy(springs->records,records,sizeof(records));s->iterations=iterations;s->pair_queries=queries;s->point_hits=hits;s->complete=1;s->frontier=0x105a94;return GH_CLOTH_OK;
 }
 gh_cloth_status gh_cloth_constrain_distances_00104ec8(gh_cloth_distances*s,gh_cloth_angles*angles){
  if(!s||!angles||!angles->complete||angles->frontier!=0x104ec8||!angles->forces||!angles->forces->prefix||!angles->shared_pivot)return GH_CLOTH_ARGUMENT;if(s->angles&&s->angles!=angles)return GH_CLOTH_ARGUMENT;if(s->complete)return GH_CLOTH_OK;s->angles=angles;fenv_t env;if(feholdexcept(&env))return GH_CLOTH_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_CLOTH_NUMERIC;}gh_cloth_status e=body(s,angles);if(fesetenv(&env))return GH_CLOTH_NUMERIC;return e;

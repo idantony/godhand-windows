@@ -22,17 +22,24 @@ static gh_game_event_status follow_parent(gh_actor_model *model,
     *frontier = 0x2b6fe8;
     uint8_t *p = model->root.bytes;
     gh_actor_external_parent_set *links = model->external_parts;
-    if (!links || links->child != model || links->count != 7 || !links->parent || !links->parent->ready ||
-        !shared || !shared->initialized || word(p + 0x30a4) != 4 || word(p + 0x30b4) != UINT32_MAX ||
+    static const uint8_t indices[3][7] = {{0, 1, 17, 18}, {0, 1, 2}, {0, 1, 2, 3, 4, 5, 6}};
+    static const unsigned counts[] = {4, 3, 7};
+    const unsigned mode = word(p + 0x30a4);
+    if (mode != 1 && mode != 2 && mode != 4) return GH_EVENT_UNSUPPORTED;
+    const unsigned profile = mode == 4 ? 2 : mode - 1;
+    const unsigned count = counts[profile];
+    if (!links || links->child != model || links->count != count || !links->parent || !links->parent->ready ||
+        !shared || !shared->initialized || word(p + 0x30b4) != UINT32_MAX ||
         !model->root.alias_f0 || word(model->root.alias_f0 + 12) != 0x3f800000) return GH_EVENT_UNSUPPORTED;
     const gh_title_player_view *parent = &links->parent->root;
     if (!parent->bytes || parent->size < 0x254) return GH_EVENT_BOUNDS;
 
     const gh_actor_part *parts[7];
-    for (unsigned i = 0; i < 7; ++i) {
+    for (unsigned i = 0; i < count; ++i) {
         const uint8_t *parent_part;
-        if (gh_actor_model_part_at(model, i, &parts[i]) || !parts[i]->alias_d0 ||
-            gh_actor_model_external_parts_at(model, i, &parent_part) || !parent_part) return GH_EVENT_BOUNDS;
+        const unsigned part = indices[profile][i];
+        if (gh_actor_model_part_at(model, part, &parts[i]) || !parts[i]->alias_d0 ||
+            gh_actor_model_external_parts_at(model, part, &parent_part) || !parent_part) return GH_EVENT_BOUNDS;
     }
 
     float matrix[16], offset[3], position[4];
@@ -44,24 +51,29 @@ static gh_game_event_status follow_parent(gh_actor_model *model,
     }
     memcpy(model->root.alias_f0, position, sizeof(position));
     memcpy(p + 0x100, parent->bytes + 0x100, 12);
-    for (unsigned i = 0; i < 7; ++i) memcpy(parts[i]->alias_d0, shared->bytes, 12);
-    for (unsigned i = 0; i < 7; ++i) memcpy(parts[i]->bytes + 0xe0, shared->bytes, 12);
+    for (unsigned i = 0; i < count; ++i) memcpy(parts[i]->alias_d0, shared->bytes, 12);
+    for (unsigned i = 0; i < count; ++i) memcpy(parts[i]->bytes + 0xe0, shared->bytes, 12);
     memcpy(p + 0x240, parent->bytes + 0x240, 16);
     store(p + 0x250, (word(p + 0x250) & ~0x10u) | (word(parent->bytes + 0x250) & 0x10u));
     return GH_EVENT_OK;
 }
 
-gh_game_event_status gh_game_event_accessory_move_002b6930(gh_event_accessory_move *s,
-    gh_event_actor_factory *actor, const gh_player_shared_vector *shared, uint32_t *frontier) {
+gh_game_event_status gh_game_event_simple_move_with_tails_002b6930(gh_event_accessory_move *s,
+    gh_event_actor_factory *actor, const gh_player_shared_vector *shared,
+    gh_event_simple_shadow shadow, void *shadow_context,
+    gh_event_simple_tail tail, void *tail_context, uint32_t *frontier) {
     if (!frontier) return GH_EVENT_ARGUMENT;
     *frontier = 0x2b6930;
-    if (!s || !actor || actor->kind != 0x60d || !actor->model.ready ||
+    if (!s || !actor || !actor->model.ready ||
         !actor->model.root.bytes || actor->model.root.size < GH_EVENT_ACTOR_BYTES ||
-        actor->model.root.bytes != actor->object.view.bytes || (s->actor && s->actor != actor)) return GH_EVENT_ARGUMENT;
+        actor->model.root.bytes != actor->object.view.bytes ||
+        actor->object.view.original_vtable214 != 0x44b528 || (s->actor && s->actor != actor)) return GH_EVENT_ARGUMENT;
     uint8_t *p = actor->model.root.bytes;
     if (!s->stage) {
-        if (p[0x2f4] == 4) {
-            *frontier = 0x2b6968;
+        /* vtable 44B528 +5C is 14EA50. Its only nonempty cases are 1..5. */
+        if (p[0x2f4] == 4 && p[0x2f5] >= 1 && p[0x2f5] <= 5) {
+            static const uint32_t entries[] = {0x14ead8, 0x14eb90, 0x14ec88, 0x14ed60, 0x14ee60};
+            *frontier = entries[p[0x2f5] - 1];
             return GH_EVENT_UNSUPPORTED;
         }
         s->actor = actor;
@@ -89,17 +101,46 @@ gh_game_event_status gh_game_event_accessory_move_002b6930(gh_event_accessory_mo
         if (status) return status == GH_ACTOR_MODEL_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
         s->stage = 3;
     }
-    if (word(p + 0x4dc)) *frontier = 0x14efa8;
-    else if (p[0x1390]) *frontier = 0x2df860;
-    else if (p[0x2fa0]) *frontier = 0x2b6a40;
-    else if (p[0x2ff0]) *frontier = 0x2b79e0;
-    else if (p[0x4d8]) *frontier = 0x2b6da0;
-    else {
-        if (!actor->model.root.alias_f0) return GH_EVENT_BOUNDS;
-        if (p + 0x490 != actor->model.root.alias_f0) memcpy(p + 0x490, actor->model.root.alias_f0, 12);
-        *s = (gh_event_accessory_move){0};
-        *frontier = 0;
-        return GH_EVENT_OK;
+    if (s->stage == 3) {
+        if (word(p + 0x4dc)) {
+            *frontier = 0x14efa8;
+            if (!shadow) return GH_EVENT_UNSUPPORTED;
+            gh_game_event_status status = shadow(shadow_context, actor, frontier);
+            if (status) return status;
+        }
+        s->stage = 4;
     }
-    return GH_EVENT_UNSUPPORTED;
+    static const struct { unsigned offset; uint32_t entry; } calls[] = {
+        {0x1390,0x2df860}, {0x2fa0,0x2b6a40}, {0x2ff0,0x2b79e0}, {0x4d8,0x2b6da0}
+    };
+    for (; s->stage < 8; ++s->stage) {
+        unsigned index = s->stage - 4;
+        if (!p[calls[index].offset]) continue;
+        *frontier = calls[index].entry;
+        if (!tail) return GH_EVENT_UNSUPPORTED;
+        gh_game_event_status status = tail(tail_context, actor, calls[index].entry, frontier);
+        if (status) return status;
+    }
+    if (!actor->model.root.alias_f0) return GH_EVENT_BOUNDS;
+    if (p + 0x490 != actor->model.root.alias_f0)
+        memcpy(p + 0x490, actor->model.root.alias_f0, 12);
+    *s = (gh_event_accessory_move){0};
+    *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+gh_game_event_status gh_game_event_simple_move_002b6930(gh_event_accessory_move *s,
+    gh_event_actor_factory *actor, const gh_player_shared_vector *shared,
+    gh_event_simple_shadow shadow, void *shadow_context, uint32_t *frontier) {
+    return gh_game_event_simple_move_with_tails_002b6930(s, actor, shared,
+        shadow, shadow_context, NULL, NULL, frontier);
+}
+
+gh_game_event_status gh_game_event_accessory_move_002b6930(gh_event_accessory_move *s,
+    gh_event_actor_factory *actor, const gh_player_shared_vector *shared, uint32_t *frontier) {
+    if (!actor || actor->kind != 0x60d) {
+        if (frontier) *frontier = 0x2b6930;
+        return GH_EVENT_ARGUMENT;
+    }
+    return gh_game_event_simple_move_002b6930(s, actor, shared, NULL, NULL, frontier);
 }

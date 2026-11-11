@@ -12,7 +12,7 @@ static unsigned h(const uint8_t*p){return p[0]|(unsigned)p[1]<<8;}
 static void put(void*p,uint32_t n){memcpy(p,&n,4);}
 static void half(void*p,uint16_t n){memcpy(p,&n,2);}
 static gh_effect_status fail(gh_esp_create_call*c,uint32_t f,gh_effect_status e){c->frontier=f;return e;}
-static int same(const gh_esp_create_bindings*a,const gh_esp_create_bindings*b){return a->storage.effects==b->storage.effects&&a->storage.esp==b->storage.esp&&a->storage.emitters==b->storage.emitters&&a->storage.esp_bytes==b->storage.esp_bytes&&a->storage.emitter_bytes==b->storage.emitter_bytes&&a->random==b->random&&a->work==b->work&&a->policy==b->policy&&a->globals==b->globals&&a->model_effect==b->model_effect&&(a->actors==b->actors||(!a->actors&&b->actors))&&(a->atan_coeff==b->atan_coeff||(!a->atan_coeff&&b->atan_coeff));}
+static int same(const gh_esp_create_bindings*a,const gh_esp_create_bindings*b){return a->storage.effects==b->storage.effects&&a->storage.esp==b->storage.esp&&a->storage.emitters==b->storage.emitters&&a->storage.esp_bytes==b->storage.esp_bytes&&a->storage.emitter_bytes==b->storage.emitter_bytes&&a->random==b->random&&a->work==b->work&&a->policy==b->policy&&a->globals==b->globals&&a->model_effect==b->model_effect&&a->camera==b->camera&&a->active_camera==b->active_camera&&(a->actors==b->actors||(!a->actors&&b->actors))&&(a->atan_coeff==b->atan_coeff||(!a->atan_coeff&&b->atan_coeff));}
 gh_effect_status gh_esp_create_begin_00300e30(gh_esp_create_call*c,unsigned emitter,uint32_t serial){if(!c||emitter>=256||!serial||(c->active&&!c->complete))return GH_EFFECT_ARGUMENT;*c=(gh_esp_create_call){.identity=c,.emitter_slot=emitter,.emitter_serial=serial,.active=1};return GH_EFFECT_OK;}
 /* Actual3060B0 uses signed bank and unsigned byte item; <count, not<=.
  * Pointer fields remain removed guesttokens, while metadata borrows the exact
@@ -136,6 +136,56 @@ static gh_effect_status initialize_13(gh_esp_create_call*c,uint8_t*p,const uint8
  c->stage=12;
  return GH_EFFECT_OK;
 }
+/* 2F3E68 compares the particle world position to the selected camera eye. */
+static gh_effect_status shake_range(gh_esp_create_call*c,const gh_game_pl_camera*camera,float radius,int*near){
+ float position[4];
+ uint32_t pc=0;
+ gh_effect_status status=gh_effect_node_world_position_native(c->b.storage.effects,0,c->slot,c->serial,
+     position,c->b.policy,&pc);
+ if(status)return fail(c,pc?pc:0x2b6160,status);
+ *near=1;
+ if(radius==0.0f)return GH_EFFECT_OK;
+ float delta[3];
+ for(unsigned i=0;i<3;i++)
+    delta[i]=mul(add(position[i],-floating(camera->fields+0x210+i*4)),1000.0f);
+ float squared=add(add(mul(delta[0],delta[0]),mul(delta[1],delta[1])),mul(delta[2],delta[2]));
+ float distance=sqrtf(squared);
+ if(!isfinite(distance))return fail(c,0x1f7df8,GH_EFFECT_UNSUPPORTED);
+ *near=distance<=radius;
+ return GH_EFFECT_OK;
+}
+
+/* Cut2 uses two one-shot counters. Continuous (-1) shake stays at 2F40C0. */
+static gh_effect_status initialize_18(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
+ gh_game_pl_camera *camera=c->b.camera;
+ if(!camera||!camera->constructed||camera->identity!=c->b.active_camera||
+    camera->policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE)
+    return fail(c,0x2f3f30,GH_EFFECT_ARGUMENT);
+ int horizontal=(int8_t)r[0x18c],vertical=(int8_t)r[0x18d];
+ if(w(p+0xf0)!=0x44f078u||horizontal<0||vertical<0||w(p+0x114))
+    return fail(c,0x2f3f30,GH_EFFECT_UNSUPPORTED);
+ float radius=mul(floating(r+0x15c),1000.0f);
+ if(!isfinite(radius)||radius<0.0f)return fail(c,0x2f3e68,GH_EFFECT_UNSUPPORTED);
+ for(unsigned i=0;i<8;i++)
+    if(!isfinite(floating(r+0x13c+i*4)))return fail(c,0x2f3f30,GH_EFFECT_UNSUPPORTED);
+ int near=0;
+ gh_effect_status status=shake_range(c,camera,radius,&near);
+ if(status)return status;
+ status=gh_effect_create_esp_commit_18(c->b.storage.effects,c->slot,c->serial);
+ if(status)return fail(c,0x2f3f30,status);
+ memcpy(camera->fields+0x268,r+0x13c,16);
+ memcpy(camera->fields+0x254,r+0x14c,16);
+ store_float(p+0x2b8,radius);
+ half(p+0x2b0,(uint16_t)horizontal);
+ half(p+0x2b2,(uint16_t)vertical);
+ if(near){
+    camera->fields[0x278]=(uint8_t)horizontal;
+    camera->fields[0x264]=(uint8_t)vertical;
+ }
+ c->stage=12;
+ c->complete=1;
+ return GH_EFFECT_OK;
+}
 static gh_effect_status initialize_1a(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
  uint32_t frontier=0;gh_effect_status status;
  if(c->stage==10){if(w(p+0xf0)!=0x44f270u)return fail(c,0x2f4be0,GH_EFFECT_UNSUPPORTED);status=gh_effect_node_detach_update_002fcb88(&c->detach,c->b.storage.effects,c->slot,c->serial,c->b.atan_coeff,c->b.policy,&frontier);if(status)return fail(c,frontier?frontier:0x2fcb88,status);if(!c->detach.complete)return fail(c,0x2fcb88,GH_EFFECT_ARGUMENT);c->stage=13;}
@@ -188,6 +238,7 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
   c->complete=1;
   return GH_EFFECT_OK;
  }
+ if(view.type==0x18&&c->stage==10)return initialize_18(c,p,r);
  if(view.type==0x13&&c->stage==10)return initialize_13(c,p,r);
  if(view.type==0x12&&c->stage==10)return initialize_12(c,p,r);
  if(view.type==0x1a&&c->stage>=10)return initialize_1a(c,p,r);
