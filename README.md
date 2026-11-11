@@ -13,14 +13,14 @@ not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 from the user's ISO and returns to the room. In a hidden, muted Windows run,
 synthetic gamepad input moves Gene within roughly one unit of an original
 enemy and starts the original Square attack. The fully visible room includes
-the first attack animation frame. The run reaches 1,769 ticks and presents
-1,628 scene frames, including earlier title and room startup frames. It
-submits 1,291,067 world packets with zero renderer, GPU, postprocess and
+successive attack animation frames. The run reaches 1,776 ticks and presents
+1,635 scene frames, including earlier title and room startup frames. It
+submits 1,303,779 world packets with zero renderer, GPU, postprocess and
 window errors.
 
-The run stops in the enemy's close-range decision at `0x00262AA8`. The attack's
-hit and damage, continued combat, room transitions and save/load still need
-end-to-end verification.
+The run stops in the nearby enemy's periodic weapon lookup at `0x002DDAB0`.
+The attack's hit and damage, continued combat, room transitions and full
+save/load still need end-to-end verification.
 
 ### Verified progress
 
@@ -51,9 +51,10 @@ end-to-end verification.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters. Subsequent opening frames create original
   event effects, update their lifetimes and render sprites and framebuffer warp.
-- 355 C modules pass 349 checks with hardware-muted audio, movie decoding and
-  the full independent ADX comparison enabled.
-  The earlier foundation also passes in an independent clean source snapshot.
+- The latest frozen source builds 365 C modules and passes 349 native checks.
+  Seventeen checks that need extra tools or devices were skipped in this run.
+  Earlier Windows verification exercised muted hardware audio, movie decoding
+  and the full independent ADX comparison.
   Restricted GPU pixels match separate CPU equations. The recovered OT traversal
   preserves bank order, bucket depth, LIFO packet groups and previous-frame presentation.
 - The two RNG routines in the same DLL pass 20544 exact state/float-bit
@@ -104,9 +105,10 @@ python -B .\tools\build-windows.py --target native
   --ffmpeg 'X:\tools\ffmpeg.exe' --show
 ```
 
-The native profile directory represents slot0; opening does not create it.
-Missing directory genuinely takes the no-card path. Save loading/writing is
-unfinished. Keyboard defaults are Z=Cross, X=Circle, arrows, Enter=Start and
+The native profile directory represents card slot0. A missing directory takes
+the original no-card path. Startup reads the original per-save header files
+and validates their version. Full save restore and writing remain unfinished.
+Keyboard defaults are Z=Cross, X=Circle, arrows, Enter=Start and
 Escape=Triangle; original ELF tables determine logical confirm/cancel.
 The window stays hidden unless `--show` is supplied. `--muted` silences only
 this program's output while retaining actual device processing/completion.
@@ -155,12 +157,12 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 
 **仍处于早期开发。** 已从用户 ISO 播完 R100 开场十个镜头并回到房间。隐藏、静音的
 Windows 测试通过合成手柄输入让 Gene 接近原版敌人至约一个游戏距离单位，再按方块
-触发原版攻击。房间淡入已完成，窗口呈现了攻击动画的第一帧。运行到 1769 ticks，
-呈现 1628 个场景帧，包含此前的标题和房间启动帧。累计提交 1291067 个世界绘制包，
+触发原版攻击。房间淡入已完成，窗口连续呈现攻击动画。运行到 1776 ticks，
+呈现 1635 个场景帧，包含此前的标题和房间启动帧。累计提交 1303779 个世界绘制包，
 渲染器、GPU、后处理和窗口错误均为 0。
 
-运行停在敌人的近距离决策 `0x00262AA8`。攻击命中与扣血、后续战斗、房间切换和
-存读档仍待端到端验证。
+运行停在近处敌人的周期武器查询 `0x002DDAB0`。攻击命中与扣血、后续战斗、房间切换和
+完整存读档仍待端到端验证。
 
 ### 已验证的进展
 
@@ -181,7 +183,7 @@ Windows 测试通过合成手柄输入让 Gene 接近原版敌人至约一个游
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始 FX 调用 0x30F228 创建 4 个环境发射器。
   后续片头帧创建原剧情特效，更新其生命周期，并绘制精灵和画面扭曲。
-- 启用硬件静音音频、片头解码和完整独立 ADX 对照后，355 个 C 模块通过 349 项检查，
+- 最新冻结源码编译 365 个 C 模块，通过 349 项原生检查，本次跳过 17 项需要额外工具或设备的检查。
   在固定源码副本验证。受限 GPU 像素与独立 CPU 方程一致；绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
@@ -194,7 +196,8 @@ FFmpeg 路径。公共仓库不含游戏程序/资源、BIOS、私有 SDK、工�
 Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音频设备。
 
 窗口默认隐藏，`--show` 才显示；`--muted` 仅静音本程序，不改系统音量。原生存档
-目录不存在时走真实无卡分支，打开时不会自动创建。默认键位为 Z=Cross、X=Circle、
+目录不存在时走原版无卡分支。启动可读取各存档头并校验原版版本。完整恢复和写入仍在开发。
+默认键位为 Z=Cross、X=Circle、
 方向键、Enter=Start、Escape=Triangle；确认/取消仍由原版 ELF 映射表决定。
 
 当前以退出码 **4** 报告下一个尚未接通的原始调用，并非游戏完成。独立 `startup-qa` 目标才

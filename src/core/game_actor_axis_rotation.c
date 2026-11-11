@@ -25,10 +25,10 @@ gh_actor_model_status gh_actor_part_axis_world_001501d0(float world[16],float ra
     gh_actor_model_status status=GH_ACTOR_MODEL_UNSUPPORTED;
     if(!fesetround(FE_TONEAREST)){
         volatile float half=radians*0.5f;
-        float quaternion[4]={0},unused,rotation[16],result[16];
+        float quaternion[4]={0},rotation[16],result[16];
         /* Actual 003BD8B0 supplies (0,1,0,1); quaternion uses its XYZ only. */
         if(gh_sdk_sine_003a19f8(half,&quaternion[1],policy,frontier))goto finish;
-        if(gh_id_sincos_reference(half,&unused,&quaternion[3])){
+        if(gh_id_cos_reference_001f7fb8(half,&quaternion[3])){
             *frontier=0x1f7fb8;
             goto finish;
         }

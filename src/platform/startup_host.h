@@ -75,7 +75,8 @@ typedef struct gh_startup_snapshot {
     uint32_t game_texture_banks;
     uint64_t mc_ui_epoch,mc_frame_serial;
     int mc_ui_live,mc_frame_ready;
-    uint32_t mc_phase,mc_subphase;
+    uint32_t mc_phase,mc_subphase,mc_present_mask;
+    int32_t mc_error;
     int mc_done,normal_continuation;
     const gh_boot_work *work; /* borrowed read-only, exact input fields */
     const gh_sound_control *sound_control;
@@ -97,9 +98,13 @@ typedef struct gh_startup_snapshot {
     int scenario_task_slot;
     uint64_t player_updates_completed,child_updates_completed,om_updates_completed;
     uint32_t last_move_handle,last_move_entry,player_update_stage,child_update_stage;
-    uint32_t player_handle,player_state_entry,player_update_frontier;
+    uint32_t player_handle,player_state_entry,player_update_frontier,player_attack_target;
     float player_world_position[3],player_motion_sample;
     uint8_t player_pose_ready,player_state[4],player_square_buffer;
+    uint32_t r100_first_enemy_handle;
+    uint16_t r100_first_enemy_hp,r100_first_enemy_player_hit_kind;
+    int32_t r100_first_enemy_player_hit_power;
+    float r100_first_enemy_position[3];
     uint32_t child_update_frontier,child_forces_complete,child_angles_complete,child_distances_complete,child_finish_complete;
     uint32_t emitter_active,esp_active,emitter_samples;
     uint32_t emitter_slots[4],emitter_banks[4],emitter_kinds[4],emitter_flags[4],emitter_known[4],emitter_types[4];

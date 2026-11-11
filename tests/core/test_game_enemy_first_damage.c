@@ -1,6 +1,6 @@
 #include "game_enemy_damage.h"
 #include "game_enemy_move.h"
-#include "game_om304.h"
+#include "game_om303.h"
 #include "game_om_factory.h"
 #include "game_om_initialize.h"
 #include "id_layout_rotation.h"
@@ -379,7 +379,7 @@ static gh_actor_motion_status scenery_sound(void *context,const gh_motion_sound_
     return GH_ACTOR_MOTION_OK;
 }
 
-static int scenery_contact(const gh_bundle *room_bundle,
+static int scenery_contact(const gh_bundle *room_bundle,unsigned kind,
     const gh_room_state *room, const gh_enemy_actor_bindings *b,
     gh_enemy_actor *waiting, const gh_title_player_view *player,
     const gh_hitarea_frame_bindings *ledger_bindings, gh_hitarea_frame *ledger,
@@ -398,16 +398,16 @@ static int scenery_contact(const gh_bundle *room_bundle,
     memcpy(origin,waiting->entry.object.view.alias_f0,12);
     float nearest=1000000;
     unsigned row_index=0;
-    for (unsigned i=8;i<18;++i) {
+    for (unsigned i=kind==0x303?3:8;i<(kind==0x303?8:18);++i) {
         gh_om_placement_record row;
         float xyz[3];
-        CHECK(!gh_om_scene_record_at(&placements,i,&row) && row.type==0x304);
+        CHECK(!gh_om_scene_record_at(&placements,i,&row) && row.type==kind);
         memcpy(xyz,row.bytes,12);
         float dx=xyz[0]-origin[0], dz=xyz[2]-origin[2];
         float distance=dx*dx+dz*dz;
         if(distance<nearest){nearest=distance;source_row=row;row_index=i;}
     }
-    CHECK(row_index && nearest<4);
+    CHECK(kind==0x303 ? row_index==6 && nearest<9 : row_index && nearest<4);
     gh_om_initializer_bindings initializer={.work=b->entry.work,.packet_heap=b->entry.packet_heap,
         .fog_rgb=b->entry.fog_rgb,.init=b->entry.init,.shapes=&b->shapes,.player=player};
     uint8_t serial=0;
@@ -418,11 +418,17 @@ static int scenery_contact(const gh_bundle *room_bundle,
     gh_om_factory factory={0};
     CHECK(!gh_om_factory_bind(&factory,&bindings,1));
     gh_scene_placement_status created=gh_om_factory_create_record(&factory,&source_row,&original);
-    if(created)fprintf(stderr,"OM304 row%u init status=%d pc=%08x\n",row_index,created,factory.frontier);
+    if(created)fprintf(stderr,"OM%03x row%u init status=%d pc=%08x\n",kind,row_index,created,factory.frontier);
     CHECK(!created && original && factory.count==1);
     gh_om_object *source=&factory.objects[0];
-    gh_om304_state *om=(gh_om304_state *)source->initialization;
-    CHECK(om->sphere_created && om->sphere_unit.group==1 && om->sphere_unit.bytes[0x46]==0x2e);
+    gh_om303_state *om=(gh_om303_state *)source->initialization;
+    CHECK(om->sphere_created && source->view.original_vtable214==(kind==0x303?0x423230u:0x423338u));
+    gh_hitarea_object *give=&om->sphere_unit;
+    CHECK(give->group==1 && give->bytes[0x46]==0x2e);
+    const uint8_t *give_node;
+    gh_collision_pair_shape give_shape;
+    CHECK(!gh_hitarea_node_at(give,0,&give_node,&give_shape) &&
+        word(give_shape.record+0x1f0)==(kind==0x303?0x40400000u:0x3f800000u));
 
     uint32_t frontier;
     CHECK(!gh_collision_pairs_step_002b9d58(b->shapes.pairs,GH_STATIC_BINARY32_REFERENCE,&frontier));
@@ -430,8 +436,8 @@ static int scenery_contact(const gh_bundle *room_bundle,
         GH_STATIC_BINARY32_REFERENCE,ledger,ledger_bindings,&frontier);
     const gh_title_player_view *resolved;
     if(hit || body->bytes[0x46]!=0x2e)
-        fprintf(stderr,"OM304 row%u distance=%f hit status=%d pc=%08x body=%02x flags=%08x\n",
-            row_index,(double)nearest,hit,frontier,body->bytes[0x46],word(body->bytes+0x60));
+        fprintf(stderr,"OM%03x row%u distance=%f hit status=%d pc=%08x body=%02x flags=%08x\n",
+            kind,row_index,(double)nearest,hit,frontier,body->bytes[0x46],word(body->bytes+0x60));
     CHECK(!hit && !frontier && !gh_hitarea_object_last_hit_actor(body,&resolved) &&
         resolved==&source->view && word(body->bytes+0x44)==0x002e0000 &&
         word(body->bytes+0x40)==UINT32_MAX && !word(body->bytes+0x4c));
@@ -441,6 +447,10 @@ static int scenery_contact(const gh_bundle *room_bundle,
     gh_game_mt rng=b->entry.init->random, expected=rng;
     uint32_t ignored;
     CHECK(!word(actor+0x54c) && (word(actor+0x2f4)&0xffff)==0x0100);
+    if(kind==0x303){
+        memcpy(actor+0x2f4,&(uint32_t){0x00011101},4);
+        memcpy(actor+0x16d0,&(uint32_t){0x04000202},4);
+    }
     CHECK(actor[0x17bc]==1 && !gh_game_mt_next_0030f348(&expected,&ignored));
     gh_enemy202_hit_call call={0};
     gh_actor_motion_status status=gh_enemy202_hit_0020a178(&call,waiting,player,1,&frontier);
@@ -467,6 +477,10 @@ static int scenery_contact(const gh_bundle *room_bundle,
         !word(actor+0x54c) && !memcmp(&rng,&b->entry.init->random,sizeof(rng)));
     memcpy(actor,actor_before,sizeof(actor_before));
 
+    if(kind==0x303){
+        memcpy(actor+0x2f4,&(uint32_t){0x00011101},4);
+        memcpy(actor+0x16d0,&(uint32_t){0x04000202},4);
+    }
     gh_enemy202_move move={0};
     const void *elf=ledger_bindings->boot_elf;
     size_t elf_size=ledger_bindings->boot_elf_size;
@@ -530,6 +544,7 @@ static int scenery_contact(const gh_bundle *room_bundle,
         memcpy(actor,after_sample,sizeof(after_sample));
         b->entry.init->random=after_clip;
     }
+    if(kind==0x303)goto restore_scenery_fixture;
     for(unsigned frame=1;frame<37;++frame){
         CHECK(!gh_frame_counter_advance(b->entry.work));
         move=(gh_enemy202_move){0};
@@ -674,6 +689,7 @@ static int scenery_contact(const gh_bundle *room_bundle,
     CHECK(!status && move.original_returned && move.substate67_motion.motion_offset==
         word(waiting->entry.resource.bytes+0xb0));
     }
+restore_scenery_fixture:
     memcpy((uint8_t *)b->entry.work+0x210,&original_frame,4);
     *motion=prior_motion;
     memcpy(score,&original_score,2);
@@ -684,7 +700,10 @@ static int scenery_contact(const gh_bundle *room_bundle,
     CHECK(!gh_collision_pairs_step_002b9d58(b->shapes.pairs,GH_STATIC_BINARY32_REFERENCE,&frontier));
     CHECK(!gh_hitarea_frame_resume_bound_001fdfd8(b->entry.init,b->entry.work,1,
         GH_STATIC_BINARY32_REFERENCE,ledger,ledger_bindings,&frontier));
-    printf("PASS actual R100 stamp%u OM304 row%u, effect2E, 37-frame reaction row %03x and selector8/0 far continuation\n",
+    if(kind==0x303)
+        printf("PASS actual R100 stamp8 OM303 row%u Give, repeated selector11 phase reset and clip rebind %03x\n",
+            row_index,offset);
+    else printf("PASS actual R100 stamp%u OM304 row%u, effect2E, 37-frame reaction row %03x and selector8/0 far continuation\n",
         actor[0x640],row_index,offset);
     return 0;
 }
@@ -938,12 +957,18 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     uint8_t *scenery=load(disc,"om/om04.dat",&scenery_bytes);
     CHECK(scenery&&!gh_game_objects_add_pinned_001fece0(global,0x304,scenery,scenery_bytes,&original)&&
         original&&!gh_game_objects_set_file_extent(global,0x304,scenery,scenery_bytes));
-    CHECK(!scenery_contact(room_bundle,room,b,waiting_enemy,&player.view,&lb,&ledger,effect_bind,navigation,&opacity));
+    CHECK(!scenery_contact(room_bundle,0x304,room,b,waiting_enemy,&player.view,&lb,&ledger,effect_bind,navigation,&opacity));
     CHECK(stamp11->actor->view.bytes[0x640]==11 && word(stamp11->actor->view.bytes+0x564)==0x203);
     move=(gh_enemy202_move){0};
     CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
     CHECK(!gh_enemy202_move_00208be0(&move,stamp11->enemy202,&player.view,elf,elf_size)&&move.original_returned);
-    CHECK(!scenery_contact(room_bundle,room,b,stamp11->enemy202,&player.view,&lb,&ledger,effect_bind,navigation,&opacity));
+    CHECK(!scenery_contact(room_bundle,0x304,room,b,stamp11->enemy202,&player.view,&lb,&ledger,effect_bind,navigation,&opacity));
+    size_t barrel_bytes;
+    uint8_t *barrel=load(disc,"om/om03.dat",&barrel_bytes);
+    CHECK(barrel&&!gh_game_objects_add_pinned_001fece0(global,0x303,barrel,barrel_bytes,&original)&&
+        original&&!gh_game_objects_set_file_extent(global,0x303,barrel,barrel_bytes));
+    CHECK(!scenery_contact(room_bundle,0x303,room,b,waiting_enemy,&player.view,&lb,&ledger,effect_bind,navigation,&opacity));
+    free(barrel);
     free(scenery);
     uint8_t *saved_row=NULL;
     for(unsigned i=0;i<room->active[8];i++){
@@ -1116,6 +1141,51 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     memcpy(player.view.bytes+0x630,old_previous,12);
     memcpy(raw_work+0x210,&old_tick,4);
     memcpy(raw_work+0x55c,&old_rate,4);
+    {
+        gh_enemy_actor *near=selector1_other[1].enemy202;
+        uint8_t *actor=near->entry.object.view.bytes;
+        const uint32_t old_player_yaw=word(player.view.bytes+0x104);
+        float actor_xyz[3],target_xyz[3],enemy_yaw,player_yaw;
+        memcpy(actor_xyz,near->entry.object.view.alias_f0,12);
+        memcpy(target_xyz,actor_xyz,12);
+        target_xyz[2]+=1.005f;
+        memcpy(player.view.alias_f0,target_xyz,12);
+        memcpy(player.view.bytes+0x630,target_xyz,12);
+        CHECK(!gh_player_target_angle_002da038(elf,elf_size,actor_xyz,target_xyz,0,3.1415927f,&enemy_yaw,&frontier));
+        CHECK(!gh_player_target_angle_002da038(elf,elf_size,target_xyz,actor_xyz,0,3.1415927f,&player_yaw,&frontier));
+        memcpy(actor+0x104,&enemy_yaw,4);
+        memcpy(player.view.bytes+0x104,&player_yaw,4);
+        memcpy(actor+0x2f4,&(uint32_t){0},4);
+        memcpy(raw_work+0x210,&(uint32_t){word(actor+0x17d0)^1u},4);
+        CHECK(actor[0x640]==19 && word(actor+0x564)==0x203);
+        move=(gh_enemy202_move){0};
+        CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+        CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+        CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+        gh_actor_motion_status status=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+        fprintf(stderr,"stamp19 near status%d pc%08x stage%u state%08x dist=%08x route=%08x behavior=%08x rank=%u heading=%08x\n",
+            status,move.frontier,move.substate67_stage,word(actor+0x2f4),word(actor+0x618),
+            word(actor+0x16d4),word(actor+0x16d0),word(actor+0x16d8),word(actor+0x768));
+        CHECK(!status&&!move.frontier&&move.original_returned &&
+            word(actor+0x2f4)==0x00010000 && word(actor+0x16d0)==0x04000402 &&
+            word(actor+0x5f4)>=60 && word(actor+0x5f4)<=240 && (word(actor+0x5f4)-60)%20==0);
+        CHECK(!gh_id_angle_reference_001f7d48(player_yaw+3.1415927f,&player_yaw));
+        memcpy(player.view.bytes+0x104,&player_yaw,4);
+        memcpy(actor+0x16d4,&(uint32_t){0x08000000},4);
+        move=(gh_enemy202_move){0};
+        CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+        CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+        CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+        status=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+        fprintf(stderr,"stamp19 near route status%d pc%08x stage%u state%08x route%08x heading%08x\n",
+            status,move.frontier,move.substate67_stage,word(actor+0x2f4),word(actor+0x16d4),word(actor+0x768));
+        CHECK(!status&&!move.frontier&&move.original_returned &&
+            word(actor+0x2f4)==0x00000900 && (word(actor+0x16d4)&0x08000000u));
+        memcpy(player.view.alias_f0,old_player,12);
+        memcpy(player.view.bytes+0x630,old_previous,12);
+        memcpy(player.view.bytes+0x104,&old_player_yaw,4);
+        memcpy(raw_work+0x210,&old_tick,4);
+    }
     CHECK(!camera_target_00139ff8(owner,b,&factory,&child,&player,&setup.model,enemy,elf,elf_size));
     motion->b.sound=NULL;
     motion->b.sound_context=NULL;

@@ -25,26 +25,47 @@ static gh_id_error angle(float f,float*out){float q,t;int32_t n;uint32_t raw;
 
  return normal(*out)?GH_ID_OK:GH_ID_UNSUPPORTED;
 }
-static gh_id_error sincos_original(float theta,float*s,float*c){
+static gh_id_error cosine_polynomial(float theta,float*out){
  /* vf8 = coefficient*t, then squared-t lanes create powers3/5/7/9.
   * Polynomial sum order is cubic, quintic, septic, nonic, exactly as VU. */
  static const uint32_t coeff[4]={0x362e9c14,0xb94fb21f,0x3c08873e,0xbe2aaaa4};
- float t,t2,p,v[4],radical;unsigned i;
+ float t,t2,p,v[4];unsigned i;
  if(!normal(theta)||fabsf(theta)>bits(0x40490fdb))return GH_ID_UNSUPPORTED;
  t=theta<0?add(bits(0x3fc90fdb),theta):add(bits(0x3fc90fdb),-theta);t2=mul(t,t);
  for(i=0;i<4;i++)v[i]=mul(mul(bits(coeff[i]),t),t2);
  for(i=0;i<3;i++)v[i]=mul(v[i],t2);p=add(t,v[3]);
  for(i=0;i<2;i++)v[i]=mul(v[i],t2);p=add(p,v[2]);
  v[0]=mul(v[0],t2);p=add(p,v[1]);p=add(p,v[0]);
- radical=add(1,-mul(p,p));
+ if(!normal(p))return GH_ID_UNSUPPORTED;
+ *out=p;
+ return GH_ID_OK;
+}
+static gh_id_error sincos_original(float theta,float*s,float*c){
+ float p;
+ gh_id_error status=cosine_polynomial(theta,&p);
+ if(status)return status;
+ const float radical=add(1,-mul(p,p));
  /* Supported observed branch has nonnegative normal SQRT argument. Rather
   * than invent VU invalid/denormal behavior, retain the precise boundary. */
- if(!normal(p)||!normal(radical)||radical<0)return GH_ID_UNSUPPORTED;
+ if(!normal(radical)||radical<0)return GH_ID_UNSUPPORTED;
  *c=p;*s=sqrtf(radical);if(theta<0)*s=-*s;
  return normal(*s)?GH_ID_OK:GH_ID_UNSUPPORTED;
 }
 static int enter(fenv_t*saved){if(fegetenv(saved))return 0;if(fesetround(FE_TONEAREST)){fesetenv(saved);return 0;}return 1;}
 gh_id_error gh_id_angle_reference_001f7d48(float f,float*out){fenv_t env;gh_id_error e;float value;if(!out)return GH_ID_ARGUMENT;if(!enter(&env))return GH_ID_UNSUPPORTED;e=angle(f,&value);if(fesetenv(&env))return GH_ID_UNSUPPORTED;if(!e)*out=value;return e;}
+gh_id_error gh_id_cos_reference_001f7fb8(float theta,float*out)
+{
+ fenv_t env;
+ float cosine;
+ if(!out)return GH_ID_ARGUMENT;
+ if(!enter(&env))return GH_ID_UNSUPPORTED;
+ const gh_id_error status=cosine_polynomial(theta,&cosine);
+ if(fesetenv(&env))return GH_ID_UNSUPPORTED;
+ /* Original 1F806C VADDY overwrites the temporary signed SQRT in vf4.x
+  * with the saved polynomial in vf4.y before QMFC2 reads the result. */
+ if(!status)*out=cosine;
+ return status;
+}
 gh_id_error gh_id_sincos_reference(float f,float*s,float*c){fenv_t env;gh_id_error e;float sv,cv;if(!s||!c)return GH_ID_ARGUMENT;if(!enter(&env))return GH_ID_UNSUPPORTED;e=sincos_original(f,&sv,&cv);if(fesetenv(&env))return GH_ID_UNSUPPORTED;if(!e){*s=sv;*c=cv;}return e;}
 static int owned(const gh_id_base*o,const gh_id_entry*e){uintptr_t a=(uintptr_t)o->entries,b=(uintptr_t)e;size_t n=(size_t)o->entry_count*sizeof(*e);return b>=a&&b-a<n&&(b-a)%sizeof(*e)==0;}
 static gh_id_error fail(gh_id_base*o,gh_id_frontier*f,uint32_t i,gh_id_error error,uint32_t address){o->first_unported=address;if(f){f->address=address;f->entry_index=i;f->kind=o->entries[i].kind;}return error;}

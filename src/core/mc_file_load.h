@@ -4,11 +4,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* Original fileLoad@REL730: fully executes the no-pending-selected-file path,
- * including per-record flags aggregation. The original self+F8 byte is explicit;
- * workInit sets it0. Selected files stop at actual Open@3350, never fake-read.
- * Does not increment Control frame or draw; caller preserves those operations. */
-gh_mc_boot_error gh_mc_file_load_00000730(gh_mc_boot_checks *,gh_boot_work *,
+/* Original fileLoad@REL730. Opens, reads and closes the original 0x400-byte
+ * boot record through the same native card endpoint, then aggregates flags.
+ * The caller owns Control's frame increment and display. */
+gh_mc_boot_error gh_mc_file_load_00000730(gh_mc_boot_checks *,gh_memory_card *,gh_boot_work *,
     uint8_t original_f8,uint32_t *first_unported);
 #ifdef __cplusplus
 }

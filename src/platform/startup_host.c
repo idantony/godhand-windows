@@ -45,6 +45,7 @@
 #include "../core/game_event_link.h"
 #include "../core/game_hitarea_objects.h"
 #include "../core/game_hitarea_internal.h"
+#include "../core/game_enemy_entry.h"
 #include "../core/game_dynamic_corners.h"
 #include "../core/enemy_se_banks.h"
 #include "../core/game_object_sounds.h"
@@ -1986,6 +1987,35 @@ static const uint8_t* diagnostic_hitarea_slot(const gh_game_init_state*s,unsigne
 {
     return slot<160?s->object_pool+(size_t)slot*0x60:slot<416?s->object_pool+0x3c00+(size_t)(slot-160)*0x70:NULL;
 }
+static void diagnostic_r100_first_enemy(const gh_game_services_scene_view *scene,
+    const gh_game_init_state *init,const gh_title_player_view *player,gh_startup_snapshot *out)
+{
+    const gh_room_pools *pools=scene->pools;
+    const struct gh_hitarea_native *hitarea=init->hitarea_native;
+    if(!pools||!pools->objects||!hitarea||hitarea->owner!=init)return;
+    for(size_t i=0;i<pools->object_slots;i++){
+        const gh_room_object_binding *entry=pools->objects+i;
+        if(entry->kind!=GH_ROOM_OBJECT_ENEMY||!entry->object)continue;
+        const gh_game_title_player *enemy=entry->object;
+        const gh_title_player_view *view=&enemy->view;
+        if(!enemy->ready||!view->bytes||view->size<0x642||!view->alias_f0)continue;
+        uint16_t stamp;
+        memcpy(&stamp,view->bytes+0x640,sizeof(stamp));
+        if(stamp!=19)continue;
+        out->r100_first_enemy_handle=entry->handle;
+        memcpy(&out->r100_first_enemy_hp,view->bytes+0x54a,2);
+        memcpy(out->r100_first_enemy_position,view->alias_f0,sizeof(out->r100_first_enemy_position));
+        for(unsigned slot=160;slot<416;slot++){
+            if(hitarea->actors[slot]!=view||hitarea->last_hit_actors[slot]!=player)continue;
+            const uint8_t *take=diagnostic_hitarea_slot(init,slot);
+            if(!(take[0x60]&1))continue;
+            memcpy(&out->r100_first_enemy_player_hit_kind,take+0x46,2);
+            memcpy(&out->r100_first_enemy_player_hit_power,take+0x4c,4);
+            break;
+        }
+        return;
+    }
+}
 gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snapshot *out)
 {
     if(!h || !out)return GH_HOST_ARGUMENT;
@@ -2002,6 +2032,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->mc_ui_epoch=h->mc_ui_epoch;out->mc_frame_serial=h->mc_frame_serial;
     out->mc_ui_live=h->mc.ui_initialized!=0;out->mc_frame_ready=h->mc_frame_ready;
     out->mc_phase=h->mc.checks.phase;out->mc_subphase=h->mc.checks.subphase;out->mc_done=h->mc.checks.done;
+    out->mc_present_mask=h->mc.checks.present_mask;out->mc_error=h->mc.checks.error;
     out->normal_continuation=h->continuation.enabled;out->work=&h->work;
     out->sound_control=h->sound_control.initialized?&h->sound_control:0;
     out->movie_pool=h->movies;out->movie_video=h->movie_video;
@@ -2076,13 +2107,16 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
                 out->scenario_task_slot=scene.step->detail;
             }
             const gh_title_player_view *player=&scene.title_player->view;
-            if(out->player_handle&&scene.title_player->ready&&player->bytes&&player->size>=0x622&&
+            if(out->player_handle&&scene.title_player->ready&&player->bytes&&player->size>=0x644&&
                player->alias_f0==player->bytes+0xb0){
                 out->player_pose_ready=1;
                 memcpy(out->player_world_position,player->alias_f0,sizeof(out->player_world_position));
                 memcpy(out->player_state,player->bytes+0x2f4,sizeof(out->player_state));
                 out->player_square_buffer=player->bytes[0x621];
                 memcpy(&out->player_motion_sample,player->bytes+0x430,sizeof(out->player_motion_sample));
+                memcpy(&out->player_attack_target,player->bytes+0x640,sizeof(out->player_attack_target));
+                if(out->current_room==0x100&&out->game_state==4)
+                    diagnostic_r100_first_enemy(&scene,&h->game_init,player,out);
             }
             const struct gh_hitarea_native*n=h->game_init.hitarea_native;
             gh_title_player_view current={0};

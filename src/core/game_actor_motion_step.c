@@ -15,10 +15,14 @@ static float mul(float a,float b){volatile float x=a*b;return x;}
 static gh_actor_motion_status fail(uint32_t*f,uint32_t a){*f=a;return GH_ACTOR_MOTION_UNSUPPORTED;}
 static unsigned motion_flags_allowed(const gh_actor_model *model){
  const uint8_t *p=model->root.bytes;
- /* Original first 20A reaction sets 434 bit 8. Sample tests bit 2,
-  * sequence tests bit 20, and frame advance tests bits 1/4/10. */
- return model->root.size>=0x568 && half(p+0x2fe)==0x202 && rd(p+0x564)==0x20a &&
-     p[0x2f4]==1 && !p[0x2f5]?0x48u:0x40u;
+ /* Original 24C3C8 sets 434 bit 8 for the ordinary frontal reaction.
+  * Sample tests bit 2, sequence tests bit 20, and advance tests 1/4/10. */
+ if(model->root.size<0x568||half(p+0x2fe)!=0x202||p[0x2f4]!=1||p[0x2f5])
+  return 0x40u;
+ const uint32_t dependency=rd(p+0x564);
+ const int stamp19=model->root.size>=0x642&&dependency==0x203&&half(p+0x640)==19&&
+    model->work&&(uint16_t)model->work->room==0x100;
+ return dependency==0x20a||stamp19?0x48u:0x40u;
 }
 static gh_actor_motion_status track_value(gh_actor_motion*s,unsigned index,float time,int cached,float*out,uint32_t*f){
  gh_motion_track t;if(gh_motion_track_at(&s->motion,index,&t))return GH_ACTOR_MOTION_BOUNDS;

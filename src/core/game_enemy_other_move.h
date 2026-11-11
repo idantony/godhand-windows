@@ -31,6 +31,8 @@ typedef struct {
     uint32_t frontier;
     unsigned texture_cursor;
     uint8_t stage, original_returned, nearby;
+    uint16_t reaction_resource_offset;
+    gh_motion_sound_request reaction_sound;
 } gh_enemy_other_move;
 
 /* Borrow the same room/player resolver and ELF as ordinary player target queries. */

@@ -155,6 +155,30 @@ static int enemy_state71_sequence_profile(const struct voice *v,int16_t bank,int
  return !sample||(w(sample)==offset&&w(sample+4)==11025&&w(sample+8)==0x5fcb80ff&&!w(sample+12));
 }
 
+/* Actual EM00 selector6B cues. Logical bank1 is already resolved by
+ * the live dependency-bank owner. Both exact rows use the existing 5FCB
+ * one-shot reference and the same original age/mix/pitch pipeline. */
+static int em00_selector6b_profile(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ if(!v->source_owner||bank<1||bank==2||bank==3||
+    (program!=0x0a&&program!=0x0b)||v->requested_program!=program||
+    h(p)!=(unsigned)bank||h(p+2)!=(unsigned)program)return 0;
+ if(v->model){
+  const gh_title_player_view *root=&v->model->root;
+  if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
+     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=0x200)return 0;
+ }else if(!v->combat_profile)return 0;
+ const int alternate=program==0x0b;
+ if(h(p+4)!=9u+(unsigned)alternate||w(p+6)!=0x0255022d||h(p+0xe)!=0x20||
+    w(p+0x10)!=0x007d007d||w(p+0x14)!=0x005a0040||
+    w(p+0x18)!=(alternate?0x0064ff38u:0x00640000u)||
+    w(p+0x1c)!=0x00030000||w(p+0x20)!=0x00010085||
+    w(p+0x24)!=0x400||w(p+0x28)!=0xffff||w(p+0x2c))return 0;
+ return !sample||(w(sample)==(alternate?0x11bc0u:0xff80u)&&
+    w(sample+4)==11025&&w(sample+8)==0x5fcb80ff&&!w(sample+12));
+}
+
 /* Actual 288F00 cEma2 impact selects one of three CORE.SES recordings. */
 static int core_ema2_impact_profile(const struct voice *v,int16_t bank,int16_t program,const uint8_t *p)
 {
@@ -199,16 +223,17 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
                   w(descriptor.data)==(program==0x2a?0u:0x2b80u)&&w(descriptor.data+4)==16000;
  int reaction_voice=adsr2==0x5fcb&&enemy_reaction_profile(candidate,bank,program,p,descriptor.data);
  int sequence_voice=adsr2==0x5fcb&&enemy_state71_sequence_profile(candidate,bank,program,p,descriptor.data);
+ int selector6b_voice=adsr2==0x5fcb&&em00_selector6b_profile(candidate,bank,program,p,descriptor.data);
  int timed_voice=adsr2==0x5fcb&&em0a_timed_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==0x5be0&&w(descriptor.data+4)==16000;
- if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!square_voice&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
+ if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!square_voice&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!selector6b_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
  static const uint32_t ema2_impact_offsets[]={0x553c0,0x56490,0x54300};
  int ema2_voice=adsr2==0x5fc0&&core_ema2_impact_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==ema2_impact_offsets[program-0x96]&&w(descriptor.data+4)==22050;
  const int footstep=core_enemy_footstep_profile(candidate,bank,program,p,NULL);
  if(footstep&&!core_enemy_footstep_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
- if(impact_voice||reaction_voice||ema2_voice||timed_voice||footstep||sequence_voice)candidate->combat_profile=1;
+ if(impact_voice||reaction_voice||ema2_voice||timed_voice||footstep||sequence_voice||selector6b_voice)candidate->combat_profile=1;
  rate=w(descriptor.data+4);if(rate<1000 || rate>48000)return unsupported(s,0x38e4);
  candidate->info.pitch_q12=selected_pitch?selected_pitch:(uint16_t)((uint64_t)rate*4096/48000);
  result=gh_audio_decode_ps_adpcm(tail.data,tail.size,&candidate->pcm);if(result){s->frontier=0x35fc;return result;}
@@ -413,6 +438,7 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
  if(candidate->info.bank!=2||candidate->info.program!=10||candidate->descriptor[0x22]!=3){
   if(!enemy_reaction_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_state71_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em0a_timed_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)&&
      !core_enemy_footstep_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL))
    return unsupported(s,0x2cbf78);

@@ -453,6 +453,87 @@ history was compacted; private receipts and Git preserve old checkpoints.
   Exact162 actual-ISO CPU route independently reaches Give4/Take effect7,
   power3 on stamp19. HP remains74 at strict 0020A178 phase0. Two workers
   cover the enemy decision and damage branches separately.
+- Local rollback `65faca5` retains the verified approach route and bilingual
+  README. Exact162 broad native passes 365 modules and 347 checks with 18
+  skipped configurations, and both RNG differentials pass on the same DLL.
+  The commit normalizes whitespace in the index; frozen verification inputs
+  are unchanged. Public main remains `6be81c8`.
+- Exact163 combines the native stamp19 close-range decision, first-enemy
+  Take/HP diagnostics and the launcher preflight fix. Windows continues past
+  00262AA8 and presents two increasing original Square samples, .749999881 to
+  1.49999976, against target handle253. At tick1770, another enemy (stamp8,
+  dep0200) stops 0020A178 from the real OM303 effect2E/power0 ledger. Stamp19
+  still has HP74 and no player Take event in the Windows run. Exact capture,
+  native samples and matched launcher are in
+  `analysis/room-transition-163-contact-execution-private.json`. Latest
+  screenshot is `analysis/native-opening/163-contact/scene1629-presented.png`.
+  The independent `r100-stamp19-hit-over162-delta` uses the real pair and
+  reduces HP74→71 with two original RNG advances in the CPU fixture.
+  `event_quit` owns its post-hit caller, `event_lighting` owns actual OM303
+  admission; both touch distinct sections of game_enemy_damage.c. Existing
+  exact163 audio passes all seven CORE64 variants in the recording fixture.
+  After composing these, prove Windows contact and damage before publishing
+  the next public milestone. `godhand_upstream` owns the independent original
+  PL00→PL01→OM300 exit path, including dynamic resource release.
+- Exact164 combines the stamp19 damage/impact/sound/reaction implementation
+  with OM303's actual zero-power repeat reaction. Full native plus both RNG
+  checks passed. Actual Windows clears the OM303 collision and reaches
+  stamp20 dep0200 selector6B at 0023B968 on tick1770. It presents scene1629.
+  `analysis/room-transition-164-verification-private.json` and the separate
+  execution proof pin the build and run. The isolated actual-ISO punch can
+  hit twice, 74→71→68, while the live fixture still stops before contact.
+- Exact165 includes all five original selector6B motion rows. Windows now
+  presents 1631 frames and stops tick1772 in the original 02A2 actor Move,
+  002856C0, after another enemy's scenery reaction reduced its HP500→499.
+  `analysis/room-transition-165-stamp20-execution-private.json` records the
+  live boundary. `event_quit` owns the original 288570 heavy state01/01.
+  Exact166 separately includes the authenticated 6B SE 0A/0B and the scalar
+  1F7FB8 cosine return, preserving the VU polynomial output even when the
+  unused sine radical cannot be reconstructed. It also includes save boot
+  header reading and small startup telemetry. Exact166 Windows build and six
+  focused tests pass. A separate no-input Windows run with a synthetic
+  original-format header in a real scratch profile presents 172 boot frames.
+  It reports slot mask8, boot error10, Work584 bit4, Work588=C0000000, and
+  leaves the input unchanged. `analysis/mc-boot-save-header-window-166-private.json`
+  pins the build, real process result and filesystem input.
+- Native mcport Boot phase2 reads the real named Windows save file in the
+  original open/read/close order, consumes its first 0x400 bytes and checks
+  the original binary32 0.1 version. Valid, missing and old-version actual
+  filesystem fixtures pass, as do 365 modules/348 native checks (17 skipped)
+  on `r100-mc-boot-read-over164`. Private source and probe fingerprints:
+  `analysis/mc-boot-save-header-private.json`. The full original cMcLoad reads
+  0xB400; 0x20..0xB110 is the same 0xB0F0 checkpoint layout (CoreSave/scene/
+  tail). The original checksum starts at 9BE6FA3B72AFDA1D and XORs 64-bit
+  LE words from 0 through B108 exclusive, stored at B110. The bytes B108..B10F
+  are outside the checksum by original design.
+- Exact167 restores the heavy 02A2 actor's original 01/01 reaction and both
+  parity motions. In Windows the player approaches the same R100 enemy and
+  the native Square animation advances through consecutive visible frames.
+  At tick1776 there are 1635 presents and 1303779 world packets, with zero
+  renderer, GPU, postprocess or window errors. The next original call is
+  periodic weapon lookup 002DDAB0, stamp19/dep0203/handle253/phase1. The
+  target is still HP74 before actual player contact. See the private
+  `analysis/room-transition-167-verification-private.json`, the corresponding
+  execution proof and the hash-checked scene1635 capture under `analysis`.
+  This snapshot passed 365 modules, 349 checks and both same-DLL RNG runs.
+- Exact168 binds the production HitArea pause owner at 003BF190/194 through
+  the canonical object pool and seeds it once from the patched ELF, where
+  both words are zero. Four focused tests pass. This prevents the unbound
+  pause owner from stopping the original contact pass at 001FE348. The next
+  actual Windows run still needs the original weapon lookup and caller.
+- The independent selected-save prefix `mc-selected-restore-prefix-over166-delta`
+  reads and verifies a complete 0xB400 record. Its filesystem fixture covers
+  absent, truncated, corrupt, old-version and valid records. The valid case
+  applies original stage work, CoreSave, room pages and player pose before
+  the strict Heat call 002A9BF0. The title caller and original cMcSave UI/write
+  remain separate production work. The exact169 composition with HitArea
+  verifies the unchanged preimages and dependencies before native testing.
+- The original room exit dispatcher now has actual combined CPU proofs
+  through all five OM303, ten OM304 and eight OM305/307 after 156 SCP, PL00,
+  PL01 and three OM300. G receipt `r100-om305-307-retire-over155-delta`
+  stops at the next OM30A marker. The test adds the next unknown type before the retirement
+  pass to prove the supported actor frees. No production host bind or live
+  room transition is claimed yet. Public main remains 6be81c8.
 - `tools/export-startup-capture.py` writes an RGB PNG from hash-checked
   presented RGBA evidence. It regenerated scene1603 byte-for-byte and
   rejected a missing presentation; output is local and never overwritten.

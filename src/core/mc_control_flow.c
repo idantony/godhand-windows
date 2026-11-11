@@ -13,7 +13,7 @@ gh_mc_boot_error gh_mc_control_flow_advance(gh_mc_control_flow*f,gh_mc_control_s
  gh_mc_boot_error e;uint32_t phase;if(!f||!c||!s||!b||!b->card||!b->work||!b->id_runtime||!s->ui_initialized)return GH_MC_BOOT_ARGUMENT;if(f->failure)return f->failure;if(f->delay_remaining)return GH_MC_BOOT_NEEDS_SLEEP;if(s->checks.done)return GH_MC_BOOT_ARGUMENT;
  f->first_unported=0;c->first_unported=0;phase=s->checks.phase;
  if(phase<2){e=gh_mc_control_advance(c,s,b);if(e==GH_MC_BOOT_NEEDS_SLEEP){if(!s->checks.delay_frames)return fail(f,GH_MC_BOOT_ARGUMENT,0x398);f->delay_remaining=s->checks.delay_frames;return e;}if(e)return fail(f,e,c->first_unported?c->first_unported:(phase?0x5d0:0x398));}
- else{if(phase==2){uint32_t first=0;e=gh_mc_file_load_00000730(&s->checks,b->work,f->original_f8,&first);if(e)return fail(f,e,first?first:0x730);}else if(phase==3){e=gh_mc_error_process_00000bd8(&f->error,c,s,b,sound,sound_context);if(e)return fail(f,e,f->error.first_unported?f->error.first_unported:0xbd8);}
+ else{if(phase==2){uint32_t first=0;e=gh_mc_file_load_00000730(&s->checks,b->card,b->work,f->original_f8,&first);if(e)return fail(f,e,first?first:0x730);}else if(phase==3){e=gh_mc_error_process_00000bd8(&f->error,c,s,b,sound,sound_context);if(e)return fail(f,e,f->error.first_unported?f->error.first_unported:0xbd8);}
   /* Originalswitchhasnodefaultworkforotherphasevalues, butstillSetDisp. */
   e=display(f,c,s,b);if(e)return e;++s->checks.frame;
  }

@@ -11,6 +11,8 @@ extern "C" {
  * the bounded normal finite domain report UNSUPPORTED. */
 gh_id_error gh_id_angle_reference_001f7d48(float,float*);
 gh_id_error gh_id_sincos_reference(float,float*,float*);
+/* Original scalar output, whose final VADDY returns the polynomial lane. */
+gh_id_error gh_id_cos_reference_001f7fb8(float,float*);
 gh_id_error gh_id_layout_rotation_reference(gh_id_base*,gh_id_frontier*);
 #ifdef __cplusplus
 }

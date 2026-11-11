@@ -695,6 +695,7 @@ def main():
         ("game-enemy-started-pitch", "tests/core/test_game_enemy_started_pitch.c", "iso"),
         ("game-ema2-impact-sound", "tests/core/test_game_ema2_impact_sound.c", "iso"),
         ("game-enemy-state71-sound", "tests/core/test_game_enemy_state71_sound.c", "iso"),
+        ("game-enemy-6b-sound", "tests/core/test_game_enemy_6b_sound.c", "iso"),
         ("se-pitch", "tests/assets/test_se_pitch.c", "iso"),
         ("game-actor-attached-pitch", "tests/core/test_game_actor_attached_pitch.c", "iso"),
         ("game-terrain-sphere", "tests/core/test_game_terrain_sphere.c", "iso"),
@@ -765,7 +766,7 @@ def main():
     focused = [by_name[name] for name in dict.fromkeys(args.focus)]
     recording_transport_tests = {
         "game-om324-started-pitch", "game-enemy-started-pitch", "game-ema2-impact-sound",
-        "game-enemy-state71-sound", "se-adx-sequence",
+        "game-enemy-state71-sound", "game-enemy-6b-sound", "se-adx-sequence",
     }
     recording_voice_object = output / "se_voice_recording_transport.o"
     try:
@@ -916,7 +917,7 @@ def main():
     run("compile-font-texture-tests", common + font_objects + ["tests/assets/test_font_texture.c", "-o", output / "test_font_texture.exe"])
     run("compile-font-qa-cli", common + font_objects + ["tools/font-texture-qa.c", "-o", output / "font-texture-qa.exe"])
     run("compile-game-start-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_start", "dvd_jobs", "memory", "disc", "tasks", "task_threads")] + ["tests/core/test_game_start.c", "-o", output / "test_game_start.exe"])
-    run("compile-memory-card-tests", common + [objects[name] for name in ("memory_card", "mc_boot", "memory", "tasks", "task_threads")] + ["tests/platform/test_memory_card.c", "-o", output / "test_memory_card.exe"])
+    run("compile-memory-card-tests", common + [objects[name] for name in ("memory_card", "mc_boot", "mc_file_load", "memory", "tasks", "task_threads")] + ["tests/platform/test_memory_card.c", "-o", output / "test_memory_card.exe"])
     run("compile-mc-id-tests", common + ["-Isrc/core"] + [objects[name] for name in ("mc_boot_id", "menu_state", "core_bundle", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_mc_boot_id.c", "-o", output / "test_mc_boot_id.exe"])
     run("compile-font-draw-tests", common + [objects["font_draw"], objects["font_state"], objects["core_bundle"], objects["disc"], "tests/core/test_font_draw.c", "-o", output / "test_font_draw.exe"])
     run("compile-game-gate-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_gate", "game_start", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_game_gate.c", "-o", output / "test_game_gate.exe"])

@@ -703,11 +703,17 @@ struct QAControlProbe {
     {
         if(!pressed||s.player_handle!=player_handle||s.player_updates_completed>press_updates+13)return;
         if(s.ticks==press_tick+1||s.player_updates_completed!=last_observation){
-            std::fprintf(stderr,"QA_CONTROL mode=%s tick=%llu updates=%llu handle=%u raw=%08X logical=%016llX axes=%d,%d state=%02X/%02X entry=%08X frontier=%08X square=%u xz=%.7g,%.7g\n",
+            std::fprintf(stderr,"QA_CONTROL mode=%s tick=%llu updates=%llu handle=%u raw=%08X logical=%016llX axes=%d,%d state=%02X/%02X entry=%08X frontier=%08X square=%u xz=%.7g,%.7g phase=%u sample=%.9g target=%u\n",
                 mode,(unsigned long long)s.ticks,(unsigned long long)s.player_updates_completed,player_handle,
                 input.raw_pressed,(unsigned long long)input.pressed,(int)input.analog.axes[0],(int)input.analog.axes[1],
                 (unsigned)s.player_state[0],(unsigned)s.player_state[1],s.player_state_entry,s.player_update_frontier,
-                (unsigned)s.player_square_buffer,(double)s.player_world_position[0],(double)s.player_world_position[2]);
+                (unsigned)s.player_square_buffer,(double)s.player_world_position[0],(double)s.player_world_position[2],
+                (unsigned)s.player_state[2],(double)s.player_motion_sample,s.player_attack_target);
+            if(approach()&&s.r100_first_enemy_handle)
+                std::fprintf(stderr,"QA_COMBAT tick=%llu scene=%llu enemy=%u stamp=19 hp=%u player_hit_kind=%u player_hit_power=%d xz=%.7g,%.7g\n",
+                    (unsigned long long)s.ticks,(unsigned long long)s.scene_frame_serial,s.r100_first_enemy_handle,
+                    (unsigned)s.r100_first_enemy_hp,(unsigned)s.r100_first_enemy_player_hit_kind,
+                    (int)s.r100_first_enemy_player_hit_power,(double)s.r100_first_enemy_position[0],(double)s.r100_first_enemy_position[2]);
             last_observation=s.player_updates_completed;
         }
         if(attacks()){
@@ -969,9 +975,9 @@ int main(int argc,char **argv)
     }while(false);
     if(disc)gh_disc_close(disc);
     gh_mc_render_status renderer={};gh_mc_renderer_inspect(app.renderer,&renderer);
-    uint32_t system_flags5d8=0,work_flags58c=0,work_flags594=0,work_flags598=0,work_flags5e0=0,work_flags5e4=0;
+    uint32_t system_flags5d8=0,work_flags588=0,work_flags58c=0,work_flags594=0,work_flags598=0,work_flags5e0=0,work_flags5e4=0;
     if(app.snapshot.work){const unsigned char*w=(const unsigned char*)app.snapshot.work;
-        std::memcpy(&system_flags5d8,w+0x5d8,4);std::memcpy(&work_flags58c,w+0x58c,4);std::memcpy(&work_flags594,w+0x594,4);
+        std::memcpy(&system_flags5d8,w+0x5d8,4);std::memcpy(&work_flags588,w+0x588,4);std::memcpy(&work_flags58c,w+0x58c,4);std::memcpy(&work_flags594,w+0x594,4);
         std::memcpy(&work_flags598,w+0x598,4);std::memcpy(&work_flags5e0,w+0x5e0,4);std::memcpy(&work_flags5e4,w+0x5e4,4);}
 
     std::printf("{\"scope\":\"native original startup execution; unfinished source port\","
@@ -980,8 +986,8 @@ int main(int argc,char **argv)
         "\"frontier_module\":\"%s\",\"frontier\":\"%08X\","
         "\"mc_frames_presented\":%llu,\"mc_frame_serial\":%llu,\"mc_ui_live\":%s,\"mc_ui_epoch\":%llu,"
         "\"movie_frames_presented\":%llu,\"movie_eof\":%s,\"movie_audio_done\":%s,\"movie_complete\":%s,"
-        "\"mc_phase\":%u,\"mc_subphase\":%u,\"game_state\":%u,\"assets_loaded\":%s,\"room\":\"%04X\",\"next_room\":\"%04X\","
-        "\"work_flags584\":\"%08X\",\"system_flags5d8\":\"%08X\","
+        "\"mc_phase\":%u,\"mc_subphase\":%u,\"mc_error\":%d,\"mc_present_mask\":\"%08X\",\"game_state\":%u,\"assets_loaded\":%s,\"room\":\"%04X\",\"next_room\":\"%04X\","
+        "\"work_flags584\":\"%08X\",\"work_flags588\":\"%08X\",\"system_flags5d8\":\"%08X\","
         "\"work_flags58c\":\"%08X\",\"work_flags594\":\"%08X\",\"work_flags598\":\"%08X\",\"work_flags5e0\":\"%08X\",\"work_flags5e4\":\"%08X\","
         "\"scene_frames_presented\":%llu,\"scene_frame_serial\":%llu,"
         "\"renderer_error\":%u,\"renderer_frontier\":\"%08X\",\"world_gpu_error\":%u,\"world_frontier\":\"%08X\",\"world_vu_pc\":\"%08X\",\"world_packets_submitted\":%llu,\"effect_post_packets\":%llu,\"effect_sprite_packets\":%llu,\"effect_post_error\":%u,\"window_error\":%u,\"exit_code\":%d,"
@@ -999,8 +1005,8 @@ int main(int argc,char **argv)
         app.snapshot.mc_ui_live?"true":"false",(unsigned long long)app.snapshot.mc_ui_epoch,
         (unsigned long long)app.presented_movie,app.snapshot.movie_video.video_eof?"true":"false",
         app.snapshot.movie_video.audio_done?"true":"false",app.snapshot.movie_video.complete?"true":"false",
-        app.snapshot.mc_phase,app.snapshot.mc_subphase,(unsigned)app.snapshot.game_state,
-        app.snapshot.game_assets_loaded?"true":"false",app.snapshot.current_room,app.snapshot.next_room,app.snapshot.flags,system_flags5d8,
+        app.snapshot.mc_phase,app.snapshot.mc_subphase,app.snapshot.mc_error,app.snapshot.mc_present_mask,(unsigned)app.snapshot.game_state,
+        app.snapshot.game_assets_loaded?"true":"false",app.snapshot.current_room,app.snapshot.next_room,app.snapshot.flags,work_flags588,system_flags5d8,
         work_flags58c,work_flags594,work_flags598,work_flags5e0,work_flags5e4,
         (unsigned long long)app.presented_scene,(unsigned long long)app.snapshot.scene_frame_serial,(unsigned)renderer.id_error,renderer.frontier,
         (unsigned)app.world_gpu_error,app.world_frontier,app.world_vu_pc,(unsigned long long)app.world_packets,

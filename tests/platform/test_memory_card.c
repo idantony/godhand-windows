@@ -3,6 +3,7 @@
 #include "../../src/platform/memory_card.h"
 #include "../../src/platform/task_threads.h"
 #include "../../src/core/mc_boot.h"
+#include "../../src/core/mc_file_load.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,7 +32,7 @@ static void check_task(void *context,int32_t unused)
 }
 int main(int argc,char **argv)
 {
-    char canonical[1200],profile[1400],folder[1500],icon[1600],absent[1500];
+    char canonical[1200],profile[1400],folder[1500],icon[1600],save_path[1600],absent[1500];
     static const char suffix[]="\\memory-card-tests\\scratch";
     size_t canonical_length;
     gh_memory_card *card,*missing;gh_mc_result result;int done;FILE *file;
@@ -51,6 +52,7 @@ int main(int argc,char **argv)
     CHECK(snprintf(folder,sizeof(folder),"%s\\BASLUS-21503GODHD003",profile)>0);
     CHECK(CreateDirectoryA(folder,0));
     CHECK(snprintf(icon,sizeof(icon),"%s\\icon.sys",folder)>0);
+    CHECK(snprintf(save_path,sizeof(save_path),"%s\\BASLUS-21503GODHD003",folder)>0);
     file=fopen(icon,"wb");CHECK(file);CHECK(fwrite("test-icon",1,9,file)==9);CHECK(!fclose(file));
     CHECK(snprintf(absent,sizeof(absent),"%s\\not-inserted",profile)>0);
     CHECK(gh_memory_card_open(profile,&card)==GH_MC_OK);
@@ -78,6 +80,34 @@ int main(int argc,char **argv)
     CHECK(f.completed && ticks==32 && state.phase==2 && !state.done);
     CHECK(state.present_mask==(1u<<3) && state.file_index==20 && !(f.flags&4));
     CHECK(gh_task_threads_destroy(f.threads)==GH_THREAD_OK);
+    gh_boot_work work={0};
+    uint32_t frontier;
+    CHECK(!gh_mc_file_load_00000730(&state,card,&work,0,&frontier)&&!frontier&&state.subphase==1);
+    CHECK(gh_memory_card_end(card)==GH_MC_BUSY);
+    CHECK(!gh_mc_file_load_00000730(&state,card,&work,0,&frontier)&&!frontier&&state.phase==3&&state.error==2);
+    CHECK(gh_mc_boot_checks_release(&state,heap)==GH_MC_BOOT_OK);
+    uint8_t header[GH_MC_SAVE_HEADER_BYTES]={0xcd,0xcc,0xcc,0x3d};
+    header[8]=2;header[0x30]=1;
+    file=fopen(save_path,"wb");CHECK(file);
+    CHECK(fwrite(header,1,sizeof(header),file)==sizeof(header)&&fputc(0x5a,file)==0x5a&&!fclose(file));
+    CHECK(!gh_mc_boot_checks_create(&state,heap));
+    state.phase=2;state.present_mask=1u<<3;
+    for(unsigned stage=1;stage<=3;stage++){
+        CHECK(!gh_mc_file_load_00000730(&state,card,&work,0,&frontier)&&!frontier&&
+              state.phase==2&&state.subphase==stage&&state.load_index==3);
+    }
+    CHECK(!gh_mc_file_load_00000730(&state,card,&work,0,&frontier)&&!frontier&&
+          state.phase==3&&state.error==10&&state.present_mask==(1u<<3)&&state.load_index==20);
+    CHECK(!memcmp((uint8_t *)state.icon_work.pointer+3*GH_MC_SAVE_HEADER_BYTES,header,sizeof(header)));
+    memcpy(&flags,work.pad588,4);CHECK(flags==0xc0000000u&&(work.flags&4));
+    CHECK(gh_mc_boot_checks_release(&state,heap)==GH_MC_BOOT_OK);
+    /* Original version check rejects an older 0x400-byte boot record. */
+    header[0]=0;
+    file=fopen(save_path,"wb");CHECK(file);CHECK(fwrite(header,1,sizeof(header),file)==sizeof(header)&&!fclose(file));
+    CHECK(!gh_mc_boot_checks_create(&state,heap));
+    state.phase=2;state.present_mask=1u<<3;work.flags=0;
+    for(unsigned stage=0;stage<4;stage++)CHECK(!gh_mc_file_load_00000730(&state,card,&work,0,&frontier)&&!frontier);
+    CHECK(state.phase==3&&state.error==2&&!state.present_mask&&!(work.flags&4));
     CHECK(gh_mc_boot_checks_release(&state,heap)==GH_MC_BOOT_OK);
     /* A genuinely missing native profile enters the original card-error path;
      * it is not silently treated as an empty inserted/formatted card. */
@@ -90,7 +120,7 @@ int main(int argc,char **argv)
     CHECK(gh_mc_boot_checks_release(&state,heap)==GH_MC_BOOT_OK);
     gh_memory_card_close(missing);gh_memory_card_close(card);
     CHECK(gh_heap_used(heap)==0 && gh_heap_destroy(heap)==GH_MEM_OK);
-    CHECK(DeleteFileA(icon));CHECK(RemoveDirectoryA(folder));CHECK(RemoveDirectoryA(profile));
-    puts("PASS real native card queries and recovered slot/file check slice with32 real fiber ticks; MC Main/UI/load pending");
+    CHECK(DeleteFileA(save_path));CHECK(DeleteFileA(icon));CHECK(RemoveDirectoryA(folder));CHECK(RemoveDirectoryA(profile));
+    puts("PASS native card queries, 32 fiber ticks, and original valid, missing and old-version boot record paths");
     return 0;
 }

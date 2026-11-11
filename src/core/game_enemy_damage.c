@@ -160,9 +160,13 @@ static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
     gh_title_player_view *actor = &enemy->entry.object.view;
     uint8_t *p = actor->bytes;
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
-    if (!source || !source->bytes || source->size < 0x300 ||
-        half(source->bytes + 0x2fe) != 0x304 || source->original_vtable214 != 0x423338 ||
-        word(source->bytes + 0x214) != 0x423338 ||
+    if (!source || !source->bytes || source->size < 0x300)
+        return stop(frontier, 0x20a178);
+    const unsigned source_kind = half(source->bytes + 0x2fe);
+    const uint32_t source_vtable = source_kind == 0x303 ? 0x423230u :
+        source_kind == 0x304 ? 0x423338u : 0;
+    if (!source_vtable || source->original_vtable214 != source_vtable ||
+        word(source->bytes + 0x214) != source_vtable ||
         actor->original_vtable214 != 0x4479c8 || word(p + 0x214) != 0x4479c8 ||
         half(p + 0x2fe) != 0x202 || !scenery_reaction_dependency(word(p + 0x564)) ||
         word(body->bytes + 0x4c) || word(body->bytes + 0x40) != UINT32_MAX)
@@ -240,6 +244,11 @@ static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
     return GH_ACTOR_MOTION_OK;
 }
 
+static int r100_stamp19(const gh_enemy_actor *enemy, const uint8_t *actor) {
+    return word(actor + 0x564) == 0x203 && half(actor + 0x640) == 19 &&
+        enemy->entry.b.work && (uint16_t)enemy->entry.b.work->room == 0x100;
+}
+
 gh_actor_motion_status gh_enemy202_hit_0020a178(
     gh_enemy202_hit_call *call, gh_enemy_actor *enemy, const gh_title_player_view *player,
     unsigned rank, uint32_t *frontier) {
@@ -264,12 +273,17 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     if (source != player || half(player->bytes + 0x2fe) != 0x100 || half(body->bytes + 0x46) != 7)
         return stop(frontier, 0x20a178);
 
+    /* Physical R100 stamp19 uses the common effect-7 hit path, with the
+     * original 0203 behavior bytes controlling its reaction probes. */
+    const uint32_t dependency = word(p + 0x564);
+    const int opening_203 = r100_stamp19(enemy, p);
+
     if (call->phase == 0) {
         const float drain = number(p + 0x770), cooldown = number(p + 0x54c);
         const float block = number(p + 0x1740), armor = number(p + 0x1734);
         const uint16_t hp = half(p + 0x54a);
         uint16_t flags = half(p + 0x3ac);
-        if (word(p + 0x564) != 0x20a || !hp || hp >= 0x8000 ||
+        if ((!opening_203 && dependency != 0x20a) || !hp || hp >= 0x8000 ||
             !isfinite(drain) || drain > 0 || !isfinite(cooldown) || cooldown > 0 ||
             !isfinite(block) || !isfinite(armor))
             return stop(frontier, 0x20a178);
@@ -298,8 +312,12 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         put(p + 0x17a8, word(p + 0x17a8) + (uint32_t)power);
         put(p + 0x17b4, (uint32_t)power);
         put(p + 0x1940, 0xbd4ccccd);
-        put(p + 0x17c4, 1);
-        put_half(p + 0x17c8, 0x2a);
+        /* 20A6F0 queues the extra bank1 SE only for the original list,
+         * whose range starts at dependency 20A. Stamp19 falls through. */
+        if (!opening_203) {
+            put(p + 0x17c4, 1);
+            put_half(p + 0x17c8, 0x2a);
+        }
         put(p + 0x54c, 0x40400000);
         put(p + 0x16dc, 0); /* 26EE40(actor, 0, 0) */
         call->phase = 3;
@@ -309,12 +327,20 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
         if (p[0x17bd] == 1 && rank >= 3) return stop(frontier, 0x26ecd0);
         if (!rank || p[0x17bd] != 1 || !half(p + 0x54a) || (flags & 0x2cu) ||
-            (behavior & 0x802020u) || (status & 0x80040u) || (p[0x2f4] == 1 && p[0x2f5] == 0x16))
+            (behavior & (opening_203 ? 0x806020u : 0x802020u)) ||
+            (status & 0x80040u) || (p[0x2f4] == 1 && p[0x2f5] == 0x16))
             return stop(frontier, 0x20a7e0);
-        if (p[0x17bc] || p[0x17ba] || p[0x17b9] || p[0x17bb] != 1)
+        if (p[0x17bc] != (unsigned)opening_203 || p[0x17ba] != (unsigned)opening_203 ||
+            p[0x17b9] || p[0x17bb] != 1)
             return stop(frontier, 0x20cac8);
-        /* 20D138 returns 0. The three other probes reject effect 7 for
-         * this 20A behavior. 20D140's first threshold draw still occurs. */
+        /* 20D138 returns 0. With selector 1, 20CAC8 draws once before
+         * rejecting effect 7. 20D398 requires selector 3 for effect 7,
+         * and 20CD00 rejects selector 0. 20D140 may draw separately. */
+        if (opening_203) {
+            uint32_t probe_random;
+            if (gh_game_mt_next_0030f348(&body->state->random, &probe_random))
+                return stop(frontier, 0x31cfe0);
+        }
         const float block = number(p + 0x1740);
         if (!isfinite(block)) return stop(frontier, 0x20d140);
         if (!word(player->bytes + 0x5fc) && block <= 0 &&
@@ -412,7 +438,9 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
         return GH_ACTOR_MOTION_ARGUMENT;
     uint8_t *p = enemy->entry.object.view.bytes;
     const float timer = number(p + 0x17cc);
-    if (!isfinite(timer) || word(p + 0x564) != 0x20a || (half(p + 0x3ac) & 0x100u))
+    /* Effect 7 leaves the default stun increment at ten for dependency 203. */
+    if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p)) ||
+        (half(p + 0x3ac) & 0x100u))
         return stop(frontier, 0x208f34);
     if (timer <= 0) {
         const int32_t sum = (int32_t)(word(p + 0x5b4) + 10u);
@@ -440,7 +468,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     gh_core_save_view save = enemy->entry.b.save;
     const uint32_t dependency = word(p + 0x564);
     if (actor->size < 0x1944 || !actor->alias_f0 ||
-        (call->effect == 0x2e ? !scenery_reaction_dependency(dependency) : dependency != 0x20a) ||
+        (call->effect == 0x2e ? !scenery_reaction_dependency(dependency) :
+            dependency != 0x20a && !r100_stamp19(enemy, p)) ||
         (half(p + 0x3ac) & 0x100u) || init->heat[0x10] || word(player->bytes + 0x5fc) ||
         (int32_t)word(init->enemies + 0x514) > 0 || !save.bytes || save.size < 0xaf)
         return stop(frontier, 0x271810);
