@@ -65,11 +65,18 @@ class StartupRunnerTests(unittest.TestCase):
         return launch
 
     def test_frontier_record_uses_runner_output_fingerprints(self):
-        prepared = self.prepare()
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, control_probe="run")
         qa = self.qa(playable_game_verified=False, frontier_module="main ELF",
                      last_move_handle=248, player_updates_completed=2)
         placement = {"handle": 248, "stamp": 8, "appearance": 5}
-        trace = ("QA_ENEMY_PLACEMENT " + json.dumps(placement) + "\n").encode("utf-8")
+        task = {"slot": 3, "stage": 3}
+        render = {"handle": 254, "frontier": "00142060", "draw_phase": 10}
+        trace = ("QA_ENEMY_PLACEMENT " + json.dumps(placement) + "\n"
+                 "QA_SCENARIO_TASK " + json.dumps(task) + "\n"
+                 "GH_ACTOR_FRONTIER " + json.dumps(render) + "\n"
+                 "QA_CONTROL mode=run tick=488 updates=3 handle=157 axes=0,127\n"
+                 "QA_CONTROL_PRESENTED mode=run handle=157 scene=370\n"
+                 "QA_CONTROL_STATUS mode=run saw_event=1 pressed=1 motion_presented=1\n").encode("utf-8")
         with patch.object(tool.subprocess, "run", self.fake_run(qa, trace)):
             tool.run(prepared)
         runner = self.snapshot / "tools/run-startup-qa.py"
@@ -80,10 +87,61 @@ class StartupRunnerTests(unittest.TestCase):
         self.assertFalse(result["verification_success"])
         self.assertFalse(result["playable_game_verified"])
         self.assertEqual(result["observation"]["enemy_placement"], placement)
+        self.assertEqual(result["observation"]["scenario_task"], task)
+        self.assertEqual(result["observation"]["actor_render"], render)
+        self.assertEqual(result["observation"]["control_probe"]["presented_motion"],
+                         {"handle": 157, "scene_serial": 370})
         self.assertEqual(result["observation"]["player_updates_completed"], 2)
         (self.scratch / "startup-newgame.stderr.log").write_bytes(b"post-launch modification")
         with self.assertRaisesRegex(frontier.proof.ProofError, "SHA256 mismatch"):
             frontier.validate(self.snapshot, self.scratch, expected_frontier="00142060")
+
+    def test_square_presentation_requires_an_advancing_attack_sample(self):
+        command = ["probe-native-startup.exe", "--qa-control", "square"]
+        status = "QA_CONTROL_STATUS mode=square saw_event=1 pressed=1 motion_presented=1"
+        presented = "QA_CONTROL_PRESENTED mode=square handle=157 scene=370 entry=0010D3A8"
+        result = frontier.control_observation(command, [status, presented + " sample_before=0.5 sample=1"])
+        self.assertEqual(result["presented_motion"], {"handle": 157, "scene_serial": 370,
+                         "entry": "0010D3A8", "sample_before": 0.5, "sample": 1})
+        with self.assertRaisesRegex(frontier.proof.ProofError, "sample did not advance"):
+            frontier.control_observation(command, [status, presented + " sample_before=1 sample=1"])
+        with self.assertRaisesRegex(frontier.proof.ProofError, "presentation differ"):
+            frontier.control_observation(command, [status])
+
+    def test_frontier_capture_range_hashes_both_layers_and_ignores_alpha(self):
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, 500, 370, 3)
+        qa = self.qa(playable_game_verified=False, frontier_module="main ELF")
+        size = 512 * 448 * 4
+        capture_lines = "".join("QA_WORLD_CAPTURE " + json.dumps({"scene_serial": scene,
+            "world_bytes": size, "fade_visible": 1, "fade_rgba": fade, "presentation_tracking": True}) + "\n"
+            for scene, fade in ((370, "FF000000"), (371, "77000000")))
+        trace = (capture_lines + "QA_CAPTURE_PRESENTED 370\n").encode("utf-8")
+        capture = self.scratch / "first-scene-candidate.rgba"
+        later = self.scratch / "first-scene-candidate.scene-371.rgba"
+        alpha_only = b"\x00\x00\x00\xff"
+        visible = b"\x02\x00\x00\xff"
+
+        def launch(command, stdout, stderr):
+            for path, pixel in ((capture, alpha_only), (later, visible)):
+                path.write_bytes(pixel + bytes(size - 4))
+                path.with_name(path.name + ".world.rgba").write_bytes(visible + bytes(size - 4))
+            return self.fake_run(qa, trace)(command, stdout, stderr)
+
+        with patch.object(tool.subprocess, "run", launch):
+            tool.run(prepared)
+        runner = self.snapshot / "tools/run-startup-qa.py"
+        runner.parent.mkdir()
+        runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+        options = {"expected_frontier": "00142060", "capture_series": True}
+        result, _ = frontier.validate(self.snapshot, self.scratch, **options)
+        frames = result["captures"]
+        self.assertEqual([frame["scene_serial"] for frame in frames], [370, 371])
+        self.assertEqual([frame["presented"] for frame in frames], [True, False])
+        self.assertEqual([frame["composite"]["nonblack_rgb_pixels"] for frame in frames], [0, 1])
+        self.assertEqual([frame["world"]["nonblack_rgb_pixels"] for frame in frames], [1, 1])
+        later.with_name(later.name + ".world.rgba").write_bytes(bytes(size))
+        with self.assertRaisesRegex(frontier.proof.ProofError, "SHA256 mismatch"):
+            frontier.validate(self.snapshot, self.scratch, **options)
 
     def test_renderer_error_has_distinct_classification_and_no_success(self):
         prepared = self.prepare()
@@ -136,7 +194,7 @@ class StartupRunnerTests(unittest.TestCase):
         self.assertFalse((self.scratch / "startup-run.lock").exists())
 
     def test_control_probe_requires_a_named_action_and_preserves_qa_flags(self):
-        for action in ("walk", "run", "square"):
+        for action in ("walk", "run", "square", "approach-square"):
             with self.subTest(action=action):
                 command = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
                                        control_probe=action)["command"]

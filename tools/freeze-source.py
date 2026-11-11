@@ -47,8 +47,21 @@ def dependency_records(value):
 def overlay_receipt(value):
     """Read worker digest pairs without rewriting their frozen receipt."""
     if isinstance(value, dict) and value.get("schema") == 1 and isinstance(value.get("files"), list):
-        return value, {}
-    if isinstance(value, list):
+        entries = value["files"]
+        if not any(isinstance(entry, dict) and "relative" in entry for entry in entries):
+            return value, {}
+        rows = []
+        for entry in entries:
+            if not isinstance(entry, dict) or "supersedes" not in entry:
+                raise ValueError("Missing worker overlay predecessor")
+            previous = entry["supersedes"]
+            if previous is not None and (not isinstance(previous, dict) or not isinstance(previous.get("sha256"), str)):
+                raise ValueError("Invalid worker overlay predecessor")
+            rows.append({"path": entry.get("relative"), "overlay": entry.get("sha256"),
+                         "base": None if previous is None else previous["sha256"]})
+            if "bytes" in entry:
+                rows[-1]["bytes"] = entry["bytes"]
+    elif isinstance(value, list):
         rows = value
     elif isinstance(value, dict) and isinstance(value.get("files"), dict):
         rows = []
@@ -71,6 +84,10 @@ def overlay_receipt(value):
                 raise ValueError("Invalid predecessor or replacement SHA-256 for " + name)
         predecessors[name] = None if old is None else old.lower()
         files.append({"path": name, "sha256": new.lower()})
+        if "bytes" in row:
+            if type(row["bytes"]) is not int or row["bytes"] < 0:
+                raise ValueError("Invalid overlay byte count for " + name)
+            files[-1]["bytes"] = row["bytes"]
     dependencies = value.get("dependency_files", {}) if isinstance(value, dict) else {}
     return {"schema": 1, "files": files, "dependency_files": dependencies}, predecessors
 

@@ -61,6 +61,8 @@ gh_audio_status gh_audio_afs_member(const gh_audio_registry *,int16_t bank,
  *32BB48. Resolve that number against owned external AFS directory. */
 gh_audio_status gh_audio_external_sample(const gh_audio_registry *,int16_t bank,
  uint32_t afd_index,gh_sound_span *afd_record,uint64_t *offset,uint64_t *size);
+/* The path is borrowed from the same registered SES/AFS generation. */
+gh_audio_status gh_audio_external_path(const gh_audio_registry *,int16_t bank,const char **);
 gh_audio_status gh_audio_bgm0_table(const gh_audio_registry *,gh_sound_span *);
 /* SDK archive 0x81. The same registry owns the bounded directory; channel 1
  * owns its AFD and supplies its address as the registration identity. */

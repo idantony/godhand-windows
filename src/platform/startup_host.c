@@ -69,6 +69,7 @@
 #include "../core/mc_exit.h"
 #include "../core/movie_task.h"
 #include "game_services.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1375,6 +1376,7 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.boot_elf=h->boot_reference;b.boot_elf_bytes=h->boot_reference_bytes;
         b.start_loading_menu=scene_start_loading_menu;b.loading_context=h;
         b.camera_follow=&h->camera_follow;
+        b.motion_camera=&h->event_camera;
         b.camera_envelope=&h->camera_envelope;
         b.player_shared_vector=&h->player_shared_vector;
         b.actor_light_globals=&h->actor_light_globals;
@@ -1929,7 +1931,10 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
         if(scene){
             if(scene==GH_SOUND_SCENE_UNSUPPORTED){
                 entry_frontier(h,h->sound_scene.frontier?h->sound_scene.frontier:0x2caf28,0,scene);h->phase=GH_HOST_FRONTIER;
-            }else{failure(h,GH_HOST_AUDIO,scene);h->phase=GH_HOST_FAILED;}
+            }else{
+                fprintf(stderr,"Native audio scene update failed (%d at %08X)\n",(int)scene,h->sound_scene.frontier);
+                failure(h,GH_HOST_AUDIO,scene);h->phase=GH_HOST_FAILED;
+            }
         }
     }
     if(h->phase==GH_HOST_RUNNING && h->bgm){
@@ -1940,7 +1945,10 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
             if(bgm==GH_BGM_UNSUPPORTED){
                 uint32_t frontier=gh_bgm_requests_frontier(h->bgm);
                 entry_frontier(h,frontier?frontier:0x2d0938,0,bgm);h->phase=GH_HOST_FRONTIER;
-            }else{failure(h,GH_HOST_AUDIO,bgm);h->phase=GH_HOST_FAILED;}
+            }else{
+                fprintf(stderr,"Native BGM update failed (%d at %08X)\n",(int)bgm,gh_bgm_requests_frontier(h->bgm));
+                failure(h,GH_HOST_AUDIO,bgm);h->phase=GH_HOST_FAILED;
+            }
         }
     }
     if(h->phase==GH_HOST_RUNNING && h->voices){
@@ -1950,7 +1958,10 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
             entry_frontier(h,frontier?frontier:0x2ca5d8,
                 frontier&&frontier<0x100000?"snddrv.irx":NULL,audio);
             h->phase=GH_HOST_FRONTIER;
-        }else if(audio){failure(h,GH_HOST_AUDIO,audio);h->phase=GH_HOST_FAILED;}
+        }else if(audio){
+            fprintf(stderr,"Native sound effects update failed (%d at %08X)\n",(int)audio,gh_se_voice_frontier(h->voices));
+            failure(h,GH_HOST_AUDIO,audio);h->phase=GH_HOST_FAILED;
+        }
     }
     if(h->phase==GH_HOST_RUNNING && h->enemy_banks){
         /* Actual2CA558 visits52 bank loads after the original voice updates. */
@@ -2071,6 +2082,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
                 memcpy(out->player_world_position,player->alias_f0,sizeof(out->player_world_position));
                 memcpy(out->player_state,player->bytes+0x2f4,sizeof(out->player_state));
                 out->player_square_buffer=player->bytes[0x621];
+                memcpy(&out->player_motion_sample,player->bytes+0x430,sizeof(out->player_motion_sample));
             }
             const struct gh_hitarea_native*n=h->game_init.hitarea_native;
             gh_title_player_view current={0};
@@ -2180,7 +2192,12 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
     if(gh_event_actor_extra_abort(&h->event_actor_extra)!=GH_EVENT_OK)return GH_HOST_ASSET;
     if(gh_event_actor_roster_abort(&h->event_actor_roster)!=GH_EVENT_OK)return GH_HOST_ASSET;
     if(h->services){
-        if(gh_game_services_destroy(h->services)!=GH_SERVICES_OK)return GH_HOST_ASSET;
+        gh_game_services_status status=gh_game_services_destroy(h->services);
+        if(status!=GH_SERVICES_OK){
+            fprintf(stderr,"Native game services cleanup failed (%d, detail %d at %08X)\n",(int)status,
+                gh_game_services_detail(h->services),gh_game_services_frontier(h->services));
+            return GH_HOST_ASSET;
+        }
         h->services=0;
     }
     if(event_abort_resources(h)!=GH_EVENT_OK)return GH_HOST_ASSET;

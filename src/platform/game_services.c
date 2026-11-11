@@ -196,6 +196,13 @@ static gh_game_services_status finalize_room_lifetime(gh_game_services*s){
  for(unsigned i=0;i<8;i++)detach_bundle(&s->world_light.slots[i],base,bytes);
  detach_bundle(&s->world_light.area,base,bytes);detach_bundle(&s->world_light.table,base,bytes);s->world_light.ready=0;
  detach_bundle(&s->b.sound_scene->seh,base,bytes);detach_bundle(&s->b.sound_scene->bmh,base,bytes);detach_bundle(&s->b.sound_scene->ts,base,bytes);
+ if(s->b.motion_camera&&in_pack(s->b.motion_camera->motion.bytes,base,bytes)){
+  s->b.motion_camera->motion=(gh_motion_view){0};
+  s->b.motion_camera->move_stage=0;
+ }
+ for(unsigned i=0;i<sizeof(s->r100_live.tasks)/sizeof(s->r100_live.tasks[0]);i++)
+  if(in_pack(s->r100_live.tasks[i].camera_start.bindings.room.bytes,base,bytes))
+   s->r100_live.tasks[i].camera_start=(gh_room_camera_start){0};
  gh_room_pack_status pe=gh_game_room_pack_release(&s->room_pack);if(pe)return fail(s,GH_SERVICES_ASSET,0x2a94f0,pe);
  s->room_texture_ready=0;s->sound_load_started=0;++s->ui_resource_epoch;
  /* Defaultheap TitlePlayer is deliberately retained: its exact destructor
@@ -681,6 +688,47 @@ static gh_r100_script_status room_r100_start_soft(void *context,gh_soft_event_st
  return !status?GH_R100_SCRIPT_OK:status==GH_SOFT_EVENT_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE;
 }
 
+static gh_r100_script_status room_r100_set_camera(void *context,gh_room_camera_start *state,
+ const char *name,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ *frontier=0x2c3ed8;
+ if(!s->b.motion_camera||!s->b.display)return GH_R100_SCRIPT_UNSUPPORTED;
+ gh_room_camera_bindings b={
+  .scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario},.init=s->b.init,
+  .motion=s->b.motion_camera,.work=s->b.work,
+  .display={&s->b.display->screen_width,&s->b.display->screen_height_bits,
+   &s->b.display->pixel_aspect_bits,&s->b.display->initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE}};
+ if(gh_game_room_pack_bundle(&s->room_pack,&b.room)){*frontier=0x31ce38;return GH_R100_SCRIPT_CALLEE;}
+ if(!b.motion->camera.constructed){
+  gh_camera_status status=gh_game_motion_camera_construct_00138be8(b.motion,GH_CAMERA_NATIVE_BINARY32_REFERENCE);
+  if(status){*frontier=0x138be8;return GH_R100_SCRIPT_CALLEE;}
+ }
+ int started;
+ gh_camera_status status=gh_game_room_camera_start_002c3ed8(state,&b,name,&started,frontier);
+ /* Original REL2B18 ignores the returned started flag. */
+ return !status?GH_R100_SCRIPT_OK:status==GH_CAMERA_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE;
+}
+
+static gh_r100_script_status room_r100_program_se(void *context,int16_t program,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ *frontier=0x2cb8a0;
+ const gh_sound_scene *scene=s->b.sound_scene;
+ if(!s->b.voices||!scene||!scene->ready||scene->control!=s->b.sound_control||
+    scene->registry!=s->b.audio_registry||!gh_audio_token_complete(scene->registry,scene->bank2))
+  return GH_R100_SCRIPT_UNSUPPORTED;
+ gh_voice_status status=gh_se_voice_bind_external_adx(s->b.voices,s->b.assets->dvd->disc,
+     scene->control,s->b.boot_elf,s->b.boot_elf_bytes);
+ if(!status)status=gh_se_voice_bind_origin_seh(s->b.voices,scene->seh.bytes,scene->seh.size);
+ uint32_t handle=0;
+ if(!status)status=gh_se_voice_request_origin(s->b.voices,2,program,-1,-1,0,0,&handle);
+ if(!status){*frontier=0;return GH_R100_SCRIPT_OK;}
+ const uint32_t original=gh_se_voice_frontier(s->b.voices);
+ if(original)*frontier=original;
+ return status==GH_VOICE_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE;
+}
+
 static gh_game_event_status room_soft_end_player(void *context,const gh_title_player_view *player,uint32_t *frontier)
 {
  gh_game_services *s=context;
@@ -689,7 +737,14 @@ static gh_game_event_status room_soft_end_player(void *context,const gh_title_pl
   .weapon_6a8=s->player_weapon.current?s->player_weapon.current->weapon:NULL,.known_mask=15};
  return gh_soft_player_unsuspend_0012c7d0(player,&links,frontier);
 }
-static gh_r100_script_status room_r100_end_soft(void *context,uint32_t *frontier)
+static gh_game_event_status room_soft_end_effects(void *context,uint32_t *frontier)
+{
+ const gh_event_start_bindings objects=room_soft_objects(context);
+ gh_soft_event_status status=gh_soft_event_set_effect_suspend_002fa470(&objects,0,frontier);
+ return !status?GH_EVENT_OK:status==GH_SOFT_EVENT_UNSUPPORTED?GH_EVENT_UNSUPPORTED:GH_EVENT_CALLEE;
+}
+
+static gh_r100_script_status room_r100_end_live_soft(void *context,gh_soft_event_end *state,uint32_t *frontier)
 {
  gh_game_services *s=context;
  const gh_event_start_bindings objects=room_soft_objects(s);
@@ -697,9 +752,26 @@ static gh_r100_script_status room_r100_end_soft(void *context,uint32_t *frontier
   .scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario},.work=s->b.work,
   .current_player=&s->title_player.view,.room_objects=&objects,.player_clear_0012c418=room_soft_end_clear,
   .camera_pose_0013b9b8=room_soft_end_camera_pose,.camera_switch_00138d40=room_soft_end_camera_switch,
-  .enemies_unsuspend_002948e8=room_soft_end_enemies,.player_unsuspend_0012c7d0=room_soft_end_player,.context=s};
- gh_game_event_status status=gh_scenario_end_soft_event_002c3c10(&s->r100_soft_end,&bindings,frontier);
+  .effect_unsuspend_002fa470=room_soft_end_effects,.enemies_unsuspend_002948e8=room_soft_end_enemies,
+  .player_unsuspend_0012c7d0=room_soft_end_player,.context=s};
+ gh_game_event_status status=gh_scenario_end_soft_event_002c3c10(state,&bindings,frontier);
  return !status?GH_R100_SCRIPT_OK:status==GH_EVENT_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE;
+}
+
+static gh_r100_script_status room_r100_end_soft(void *context,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ return room_r100_end_live_soft(s,&s->r100_soft_end,frontier);
+}
+
+static gh_r100_script_status room_r100_camera_ended(void *context,int *ended,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ *frontier=0x2c4040;
+ const gh_scene_scenario_view scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};
+ gh_camera_status status=gh_game_room_camera_ended_002c4040(scenario,s->b.motion_camera,ended);
+ if(!status)*frontier=0;
+ return status?GH_R100_SCRIPT_CALLEE:GH_R100_SCRIPT_OK;
 }
 
 static gh_r100_script_status room_r100_enemy(void*p,uint8_t entry,const void**identity,uint32_t*f){
@@ -806,7 +878,9 @@ static gh_r100_init_status room_r100_task_exec(void*p,uint32_t entry,int32_t arg
    .init=s->b.init,.work=s->b.work,.player=&s->title_player.view,
    .enemies=&s->enemies,.checkpoint=room_r100_checkpoint,.context=s,
    .math=s->b.math_globals,.elf=s->b.boot_elf,.elf_size=s->b.boot_elf_bytes,.scene_tables=&s->scene_tables,
-   .start_soft_event=room_r100_start_soft};
+   .start_soft_event=room_r100_start_soft,.set_room_camera=room_r100_set_camera,
+   .program_se=room_r100_program_se,.pools=&s->pools,.object_view=room_r100_om_view,
+   .camera_ended=room_r100_camera_ended,.end_soft_event=room_r100_end_live_soft};
   e=gh_r100_live_register(&s->r100_live,&bindings,entry,argument,&f);
  }else return GH_R100_INIT_UNSUPPORTED;
  if(e){if(frontier)*frontier=f;return e==GH_R100_SCRIPT_UNSUPPORTED?GH_R100_INIT_UNSUPPORTED:GH_R100_INIT_CALLEE;}

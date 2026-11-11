@@ -111,10 +111,11 @@ extern "C" gh_ui_error gh_ui_polygon_batch(gh_ui_polygon_renderer *r,const gh_ui
  size_t count,const unsigned char *back,unsigned char *output,size_t bytes){
  return gh_ui_polygon_batch_with_depth(r,s,items,count,back,output,bytes,nullptr);
 }
-extern "C" gh_ui_error gh_ui_polygon_fan(gh_ui_polygon_renderer*r,const gh_ui_sprite_state*s,uint32_t texture,const gh_cockpit_fan*fan,const unsigned char*back,unsigned char*output,size_t bytes){
+static gh_ui_error render_fan(gh_ui_polygon_renderer*r,const gh_ui_sprite_state*s,uint32_t texture,const gh_cockpit_fan*fan,const unsigned char*back,unsigned char*output,size_t bytes,const gh_ui_depth_write *depth){
  if(!r||!s||!fan||!fan->ready||!back||!output||GetCurrentThreadId()!=r->thread||bytes<(size_t)r->width*r->height*4||!texture||texture>r->textures.size())return GH_UI_ARGUMENT;
  if(s->alpha!=UINT64_C(0x8000000044)||s->test!=0x3001d||s->prim!=0x55||s->tex1!=0x60||s->clamp||s->colclamp!=1||s->prmodecont!=1||s->pabe||s->fba||s->frame_mask)return GH_UI_UNSUPPORTED;
  const auto&t=*r->textures[texture-1];if(t.width!=16||t.height!=16||fan->texture.width!=16||fan->texture.height!=16||fan->texture.tex0!=UINT64_C(0x111408000)||fan->color!=0x80808080||fan->bank!=6||fan->depth!=5)return GH_UI_UNSUPPORTED;
+ if(depth&&depth->z!=0)return GH_UI_UNSUPPORTED;
  PolygonParams params[31]={};size_t count=0;
  for(unsigned tri=0;tri<31;tri++){
   PolygonParams p={};unsigned ids[]={0,tri+1,tri+2};
@@ -123,14 +124,26 @@ extern "C" gh_ui_error gh_ui_polygon_fan(gh_ui_polygon_renderer*r,const gh_ui_sp
    p.xy[k*2]=(int)(x*16);p.xy[k*2+1]=(int)(y*16);p.su[k]=(unsigned)(u*16*65536.0f);p.sv[k]=(unsigned)(v*16*65536.0f);
   }
   int64_t dx=p.xy[2]-p.xy[0],dy=p.xy[3]-p.xy[1];int64_t area=dx*(p.xy[5]-p.xy[1])-dy*(p.xy[4]-p.xy[0]);if(area>INT32_MAX||area< -INT32_MAX)return GH_UI_UNSUPPORTED;if(!area)continue;
-  p.info[0]=fan->color;p.info[1]=p.info[2]=16;p.info[3]=r->width;p.dimensions[0]=r->height;p.dimensions[1]=1;params[count++]=p;
+  p.info[0]=fan->color;p.info[1]=p.info[2]=16;p.info[3]=r->width;p.dimensions[0]=r->height;p.dimensions[1]=1;if(depth)p.dimensions[2]=1;params[count++]=p;
  }
- auto*ctx=r->context.p;ctx->UpdateSubresource(r->frame[0].p,0,nullptr,back,r->width*4,0);unsigned previous=0;
+ auto*ctx=r->context.p;
+ if(depth){gh_ui_error e=r->depth.begin(r->device.p,ctx,r->width,r->height,*depth);if(e)return e;}
+ ctx->UpdateSubresource(r->frame[0].p,0,nullptr,back,r->width*4,0);unsigned previous=0;
  ctx->CSSetShader(r->shader.p,nullptr,0);ctx->CSSetConstantBuffers(0,1,&r->constants.p);
  for(size_t i=0;i<count;i++){
   unsigned next=previous^1;ctx->UpdateSubresource(r->constants.p,0,nullptr,&params[i],0,0);ID3D11ShaderResourceView*views[]={t.view.p,r->frameview[previous].p};
-  ctx->CSSetShaderResources(0,2,views);ctx->CSSetUnorderedAccessViews(0,1,&r->target[next].p,nullptr);ctx->Dispatch((r->width+7)/8,(r->height+7)/8,1);
-  ID3D11ShaderResourceView*nullviews[2]={};ID3D11UnorderedAccessView*nulltarget=nullptr;ctx->CSSetShaderResources(0,2,nullviews);ctx->CSSetUnorderedAccessViews(0,1,&nulltarget,nullptr);previous=next;
+  ctx->CSSetShaderResources(0,2,views);ID3D11UnorderedAccessView*targets[]={r->target[next].p,depth?r->depth.view():nullptr};ctx->CSSetUnorderedAccessViews(0,2,targets,nullptr);ctx->Dispatch((r->width+7)/8,(r->height+7)/8,1);
+  ID3D11ShaderResourceView*nullviews[2]={};ID3D11UnorderedAccessView*nulltargets[2]={};ctx->CSSetShaderResources(0,2,nullviews);ctx->CSSetUnorderedAccessViews(0,2,nulltargets,nullptr);previous=next;
  }
- ctx->CopyResource(r->readback.p,r->frame[previous].p);D3D11_MAPPED_SUBRESOURCE map={};SGPU(ctx->Map(r->readback.p,0,D3D11_MAP_READ,0,&map));for(unsigned y=0;y<r->height;y++)memcpy(output+(size_t)y*r->width*4,(unsigned char*)map.pData+(size_t)y*map.RowPitch,(size_t)r->width*4);ctx->Unmap(r->readback.p,0);return GH_UI_OK;
+ ctx->CopyResource(r->readback.p,r->frame[previous].p);D3D11_MAPPED_SUBRESOURCE map={};SGPU(ctx->Map(r->readback.p,0,D3D11_MAP_READ,0,&map));for(unsigned y=0;y<r->height;y++)memcpy(output+(size_t)y*r->width*4,(unsigned char*)map.pData+(size_t)y*map.RowPitch,(size_t)r->width*4);ctx->Unmap(r->readback.p,0);return depth?r->depth.finish(ctx,r->width,r->height,*depth):GH_UI_OK;
+}
+extern "C" gh_ui_error gh_ui_polygon_fan(gh_ui_polygon_renderer*r,const gh_ui_sprite_state*s,
+ uint32_t texture,const gh_cockpit_fan*fan,const unsigned char*back,unsigned char*output,size_t bytes){
+ return render_fan(r,s,texture,fan,back,output,bytes,nullptr);
+}
+extern "C" gh_ui_error gh_ui_polygon_fan_with_depth(gh_ui_polygon_renderer*r,const gh_ui_sprite_state*s,
+ uint32_t texture,const gh_cockpit_fan*fan,const unsigned char*back,unsigned char*output,size_t bytes,
+ const gh_ui_depth_write *depth){
+ if(!depth)return GH_UI_ARGUMENT;
+ return render_fan(r,s,texture,fan,back,output,bytes,depth);
 }

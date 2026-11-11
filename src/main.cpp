@@ -643,6 +643,13 @@ struct QAControlProbe {
     uint64_t neutral_updates=0,press_tick=0,press_updates=0,last_observation=0,motion_scene=0;
     uint32_t player_handle=0;
     float origin_x=0,origin_z=0;
+    bool square_edge=false,square_sample_known=false;
+    float square_previous_sample=0,square_presented_sample=0;
+    bool approach_started=false;
+    uint64_t approach_updates=0;
+
+    bool approach() const { return !std::strcmp(mode,"approach-square"); }
+    bool attacks() const { return approach()||!std::strcmp(mode,"square"); }
 
     gh_native_gamepad_sample sample(const gh_startup_snapshot &s)
     {
@@ -657,6 +664,23 @@ struct QAControlProbe {
             neutral_updates=s.player_updates_completed;
         }
         if(s.player_updates_completed<neutral_updates+2)return {};
+        if(approach()&&!pressed){
+            if(!approach_started){
+                approach_started=true;
+                approach_updates=s.player_updates_completed;
+                player_handle=s.player_handle;
+            }
+            if(s.player_handle!=player_handle)return {};
+            const uint64_t moved=s.player_updates_completed-approach_updates;
+            if(moved<27){
+                // R100 spawn to the first AT1 enemy, through the original stick path.
+                gh_native_gamepad_sample pad={};pad.connected=1;
+                pad.left_x=moved<7?28000:0;
+                pad.left_y=moved<7?18000:32767;
+                return pad;
+            }
+            if(s.player_state[0]||s.player_state[1])return {};
+        }
         if(!pressed){
             pressed=true;
             press_tick=s.ticks;
@@ -665,7 +689,7 @@ struct QAControlProbe {
             origin_x=s.player_world_position[0];origin_z=s.player_world_position[2];
         }
         if(s.player_handle!=player_handle||s.player_updates_completed>=press_updates+12)return {};
-        if(!std::strcmp(mode,"square")){
+        if(attacks()){
             gh_native_gamepad_sample pad={};
             if(s.ticks==press_tick){pad.connected=1;pad.buttons=0x4000;}
             return pad;
@@ -686,6 +710,25 @@ struct QAControlProbe {
                 (unsigned)s.player_square_buffer,(double)s.player_world_position[0],(double)s.player_world_position[2]);
             last_observation=s.player_updates_completed;
         }
+        if(attacks()){
+            // The injected XInput X bit 0x4000 maps to the original Work Square bit 0x80.
+            if(s.ticks==press_tick+1&&(input.raw_pressed&0x80u))square_edge=true;
+            if(!square_edge||reported_motion||motion_scene||!s.scene_frame_ready||
+                s.player_updates_completed<=press_updates||s.player_update_frontier)return;
+            if(s.player_state_entry!=0x10d3a8u||s.player_state[0]||s.player_state[1]!=0x0b||
+                s.player_state[2]!=1||!std::isfinite(s.player_motion_sample)||s.player_motion_sample<0){
+                square_sample_known=false;
+                return;
+            }
+            if(square_sample_known&&s.player_motion_sample>square_previous_sample){
+                square_presented_sample=s.player_motion_sample;
+                motion_scene=s.scene_frame_serial;
+            }else{
+                square_previous_sample=s.player_motion_sample;
+                square_sample_known=true;
+            }
+            return;
+        }
         const bool walk=!std::strcmp(mode,"walk"),run=!std::strcmp(mode,"run");
         if((!walk&&!run)||reported_motion||motion_scene||!s.scene_frame_ready||s.player_updates_completed<=press_updates||
            !input.analog_valid||input.analog.axes[1]!=(walk?67:127)||
@@ -699,7 +742,11 @@ struct QAControlProbe {
     {
         if(motion_scene&&serial==motion_scene&&!reported_motion){
             reported_motion=true;
-            std::fprintf(stderr,"QA_CONTROL_PRESENTED mode=%s handle=%u scene=%llu\n",mode,player_handle,(unsigned long long)serial);
+            if(attacks())
+                std::fprintf(stderr,"QA_CONTROL_PRESENTED mode=%s handle=%u scene=%llu entry=0010D3A8 sample_before=%.9g sample=%.9g\n",
+                    mode,player_handle,(unsigned long long)serial,(double)square_previous_sample,(double)square_presented_sample);
+            else
+                std::fprintf(stderr,"QA_CONTROL_PRESENTED mode=%s handle=%u scene=%llu\n",mode,player_handle,(unsigned long long)serial);
         }
     }
 };
@@ -739,8 +786,8 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-new-game")){qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-control")&&i+1<argc){
             qa_control.mode=argv[++i];
-            if(std::strcmp(qa_control.mode,"walk")&&std::strcmp(qa_control.mode,"run")&&std::strcmp(qa_control.mode,"square")){
-                std::fprintf(stderr,"QA control mode must be walk, run or square.\n");return 2;
+            if(std::strcmp(qa_control.mode,"walk")&&std::strcmp(qa_control.mode,"run")&&!qa_control.attacks()){
+                std::fprintf(stderr,"QA control mode must be walk, run, square or approach-square.\n");return 2;
             }
         }
         else if(!std::strcmp(argv[i],"--qa-capture")&&i+1<argc)qa_capture=argv[++i];

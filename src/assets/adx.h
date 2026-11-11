@@ -17,17 +17,22 @@ typedef struct gh_adx_decoder gh_adx_decoder;
 /* Reads the actual 2CA34C key-set call and its string plus prime table through
  * bounded ELF32 PT_LOAD spans. No executable bytes are run or host-cast. */
 gh_adx_error gh_adx_key_from_elf(const void*,size_t,gh_adx_key*);
-/* Restricted ADX encoding3/frame18/bits4/stereo/version0408, 48k/500Hz.
- * Includes the verified 0x28-byte nonlooping header with stereo history.
+/* Original 373FF0 volume-index table at 3F2060, in tenths of a dB. */
+gh_adx_error gh_adx_volume_table_from_elf(const void*,size_t,int16_t out[128]);
+/* Restricted ADX encoding3/frame18/bits4/version0408, 48k/500Hz.
+ * Stereo supports the original loop header and the 0x28-byte nonlooping header.
+ * Mono supports the verified 0x28-byte nonlooping room-sound header.
  * Borrows immutable source until close; scans all real scale headers against
  * the key. This is format validation, not cryptographic authentication. */
 gh_adx_error gh_adx_open(const void*,size_t,const gh_adx_key*,gh_adx_decoder**);
 void gh_adx_close(gh_adx_decoder*);
 gh_adx_error gh_adx_inspect(const gh_adx_decoder*,gh_adx_info*);
 uint32_t gh_adx_tell(const gh_adx_decoder*);
-/* capacity is sample frames, output requires capacity*2 int16 elements.
- * Returns actual decoded frames; EOF is OK with zero frames, never silence. */
+/* Interleaved stereo output requires capacity*2 int16 elements. A mono
+ * source is copied to both channels. EOF is OK with zero frames. */
 gh_adx_error gh_adx_decode(gh_adx_decoder*,int16_t*,size_t capacity,size_t *frames);
+/* Native mono output requires capacity int16 elements and a mono source. */
+gh_adx_error gh_adx_decode_mono(gh_adx_decoder*,int16_t*,size_t capacity,size_t *frames);
 /* Replays prediction from a verified checkpoint; exact arbitrary sample seek.
  * No inferred loop policy: caller chooses whether/when to seek loop_start. */
 gh_adx_error gh_adx_seek(gh_adx_decoder*,uint32_t sample);

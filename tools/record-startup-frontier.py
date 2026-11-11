@@ -9,6 +9,7 @@ import argparse
 import datetime
 import importlib.util
 import json
+import math
 from pathlib import Path
 import re
 
@@ -114,7 +115,7 @@ def control_observation(command, trace):
     proof.require(len(records) <= 1, "multiple control status observations")
     if not records:
         return None
-    status = re.fullmatch(r"mode=(walk|run|square) saw_event=([01]) pressed=([01]) motion_presented=([01])",
+    status = re.fullmatch(r"mode=(walk|run|square|approach-square) saw_event=([01]) pressed=([01]) motion_presented=([01])",
                           records[0])
     proof.require(status is not None and status[1] == mode, "invalid control status observation")
     observations = [line for line in trace if line.startswith("QA_CONTROL ")]
@@ -127,10 +128,20 @@ def control_observation(command, trace):
     result = {"mode": mode, "saw_event": status[2] == "1", "pressed": status[3] == "1",
               "motion_presented": motion, "input_trace": observations}
     if presented:
-        match = re.fullmatch(r"mode=(walk|run) handle=([1-9][0-9]*) scene=([1-9][0-9]*)", presented[0])
+        marker = r"mode=(walk|run|square|approach-square) handle=([1-9][0-9]*) scene=([1-9][0-9]*)"
+        attacks = mode in ("square", "approach-square")
+        if attacks:
+            number = r"([0-9]+(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?)"
+            marker += rf" entry=0010D3A8 sample_before={number} sample={number}"
+        match = re.fullmatch(marker, presented[0])
         proof.require(match is not None and match[1] == mode and result["pressed"],
                       "invalid presented control motion observation")
         result["presented_motion"] = {"handle": int(match[2]), "scene_serial": int(match[3])}
+        if attacks:
+            before, sample = float(match[4]), float(match[5])
+            proof.require(math.isfinite(before) and math.isfinite(sample) and 0 <= before < sample,
+                          "Square animation sample did not advance")
+            result["presented_motion"].update(entry="0010D3A8", sample_before=before, sample=sample)
     return result
 
 

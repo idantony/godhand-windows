@@ -102,9 +102,25 @@ static void test_enemy_focus(const gh_player_target_bindings *b,item *om)
  queries=b->actors->ray.native_queries;
  C(!gh_player_attack_target_00124540(b,init,&target,&pc)&&target.handle==om->handle&&
    b->actors->ray.native_queries==queries);
+ /* Player Move passes flag zero to 124C30. The selected object can move
+  * outside the attack cone, but becomes invalid as soon as it is suspended. */
+ const float far_object[3]={1000040,0,999960};
+ memcpy(om->view.alias_f0,far_object,12);
+ C(!gh_player_check_attack_target_00124c30(b,init,&pc)&&!pc&&
+   w(b->player->bytes+0x640)==om->handle&&b->player->bytes[0x648]==20&&
+   b->actors->ray.native_queries==queries);
+ put(om->bytes+0x250,0x8000);
+ C(!gh_player_check_attack_target_00124c30(b,init,&pc)&&!pc&&
+   !w(b->player->bytes+0x640)&&!b->player->bytes[0x648]);
+ put(om->bytes+0x250,0);
+ memcpy(om->view.alias_f0,straight,12);
+ C(!gh_player_attack_target_00124540(b,init,&target,&pc)&&target.handle==om->handle);
  memcpy(enemies[1].view.alias_f0+4,&(float){0},4);
  put(om->bytes+0x250,0x8000);
  C(!gh_player_attack_target_00124540(b,init,&target,&pc)&&target.handle==handles[1]);
+ C(enemy_bytes[1][0x617]==1);
+ C(!gh_player_check_attack_target_00124c30(b,init,&pc)&&!pc&&
+   !w(b->player->bytes+0x640)&&!b->player->bytes[0x648]);
  put(om->bytes+0x250,0);
  b->player->bytes[0x648]=0;
  C(!gh_player_attack_target_00124540(b,init,&target,&pc)&&target.handle==om->handle);

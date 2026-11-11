@@ -114,6 +114,21 @@ int main(int argc,char **argv)
  size_t room_bytes,em_bytes;
  uint8_t *room=read_file(disc,"st1/r100.dat",&room_bytes);
  uint8_t *resource_bytes=read_file(disc,"em/em02.dat",&em_bytes);
+ uint32_t sequence_offset;
+ C(em_bytes>=0x424);
+ memcpy(&sequence_offset,resource_bytes+0x420,4);
+ C(sequence_offset==0x2154c0&&sequence_offset<=em_bytes&&em_bytes-sequence_offset>=0x1b);
+ const uint8_t *sequence=resource_bytes+sequence_offset;
+ C(!memcmp(sequence,"SEQ",4)&&sequence[0x1a]==1);
+ const size_t sound_offset=sequence[12]|(unsigned)sequence[13]<<8;
+ const unsigned sound_count=sequence[14]|(unsigned)sequence[15]<<8;
+ C(sound_offset<=em_bytes-sequence_offset&&sound_count<=(em_bytes-sequence_offset-sound_offset)/12);
+ unsigned sequence28=0;
+ for(unsigned i=0;i<sound_count;++i){
+  const uint8_t *row=sequence+sound_offset+12*i;
+  if(row[0]==50&&!row[1]&&row[2]==0x28&&!row[3]&&!row[4]&&!row[5]&&row[8]==1)++sequence28;
+ }
+ C(sequence28==1);
  gh_bundle room_bundle;
  C(!gh_bundle_open(room,room_bytes,&room_bundle));
  gh_game_scene_tables tables={0};
@@ -239,9 +254,78 @@ int main(int argc,char **argv)
      info.left_q14&&!info.right_q14&&submissions==before_timed+1);
   }
   C(!gh_actor_attached_sound_abort(&source));
+  if(!enabled){
+   for(unsigned desired=0;desired<2;++desired){
+    uint32_t draw;
+    gh_game_mt before;
+    gh_game_mt_seed_0030f2b0(&before,desired?1:2);
+    expected=before;
+    C(!gh_game_mt_next_0030f348(&expected,&draw)&&(draw&1u)==desired);
+    random=before;
+    C(!gh_actor_attached_sound_bind(&source,&binding));
+    C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+    request.bank=0;
+    request.program=0xaa;
+    gh_actor_motion_status status=gh_actor_attached_sound_motion(&source,&request,&handle,&frontier);
+    if(status)fprintf(stderr,"CORE footstep request status%d pc%08x detail%d\n",status,frontier,source.detail);
+    C(!status&&handle&&!frontier&&!memcmp(&random,&expected,sizeof(random)));
+    gh_se_voice_info info;
+    C(!gh_se_voice_query(voices,handle,&info)&&info.pending&&info.position_mode==2&&
+       info.bank==0&&info.program==(int)(0xaa+desired)&&info.sample_slot==99+desired&&
+       info.rate==14000&&info.adsr1==0x80ff&&info.adsr2==0x5fc0);
+    random=before;
+    uint32_t duplicate=99;
+    C(!gh_actor_attached_sound_motion(&source,&request,&duplicate,&frontier)&&!duplicate&&!frontier&&
+      !memcmp(&random,&expected,sizeof(random))&&model.model.sound_borrowers==1);
+    const unsigned submitted_before=submissions;
+    gh_voice_status update=gh_se_voice_update(voices);
+    if(update)fprintf(stderr,"CORE footstep update status%d pc%08x\n",update,gh_se_voice_frontier(voices));
+    C(!update);
+    C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&
+       info.channel==28&&info.distance==3&&!info.azimuth&&!info.pan&&info.pitch_q12);
+    C(info.left_q14==0x5a00*25/127/2&&!info.right_q14&&submissions==submitted_before+1&&
+       submitted[submitted_before].frames>(desired?1316u:2856u));
+    const uint16_t normal_pitch=info.pitch_q12;
+    store(enemy.view.bytes+0x5a8,0.25f);
+    C(!gh_se_voice_update(voices)&&!gh_se_voice_query(voices,handle,&info)&&
+       info.pitch_q12<normal_pitch&&info.left_q14==0x5a00*19/127/2);
+    for(unsigned age=0;age<4;++age)C(!gh_se_voice_update(voices));
+    C(!gh_se_voice_query(voices,handle,&info)&&!info.left_q14&&!info.right_q14&&
+       !memcmp(&random,&expected,sizeof(random)));
+    store(enemy.view.bytes+0x5a8,1);
+    C(!gh_actor_attached_sound_abort(&source)&&!model.model.sound_borrowers);
+   }
+  }
+  if(!enabled){
+   const unsigned sample_slot=15+i;
+   const size_t sample_frames[]={5684,10108,12348};
+   check_program(registry,(int16_t)bank,0x28,sample_slot,11025,sample_frames[i]);
+   C(!gh_actor_attached_sound_bind(&source,&binding));
+   C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+   request.bank=1;
+   request.program=0x28;
+   expected=random;
+   const unsigned before_sequence=submissions;
+   gh_actor_motion_status requested=gh_actor_attached_sound_motion(&source,&request,&handle,&frontier);
+   if(requested)fprintf(stderr,"SEQ28 request dep%03x status%d pc%08x detail%d bank%d\n",dep,requested,frontier,source.detail,bank);
+   C(!requested&&handle&&!frontier);
+   C(!memcmp(&random,&expected,sizeof(random))&&model.model.sound_borrowers==1);
+   uint32_t duplicate=99;
+   C(!gh_actor_attached_sound_motion(&source,&request,&duplicate,&frontier)&&!duplicate&&!frontier);
+   C(!memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_attached_reservations(voices));
+   gh_voice_status status=gh_se_voice_update(voices);
+   if(status)fprintf(stderr,"EM02 sequence28 dep%03x status%d frontier%08x\n",dep,status,gh_se_voice_frontier(voices));
+   C(!status);
+   gh_se_voice_info info;
+   C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&info.channel==40);
+   C(info.bank==bank&&info.program==0x28&&info.sample_slot==sample_slot&&info.rate==11025&&
+     info.position_mode==2&&info.distance==3&&info.left_q14&&!info.right_q14&&info.pitch_q12&&
+     submissions==before_sequence+1&&submitted[before_sequence].frames>sample_frames[i]);
+   C(!gh_actor_attached_sound_abort(&source)&&!model.model.sound_borrowers);
+  }
   C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
  }
- C(submissions==4&&stops==4);
+ C(submissions==13&&stops==13);
  C(!gh_enemy_se_banks_destroy(banks));
  gh_se_voice_destroy(voices);
  C(!gh_game_room_pools_release(&pools)&&!gh_task_threads_destroy(threads)&&!gh_heap_destroy(heap));
@@ -250,6 +334,6 @@ int main(int argc,char **argv)
  gh_disc_close(disc);
  free(resource_bytes);
  free(room);
- puts("PASS actual R100 timed bank1:11 and enemy reaction bank1:0, original MT, duplicates and spatial PCM commands (no device)");
+ puts("PASS actual R100 timed bank1:11 enemy reaction bank1:0, SEQ bank1:28, CORE AA/AB footsteps, original MT, duplicates and spatial PCM commands (no device)");
  return 0;
 }

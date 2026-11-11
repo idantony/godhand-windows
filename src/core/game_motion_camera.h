@@ -4,6 +4,8 @@
 #include "game_camera_projection.h"
 #include "game_event_camera_track.h"
 #include "game_event_environment.h"
+#include "game_scene_setup.h"
+#include "../assets/core_bundle.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,6 +28,28 @@ gh_camera_status gh_game_motion_camera_set_001390b8(gh_game_motion_camera *, con
  * The EVT caller supplies the original zero blend/parent/offset setup. */
 gh_camera_status gh_game_motion_camera_move_00138600(gh_game_motion_camera *,
     const gh_game_init_state *, const gh_boot_work *, const gh_camera_projection_display *, uint32_t *frontier);
+
+typedef struct {
+    gh_bundle room;
+    gh_scene_scenario_view scenario;
+    gh_game_init_state *init;
+    gh_game_motion_camera *motion;
+    gh_boot_work *work;
+    gh_camera_projection_display display;
+} gh_room_camera_bindings;
+
+typedef struct {
+    gh_room_camera_bindings bindings;
+    char name[4];
+    uint8_t stage,started;
+} gh_room_camera_start;
+
+/* Original 2C3ED8 names a motion in the loaded room's CMP directory. */
+gh_camera_status gh_game_room_camera_start_002c3ed8(gh_room_camera_start *,
+    const gh_room_camera_bindings *,const char *name,int *started,uint32_t *frontier);
+/* The caller performs the original one-tick fiber sleeps while ended is false. */
+gh_camera_status gh_game_room_camera_ended_002c4040(gh_scene_scenario_view,
+    const gh_game_motion_camera *,int *ended);
 
 typedef struct {
     gh_event_components *components;

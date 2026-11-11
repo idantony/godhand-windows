@@ -360,6 +360,102 @@ history was compacted; private receipts and Git preserve old checkpoints.
   20534 comparisons on one DLL; this broad suite skipped 18 checks including
   hardware-audio options. `export-progress.py --presented-scene-scratch`
   revalidates matching captures and publishes counts without images.
+- Public main `6be81c8` records the first visible R100 frame and synthetic
+  movement. Remote SHA checked. Follow-up original footstep overlay
+  `r100-core-footstep-over153` passed real ISO recording transport for both
+  AA/AB variants across dep0200/0202/0203. It reuses the original spatial
+  equalization based on descriptor+10 (25 rather than +12=55), canonical
+  occlusion, shared MT variant draw, duplicate age3 and actor-rate behavior.
+  Actual stamp4 local ground probes resolve attribute1; remap programs stay
+  separate. `room-transition-154` Windows execution and focus tests started.
+- Exact154 passes all three focused ISO checks and the native Windows
+  footstep, then submits scenes1604–1609. Scene1609 shows the room and HUD
+  with alpha11; `analysis/native-opening/154/scene1609-presented.png` is
+  the final presented composite. Tick1750 prepares scene1610 with alpha00
+  and the original terminal TEST70000, but native renderer error8 at
+  0015C928 leaves that frame unpresented.
+  `analysis/room-transition-154-execution-private.json` records the error. The sorted UI prefix
+  drops depth knowledge at NUMBER and FAN; RADAR depth already works.
+- Original NUMBER 2C6550→2C5BD8 reads draw-environment+30 for vertex Z.
+  FAN 1430E8→15C410 uses Z0 and the caller overwrites the packet TEST at
+  +1A0 with 3001D. Inspect the caller after a packet builder returns.
+  Both now update the same depth plane on alpha-tested coverage. The
+  original transparent terminal Fade still needs that plane for its alpha
+  write. Exact155 Windows run and a separate GPU fan regression started.
+- Exact155's standalone fan GPU regression passed full RGBA/Z comparison
+  against independent CPU coverage (2562 fragments). Integrated Windows
+  still stops at the terminal fade. Its ordered log shows `zKnown0` on
+  every resource1 Cockpit sprite and digit. The native depth guard had
+  overfit ID2. Exact156 uses the actual shared draw-env +30 for supported
+  Cockpit resource1 consumers in the same bank6/depth5. The QA log now also
+  records original base IDs. Exact155 private proof is
+  `analysis/room-transition-155-execution-private.json`.
+- Actual exact156 finishes the terminal fade at scene1610 (`TEST70000`,
+  18 sorted groups, renderer result0), presents 1610–1614, then stops
+  tick1755 in stamp8's second OM304 collision at 0020B394. The actual
+  scene1614 screenshot with fade inactive is
+  `analysis/native-opening/156/scene1614-presented.png` and its run proof is
+  `analysis/room-transition-156-execution-private.json`. Gene moved during
+  the synthetic run and its release. The new collision has HP74, flags
+  04000202, outer1/selector11/phase1. Original 20B394 distinguishes selector16,
+  and normal 2E writes outer1/selector11/phase0/variant0 before rebinding.
+  Exact157 composes this repeated-hit branch with the independently tested
+  stamp8 pursuit and stamp11 return-home→selector3 (64 ISO CPU updates).
+  Exact157's actual run completed the repeat-hit update and prepared scene1615,
+  but native audio failed before the frame was presented. The focused actual ISO
+  damage and selector71 checks passed. The private process proof is
+  `analysis/room-transition-157-native-audio-private.json`.
+- Exact158 retires a started SE node and its actor-model borrow if a newer
+  XAudio2 start has already reaped the previous endpoint. The old objects fail
+  the new focused test. Exact158 passes five focused checks, presents scenes
+  1615–1625 after the audio fix, and stops at tick1766 in the next original
+  attached sound request, 002CBF78, stamp3/dep0200 selector71 sequence frame50.
+  `analysis/room-transition-158-execution-private.json` pins the actual run and
+  `analysis/native-opening/158/scene1625-presented.png` is its latest inspected
+  composite. The run used synthetic run input and hidden/muted output.
+- Exact159-Square's one XInput-mapped press reaches original 0010D3A8 and
+  presents the first attack frame, scene1599. At tick1740, Player Move calls
+  00124C30 with flag zero for a live +640 target. It stops before the second
+  increasing attack sample, so `motion_presented=0` in the two-sample proof.
+  `analysis/room-transition-159-square-execution-private.json` records the
+  exact capture series, input and boundary. Exact160-Square implements this
+  original liveness check, sharing validation with the attack selector but
+  skipping its optional distance/angle stage. Windows now runs through the
+  successive original 0010D3A8 frames, completes the fade and presents scene1625
+  before the same enemy sound boundary as exact158. See
+  `analysis/room-transition-160-square-execution-private.json`. The old dedicated
+  proof marker incorrectly checked physical XInput bit4000 against the mapped
+  raw Work value80, so its false result cannot establish motion sampling.
+- The exact158-derived R100 watcher bundle integrates original AT1/AT2 with
+  the same motion camera, registered room audio, and original Scenario-owned
+  actor and cleanup routines. Five focused actual ISO tests passed with the
+  watcher chain, mono ADX and reaped-endpoint regression. The pinned worker
+  bundle is `r100-watch-chain-over158-delta`, validated in snapshot
+  `room-transition-160-watch-base`. Live natural trigger and device proof
+  remain. The public milestone is still 6be81c8.
+- Exact161 combines the target liveness fix, watcher chain and original
+  bank1/program28 descriptor for dep0200/0202/0203 at selector71 frame50.
+  Native compile and nine focused checks pass. Windows original run input
+  clears the sound and stops at stamp19 dep0203 near decision 00262AA8 at
+  tick1769. Its launcher was the newer E revision, so strict exact-runner
+  aggregation rejected 161. The launcher now checks this before launch.
+  Exact162 adds the corrected Square proof input mask
+  and a bounded original stick route for first contact, then neutral until
+  idle before pressing Square. The separate actual-ISO CPU route
+  `r100-navigation-over159-evidence` verifies seven samples at (28000,18000),
+  twenty at (0,32767), and two coasting updates, about .644 m from stamp19's
+  spawn. Actual Windows exact162 reaches about 1 m from live stamp19 and
+  enters Square at tick1767. Original 0010D3A8 presents scene1628, with full
+  fade already released. The next scene stops at the same near decision,
+  tick1769, before hit or the second presented motion sample. The exact
+  capture/launch evidence is `analysis/room-transition-162-approach-execution-private.json`,
+  and the latest inspected image is `analysis/native-opening/162-approach/scene1628-presented.png`.
+  Exact162 actual-ISO CPU route independently reaches Give4/Take effect7,
+  power3 on stamp19. HP remains74 at strict 0020A178 phase0. Two workers
+  cover the enemy decision and damage branches separately.
+- `tools/export-startup-capture.py` writes an RGB PNG from hash-checked
+  presented RGBA evidence. It regenerated scene1603 byte-for-byte and
+  rejected a missing presentation; output is local and never overwritten.
 
 - Previous public main was 5e94688824d754b2f99ec94e9a6dec6e49ac7aa8. Snapshot
   room-transition-115 passes 316 C modules and 340 checks, two independent

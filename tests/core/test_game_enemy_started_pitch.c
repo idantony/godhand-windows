@@ -16,6 +16,8 @@ static void store(void*p,float f){memcpy(p,&f,4);}
 typedef struct {float left,right;size_t frames;int live;} recorded_voice;
 static recorded_voice submitted[32];
 static unsigned submissions,gain_updates,stops,pitch_updates;
+static uint32_t reap_on_play,reaped_handle;
+static unsigned reaped_gain_attempts;
 static char command_order[256];
 static unsigned command_count;
 static uint16_t latest_target,latest_submitted;
@@ -28,6 +30,11 @@ gh_voice_status __wrap_gh_audio_output_play(gh_audio_output *output,const gh_adp
  size_t nonzero=0;
  for(size_t i=0;i<pcm->frames;++i)nonzero+=pcm->samples[i]!=0;
  C(nonzero>0);
+ if(reap_on_play){
+  reaped_handle=reap_on_play;
+  submitted[reaped_handle-1].live=0;
+  reap_on_play=0;
+ }
  submitted[submissions]=(recorded_voice){left,right,pcm->frames,1};
  *handle=++submissions;
  return GH_VOICE_OK;
@@ -36,11 +43,13 @@ gh_voice_status __wrap_gh_audio_output_active(gh_audio_output *output,uint32_t h
  int *active,uint64_t *played)
 {
  C(output==(gh_audio_output *)&transport&&handle&&handle<=submissions);
+ if(handle==reaped_handle)return GH_VOICE_BOUNDS;
  *active=submitted[handle-1].live;*played=0;
  return GH_VOICE_OK;
 }
 gh_voice_status __wrap_gh_audio_output_stop(gh_audio_output *output,uint32_t handle)
 {
+ if(handle&&handle==reaped_handle)return GH_VOICE_BOUNDS;
  C(output==(gh_audio_output *)&transport&&handle&&handle<=submissions&&submitted[handle-1].live);
  submitted[handle-1].live=0;++stops;
  return GH_VOICE_OK;
@@ -48,6 +57,7 @@ gh_voice_status __wrap_gh_audio_output_stop(gh_audio_output *output,uint32_t han
 gh_voice_status __wrap_gh_audio_output_voice_gain(gh_audio_output *output,uint32_t handle,
  float left,float right)
 {
+ if(handle&&handle==reaped_handle){++reaped_gain_attempts;return GH_VOICE_BOUNDS;}
  C(output==(gh_audio_output *)&transport&&handle&&handle<=submissions&&submitted[handle-1].live);
  submitted[handle-1].left=left;submitted[handle-1].right=right;++gain_updates; C(command_count<sizeof(command_order)); command_order[command_count++]='G';
  return GH_VOICE_OK;
@@ -239,7 +249,24 @@ int main(int argc,char **argv)
  }
  C(seen==7&&submissions==stops);
 
- C(!gh_actor_attached_sound_abort(&source));
+ /* A new XAudio2 submission can reap an older endpoint while its game
+  * voice is still linked. Do not write gains using the expired native ID. */
+ uint32_t old,newer,frontier;
+ gh_se_voice_info old_info,new_info;
+ C(!gh_actor_attached_sound_motion(&source,&request,&old,&frontier)&&old&&!frontier);
+ C(!gh_se_voice_update(voices)&&!gh_se_voice_query(voices,old,&old_info)&&old_info.native_voice);
+ reap_on_play=old_info.native_voice;
+ request.program=0x2a;
+ C(!gh_actor_attached_sound_motion(&source,&request,&newer,&frontier)&&newer&&!frontier);
+ C(!gh_se_voice_update(voices)&&!reaped_gain_attempts&&!gh_se_voice_frontier(voices));
+ C(gh_se_voice_query(voices,old,&old_info)==GH_VOICE_BOUNDS&&model.model.sound_borrowers==1);
+ C(!gh_se_voice_query(voices,newer,&new_info)&&new_info.native_voice);
+ /* Shutdown can also discover an already reaped endpoint. Release its
+  * attached model borrow even though the transport handle has ended. */
+ reaped_handle=new_info.native_voice;
+ submitted[reaped_handle-1].live=0;
+ C(!gh_actor_attached_sound_abort(&source)&&!model.model.sound_borrowers);
+ C(gh_se_voice_query(voices,newer,&new_info)==GH_VOICE_BOUNDS);
  C(!gh_enemy_se_banks_destroy(enemy_banks));
  gh_se_voice_destroy(voices);
  C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
@@ -248,6 +275,6 @@ int main(int argc,char **argv)
  gh_disc_close(disc);
  free(resource_bytes);
  free(room);
- puts("PASS actual EM0A impact 2A/2B, canonical bank1, original MT and SDK pitch, impact mask0B and reaction mask0F live pitch/gain, source cursor preserved, no device");
+ puts("PASS actual EM0A impact/reaction pitch and gain, reaped endpoint update and shutdown, no device");
  return 0;
 }

@@ -5,6 +5,8 @@
 #include "../core/game_enemy_ems.h"
 #include "../core/game_math_globals.h"
 #include "../core/game_scene_tables.h"
+#include "../core/game_motion_camera.h"
+#include "../core/game_scenario_end_soft_event.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -25,6 +27,12 @@ typedef struct {
     size_t elf_size;
     gh_game_scene_tables *scene_tables;
     gh_r100_script_status (*start_soft_event)(void *,gh_soft_event_start *,unsigned,uint32_t *);
+    gh_r100_script_status (*set_room_camera)(void *,gh_room_camera_start *,const char *,uint32_t *);
+    gh_r100_script_status (*program_se)(void *,int16_t,uint32_t *);
+    const gh_room_pools *pools;
+    gh_r100_om_scalar_view object_view;
+    gh_r100_script_status (*camera_ended)(void *,int *,uint32_t *);
+    gh_r100_script_status (*end_soft_event)(void *,gh_soft_event_end *,uint32_t *);
 } gh_r100_live_bindings;
 typedef struct {
     gh_r100_live_bindings b;
@@ -32,8 +40,11 @@ typedef struct {
     int32_t slot;
     gh_r100_script_status status;
     uint8_t registered,entered,finished,frontier_relative,at3_stage;
-    gh_enemy_ems_set_call at3_set;
+    gh_enemy_ems_set_call set_enemy;
     gh_soft_event_start soft_start;
+    gh_room_camera_start camera_start;
+    gh_enemy_stamp_pose at1_pose;
+    gh_soft_event_end soft_end;
 } gh_r100_live_task;
 typedef struct {gh_r100_live_task tasks[8];} gh_r100_live_tasks;
 /* Original BC0 registrations. The supported wait paths run real scenario

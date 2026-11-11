@@ -48,6 +48,16 @@ gh_camera_status gh_game_motion_camera_construct_00138be8(gh_game_motion_camera 
     return gh_game_camera_construct_motion_00138be8(&s->camera, &s->identity, policy);
 }
 
+/* Original 138DB8 source argument zero omits the matrix copy. */
+static void activate_motion_camera(gh_game_init_state *init,gh_game_motion_camera *s)
+{
+    if (init->camera.mode == 4 || init->camera.mode == 16) return;
+    init->camera.previous_mode = init->camera.mode;
+    init->camera.previous = init->active_camera;
+    init->active_camera = &s->identity;
+    init->camera.mode = 4;
+}
+
 gh_game_event_status gh_event_camera_init_play_00004bd8(gh_event_components *components,
     gh_game_init_state *init, gh_game_motion_camera *s, uint32_t *frontier) {
     if (!frontier) return GH_EVENT_ARGUMENT;
@@ -62,12 +72,7 @@ gh_game_event_status gh_event_camera_init_play_00004bd8(gh_event_components *com
     if (init->camera.mode == 4 && init->active_camera != &s->identity) return GH_EVENT_ARGUMENT;
     /* Component +0 borrows the typed owner supplied to the move callback. */
     write_word(camera.bytes, 0);
-    if (init->camera.mode != 4 && init->camera.mode != 16) {
-        init->camera.previous_mode = init->camera.mode;
-        init->camera.previous = init->active_camera;
-        init->active_camera = &s->identity;
-        init->camera.mode = 4;
-    }
+    activate_motion_camera(init,s);
     *frontier = 0;
     return GH_EVENT_OK;
 }
@@ -193,6 +198,77 @@ gh_camera_status gh_game_motion_camera_move_00138600(gh_game_motion_camera *s,
     gh_camera_status status = gh_game_camera_project_00138740(&s->camera, display, frontier);
     if (!status) s->move_stage = 0;
     return status;
+}
+
+static int same_room_camera(const gh_room_camera_bindings *a,const gh_room_camera_bindings *b)
+{
+    return a->room.bytes==b->room.bytes && a->room.size==b->room.size &&
+        a->room.count==b->room.count && a->scenario.bytes==b->scenario.bytes &&
+        a->scenario.size==b->scenario.size && a->init==b->init &&
+        a->motion==b->motion && a->work==b->work &&
+        a->display.screen_width==b->display.screen_width &&
+        a->display.screen_height_bits==b->display.screen_height_bits &&
+        a->display.pixel_aspect_bits==b->display.pixel_aspect_bits &&
+        a->display.initialized==b->display.initialized && a->display.policy==b->display.policy;
+}
+
+gh_camera_status gh_game_room_camera_start_002c3ed8(gh_room_camera_start *s,
+    const gh_room_camera_bindings *b,const char *name,int *started,uint32_t *frontier)
+{
+    if (!frontier) return GH_CAMERA_ARGUMENT;
+    *frontier=0x2c3ed8;
+    if (!s || !b || !name || !started || !b->room.bytes || !b->scenario.bytes ||
+        b->scenario.size<0x112 || !b->init || !b->motion || !b->work ||
+        strlen(name)>3) return GH_CAMERA_ARGUMENT;
+    if (s->stage && (!same_room_camera(&s->bindings,b) || strcmp(s->name,name))) return GH_CAMERA_BUSY;
+
+    if (!s->stage) {
+        gh_bundle_entry pack,source;
+        gh_bundle directory;
+        gh_bundle_error found=gh_bundle_find(&b->room,"CMP",0,&pack);
+        if (!found) found=gh_bundle_open(pack.bytes,pack.size,&directory);
+        if (!found) found=gh_bundle_find(&directory,name,0,&source);
+        if (found==GH_BUNDLE_NOT_FOUND) {
+            *started=0;
+            *frontier=0;
+            return GH_CAMERA_OK;
+        }
+        if (found) return stop(frontier,0x31ce38,GH_CAMERA_UNSUPPORTED);
+        gh_event_camera_track selected={.apply_motion=1};
+        if (gh_motion_open_mtb3(source.bytes,source.size,0,&selected.track) ||
+            selected.track.count<8) return stop(frontier,0x1390b8,GH_CAMERA_UNSUPPORTED);
+        if (b->init->camera.mode==16 ||
+            (b->init->camera.mode==4 && b->init->active_camera!=&b->motion->identity))
+            return stop(frontier,0x138db8,GH_CAMERA_UNSUPPORTED);
+        gh_camera_status status=gh_game_motion_camera_set_001390b8(b->motion,&selected);
+        if (status) return stop(frontier,0x1390b8,status);
+        uint8_t *flags=(uint8_t *)b->work+0x5d8;
+        write_word(flags,read_word(flags)|0x00200000u);
+        activate_motion_camera(b->init,b->motion);
+        s->bindings=*b;
+        memcpy(s->name,name,strlen(name)+1);
+        s->stage=1;
+    }
+    if (s->stage==1) {
+        gh_camera_status status=gh_game_motion_camera_move_00138600(
+            b->motion,b->init,b->work,&b->display,frontier);
+        if (status) return status;
+        b->scenario.bytes[0x111]=1;
+        s->started=1;
+        s->stage=2;
+    }
+    *started=s->started;
+    *frontier=0;
+    return GH_CAMERA_OK;
+}
+
+gh_camera_status gh_game_room_camera_ended_002c4040(gh_scene_scenario_view scenario,
+    const gh_game_motion_camera *motion,int *ended)
+{
+    if (!scenario.bytes || scenario.size<0x112 || !motion || !ended) return GH_CAMERA_ARGUMENT;
+    *ended=!scenario.bytes[0x111] || (read_word(motion->camera.fields+0x3e4)&2u)!=0;
+    if (*ended) scenario.bytes[0x111]=0;
+    return GH_CAMERA_OK;
 }
 
 static int same_quit(const gh_event_camera_quit_bindings *a, const gh_event_camera_quit_bindings *b) {

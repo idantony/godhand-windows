@@ -63,6 +63,27 @@ gh_actor_motion_status gh_enemy_manager_get_00290868(const gh_game_init_state *,
     uint8_t entry_number, gh_game_title_player **);
 gh_actor_motion_status gh_enemy2a2_set_escape_position_00289038(gh_game_title_player *,
     const float position[4]);
+/* cEmWrap::setSuspend resolves the stamp through the canonical EnemyM. */
+gh_actor_motion_status gh_enemy_ems_set_stamp_suspend_00295bc0(const gh_enemy_ems *,
+    const gh_game_init_state *,uint8_t stamp,int suspend,uint32_t *frontier);
+/* One cEmWrap SetPos on a registered weaponless EM02. The wrapper applies
+ * the original position, current pose solve, Euler and final hierarchy. */
+typedef struct {
+    const gh_game_title_player *actor;
+    float position[3],yaw;
+    gh_motion_solve solve;
+    gh_actor_finish_model_call finish;
+    uint8_t stage;
+} gh_enemy_stamp_pose;
+gh_actor_motion_status gh_enemy_ems_set_stamp_pose_00295a08(const gh_enemy_ems *,
+    const gh_game_init_state *,gh_enemy_stamp_pose *,uint8_t stamp,const float position[3],
+    float yaw,uint32_t *frontier);
+/* Original Goto wrapper for the mode0/mode2 deferred and mode9 immediate R100 calls. */
+gh_actor_motion_status gh_enemy_ems_set_stamp_goto_00295f80(const gh_enemy_ems *,
+    const gh_game_init_state *,uint8_t stamp,const float destination[3],uint32_t mode,int immediate,uint32_t *frontier);
+/* R100 AT2's original unsuspend, StartAction, mode0 Goto and SetKeepPos. */
+gh_actor_motion_status gh_enemy_ems_start_goto_at2(const gh_enemy_ems *,
+    const gh_game_init_state *,uint8_t stamp,const float destination[3],uint32_t *frontier);
 /* R100 AT3's original cEmWrap calls, on the same registered live actor. */
 gh_actor_motion_status gh_enemy_ems_start_goto_at3(const gh_enemy_ems *,uint8_t stamp,
     const float destination[3],uint32_t *frontier);

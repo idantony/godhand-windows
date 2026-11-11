@@ -13,6 +13,7 @@
 #include "../core/game_room_pack.h"
 #include "../core/game_room_pools.h"
 #include "../core/game_camera.h"
+#include "../core/game_motion_camera.h"
 #include "../core/game_cockpit.h"
 #include "../core/game_objects.h"
 #include "../core/screen_fade.h"
@@ -100,6 +101,7 @@ typedef struct {
  gh_player_opacity_globals *player_opacity_globals;gh_se_voice_engine *voices; /*borrow RootONE owners*/
  const gh_actor_light_globals *actor_light_globals; /*RootONE3BD870/890, no permodel reset*/
  gh_frame_random *frame_random; /*same auxiliary 747B10 owner as the frame driver*/
+ gh_game_motion_camera *motion_camera; /*RootONE CamManager+530, shared by EVT and room scripts*/
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;

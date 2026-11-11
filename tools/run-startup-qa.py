@@ -34,7 +34,7 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
     proof.require(type(capture_count) is int and 1 <= capture_count <= MAX_CAPTURE_COUNT
                   and capture_frame + capture_count - 1 <= max_ticks,
                   f"require 1 <= capture-count <= {MAX_CAPTURE_COUNT} and range within max-ticks")
-    proof.require(control_probe in (None, "walk", "run", "square"), "unknown control probe")
+    proof.require(control_probe in (None, "walk", "run", "square", "approach-square"), "unknown control probe")
     _, executable, exe_sha, receipt_fact, report_fact = proof.startup_build_inputs(snapshot, scratch, PROJECT)
     proof.require(iso.is_file() and ffmpeg.is_file(), "ISO and ffmpeg must be existing files")
     profile, capture = scratch / "profile-absent", scratch / "first-scene-candidate.rgba"
@@ -103,7 +103,7 @@ def main():
     parser.add_argument("--capture-frame", type=int, default=370)
     parser.add_argument("--capture-count", type=int, default=1,
                         help=f"capture up to {MAX_CAPTURE_COUNT} ready scene frames beginning at capture-frame")
-    parser.add_argument("--control-probe", choices=("walk", "run", "square"),
+    parser.add_argument("--control-probe", choices=("walk", "run", "square", "approach-square"),
                         help="send original pad input after EV01 and two neutral player updates")
     args = parser.parse_args()
     try:

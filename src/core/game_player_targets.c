@@ -236,7 +236,7 @@ static void attack_target_clear(const gh_title_player_view *player,gh_player_tar
 }
 
 static gh_player_target_status keep_attack_target(const gh_player_target_bindings *b,
- const gh_game_init_state *init,gh_player_target *current,uint32_t *f)
+ const gh_game_init_state *init,gh_player_target *current,int check_geometry,uint32_t *f)
 {
  const gh_title_player_view *player=b->player;
  if((int8_t)player->bytes[0x648]<1){
@@ -281,6 +281,7 @@ static gh_player_target_status keep_attack_target(const gh_player_target_binding
   attack_target_clear(player,current);
   return GH_PLAYER_TARGET_OK;
  }
+ if(!check_geometry)return GH_PLAYER_TARGET_OK;
 
  float origin[3],position[3];
  if(!point(player,origin))return fail(f,0x124d34,GH_PLAYER_TARGET_ARGUMENT);
@@ -311,6 +312,24 @@ static gh_player_target_status keep_attack_target(const gh_player_target_binding
  return GH_PLAYER_TARGET_OK;
 }
 
+gh_player_target_status gh_player_check_attack_target_00124c30(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,uint32_t *f)
+{
+ if(f)*f=0;
+ if(!b||!init||!b->player||!b->player->bytes||b->player->size<0x649)
+  return fail(f,0x124c30,GH_PLAYER_TARGET_ARGUMENT);
+ gh_player_target current={0};
+ if((int8_t)b->player->bytes[0x648]>0){
+  current.handle=w(b->player->bytes+0x640);
+  if(current.handle){
+   if(!b->resolve)return fail(f,0x124c30,GH_PLAYER_TARGET_UNSUPPORTED);
+   gh_player_target_status status=b->resolve(b->context,current.handle,&current.view,f);
+   if(status)return status;
+  }
+ }
+ return keep_attack_target(b,init,&current,0,f);
+}
+
 gh_player_target_status gh_player_attack_target_00124540(const gh_player_target_bindings *b,
  const gh_game_init_state *init,gh_player_target *current,uint32_t *f)
 {
@@ -323,7 +342,7 @@ gh_player_target_status gh_player_attack_target_00124540(const gh_player_target_
   (void)fesetenv(&environment);
   return fail(f,0x124540,GH_PLAYER_TARGET_NUMERIC);
  }
- gh_player_target_status status=keep_attack_target(b,init,current,f);
+ gh_player_target_status status=keep_attack_target(b,init,current,1,f);
  if(fesetenv(&environment))return fail(f,0x124540,GH_PLAYER_TARGET_NUMERIC);
  if(status)return status;
  if(!current->handle){

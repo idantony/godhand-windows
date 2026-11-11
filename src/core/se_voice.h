@@ -12,6 +12,11 @@ gh_voice_status gh_se_voice_bind_pitch_reference(gh_se_voice_engine *,gh_disc *)
 gh_voice_status gh_se_voice_pitch_state(const gh_se_voice_engine *,uint16_t *state);
 struct gh_actor_model;
 struct gh_game_scene_tables;
+struct gh_sound_control;
+/* Binds the same boot key, disc and live mixer as the sequence SDK.
+ * The actual R100 AFD sequence path remains strict until bound. */
+gh_voice_status gh_se_voice_bind_external_adx(gh_se_voice_engine *,gh_disc *,
+ const struct gh_sound_control *,const void *boot_elf,size_t boot_elf_bytes);
 typedef struct {uint32_t system_flags_5e4,game_flags_5d8,gain64_bits;int32_t debug58c;uint16_t se_level_q8;uint8_t output_mode,reverb;
  uint32_t listener_position_c0[4],listener_matrix_d0[16];int32_t listener_mode110;
  uint32_t *sound_flags_ac,*sound_flags_b0;

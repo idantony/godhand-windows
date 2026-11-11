@@ -36,6 +36,9 @@ gh_r100_script_status gh_r100_scripts_bind(gh_r100_scripts *,const gh_r100_scrip
  * Rootmustinspectowner.status/frontier afteractualScenario visit: missinglaterprovider blocks
  * itsfiberwithrealSleep1, neverpretendsEventcomplete/normaltaskexit. */
 gh_r100_script_status gh_r100_scripts_register_000009b0(gh_r100_scripts *,int32_t request,int32_t *slot);
+/* Original OM registry search: return the first matching OM name, or a null view. */
+gh_r100_script_status gh_r100_find_om_0014fd98(const gh_room_pools *,gh_r100_om_scalar_view,
+    void *context,const char *name,gh_r100_om_view *,uint32_t *frontier);
 /* ActualBC0 orderedtasks/enemypositions/doorflags; unknownREL bodies require
  * typedregister_other andkeepRELfrontier. MaycalledfromoriginalInitdirectpath. */
 gh_r100_script_status gh_r100_script_setup_00000bc0(gh_r100_scripts *);

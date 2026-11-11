@@ -26,6 +26,8 @@ gh_soft_event_status gh_scenario_start_soft_event_002c39b0(gh_soft_event_start *
 gh_soft_event_status gh_soft_event_suspend_player_0012c7d0(const gh_title_player_view *,
  const gh_title_player_view *const related[4],uint8_t known_mask,uint32_t *frontier);
 /* Actual 2FA470 only visits the original 754C30 object registry. */
+gh_soft_event_status gh_soft_event_set_effect_suspend_002fa470(const gh_event_start_bindings *,
+ int suspend,uint32_t *frontier);
 gh_soft_event_status gh_soft_event_suspend_effects_002fa470(const gh_event_start_bindings *,
  uint32_t *frontier);
 

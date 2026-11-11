@@ -11,15 +11,16 @@ not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
 **Early development.** The original R100 opening plays all ten camera cuts
 from the user's ISO and returns to the room. In a hidden, muted Windows run,
-a synthetic gamepad stick enters the original run state and moves Gene.
-The first visible room frame reaches the window as the opening fade lifts.
-The run reaches 1,744 ticks and presents 1,603 scene frames, including earlier
-title and room startup frames. It submits 1,243,415 world packets with zero
-renderer, GPU, postprocess and window errors.
+synthetic gamepad input moves Gene within roughly one unit of an original
+enemy and starts the original Square attack. The fully visible room includes
+the first attack animation frame. The run reaches 1,769 ticks and presents
+1,628 scene frames, including earlier title and room startup frames. It
+submits 1,291,067 world packets with zero renderer, GPU, postprocess and
+window errors.
 
-The run stops during an enemy footstep sound request at `0x002CBF78` while
-the fade is still active. Continuous control, combat, room transitions and
-save/load still need end-to-end verification.
+The run stops in the enemy's close-range decision at `0x00262AA8`. The attack's
+hit and damage, continued combat, room transitions and save/load still need
+end-to-end verification.
 
 ### Verified progress
 
@@ -153,11 +154,12 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 使用 Jak 专用反编译器。
 
 **仍处于早期开发。** 已从用户 ISO 播完 R100 开场十个镜头并回到房间。隐藏、静音的
-Windows 运行通过合成摇杆输入进入原版跑步状态，Gene 随之移动。首个可见房间帧已在
-淡出期间提交到窗口。运行到 1744 ticks，呈现 1603 个场景帧，包含此前的标题和房间
-启动帧。累计提交 1243415 个世界绘制包，渲染器、GPU、后处理和窗口错误均为 0。
+Windows 测试通过合成手柄输入让 Gene 接近原版敌人至约一个游戏距离单位，再按方块
+触发原版攻击。房间淡入已完成，窗口呈现了攻击动画的第一帧。运行到 1769 ticks，
+呈现 1628 个场景帧，包含此前的标题和房间启动帧。累计提交 1291067 个世界绘制包，
+渲染器、GPU、后处理和窗口错误均为 0。
 
-淡出尚未结束，运行停在敌人的脚步声请求 `0x002CBF78`。连续操作、战斗、房间切换和
+运行停在敌人的近距离决策 `0x00262AA8`。攻击命中与扣血、后续战斗、房间切换和
 存读档仍待端到端验证。
 
 ### 已验证的进展

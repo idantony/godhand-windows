@@ -88,7 +88,17 @@ static gh_player_frame_status idle_frame(gh_game_player_frame*s){const gh_player
  if(s->stage==3){if(s->effect_pending){if(!b->current_player||!b->effects)return fail(s,0x306200,GH_PLAYER_FRAME_UNSUPPORTED);unsigned slot;gh_effect_status e=gh_game_effect_release_00306200(b->effects,b->current_player,5,2,&pc,&slot);if(e)return fail(s,pc?pc:0x306200,GH_PLAYER_FRAME_CALLEE);s->effect_pending=0;}if(!b->save.bytes||b->save.size<GH_CORE_SAVE_BYTES||!b->scenario.bytes||b->scenario.size<0x15)return fail(s,0x108db8,GH_PLAYER_FRAME_ARGUMENT);unsigned stage=work[0x5b1];if((w(b->save.bytes+0x14)&0x4000000)||b->scenario.bytes[0x14])stage=b->init->enemies[0x5b4];static const uint32_t multiplier[]={0x3f800000,0x3f800000,0x3f99999a,0x3fb33333,0x3fcccccd,0x3fe66666,0x40000000,0x400ccccd,0x4019999a};put(p+0x600,stage<=8?multiplier[stage]:0x3f800000);uint32_t pressed=w(work+8);if(pressed&0x80)p[0x621]=3;if(pressed&0x10)p[0x622]=3;if(pressed&0x20)p[0x625]=3;if(pressed&0x40)p[0x623]=3;if(pressed&8)p[0x624]=3;if(pressed&(w(work+0x56c)?0x10:0x40))p[0x626]=3;if(p[0x61d]&&number(w(p+0x608))<number(0x3f860a92)){if(!p[0x628])p[0x628]=10;else {p[0x628]=0;p[0x627]=2;}}gh_player_frame_status e=gh_game_player_button_history_00126820(&b->player->view,b->work);if(e)return e;s->stage=4;}
  if(s->stage==4){if(!b->camera||!b->camera->constructed||b->init->active_camera!=b->camera->identity)return fail(s,0x108f04,GH_PLAYER_FRAME_UNSUPPORTED);float x=sub(number(w(b->camera->fields+0x200)),number(w(b->camera->fields+0x210))),z=sub(number(w(b->camera->fields+0x208)),number(w(b->camera->fields+0x218)));if(gh_game_angle_001f8180(x,z,&angle,b->numeric_policy,&pc))return fail(s,pc?pc:0x1f8180,GH_PLAYER_FRAME_UNSUPPORTED);sf(p+0x15f8,angle);s->stage=5;}
  if(s->stage==5){if(p[0x61f]){volatile float sum=number(w(p+0x15f8))+number(w(p+0x604));float wrapped;if(gh_id_angle_reference_001f7d48(sum,&wrapped))return fail(s,0x1f7d48,GH_PLAYER_FRAME_UNSUPPORTED);sf(p+0x15fc,wrapped);}/*2E0D60→2E0B78→2E0AD8 returns1 unconditionally: both diagnosticprints truly skipped. */decrement_byte(p+0x648);decrement_byte(p+0x1600);decrement_byte(p+0x1601);decrement_byte(p+0x1602);decrement_half(p+0x1616);decrement_half(p+0x1618);decrement_byte(p+0x1603);s->stage=6;}
- if(s->stage==6){/*124C30(self,0): actual expired target clears only648/640. */if((int8_t)p[0x648]<1){p[0x648]=0;put(p+0x640,0);}else if(w(p+0x640))return fail(s,0x124c30,GH_PLAYER_FRAME_UNSUPPORTED);s->stage=7;}
+ if(s->stage==6){
+  gh_player_target_bindings local={.player=&b->player->view};
+  const gh_player_target_bindings *targets=&local;
+  if((int8_t)p[0x648]>0&&w(p+0x640)&&b->idle_input_bindings)
+   targets=&b->idle_input_bindings->targets;
+  if(targets->player!=&b->player->view)return fail(s,0x124c30,GH_PLAYER_FRAME_ARGUMENT);
+  gh_player_target_status status=gh_player_check_attack_target_00124c30(targets,b->init,&pc);
+  if(status)return fail(s,pc?pc:0x124c30,status==GH_PLAYER_TARGET_UNSUPPORTED?
+   GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE);
+  s->stage=7;
+ }
  if(s->stage==7){
   gh_player_target target;
   if(!s->enemy_focus_fallback){

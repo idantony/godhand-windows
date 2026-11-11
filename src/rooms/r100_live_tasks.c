@@ -76,21 +76,27 @@ static gh_r100_script_status center(gh_r100_live_task *s,unsigned id,float desti
     return GH_R100_SCRIPT_OK;
 }
 
+static gh_r100_script_status set_enemy(gh_r100_live_task *s,gh_enemy_ems *owner,uint8_t stamp)
+{
+    gh_game_title_player *ignored;
+    uint32_t frontier=0;
+    gh_scene_placement_status status=gh_enemy_ems_set_002952d0(owner,&s->set_enemy,stamp,&ignored,&frontier);
+    if(status)return fail(s,frontier?frontier:0x2952d0,
+        status==GH_PLACE_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE);
+    uint8_t *counter=s->b.room_init->work.pointer;
+    wr(counter,rd(counter)+1u); /* Increment after each call, including original null result. */
+    s->b.room_init->known_work_bytes|=15u;
+    s->set_enemy=(gh_enemy_ems_set_call){0};
+    return GH_R100_SCRIPT_OK;
+}
+
 static gh_r100_script_status at3_payload(gh_r100_live_task *s)
 {
     if(!s->b.enemies||!*s->b.enemies)return fail(s,0x2952d0,GH_R100_SCRIPT_UNSUPPORTED);
     gh_enemy_ems *owner=*s->b.enemies;
-    uint8_t *counter=s->b.room_init->work.pointer;
     while(s->at3_stage<2){
-        gh_game_title_player *ignored;
-        uint32_t frontier=0;
-        gh_scene_placement_status status=gh_enemy_ems_set_002952d0(owner,&s->at3_set,
-            (uint8_t)(31+s->at3_stage),&ignored,&frontier);
-        if(status)return fail(s,frontier?frontier:0x2952d0,
-            status==GH_PLACE_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE);
-        wr(counter,rd(counter)+1u); /* Increment after each call, including original null result. */
-        s->b.room_init->known_work_bytes|=15u;
-        s->at3_set=(gh_enemy_ems_set_call){0};
+        gh_r100_script_status status=set_enemy(s,owner,(uint8_t)(31+s->at3_stage));
+        if(status)return status;
         ++s->at3_stage;
     }
     while(s->at3_stage<4){
@@ -184,13 +190,53 @@ static gh_r100_script_status active(gh_r100_live_task *s,const gh_game_title_pla
     return GH_R100_SCRIPT_OK;
 }
 
-static gh_r100_script_status start_soft_event(gh_r100_live_task *s,uint32_t next)
+static gh_r100_script_status start_soft_event(gh_r100_live_task *s)
 {
     if(!s->b.start_soft_event)return fail(s,0x2c39b0,GH_R100_SCRIPT_UNSUPPORTED);
     uint32_t frontier=0;
     gh_r100_script_status status=s->b.start_soft_event(s->b.context,&s->soft_start,0,&frontier);
-    if(status)return fail(s,frontier?frontier:0x2c39b0,status);
-    return fail(s,next,GH_R100_SCRIPT_UNSUPPORTED);
+    return status?fail(s,frontier?frontier:0x2c39b0,status):GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status set_room_camera(gh_r100_live_task *s,const char *name)
+{
+    if(!s->b.set_room_camera)return fail(s,0x2c3ed8,GH_R100_SCRIPT_UNSUPPORTED);
+    uint32_t frontier=0;
+    gh_r100_script_status status=s->b.set_room_camera(s->b.context,&s->camera_start,name,&frontier);
+    return status?fail(s,frontier?frontier:0x2c3ed8,status):GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status program_se(gh_r100_live_task *s,int16_t program)
+{
+    if(!s->b.program_se)return fail(s,0x2cb8a0,GH_R100_SCRIPT_UNSUPPORTED);
+    uint32_t frontier=0;
+    gh_r100_script_status status=s->b.program_se(s->b.context,program,&frontier);
+    return status?fail(s,frontier?frontier:0x2cb8a0,status):GH_R100_SCRIPT_OK;
+}
+
+static int sleep_one(gh_r100_live_task *s);
+
+static gh_r100_script_status wait_camera(gh_r100_live_task *s)
+{
+    if(!s->b.camera_ended)return fail(s,0x2c4078,GH_R100_SCRIPT_UNSUPPORTED);
+    for(;;){
+        int ended=0;
+        uint32_t frontier=0;
+        gh_r100_script_status status=s->b.camera_ended(s->b.context,&ended,&frontier);
+        if(status)return fail(s,frontier?frontier:0x2c4040,status);
+        if(ended)return GH_R100_SCRIPT_OK;
+        if(!sleep_one(s))return s->status;
+    }
+}
+
+static gh_r100_script_status end_soft_event(gh_r100_live_task *s)
+{
+    if(!s->b.end_soft_event)return fail(s,0x2c3c10,GH_R100_SCRIPT_UNSUPPORTED);
+    uint32_t frontier=0;
+    gh_r100_script_status status=s->b.end_soft_event(s->b.context,&s->soft_end,&frontier);
+    if(status)return fail(s,frontier?frontier:0x2c3c10,status);
+    s->finished=1;
+    return GH_R100_SCRIPT_OK;
 }
 
 static gh_r100_script_status at1_payload(gh_r100_live_task *s)
@@ -226,7 +272,70 @@ static gh_r100_script_status at1_payload(gh_r100_live_task *s)
         s->finished=1;
         return GH_R100_SCRIPT_OK;
     }
-    return start_soft_event(s,0x2c3ed8); /* REL2B18 setCam. */
+    status=start_soft_event(s);
+    if(status)return status;
+    status=set_room_camera(s,"A00"); /* REL2B18 */
+    if(status)return status;
+    status=program_se(s,0x32); /* REL2B3C */
+    if(status)return status;
+    const gh_enemy_ems *owner=s->b.enemies?*s->b.enemies:NULL;
+    gh_actor_motion_status motion=gh_enemy_ems_set_stamp_suspend_00295bc0(owner,s->b.init,0,0,&frontier);
+    if(motion)return fail(s,frontier?frontier:0x295bc0,
+        motion==GH_ACTOR_MOTION_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE);
+    const uint32_t position_bits[3]={0x40db851f,0x3eb851ec,0x40728f5c};
+    const uint32_t yaw_bits=0xbfca3d71;
+    float position[3],yaw;
+    memcpy(position,position_bits,sizeof(position));
+    memcpy(&yaw,&yaw_bits,sizeof(yaw));
+    motion=gh_enemy_ems_set_stamp_pose_00295a08(owner,s->b.init,&s->at1_pose,0,position,yaw,&frontier);
+    if(motion)return fail(s,frontier?frontier:0x295a08,
+        motion==GH_ACTOR_MOTION_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE);
+    float destination[3];
+    status=center(s,4,destination); /* REL2BB0 */
+    if(status)return status;
+    motion=gh_enemy_ems_set_stamp_goto_00295f80(owner,s->b.init,0,destination,9,1,&frontier);
+    if(motion)return fail(s,frontier?frontier:0x295f80,
+        motion==GH_ACTOR_MOTION_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE);
+    gh_r100_om_view door;
+    status=gh_r100_find_om_0014fd98(s->b.pools,s->b.object_view,s->b.context,"dor003",&door,&frontier);
+    if(status)return fail(s,frontier?frontier:0x14fd98,status);
+    if(door.bytes){
+        if(door.size<0x5bc)return fail(s,0x14fd98,GH_R100_SCRIPT_BOUNDS);
+        wr(door.bytes+0x5b8,rd(door.bytes+0x5b8)|2u);
+    }
+    status=wait_camera(s);
+    if(status)return status;
+    if(door.bytes)wr(door.bytes+0x5b8,rd(door.bytes+0x5b8)&~2u);
+    return end_soft_event(s);
+}
+
+static gh_r100_script_status at2_payload(gh_r100_live_task *s)
+{
+    if(!s->b.enemies||!*s->b.enemies)return fail(s,0x2952d0,GH_R100_SCRIPT_UNSUPPORTED);
+    gh_enemy_ems *owner=*s->b.enemies;
+    for(uint8_t stamp=29;stamp<=30;stamp++){
+        gh_r100_script_status status=set_enemy(s,owner,stamp); /* REL27C0, REL27E0 */
+        if(status)return status;
+    }
+    float destination[3];
+    gh_r100_script_status status=center(s,0x10,destination); /* REL280C */
+    if(status)return status;
+    uint32_t frontier=0;
+    for(uint8_t stamp=29;stamp<=30;stamp++){
+        gh_actor_motion_status motion=gh_enemy_ems_start_goto_at2(owner,s->b.init,stamp,destination,&frontier);
+        if(motion)return fail(s,frontier?frontier:0x295bc0,
+            motion==GH_ACTOR_MOTION_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE);
+    }
+    status=wait_camera(s); /* REL2890 */
+    if(status)return status;
+    for(uint8_t stamp=29;stamp<=30;stamp++){
+        if(!s->b.player||!s->b.player->alias_f0)return fail(s,0x2db6b0,GH_R100_SCRIPT_UNSUPPORTED);
+        memcpy(destination,s->b.player->alias_f0,sizeof(destination));
+        gh_actor_motion_status motion=gh_enemy_ems_set_stamp_goto_00295f80(owner,s->b.init,stamp,destination,2,0,&frontier);
+        if(motion)return fail(s,frontier?frontier:0x295f80,
+            motion==GH_ACTOR_MOTION_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE);
+    }
+    return end_soft_event(s); /* REL28D8 */
 }
 
 static gh_r100_script_status watch(gh_r100_live_task *s)
@@ -250,7 +359,13 @@ static gh_r100_script_status watch(gh_r100_live_task *s)
         if(status||!ready)return status;
         if(!second)return at1_payload(s);
         wr(s->b.room->active+4,rd(s->b.room->active+4)|0x10000000u);
-        return start_soft_event(s,0x2cb8a0); /* REL2794 SeCall, bank 2 program 0x33. */
+        status=start_soft_event(s);
+        if(status)return status;
+        status=program_se(s,0x33); /* REL2794 */
+        if(status)return status;
+        status=set_room_camera(s,"A03"); /* REL27A4 */
+        if(status)return status;
+        return at2_payload(s);
     }
     case 0x2490:
         if(!s->at3_stage){

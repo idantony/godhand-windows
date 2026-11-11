@@ -217,8 +217,10 @@ static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
     if (call->phase == 2) {
         const uint16_t flags = half(p + 0x3ac);
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
+        const int waiting = p[0x2f4] == 0 && p[0x2f5] == 1;
+        const int reacting = p[0x2f4] == 1 && p[0x2f5] == 0x11 && p[0x2f6] == 1;
         if ((status & 0x80040u) || (behavior & 0x806020u) ||
-            (flags & 0x2cu) || p[0x2f4] != 0 || p[0x2f5] != 1)
+            (flags & 0x2cu) || !(waiting || reacting))
             return stop(frontier, 0x20b394);
 
         /* 20D138 returns zero. For 2E, 20CAC8 can still draw once

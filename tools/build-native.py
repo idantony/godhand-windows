@@ -584,6 +584,8 @@ def main():
         ("title-texture", "tests/core/test_title_texture.c", "iso"),
         ("adx", "tests/assets/test_adx.c", "adx-reference"),
         ("adx-compact", "tests/assets/test_adx_compact.c", "event-adx-reference"),
+        ("adx-mono", "tests/assets/test_adx_mono.c", "iso"),
+        ("se-adx-sequence", "tests/core/test_se_adx_sequence.c", "iso"),
         ("adx-stream", "tests/platform/test_adx_stream.c", "iso"),
         ("sound-scene-tick", "tests/core/test_sound_scene_tick.c", "iso"),
         ("game-world-light", "tests/core/test_game_world_light.c", "iso"),
@@ -763,7 +765,7 @@ def main():
     focused = [by_name[name] for name in dict.fromkeys(args.focus)]
     recording_transport_tests = {
         "game-om324-started-pitch", "game-enemy-started-pitch", "game-ema2-impact-sound",
-        "game-enemy-state71-sound",
+        "game-enemy-state71-sound", "se-adx-sequence",
     }
     recording_voice_object = output / "se_voice_recording_transport.o"
     try:

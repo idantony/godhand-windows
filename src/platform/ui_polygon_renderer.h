@@ -32,6 +32,10 @@ gh_ui_error gh_ui_polygon_upload_number128(gh_ui_polygon_renderer*,const gh_id_t
  const unsigned char*,size_t,uint32_t*);
 gh_ui_error gh_ui_polygon_fan(gh_ui_polygon_renderer*,const gh_ui_sprite_state*,
  uint32_t texture,const gh_cockpit_fan*,const unsigned char*,unsigned char*,size_t);
+/* The 1430E8 caller patches TEST to 0x3001d after 15C410 returns.
+ * Alpha-tested coverage writes vertex Z=0 to the shared depth plane. */
+gh_ui_error gh_ui_polygon_fan_with_depth(gh_ui_polygon_renderer*,const gh_ui_sprite_state*,
+ uint32_t texture,const gh_cockpit_fan*,const unsigned char*,unsigned char*,size_t,const gh_ui_depth_write*);
 gh_ui_error gh_ui_polygon_batch_with_depth(gh_ui_polygon_renderer *,const gh_ui_sprite_state *,
  const gh_ui_polygon_item *,size_t,const unsigned char *,unsigned char *,size_t,const gh_ui_depth_write *);
 #ifdef __cplusplus

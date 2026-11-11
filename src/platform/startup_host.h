@@ -98,7 +98,7 @@ typedef struct gh_startup_snapshot {
     uint64_t player_updates_completed,child_updates_completed,om_updates_completed;
     uint32_t last_move_handle,last_move_entry,player_update_stage,child_update_stage;
     uint32_t player_handle,player_state_entry,player_update_frontier;
-    float player_world_position[3];
+    float player_world_position[3],player_motion_sample;
     uint8_t player_pose_ready,player_state[4],player_square_buffer;
     uint32_t child_update_frontier,child_forces_complete,child_angles_complete,child_distances_complete,child_finish_complete;
     uint32_t emitter_active,esp_active,emitter_samples;

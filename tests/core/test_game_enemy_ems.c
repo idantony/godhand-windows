@@ -8,6 +8,7 @@
 #include "game_world_light.h"
 #include "game_ray_static.h"
 #include "disc.h"
+#include "display_state.h"
 #include <fenv.h>
 #include <math.h>
 #include <stdio.h>
@@ -59,6 +60,8 @@ typedef struct {
     unsigned calls,kind;
     uint32_t flags;
     gh_soft_event_start *state;
+    gh_room_camera_bindings camera;
+    unsigned camera_calls;
 } watch_soft_probe;
 
 static gh_r100_script_status watch_soft(void *context,gh_soft_event_start *state,
@@ -71,6 +74,17 @@ static gh_r100_script_status watch_soft(void *context,gh_soft_event_start *state
     probe->state=state;
     *frontier=0;
     return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status watch_camera(void *context,gh_room_camera_start *state,
+    const char *name,uint32_t *frontier)
+{
+    watch_soft_probe *probe=context;
+    if(probe->calls!=1||probe->kind||strcmp(name,"A00"))return GH_R100_SCRIPT_CALLEE;
+    ++probe->camera_calls;
+    int started=0;
+    gh_camera_status status=gh_game_room_camera_start_002c3ed8(state,&probe->camera,name,&started,frontier);
+    return !status&&started?GH_R100_SCRIPT_OK:GH_R100_SCRIPT_CALLEE;
 }
 
 int main(int argc,char **argv)
@@ -445,11 +459,23 @@ int main(int argc,char **argv)
     CHECK(!gh_task_threads_create(&task_manager,&scenario_threads));
     uint8_t scenario_bytes[0x114]={0};
     gh_r100_live_tasks tasks={0};
-    watch_soft_probe soft_probe={.room=room.active};
+    gh_display_state display={0};
+    gh_game_motion_camera motion_camera={0};
+    CHECK(!gh_display_state_from_elf(&display,elf,elf_size));
+    CHECK(!gh_display_static_initialize_002a48a8(&display,1,0xffff));
+    CHECK(!gh_game_motion_camera_construct_00138be8(&motion_camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+    CHECK(init->camera.mode==1&&init->active_camera==&init->camera);
+    const uint32_t prior_work_camera=word((uint8_t *)&work+0x5d8);
+    watch_soft_probe soft_probe={.room=room.active,
+        .camera={.room=room_bundle,.scenario={scenario_bytes,sizeof(scenario_bytes),&task_manager},
+            .init=init,.motion=&motion_camera,.work=&work,
+            .display={&display.screen_width,&display.screen_height_bits,&display.pixel_aspect_bits,
+                &display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE}}};
     const gh_r100_live_bindings live_b={.scenario={scenario_bytes,sizeof(scenario_bytes),&task_manager},
         .threads=scenario_threads,.room_init=&room_runtime,.room=&room,.at=&at,
         .init=init,.work=&work,.player=target,.enemies=&owner,.context=&soft_probe,
-        .math=&math,.elf=elf,.elf_size=elf_size,.scene_tables=&actors,.start_soft_event=watch_soft};
+        .math=&math,.elf=elf,.elf_size=elf_size,.scene_tables=&actors,.start_soft_event=watch_soft,
+        .set_room_camera=watch_camera};
     /* REL2920's real AT1 and original EMS stamps 19/20, with their canonical RoomSave rows. */
     uint8_t *watched_rows[2]={room.active+12+24*14,room.active+12+24*15};
     for(unsigned i=0;i<2;i++){
@@ -485,10 +511,27 @@ int main(int argc,char **argv)
 
     watched_rows[1][0x14]=1;
     CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
-    CHECK(!tasks.tasks[0].finished&&tasks.tasks[0].status==GH_R100_SCRIPT_UNSUPPORTED&&tasks.tasks[0].frontier==0x2c3ed8);
+    CHECK(!tasks.tasks[0].finished&&tasks.tasks[0].status==GH_R100_SCRIPT_UNSUPPORTED&&tasks.tasks[0].frontier==0x2cb8a0);
     CHECK(soft_probe.calls==1&&!soft_probe.kind&&soft_probe.state==&tasks.tasks[0].soft_start);
     CHECK(soft_probe.flags==(saved_room_flags|0x20000000u)&&word(room.active+4)==soft_probe.flags);
+    CHECK(soft_probe.camera_calls==1&&tasks.tasks[0].camera_start.started&&scenario_bytes[0x111]==1);
+    CHECK(init->camera.mode==4&&init->active_camera==&motion_camera.identity&&init->camera.previous==&init->camera);
+    CHECK(motion_camera.motion.bytes==room_data+1437120&&motion_camera.motion.frames==60&&motion_camera.motion.count==8);
+    CHECK(word((uint8_t *)&work+0x5d8)==(prior_work_camera|0x00200000u));
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(soft_probe.calls==1&&soft_probe.camera_calls==1&&word(motion_camera.camera.fields+0x3a8)==0x3f800000);
     CHECK(!gh_task_threads_cancel(scenario_threads,tasks.tasks[0].slot));
+
+    /* The real scene camera consumer completes A00 after the original 60 samples. */
+    int camera_ended=0;
+    CHECK(!gh_game_room_camera_ended_002c4040(soft_probe.camera.scenario,&motion_camera,&camera_ended)&&!camera_ended);
+    for(unsigned i=1;i<60;i++){
+        CHECK(!gh_game_motion_camera_move_00138600(&motion_camera,init,&work,&soft_probe.camera.display,&frontier));
+        CHECK(!gh_game_room_camera_ended_002c4040(soft_probe.camera.scenario,&motion_camera,&camera_ended));
+        CHECK(camera_ended==(i==59));
+    }
+    CHECK(!scenario_bytes[0x111]&&!gh_game_camera_restore_00138d40(init)&&init->active_camera==&init->camera);
+    memcpy((uint8_t *)&work+0x5d8,&prior_work_camera,4);
 
     for(unsigned i=0;i<2;i++){
         /* Active and dead stamp0 each consume the AT1 flag and exit without starting an event. */
@@ -528,7 +571,7 @@ int main(int argc,char **argv)
     at2_rows[1][0x14]=1;
     CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
     CHECK(!tasks.tasks[1].finished&&tasks.tasks[1].status==GH_R100_SCRIPT_UNSUPPORTED&&tasks.tasks[1].frontier==0x2cb8a0);
-    CHECK(soft_probe.calls==2&&!soft_probe.kind&&soft_probe.state==&tasks.tasks[1].soft_start);
+    CHECK(soft_probe.calls==2&&soft_probe.camera_calls==1&&!soft_probe.kind&&soft_probe.state==&tasks.tasks[1].soft_start);
     CHECK(soft_probe.flags==(saved_room_flags|0x10000000u)&&word(room.active+4)==soft_probe.flags);
     CHECK(!gh_task_threads_cancel(scenario_threads,tasks.tasks[1].slot));
     at2_rows[0][0x14]=at2_rows[1][0x14]=0;
@@ -590,6 +633,6 @@ int main(int argc,char **argv)
     CHECK(!gh_game_world_light_release_presets(&light)&&!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));
     gh_disc_close(disc);
     free(weapon_data);free(aux);free(heavy);free(init);free(id);free(elf);free(language_data);free(model_data);free(room_data);
-    puts("PASS actual R100 BGM roster/death/priority and eleven EMS actors, attached weapon, retry, full 2A2/held363 Moves, AT1 live/absent GetPos, AT1/AT2 survivor gates and kind0, and AT3 SetEm31/32, Goto, unsuspend, duplicate gates and scoped release");
+    puts("PASS actual R100 BGM roster/death/priority and eleven EMS actors, attached weapon, retry, full 2A2/held363 Moves, AT1 live/absent GetPos, AT1/AT2 survivor gates, kind0 and the real A00 room camera, and AT3 SetEm31/32, Goto, unsuspend, duplicate gates and scoped release");
     return 0;
 }

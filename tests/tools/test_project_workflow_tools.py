@@ -78,6 +78,22 @@ class WorkflowTools(unittest.TestCase):
         self.assertEqual(snapshot.read_bytes(), b"int value;\n\n\n")
         self.assertEqual(eof.normalize(self.root, apply=True)["files"], [])
 
+    def test_worker_absolute_receipt_uses_relative_path_and_checks_predecessor(self):
+        existing = {"relative": "src/model.c", "path": "G:/worker/src/model.c",
+                    "sha256": "B" * 64, "bytes": 18,
+                    "supersedes": {"path": "G:/base/src/model.c", "sha256": "A" * 64}}
+        added = {"relative": "tests/model.c", "path": "G:/worker/tests/model.c",
+                 "sha256": "C" * 64, "supersedes": None}
+        normalized, predecessors = snapshot_freeze.overlay_receipt({"schema": 1, "files": [existing, added]})
+        self.assertEqual(normalized["files"], [
+            {"path": "src/model.c", "sha256": "b" * 64, "bytes": 18},
+            {"path": "tests/model.c", "sha256": "c" * 64},
+        ])
+        self.assertEqual(predecessors, {"src/model.c": "a" * 64, "tests/model.c": None})
+        del existing["supersedes"]
+        with self.assertRaisesRegex(ValueError, "predecessor"):
+            snapshot_freeze.overlay_receipt({"schema": 1, "files": [existing, added]})
+
     def test_rejects_other_whitespace_atomically(self):
         path = self.stage("src/demo.c", b"trailing space \n\n")
         before = (self.root / ".git/index").read_bytes()

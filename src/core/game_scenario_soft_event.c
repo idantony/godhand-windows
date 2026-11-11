@@ -144,8 +144,8 @@ gh_soft_event_status gh_soft_event_suspend_player_0012c7d0(const gh_title_player
  return GH_SOFT_EVENT_OK;
 }
 
-gh_soft_event_status gh_soft_event_suspend_effects_002fa470(const gh_event_start_bindings *b,
- uint32_t *frontier)
+gh_soft_event_status gh_soft_event_set_effect_suspend_002fa470(const gh_event_start_bindings *b,
+ int suspend,uint32_t *frontier)
 {
  if(!frontier)return GH_SOFT_EVENT_ARGUMENT;
  *frontier=0x2fa470;
@@ -163,8 +163,17 @@ gh_soft_event_status gh_soft_event_suspend_effects_002fa470(const gh_event_start
   if(e){if(nested)*frontier=nested;return e==GH_EVENT_UNSUPPORTED?GH_SOFT_EVENT_UNSUPPORTED:GH_SOFT_EVENT_CALLEE;}
   if(!actor.bytes||actor.size<0x300)return GH_SOFT_EVENT_ARGUMENT;
   unsigned kind=h(actor.bytes+0x2fe);
-  if(kind>=0x500&&kind<0x600)ww(actor.bytes+0x250,w(actor.bytes+0x250)|0x8000);
+  if(kind>=0x500&&kind<0x600){
+   const uint32_t flags=w(actor.bytes+0x250);
+   ww(actor.bytes+0x250,suspend?flags|0x8000u:flags&~0x8000u);
+  }
  }
  *frontier=0;
  return GH_SOFT_EVENT_OK;
+}
+
+gh_soft_event_status gh_soft_event_suspend_effects_002fa470(const gh_event_start_bindings *b,
+ uint32_t *frontier)
+{
+ return gh_soft_event_set_effect_suspend_002fa470(b,1,frontier);
 }

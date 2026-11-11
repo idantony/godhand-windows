@@ -37,9 +37,9 @@ static int is_r100_appearance0_profile(const gh_enemy_request *request)
 {
     return request && request->object_kind==0x202 && !request->appearance &&
         request->flags==0x04000000u && !request->dependency_flags &&
-        ((request->entry_number==19 && request->dependency_kind==0x203) ||
+        (((request->entry_number==19||request->entry_number==30) && request->dependency_kind==0x203) ||
          ((request->entry_number==20||request->entry_number==31) && request->dependency_kind==0x200) ||
-         (request->entry_number==32 && request->dependency_kind==0x202));
+         ((request->entry_number==29||request->entry_number==32) && request->dependency_kind==0x202));
 }
 
 int gh_enemy202_is_r100_supported_profile(const gh_enemy_request *request)

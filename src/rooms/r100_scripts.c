@@ -18,11 +18,40 @@ static gh_r100_script_status enemy(gh_r100_scripts*s,unsigned entry,const void**
  if(!rd(s->b.init->enemies+0x500)&&!s->b.init->enemy_top){*out=NULL;return GH_R100_SCRIPT_OK;} /* actualGetEm emptylinkedlist */
  if(!s->b.get_enemy)return fail(s,0x290868,0,GH_R100_SCRIPT_UNSUPPORTED);uint32_t f=0;gh_r100_script_status e=s->b.get_enemy(s->b.context,(uint8_t)entry,out,&f);return e?fail(s,f?f:0x290868,0,e):GH_R100_SCRIPT_OK;
 }
-static gh_r100_script_status find_gate(gh_r100_scripts*s,const char*name,gh_r100_om_view*out){
- *out=(gh_r100_om_view){0};if(!s->b.pools)return fail(s,0x14fd98,0,GH_R100_SCRIPT_ARGUMENT);const gh_room_vector*v;if(gh_room_registry_view(s->b.pools,0x754c58,&v))return fail(s,0x14fd98,0,GH_R100_SCRIPT_BOUNDS);
- uint64_t key=0;for(unsigned k=0;k<8&&name[k];k++)key|=(uint64_t)(uint8_t)name[k]<<(k*8);
- for(uint32_t i=0;i<v->count;i++){if(!s->b.object_view)return fail(s,0x14fd98,0,GH_R100_SCRIPT_UNSUPPORTED);gh_r100_om_view o={0};uint32_t f=0;gh_r100_init_status e=s->b.object_view(s->b.context,rd((const uint8_t*)v->allocation.pointer+(size_t)i*4),&o,&f);if(e)return fail(s,f?f:0x14fd98,0,GH_R100_SCRIPT_CALLEE);if(!o.bytes||o.size<0x540||!o.identity)return fail(s,0x14fd98,0,GH_R100_SCRIPT_BOUNDS);unsigned id=half(o.bytes+0x2fe);uint64_t bits=(uint64_t)rd(o.bytes+0x538)|(uint64_t)rd(o.bytes+0x53c)<<32;if(id>=0x300&&id<0x500&&bits==key){*out=o;break;}}
+gh_r100_script_status gh_r100_find_om_0014fd98(const gh_room_pools *pools,
+ gh_r100_om_scalar_view object_view,void *context,const char *name,gh_r100_om_view *out,uint32_t *frontier)
+{
+ if(!frontier)return GH_R100_SCRIPT_ARGUMENT;
+ *frontier=0x14fd98;
+ if(!pools||!name||!out)return GH_R100_SCRIPT_ARGUMENT;
+ *out=(gh_r100_om_view){0};
+ const gh_room_vector *v;
+ if(gh_room_registry_view(pools,0x754c58,&v)||(v->count&&!v->allocation.pointer)||v->count>v->capacity)
+  return GH_R100_SCRIPT_BOUNDS;
+ if(v->count&&!object_view)return GH_R100_SCRIPT_UNSUPPORTED;
+ uint64_t key=0;
+ for(unsigned k=0;k<8&&name[k];k++)key|=(uint64_t)(uint8_t)name[k]<<(k*8);
+ for(uint32_t i=0;i<v->count;i++){
+  gh_r100_om_view object={0};
+  uint32_t child=0;
+  gh_r100_init_status status=object_view(context,rd((const uint8_t *)v->allocation.pointer+(size_t)i*4),&object,&child);
+  if(status){if(child)*frontier=child;return GH_R100_SCRIPT_CALLEE;}
+  if(!object.bytes||object.size<0x300||!object.identity)return GH_R100_SCRIPT_BOUNDS;
+  const unsigned id=half(object.bytes+0x2fe);
+  if(id<0x300||id>=0x500)continue;
+  if(object.size<0x540)return GH_R100_SCRIPT_BOUNDS;
+  const uint64_t bits=(uint64_t)rd(object.bytes+0x538)|(uint64_t)rd(object.bytes+0x53c)<<32;
+  if(bits==key){*out=object;break;}
+ }
+ *frontier=0;
  return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status find_gate(gh_r100_scripts *s,const char *name,gh_r100_om_view *out)
+{
+ uint32_t frontier;
+ gh_r100_script_status status=gh_r100_find_om_0014fd98(s->b.pools,s->b.object_view,s->b.context,name,out,&frontier);
+ return status?fail(s,frontier,0,status):GH_R100_SCRIPT_OK;
 }
 gh_r100_script_status gh_r100_script_setup_00000bc0(gh_r100_scripts*s){
  if(!s||!s->bound)return GH_R100_SCRIPT_ARGUMENT;uint32_t flags=rd(s->b.room->active+4);gh_r100_script_status e;s->frontier=0;s->frontier_relative=0;s->status=GH_R100_SCRIPT_OK;

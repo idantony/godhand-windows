@@ -94,6 +94,15 @@ gh_audio_status gh_audio_bank_views(const gh_audio_registry *r,int16_t id,
  *programs=b->view.sections[0];*afd=b->view.sections[1];
  *sys=b->view.sections[2];*samples=b->view.sections[3];return GH_AUDIO_OK;
 }
+gh_audio_status gh_audio_external_path(const gh_audio_registry *r,int16_t id,const char **path)
+{
+ if(!r||!path||!valid_id(id))return GH_AUDIO_ARGUMENT;
+ const bank *b=get(r,id);
+ if(!b||!b->afs.pairs||!b->view.external_afs)return GH_AUDIO_NOT_FOUND;
+ *path=b->view.external_afs;
+ return GH_AUDIO_OK;
+}
+
 gh_audio_status gh_audio_sample_at(const gh_audio_registry *r,int16_t id,
  uint32_t slot,gh_sound_span *descriptor,gh_sound_span *tail){
  const bank *b=get(r,id);gh_sound_span sys,data;uint32_t off;
