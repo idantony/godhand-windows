@@ -3,6 +3,7 @@
 #include "game_room_death.h"
 #include "game_om300_retire.h"
 #include "game_effect_create.h"
+#include "game_enemy_retire.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,6 +19,8 @@ typedef struct {
  gh_scene_dynamic_owner *dynamic;
  const gh_game_effects *effects;
  gh_se_voice_engine *voices;
+ gh_enemy_ems *enemies;
+ gh_enemy_retire_bindings enemy;
 } gh_room_death_bindings;
 
 typedef struct {
@@ -26,6 +29,8 @@ typedef struct {
  gh_player_retirement player;
  gh_child_retirement child;
  gh_om300_full_retirement door;
+ gh_enemy_death_mark enemy_mark;
+ gh_enemy_full_retirement enemy;
  uint32_t frontier,blocked_handle,retiring_kind,retiring_handle;
 } gh_room_death_dispatch;
 

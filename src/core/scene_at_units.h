@@ -20,6 +20,9 @@ size_t gh_scene_at_native_unit_count(const gh_scene_at_manager *);
 /* Native ownership cleanup at proven room lifetime boundary. Includes isolated
  * allocation made by originalself-destination JMP path; no destructor ack. */
 gh_scene_at_status gh_scene_at_units_release(gh_scene_at_manager *);
+/* Actual 2C1270: release known JMP allocations in eight-slot order. Retire
+ * the native list companion at this room-exit lifetime boundary. */
+gh_scene_at_status gh_scene_at_quit_002c1270(gh_scene_at_manager *,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

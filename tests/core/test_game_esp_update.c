@@ -5,6 +5,7 @@
 #include "game_actor_two_bone.h"
 #include "game_esp_update.h"
 #include "game_ray_static.h"
+#include "game_scene_exit.h"
 #include "disc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,4 +32,30 @@ const uint32_t work_flags[]={0x10000,0x10000,0x10000,0x4010000,0,0};const uint32
  * Then originalnextframe marks hidden and the following VDtor(flags2) clears
  * active via dispatcher; a foreign sibling remains alive throughout. */
 for(unsigned death=0;death<4;death++){created victim=make(&b,death==3?2:0),sibling=make(&b,0);gh_effect_esp_view v=view(e,victim.slot);if(death==0){v.payload[0x22c]=1;v.payload[0x22d]=0;}if(death==1)v.payload[0x24c]=1;if(death==2){v.payload[0x238]=1;v.payload[0x239]=0;v.payload[0x22e]=1;v.payload[0x22f]=0;}if(death==3){float twenty=20,zero=0;memcpy(v.payload+0x234,&twenty,4);v.payload[0x22e]=20;v.payload[0x22f]=0;memcpy(v.payload+0x194,&zero,4);}gh_esp_update_call ending={0};C(!gh_game_esp_update_002fbed0(&ending,&ub,victim.slot,victim.serial)&&ending.retired&&ending.complete&&view(e,victim.slot).parent_emitter==-1&&view(e,sibling.slot).initialized);unsigned off=(victim.slot>>5)*4;uint32_t mask=0x80000000u>>(victim.slot&31),active_word,paused_word;memcpy(&active_word,esp+0x100000+off,4);memcpy(&paused_word,esp+0x100080+off,4);C((active_word&mask)&&(paused_word&mask));for(unsigned frame_index=0;frame_index<2;frame_index++){gh_game_scene_aux profile={.effect_stage=1};gh_effects_frame_bindings fb={.storage=storage,.work=&work,.globals=&globals,.profile=&profile,.clock=test_clock,.atan_coeff=envelope.atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE};gh_game_effects_frame frame={.b=fb,.stage=4,.bound=1};frame.identity=&frame;C(!gh_game_effects_frame_update_0030f228(&frame,&fb));memcpy(&active_word,esp+0x100000+off,4);C(frame_index?!(active_word&mask):(active_word&mask));}C(gh_effect_create_esp_at(e,victim.slot,&v)==GH_EFFECT_UNSUPPORTED&&view(e,sibling.slot).initialized);C(!gh_effect_create_esp_abort_native(e,sibling.slot,sibling.serial));}
+/* Actual R100 emitter and ESP owners enter Main5 op4. Preserve the original
+ * paused/hidden exclusions and leave active bits for the normal update. */
+created ending=make(&b,0),hidden=make(&b,0);
+const uint32_t ending_bit=0x80000000u>>(ending.slot&31),hidden_bit=0x80000000u>>(hidden.slot&31);
+const unsigned ending_word=(ending.slot>>5)*4,hidden_word=(hidden.slot>>5)*4;
+put(emit+0x26020,0x40000000);
+put(esp+0x100100+hidden_word,hidden_bit);
+C(gh_scene_exit_effects_00305b90(esp,0x100180,emit,0x26060,&f)==GH_SCENE_EXIT_UNSUPPORTED&&f==0x302918);
+uint8_t save_bytes[GH_CORE_SAVE_BYTES];
+gh_core_save_view save={save_bytes,sizeof(save_bytes)};
+C(!gh_core_save_system_init(save));
+gh_game_loop loop={.work=&work,.game_state={5,1}};
+gh_game_scene_exit scene_exit={.phase=1,.operation=4};
+const gh_game_scene_exit_bindings exit_bindings={.loop=&loop,.save=save,.effects=e,
+ .scene_buffer_a=esp,.scene_buffer_a_size=0x100180,.scene_buffer_b=emit,.scene_buffer_b_size=0x26060};
+C(gh_game_scene_exit_002a67d0(&scene_exit,&exit_bindings)==GH_SCENE_EXIT_ARGUMENT&&
+ scene_exit.operation==5&&scene_exit.frontier==0x2c3858);
+C((emitter(e,0).payload[0x117]&0x40)&&!(emitter(e,1).payload[0x117]&0x40));
+C(view(e,ending.slot).initialized&&view(e,ending.slot).parent_emitter==-1&&view(e,hidden.slot).initialized);
+uint32_t paused,active;
+memcpy(&paused,esp+0x100080+ending_word,4);
+memcpy(&active,esp+0x100000+ending_word,4);
+C((paused&ending_bit)&&(active&ending_bit));
+memcpy(&paused,esp+0x100080+hidden_word,4);
+C(!(paused&hidden_bit));
+puts("PASS actual R100 State5 op4 emitter retirement request and ESP pause, preserving active and skipped slots");
 gh_scene_ray_triangle_state_release(&actors);gh_effect_create_forget_on_owner_destroy(e);gh_disc_close(disc);free(e);free(esp);free(emit);free(core);free(roombytes);free(elf);puts("PASS actualR100 fourambient ESP firstupdates16cases/fourFEnv realtimer/colourfade15/scale/euler/position/velocity/detach; lateerrorprefix noRNG/counterreplay and copiedcursor rejection; nativefixture notworld/renderclaim");return 0;}

@@ -308,26 +308,34 @@ static int player_fall_impact_profile(const struct voice *v,const uint8_t *p)
     !w(p+0x24)&&w(p+0x28)==0xffffu&&!w(p+0x2c);
 }
 
-/* Original 25E790 voice for R100 stamp19/dependency0203, after the
- * actor-attached bank1 alias has resolved the actual EM03.SES bank. */
-static int em03_death_profile(const struct voice *v,int16_t bank,int16_t program,
+/* Original 25E790 voice for the two R100 opening enemies. Actor bank1
+ * resolves to EM03.SES (stamp19) or EM00.SES (stamp20). */
+static int r100_death_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
  if(!v->source_owner||v->requested_program!=8||bank<1||bank==2||bank==3||
     (program!=8&&program!=9)||v->part_index!=-1)return 0;
+ int stamp=0;
  if(v->model){
   const gh_title_player_view *root=&v->model->root;
   if(!root->bytes||root->size<0x642||root->original_vtable214!=0x4479c8||
-     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=0x203||
-     h(root->bytes+0x640)!=19||!v->model->work||(uint16_t)v->model->work->room!=0x100)return 0;
+     h(root->bytes+0x2fe)!=0x202||!v->model->work||(uint16_t)v->model->work->room!=0x100)return 0;
+  stamp=(int)h(root->bytes+0x640);
+  const uint32_t dependency=w(root->bytes+0x564);
+  if(!((stamp==19&&dependency==0x203)||(stamp==20&&dependency==0x200)))return 0;
  }else if(!v->combat_profile)return 0;
  if(w(p+4)!=(program==8?0x012e0007u:0x012e0008u)||w(p+8)!=0x25f||
-    h(p+12)||h(p+14)!=0x20||w(p+16)!=(program==8?0x005f005fu:0x007d007du)||
-    w(p+20)!=0x005a0040||w(p+24)!=0x0064ff38||w(p+28)||
+    h(p+12)||h(p+14)!=0x20||w(p+20)!=0x005a0040||w(p+24)!=0x0064ff38||w(p+28)||
     w(p+32)!=(program==8?0x00010145u:0x00010045u)||w(p+36)!=0x400||
     w(p+40)!=0xffff||w(p+44))return 0;
- return !sample||(w(sample)==(program==8?0xa550u:0xbd40u)&&w(sample+4)==11025&&
-        w(sample+8)==0x5fcb80ff&&!w(sample+12));
+ const uint32_t gain=w(p+16);
+ const uint32_t em03=program==8?0xa550u:0xbd40u;
+ const uint32_t em00=program==8?0x7b40u:0xa4c0u;
+ const int profile03=stamp!=20&&gain==(program==8?0x005f005fu:0x007d007du)&&
+    (!sample||w(sample)==em03);
+ const int profile00=stamp!=19&&gain==0x00780078u&&(!sample||w(sample)==em00);
+ return (profile03||profile00)&&(!sample||
+    (w(sample+4)==11025&&w(sample+8)==0x5fcb80ff&&!w(sample+12)));
 }
 
 static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,int16_t program,const uint8_t*p,struct voice*candidate,uint16_t selected_pitch){
@@ -366,7 +374,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  int sequence_voice=adsr2==0x5fcb&&enemy_state71_sequence_profile(candidate,bank,program,p,descriptor.data);
  int selector6b_voice=adsr2==0x5fcb&&em00_selector6b_profile(candidate,bank,program,p,descriptor.data);
  int attack_voice=adsr2==0x5fcb&&em03_attack_sequence_profile(candidate,bank,program,p,descriptor.data);
- int death_voice=adsr2==0x5fcb&&em03_death_profile(candidate,bank,program,p,descriptor.data);
+ int death_voice=adsr2==0x5fcb&&r100_death_profile(candidate,bank,program,p,descriptor.data);
  int timed_voice=adsr2==0x5fcb&&em0a_timed_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==0x5be0&&w(descriptor.data+4)==16000;
  if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!square_voice&&!player_cd&&!hurt_voice&&!fall_grunt&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!selector6b_voice&&!attack_voice&&!death_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
@@ -608,7 +616,7 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
      !enemy_state71_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em03_attack_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
-     !em03_death_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !r100_death_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_em03_attack_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em0a_timed_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)&&

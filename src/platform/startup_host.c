@@ -72,6 +72,7 @@
 #include "../core/mc_save_control.h"
 #include "../core/game_loaded_room.h"
 #include "../core/movie_task.h"
+#include "../rooms/r100_exit.h"
 #include "game_services.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -201,6 +202,8 @@ struct gh_startup_host {
     int event_link_relative;
     gh_display_state display;
     gh_game_scene_aux scene_aux;
+    gh_r100_exit r100_exit;
+    gh_event_reserve_work event_reserve;
     gh_game_effects_frame effects_frame;gh_effects_frame_globals effects_globals;
     gh_game_object_step object_step;
     gh_game_render_projection render_projection;
@@ -273,11 +276,31 @@ static gh_door_status scene_save_map_scenario_end(void *context,uint32_t address
     if(status&&frontier)*frontier=h->scene_exit.frontier;
     return status?GH_DOOR_CALLEE:GH_DOOR_OK;
 }
+static gh_door_status scene_door_player_aux(void *context,uint32_t address,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    gh_game_services_scene_view scene;
+    size_t offset;
+    if(frontier)*frontier=address;
+    if(address==0x12ac60)offset=0x698;
+    else if(address==0x12b9f0)offset=0x6a0;
+    else return GH_DOOR_UNSUPPORTED;
+    if(gh_game_services_get_scene_view(h->services,&scene))return GH_DOOR_ARGUMENT;
+    const gh_game_title_player *player=scene.title_player;
+    if(!player||!player->ready||!player->view.bytes||player->view.size<offset+4)return GH_DOOR_UNSUPPORTED;
+    uint32_t token;
+    memcpy(&token,player->view.bytes+offset,sizeof(token));
+    if(token)return GH_DOOR_UNSUPPORTED;
+    /* The two original leaves return immediately when their owner is absent. */
+    if(frontier)*frontier=0;
+    return GH_DOOR_OK;
+}
 static gh_game_door_bindings scene_door_bindings(gh_startup_host *h,const gh_game_services_scene_view *s)
 {
     gh_game_door_bindings b={.work=&h->work,.loop=&h->game_loop,
         .scenario={s->scenario_bytes,s->scenario_bytes_size,s->scenario},.messages=s->scene_ui,
-        .prepare=s->prepare,.player=s->title_player,.scene_step=s->step,.fade=&h->fade,.display=&h->display};
+        .prepare=s->prepare,.player=s->title_player,.scene_step=s->step,.fade=&h->fade,.display=&h->display,
+        .external=scene_door_player_aux,.context=h};
     return b;
 }
 static gh_checkpoint_bindings scene_checkpoint_bindings(gh_startup_host *h,
@@ -289,14 +312,21 @@ static gh_checkpoint_bindings scene_checkpoint_bindings(gh_startup_host *h,
         .destination_size=sizeof(h->game_stage.work_area)
     };
 }
-static gh_r020_status scene_begin_room_jump(void *context,const gh_r020_room_jump_request *request,uint32_t *frontier)
+static gh_door_status scene_request_room_jump(void *context,uint16_t room,const float position[3],
+    float yaw,uint8_t kind,uint32_t flags,uint8_t force,uint32_t *frontier)
 {
     gh_startup_host *h=context;gh_game_services_scene_view s;
-    if(!request||gh_game_services_get_scene_view(h->services,&s))return GH_R020_ARGUMENT;
-    gh_game_door_bindings b=scene_door_bindings(h,&s);
-    gh_door_status e=gh_game_door_request_001ffeb8(s.door,&b,request->room,request->position,request->yaw,
-        request->kind,request->flags,request->transition);
+    if(gh_game_services_get_scene_view(h->services,&s))return GH_DOOR_ARGUMENT;
+    const gh_game_door_bindings b=scene_door_bindings(h,&s);
+    const gh_door_status e=gh_game_door_request_001ffeb8(s.door,&b,room,position,yaw,kind,flags,force);
     if(e&&frontier)*frontier=s.door->frontier;
+    return e;
+}
+static gh_r020_status scene_begin_room_jump(void *context,const gh_r020_room_jump_request *request,uint32_t *frontier)
+{
+    if(!request)return GH_R020_ARGUMENT;
+    const gh_door_status e=scene_request_room_jump(context,request->room,request->position,request->yaw,
+        request->kind,request->flags,request->transition,frontier);
     return e?(e==GH_DOOR_UNSUPPORTED?GH_R020_UNSUPPORTED:GH_R020_ARGUMENT):GH_R020_OK;
 }
 static gh_r020_status scene_open_load(void *context,uint32_t *frontier)
@@ -1068,7 +1098,10 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_camera_status status=gh_game_motion_camera_move_00138600(&h->event_camera,&h->game_init,&h->work,&display,frontier);
         return status?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2c1618){
-        int original_return;gh_scene_at_status e=gh_scene_at_step_native_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,&h->work,NULL,&original_return,frontier);
+        const gh_scene_at_step_callbacks callbacks={.context=&h->r100_exit,.spawn=gh_r100_exit_spawn_001f7858};
+        int original_return;
+        gh_scene_at_status e=gh_scene_at_step_native_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,
+            &h->work,h->work.room==0x100?&callbacks:NULL,&original_return,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x30f090){
         if(!h->object_step.live_bound){
@@ -1479,7 +1512,8 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.fade=&h->fade;b.audio_registry=h->audio;b.em_set_first_byte=&h->em_set_first_byte;
         b.bgm_requests=h->bgm;
         b.sound_scene=&h->sound_scene;
-        b.event=&h->event;
+        b.event=&h->event;b.event_reserve=&h->event_reserve;
+        b.begin_event_room_jump=scene_request_room_jump;b.event_room_context=h;
         b.display=&h->display;
         b.title_callbacks=(gh_r020_move_callbacks){.context=h,.draw_entry=scene_title_draw,.logo_se=scene_logo_se,
             .program_se=scene_program_se,.begin_room_jump=scene_begin_room_jump,.open_load=scene_open_load};
@@ -1525,14 +1559,26 @@ static int initialize_state2(void *context,gh_game_loop *loop)
 static int initialize_state3(void *context,gh_game_loop *loop)
 {gh_startup_host *h=context;(void)loop;return service_state(h,3);}
 static gh_scene_step_status scene_scenario_status(void *context,uint32_t *frontier)
-{gh_startup_host*h=context;return gh_game_services_task_status(h->services,frontier);}
+{
+    gh_startup_host *h=context;
+    if(h->r100_exit.status){
+        if(frontier)*frontier=h->r100_exit.frontier;
+        return GH_SCENE_STEP_CALLEE;
+    }
+    return gh_game_services_task_status(h->services,frontier);
+}
 static int update_state4(void *context,gh_game_loop *loop)
 {
     gh_startup_host *h=context;gh_game_services_scene_view s;(void)loop;
     if(!h->services||gh_game_services_get_scene_view(h->services,&s))return entry_frontier(h,0x2a6690,0,GH_SCENE_STEP_ARGUMENT);
+    if(h->work.room==0x100)h->r100_exit.bindings=(gh_r100_exit_bindings){
+        .work=&h->work,.room=s.room_state,.at=s.scene_at,.buttons=s.action_buttons,
+        .scenario={s.scenario_bytes,s.scenario_bytes_size,s.scenario},.threads=s.scenario_threads,
+        .event_work=&h->event_reserve,.begin_room=scene_request_room_jump,.context=h};
     if(!s.step->action_frame.active||s.step->action_frame.complete)h->action_bindings=(gh_action_step_bindings){
         .buttons=s.action_buttons,.work=&h->work,.cockpit=s.cockpit,.current_player=&s.title_player->view,
-        .init=&h->game_init,.auxiliary_binding_known=1};
+        .init=&h->game_init,.auxiliary_binding_known=1,
+        .callback=h->work.room==0x100?gh_r100_exit_action_002c2138:NULL,.context=&h->r100_exit};
     gh_game_scene_step_bindings b={.work=&h->work,.init=&h->game_init,.prepare=s.prepare,
         .save={h->save_bytes,sizeof(h->save_bytes)},.collision=s.collision_pairs,.actors=s.scene_tables,
         .scenario={s.scenario_bytes,s.scenario_bytes_size,s.scenario},.main_threads=h->threads,
@@ -1548,6 +1594,8 @@ static int update_state4(void *context,gh_game_loop *loop)
     if(e){
         const char *module=gh_game_services_frontier_module(h->services);
         if(h->event_link_relative && s.step->frontier==h->event.frontier)module="event.rel";
+        if(h->r100_exit.status&&s.step->frontier==h->r100_exit.frontier)
+            module=s.step->frontier<0x100000?"r100.rel":NULL;
         return entry_frontier(h,s.step->frontier?s.step->frontier:0x2a6690,
             module,s.step->detail?s.step->detail:(int)e);
     }
@@ -1557,6 +1605,13 @@ static int update_state4(void *context,gh_game_loop *loop)
 static gh_scene_exit_status scene_exit_consumer(void *context,uint32_t address,uint32_t argument,int *original_return,uint32_t *frontier)
 {
     gh_startup_host *h=context;(void)argument;gh_sound_exit_status e;
+    if(address==0x30f8b0){
+        uint32_t blocked_handle=0;
+        const gh_game_services_status status=gh_game_services_scene_retire_objects_0030f8b0(h->services,frontier,&blocked_handle);
+        if(status&&blocked_handle)fprintf(stderr,"Native scene exit stopped at object handle %u\n",blocked_handle);
+        if(status==GH_SERVICES_FRONTIER)return GH_SCENE_EXIT_UNSUPPORTED;
+        return status?GH_SCENE_EXIT_CALLEE:GH_SCENE_EXIT_OK;
+    }
     if(address==0x1fdfa8||address==0x2a71f0||address==0x2a7280||address==0x2d73e0){gh_game_services_scene_view s;uint32_t f=0;int detail;
         if(gh_game_services_get_scene_view(h->services,&s))return GH_SCENE_EXIT_ARGUMENT;
         if(address==0x1fdfa8)detail=gh_game_object_pool_release_001fdfa8(&h->game_init,&f);
@@ -1625,7 +1680,7 @@ static int update_state5(void *context,gh_game_loop *loop)
         .objects=s.objects,.room_objects=s.room_objects,.scene_at=s.scene_at,
         .scene_buffer_a=s.scene_buffer_a,.scene_buffer_a_size=s.scene_buffer_a_size,
         .scene_buffer_b=s.scene_buffer_b,.scene_buffer_b_size=s.scene_buffer_b_size,
-        .external=scene_exit_consumer,.context=h};
+        .external=scene_exit_consumer,.context=h,.effects=s.effects};
     gh_scene_exit_status e=gh_game_scene_exit_002a67d0(&h->scene_exit,&b);
     if(e)return entry_frontier(h,h->scene_exit.frontier?h->scene_exit.frontier:0x2a67d0,0,h->scene_exit.detail?h->scene_exit.detail:(int)e);
     if(loop->game_state[0]==2||loop->game_state[0]==3){gh_game_services_status next=gh_game_services_begin_next_room(h->services);
@@ -2463,6 +2518,8 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
                     memcpy(&out->current_enemy_serial,p+0x17d0,4);
                     memcpy(&out->current_enemy_distance_bits,p+0x618,4);
                     memcpy(&out->current_enemy_route_bits,p+0x510,4);
+                    memcpy(&out->current_enemy_home_reason,p+0x16c4,4);
+                    memcpy(&out->current_enemy_home_timer_bits,p+0x16c0,4);
                     out->current_enemy_flags_3ac=(uint32_t)p[0x3ac]|(uint32_t)p[0x3ad]<<8;
                     memcpy(&out->current_enemy_flags_16d0,p+0x16d0,4);
                     memcpy(&out->current_enemy_flags_16d4,p+0x16d4,4);

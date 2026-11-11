@@ -18,7 +18,42 @@ gh_scene_dynamic_status gh_scene_dynamic_box_create_0012ead8(gh_scene_dynamic_ow
  memcpy(p+0x60,a->alias_f0,12);memcpy(p+0x70,offset,12);memcpy(p+0x80,a->bytes+0x100,12);memcpy(p+0x90,rotation,12);for(unsigned i=0;i<3;i++){float f=size[i];if(f<0)f=-f;memcpy(p+0xa0+i*4,&f,4);}for(unsigned i=0;i<6;i++){memcpy(p+0xb0+i*16,attributes+i*16,16);uint16_t sentinel=0xffff;memcpy(p+0xb8+i*16,&sentinel,2);p[0xba+i*16]=p[0xbb+i*16]=0;}put(p,8,5);
  if(s->tables->pending_actor_head){struct gh_scene_dynamic_box*tail=s->tables->pending_actor_head;while(tail->next)tail=tail->next;tail->next=b;}else s->tables->pending_actor_head=b;s->tables->pending_actor_count++;s->allocations[s->allocation_count++]=b;*out=b;*original=1;return GH_DYNAMIC_OK;}
 gh_scene_dynamic_status gh_scene_dynamic_box_view_at(const gh_scene_dynamic_owner*s,const struct gh_scene_dynamic_box*b,gh_scene_dynamic_box_view*out){if(!s||!s->bound||s->identity!=s||!b||!out||!known(s,b))return GH_DYNAMIC_ARGUMENT;if(b->original_bytes!=0x100&&b->original_bytes!=0x190)return GH_DYNAMIC_ARGUMENT;*out=(gh_scene_dynamic_box_view){b->allocation.pointer,b->original_bytes,b->actor,b->matrix,b->next,b->world_ready};return GH_DYNAMIC_OK;}
-gh_scene_dynamic_status gh_scene_dynamic_box_abort(gh_scene_dynamic_owner*s,struct gh_scene_dynamic_box*b){gh_scene_dynamic_status e=gh_scene_dynamic_validate_owner(s);if(e)return e;if(s->update_active)return GH_DYNAMIC_BUSY;if(!b||!known(s,b))return GH_DYNAMIC_ARGUMENT;struct gh_scene_dynamic_box*previous=NULL,*cur=s->tables->pending_actor_head;while(cur!=b){previous=cur;cur=cur->next;}if(gh_heap_release(s->heap,b->allocation))return GH_DYNAMIC_BUSY;if(previous)previous->next=b->next;else s->tables->pending_actor_head=b->next;s->tables->pending_actor_count--;size_t index=0;while(s->allocations[index]!=b)index++;memmove(s->allocations+index,s->allocations+index+1,(s->allocation_count-index-1)*sizeof(*s->allocations));s->allocation_count--;free(b);s->frontier=0;return GH_DYNAMIC_OK;}
+gh_scene_dynamic_status gh_scene_dynamic_box_abort(gh_scene_dynamic_owner*s,struct gh_scene_dynamic_box*b){gh_scene_dynamic_status e=gh_scene_dynamic_validate_owner(s);if(e)return e;if(s->update_active)return GH_DYNAMIC_BUSY;if(!b||!known(s,b)||(b->borrowed_slot&&*b->borrowed_slot!=b))return GH_DYNAMIC_ARGUMENT;struct gh_scene_dynamic_box*previous=NULL,*cur=s->tables->pending_actor_head;while(cur!=b){previous=cur;cur=cur->next;}if(gh_heap_release(s->heap,b->allocation))return GH_DYNAMIC_BUSY;if(previous)previous->next=b->next;else s->tables->pending_actor_head=b->next;s->tables->pending_actor_count--;size_t index=0;while(s->allocations[index]!=b)index++;memmove(s->allocations+index,s->allocations+index+1,(s->allocation_count-index-1)*sizeof(*s->allocations));s->allocation_count--;if(b->borrowed_slot)*b->borrowed_slot=NULL;free(b);s->frontier=0;return GH_DYNAMIC_OK;}
+gh_scene_dynamic_status gh_scene_dynamic_box_bind_slot(gh_scene_dynamic_owner *owner,
+ struct gh_scene_dynamic_box *box,struct gh_scene_dynamic_box **slot)
+{
+ if(!owner||!slot||!box||!known(owner,box)||box->owner!=owner||*slot!=box||
+    (box->borrowed_slot&&box->borrowed_slot!=slot))return GH_DYNAMIC_ARGUMENT;
+ box->borrowed_slot=slot;
+ return GH_DYNAMIC_OK;
+}
+
+gh_scene_dynamic_status gh_scene_dynamic_room_quit_0012ecf0(gh_scene_dynamic_owner *owner)
+{
+ gh_scene_dynamic_status status=gh_scene_dynamic_validate_owner(owner);
+ if(status)return status;
+ if(owner->update_active)return GH_DYNAMIC_BUSY;
+ for(struct gh_scene_dynamic_box *box=owner->tables->pending_actor_head;box;box=box->next){
+  uint32_t vtable;
+  if(box->original_bytes!=0x190||!box->allocation.pointer||
+     (box->borrowed_slot&&*box->borrowed_slot!=box)){
+   owner->frontier=0x12ecf0;
+   return GH_DYNAMIC_UNSUPPORTED;
+  }
+  memcpy(&vtable,(const uint8_t*)box->allocation.pointer+0x5c,4);
+  if(vtable!=0x41d558){owner->frontier=0x12ecf0;return GH_DYNAMIC_UNSUPPORTED;}
+ }
+ while(owner->tables->pending_actor_head){
+  struct gh_scene_dynamic_box *box=owner->tables->pending_actor_head;
+  uint8_t *raw=box->allocation.pointer;
+  put(raw,0x5c,0x41d5a8); /* 12DC88 mode3 rebinds the base before free. */
+  status=gh_scene_dynamic_box_abort(owner,box);
+  if(status){put(raw,0x5c,0x41d558);owner->frontier=0x30f5a0;return status;}
+ }
+ owner->frontier=0;
+ return GH_DYNAMIC_OK;
+}
+
 gh_scene_dynamic_status gh_scene_dynamic_release(gh_scene_dynamic_owner*s){if(!s)return GH_DYNAMIC_ARGUMENT;if(!s->bound){if(s->allocations)return GH_DYNAMIC_BUSY;return GH_DYNAMIC_OK;}gh_scene_dynamic_status e=gh_scene_dynamic_validate_owner(s);if(e)return e;if(s->update_active)return GH_DYNAMIC_BUSY;while(s->tables->pending_actor_head){e=gh_scene_dynamic_box_abort(s,s->tables->pending_actor_head);if(e)return e;}free(s->allocations);if(s->tables->dynamic_native_owner==s)s->tables->dynamic_native_owner=NULL;*s=(gh_scene_dynamic_owner){0};return GH_DYNAMIC_OK;}
 
 void gh_scene_dynamic_cancel_update(gh_scene_dynamic_owner*s){if(!s||s->identity!=s)return;s->update_cursor=NULL;s->update_tables=NULL;s->update_work=NULL;s->update_completed=s->update_allocation_count=0;s->update_active=0;}

@@ -119,6 +119,7 @@ typedef struct gh_startup_snapshot {
     uint32_t current_enemy_placement_ready,current_enemy_stamp,current_enemy_dependency,current_enemy_appearance;
     uint32_t current_enemy_spawn_flags,current_enemy_phase,current_enemy_variant,current_enemy_serial;
     uint32_t current_enemy_distance_bits,current_enemy_route_bits;
+    uint32_t current_enemy_home_reason,current_enemy_home_timer_bits;
     uint32_t current_enemy_flags_3ac,current_enemy_flags_16d0,current_enemy_flags_16d4;
     uint32_t current_enemy_reaction_set_17bd;
     uint32_t current_b_samples,current_b_index[4],current_b_group[4],current_b_generation[4],current_b_serial[4];

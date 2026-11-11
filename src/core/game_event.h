@@ -17,6 +17,17 @@ typedef struct {
     uint32_t unknown1c,position_bits[4],angle_bits;
     uint8_t skip_ok,unknown35[3];
 } gh_game_event_prefix;
+/* Original Event+38 points to this separate record. Its native owner must
+ * survive the intermediate room load until the destination request consumes it. */
+typedef struct {
+    uint32_t flags,mode;
+    uint16_t destination_room;
+    uint8_t reserved0a[6];
+    float position[3];
+    uint32_t reserved1c;
+    float yaw;
+    uint32_t reserved24[3];
+} gh_event_reserve_work;
 typedef enum {GH_EVENT_OK,GH_EVENT_ARGUMENT,GH_EVENT_BOUNDS,GH_EVENT_FORMAT,
               GH_EVENT_UNSUPPORTED,GH_EVENT_CALLEE} gh_game_event_status;
 typedef struct gh_game_event gh_game_event;

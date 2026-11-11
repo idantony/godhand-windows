@@ -320,7 +320,8 @@ int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *v)
         v->model&&v->model->root.bytes==v->actor->bytes&&v->part==v->model->parts&&v->part&&
         v->record.bytes&&v->record.size==0x2f0&&v->payload&&v->payload_size==0x260&&w(v->payload+0x18c)==0x00020058u&&
         !v->payload[0x1ec]&&(w(v->actor->bytes+0x2fc)>>16)==0x202&&
-        w(v->actor->bytes+0x564)==0x203&&(w(v->actor->bytes+0x640)&0xffff)==19&&
+        ((w(v->actor->bytes+0x564)==0x203&&(w(v->actor->bytes+0x640)&0xffff)==19)||
+         (w(v->actor->bytes+0x564)==0x200&&(w(v->actor->bytes+0x640)&0xffff)==20))&&
         !v->record.bytes[0xbe]&&!v->record.bytes[0x128]&&!v->record.bytes[0x136];
 }
 gh_effect_status gh_effect_create_emitter_at(const gh_game_effects*s,unsigned slot,gh_effect_emitter_view*out){

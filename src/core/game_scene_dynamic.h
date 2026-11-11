@@ -30,6 +30,11 @@ gh_scene_dynamic_status gh_scene_dynamic_box_view_at(const gh_scene_dynamic_owne
 /* Native constructor/shutdown abort only, never fake originalvirtualupdate or
  * querycompletion. Unlinks/frees ONLYowner's records, validatesbeforemutation. */
 gh_scene_dynamic_status gh_scene_dynamic_box_abort(gh_scene_dynamic_owner *,struct gh_scene_dynamic_box *);
+/* A persistent typed door slot borrows this record until its deletion. */
+gh_scene_dynamic_status gh_scene_dynamic_box_bind_slot(gh_scene_dynamic_owner *,
+ struct gh_scene_dynamic_box *,struct gh_scene_dynamic_box **);
+/* Original 12ECF0 deletion order for the supported 12DC88 boxes. */
+gh_scene_dynamic_status gh_scene_dynamic_room_quit_0012ecf0(gh_scene_dynamic_owner *);
 /* Original1311A0 unique sourceactor list at+34[8], count remains original+54.
  * Borrowed views must be detached before their actor storage is released.
  * Detach clears typed references only; original count/order are preserved. */

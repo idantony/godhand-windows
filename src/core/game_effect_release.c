@@ -1,4 +1,4 @@
-#include "game_effect_release.h"
+#include "game_effect_create.h"
 #include <string.h>
 static uint32_t rd(const uint8_t*p){uint32_t x;memcpy(&x,p,4);return x;}
 static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_player_view*actor,int32_t kind,int emitter,uint32_t*f,unsigned*slot){
@@ -10,7 +10,20 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
   if(rd(p+kindoff)!=(uint32_t)kind)continue;*slot=i;int match=0;
   if(!b->actor_match){*f=emitter?0x3039e8:0x2feb80;return GH_EFFECT_UNSUPPORTED;}
   gh_effect_status e=b->actor_match(b->context,emitter,i,actor,&match,f);if(e)return e;
-  if(match){*f=emitter?0x302918:0x2fbe50;return GH_EFFECT_UNSUPPORTED;}
+  if(!match)continue;
+  if(emitter){
+   gh_effect_emitter_view view;
+   if(!gh_effect_create_emitter_at(b->effects,i,&view)&&view.payload==p&&
+      gh_effect_stamp19_attack_part_is_bound(&view)&&actor&&view.actor->bytes==actor->bytes){
+    /* 302918 only sets the stop request. The Effects step owns child
+     * links, pending masks, and final destruction. */
+    const uint32_t stopped=rd(p+0x114)|0x40000000u;
+    memcpy(view.payload+0x114,&stopped,sizeof(stopped));
+    continue;
+   }
+  }
+  *f=emitter?0x302918:0x2fbe50;
+  return GH_EFFECT_UNSUPPORTED;
  }
  return GH_EFFECT_OK;
 }

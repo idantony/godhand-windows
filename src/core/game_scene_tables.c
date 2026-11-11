@@ -1,5 +1,6 @@
 /* MIT LICENSE.upstream; exactscene resourcebinding leaves. */
 #include "game_scene_tables.h"
+#include "game_scene_dynamic.h"
 #include "game_actor_scroll_links.h"
 #include "game_ray_static.h"
 #include <string.h>
@@ -42,7 +43,12 @@ gh_scene_table_status gh_scene_actors_0012e670(gh_game_scene_tables*s,const gh_b
  s->akt=akt;s->akg=akg;memcpy(s->actor_links,links,sizeof(links));
  memcpy(s->actor_vec50,akg.bytes+0x48,12);memcpy(s->actor_vec30,akg.bytes+0x30,12);memcpy(s->actor_vec40,akg.bytes+0x3c,12);
  s->actor_count60=u16(akg.bytes+0x60);s->actor_count64=u16(akg.bytes+0x62);s->actor_count68=u16(akg.bytes+0x64);
- if(s->pending_actor_head)return fail(s,0x12ecf0,0,GH_TABLE_UNSUPPORTED);
+ if(s->pending_actor_head){
+  gh_scene_dynamic_owner *owner=s->dynamic_native_owner;
+  if(!owner)return fail(s,0x12ecf0,0,GH_TABLE_UNSUPPORTED);
+  gh_scene_dynamic_status status=gh_scene_dynamic_room_quit_0012ecf0(owner);
+  if(status)return fail(s,owner->frontier?owner->frontier:0x12ecf0,status,GH_TABLE_UNSUPPORTED);
+ }
  s->actors_ready=1;return GH_TABLE_OK;
 }
 gh_scene_table_status gh_scene_actor_scroll_links_00307a60(gh_game_scene_tables*s){
@@ -58,6 +64,11 @@ gh_scene_table_status gh_scene_actors_reset_0012e800(gh_game_scene_tables*s){
  gh_scene_actor_scroll_links_release(s);gh_scene_ray_triangle_state_release(s);s->akg=(gh_bundle_entry){0};memset(s->actor_links,0,sizeof(s->actor_links));s->actors_ready=0;
  /* akt is the bounded containing asset, not an original additional pointer
   * field; retain its provenance view until the actual room asset release. */
- if(s->pending_actor_head)return fail(s,0x12ecf0,0,GH_TABLE_UNSUPPORTED);
+ if(s->pending_actor_head){
+  gh_scene_dynamic_owner *owner=s->dynamic_native_owner;
+  if(!owner)return fail(s,0x12ecf0,0,GH_TABLE_UNSUPPORTED);
+  gh_scene_dynamic_status status=gh_scene_dynamic_room_quit_0012ecf0(owner);
+  if(status)return fail(s,owner->frontier?owner->frontier:0x12ecf0,status,GH_TABLE_UNSUPPORTED);
+ }
  s->frontier=0;return GH_TABLE_OK;
 }

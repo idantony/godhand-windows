@@ -6,10 +6,16 @@ static uint64_t dw(const uint8_t*p){return w(p)|(uint64_t)w(p+4)<<32;}
 static void wh(uint8_t*p,uint16_t v){p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void ww(uint8_t*p,uint32_t v){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(i*8));}
 static void wd(uint8_t*p,uint64_t v){for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(i*8));}
-gh_soft_event_status gh_scenario_stop_input_0031afa0(gh_boot_work*s){
- if(!s)return GH_SOFT_EVENT_ARGUMENT;uint8_t*r=(uint8_t*)s,*p=r+0x178;uint64_t mask=UINT64_C(0x000f00807ff00000);ww(r+0x5d8,w(r+0x5d8)|0x2000000);
+gh_soft_event_status gh_scenario_clear_pad_0031b410(gh_boot_work*s){
+ if(!s)return GH_SOFT_EVENT_ARGUMENT;uint8_t*p=(uint8_t*)s+0x178;uint64_t mask=UINT64_C(0x000f00807ff00000);
  wd(p+64,dw(p+64)&mask);wd(p+56,dw(p+56)&mask);wd(p,dw(p+24)&mask);wd(p+40,dw(p+40)&mask);wd(p+48,dw(p+48)&mask);
  p[0x6b]=0x80;p[0x7b]=0;p[0x68]=p[0x69]=p[0x6a]=0x80;p[0x6f]=p[0x6e]=p[0x6c]=p[0x6d]=0;memset(p+0x70,0,12);return GH_SOFT_EVENT_OK;
+}
+gh_soft_event_status gh_scenario_stop_input_0031afa0(gh_boot_work*s){
+ if(!s)return GH_SOFT_EVENT_ARGUMENT;
+ uint8_t *raw=(uint8_t*)s;
+ ww(raw+0x5d8,w(raw+0x5d8)|0x2000000);
+ return gh_scenario_clear_pad_0031b410(s);
 }
 static gh_soft_event_status stop(gh_soft_event_start*s,uint32_t pc,gh_soft_event_status e){s->frontier=pc;return e;}
 static gh_soft_event_status leaf(gh_soft_event_start *s,gh_soft_event_leaf action,

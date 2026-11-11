@@ -9,6 +9,7 @@
 #include "game_scene_at.h"
 #include "game_objects.h"
 #include "game_event.h"
+#include "game_effects.h"
 #include "game_prepare.h"
 #include "screen_fade.h"
 #ifdef __cplusplus
@@ -28,6 +29,7 @@ typedef struct {
  gh_game_objects *objects,*room_objects;gh_scene_at_manager *scene_at;
  uint8_t *scene_buffer_a,*scene_buffer_b;size_t scene_buffer_a_size,scene_buffer_b_size;
  gh_scene_exit_external external;void *context;
+ gh_game_effects *effects;
 } gh_game_scene_exit_bindings;
 typedef struct {uint32_t operation,frontier;uint8_t phase,scenario_stage;
  uint32_t scenario_cursor;int detail;uint64_t completed_calls;} gh_game_scene_exit;

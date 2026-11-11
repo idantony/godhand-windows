@@ -1103,10 +1103,12 @@ int main(int argc,char **argv)
             "QA_ENEMY_PLACEMENT {\"handle\":%u,\"stamp\":%u,\"dependency\":\"%04X\","
             "\"appearance\":%u,\"spawn_flags\":\"%08X\",\"phase\":%u,\"variant\":%u,\"serial\":%u,"
             "\"distance_xz_squared_bits\":\"%08X\",\"route_distance_bits\":\"%08X\","
+            "\"home_reason\":%u,\"home_timer_bits\":\"%08X\","
             "\"flags_3ac\":\"%04X\",\"flags_16d0\":\"%08X\",\"flags_16d4\":\"%08X\",\"reaction_set_17bd\":%u}\n",
             d.last_move_handle,d.current_enemy_stamp,d.current_enemy_dependency,d.current_enemy_appearance,
             d.current_enemy_spawn_flags,d.current_enemy_phase,d.current_enemy_variant,d.current_enemy_serial,
-            d.current_enemy_distance_bits,d.current_enemy_route_bits,d.current_enemy_flags_3ac,
+            d.current_enemy_distance_bits,d.current_enemy_route_bits,d.current_enemy_home_reason,
+            d.current_enemy_home_timer_bits,d.current_enemy_flags_3ac,
             d.current_enemy_flags_16d0,d.current_enemy_flags_16d4,d.current_enemy_reaction_set_17bd);
         for(unsigned i=0;i<d.current_b_samples;i++){std::fprintf(stderr,"QA CurrentB index%u group%u generation%u serial%u source_present%u source_known%u source_kind%04X words00..6C",d.current_b_index[i],d.current_b_group[i],d.current_b_generation[i],d.current_b_serial[i],d.current_b_source_present[i],d.current_b_source_known[i],d.current_b_source_kind[i]);for(unsigned j=0;j<28;j++)std::fprintf(stderr," %08X",d.current_b_words[i][j]);std::fprintf(stderr,"\n");}
     }

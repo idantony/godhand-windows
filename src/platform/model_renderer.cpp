@@ -11,11 +11,13 @@
 #include <cstdio>
 #include <algorithm>
 #include "model_renderer.h"
+#include "model_raster_bounds.h"
 template<class T>struct Owned{T*p=nullptr;~Owned(){if(p)p->Release();}T**out(){return &p;}Owned()=default;Owned(const Owned&)=delete;};
 struct Material{uint64_t identity;unsigned width,height;Owned<ID3D11Texture2D> image;Owned<ID3D11ShaderResourceView> view;};
 struct Vertex{int32_t xyzd[4];float stq[4];uint32_t rgba[4];};
 static_assert(sizeof(Vertex)==48,"structured shader input");
-struct Parameters{uint32_t surface[4],state[4],blend[4],texture[4];};
+struct Parameters{uint32_t surface[4],state[4],blend[4],texture[4],raster[4];};
+static_assert(sizeof(Parameters)==80,"shader constant buffer");
 struct gh_model_renderer{
  unsigned width,height;DWORD thread;bool begun=false;
  Owned<ID3D11Device> device;Owned<ID3D11DeviceContext> context;Owned<ID3D11ComputeShader> shader;
@@ -35,7 +37,7 @@ static const char *shader=R"(
 struct Vertex{int4 xyzd;float4 stq;uint4 rgba;};
 Texture2D<uint4> image:register(t0);StructuredBuffer<Vertex> vertices:register(t1);StructuredBuffer<uint> indices:register(t2);
 RWTexture2D<uint4> colorTarget:register(u0);RWTexture2D<uint> depthTarget:register(u1);
-cbuffer Parameters:register(b0){uint4 surface;uint4 state;uint4 blend;uint4 dimensions;};
+cbuffer Parameters:register(b0){uint4 surface;uint4 state;uint4 blend;uint4 dimensions;uint4 rasterBounds;};
 // PackedXY-offset is at most16 bits in magnitude; pixel differences are
 // below73728 on this512x448 surface. The16-bit partial products therefore
 // have no unsigned intermediate overflow. Keep exact signed64 coverage using
@@ -66,7 +68,8 @@ bool alpha_pass(uint a){uint test=state.x;if((test&1)==0)return true;uint ref=(t
 }
 int3 select_color(uint selector,int3 source,int3 destination){return selector==0?source:(selector==1?destination:int3(0,0,0));}
 [numthreads(8,8,1)]void main(uint3 tid:SV_DispatchThreadID){
- uint2 p=tid.xy;if(p.x>=surface.x||p.y>=surface.y)return;int2 pixelPosition=int2(p)*16;
+ if(tid.x>=rasterBounds.z||tid.y>=rasterBounds.w)return;
+ uint2 p=tid.xy+rasterBounds.xy;if(p.x>=surface.x||p.y>=surface.y)return;int2 pixelPosition=int2(p)*16;
  bool framebufferMasked=(state.w&0x04000000u)!=0;
  uint4 destination=colorTarget[p];uint oldZ=depthTarget[p];
  [loop]for(uint i=0;i<surface.z;i+=3){Vertex a=vertices[indices[i]],b=vertices[indices[i+1]],c=vertices[indices[i+2]];
@@ -177,6 +180,7 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
  std::vector<uint8_t> referenced;try{referenced.resize(count,0);}catch(const std::bad_alloc&){return GH_MODEL_GPU_MEMORY;}
  for(size_t i=0;i<n;i++){if(indices[i]>=count)return GH_MODEL_GPU_ARGUMENT;referenced[indices[i]]=1;}if(!n)return GH_MODEL_GPU_OK;
  std::vector<Vertex> vertices;try{vertices.resize(count);}catch(const std::bad_alloc&){return GH_MODEL_GPU_MEMORY;}
+ int32_t min_x=INT32_MAX,min_y=INT32_MAX,max_x=INT32_MIN,max_y=INT32_MIN;
  for(size_t i=0;i<count;i++){const auto&v=input[i];auto&out=vertices[i];
   // ADC/CLIP can leave unused carry vertices in a real batch. Their Q/XYZ
   // values do not enter any raster primitive, so do not consume them.
@@ -187,14 +191,21 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
   if(!std::isfinite(v.stq[2])||v.stq[2]<0.000001f||v.stq[2]>1000000)return GH_MODEL_GPU_UNSUPPORTED;
   for(unsigned c=0;c<3;c++){if(!std::isfinite(v.stq[c])||(c<2&&std::fabs((double)v.stq[c]/v.stq[2])>16))return GH_MODEL_GPU_UNSUPPORTED;out.stq[c]=v.stq[c];}
   for(unsigned c=0;c<4;c++){if(v.rgba[c]>255)return GH_MODEL_GPU_UNSUPPORTED;out.rgba[c]=v.rgba[c];}
+  min_x=(std::min)(min_x,out.xyzd[0]);min_y=(std::min)(min_y,out.xyzd[1]);
+  max_x=(std::max)(max_x,out.xyzd[0]);max_y=(std::max)(max_y,out.xyzd[1]);
  }
  Owned<ID3D11Buffer> vb,ib;Owned<ID3D11ShaderResourceView> vv,iv;gh_model_gpu_error e=structured(r,vertices.data(),sizeof(Vertex),(UINT)count,vb,vv);if(e)return e;e=structured(r,indices,4,(UINT)n,ib,iv);if(e)return e;
  const uint32_t frame_flags=s->frame_mask==UINT32_MAX?0x04000000u:
                             s->frame_mask==0xff000000u?0x01000000u:0;
+ const gh_model_raster_bounds raster=gh_model_raster_bounds_from_fixed4(min_x,min_y,max_x,max_y,r->width,r->height);
  Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)|frame_flags|(tcc0?0x02000000u:0u)},
-  {(uint32_t)s->alpha&3,((uint32_t)s->alpha>>2)&3,((uint32_t)s->alpha>>4)&3,((uint32_t)s->alpha>>6)&3},{m.width,m.height,(uint32_t)((s->tex1>>5)&1),(uint32_t)(s->alpha>>32)&255}};
+  {(uint32_t)s->alpha&3,((uint32_t)s->alpha>>2)&3,((uint32_t)s->alpha>>4)&3,((uint32_t)s->alpha>>6)&3},{m.width,m.height,(uint32_t)((s->tex1>>5)&1),(uint32_t)(s->alpha>>32)&255},
+  {raster.x,raster.y,raster.width,raster.height}};
  r->context.p->UpdateSubresource(r->parameters.p,0,nullptr,&p,0,0);ID3D11Buffer*constant=r->parameters.p;ID3D11ShaderResourceView*views[]={m.view.p,vv.p,iv.p};ID3D11UnorderedAccessView*targets[]={r->color_target.p,r->depth_target.p};
- r->context.p->CSSetShader(r->shader.p,nullptr,0);r->context.p->CSSetConstantBuffers(0,1,&constant);r->context.p->CSSetShaderResources(0,3,views);r->context.p->CSSetUnorderedAccessViews(0,2,targets,nullptr);r->context.p->Dispatch((r->width+7)/8,(r->height+7)/8,1);
+ r->context.p->CSSetShader(r->shader.p,nullptr,0);r->context.p->CSSetConstantBuffers(0,1,&constant);r->context.p->CSSetShaderResources(0,3,views);r->context.p->CSSetUnorderedAccessViews(0,2,targets,nullptr);
+ // Keep one ordered submission even when all samples miss the viewport.
+ const bool has_samples=raster.width&&raster.height;
+ r->context.p->Dispatch(has_samples?(raster.width+7)/8:1,has_samples?(raster.height+7)/8:1,1);
  ID3D11ShaderResourceView*emptyViews[3]={};ID3D11UnorderedAccessView*emptyTargets[2]={};r->context.p->CSSetShaderResources(0,3,emptyViews);r->context.p->CSSetUnorderedAccessViews(0,2,emptyTargets,nullptr);return GH_MODEL_GPU_OK;
 }
 extern "C" gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer*r,const gh_model_draw_state*s,uint32_t texture,

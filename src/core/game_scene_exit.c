@@ -1,6 +1,7 @@
 #include "game_scene_exit.h"
 #include "game_scene_aux.h"
 #include "scene_at_units.h"
+#include "game_effect_create.h"
 #include <string.h>
 static uint32_t w(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void put(uint8_t*p,uint32_t n){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(n>>(8*i));}
@@ -9,11 +10,52 @@ static gh_scene_exit_status call(gh_game_scene_exit*s,const gh_game_scene_exit_b
  if(!b->external)return fail(s,pc,GH_SCENE_EXIT_UNSUPPORTED);uint32_t f=0;int ignored=0;uint32_t arg=0;switch(pc){case 0x2c0038:case 0x2bf948:arg=0x3c264c;break;case 0x2caa00:case 0x2cab58:case 0x2ca910:arg=0x5fee00;break;case 0x12e800:arg=0x5cae50;break;case 0x138d40:arg=0x463050;break;case 0x141628:arg=0x3bd6e8;break;case 0x1612a8:arg=0x3bd930;break;case 0x2ad108:arg=0x3c2388;break;case 0x201018:arg=0x583f20;break;default:break;}
  gh_scene_exit_status e=b->external(b->context,pc,arg,result?result:&ignored,&f);return e?fail(s,f?f:pc,e):GH_SCENE_EXIT_OK;
 }
-gh_scene_exit_status gh_scene_exit_effects_00305b90(uint8_t*a,size_t az,uint8_t*b,size_t bz,uint32_t*frontier){
- if(frontier)*frontier=0;if(!a||az<0x100180||!b||bz<0x26060)return GH_SCENE_EXIT_ARGUMENT;
- for(unsigned i=0;i<256;i++){unsigned n=(i>>5)*4;uint32_t m=0x80000000u>>(i&31);if((w(b+0x26000+n)&m)&&!(w(b+0x26020+n)&m)&&!(w(b+0x26040+n)&m)){if(frontier)*frontier=0x302918;return GH_SCENE_EXIT_UNSUPPORTED;}}
- for(unsigned i=0;i<1024;i++){unsigned n=(i>>5)*4;uint32_t m=0x80000000u>>(i&31);if((w(a+0x100000+n)&m)&&!(w(a+0x100080+n)&m)&&!(w(a+0x100100+n)&m)){if(frontier)*frontier=0x2fbe50;return GH_SCENE_EXIT_UNSUPPORTED;}}
+static int exit_effect_live(const uint8_t *masks,unsigned stride,unsigned slot)
+{
+ unsigned offset=(slot>>5)*4;
+ uint32_t mask=UINT32_C(0x80000000)>>(slot&31);
+ return (w(masks+offset)&mask)&&!(w(masks+stride+offset)&mask)&&!(w(masks+2*stride+offset)&mask);
+}
+
+static gh_scene_exit_status exit_effects_00305b90(gh_game_effects *effects,
+ uint8_t *esp,size_t esp_bytes,uint8_t *emitters,size_t emitter_bytes,uint32_t *frontier)
+{
+ if(frontier)*frontier=0;
+ if(!esp||esp_bytes<0x100180||!emitters||emitter_bytes<0x26060)return GH_SCENE_EXIT_ARGUMENT;
+ for(unsigned slot=0;slot<256;++slot){
+  if(!exit_effect_live(emitters+0x26000,0x20,slot))continue;
+  uint8_t *payload=emitters+(size_t)slot*0x260;
+  gh_effect_emitter_view emitter;
+  if(!effects||gh_effect_create_emitter_at(effects,slot,&emitter)||emitter.payload!=payload||
+     !emitter.initialized){
+   if(frontier)*frontier=0x302918;
+   return GH_SCENE_EXIT_UNSUPPORTED;
+  }
+  /* 302918 requests retirement. The emitter update owns its destructor. */
+  put(payload+0x114,w(payload+0x114)|UINT32_C(0x40000000));
+ }
+ for(unsigned slot=0;slot<1024;++slot){
+  if(!exit_effect_live(esp+0x100000,0x80,slot))continue;
+  gh_effect_esp_view particle;
+  if(!effects||gh_effect_create_esp_at(effects,slot,&particle)||
+     particle.payload!=esp+(size_t)slot*0x400){
+   if(frontier)*frontier=0x2fbe50;
+   return GH_SCENE_EXIT_UNSUPPORTED;
+  }
+  uint32_t failure=0;
+  gh_effect_status status=gh_effect_create_esp_pause_002fbe50(effects,slot,particle.serial,&failure);
+  if(status){
+   if(frontier)*frontier=failure?failure:0x2fbe50;
+   return status==GH_EFFECT_UNSUPPORTED?GH_SCENE_EXIT_UNSUPPORTED:GH_SCENE_EXIT_CALLEE;
+  }
+ }
  return GH_SCENE_EXIT_OK;
+}
+
+gh_scene_exit_status gh_scene_exit_effects_00305b90(uint8_t *esp,size_t esp_bytes,
+ uint8_t *emitters,size_t emitter_bytes,uint32_t *frontier)
+{
+ return exit_effects_00305b90(NULL,esp,esp_bytes,emitters,emitter_bytes,frontier);
 }
 static gh_scene_exit_status movie_stop_all(gh_game_scene_exit*s,const gh_game_scene_exit_bindings*b){
  if(!b->movies)return fail(s,0x2b4da8,GH_SCENE_EXIT_ARGUMENT);
@@ -49,7 +91,7 @@ static gh_scene_exit_status phase1(gh_game_scene_exit*s,const gh_game_scene_exit
  case 1:gh_scene_background_mode_0030e5c0(b->loop->work,1,0,0,0);break;
  case 2:if(!b->fade)return fail(s,0x3076e0,GH_SCENE_EXIT_ARGUMENT);gh_screen_fade_kill_003076e0(b->fade);break;
  case 3:if((e=movie_stop_all(s,b)))return e;break;
- case 4:e=gh_scene_exit_effects_00305b90(b->scene_buffer_a,b->scene_buffer_a_size,b->scene_buffer_b,b->scene_buffer_b_size,&f);if(e)return fail(s,f?f:0x305b90,e);break;
+ case 4:e=exit_effects_00305b90(b->effects,b->scene_buffer_a,b->scene_buffer_a_size,b->scene_buffer_b,b->scene_buffer_b_size,&f);if(e)return fail(s,f?f:0x305b90,e);break;
  case 5:if((e=gh_game_scene_scenario_stop_002c3858(s,b)))return e;break;
  case 6:{uint16_t room=b->loop->work->room;int special=(room>=0x40&&room<=0x42)||room==0x4e||room==0x4f;
   if((w(b->save.bytes+0x14)&0x4000000)&&special){if((e=call(s,b,0x2c0038,NULL)))return e;}
@@ -64,10 +106,11 @@ static gh_scene_exit_status phase1(gh_game_scene_exit*s,const gh_game_scene_exit
  case 14:break; /*actual141620 JRRA/NOP*/
  case 15:if((e=call(s,b,0x141628,NULL)))return e;break;
  case 16:if((e=call(s,b,0x1612a8,NULL)))return e;break;
- case 17:if(!b->scene_at)return fail(s,0x2c1270,GH_SCENE_EXIT_ARGUMENT);for(unsigned i=0;i<8;i++)if(b->scene_at->jump_slots[i].bytes)return fail(s,0x30f5a0,GH_SCENE_EXIT_UNSUPPORTED);
-  /* The verified empty-jump quit also ends this room's native list companion.
-   * Retaining it would bind the next room to the old bundle/room identity. */
-  if(gh_scene_at_units_release(b->scene_at))return fail(s,0x2c1270,GH_SCENE_EXIT_CALLEE);break;
+ case 17:{
+  gh_scene_at_status at=gh_scene_at_quit_002c1270(b->scene_at,&f);
+  if(at)return fail(s,f?f:0x2c1270,at==GH_AT_UNSUPPORTED?GH_SCENE_EXIT_UNSUPPORTED:GH_SCENE_EXIT_CALLEE);
+  break;
+ }
  case 18:if((e=call(s,b,0x2ad108,NULL)))return e;break;
  default:return GH_SCENE_EXIT_OK;
  }s->operation++;}

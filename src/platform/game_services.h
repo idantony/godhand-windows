@@ -102,6 +102,10 @@ typedef struct {
  const gh_actor_light_globals *actor_light_globals; /*RootONE3BD870/890, no permodel reset*/
  gh_frame_random *frame_random; /*same auxiliary 747B10 owner as the frame driver*/
  gh_game_motion_camera *motion_camera; /*RootONE CamManager+530, shared by EVT and room scripts*/
+ gh_event_reserve_work *event_reserve; /* Original Event+38 record, held across room loads. */
+ gh_door_status (*begin_event_room_jump)(void *,uint16_t,const float[3],float,
+    uint8_t,uint32_t,uint8_t,uint32_t *);
+ void *event_room_context;
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;
@@ -181,6 +185,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
  * retain their exact original entry. The provider borrows Root's one OT. */
 gh_game_services_status gh_game_services_trans_erase(gh_game_services *,
     const gh_object_trans_request *,const void *owner,int *handled,uint32_t *);
+gh_game_services_status gh_game_services_scene_retire_objects_0030f8b0(gh_game_services *,uint32_t *frontier,uint32_t *blocked_handle);
 gh_game_services_status gh_game_services_release_enemies_002908c0(gh_game_services *,uint32_t *);
 gh_game_services_status gh_game_services_trans_actor(gh_game_services *,const gh_object_trans_request *,
  const gh_boot_work *,const gh_game_actor_render_provider *,uint32_t *frontier);

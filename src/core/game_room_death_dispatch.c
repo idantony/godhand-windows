@@ -15,10 +15,23 @@ static gh_room_pool_status fail(gh_room_death_dispatch *state,uint32_t handle,ui
  return GH_POOL_UNSUPPORTED;
 }
 
+static int enemy_kind(uint32_t kind)
+{
+ return kind==0x202||kind==0x2a2;
+}
+
 static gh_room_pool_status retire(gh_room_death_dispatch *state,const gh_room_death_bindings *b)
 {
  uint32_t handle=state->retiring_handle,entry=0;
  gh_room_pool_status status;
+ if(enemy_kind(state->retiring_kind)){
+  gh_actor_motion_status enemy=gh_enemy_ems_retire_0030f8b0(b->enemies,&state->enemy,
+   handle,&b->enemy,&entry);
+  if(enemy)return fail(state,handle,entry?entry:0x290770);
+  state->enemy=(gh_enemy_full_retirement){0};
+  state->retiring_kind=state->retiring_handle=0;
+  return GH_POOL_OK;
+ }
  switch(state->retiring_kind){
  case 0x100:
   status=gh_room_death_retire_player_0030f8b0(&state->player,&b->player,b->hitarea,b->pairs);
@@ -79,17 +92,33 @@ gh_room_pool_status gh_room_death_dispatch_0030f8b0(gh_room_death_dispatch *stat
    if(!actor->bytes||actor->size<0x300)return fail(state,handle,0x312708);
    kind=(uint32_t)actor->bytes[0x2fe]|(uint32_t)actor->bytes[0x2ff]<<8;
   }
+  if(!actor&&b->enemies){
+   gh_enemy_ems_live live;
+   if(gh_enemy_ems_live_at(b->enemies,handle,&live))return fail(state,handle,0x312708);
+   if(live.held_weapon)return fail(state,handle,0x312708);
+   if(live.actor){
+    actor=&live.actor->view;
+    kind=live.enemy202?0x202:live.enemy2a2?0x2a2:0;
+   }
+  }
   if(!actor||!actor->bytes||actor->size<0x254)return fail(state,handle,0x312708);
   uint32_t flags=word(actor->bytes+0x250);
-  if(kind!=0x100&&kind!=0x101&&!gh_om_retire_entry(kind))
+  if(kind!=0x100&&kind!=0x101&&!enemy_kind(kind)&&!gh_om_retire_entry(kind))
    return fail(state,handle,0x312708);
   if(!(flags&0x80000000u)){
+   if(enemy_kind(kind)){
+    gh_actor_motion_status enemy=gh_enemy_death_mark_00312708(&state->enemy_mark,
+     b->enemies,handle,b->voices,&frontier);
+    if(enemy)return fail(state,handle,frontier?frontier:0x312708);
+    state->enemy_mark=(gh_enemy_death_mark){0};
+   }else{
    switch(kind){
    case 0x100:status=gh_room_death_mark_player_00312708(b->player.factory,b->player.model,b->voices,&frontier);break;
    case 0x101:status=gh_room_death_mark_child_00312708(b->child,b->voices,&frontier);break;
    default:status=gh_om_retire_mark_00312708(b->door.factory,handle,b->voices,&frontier);break;
    }
    if(status)return fail(state,handle,frontier?frontier:0x312708);
+   }
    flags=word(actor->bytes+0x250);
   }
   if(!(flags&0x20000000u)){
@@ -101,7 +130,7 @@ gh_room_pool_status gh_room_death_dispatch_0030f8b0(gh_room_death_dispatch *stat
   int borrowed;
   if(gh_effect_create_actor_has_live_refs(b->effects,actor,&borrowed)||borrowed)
    return fail(state,handle,0x305b90);
-  if(!gh_om_retire_entry(kind))gh_scene_dynamic_forget_sphere_actor(b->dynamic,actor);
+  if(!enemy_kind(kind)&&!gh_om_retire_entry(kind))gh_scene_dynamic_forget_sphere_actor(b->dynamic,actor);
   state->retiring_kind=kind;
   state->retiring_handle=handle;
   status=retire(state,b);

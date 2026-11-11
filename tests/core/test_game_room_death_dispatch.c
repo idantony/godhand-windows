@@ -215,6 +215,14 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
  const uint32_t known=158+doors.count;
  C(!gh_room_death_dispatch_0030f8b0(&dispatch,&bindings)&&!dispatch.scan.cursor&&
    pools.vectors[0].count==known&&(w(player.view.bytes+0x250)&0xe0000002u)==0xc0000002u);
+ /* Original Main5 op11 deletes still-live R100 door collision boxes after
+  * the first death pass and before later mode3 actor destruction. */
+ C(dynamic.allocation_count>=3&&tables.pending_actor_head&&tables.pending_actor_count>=3);
+ for(unsigned i=0;i<3;++i)C(doors.objects[i].initialization->geometry_state.box);
+ C(gh_scene_actors_reset_0012e800(&tables)==GH_TABLE_OK&&dynamic.bound&&!dynamic.allocation_count);
+ C(!tables.pending_actor_head&&!tables.pending_actor_count);
+ for(unsigned i=0;i<3;++i)C(!doors.objects[i].initialization->geometry_state.box);
+ puts("PASS actual R100 12E800/12ECF0 door boxes and native borrow retirement before object death");
  for(unsigned i=3;i<next_row;++i)C((w(doors.objects[i].view.bytes+0x250)&0xe0000002u)==0xc0000002u);
  C(!gh_room_death_dispatch_0030f8b0(&dispatch,&bindings)&&!dispatch.scan.cursor&&
    pools.vectors[0].count==known&&(w(child.object.view.bytes+0x250)&0xe0000002u)==0xe0000002u);

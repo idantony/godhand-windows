@@ -17,6 +17,7 @@ typedef struct {gh_scene_scenario_view scenario;gh_boot_work *work;
 typedef struct {uint32_t stage,frontier;uint8_t *scenario_bytes;gh_task_manager *manager;gh_boot_work *work;uint8_t kind;} gh_soft_event_start;
 /* Originalleaf31AFA0->31B410, SAMEWork input bytes. No native padowner. */
 gh_soft_event_status gh_scenario_stop_input_0031afa0(gh_boot_work *);
+gh_soft_event_status gh_scenario_clear_pad_0031b410(gh_boot_work *);
 /* Kind4 event start and kind0 room soft event. A required provider failure
  * keeps the continuation at that call. The next invocation is fresh after
  * this original call completes. Other kinds retain their strict frontier. */

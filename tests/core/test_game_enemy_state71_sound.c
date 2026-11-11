@@ -159,7 +159,7 @@ int main(int argc,char **argv)
    !gh_em_scene_load_native_00294b98(&placement,&selected_room,&ems,&work,0,
        GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,&loaded)&&loaded);
 
- const unsigned rows[]={2,3,4,0,14};
+ const unsigned rows[]={2,3,4,0,14,15};
  for(unsigned i=0;i<sizeof(rows)/sizeof(*rows);++i){
   gh_enemy_request req;
   int spawn;
@@ -171,7 +171,7 @@ int main(int argc,char **argv)
   if(!i)C(req.entry_number==3&&req.appearance==2&&req.dependency_kind==0x200);
   int32_t bank;
   C(!gh_enemy_se_request_002cb278(banks,&work,req.dependency_kind,&bank));
-  if(rows[i]==14)C(bank==-1&&!gh_enemy_se_resolve_002cb418(banks,req.dependency_kind,&bank));
+  if(rows[i]>=14)C(bank==-1&&!gh_enemy_se_resolve_002cb418(banks,req.dependency_kind,&bank));
   C(bank>=1);
   int ready=0;
   for(unsigned n=0;n<16&&!ready;++n){
@@ -232,7 +232,7 @@ int main(int argc,char **argv)
    C(info.position_mode==2&&info.distance==3&&!info.pan&&info.pitch_q12);
    C(info.left_q14==0x5a00*(95*80/127)/127/2&&!info.right_q14);
    C(submissions==before_timed+1&&submitted[before_timed].frames>15456);
-  }else if(rows[i]!=14){
+  }else if(rows[i]<14){
    C(!handle&&!model.model.sound_borrowers&&!gh_se_voice_active_nodes(voices));
    C(!gh_se_voice_attached_reservations(voices)&&submissions==before_timed);
    /* Selector 11 uses logical program 0. Both variants have a one-frame
@@ -258,7 +258,8 @@ int main(int argc,char **argv)
      info.left_q14&&!info.right_q14&&submissions==before_timed+1);
   }
   C(!gh_actor_attached_sound_abort(&source));
-  if(rows[i]==14){
+  if(rows[i]>=14){
+   if(rows[i]==15)C(req.entry_number==20&&dep==0x200);
    unsigned seen=0;
    for(unsigned desired=0;desired<2;++desired){
     gh_game_mt_seed_0030f2b0(&random,desired?1:2);
@@ -266,11 +267,19 @@ int main(int argc,char **argv)
     expected=before;
     uint32_t draw;
     C(!gh_game_mt_next_0030f348(&expected,&draw)&&(draw&1u)==desired);
+    if(rows[i]==15){
+     gh_sound_span sample,tail;
+     gh_adpcm_pcm pcm={0};
+     C(!gh_audio_get_program(registry,(int16_t)bank,(int16_t)(8+desired),0,program));
+     C(!gh_audio_sample_at(registry,(int16_t)bank,7+desired,&sample,&tail)&&sample.size==16);
+     C(!gh_audio_decode_ps_adpcm(tail.data,tail.size,&pcm)&&pcm.frames==(desired?19740u:18564u));
+     gh_audio_pcm_release(&pcm);
+    }
     C(!gh_actor_attached_sound_bind(&source,&binding));
     C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
     request.program=8;
     gh_actor_motion_status status=gh_actor_attached_sound_motion(&source,&request,&handle,&frontier);
-    if(status)fprintf(stderr,"EM03 death request status%d pc%08x detail%d\n",status,frontier,source.detail);
+    if(status)fprintf(stderr,"R100 death request status%d pc%08x detail%d\n",status,frontier,source.detail);
     C(!status&&handle&&!frontier&&!memcmp(&random,&expected,sizeof(random)));
     gh_se_voice_info info;
     C(!gh_se_voice_query(voices,handle,&info)&&info.pending&&info.position_mode==2&&
@@ -281,7 +290,7 @@ int main(int argc,char **argv)
        !memcmp(&random,&expected,sizeof(random)));
     unsigned before_submit=submissions;
     gh_voice_status update=gh_se_voice_update(voices);
-    if(update)fprintf(stderr,"EM03 death update %d pc%08x\n",update,gh_se_voice_frontier(voices));
+    if(update)fprintf(stderr,"R100 death update %d pc%08x\n",update,gh_se_voice_frontier(voices));
     C(!update&&!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&
        info.channel==46&&info.distance==3&&info.rate==11025&&info.left_q14&&!info.right_q14&&
        submissions==before_submit+1);
@@ -290,9 +299,9 @@ int main(int argc,char **argv)
     seen|=1u<<desired;
    }
    C(seen==3);
-   puts("PASS actual stamp19 EM03 death 08/09 PCM, original MT and duplicate suppression (no device)");
+   printf("PASS actual R100 stamp%u death 08/09 PCM, original MT and duplicate suppression (no device)\n",req.entry_number);
   }
-  if(!enabled&&rows[i]!=14){
+  if(!enabled&&rows[i]<14){
    for(unsigned desired=0;desired<2;++desired){
     uint32_t draw;
     gh_game_mt before;
@@ -334,7 +343,7 @@ int main(int argc,char **argv)
     C(!gh_actor_attached_sound_abort(&source)&&!model.model.sound_borrowers);
    }
   }
-  if(!enabled&&rows[i]!=14){
+  if(!enabled&&rows[i]<14){
    const unsigned sample_slot=15+i;
    const size_t sample_frames[]={5684,10108,12348};
    check_program(registry,(int16_t)bank,0x28,sample_slot,11025,sample_frames[i]);
@@ -363,7 +372,7 @@ int main(int argc,char **argv)
   }
   C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
  }
- C(submissions==15&&stops==15);
+ C(submissions==17&&stops==17);
  C(!gh_enemy_se_banks_destroy(banks));
  gh_se_voice_destroy(voices);
  C(!gh_game_room_pools_release(&pools)&&!gh_task_threads_destroy(threads)&&!gh_heap_destroy(heap));

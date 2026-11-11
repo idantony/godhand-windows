@@ -59,7 +59,47 @@ gh_scene_at_status gh_scene_at_initialize_units_002c0f90(gh_scene_at_manager*s,c
 }
 gh_scene_at_status gh_scene_at_set_enabled(gh_scene_at_manager*s,gh_at_native_unit v,int enabled,int*original){if(!s||!original)return GH_AT_ARGUMENT;*original=0;if(!s->headers[0].bytes||!v.bytes)return GH_AT_OK;if(!own(s,v))return GH_AT_ARGUMENT;if(v.bytes[0x35]==9)return fail(s,enabled?0x2c0e20:0x2c0e60,0,GH_AT_UNSUPPORTED);if(enabled)v.bytes[0x34]|=1;else v.bytes[0x34]&=0xfe;*original=1;return GH_AT_OK;}
 gh_scene_at_status gh_scene_at_set_jump_info_002c2750(gh_scene_at_manager*s,gh_at_native_unit v,uint8_t state,uint32_t fn,uint32_t arg,uint8_t trigger){if(!s)return GH_AT_ARGUMENT;if(!v.bytes)return GH_AT_OK;if(!own(s,v))return GH_AT_ARGUMENT;uint8_t*p=v.bytes;if(trigger){if(!p[0x4e])p[0x4e]=p[0x3b];p[0x3b]=trigger;}ww(p+0x40,arg);p[0x44]=state;ww(p+0x3c,fn);return GH_AT_OK;}
-gh_scene_at_status gh_scene_at_units_release(gh_scene_at_manager*s){if(!s)return GH_AT_ARGUMENT;struct gh_scene_at_units*t=s->native_units;if(!t)return GH_AT_OK;for(size_t i=0;i<t->count;i++)if(t->nodes[i].owned.pointer&&gh_heap_release(t->heap,t->nodes[i].owned))return GH_AT_BOUNDS;for(unsigned i=0;i<4;i++)free(t->copies[i]);free(t->nodes);free(t);s->native_units=NULL;s->ready=0;for(unsigned i=0;i<4;i++)s->units[i]=(gh_at_unit_view){0};for(unsigned i=0;i<8;i++)s->jump_slots[i]=(gh_at_unit_view){0};return GH_AT_OK;}
+gh_scene_at_status gh_scene_at_units_release(gh_scene_at_manager*s){if(!s)return GH_AT_ARGUMENT;struct gh_scene_at_units*t=s->native_units;if(!t)return GH_AT_OK;for(size_t i=0;i<t->count;i++){
+ if(t->nodes[i].owned.pointer&&gh_heap_release(t->heap,t->nodes[i].owned))return GH_AT_BOUNDS;
+ t->nodes[i].owned=(gh_r207_allocation){0};
+ }for(unsigned i=0;i<4;i++)free(t->copies[i]);free(t->nodes);free(t);s->native_units=NULL;s->ready=0;for(unsigned i=0;i<4;i++)s->units[i]=(gh_at_unit_view){0};for(unsigned i=0;i<8;i++)s->jump_slots[i]=(gh_at_unit_view){0};return GH_AT_OK;}
+gh_scene_at_status gh_scene_at_quit_002c1270(gh_scene_at_manager *s,uint32_t *frontier)
+{
+ if(!frontier)return GH_AT_ARGUMENT;
+ *frontier=0x2c1270;
+ if(!s)return GH_AT_ARGUMENT;
+ struct gh_scene_at_units *units=s->native_units;
+ node *slots[8]={0};
+ for(unsigned i=0;i<8;++i){
+  const gh_at_unit_view *view=&s->jump_slots[i];
+  if(!view->bytes)continue;
+  *frontier=0x30f5a0;
+  if(!units||view->size!=0x9c||view->count!=1)return GH_AT_UNSUPPORTED;
+  for(size_t j=0;j<units->count;++j){
+   node *candidate=&units->nodes[j];
+   if(candidate->view.bytes!=view->bytes||candidate->owned.pointer!=view->bytes)continue;
+   slots[i]=candidate;
+   break;
+  }
+  if(!slots[i])return GH_AT_UNSUPPORTED;
+  for(unsigned j=0;j<i;++j)if(slots[j]==slots[i])return GH_AT_UNSUPPORTED;
+ }
+ s->ready=0;
+ for(unsigned i=0;i<8;++i){
+  node *owned=slots[i];
+  if(!owned)continue;
+  *frontier=0x2a9680;
+  if(gh_heap_release(units->heap,owned->owned))return GH_AT_BOUNDS;
+  owned->owned=(gh_r207_allocation){0};
+  owned->view.bytes=NULL;
+  s->jump_slots[i]=(gh_at_unit_view){0};
+ }
+ *frontier=0x2c1270;
+ gh_scene_at_status status=gh_scene_at_units_release(s);
+ if(!status)*frontier=0;
+ return status;
+}
+
 /* Strict typed traversal of the SAME original tagged unit lists. */
 static gh_scene_at_status walk_checked(gh_scene_at_manager*s,gh_at_link link,gh_at_native_unit*out){
  *out=(gh_at_native_unit){0};for(unsigned depth=0;depth<17;depth++){
