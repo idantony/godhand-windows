@@ -5,6 +5,7 @@
 #include "../platform/memory.h"
 #include "../platform/adx_stream.h"
 #include "game_children.h"
+#include "game_event.h"
 #include "game_init.h"
 #include "game_room_state.h"
 #ifdef __cplusplus
@@ -84,6 +85,8 @@ int gh_bgm_requests_uses_owners(const gh_bgm_requests *,const gh_audio_registry 
 gh_bgm_status gh_bgm_requests_scene_exit_begin(gh_bgm_requests *);
 gh_bgm_status gh_bgm_requests_scene_exit_ready(const gh_bgm_requests *,int *);
 gh_bgm_status gh_bgm_requests_scene_exit_finalize(gh_bgm_requests *);
+/* Original Event+38 reserve is a stable Main owner borrowed by 2D0D70. */
+gh_bgm_status gh_bgm_requests_bind_event_reserve(gh_bgm_requests *,const gh_event_reserve_work *);
 int gh_bgm_requests_scene_event(const gh_bgm_requests *,int32_t *);
 /* Borrowed scene context is captured by actual scene_begin and must outlive
  * ordinary audio ticks. This is the SAME children/Heat/enemy owner, no copies.

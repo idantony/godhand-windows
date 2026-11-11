@@ -27,6 +27,20 @@ static void vf0(uint8_t *bytes)
     put(bytes+12,0x3f800000);
 }
 
+gh_actor_model_status gh_om_weapon_construct_001c9140(void *data,size_t size,gh_title_player_view *view)
+{
+    if(!data||!view)return GH_ACTOR_MODEL_ARGUMENT;
+    if(size<GH_ENEMY_WEAPON_363_BYTES)return GH_ACTOR_MODEL_BOUNDS;
+    if(gh_om_base_construct_001b6e90(data,size,view))return GH_ACTOR_MODEL_ARGUMENT;
+    uint8_t *bytes=data;
+    put(bytes+0x214,0x42aa98);
+    view->original_vtable214=0x42aa98;
+    static const uint16_t vectors[]={0x610,0x620,0x640,0x6a0};
+    for(unsigned i=0;i<sizeof(vectors)/sizeof(vectors[0]);i++)vf0(bytes+vectors[i]);
+    for(unsigned i=0;i<14;i++)vf0(bytes+0x6b0+i*16);
+    return GH_ACTOR_MODEL_OK;
+}
+
 static gh_actor_model_status stop(gh_enemy_weapon *weapon,uint32_t pc,gh_actor_model_status status)
 {
     weapon->frontier=pc;
@@ -87,13 +101,8 @@ gh_actor_model_status gh_enemy_weapon_create_0030fa98(gh_enemy_weapon *weapon,
 
     if(weapon->stage==ALLOCATED){
         uint8_t *bytes=weapon->object.arena_allocation.pointer;
-        if(gh_om_base_construct_001b6e90(bytes,GH_ENEMY_WEAPON_363_BYTES,&weapon->object.view))
+        if(gh_om_weapon_construct_001c9140(bytes,GH_ENEMY_WEAPON_363_BYTES,&weapon->object.view))
             return stop(weapon,0x1c9140,GH_ACTOR_MODEL_ARGUMENT);
-        static const uint16_t vectors[]={0x610,0x620,0x640,0x6a0};
-        for(unsigned i=0;i<sizeof(vectors)/sizeof(vectors[0]);i++)vf0(bytes+vectors[i]);
-        for(unsigned i=0;i<14;i++)vf0(bytes+0x6b0+i*16);
-        put(bytes+0x214,0x42aa98);
-        weapon->object.view.original_vtable214=0x42aa98;
         weapon->object.view.initial_memory=GH_TITLE_MEMORY_ORIGINAL_FACTORY_ZERO;
         bytes[0x2fc]=(*binding->factory_serial)++;
         half(bytes+0x2fe,0x363);

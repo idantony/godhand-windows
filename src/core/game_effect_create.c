@@ -36,6 +36,17 @@ gh_effect_status gh_effect_create_enemy_death_part0_00306900(gh_effect_create_ca
  return status;
 }
 
+gh_effect_status gh_effect_create_enemy_knockdown_002a8608(gh_effect_create_call *c,
+ const gh_title_player_view *actor,uint32_t index)
+{
+ if(!actor||!actor->bytes||actor->size<0x436||(index!=0x2f&&index!=0x30))return GH_EFFECT_ARGUMENT;
+ if(actor->bytes[0x434]&2)return GH_EFFECT_UNSUPPORTED;
+ const gh_effect_create_request request={.bank=0x58,.index=index,.actor=actor,.mode=0,.selector=-1};
+ gh_effect_status status=gh_effect_create_begin(c,&request);
+ if(!status)c->configuration_death_part_zero=2;
+ return status;
+}
+
 gh_effect_status gh_effect_create_nested_begin_002f1d3c(gh_effect_create_call *c,
  const gh_effect_create_request *request,uint8_t group,uint32_t scale,uint32_t flags){
  if(!request||!group||!request->actor||request->mode!=-1||request->selector!=-1||
@@ -169,7 +180,8 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
  c->est=entry;c->count=w(c->est.bytes+4);if(c->count>(c->est.size-16)/0x2f0)return fail(c,0x3066d0,GH_EFFECT_BOUNDS);c->config_flags=(w((const uint8_t*)b->work+0x5e4)&0x40)?2:0;
  if(c->configuration_2fa158)c->config_flags|=0xe;
  if(c->configuration_nested_group)c->config_flags|=c->configuration_nested_flags;
- if(c->configuration_death_part_zero&&
+ if(c->configuration_death_part_zero==2)c->config_flags=0;
+ if(c->configuration_death_part_zero==1&&
     (c->count!=1||entry.bytes[16+0xbe]||entry.bytes[16+0x128]||entry.bytes[16+0x136]))
   return fail(c,0x306900,GH_EFFECT_UNSUPPORTED);
  c->stage=1;return GH_EFFECT_OK;
@@ -314,6 +326,22 @@ int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *v)
         !v->record.bytes[0x128]&&!v->record.bytes[0x136];
 }
 
+int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *v)
+{
+ if(!v||!v->payload||v->payload_size!=0x260)return 0;
+ const uint32_t program=w(v->payload+0x18c);
+ if((program!=0x002f0058u&&program!=0x00300058u)||!v->initialized||
+    !v->actor||!v->actor->bytes||v->actor->size<0x644||v->actor!=v->selector||
+    !v->model||v->model->root.bytes!=v->actor->bytes||
+    !v->record.bytes||v->record.size!=0x2f0||v->record.bytes[0x128]||v->record.bytes[0x136]||
+    w(v->payload+0x110)||v->payload[0x1ec])return 0;
+ const unsigned stamp=w(v->actor->bytes+0x640)&0xffffu;
+ const uint32_t dependency=w(v->actor->bytes+0x564);
+ if((w(v->actor->bytes+0x2fc)>>16)!=0x202||
+    !((stamp==19&&dependency==0x203)||(stamp==20&&dependency==0x200)))return 0;
+ const unsigned part=v->record.bytes[0xbe];
+ return part<v->model->part_count&&v->part==v->model->parts+part;
+}
 int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *v)
 {
  return v&&v->actor&&v->actor->bytes&&v->actor->size>=0x644&&v->selector==v->actor&&

@@ -1,6 +1,7 @@
 #include "game_om041c.h"
 #include "game_actor_axis_rotation.h"
 #include "game_actor_matrix.h"
+#include "game_actor_two_bone.h"
 #include "game_om_base.h"
 #include "id_layout_rotation.h"
 
@@ -71,8 +72,10 @@ static gh_scene_placement_status bind_tables(gh_om041c_state *s,const gh_om_init
     const uint8_t *part_bases=elf_span(b->elf,b->elf_bytes,0x421ad0,2);
     const uint8_t *points=elf_span(b->elf,b->elf_bytes,0x421ae0,4*POINT_COUNT);
     const uint8_t *springs=elf_span(b->elf,b->elf_bytes,0x421b20,5*SPRING_COUNT);
-    const uint8_t *coefficients=elf_span(b->elf,b->elf_bytes,0x3c2390,8);
-    if(!part_bases||!points||!springs||!coefficients)return fail(s,0x2ad2b8,GH_PLACE_BOUNDS);
+    const uint8_t *coefficients=elf_span(b->elf,b->elf_bytes,0x3c238c,24);
+    const uint8_t *reset=elf_span(b->elf,b->elf_bytes,0x3bda50,1);
+    if(!part_bases||!points||!springs||!coefficients||!reset)return fail(s,0x2ad2b8,GH_PLACE_BOUNDS);
+    if(word(coefficients)!=3||*reset)return fail(s,0x2ad590,GH_PLACE_UNSUPPORTED);
     uint32_t seen=0;
     for(unsigned i=0;i<POINT_COUNT;i++){
         const uint8_t *p=points+4*i;
@@ -86,12 +89,16 @@ static gh_scene_placement_status bind_tables(gh_om041c_state *s,const gh_om_init
         if(p[0]>2||p[1]>4||p[2]>2||p[3]>4||p[4]>1)
             return fail(s,0x2ad2b8,GH_PLACE_BOUNDS);
     }
-    if(!isfinite(value(coefficients))||!isfinite(value(coefficients+4)))
+    for(unsigned i=1;i<6;i++)if(!isfinite(value(coefficients+4*i)))
         return fail(s,0x2ad2b8,GH_PLACE_BOUNDS);
+    if(value(coefficients+16)<0||value(coefficients+20)<=0)return fail(s,0x2ad748,GH_PLACE_BOUNDS);
     s->part_bases=part_bases;
     s->point_setup=points;
     s->spring_setup=springs;
-    memcpy(s->spring_coefficients,coefficients,8);
+    memcpy(s->spring_coefficients,coefficients+4,8);
+    s->gravity=value(coefficients+12);
+    s->drag=value(coefficients+16);
+    s->force_cap=value(coefficients+20);
     return GH_PLACE_OK;
 }
 
@@ -272,5 +279,234 @@ finish:
     if(pc)return fail(s,pc,GH_PLACE_UNSUPPORTED);
     for(unsigned i=0;i<POINT_COUNT;i++)
         if(mask&(1u<<i))memcpy(point(root,i)+0x10,updated[i],12);
+    return GH_PLACE_OK;
+}
+
+static float dot3(const float a[3],const float b[3])
+{
+    return add(add(mul(a[0],b[0]),mul(a[1],b[1])),mul(a[2],b[2]));
+}
+
+/* Actual 2AD748 force order is gravity, velocity drag, the 30 ordered
+ * springs, then one force limit per unpinned point. */
+static uint32_t solve_forces(const gh_om041c_state *s,const uint8_t *root,
+    uint8_t points[POINT_COUNT][POINT_BYTES])
+{
+    for(unsigned i=0;i<POINT_COUNT;i++){
+        uint8_t *p=points[i];
+        memset(p+0x30,0,12);
+        if(p[0x48])continue;
+        float velocity[3];
+        memcpy(velocity,p+0x10,12);
+        const float speed_squared=dot3(velocity,velocity),speed=sqrtf(speed_squared);
+        const float mass=value(p+0x40);
+        if(!isfinite(speed)||!isfinite(mass)||mass<=0)return 0x2ad748;
+        float force[3]={0,mul(s->gravity,mass),0};
+        if(speed>0){
+            const float reciprocal=divide(1,speed);
+            for(unsigned axis=0;axis<3;axis++){
+                const float unit=mul(velocity[axis],reciprocal);
+                force[axis]=add(force[axis],-mul(mul(unit,speed_squared),s->drag));
+            }
+        }
+        memcpy(p+0x30,force,12);
+    }
+    for(unsigned i=0;i<SPRING_COUNT;i++){
+        const uint8_t *cfg=s->spring_setup+5*i;
+        const uint8_t *link=spring((uint8_t *)root,i);
+        uint8_t *a=points[3*cfg[1]+cfg[0]],*b=points[3*cfg[3]+cfg[2]];
+        float separation[3],relative_speed[3];
+        for(unsigned axis=0;axis<3;axis++){
+            separation[axis]=add(value(a+4*axis),-value(b+4*axis));
+            relative_speed[axis]=add(value(a+0x10+4*axis),-value(b+0x10+4*axis));
+        }
+        const float distance=sqrtf(dot3(separation,separation));
+        if(!isfinite(distance)||distance<=0)return 0x1f7df8;
+        const float elastic=mul(add(distance,-value(link+0x10)),value(link+8));
+        const float damped=mul(divide(dot3(relative_speed,separation),distance),value(link+0xc));
+        const float amount=-add(elastic,damped),inverse=divide(1,distance);
+        for(unsigned axis=0;axis<3;axis++){
+            const float f=mul(mul(separation[axis],inverse),amount);
+            if(!isfinite(f))return 0x2ad748;
+            if(!a[0x48])write_float(a+0x30+4*axis,add(value(a+0x30+4*axis),f));
+            if(!b[0x48])write_float(b+0x30+4*axis,add(value(b+0x30+4*axis),-f));
+        }
+    }
+    const float cap_squared=mul(s->force_cap,s->force_cap);
+    for(unsigned i=0;i<POINT_COUNT;i++){
+        uint8_t *p=points[i];
+        if(p[0x48])continue;
+        float force[3];
+        memcpy(force,p+0x30,12);
+        float squared=dot3(force,force);
+        if(!isfinite(squared))return 0x2ad748;
+        if(squared>cap_squared){
+            float ratio=divide(s->force_cap,sqrtf(squared));
+            for(unsigned axis=0;axis<3;axis++)write_float(p+0x30+4*axis,mul(force[axis],ratio));
+        }
+    }
+    return 0;
+}
+
+static uint32_t integrate_cloth(gh_om041c_state *s,uint8_t *root)
+{
+    uint8_t points[POINT_COUNT][POINT_BYTES];
+    memcpy(points,point(root,0),sizeof(points));
+    const float dt=divide(0x1.111112p-5f,3.0f); /* original f12 bits 3D088889 */
+    for(unsigned step=0;step<3;step++){
+        uint32_t pc=solve_forces(s,root,points);
+        if(pc)return pc;
+        for(unsigned i=0;i<POINT_COUNT;i++){
+            uint8_t *p=points[i];
+            if(p[0x48])continue;
+            const float inverse=value(p+0x44);
+            if(!isfinite(inverse)||inverse<=0)return 0x2ad590;
+            for(unsigned axis=0;axis<3;axis++){
+                const float accel=mul(value(p+0x30+4*axis),inverse);
+                const float velocity=add(value(p+0x10+4*axis),mul(accel,dt));
+                const float position=add(value(p+4*axis),mul(velocity,dt));
+                if(!isfinite(position)||!isfinite(velocity))return 0x2ad590;
+                write_float(p+0x20+4*axis,accel);
+                write_float(p+0x10+4*axis,velocity);
+                write_float(p+4*axis,position);
+            }
+        }
+    }
+    memcpy(point(root,0),points,sizeof(points));
+    return 0;
+}
+
+static uint32_t root_world(gh_actor_model *model,gh_static_transform_policy policy)
+{
+    uint8_t *root=model->root.bytes;
+    if(word(root+0x250)&0x800u)return 0;
+    float position[3],angles[3],scale[3],matrix[16];
+    memcpy(position,model->root.alias_f0,12);
+    memcpy(angles,root+0x100,12);
+    memcpy(scale,root+0x110,12);
+    uint32_t pc=0;
+    if(gh_actor_matrix_compose_00147a48(position,angles,scale,root[0x140],matrix,policy,&pc))
+        return pc?pc:0x14a2b0;
+    memcpy(root+0x80,matrix,64);
+    memcpy(root+0x120,root+0x110,12);
+    return 0;
+}
+
+static uint32_t seed_anchors(gh_om041c_state *s,gh_static_transform_policy policy)
+{
+    gh_actor_model *model=&s->common.model;
+    uint8_t *root=model->root.bytes;
+    uint32_t pc=root_world(model,policy);
+    if(pc)return pc;
+    for(unsigned column=0;column<2;column++){
+        unsigned index=s->part_bases[column];
+        gh_actor_part *part=model->parts+index;
+        if(gh_actor_part_rebuild_00150138(model,index,policy,&pc))return pc?pc:0x150138;
+        if(gh_actor_part_world_001501d0(part,root,word(root+0x250),policy,&pc))
+            return pc?pc:0x1501d0;
+        memcpy(point(root,2*column),part->bytes+0xb0,12);
+    }
+    return 0;
+}
+
+static uint32_t orient_bone(const gh_motion_ik_globals *globals,const float parent[16],
+    const float delta[3],float quaternion[4],gh_static_transform_policy policy)
+{
+    float q[4],swing[4];
+    uint32_t pc=0;
+    if(gh_actor_matrix_quaternion_0015a190(parent,q,globals,policy,&pc))return pc?pc:0x15a190;
+    const float distance=sqrtf(dot3(delta,delta));
+    if(!isfinite(distance))return 0x101e28;
+    float direction[3]={0};
+    if(distance>0){
+        const float inverse=divide(1,distance);
+        for(unsigned i=0;i<3;i++)direction[i]=mul(delta[i],inverse);
+    }
+    /* 15A878 aligns the authored bone's (0,-1,0) to the cloth segment. */
+    float dot=-direction[1];
+    if(dot < -1.0f)dot=-1.0f;
+    if(dot > 1.0f)dot=1.0f;
+    const float twice_cos=sqrtf(add(add(add(dot,1),dot),1));
+    if(!isfinite(twice_cos)||twice_cos<=0)return 0x15a878;
+    const float inv_cos=divide(1,twice_cos);
+    swing[0]=mul(-direction[2],inv_cos);
+    swing[1]=0;
+    swing[2]=mul(direction[0],inv_cos);
+    swing[3]=mul(twice_cos,0.5f);
+
+    const float norm=add(dot3(q,q),mul(q[3],q[3]));
+    if(!isfinite(norm)||norm<=0)return 0x15a190;
+    const float inverse=divide(1,norm);
+    for(unsigned i=0;i<3;i++)q[i]=mul(-q[i],inverse);
+    q[3]=mul(q[3],inverse);
+    for(unsigned i=0;i<3;i++){
+        const unsigned j=(i+1)%3,k=(i+2)%3;
+        const float cross=add(mul(q[j],swing[k]),-mul(q[k],swing[j]));
+        quaternion[i]=add(add(cross,mul(q[i],swing[3])),mul(q[3],swing[i]));
+    }
+    quaternion[3]=add(add(add(mul(q[3],swing[3]),-mul(q[0],swing[0])),
+        -mul(q[1],swing[1])),-mul(q[2],swing[2]));
+    return 0;
+}
+
+static uint32_t solve_bones(gh_om041c_state *s,const gh_motion_ik_globals *globals,
+    gh_static_transform_policy policy)
+{
+    gh_actor_model *model=&s->common.model;
+    uint8_t *root=model->root.bytes;
+    uint32_t flags=word(root+0x250);
+    for(unsigned column=0;column<2;column++)for(unsigned row=0;row<5;row++){
+        const unsigned index=s->part_bases[column]+row;
+        gh_actor_part *part=model->parts+index;
+        const uint8_t *parent=row?model->parts[index-1].bytes:root;
+        float local[16]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+        memcpy(local+12,part->alias_d0,12);
+        uint32_t pc=0;
+        if(row<4){
+            float delta[3],parent_world[16],quaternion[4],rotation[16],adjusted[16];
+            const uint8_t *a=point(root,3*row+2*column),*b=point(root,3*(row+1)+2*column);
+            for(unsigned axis=0;axis<3;axis++)delta[axis]=add(value(b+4*axis),-value(a+4*axis));
+            memcpy(parent_world,parent+0x80,64);
+            pc=orient_bone(globals,parent_world,delta,quaternion,policy);
+            if(pc)return pc;
+            if(gh_actor_quaternion_matrix_001478a8(quaternion,rotation,policy,&pc)||
+               gh_actor_matrix_product_00147548(local,rotation,adjusted,policy,&pc))return pc?pc:0x147bb0;
+            memcpy(local,adjusted,64);
+        }
+        /* Each authored column is an independent chain. The original tip's
+         * temporary rotation is overwritten by 17BFAC's translation-only
+         * pass before any later consumer, and no bone inherits the tip. */
+        memcpy(part->bytes,local,64);
+        if(gh_actor_part_world_001501d0(part,parent,flags,policy,&pc))return pc?pc:0x1501d0;
+    }
+    return 0;
+}
+
+gh_scene_placement_status gh_om041c_move_0017baf0(gh_om041c_state *s,
+    const gh_motion_ik_globals *globals,uint8_t *phase)
+{
+    if(!s||!s->initialized||!phase||*phase>2)return GH_PLACE_ARGUMENT;
+    s->frontier=0;
+    if(*phase==2)return GH_PLACE_OK;
+    if(!globals||!globals->initialized)return fail(s,0x15a190,GH_PLACE_UNSUPPORTED);
+    gh_actor_model *model=&s->common.model;
+    const gh_static_transform_policy policy=GH_STATIC_BINARY32_REFERENCE;
+    if(model->part_count!=10||s->part_bases[0]!=0||s->part_bases[1]!=5)
+        return fail(s,0x17baf0,GH_PLACE_UNSUPPORTED);
+    for(unsigned i=0;i<10;i++){
+        const gh_actor_part *part=model->parts+i;
+        if(!part->bytes||!part->alias_d0||(i%5?part->parent_is_model||part->parent!=(int)i-1:!part->parent_is_model))
+            return fail(s,0x17baf0,GH_PLACE_UNSUPPORTED);
+    }
+    uint32_t pc=0;
+    if(!*phase){
+        pc=seed_anchors(s,policy);
+        if(!pc)pc=integrate_cloth(s,model->root.bytes);
+        if(pc)return fail(s,pc,GH_PLACE_UNSUPPORTED);
+        *phase=1;
+    }
+    pc=solve_bones(s,globals,policy);
+    if(pc)return fail(s,pc,GH_PLACE_UNSUPPORTED);
+    *phase=2;
     return GH_PLACE_OK;
 }

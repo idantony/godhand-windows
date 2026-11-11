@@ -1,5 +1,20 @@
 #include "game_player_init_tail.h"
 #include <string.h>
+
+gh_player_init_status gh_game_player_reset_room_cursors(
+ gh_game_player_init *init,gh_game_player_init_tail *tail,gh_game_player_spawn *spawn,
+ const gh_game_title_player *player,const gh_game_player_child *child)
+{
+ if(!init||!tail||!spawn||!player||!child||
+    player->view.bytes||player->allocation.pointer||
+    child->object.view.bytes||child->object.allocation.pointer||child->model.ready)
+  return GH_PLAYER_INIT_ARGUMENT;
+ *init=(gh_game_player_init){0};
+ *tail=(gh_game_player_init_tail){0};
+ *spawn=(gh_game_player_spawn){0};
+ return GH_PLAYER_INIT_OK;
+}
+
 static uint32_t w(const uint8_t*p){uint32_t v;memcpy(&v,p,4);return v;}
 static void ww(uint8_t*p,uint32_t v){memcpy(p,&v,4);}
 static void wh(uint8_t*p,uint16_t v){memcpy(p,&v,2);}

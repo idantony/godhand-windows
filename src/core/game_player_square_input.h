@@ -10,6 +10,11 @@ extern "C" {
 gh_player_frame_status gh_player_square_input_00123fc8(
     const gh_title_player_view *,gh_core_save_view,const gh_game_init_state *,
     int caller_mode,int *original_return,uint32_t *frontier);
+/* Original 123F44..123FC4 neutral Triangle selector, after its target prelude.
+ * Only the ordinary no-analog branch is exposed by this helper. */
+gh_player_frame_status gh_player_triangle_input_00123f44(
+    const gh_title_player_view *,gh_core_save_view,int caller_mode,
+    int *original_return,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

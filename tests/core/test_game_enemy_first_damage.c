@@ -1,3 +1,6 @@
+#include "game_player_square_frame.h"
+#include "game_player_idle_input.h"
+#include "game_actor_motion_ik.h"
 #include "game_effects_frame.h"
 #include "game_enemy_retire.h"
 #include "game_object_live_trans.h"
@@ -1205,6 +1208,317 @@ static int verify_stamp19_attack_effect(const gh_enemy202_move *move,
     return 0;
 }
 
+#define VERIFY(expr) do { if (!(expr)) { fprintf(stderr,"line %d: %s\n",__LINE__,#expr); exit(1); } } while (0)
+typedef struct {
+ gh_actor_motion motion;
+ gh_actor_motion_call call;
+ gh_actor_motion_bindings bindings;
+ unsigned begins,sounds;
+ int block;
+ unsigned triangle;
+} bridge;
+static gh_player_init_status begin_motion(void*ctx,const gh_player_motion_request*r,uint32_t*f)
+{
+ bridge *b=ctx;
+ b->begins++;
+ if(b->triangle)VERIFY(r->motion_offset==0x992e0&&r->sequence_candidate_offset==0x9ad20&&
+   !r->start_frame_bits&&r->blend_frames==5&&r->flags==0x40&&r->release_previous_sequence);
+ else VERIFY(r->motion_offset==0x955a0&&r->sequence_candidate_offset==0x96520&&
+   !r->start_frame_bits&&r->blend_frames==7&&r->flags==0x40&&r->release_previous_sequence);
+ if(b->block){b->block=0;*f=0x2a8578;return GH_PLAYER_INIT_UNSUPPORTED;}
+ gh_actor_motion_status e=gh_actor_motion_call_open_parameters_002a8578(
+  &b->call,&b->motion,&b->bindings,r->motion_offset,r->sequence_candidate_offset,
+  r->start_frame_bits,r->blend_frames,r->flags,r->release_previous_sequence);
+ if(!e)e=gh_actor_motion_call_step_002a8578(&b->call);
+ *f=b->call.frontier;
+ return e?GH_PLAYER_INIT_UNSUPPORTED:GH_PLAYER_INIT_OK;
+}
+static gh_actor_motion_status sound(void *context,const gh_motion_sound_request *r,uint32_t *handle,uint32_t *frontier)
+{
+ bridge *b=context;
+ VERIFY(r->actor==&b->bindings.model->root&&r->model==b->bindings.model&&!r->part);
+ if(b->triangle){
+  VERIFY(r->bank==0&&r->program==(b->sounds?243:203));
+  ++b->sounds;*handle=17;return GH_ACTOR_MOTION_OK;
+ }
+ VERIFY(r->bank==0&&r->program==(b->sounds<2?203:24));
+ b->sounds++;
+ if(b->sounds==1){*frontier=0x2cba48;return GH_ACTOR_MOTION_BUSY;}
+ *handle=17;
+ return GH_ACTOR_MOTION_OK;
+}
+static gh_player_frame_status advance_motion(void *context,const gh_player_motion_request *r,
+ int *ended,uint32_t *frontier)
+{
+ bridge *b=context;
+ gh_actor_motion_status e=gh_actor_motion_step_00157c18(
+  &b->motion,*r->rate,GH_STATIC_BINARY32_REFERENCE,ended,frontier);
+ return e?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_OK;
+}
+static gh_player_frame_status strike(void *context,const gh_title_player_view *player,
+ gh_hitarea_object give[5],uint32_t *frontier)
+{
+ (void)context;
+ return gh_player_attack_hitarea_0010a438(player,give,frontier)?
+        GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_OK;
+}
+static gh_actor_motion_status triangle_impact_sound(void *context,const gh_motion_sound_request *request,
+    uint32_t *handle,uint32_t *frontier)
+{
+    gh_enemy_actor *enemy=context;
+    fprintf(stderr,"Triangle sound %u:%u part %p\n",request->bank,request->program,(const void*)request->part);
+    VERIFY(request->actor->bytes==enemy->entry.object.view.bytes&&request->model==enemy->motion.motion.b.model&&
+        !request->part&&((request->bank==0&&(request->program==10||request->program==180))||
+            (request->bank==1&&(request->program==(int16_t)(word(enemy->entry.object.view.bytes+0x424)&0xffff)||
+             request->program==(int16_t)((word(enemy->entry.object.view.bytes+0x424)&0xffff)+8u)))));
+    *handle=17;
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
+static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *enemy,
+    gh_game_title_player *player, gh_actor_model *model, const uint8_t *pl, size_t pl_size,
+    const uint8_t *elf, size_t elf_size, gh_game_player_init_tail *tail, camera_target_fixture *resolver,
+    const gh_hitarea_frame_bindings *lb, gh_hitarea_frame *ledger, const gh_effect_create_bindings *effect, const gh_room_state *room, const gh_enemy_ems_live *live, int mode)
+{
+    uint8_t *p=player->view.bytes, *e=enemy->entry.object.view.bytes;
+    gh_motion_ik_globals ik={0};
+    gh_frame_random random={0};
+    bridge backend={.triangle=1};
+    uint32_t pc;
+    CHECK(!gh_motion_ik_globals_from_elf(&ik,elf,elf_size));
+    CHECK(!gh_frame_seed_0031ceb8(&random,&b->entry.init->random,GH_FRAME_CHOP_REFERENCE));
+    backend.bindings=(gh_actor_motion_bindings){.model=model,.resource=pl,.resource_bytes=pl_size,
+        .work=b->entry.work,.ik_globals=&ik,.sequence_random=&random,.sound=sound,.sound_context=&backend};
+    const size_t idle=word(pl+0x28);
+    p[0x570]=p[0x571]=0xff; /* PlayerInit sequence handle sentinel. */
+    const gh_actor_motion_status started=gh_actor_motion_begin_002a8578(&backend.motion,&backend.bindings,idle,word(pl+0x2c),0);
+    if(started)fprintf(stderr,"Triangle idle status%d PC%08x detail%08x speed%08x state%08x\n",started,
+        backend.motion.frontier,backend.motion.detail,word(p+0x5a8),word(p+0x428));
+    CHECK(!started);
+    int ended;
+    CHECK(!gh_actor_motion_step_00157c18(&backend.motion,1,GH_STATIC_BINARY32_REFERENCE,&ended,&pc));
+    const float rate=1;
+    const gh_player_frame_bindings frame={.player=player,.work=b->entry.work,.init=b->entry.init,
+        .current_player=&player->view,.elf=elf,.elf_bytes=elf_size,.model=model,.resource=pl,
+        .resource_bytes=pl_size,.rate=&rate,.initialize_motion=begin_motion,.advance_motion=advance_motion,
+        .motion_context=&backend,.give_objects=tail->give_objects,.give_binding_known=1,.give_present_mask=31,
+        .auxiliary_bindings_known=1,.effects=&effect->storage,.save=b->entry.save,
+        .numeric_policy=GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+    const gh_player_target_bindings targets={.pools=b->entry.pools,.actors=b->actors,
+        .player=&player->view,.elf=elf,.elf_bytes=elf_size,.resolve=resolve_camera_target,.context=resolver};
+    gh_player_target selected={0};
+    gh_player_square_frame_bindings attack={.frame=&frame,.target_bindings=&targets,
+        .target_640=&selected,.hit_area_0010a438=strike};
+    gh_player_square_frame call={0};
+    gh_player_idle_input input={0};
+    int chosen;
+    p[0x622]=3; /* Edge buffer supplied by the normal input owner. */
+    memcpy(p+0x15f4,&(uint32_t){0x20},4);
+    const gh_player_idle_input_bindings input_bindings={.frame=frame,.targets=targets};
+    const gh_player_frame_status picked=gh_game_player_idle_input_00123938(&input,&input_bindings,&chosen);
+    if(picked)fprintf(stderr,"Triangle input status %d PC %08x phase %u\n",picked,input.frontier,input.phase);
+    CHECK(!picked&&chosen&&p[0x5e2]==1);
+    selected.handle=word(p+0x640);
+    if(selected.handle)CHECK(!resolve_camera_target(resolver,selected.handle,&selected.view,&pc));
+    p[0x622]=0;
+    for(unsigned i=0;i<17;i++){
+        CHECK(!gh_player_square_frame_reset(&call));
+        const gh_player_frame_status status=gh_game_player_square_frame_0010d3a8(&call,&attack);
+        if(status)fprintf(stderr,"Triangle player stage %u PC %08x frame %u\n",call.stage,call.frontier,i);
+        CHECK(!status);
+        if(p[0x5e6])break;
+    }
+    CHECK(p[0x5e6]&&backend.begins==1&&backend.sounds==2);
+    CHECK(!gh_collision_pairs_step_002b9d58(b->shapes.pairs,GH_STATIC_BINARY32_REFERENCE,&pc));
+    CHECK(!gh_hitarea_frame_resume_bound_001fdfd8(b->entry.init,b->entry.work,1,
+        GH_STATIC_BINARY32_REFERENCE,ledger,lb,&pc));
+    const gh_hitarea_object *body=&enemy->hitareas.units[0];
+    const gh_title_player_view *source;
+    CHECK(!gh_hitarea_object_last_hit_actor(body,&source)&&source==&player->view&&
+          body->bytes[0x46]==0x12&&word(body->bytes+0x4c)==12);
+    const int lethal=mode==4||mode==5;
+    if(mode>=6){
+        const unsigned wanted=mode>=10?10u:mode>=8?0x70u:0;
+        const unsigned rank=mode>=12?3:2;
+        const size_t rank_table=0x3bf160-0xff000;
+        CHECK(rank_table+8<=elf_size&&word(elf+rank_table)==1000&&word(elf+rank_table+4)==3000);
+        const uint16_t points=(uint16_t)word(elf+rank_table+4*(rank-2));
+        memcpy(b->entry.save.bytes+0x1c,&points,2);
+        gh_game_mt predicted;
+        uint32_t seed;
+        for(seed=1;seed<2048;++seed){
+            gh_game_mt_seed_0030f2b0(&predicted,seed);
+            uint32_t draw[3];
+            CHECK(!gh_game_mt_next_0030f348(&predicted,draw)&&
+                !gh_game_mt_next_0030f348(&predicted,draw+1)&&!gh_game_mt_next_0030f348(&predicted,draw+2));
+            const unsigned counter=!(draw[1]&3u)?0x70u:e[0x640]==20&&(draw[2]&31u)==3?10u:0;
+            if(counter==wanted)break;
+        }
+        CHECK(seed<2048);
+        gh_game_mt_seed_0030f2b0(&b->entry.init->random,seed);
+        if(wanted){
+            gh_enemy202_hit_call hit={0};
+            const uint32_t hp=word(e+0x548);
+            CHECK(!gh_enemy202_hit_0020a178(&hit,enemy,&player->view,rank,&pc)&&!pc&&
+                 !hit.reacted&&hit.phase==5&&word(e+0x548)==hp&&
+                 word(e+0x2f4)==wanted*256u&&word(b->entry.init->heat+4)==0x40000000);
+            CHECK(b->entry.init->random.index==(wanted==10?3u:2u)&&
+                 word(e+0x54c)==(wanted==10?0x40400000u:0x40000000u));
+            printf("PASS Triangle rank%u stamp%u original counter %X, HP restored, MT index %u\n",
+                rank,e[0x640],wanted,b->entry.init->random.index);
+            return 0;
+        }
+        gh_enemy202_hit_call hit={0};
+        const unsigned hp=word(e+0x548)>>16;
+        const unsigned excitement=word(e+0x16e8);
+        CHECK(!gh_enemy202_hit_0020a178(&hit,enemy,&player->view,rank,&pc)&&!pc&&hit.reacted&&hit.phase==5&&
+             word(e+0x2f4)==0x101&&word(b->entry.init->heat+4)==0x40000000&&(word(e+0x548)>>16)==hp-12);
+        CHECK(word(e+0x16e8)==excitement+(rank>=3?20u:0));
+        printf("PASS Triangle rank%u stamp%u original counter miss, HP %u to %u\n",rank,e[0x640],hp,hp-12);
+        return 0;
+    }
+    if(lethal)memcpy(e+0x54a,&(uint16_t){12},2); /* Controlled pre-contact HP edge. */
+    const unsigned hp=word(e+0x548)>>16;
+    gh_enemy202_move move={0};
+    const gh_actor_motion_status status=gh_enemy202_move_00208be0(&move,enemy,&player->view,elf,elf_size);
+    fprintf(stderr,"Triangle Take stamp%u status%d PC%08x phase%u hp%u/%u state%08x heat%08x rank%u stun%u\n",
+        e[0x640],status,move.frontier,move.damage.phase,word(e+0x548)>>16,hp,word(e+0x2f4),
+        word(b->entry.init->heat+4),word(b->entry.save.bytes+0x1c)&0xffff,word(e+0x5b4));
+    CHECK(status==GH_ACTOR_MOTION_UNSUPPORTED&&move.frontier==0x306838&&move.damage.effect==0x12);
+    CHECK((word(e+0x548)>>16)==hp-12&&word(e+0x2f4)==(lethal?0x701u:0x101u)&&
+        word(b->entry.init->heat+4)==0x40000000&&word(b->entry.init->heat+8)==0x40000000&&
+        (word(b->entry.save.bytes+0x1c)&0xffff)==24&&(word(e+0x5b4)==15||word(e+0x5b4)==30));
+    CHECK(move.damage.impact.bank==0x58&&move.damage.impact.index==0x10);
+    CHECK(!gh_enemy202_move_bind_impact(&move,effect));
+    gh_actor_motion *motion=&enemy->motion.motion;
+    const gh_motion_sound_consumer old_sound=motion->b.sound;
+    void *old_context=motion->b.sound_context;
+    motion->b.sound=triangle_impact_sound;
+    motion->b.sound_context=enemy;
+    const gh_actor_motion_status resumed=gh_enemy202_move_00208be0(&move,enemy,&player->view,elf,elf_size);
+    motion->b.sound=old_sound;
+    motion->b.sound_context=old_context;
+    fprintf(stderr,"Triangle reaction stamp%u status%d PC%08x stage%u phase%u\n",
+        e[0x640],resumed,move.frontier,move.stage,move.damage.phase);
+    fprintf(stderr,"reaction row%X frame%08x state%08x pos%08x clock%u %u flags%08x\n",
+        move.reaction_resource_offset,word(e+0x430),word(e+0x2f4),word(e+0x600),
+        word(e+0x5f0),word(e+0x5f4),word(e+0x434));
+    gh_game_pl_camera camera={0};
+    CHECK(!gh_game_camera_construct_pl_00139bc8(&camera,&b->entry.init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+    CHECK(b->entry.init->active_camera==&b->entry.init->camera);
+    memcpy(camera.fields+0x200,enemy->entry.object.view.alias_f0,12);
+    memcpy(camera.fields+0x210,player->view.alias_f0,12);
+    gh_object_opacity_environment opacity={b->entry.init,&camera,&player->view,1};
+    if(lethal){
+        fprintf(stderr,"lethal scope effect stage%u complete%u EST%u marker%u frames%u\n",
+            move.death_effect_create.stage,move.death_effect_create.complete,move.death_effect_create.count,
+            move.death_effect_create.configuration_death_part_zero,enemy->motion.motion.motion.frames);
+        CHECK(!resumed&&move.original_returned&&move.impact_create.complete&&move.death_effect_create.complete);
+        CHECK(word(e+0x2f4)==0x00010701&&word(e+0x430)==0x3f800000);
+        CHECK(!gh_hitarea_object_set_active_001fd668(&tail->give_objects[4],0,&pc));
+        const gh_motion_effect_consumer old_effect=motion->b.effect;
+        void *old_effect_context=motion->b.context;
+        motion->b.effect=release_stamp19_effect;
+        motion->b.context=(void *)effect;
+        motion->b.sound=triangle_impact_sound;
+        motion->b.sound_context=enemy;
+        unsigned frames=0;
+        while(frames<160&&(word(e+0x2f4)&0xffff)!=0x0202){
+            CHECK(!gh_collision_pairs_step_002b9d58(b->shapes.pairs,GH_STATIC_BINARY32_REFERENCE,&pc));
+            CHECK(!gh_hitarea_frame_resume_bound_001fdfd8(b->entry.init,b->entry.work,1,
+                GH_STATIC_BINARY32_REFERENCE,ledger,lb,&pc));
+            gh_enemy202_move next={0};
+            CHECK(!gh_enemy202_move_bind_impact(&next,effect));
+            CHECK(!gh_enemy202_move_bind_opacity(&next,&opacity));
+            const gh_actor_motion_status tick=gh_enemy202_move_00208be0(&next,enemy,&player->view,elf,elf_size);
+            if(tick)fprintf(stderr,"lethal tick %u stamp%u frontier %08x stage%u mode%08x motion%zu frame%08x\n",
+                frames+1,e[0x640],next.frontier,next.stage,word(e+0x2f4),motion->motion.offset,word(e+0x430));
+            CHECK(!tick);
+            ++frames;
+        }
+        motion->b.effect=old_effect;
+        motion->b.context=old_effect_context;
+        motion->b.sound=old_sound;
+        motion->b.sound_context=old_context;
+        fprintf(stderr,"lethal final stamp%u frames%u mode%08x\n",e[0x640],frames,word(e+0x2f4));
+        CHECK(frames<160&&(word(e+0x2f4)&0xffff)==0x0202);
+        uint8_t *save_row=NULL;
+        for(unsigned i=0;i<room->active[8];i++){
+            uint8_t *entry=room->active+12+i*24;
+            if(entry[0x13]==e[0x640])save_row=entry;
+        }
+        CHECK(save_row&&!save_row[0x14]);
+        motion->b.effect=release_stamp19_effect;
+        motion->b.context=(void *)effect;
+        const unsigned count=word(b->entry.init->enemies+0x508);
+        gh_audio_registry *registry=NULL;
+        gh_se_voice_engine *voices=NULL;
+        gh_se_mix mix;
+        max_align_t transport_identity;
+        CHECK(!gh_audio_registry_create(&registry)&&
+            !gh_se_mix_boot_defaults_002c9e78(&mix,0,GH_SE_DSP_NATIVE_LINEAR_REFERENCE)&&
+            !gh_se_voice_create(registry,(gh_audio_output *)&transport_identity,&mix,&voices));
+        stamp19_release_fixture removal={.owner=resolver->enemies,.voices=voices};
+        uint32_t handle=0;
+        CHECK(!gh_enemy_ems_handle_for_actor(resolver->enemies,&enemy->entry.object,&handle)&&handle);
+        /* Select a deterministic no-drop test branch using the actual MT. */
+        gh_game_mt_seed_0030f2b0(&b->entry.init->random,1);
+        gh_game_mt expected=b->entry.init->random;
+        uint32_t draw[2];
+        CHECK(!gh_game_mt_next_0030f348(&expected,draw)&&!gh_game_mt_next_0030f348(&expected,draw+1)&&
+            draw[0]%50>0&&(draw[1]&3u));
+        unsigned fade=0;
+        for(;fade<100&&!removal.removed;fade++){
+            gh_enemy202_move next={0};
+            CHECK(!gh_enemy202_move_bind_impact(&next,effect));
+            CHECK(!gh_enemy202_move_bind_opacity(&next,&opacity));
+            CHECK(!gh_enemy202_move_bind_room_state(&next,room));
+            CHECK(!gh_enemy202_move_bind_death_release(&next,release_stamp19_fixture,&removal));
+            const gh_actor_motion_status tick=gh_enemy202_move_00208be0(&next,enemy,&player->view,elf,elf_size);
+            if(tick)fprintf(stderr,"Triangle fade frame%u stamp%u status%d PC%08x phase%u remove%u item%u\n",
+                fade,e[0x640],tick,next.frontier,next.death_fade_phase,removal.remove.stage,next.death_item);
+            CHECK(!tick&&next.original_returned);
+            if(!fade)CHECK(!memcmp(&expected,&b->entry.init->random,sizeof(expected)));
+        }
+        CHECK(removal.removed==1&&word(b->entry.init->enemies+0x508)==count-1&&save_row[0x14]==1);
+        printf("PASS lethal Triangle stamp%u actual clips %u + fade %u, RoomSave and 290770\n",e[0x640],frames,fade);
+        motion->b.effect=old_effect;
+        motion->b.context=old_effect_context;
+        gh_se_voice_destroy(voices);
+        gh_audio_registry_destroy(registry);
+        CHECK(!retire_stamp19_trans(resolver->enemies,live,handle,effect,&player->view,
+            b->entry.init,b->actors,elf,elf_size,b->entry.pools,b->default_heap));
+        return 0;
+    }
+    CHECK(resumed==GH_ACTOR_MOTION_UNSUPPORTED&&move.frontier==0x26ef60&&move.impact_create.complete);
+    CHECK(move.reaction_resource_offset==(e[0x640]==19?0x784u:0x2e0u)&&
+        word(e+0x430)==0x3f800000&&word(e+0x2f4)==0x00010101&&word(e+0x600)==0x41700000&&
+        word(e+0x5f0)==9&&word(e+0x5f4)==92&&!(word(e+0x434)&8u));
+    CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+    const gh_actor_motion_status finished=gh_enemy202_move_00208be0(&move,enemy,&player->view,elf,elf_size);
+    if(finished)fprintf(stderr,"Triangle final status%d PC%08x\n",finished,move.frontier);
+    CHECK(!finished&&move.original_returned&&word(e+0x430)==0x3f800000);
+    CHECK(!gh_hitarea_object_set_active_001fd668(&tail->give_objects[4],0,&pc));
+    for(unsigned frame=2;frame<=3;frame++){
+        CHECK(!gh_collision_pairs_step_002b9d58(b->shapes.pairs,GH_STATIC_BINARY32_REFERENCE,&pc));
+        CHECK(!gh_hitarea_frame_resume_bound_001fdfd8(b->entry.init,b->entry.work,1,
+            GH_STATIC_BINARY32_REFERENCE,ledger,lb,&pc));
+        gh_enemy202_move next={0};
+        CHECK(!gh_enemy202_move_bind_opacity(&next,&opacity));
+        const gh_actor_motion_status step=gh_enemy202_move_00208be0(&next,enemy,&player->view,elf,elf_size);
+        if(step)fprintf(stderr,"Triangle continuation frame%u PC%08x stage%u\n",frame,next.frontier,next.stage);
+        float sample;
+        memcpy(&sample,e+0x430,4);
+        CHECK(!step&&next.original_returned&&sample==(float)frame);
+    }
+    CHECK((word(e+0x548)>>16)==hp-12&&word(b->entry.init->heat+4)==0x40000000);
+
+    puts("PASS actual PL00 Triangle clip -> R100 Give4 ledger -> original stamp Take");
+    return 0;
+}
+#undef VERIFY
+
 static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_t *elf, size_t elf_size,
     const gh_enemy_ems_bindings *bindings, gh_enemy_ems *owner, gh_enemy_ems_live *first,
     const gh_enemy_ems_live *appearance2, const gh_enemy_ems_live *selector1,
@@ -1217,12 +1531,13 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     const gh_enemy_actor_bindings *b = &bindings->actor;
     gh_game_init_state *init = b->entry.init;
     gh_collision_pairs *pairs = b->shapes.pairs;
-    gh_game_title_player *enemy = first->actor;
+    const gh_enemy_ems_live *target=attack_effect>=2?&selector1_other[1+(attack_effect&1)]:first;
+    gh_game_title_player *enemy = target->actor;
     gh_heap *heap = b->entry.room_heap;
     gh_game_objects *global = b->entry.global_objects;
-    const gh_hitarea_object *body = &first->enemy202->hitareas.units[0];
-    CHECK(first->physical_row == 0 && enemy->view.bytes[0x640] == 0 &&
-        body->state == init && body->group == 2 && first->enemy202->hitareas.created[0]);
+    const gh_hitarea_object *body = &target->enemy202->hitareas.units[0];
+    CHECK((attack_effect>=2 || (first->physical_row == 0 && enemy->view.bytes[0x640] == 0)) &&
+        body->state == init && body->group == 2 && target->enemy202->hitareas.created[0]);
     size_t pl_size, hair_size;
     uint8_t *pl = load(disc, "pl/pl00.dat", &pl_size), *hair = load(disc, "pl/pl01.dat", &hair_size);
     CHECK(pl && hair);
@@ -1273,7 +1588,7 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     euler[1]=yaw;
     CHECK(!gh_actor_matrix_rotation_00147728(euler,0,matrix,GH_STATIC_BINARY32_REFERENCE,&frontier));
     memcpy(p+0x80,matrix,64);
-    location[1] -= 1.15f;
+    location[1] -= attack_effect>=2 ? 0.75f : 1.15f;
     location[0] -= matrix[8]*0.7f;
     location[2] -= matrix[10]*0.7f;
     memcpy(p+0xb0,location,12);
@@ -1283,13 +1598,34 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     const uint32_t pause[2] = {0};
     gh_hitarea_frame_bindings lb = {.tables=b->actors,.boot_elf=elf,.boot_elf_size=elf_size,
         .current_player=&player.view,.player_pause_words=pause};
-    CHECK(word(e+0x54c) == 0x40a00000);
+    CHECK(attack_effect>=2 || word(e+0x54c) == 0x40a00000);
     for (unsigned i=0;i<5;i++) {
         CHECK(!gh_collision_pairs_step_002b9d58(pairs,GH_STATIC_BINARY32_REFERENCE,&frontier));
         CHECK(!gh_hitarea_frame_resume_bound_001fdfd8(
             init,b->entry.work,1,GH_STATIC_BINARY32_REFERENCE,&ledger,&lb,&frontier));
     }
     CHECK(!word(e+0x54c));
+    if(attack_effect>=2){
+        camera_target_fixture resolver={.enemies=owner,.player=&factory,.child=&child};
+        CHECK(!triangle_ledger(b,target->enemy202,&player,&setup.model,pl,pl_size,elf,elf_size,
+            &tail,&resolver,&lb,&ledger,effect_bind,room,target,attack_effect));
+        goto release_player;
+    }
+    /* Original skill29 class1 Give4, before the class0 Square resets size. */
+    const size_t triangle_power=0x3bc7d0-0xff000+29*0x14;
+    CHECK(triangle_power+4<=elf_size&&word(elf+triangle_power)==12);
+    p[0x3ac]=1;
+    memcpy(p+0x1610,&(float){1},4);
+    memcpy(p+0x1660,&(uint32_t){1},4);
+    memcpy(p+0x1668,elf+triangle_power,4);
+    memcpy(p+0x1670,&(uint32_t){0x12},4);
+    p[0x1680]=10;
+    CHECK(!gh_player_attack_hitarea_0010a438(&player.view,tail.give_objects,&frontier));
+    CHECK(word(box.record+0xe0+0x44)==0x3f000000&&word(box.record+0xe0+0x48)==0x3f333333);
+    CHECK(word(box.record+0xe0+0x110)==0x3fe66666&&word(box.record+0xe0+0x114)==0x3fc00000&&
+        word(box.record+0xe0+0x118)==0x3fe66666);
+    CHECK(tail.give_objects[4].bytes[0x46]==0x12&&word(tail.give_objects[4].bytes+0x4c)==12);
+    puts("PASS actual R100/PL00 skill29 Give4 class1 size, offset, effect and power");
     const size_t sequence = word(pl+0xe8);
     CHECK(sequence == 0x96520 && sequence+0x48 <= pl_size &&
         !memcmp(pl+sequence,"SEQ",4) && word(pl+sequence+0x40) == 0x00080006);
@@ -1306,6 +1642,8 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     p[0x1682] = 100;
     CHECK(!gh_player_attack_hitarea_0010a438(&player.view,tail.give_objects,&frontier));
     CHECK(!gh_collision_pairs_step_002b9d58(pairs,GH_STATIC_BINARY32_REFERENCE,&frontier));
+    CHECK(word(box.record+0xe0+0x110)==0x3f333333&&word(box.record+0xe0+0x114)==0x3f800000&&
+        word(box.record+0xe0+0x118)==0x3f99999a);
     CHECK(word(box.record+0xd8));
     gh_hitarea_status hit = gh_hitarea_frame_resume_bound_001fdfd8(
         init,b->entry.work,1,GH_STATIC_BINARY32_REFERENCE,&ledger,&lb,&frontier);
@@ -1760,21 +2098,20 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
         memcpy(player.view.alias_f0,target,12);
         memcpy(player.view.bytes+0x630,target,12);
         memcpy(score,&(uint16_t){0},2);
+        for(unsigned selector=5;selector<=6;selector++)
         for(unsigned promoted=0;promoted<2;promoted++){
             memcpy(actor,actor_before,sizeof(actor_before));
             entry->motion.motion=motion_before;
             init->random=rng;
-            if(promoted){
-                for(unsigned i=0;i<rank_count;i++){
-                    const float closer[3]={target[0]+2.0f+i,target[1],target[2]};
-                    memcpy(rank_peer[i]->alias_f0,closer,12);
-                    rank_peer[i]->bytes[0x617]=0;
-                }
+            for(unsigned i=0;i<rank_count;i++){
+                const float closer[3]={target[0]+2.0f+i,target[1],target[2]};
+                memcpy(rank_peer[i]->alias_f0,promoted?closer:rank_positions[i],12);
+                rank_peer[i]->bytes[0x617]=promoted?0:rank_hidden[i];
             }
             init->enemies[0x53b]=0;
             memcpy(init->enemies+0x510,&shared_timer,4);
             memcpy(raw_work+0x210,&(uint32_t){word(actor+0x17d0)^1u},4);
-            memcpy(actor+0x2f4,&(uint32_t){0x00000600},4);
+            memcpy(actor+0x2f4,&(uint32_t){selector<<8},4);
             memcpy(actor+0x16d0,&(uint32_t){0x04000002},4);
             memcpy(actor+0x16d4,&(uint32_t){0x08000000},4);
             memcpy(actor+0x1760,&(uint32_t){0},4);
@@ -1789,21 +2126,21 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
             CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
             const gh_actor_motion_status status=gh_enemy202_move_00208be0(&move,entry,&player.view,elf,elf_size);
-            fprintf(stderr,"stamp20 selector6 promoted%u status%d pc%08x state%08x distance%08x rank%u\n",
-                promoted,status,move.frontier,word(actor+0x2f4),word(actor+0x618),word(actor+0x16d8));
+            fprintf(stderr,"stamp20 selector%u promoted%u status%d pc%08x state%08x distance%08x rank%u\n",
+                selector,promoted,status,move.frontier,word(actor+0x2f4),word(actor+0x618),word(actor+0x16d8));
             CHECK(!status&&!move.frontier&&move.original_returned);
             CHECK(word(actor+0x618)>0x42340000&&word(actor+0x618)<0x42440000&&
-                word(actor+0x5f0)==89&&word(actor+0x5f4)==120+draw%60u&&
-                move.substate67_motion.motion_offset==word(entry->entry.resource.bytes+0xc0)&&
+                (selector==5||word(actor+0x5f0)==89)&&word(actor+0x5f4)==120+draw%60u&&
+                move.substate67_motion.motion_offset==word(entry->entry.resource.bytes+(selector==5?0xb0:0xc0))&&
                 !memcmp(&expected,&init->random,sizeof(expected)));
-            CHECK(promoted?word(actor+0x16d8)>=3&&!actor[0x2f6]&&actor[0x2f5]!=6:
-                word(actor+0x16d8)<3&&word(actor+0x2f4)==0x00010600);
+            CHECK(promoted?word(actor+0x16d8)>=3&&!actor[0x2f6]&&actor[0x2f5]!=selector:
+                word(actor+0x16d8)<3&&word(actor+0x2f4)==(0x00010000u|selector<<8));
         }
         for(unsigned i=0;i<rank_count;i++){
             memcpy(rank_peer[i]->alias_f0,rank_positions[i],12);
             rank_peer[i]->bytes[0x617]=rank_hidden[i];
         }
-        puts("PASS actual stamp20 selector6 in Load distance band, both original rank outcomes");
+        puts("PASS actual stamp20 selectors 5/6 in the original distance band, both original rank outcomes");
         memcpy(actor,actor_before,sizeof(actor_before));
         entry->motion.motion=motion_before;
         init->enemies[0x53b]=retreat;
@@ -2107,6 +2444,7 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     motion->b.sound_context=NULL;
 
     CHECK(!enemy_give_player_take(disc,room_bundle,first->enemy202,&player,&tail,&setup.model,pl,pl_size,&lb,&ledger,effect_bind));
+release_player:
     for (unsigned i=0;i<5;i++) {
         CHECK(!gh_hitarea_shapes_abort_object(&tail.give_objects[i],&frontier));
         CHECK(!gh_hitarea_object_release_empty_001fe278(&tail.give_objects[i],&frontier));
@@ -2120,7 +2458,7 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     CHECK(!gh_game_player_factory_release_prefix(&factory));
     free(hair);
     free(pl);
-    printf("PASS actual R100 first 0202 contact through Give4 and production ledger, HP %u to %u\n",
+    if(attack_effect<2)printf("PASS actual R100 first 0202 contact through Give4 and production ledger, HP %u to %u\n",
         hp_before, hp_before-3);
     return 0;
 }
@@ -2589,7 +2927,7 @@ static int run_fixture(int argc,char **argv,int attack_effect)
         &room,&navigation,&effect_bind,&light,&impact,attack_effect));
     gh_scene_nearcheck_release(&navigation);
     uint32_t position[3];
-    memcpy(position,impact.position,12);
+    if(attack_effect<2)memcpy(position,impact.position,12);
     for(unsigned row=0;!attack_effect&&row<effect_rows;row++) {
         gh_effect_emitter_view emitter;
         CHECK(!gh_effect_create_emitter_at(effects,row,&emitter) && emitter.initialized &&
@@ -2598,13 +2936,13 @@ static int run_fixture(int argc,char **argv,int attack_effect)
     }
     gh_scene_dynamic_owner retirement_dynamic={0};
     CHECK(!gh_scene_dynamic_bind(&retirement_dynamic,&actors,heap));
-    CHECK(!check_enemy_destructors(owner,init,&solids,&pools,effects,&retirement_dynamic,&room,room_objects,
+    if(attack_effect<2)CHECK(!check_enemy_destructors(owner,init,&solids,&pools,effects,&retirement_dynamic,&room,room_objects,
         elf,elf_size,&work,first_handle,word((uint8_t*)v->allocation.pointer+4*4)));
     CHECK(!gh_scene_dynamic_release(&retirement_dynamic));
     gh_effect_create_forget_on_owner_destroy(effects);
     free(emit);free(esp);free(effects);free(core);
     CHECK(!gh_enemy_ems_release_native(&owner,&frontier)&&!owner&&!frontier);
-    CHECK(!init->enemy_top&&!init->enemy_last&&gh_collision_solid_units_empty(&solids)&&gh_collision_pair_shapes_have_live(&pairs));
+    CHECK(!init->enemy_top&&!init->enemy_last&&gh_collision_solid_units_empty(&solids)&&(attack_effect>=2||gh_collision_pair_shapes_have_live(&pairs)));
     CHECK(!fesetround(FE_TONEAREST));
     CHECK(!gh_collision_scroll_mutation_release(&scroll));
     gh_scene_ray_triangle_state_release(&actors);
@@ -2623,5 +2961,12 @@ static int run_fixture(int argc,char **argv,int attack_effect)
 int main(int argc,char **argv)
 {
     CHECK(!run_fixture(argc,argv,0));
-    return run_fixture(argc,argv,1);
+    CHECK(!run_fixture(argc,argv,1));
+    CHECK(!run_fixture(argc,argv,2));
+    CHECK(!run_fixture(argc,argv,3));
+    CHECK(!run_fixture(argc,argv,4));
+    CHECK(!run_fixture(argc,argv,5));
+    for(int mode=6;mode<=9;++mode)CHECK(!run_fixture(argc,argv,mode));
+    CHECK(!run_fixture(argc,argv,11));
+    return run_fixture(argc,argv,13);
 }

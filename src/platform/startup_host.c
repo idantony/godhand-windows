@@ -2496,6 +2496,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
                 out->player_square_buffer=player->bytes[0x621];
                 memcpy(&out->player_motion_sample,player->bytes+0x430,sizeof(out->player_motion_sample));
                 memcpy(&out->player_attack_target,player->bytes+0x640,sizeof(out->player_attack_target));
+                memcpy(&out->player_attack_skill,player->bytes+0x5e8,sizeof(out->player_attack_skill));
                 if(out->current_room==0x100&&out->game_state==4)
                     diagnostic_r100_first_enemy(&scene,&h->game_init,player,out);
             }

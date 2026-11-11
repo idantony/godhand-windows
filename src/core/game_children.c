@@ -551,6 +551,13 @@ gh_child_status gh_game_children_save_map_quit_0015ff10(gh_game_children *s,
     return gh_game_children_room_reset_0015fee0(s);
 }
 
+gh_child_status gh_game_children_save_map_room(const gh_game_children *s,uint16_t *room)
+{
+    if(!s||!room||!s->save_map_active)return GH_CHILD_ARGUMENT;
+    *room=s->save_map_room;
+    return GH_CHILD_OK;
+}
+
 gh_child_status gh_game_children_save_map_view(const gh_game_children *s,gh_save_map_view *out)
 {
     if(!s||!out||s->count!=9)return GH_CHILD_ARGUMENT;

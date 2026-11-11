@@ -1,4 +1,4 @@
-/* Original ordinary skill0 state 10D3A8, resumed by exact callee boundary. */
+/* Original ordinary combo state 10D3A8, resumed by exact callee boundary. */
 #include "game_player_square_frame.h"
 #include "game_player_attack_recent.h"
 #include "game_player_root_delta.h"
@@ -91,7 +91,26 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
  }
  if((sequence&0x10)&&(pressed&4))return stop(s,0x124244,GH_PLAYER_FRAME_UNSUPPORTED);
  if(sequence&0x40)put(p+0x15f4,word(p+0x15f4)|0x100u);
- if(sequence&0x20)return stop(s,0x1242c4,GH_PLAYER_FRAME_UNSUPPORTED);
+ if(sequence&0x20){
+   /* 1242E0..124388, neutral caller-mode1. */
+  if(p[0x61f]||p[0x621]||p[0x622]||p[0x623]||pressed)
+   return stop(s,0x1242c4,GH_PLAYER_FRAME_UNSUPPORTED);
+  put(p+0x15f4,word(p+0x15f4)|0x400u);
+  if(word(p+0x15f4)&0x20){
+   if(!b->target_bindings)return stop(s,0x12a610,GH_PLAYER_FRAME_UNSUPPORTED);
+   gh_player_target found;
+   uint32_t pc=0;
+   gh_player_target_status e=gh_player_pickup_target_0012a610(b->target_bindings,&found,&pc);
+   if(e)return target_error(s,pc?pc:0x12a610,e);
+   if(found.handle)return stop(s,0x1d07e8,GH_PLAYER_FRAME_UNSUPPORTED);
+   put(p+0x69c,0);
+   e=gh_player_interact_target_0012b328(b->target_bindings,&found,&pc);
+   if(e)return target_error(s,pc?pc:0x12b328,e);
+   if(found.handle)return stop(s,0x2dc108,GH_PLAYER_FRAME_UNSUPPORTED);
+   put(p+0x6a4,0);
+   if(half(work+0x5b0)==0x608)return stop(s,0x2c2568,GH_PLAYER_FRAME_UNSUPPORTED);
+  }
+ }
  s->input_result=0;
  return GH_PLAYER_FRAME_OK;
 }
@@ -112,7 +131,7 @@ static gh_player_frame_status body(gh_player_square_frame *s,const gh_player_squ
   gh_hitarea_status e=gh_player_attack_recent_0010b2e8(&f->player->view,f->give_objects,&recent,&pc);
   if(e)return stop(s,pc?pc:0x10b2e8,GH_PLAYER_FRAME_CALLEE);
   if(recent&&word(p+0x5e8)==0x5d)return stop(s,0x2cba48,GH_PLAYER_FRAME_UNSUPPORTED);
-  if(p[0x2f6]>1||(p[0x2f6]&&word(p+0x5e8)!=0))return stop(s,0x10d3a8,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(p[0x2f6]>1||(p[0x2f6]&&word(p+0x5e8)!=0&&word(p+0x5e8)!=29))return stop(s,0x10d3a8,GH_PLAYER_FRAME_UNSUPPORTED);
   s->stage=p[0x2f6]?5:2;
  }
  if(s->stage==2){
@@ -140,7 +159,7 @@ static gh_player_frame_status body(gh_player_square_frame *s,const gh_player_squ
  if(s->stage==4){
   gh_player_frame_status e=gh_player_square_attack_begin_00126918(&s->begin,f);
   if(e)return stop(s,s->begin.frontier,e);
-  p[0x2f7]=0;put(p+0x5e8,0);put(p+0x15c0,0x3f800000);
+  p[0x2f7]=0;put(p+0x5e8,s->begin.skill);put(p+0x15c0,0x3f800000);
   put(p+0x15b8,1);sh(p+0x5f0,10);put(p+0x15c4,0);
   put(p+0x15b0,1);put(p+0x15b4,0);sh(p+0x568,999);sh(p+0x56a,0);
   put(p+0x1598,0x3f000000);
@@ -231,7 +250,7 @@ static gh_player_frame_status body(gh_player_square_frame *s,const gh_player_squ
    if(e)return stop(s,pc?pc:0x10a438,e);
    sh(p+0x5e6,1);
   }else if(half(p+0x5e6)){
-   /* The decoded skill0 table's remaining four entries are zero. */
+   /* The decoded skill0 and skill29 tables' remaining four entries are zero. */
    unsigned i=half(p+0x5e4)+1u;if(i>4)i=4;
    sh(p+0x5e4,(uint16_t)i);put(p+0x1668,0);put(p+0x166c,0);sh(p+0x5e6,0);
   }

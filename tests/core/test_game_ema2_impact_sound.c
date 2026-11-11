@@ -3,6 +3,7 @@
 #include "game_enemy_model.h"
 #include "game_enemy_2a2.h"
 #include "game_scene_tables.h"
+#include "enemy_se_banks.h"
 #include "game_ray_query.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -223,6 +224,47 @@ int main(int argc,char **argv)
  C(gh_se_voice_query(voices,blocked,&missing)==GH_VOICE_BOUNDS);
 
  C(!gh_actor_attached_sound_abort(&source));
+
+ gh_enemy_se_banks *banks;
+ gh_enemy_se_bindings bank_bind={.control=&control,.registry=registry,.disc=disc,.dvd=&dvd,
+     .default_heap=heap,.room_heap=heap,.voices=voices};
+ int32_t bank;
+ C(!gh_enemy_se_banks_from_startup(&bank_bind,&banks));
+ C(!gh_enemy_se_request_002cb278(banks,&work,0x2a2,&bank)&&bank>=1);
+ int ready=0;
+ for(unsigned i=0;i<16&&!ready;++i){
+  C(!gh_dvd_pump(&dvd)&&!gh_enemy_se_banks_update_002cf440(banks));
+  C(!gh_enemy_se_ready_002cb778(banks,bank,&ready));
+ }
+ C(ready);
+ memcpy(enemy.view.alias_f0,anchor,16);
+ memcpy(control.listener_position_c0,listener,16);
+ C(!gh_actor_attached_sound_bind(&source,&binding));
+ C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+ request.bank=1;
+ request.program=0x5a;
+ seen=0;
+ for(unsigned i=0;i<8&&seen!=3;++i){
+  gh_game_mt expected=random;
+  uint32_t draw,handle;
+  C(!gh_game_mt_next_0030f348(&expected,&draw));
+  gh_actor_motion_status status=gh_actor_attached_sound_motion(&source,&request,&handle,&frontier);
+  if(status)fprintf(stderr,"cEma2 timer cue request %d frontier %08x\n",status,frontier);
+  C(!status&&handle&&!frontier&&!memcmp(&expected,&random,sizeof(random)));
+  const unsigned variant=draw%2;
+  gh_voice_status update=gh_se_voice_update(voices);
+  if(update)fprintf(stderr,"cEma2 timer cue update %d frontier %08x\n",update,gh_se_voice_frontier(voices));
+  gh_se_voice_info info;
+  C(!update&&!gh_se_voice_query(voices,handle,&info)&&info.native_voice);
+  C(info.bank==bank&&info.program==(int)(0x5a+variant)&&info.sample_slot==variant&&
+    info.rate==11025&&info.adsr2==0x5fcb&&info.distance==3&&info.channel>=45&&info.channel<=47);
+  seen|=1u<<variant;
+  C(!gh_actor_attached_sound_abort(&source)&&!model.model.sound_borrowers);
+  C(!gh_actor_attached_sound_bind(&source,&binding));
+  C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+ }
+ C(seen==3&&submissions==stops);
+ C(!gh_actor_attached_sound_abort(&source)&&!gh_enemy_se_banks_destroy(banks));
  gh_se_voice_destroy(voices);
  C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
  C(!gh_game_room_pools_release(&pools)&&!gh_task_threads_destroy(threads)&&!gh_heap_destroy(heap));

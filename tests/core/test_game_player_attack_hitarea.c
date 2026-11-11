@@ -41,8 +41,8 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
  const uint8_t *node;
  gh_collision_pair_shape box;
  C(!gh_hitarea_node_at(&tail.give_objects[4], 0, &node, &box));
- uint32_t box_width = w(box.record + 0x1f0), box_height = w(box.record + 0x1f4);
- uint32_t box_depth = w(box.record + 0x1f8), box_bound = w(box.record + 0x1c4);
+ C(w(box.record + 0x1f0) == 0x3f800000 && w(box.record + 0x1f4) == 0x3f000000 &&
+   w(box.record + 0x1f8) == 0x3f800000);
  for (unsigned frame = 5; frame <= 9; ++frame) {
      for (unsigned i = 0; i < 5; ++i) {
          C(!gh_hitarea_object_set_active_001fd668(&tail.give_objects[i], 0, &frontier));
@@ -71,8 +71,9 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
      if (actor[0x3ac] & 3) {
          C(w(box.record + 0x130) == 0 && w(box.record + 0x134) == 0x3f666666 &&
            w(box.record + 0x138) == 0x3f333333);
-         C(w(box.record + 0x1f0) == box_width && w(box.record + 0x1f4) == box_height &&
-           w(box.record + 0x1f8) == box_depth && w(box.record + 0x1c4) == box_bound);
+         /* Original 10AF24 replaces the constructor box through its SetSize virtual. */
+         C(w(box.record + 0x1f0) == 0x3f333333 && w(box.record + 0x1f4) == 0x3f800000 &&
+           w(box.record + 0x1f8) == 0x3f99999a && w(box.record + 0x1c4) == 0x3f5b19c8);
          C(w(tail.give_objects[4].bytes + 0x18) == 0x3f800000);
          C(!gh_collision_pairs_step_002b9d58(&pairs, GH_STATIC_BINARY32_REFERENCE, &frontier));
          const uint8_t *position;
@@ -82,6 +83,11 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
  }
  actor[0x3ac] = 3;
  put(actor + 0x1660, 1);
+ C(!gh_player_attack_hitarea_0010a438(&player.view, tail.give_objects, &frontier) && !frontier);
+ C(w(box.record + 0x134) == 0x3f000000 && w(box.record + 0x1f0) == 0x3fe66666 &&
+   w(box.record + 0x1f4) == 0x3fc00000 && w(box.record + 0x1f8) == 0x3fe66666);
+ C(!gh_hitarea_object_set_active_001fd668(&tail.give_objects[4], 0, &frontier));
+ put(actor + 0x1660, 2);
  C(gh_player_attack_hitarea_0010a438(&player.view, tail.give_objects, &frontier) == GH_HITAREA_UNSUPPORTED &&
    frontier == 0x10a608 && !(w(box.record) & 2));
 
@@ -127,4 +133,4 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
    target.bytes[0x44] == 100 && w(target.bytes + 0x4c) == 3);
  C(!gh_hitarea_object_set_active_001fd668(&tail.give_objects[4], 0, &frontier));
  actor[0x3ac] = 0;
-C(!gh_collision_pairs_step_002b9d58(&pairs,GH_STATIC_BINARY32_REFERENCE,&frontier)&&!frontier);for(unsigned i=0;i<9;i++)C(!w((uint8_t*)pairs.records.pointer+i*0x270+0xd8));C(!gh_hitarea_shapes_abort(init,&frontier)&&!gh_game_object_pool_release_001fdfa8(init,&frontier)&&!init->hitarea_native&&init->hitarea_cold_constructed&&!gh_collision_solid_units_shutdown(&solids,&frontier));gh_game_player_child_attachment_clear(&attachment);c.publication=NULL;C(!gh_game_player_child_release_prefix(&child)&&!gh_actor_model_release(&c.model)&&!gh_game_player_factory_release_prefix(&factory)&&!gh_collision_pairs_release(&pairs)&&!gh_game_world_light_release_presets(light));free(light);gh_game_objects_destroy(objects);gh_game_objects_destroy(global);C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(c.heap)&&!gh_heap_destroy(c.heap));free(hair);free(pl);free(room);free(init);free(c.elf);gh_disc_close(d);puts("PASS actual PL00 canonical give box, first Square class 0 frame gates, original payload/duration/offset/effect/power, unchanged virtual size and production ledger contact");return 0;}
+C(!gh_collision_pairs_step_002b9d58(&pairs,GH_STATIC_BINARY32_REFERENCE,&frontier)&&!frontier);for(unsigned i=0;i<9;i++)C(!w((uint8_t*)pairs.records.pointer+i*0x270+0xd8));C(!gh_hitarea_shapes_abort(init,&frontier)&&!gh_game_object_pool_release_001fdfa8(init,&frontier)&&!init->hitarea_native&&init->hitarea_cold_constructed&&!gh_collision_solid_units_shutdown(&solids,&frontier));gh_game_player_child_attachment_clear(&attachment);c.publication=NULL;C(!gh_game_player_child_release_prefix(&child)&&!gh_actor_model_release(&c.model)&&!gh_game_player_factory_release_prefix(&factory)&&!gh_collision_pairs_release(&pairs)&&!gh_game_world_light_release_presets(light));free(light);gh_game_objects_destroy(objects);gh_game_objects_destroy(global);C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(c.heap)&&!gh_heap_destroy(c.heap));free(hair);free(pl);free(room);free(init);free(c.elf);gh_disc_close(d);puts("PASS actual PL00 canonical give box, first Square class 0 frame gates, original payload/duration/offset/effect/power, original virtual size updates and production ledger contact");return 0;}

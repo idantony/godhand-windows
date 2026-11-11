@@ -26,7 +26,8 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
     if (!flags) return GH_HITAREA_OK;
 
     const unsigned side = (flags & 1) ? 0 : 1;
-    if (word(p + 0x1660 + side * 4) != 0)
+    const unsigned shape_class = word(p + 0x1660 + side * 4);
+    if (shape_class > 1)
         return stop(frontier, 0x10a608, GH_HITAREA_UNSUPPORTED);
     if (!give) return stop(frontier, 0x10a438, GH_HITAREA_ARGUMENT);
 
@@ -69,7 +70,10 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
     const float offset1[3] = {0.0f, 1.3f, 0.2f};
     const float offset2[3] = {0.0f, 0.8f, 0.2f};
     const float base_box[3] = {0.0f, 1.3f, 0.0f};
-    const float active_box[3] = {0.0f, 0.9f, 0.7f};
+    const float active_box[3] = {0.0f, shape_class ? 0.5f : 0.9f, 0.7f};
+    const float box_size[3] = {
+        shape_class ? 1.8f : 0.7f, shape_class ? 1.5f : 1.0f, shape_class ? 1.8f : 1.2f
+    };
     for (unsigned i = 0; i < 5; ++i) {
         uint8_t *object = give[order[i]].bytes;
         memcpy(object + 0x44, p + 0x1680 + side * 2, 2);
@@ -87,6 +91,7 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
     if (status) return status;
     memcpy(box + 0x4c, &power, sizeof(power));
     memcpy(box + 0x10, rotation + 8, 12);
-    /* 1FD820 uses box VT+3C = 2BA468, an empty leaf. */
-    return GH_HITAREA_OK;
+    /* 1FD820 dispatches to box VT+3C = 2BAAA8 (SetSize). */
+    return gh_collision_pair_box_size_002baaa8(&shapes[4],box_size,frontier)?
+        GH_HITAREA_UNSUPPORTED:GH_HITAREA_OK;
 }

@@ -1,6 +1,7 @@
 #ifndef GH_GAME_PLAYER_INIT_TAIL_H
 #define GH_GAME_PLAYER_INIT_TAIL_H
 #include "game_player_init.h"
+#include "game_player_spawn.h"
 #include "game_player_child_attach.h"
 #include "game_player_shadow.h"
 #include "game_collision_solid_units.h"
@@ -43,6 +44,10 @@ typedef struct {gh_player_init_tail_bindings b;gh_game_title_player *player;
  * Actualsamepool hitareas/4spheres/4cylinders/box anddisable gates continue throughnodecache/scalars, optionalrealmotion begin/advance, shared149EB8, real152A20 provider andexactpost-init suffix;
  * Successrequiresallactualconsumers andoriginalreturn1;31C5C0 remains the originalcaller nextorderedoperation. */
 gh_player_init_status gh_game_player_initialize_tail_00107f58(gh_game_player_init_tail *,const gh_player_init_tail_bindings *);
+/* Drop native constructor cursors only after the room actors have retired. */
+gh_player_init_status gh_game_player_reset_room_cursors(
+ gh_game_player_init *,gh_game_player_init_tail *,gh_game_player_spawn *,
+ const gh_game_title_player *,const gh_game_player_child *);
 #ifdef __cplusplus
 }
 #endif

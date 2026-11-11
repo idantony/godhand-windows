@@ -34,11 +34,85 @@ static gh_actor_model_status stop(gh_enemy_weapon_init *s,uint32_t pc,gh_actor_m
     return error;
 }
 
-static gh_actor_model_status hit_error(gh_enemy_weapon_init *s,gh_hitarea_status error,
+static gh_actor_model_status sphere_error(uint32_t *frontier,gh_hitarea_status status,
     uint32_t pc,uint32_t fallback)
 {
-    return stop(s,pc?pc:fallback,error==GH_HITAREA_MEMORY?GH_ACTOR_MODEL_MEMORY:
-        error==GH_HITAREA_BOUNDS?GH_ACTOR_MODEL_BOUNDS:GH_ACTOR_MODEL_UNSUPPORTED);
+    *frontier=pc?pc:fallback;
+    return status==GH_HITAREA_MEMORY?GH_ACTOR_MODEL_MEMORY:
+        status==GH_HITAREA_BOUNDS?GH_ACTOR_MODEL_BOUNDS:GH_ACTOR_MODEL_UNSUPPORTED;
+}
+
+gh_actor_model_status gh_om_weapon_spheres_001c9268(gh_actor_model *model,gh_title_player_view *actor,gh_game_init_state *init,
+    const gh_hitarea_shape_bindings *shapes,gh_hitarea_object hit[2],int index[2],
+    uint8_t *owned,uint8_t *phase,uint32_t *frontier)
+{
+    if(!model||!actor||actor->bytes!=model->root.bytes||!init||!shapes||!shapes->pairs||!shapes->math||!shapes->math->initialized||
+       !hit||!index||!owned||!phase||*phase>7||!frontier)return GH_ACTOR_MODEL_ARGUMENT;
+    *frontier=0;
+    const gh_actor_part *root;
+    if(gh_actor_model_part_at(model,0,&root)||!root->bytes){
+        *frontier=0x1fdaf0;
+        return GH_ACTOR_MODEL_BOUNDS;
+    }
+    for(unsigned i=0;i<2;i++){
+        const unsigned first=3*i;
+        uint32_t pc=0;
+        if(*phase==first){
+            int present;
+            gh_hitarea_status status=gh_hitarea_object_create_001fe0e8(init,actor,
+                (uint8_t)(1-i),&hit[i],&present,&pc);
+            if(status)return sphere_error(frontier,status,pc,0x1fe0e8);
+            if(!present){
+                if(!i){
+                    *frontier=0x1fdaf0;
+                    return GH_ACTOR_MODEL_UNSUPPORTED;
+                }
+                *phase=7;
+                break;
+            }
+            if(!hit[i].fallback)*owned|=(uint8_t)(1u<<i);
+            (*phase)++;
+        }
+        if(*phase==first+1){
+            const uint32_t xyz[3]={0};
+            gh_hitarea_status status=gh_hitarea_add_sphere_001fdaf0(&hit[i],shapes,root->bytes+0x80,
+                xyz,i?0x3ecccccd:0x3e99999a,&index[i],&pc);
+            if(status)return sphere_error(frontier,status,pc,0x1fdaf0);
+            (*phase)++;
+        }
+        if(*phase==first+2){
+            gh_hitarea_status status=gh_hitarea_object_set_active_001fd668(&hit[i],0,&pc);
+            if(status)return sphere_error(frontier,status,pc,0x1fd668);
+            if(i){
+                half(hit[i].bytes+0x46,0x2f);
+                put(hit[i].bytes+0x4c,50);
+                memcpy(hit[i].bytes+0x10,shapes->math->zero_vector,12);
+                put(hit[i].bytes+0x40,UINT32_MAX);
+                half(hit[i].bytes+0x44,0);
+            }
+            (*phase)++;
+        }
+    }
+    return GH_ACTOR_MODEL_OK;
+}
+
+gh_actor_model_status gh_om_weapon_spheres_release(gh_hitarea_object hit[2],uint8_t *owned,
+    uint32_t *frontier)
+{
+    if(!hit||!owned||!frontier)return GH_ACTOR_MODEL_ARGUMENT;
+    *frontier=0;
+    for(unsigned i=2;i>0;i--){
+        gh_hitarea_object *unit=&hit[i-1];
+        if(!(*owned&(1u<<(i-1))))continue;
+        uint32_t pc=0;
+        gh_hitarea_status status=gh_hitarea_shapes_abort_object(unit,&pc);
+        if(status)return sphere_error(frontier,status,pc,0x1fd580);
+        status=gh_hitarea_object_release_empty_001fe278(unit,&pc);
+        if(status)return sphere_error(frontier,status,pc,0x1fe148);
+        *owned&=(uint8_t)~(1u<<(i-1));
+        *unit=(gh_hitarea_object){0};
+    }
+    return GH_ACTOR_MODEL_OK;
 }
 
 gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *s,
@@ -112,47 +186,12 @@ gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *
         s->stage=MODEL_READY;
     }
 
-    const gh_actor_part *root;
-    if(gh_actor_model_part_at(&s->model,0,&root)||!root->bytes)
-        return stop(s,0x1fdaf0,GH_ACTOR_MODEL_BOUNDS);
-    for(unsigned i=0;i<2;i++){
-        unsigned first=i?RECEIVER_DISABLED:MODEL_READY;
-        unsigned created=i?ATTACKER_CREATED:RECEIVER_CREATED;
-        unsigned shaped=i?ATTACKER_SHAPED:RECEIVER_SHAPED;
-        unsigned disabled=i?ATTACKER_DISABLED:RECEIVER_DISABLED;
-        uint32_t pc=0;
-        if(s->stage==first){
-            int present;
-            gh_hitarea_status status=gh_hitarea_object_create_001fe0e8(weapon->bindings.init,
-                object,(uint8_t)(1-i),&s->hit[i],&present,&pc);
-            if(status)return hit_error(s,status,pc,0x1fe0e8);
-            if(!present){
-                if(!i)return stop(s,0x1fdaf0,GH_ACTOR_MODEL_UNSUPPORTED);
-                s->stage=HIDE_LAYER;
-                break;
-            }
-            if(!s->hit[i].fallback)s->hit_owned|=(uint8_t)(1u<<i);
-            s->stage=(uint8_t)created;
-        }
-        if(s->stage==created){
-            const uint32_t xyz[3]={0};
-            gh_hitarea_status status=gh_hitarea_add_sphere_001fdaf0(&s->hit[i],shapes,
-                root->bytes+0x80,xyz,i?0x3ecccccd:0x3e99999a,&s->shape_index[i],&pc);
-            if(status)return hit_error(s,status,pc,0x1fdaf0);
-            s->stage=(uint8_t)shaped;
-        }
-        if(s->stage==shaped){
-            gh_hitarea_status status=gh_hitarea_object_set_active_001fd668(&s->hit[i],0,&pc);
-            if(status)return hit_error(s,status,pc,0x1fd668);
-            if(i){
-                half(s->hit[i].bytes+0x46,0x2f);
-                put(s->hit[i].bytes+0x4c,50);
-                memcpy(s->hit[i].bytes+0x10,shapes->math->zero_vector,12);
-                put(s->hit[i].bytes+0x40,UINT32_MAX);
-                half(s->hit[i].bytes+0x44,0);
-            }
-            s->stage=(uint8_t)disabled;
-        }
+    if(s->stage>=MODEL_READY&&s->stage<ATTACKER_DISABLED){
+        uint8_t phase=(uint8_t)(s->stage-MODEL_READY);
+        gh_actor_model_status status=gh_om_weapon_spheres_001c9268(&s->model,object,weapon->bindings.init,
+            shapes,s->hit,s->shape_index,&s->hit_owned,&phase,&s->frontier);
+        s->stage=(uint8_t)(MODEL_READY+phase);
+        if(status)return status;
     }
 
     if(s->stage==ATTACKER_DISABLED||s->stage==HIDE_LAYER){
@@ -259,18 +298,9 @@ gh_actor_model_status gh_enemy_weapon_release_init(gh_enemy_weapon_init *s)
         gh_actor_model_status status=gh_actor_model_clear_external_parent(&s->model,s);
         if(status)return stop(s,0x1cf160,status);
     }
-    for(unsigned i=2;i>0;i--){
-        gh_hitarea_object *hit=&s->hit[i-1];
-        if(!(s->hit_owned&(1u<<(i-1))))continue;
-        uint32_t pc=0;
-        gh_hitarea_status status=gh_hitarea_shapes_abort_object(hit,&pc);
-        if(status)return hit_error(s,status,pc,0x1fd580);
-        status=gh_hitarea_object_release_empty_001fe278(hit,&pc);
-        if(status)return hit_error(s,status,pc,0x1fe148);
-        s->hit_owned&=(uint8_t)~(1u<<(i-1));
-        *hit=(gh_hitarea_object){0};
-    }
-    gh_actor_model_status status=gh_actor_model_release(&s->model);
+    gh_actor_model_status status=gh_om_weapon_spheres_release(s->hit,&s->hit_owned,&s->frontier);
+    if(status)return status;
+    status=gh_actor_model_release(&s->model);
     if(status)return stop(s,0x149738,status);
     *s=(gh_enemy_weapon_init){0};
     return GH_ACTOR_MODEL_OK;

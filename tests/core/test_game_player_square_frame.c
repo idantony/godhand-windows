@@ -22,12 +22,15 @@ typedef struct {
  gh_actor_motion_bindings bindings;
  unsigned begins,sounds;
  int block;
+ unsigned triangle;
 } bridge;
 static gh_player_init_status begin_motion(void*ctx,const gh_player_motion_request*r,uint32_t*f)
 {
  bridge *b=ctx;
  b->begins++;
- C(r->motion_offset==0x955a0&&r->sequence_candidate_offset==0x96520&&
+ if(b->triangle)C(r->motion_offset==0x992e0&&r->sequence_candidate_offset==0x9ad20&&
+   !r->start_frame_bits&&r->blend_frames==5&&r->flags==0x40&&r->release_previous_sequence);
+ else C(r->motion_offset==0x955a0&&r->sequence_candidate_offset==0x96520&&
    !r->start_frame_bits&&r->blend_frames==7&&r->flags==0x40&&r->release_previous_sequence);
  if(b->block){b->block=0;*f=0x2a8578;return GH_PLAYER_INIT_UNSUPPORTED;}
  gh_actor_motion_status e=gh_actor_motion_call_open_parameters_002a8578(
@@ -41,6 +44,10 @@ static gh_actor_motion_status sound(void *context,const gh_motion_sound_request 
 {
  bridge *b=context;
  C(r->actor==&b->bindings.model->root&&r->model==b->bindings.model&&!r->part);
+ if(b->triangle){
+  C(r->bank==0&&r->program==(b->sounds?243:203));
+  ++b->sounds;*handle=17;return GH_ACTOR_MOTION_OK;
+ }
  C(r->bank==0&&r->program==(b->sounds<2?203:24));
  b->sounds++;
  if(b->sounds==1){*frontier=0x2cba48;return GH_ACTOR_MOTION_BUSY;}
@@ -64,7 +71,7 @@ static gh_player_frame_status strike(void *context,const gh_title_player_view *p
 }
 int main(int argc,char**argv){
  C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t rn,pn,cn;uint8_t *core=load(d,"etc/core.dat",&cn);uint8_t*room_bytes=load(d,"st1/r100.dat",&rn),*pl=load(d,"pl/pl00.dat",&pn);size_t en=(size_t)gh_disc_boot_elf_size(d);uint8_t*elf=malloc(en),*copy=malloc(pn);C(elf&&copy&&!gh_disc_read_boot_elf(d,0,elf,en));memcpy(copy,pl,pn);gh_disc_close(d);gh_bundle room,bundle;gh_bundle_entry md,texture;C(!gh_bundle_open(room_bytes,rn,&room)&&!gh_bundle_open(pl,pn,&bundle)&&!gh_bundle_find(&bundle,"MD",0,&md)&&!gh_bundle_find(&bundle,"TM3",0,&texture));
- int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};for(unsigned mode=0;mode<4;mode++){
+ int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};for(unsigned mode=0;mode<8;mode++){
   gh_heap*heap;C(!gh_heap_create(16*1024*1024,&heap));gh_room_pools pools={0};C(!gh_game_room_pools_initialize_002a5d80(&pools,&room,heap));gh_scene_at_manager at={0};C(!gh_scene_at_initialize_units_002c0f90(&at,&room,heap,0x100,1));gh_game_scene_tables actors={0};C(!gh_scene_actors_0012e670(&actors,&room));
   gh_game_init_state*init=malloc(sizeof(*init));C(init);gh_game_init_state_initialize(init);gh_boot_work work={0};work.room=0x100;uint8_t raw[GH_TITLE_PLAYER_BYTES]={0};gh_game_title_player player={0};C(!gh_title_player_construct_00107e40(raw,sizeof(raw),&player.view));gh_actor_model model={0};int original;C(gh_actor_model_initialize_00149738(&model,&player.view,&work,&pools,&md,&texture,0,0,GH_STATIC_BINARY32_REFERENCE,&original)==GH_ACTOR_MODEL_UNSUPPORTED&&model.parts_ready&&model.part_count==32);
   /* This focused consumer needs canonical32skeletalparts only. Whole model
@@ -114,16 +121,27 @@ int main(int argc,char**argv){
   const gh_player_target_bindings targets={.pools=&pools,.actors=&actors,.player=&player.view,.elf=elf,.elf_bytes=en};
   gh_player_square_frame_bindings attack={.frame=&live,.target_bindings=&targets,.target_640=&selected};
   gh_player_square_frame call={0};
-  raw[0x2f5]=0xb;
+  const unsigned triangle=mode>=4;
+  backend.triangle=triangle;
+  if(triangle){
+   raw[0x622]=3;
+   memcpy(raw+0x15f4,&(uint32_t){0x20},4);
+   const gh_player_idle_input_bindings idle_bindings={.frame=live,.targets=targets};
+   gh_player_idle_input idle_input={0};
+   int chosen;
+   C(!gh_game_player_idle_input_00123938(&idle_input,&idle_bindings,&chosen)&&chosen&&
+       raw[0x5e2]==1&&raw[0x2f5]==0xb);
+   raw[0x622]=0; /* Original three-frame edge buffer ages outside 10D3A8. */
+   }else raw[0x2f5]=0xb;
   backend.block=1;
-  C(!fesetround(modes[mode])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));
+  C(!fesetround(modes[mode%4])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));
   C(gh_game_player_square_frame_0010d3a8(&call,&attack)==GH_PLAYER_FRAME_UNSUPPORTED&&
     call.frontier==0x2a8578&&call.stage==4&&backend.begins==1&&!raw[0x5e0]);
   gh_player_frame_status e=gh_game_player_square_frame_0010d3a8(&call,&attack);
   if(e)fprintf(stderr,"initial frame stage %u frontier %X\n",call.stage,call.frontier);
-  C(!e&&raw[0x2f6]==1&&raw[0x5e0]==1&&num(raw+0x430)>0&&word(raw+0x15f4)==0x500);
+  C(!e&&raw[0x2f6]==1&&raw[0x5e0]==1&&num(raw+0x430)>0&&word(raw+0x15f4)==(triangle?0x520u:0x500u));
   unsigned complete_frames=1;
-  for(unsigned i=0;i<12;i++){
+  for(unsigned i=0;i<(triangle?22u:12u);i++){
    C(!gh_player_square_frame_reset(&call));
    e=gh_game_player_square_frame_0010d3a8(&call,&attack);
    if(e&&call.frontier==0x2cba48)e=gh_game_player_square_frame_0010d3a8(&call,&attack);
@@ -132,7 +150,7 @@ int main(int argc,char**argv){
   }
   if(call.frontier!=0x10a438)fprintf(stderr,"strike stage %u frontier %X after %u\n",call.stage,call.frontier,complete_frames);
   C(e==GH_PLAYER_FRAME_UNSUPPORTED&&call.frontier==0x10a438&&call.stage==14&&
-    complete_frames>=4&&backend.begins==2&&backend.sounds==3&&(raw[0x3ac]&3)==2);
+    complete_frames>=4&&backend.begins==2&&backend.sounds==(triangle?2u:3u)&&(raw[0x3ac]&3)==(triangle?1u:2u));
   uint32_t time=word(raw+0x430),turn=word(raw+0x568);
   C(gh_game_player_square_frame_0010d3a8(&call,&attack)==GH_PLAYER_FRAME_UNSUPPORTED&&
     call.frontier==0x10a438&&word(raw+0x430)==time&&word(raw+0x568)==turn);
@@ -141,9 +159,14 @@ int main(int argc,char**argv){
   const uint8_t *node;
   gh_collision_pair_shape box;
   C(!gh_hitarea_node_at(&give[4],0,&node,&box)&&(word(box.record)&2)&&
-    word(give[4].bytes+0x4c)==3&&give[4].bytes[0x46]==7&&raw[0x5e6]==1);
+    word(give[4].bytes+0x4c)==(triangle?12u:3u)&&give[4].bytes[0x46]==(triangle?0x12:7)&&raw[0x5e6]==1);
+  const uint8_t *shape=box.record+0xe0;
+  C(word(shape+0x44)==(triangle?0x3f000000u:0x3f666666u)&&word(shape+0x48)==0x3f333333u);
+  C(word(shape+0x110)==(triangle?0x3fe66666u:0x3f333333u)&&
+    word(shape+0x114)==(triangle?0x3fc00000u:0x3f800000u)&&
+    word(shape+0x118)==(triangle?0x3fe66666u:0x3f99999au));
   unsigned active=1;
-  for(unsigned i=0;i<24&&raw[0x2f5];i++){
+  for(unsigned i=0;i<60&&raw[0x2f5];i++){
    for(unsigned k=0;k<5;k++)C(!gh_hitarea_object_set_active_001fd668(&give[k],0,&pc));
    C(!gh_player_square_frame_reset(&call));
    e=gh_game_player_square_frame_0010d3a8(&call,&attack);
@@ -152,9 +175,9 @@ int main(int argc,char**argv){
    C((word(box.record)&2)==((raw[0x3ac]&3)?2u:0u));
    active+=(raw[0x3ac]&3)!=0;
   }
-  C(!raw[0x2f5]&&!raw[0x2f6]&&call.ended&&active==2&&raw[0x5e4]==1&&
+  C(!raw[0x2f5]&&!raw[0x2f6]&&call.ended&&active==(triangle?3u:2u)&&raw[0x5e4]==1&&
     !raw[0x5e6]&&!word(raw+0x1668)&&!word(raw+0x166c)&&!(word(raw+0x15f4)&2));
-  C(fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);
+  C(fegetround()==modes[mode%4]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);
   for(unsigned i=0;i<5;i++)C(!gh_hitarea_shapes_abort_object(&give[i],&pc)&&
                              !gh_hitarea_object_release_empty_001fe278(&give[i],&pc));
   C(!gh_collision_pairs_release(&pairs));
@@ -166,6 +189,6 @@ int main(int argc,char**argv){
   free(init);
  }
  C(!memcmp(pl,copy,pn));free(copy);free(elf);free(pl);free(room_bytes);free(core);
- puts("PASS actual PL00 first Square 10D3A8 ordinary state, native Give4 strike, power3, and clip retirement without camera reset");
+ puts("PASS actual PL00 Square/Triangle 10D3A8, native Give4 power3/12, and clip retirement");
  return 0;
 }

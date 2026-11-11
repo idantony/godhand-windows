@@ -25,6 +25,7 @@ typedef struct {
  gh_motion_sound_consumer break_sound;
  gh_om_break_collision break_collision;
  gh_om_remove_sound remove_sound;
+ const struct gh_motion_ik_globals *ik_globals;
 } gh_om_frame_runtime;
 typedef struct {const gh_om_factory *factory;gh_om_object *object;
  const gh_title_player_view *contact634;uint32_t handle,entry,frontier;

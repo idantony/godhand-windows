@@ -2,6 +2,7 @@
 #include "bgm_requests.h"
 #include "game_event_audio.h"
 #include "game_movie_pool.h"
+#include "game_subscreen_save.h"
 #include "se_voice.h"
 #include "../rooms/r100_counter_task.h"
 #include <stdlib.h>
@@ -20,7 +21,7 @@ typedef struct {uint8_t scalar[0xdc],row[32];gh_r207_allocation encoded,work;
 struct gh_bgm_requests {gh_audio_registry *registry;gh_sound_control *control;gh_disc *disc;gh_heap *heap;
  request requests[16];uint32_t frontier;DWORD owner;gh_adx_key key;int16_t decibels[128];
  int native_enabled,event_output_enabled,muted,head;int32_t current128;uint32_t field138,field44,field48;
- uint8_t fallback_map[24],scene_event_valid;int32_t scene_event;const gh_game_children *scene_children;const gh_game_init_state *scene_init;const gh_room_state *scene_room;uint32_t field134;};
+ uint8_t fallback_map[24],scene_event_valid;int32_t scene_event;const gh_game_children *scene_children;const gh_game_init_state *scene_init;const gh_room_state *scene_room;const gh_event_reserve_work *event_reserve;uint32_t field134;};
 static uint16_t u16(const uint8_t*p){return (uint16_t)((unsigned)p[0]|(unsigned)p[1]<<8);}
 static uint32_t u32(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static uint32_t be32(const uint8_t*p){return (uint32_t)p[3]|(uint32_t)p[2]<<8|(uint32_t)p[1]<<16|(uint32_t)p[0]<<24;}
@@ -609,13 +610,31 @@ gh_bgm_status gh_bgm_enemy_override_002d0cd0(const gh_game_init_state *init,
  return GH_BGM_OK;
 }
 
+gh_bgm_status gh_bgm_requests_bind_event_reserve(gh_bgm_requests *state,const gh_event_reserve_work *reserve)
+{
+ if(!own(state)||!reserve||(state->event_reserve&&state->event_reserve!=reserve))return GH_BGM_ARGUMENT;
+ state->event_reserve=reserve;
+ return GH_BGM_OK;
+}
+
 static gh_bgm_status select_scene_event(gh_bgm_requests*s,const gh_boot_work*w,const gh_game_children*children,const gh_game_init_state*init,const gh_room_state *room_state,int32_t*out){
  if(!own(s)||!w||!children||!init)return GH_BGM_ARGUMENT;
  const uint8_t*c;size_t bytes;if(gh_game_children_manager_view(children,&c,&bytes)||bytes<0xeec)return GH_BGM_ARGUMENT;
- uint32_t mode=u32(c+0x48);if((mode==3||mode==12)&&u32(c+0xee8))return fail(s,0x2d0d70,GH_BGM_UNSUPPORTED);
+ uint32_t mode=u32(c+0x48);
+ const int map_active=(mode==3||mode==12)&&u32(c+0xee8);
+ uint16_t room=(uint16_t)w->room;
+ if(map_active){
+  if(room==0x21)room=0x100;
+  else if(!s->event_reserve)return fail(s,0x2d0d70,GH_BGM_UNSUPPORTED);
+  else if(s->event_reserve->flags&1u)room=s->event_reserve->destination_room;
+  else {
+   if(gh_game_children_save_map_room(children,&room))
+    return fail(s,0x2d0d70,GH_BGM_UNSUPPORTED);
+  }
+ }
  int32_t selected=10;
- if(!init->heat[0x10]){
-  uint8_t map[44*24];const uint8_t*row=NULL;uint16_t room=(uint16_t)w->room;
+ if(map_active||!init->heat[0x10]){
+  uint8_t map[44*24];const uint8_t*row=NULL;
   if(!elf_span(s->disc,0x3c3138,map,sizeof(map)))return fail(s,0x2d0b88,GH_BGM_DISC);
   for(unsigned i=0;i<44;i++)if(u16(map+i*24)==room)row=map+i*24; /*LASTmatchoriginal*/
   if(!row){
@@ -623,6 +642,11 @@ static gh_bgm_status select_scene_event(gh_bgm_requests*s,const gh_boot_work*w,c
    s->fallback_map[0]=(uint8_t)room;s->fallback_map[1]=(uint8_t)(room>>8);
    uint32_t high=room>>8,number=2;if(((high-1)&255)<8)number=high+1;
    for(unsigned i=4;i<24;i+=4)w32(s->fallback_map+i,number);row=s->fallback_map;
+  }
+  if(map_active){
+   uint32_t raw=u32(row+4);
+   memcpy(out,&raw,4);
+   return GH_BGM_OK;
   }
   unsigned column=4;int32_t state=s->control->bgm_state_13c;
   if(state==1)column=8;

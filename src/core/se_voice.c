@@ -214,6 +214,25 @@ static int core_ema2_impact_profile(const struct voice *v,int16_t bank,int16_t p
         h(p+0x18)==(program==0x96?0xff80:0x80)&&h(p+0x1a)==0x80&&
         w(p+0x1c)==0x00070000&&w(p+0x20)==(program==0x96?0x205u:5u)&&w(p+0x24)==1;
 }
+/* Actual 28696C requests EMA2 program 90 and one MT-selected alternate. */
+static int ema2_timer_cue_profile(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ if(!v->source_owner||bank<1||bank==2||bank==3||v->requested_program!=0x5a||
+    (program!=0x5a&&program!=0x5b)||h(p)!=(unsigned)bank||h(p+2)!=(unsigned)program||
+    v->part_index!=-1||!v->model)return 0;
+ const gh_title_player_view *root=&v->model->root;
+ if(root->size<0x568||root->original_vtable214!=0x448ca0||
+    h(root->bytes+0x2fe)!=0x2a2||w(root->bytes+0x564)!=0x2a2)return 0;
+ const int alternate=program==0x5b;
+ if(h(p+4)!=(unsigned)alternate||w(p+6)!=0x0250022d||h(p+0xe)!=0x20||
+    w(p+0x10)!=0x00780078||w(p+0x14)!=0x005a0040||w(p+0x18)||
+    w(p+0x1c)!=0x00030000||w(p+0x20)!=(alternate?5u:0x105u)||
+    w(p+0x24)!=0x401||w(p+0x28)!=0xffff||w(p+0x2c))return 0;
+ return w(sample)==(alternate?6368u:2864u)&&w(sample+4)==11025&&
+    w(sample+8)==0x5fcb80ff&&!w(sample+12);
+}
+
 /* EM02's original AA footsteps keep the CORE bank through 2C7FD0.
  * SDE 3751B8 attenuates the first level and sets both levels to that
  * result in this mode, before the 37D558 pan split. */
@@ -235,8 +254,8 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
  return !sample||(w(sample)==(alternate?563952u:562304u)&&w(sample+4)==14000&&
     w(sample+8)==0x5fc080ff&&!w(sample+12));
 }
-/* EM00 selector6B SEQ cue, original logical CORE 8D. */
-static int core_em00_selector6b_profile(const struct voice *v,int16_t bank,int16_t program,
+/* EM00 and EM03 turn SEQ cue, original logical CORE 8D. */
+static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
  if(!v->source_owner||bank||program!=0x8d||v->requested_program!=0x8d||
@@ -244,7 +263,9 @@ static int core_em00_selector6b_profile(const struct voice *v,int16_t bank,int16
  if(v->model){
   const gh_title_player_view *root=&v->model->root;
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
-     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=0x200)return 0;
+     h(root->bytes+0x2fe)!=0x202)return 0;
+  const uint32_t dependency=w(root->bytes+0x564);
+  if(dependency!=0x200&&dependency!=0x203)return 0;
  }else if(!v->combat_profile)return 0;
  if(h(p+4)!=92||w(p+6)!=0x0246020bu||w(p+0xa)||h(p+0xe)!=0x20||
     w(p+0x10)!=0x00500050||w(p+0x14)!=0x005a0040||w(p+0x18)!=0x00800080||
@@ -277,6 +298,28 @@ static int core_em03_attack_profile(const struct voice *v,int16_t bank,int16_t p
     w(p+0x28)!=0xffffu||w(p+0x2c))return 0;
  const uint32_t offset=aged?0x6f7d0u:second?0xa1ed0u:0xa2f60u;
  return !sample||(w(sample)==offset&&w(sample+4)==16000&&
+    w(sample+8)==0x5fc080ffu&&!w(sample+12));
+}
+
+/* CORE B4 is the attached impact in the R100 pair's knockdown clip. */
+static int core_r100_knockdown_profile(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ if(!v->source_owner||bank||program!=180||v->requested_bank||v->requested_program!=180||
+    v->part_index!=-1||w(p)!=0x00b40000u)return 0;
+ if(v->model){
+  const gh_title_player_view *root=&v->model->root;
+  if(!root->bytes||root->size<0x642||root->original_vtable214!=0x4479c8||
+     h(root->bytes+0x2fe)!=0x202)return 0;
+  const uint32_t dep=w(root->bytes+0x564);
+  const unsigned stamp=h(root->bytes+0x640);
+  if(!((dep==0x203&&stamp==19)||(dep==0x200&&stamp==20)))return 0;
+ }else if(!v->combat_profile)return 0;
+ if(w(p+4)!=0x0420006cu||w(p+8)!=0x25a||w(p+12)!=0x00200000u||
+    w(p+16)!=0x00640064u||w(p+20)!=0x005a0040u||w(p+24)!=0x0080ff80u||
+    w(p+28)!=0x00010000u||w(p+32)!=0x00060005u||w(p+36)!=0x301||
+    w(p+40)!=0xffff||w(p+44))return 0;
+ return !sample||(w(sample)==0xe6d0&&w(sample+4)==16000&&
     w(sample+8)==0x5fc080ffu&&!w(sample+12));
 }
 
@@ -364,6 +407,16 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
     w(p+16)==0x007f007f&&w(p+20)==0x005a0040&&w(p+24)==0xff00ff00u&&
     w(p+28)==0x00ff0000&&w(p+32)==5&&!w(p+36)&&w(p+40)==0xffff&&!w(p+44)&&
     w(descriptor.data)==0x3540&&w(descriptor.data+4)==11025;
+ /* Skill29 SEQ9AD20 logical CORE F3 maps to PL00 row43. */
+ const int triangle_voice=adsr2==0x5fcb&&candidate->source_owner&&bank==3&&program==43&&
+    candidate->requested_bank==0&&candidate->requested_program==243&&candidate->part_index==-1&&
+    candidate->model&&candidate->model->root.size>=0x300&&
+    candidate->model->root.original_vtable214==0x41d220&&
+    h(candidate->model->root.bytes+0x2fe)==0x100&&
+    w(p+4)==0x020b0021&&w(p+8)==0x64&&w(p+12)==0x00210000&&
+    w(p+16)==0x00550055&&w(p+20)==0x005a0040&&w(p+24)==0x00800080&&
+    w(p+28)==0x00ff0000&&w(p+32)==5&&!w(p+36)&&w(p+40)==0xffff&&!w(p+44)&&
+    w(descriptor.data)==0x23fa0&&w(descriptor.data+4)==16000;
  int fall_grunt=adsr2==0x5fcb&&player_fall_grunt_profile(candidate,bank,program,p,descriptor.data);
  if(player_fall_impact_profile(candidate,p)&&(w(descriptor.data)!=0x35460||
     w(descriptor.data+4)!=18000||w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))
@@ -377,21 +430,25 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  int death_voice=adsr2==0x5fcb&&r100_death_profile(candidate,bank,program,p,descriptor.data);
  int timed_voice=adsr2==0x5fcb&&em0a_timed_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==0x5be0&&w(descriptor.data+4)==16000;
- if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!square_voice&&!player_cd&&!hurt_voice&&!fall_grunt&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!selector6b_voice&&!attack_voice&&!death_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
+ const int ema2_timer_voice=adsr2==0x5fcb&&ema2_timer_cue_profile(candidate,bank,program,p,descriptor.data);
+ if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!ema2_timer_voice&&!square_voice&&!triangle_voice&&!player_cd&&!hurt_voice&&!fall_grunt&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!selector6b_voice&&!attack_voice&&!death_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
  static const uint32_t ema2_impact_offsets[]={0x553c0,0x56490,0x54300};
  int ema2_voice=adsr2==0x5fc0&&core_ema2_impact_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==ema2_impact_offsets[program-0x96]&&w(descriptor.data+4)==22050;
  const int footstep=core_enemy_footstep_profile(candidate,bank,program,p,NULL);
  if(footstep&&!core_enemy_footstep_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
- const int selector6b_core=core_em00_selector6b_profile(candidate,bank,program,p,NULL);
- if(selector6b_core&&!core_em00_selector6b_profile(candidate,bank,program,p,descriptor.data))
+ const int turn_core=core_enemy_turn_profile(candidate,bank,program,p,NULL);
+ if(turn_core&&!core_enemy_turn_profile(candidate,bank,program,p,descriptor.data))
+  return unsupported(s,0x35fc);
+ const int knockdown_core=core_r100_knockdown_profile(candidate,bank,program,p,NULL);
+ if(knockdown_core&&!core_r100_knockdown_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
  const int attack_core=core_em03_attack_profile(candidate,bank,program,p,NULL);
  if(attack_core&&!core_em03_attack_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
- if(impact_voice||reaction_voice||ema2_voice||timed_voice||footstep||sequence_voice||attack_core||
-    selector6b_voice||selector6b_core||attack_voice||death_voice)candidate->combat_profile=1;
+ if(impact_voice||reaction_voice||ema2_voice||ema2_timer_voice||timed_voice||footstep||sequence_voice||attack_core||
+    selector6b_voice||turn_core||attack_voice||death_voice||knockdown_core)candidate->combat_profile=1;
  rate=w(descriptor.data+4);if(rate<1000 || rate>48000)return unsupported(s,0x38e4);
  candidate->info.pitch_q12=selected_pitch?selected_pitch:(uint16_t)((uint64_t)rate*4096/48000);
  result=gh_audio_decode_ps_adpcm(tail.data,tail.size,&candidate->pcm);if(result){s->frontier=0x35fc;return result;}
@@ -617,8 +674,9 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
      !em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em03_attack_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !r100_death_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !core_r100_knockdown_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_em03_attack_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
-     !core_em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !core_enemy_turn_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em0a_timed_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)&&
      !player_fall_impact_profile(candidate,candidate->descriptor)&&
      !core_enemy_footstep_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL))

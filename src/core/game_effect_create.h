@@ -42,6 +42,9 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
  * and otherwise identity configuration. */
 gh_effect_status gh_effect_create_enemy_death_part0_00306900(gh_effect_create_call *,
  const gh_title_player_view *,int32_t mode);
+/* 2A8608's original 58:2F/30 mode0, selector self, explicit part0. */
+gh_effect_status gh_effect_create_enemy_knockdown_002a8608(gh_effect_create_call *,
+ const gh_title_player_view *,uint32_t index);
 /* Original OM324 break, 1BFD28 -> 306528 with bank0/index1C, no actor.
  * Caller supplies the 84 virtual world position and 1F8180 yaw as binary32. */
 gh_effect_status gh_effect_create_om324_break_begin_001bfd28(gh_effect_create_call *,
@@ -65,6 +68,7 @@ typedef struct {gh_effect_view record;const gh_title_player_view *actor,*selecto
   * duplicate work buffer; consumers also validate payload against storage. */
  uint8_t *payload;size_t payload_size;int32_t first_esp_child;} gh_effect_emitter_view;
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
+int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *);
 gh_effect_status gh_effect_create_emitter_at(const gh_game_effects *,unsigned,gh_effect_emitter_view *);
 /* Read same producer metadata for original3039E8 matching. Unknown external

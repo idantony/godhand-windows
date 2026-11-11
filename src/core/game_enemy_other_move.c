@@ -3,6 +3,7 @@
 #include "game_event_player_reset.h"
 #include "game_actor_matrix.h"
 #include "game_scene_at_geometry.h"
+#include "game_enemy_timers.h"
 #include <fenv.h>
 #include <math.h>
 #include <string.h>
@@ -168,6 +169,8 @@ gh_actor_motion_status gh_enemy_other_move_bind_2a2_services(gh_enemy_other_move
     return GH_ACTOR_MOTION_OK;
 }
 
+enum { HEAVY_TIMER_CONVERT=28, HEAVY_TIMER_SOUND, HEAVY_TIMER_DRAW };
+
 enum { HEAVY_REACTION_SOLID=32, HEAVY_REACTION_SELECT, HEAVY_REACTION_BEGIN,
        HEAVY_REACTION_SOUND, HEAVY_REACTION_STEP, HEAVY_REACTION_WORLD };
 
@@ -241,10 +244,10 @@ static gh_actor_motion_status heavy_reaction_002887d0(gh_enemy_other_move *s,
     if(s->stage==HEAVY_REACTION_SOUND){
         if(!p[0x2f7]){
             if(!s->sound)return stop(s,0x2cba48,GH_ACTOR_MOTION_UNSUPPORTED);
-            if(!s->reaction_sound.model)s->reaction_sound=(gh_motion_sound_request){
+            if(!s->sound_request.model)s->sound_request=(gh_motion_sound_request){
                 .model=&prefix->model.model,.actor=root,.bank=1,.program=0x5c};
             uint32_t handle;
-            gh_actor_motion_status status=s->sound(s->sound_context,&s->reaction_sound,&handle,&pc);
+            gh_actor_motion_status status=s->sound(s->sound_context,&s->sound_request,&handle,&pc);
             if(status)return stop(s,pc?pc:0x2cba48,status);
         }
         p[0x2f6]++;
@@ -362,11 +365,35 @@ static gh_actor_motion_status heavy_move_substate_002866f8(gh_enemy_other_move *
                 if(!s->nearby)p[0x2f6]=2;
             }
             if(word(p+0x15b0)&8u)p[0x2f6]=2;
-            if(scalar(p+0x15bc)<=0){s->stage=30;return stop(s,0x31d000,GH_ACTOR_MOTION_UNSUPPORTED);}
+            if(scalar(p+0x15bc)<=0)s->stage=HEAVY_TIMER_DRAW;
         }
+        if(s->stage==11)s->stage=12;
+    }
+    /* Original 286928 reloads the timer before the optional 28696C voice. */
+    if(s->stage==HEAVY_TIMER_DRAW){
+        if(!prefix->bindings.random||gh_game_mt_next_0030f348(prefix->bindings.random,&s->timer_word))
+            return stop(s,0x31d000,GH_ACTOR_MOTION_ARGUMENT);
+        s->stage=HEAVY_TIMER_CONVERT;
+    }
+    if(s->stage==HEAVY_TIMER_CONVERT){
+        uint32_t timer;
+        gh_actor_motion_status status=gh_enemy2a2_mt_timer_reference(s->timer_word,
+            GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,&timer);
+        if(status)return stop(s,0x31d000,status);
+        put(p+0x15bc,timer);
+        if(s->nearby){
+            s->sound_request=(gh_motion_sound_request){.model=&prefix->model.model,
+                .actor=root,.bank=1,.program=0x5a};
+            s->stage=HEAVY_TIMER_SOUND;
+        }else s->stage=12;
+    }
+    if(s->stage==HEAVY_TIMER_SOUND){
+        if(!s->sound)return stop(s,0x2cba48,GH_ACTOR_MOTION_UNSUPPORTED);
+        uint32_t handle;
+        gh_actor_motion_status status=s->sound(s->sound_context,&s->sound_request,&handle,&pc);
+        if(status)return stop(s,pc?pc:0x2cba48,status);
         s->stage=12;
     }
-    if(s->stage==30)return stop(s,0x31d000,GH_ACTOR_MOTION_UNSUPPORTED);
     return GH_ACTOR_MOTION_OK;
 }
 
@@ -534,7 +561,7 @@ gh_actor_motion_status gh_enemy2a2_move_002856c0(gh_enemy_other_move *s,
     if((s->stage==5&&p[0x2f4]==1)||s->stage>=HEAVY_REACTION_SOLID){
         gh_actor_motion_status status=heavy_reaction_002887d0(s,actor);
         if(status)return status;
-    }else if(s->stage<12||s->stage==30){
+    }else if(s->stage<12||(s->stage>=HEAVY_TIMER_CONVERT&&s->stage<=HEAVY_TIMER_DRAW)){
         gh_actor_motion_status status=heavy_move_substate_002866f8(s,actor);
         if(status)return status;
     }

@@ -21,6 +21,20 @@ static gh_actor_motion_status stop(uint32_t *frontier, uint32_t entry) {
     return GH_ACTOR_MOTION_UNSUPPORTED;
 }
 
+static int r100_stamp19(const gh_enemy_actor *enemy, const uint8_t *actor) {
+    return word(actor + 0x564) == 0x203 && half(actor + 0x640) == 19 &&
+        enemy->entry.b.work && (uint16_t)enemy->entry.b.work->room == 0x100;
+}
+
+static int r100_stamp20(const gh_enemy_actor *enemy, const uint8_t *actor) {
+    return word(actor + 0x564) == 0x200 && half(actor + 0x640) == 20 &&
+        enemy->entry.b.work && (uint16_t)enemy->entry.b.work->room == 0x100;
+}
+
+static int opening_triangle(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
+    return effect == 0x12 && (r100_stamp19(enemy, actor) || r100_stamp20(enemy, actor));
+}
+
 gh_actor_motion_status gh_enemy202_damage_0028fb88(
     gh_enemy_actor *enemy, const gh_title_player_view *player, int32_t power, uint32_t *frontier) {
     if (!frontier) return GH_ACTOR_MOTION_ARGUMENT;
@@ -39,7 +53,9 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
         body->state != enemy->entry.b.init || gh_hitarea_object_actor(body, &owner) ||
         owner != view || gh_hitarea_object_last_hit_actor(body, &source) ||
         source != player || half(player->bytes + 0x2fe) != 0x100 ||
-        !(word(body->bytes + 0x60) & 1) || half(body->bytes + 0x46) != 7)
+        !(word(body->bytes + 0x60) & 1) ||
+        (half(body->bytes + 0x46) != 7 &&
+            !opening_triangle(enemy, view->bytes, half(body->bytes + 0x46))))
         return stop(frontier, 0x20a5dc);
 
     uint8_t *actor = view->bytes;
@@ -84,7 +100,7 @@ static void put_half(uint8_t *p, uint16_t value) {
     memcpy(p, &value, sizeof(value));
 }
 
-static gh_actor_motion_status first_punch_heat(gh_enemy_actor *enemy, uint32_t *frontier) {
+static gh_actor_motion_status first_punch_heat(gh_enemy_actor *enemy, int triangle, uint32_t *frontier) {
     const gh_enemy_entry_bindings *b = &enemy->entry.b;
     gh_core_save_view save = b->save;
     uint8_t *heat = b->init->heat;
@@ -101,7 +117,8 @@ static gh_actor_motion_status first_punch_heat(gh_enemy_actor *enemy, uint32_t *
         (void)fesetenv(&saved);
         return stop(frontier, 0x2a9978);
     }
-    const float amount = !(word(save.bytes + 0x14) & 0x4000000u) && !save.bytes[0x1f] ? 1.0f : 0.8f;
+    const int easy = !(word(save.bytes + 0x14) & 0x4000000u) && !save.bytes[0x1f];
+    const float amount = triangle ? (easy ? 2.5f : 2.0f) : (easy ? 1.0f : 0.8f);
     volatile float sum = current + amount;
     const float next = maximum < sum ? maximum : sum;
     volatile float delta = next - current;
@@ -245,14 +262,58 @@ static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
     return GH_ACTOR_MOTION_OK;
 }
 
-static int r100_stamp19(const gh_enemy_actor *enemy, const uint8_t *actor) {
-    return word(actor + 0x564) == 0x203 && half(actor + 0x640) == 19 &&
-        enemy->entry.b.work && (uint16_t)enemy->entry.b.work->room == 0x100;
+static void restore_counter_hp(uint8_t *p)
+{
+    const int32_t before=(int32_t)word(p+0x17ac);
+    const int16_t maximum=(int16_t)half(p+0x548);
+    put_half(p+0x54a,(uint16_t)(before<maximum?before:maximum));
 }
 
-static int r100_stamp20(const gh_enemy_actor *enemy, const uint8_t *actor) {
-    return word(actor + 0x564) == 0x200 && half(actor + 0x640) == 20 &&
-        enemy->entry.b.work && (uint16_t)enemy->entry.b.work->room == 0x100;
+static void counter_mode(uint8_t *p,unsigned mode,int extra_cooldown)
+{
+    restore_counter_hp(p);
+    if(extra_cooldown)put(p+0x54c,0x40000000);
+    put(p+0x17c4,UINT32_MAX);
+    put_half(p+0x17c8,0);
+    p[0x2f5]=(uint8_t)mode;
+    p[0x2f4]=p[0x2f6]=p[0x2f7]=0;
+}
+
+/* Called after the actual 20CAC8 draw. Effect 12 with these two
+ * dependency/selector pairs reaches only the bounded 20D398 and 20CD00
+ * paths below. A successful counter returns Take's original false. */
+static unsigned triangle_counter(uint8_t *p,const gh_title_player_view *player,
+    gh_game_init_state *init,unsigned rank,int stamp20,gh_game_mt *mt,uint32_t *pc)
+{
+    if(rank<2||number(p+0x1740)>0||number(p+0x17cc)>0||
+       (int32_t)word(p+0x17ac)<1||(half(p+0x3ac)&0x12cu))return 0;
+    const uint32_t status=word(p+0x16d4);
+    const int ignore_heat=(status&0x4000000u)!=0;
+    const int player_power=word(player->bytes+0x5fc)!=0;
+    const float facing=number(p+0x760);
+    const float speed=number(p+0x5a8);
+    if(!isfinite(facing)||!isfinite(speed)){
+        *pc=0x20d398;
+        return 0;
+    }
+    uint32_t random;
+    if(!player_power&&(ignore_heat||!init->heat[0x10])&&
+       ((status&0x40000u)||facing<=1.5707964f)){
+        if(gh_game_mt_next_0030f348(mt,&random)){
+            *pc=0x31cfe0;
+            return 0;
+        }
+        if(!(random&3u))return 0x70;
+    }
+    if(stamp20&&(ignore_heat||(!init->heat[0x10]&&!player_power))&&
+       facing<=2.3561945f&&speed>=1){
+        if(gh_game_mt_next_0030f348(mt,&random)){
+            *pc=0x31cfe0;
+            return 0;
+        }
+        if((random&31u)==3)return 10;
+    }
+    return 0;
 }
 
 gh_actor_motion_status gh_enemy202_hit_0020a178(
@@ -276,7 +337,9 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
 
     if (half(body->bytes + 0x46) == 0x2e)
         return scenery_hit(call, enemy, source, rank, frontier);
-    if (source != player || half(player->bytes + 0x2fe) != 0x100 || half(body->bytes + 0x46) != 7)
+    const uint16_t effect = half(body->bytes + 0x46);
+    const int triangle = opening_triangle(enemy, p, effect);
+    if (source != player || half(player->bytes + 0x2fe) != 0x100 || (effect != 7 && !triangle))
         return stop(frontier, 0x20a178);
 
     /* Physical R100 stamp19 uses the common effect-7 hit path, with the
@@ -302,10 +365,11 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         put_half(p + 0x3ac, flags);
         put_half(p + 0x17ca, 10);
+        if (triangle) call->effect = effect;
         call->phase = 1;
     }
     if (call->phase == 1) {
-        gh_actor_motion_status status = first_punch_heat(enemy, frontier);
+        gh_actor_motion_status status = first_punch_heat(enemy, triangle, frontier);
         if (status) return status;
         call->phase = 2;
     }
@@ -328,19 +392,30 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         put(p + 0x54c, 0x40400000);
         put(p + 0x16dc, 0); /* 26EE40(actor, 0, 0) */
+        if(triangle&&p[0x17bd]==1&&rank>=3){
+            const uint32_t increase=(int32_t)word(p+0x16ec)<1?(power>9?20u:5u):0u;
+            const uint32_t total=word(p+0x16e8)+increase;
+            if(increase)put(p+0x16e8,total);
+            if((int32_t)total>200){
+                call->phase=14;
+                return stop(frontier,0x26ecd0);
+            }
+        }
         call->phase = 3;
     }
+    if (call->phase == 14) return stop(frontier,0x26ecd0);
+    if (call->phase == 15) return stop(frontier,0x274238);
     if (call->phase == 3) {
         const uint16_t flags = half(p + 0x3ac);
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
-        if (p[0x17bd] == 1 && rank >= 3) return stop(frontier, 0x26ecd0);
+        if (!triangle && p[0x17bd] == 1 && rank >= 3) return stop(frontier, 0x26ecd0);
         /* 20BB58 is the dead-HP effect switch. Ordinary stamp19 effect7
          * reaches it with no special reaction, block, or alternate motion. */
-        if (opening_pair && !half(p + 0x54a) && rank && rank < 3 && p[0x17bd] == 1 &&
+        if (opening_pair && !half(p + 0x54a) && rank && (triangle||rank < 3) && p[0x17bd] == 1 &&
             !(flags & 0x12cu) && !(behavior & 0x806020u) &&
             !(status & 0x180040u) && !(p[0x2f4] == 1 && p[0x2f5] == 0x16)) {
-            p[0x2f4] = 2;
-            p[0x2f5] = 0;
+            p[0x2f4] = triangle ? 1 : 2;
+            p[0x2f5] = triangle ? 7 : 0;
             p[0x2f6] = p[0x2f7] = 0;
             call->reacted = 1;
             call->phase = 5;
@@ -357,12 +432,25 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
          * rejecting effect 7. 20D398 requires selector 3 for effect 7,
          * and 20CD00 rejects selector 0. Stamp20 selector1 returns at rank 1.
          * The rank2+ selector1 branch has an additional counter draw. */
-        if (opening_200 && rank >= 2)
+        if (!triangle && opening_200 && rank >= 2)
             return stop(frontier, 0x20cd00);
         if (opening_pair) {
+            gh_game_mt mt=body->state->random;
             uint32_t probe_random;
-            if (gh_game_mt_next_0030f348(&body->state->random, &probe_random))
+            if (gh_game_mt_next_0030f348(&mt, &probe_random))
                 return stop(frontier, 0x31cfe0);
+            if(triangle){
+                uint32_t pc=0;
+                const unsigned counter=triangle_counter(p,player,body->state,rank,opening_200,&mt,&pc);
+                if(pc)return stop(frontier,pc);
+                if(counter){
+                    body->state->random=mt;
+                    counter_mode(p,counter,counter==0x70);
+                    call->phase=5;
+                    return GH_ACTOR_MOTION_OK;
+                }
+            }
+            body->state->random=mt;
         }
         const float block = number(p + 0x1740);
         if (!isfinite(block)) return stop(frontier, 0x20d140);
@@ -376,8 +464,18 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             p[0x17bf]++;
             if (p[0x17bf] > 100) p[0x17bf] = 100;
             if (p[0x17bf] >= threshold) {
-                call->phase = 6;
-                return stop(frontier, 0x20d2a0);
+                if(!triangle){
+                    call->phase = 6;
+                    return stop(frontier, 0x20d2a0);
+                }
+                uint32_t retry;
+                if (gh_game_mt_next_0030f348(&body->state->random,&retry))
+                    return stop(frontier,0x31cfe0);
+                if(!(retry&3u)&&number(p+0x760)<=1.5707964f){
+                    restore_counter_hp(p);
+                    call->phase=15;
+                    return stop(frontier,0x274238);
+                }
             }
         }
         call->phase = 4;
@@ -387,7 +485,8 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         gh_actor_motion_status status = first_punch_wall(enemy, frontier);
         if (status) return status;
         p[0x2f4] = 1;
-        p[0x2f5] = number(p + 0x17cc) > 0 ? 1 : 0;
+        p[0x2f5] = triangle ? (number(p + 0x17cc) > 0 ? 7 : 1) :
+            (number(p + 0x17cc) > 0 ? 1 : 0);
         p[0x2f6] = p[0x2f7] = 0;
         call->reacted = 1;
         call->phase = 5;
@@ -461,12 +560,21 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
         return GH_ACTOR_MOTION_ARGUMENT;
     uint8_t *p = enemy->entry.object.view.bytes;
     const float timer = number(p + 0x17cc);
-    /* Effect 7 leaves the default stun increment at ten for dependency 203. */
+    const gh_hitarea_object *body = &enemy->hitareas.units[0];
+    const int triangle = body->bytes && body->size >= 0x48 &&
+        opening_triangle(enemy, p, half(body->bytes + 0x46));
     if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p)) ||
         (half(p + 0x3ac) & 0x100u))
         return stop(frontier, 0x208f34);
+    unsigned increment = 10;
+    if (triangle) {
+        uint32_t random;
+        if (gh_game_mt_next_0030f348(&enemy->entry.b.init->random, &random))
+            return stop(frontier, 0x31cfe0);
+        increment = 15u << (random & 1u);
+    }
     if (timer <= 0) {
-        const int32_t sum = (int32_t)(word(p + 0x5b4) + 10u);
+        const int32_t sum = (int32_t)(word(p + 0x5b4) + increment);
         put(p + 0x5b4, sum < 0 ? 0u : sum > 100000 ? 100000u : (uint32_t)sum);
         put(p + 0x5b8, 0x42b40000);
     }

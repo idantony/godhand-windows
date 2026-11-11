@@ -8,9 +8,9 @@ typedef struct {
  const gh_player_frame_bindings *bindings;
  gh_player_motion_request motion;
  uint32_t frontier;
- uint8_t stage;
+ uint8_t stage,skill;
 } gh_player_square_attack;
-/* Original ComboObj_startNext, bounded to ordinary first Square skill0.
+/* Original ComboObj_startNext, bounded to ordinary skill0 and neutral Triangle skill29.
  * Caller already completed the attack target/distance prefix of 10D3A8.
  * On success the same motion owner is ready to advance. */
 gh_player_frame_status gh_player_square_attack_begin_00126918(

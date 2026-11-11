@@ -100,6 +100,119 @@ static void check_wind_forces(gh_r003_event *event,gh_om_factory *factory)
     CHECK(fegetround()==FE_UPWARD&&(fetestexcept(FE_ALL_EXCEPT)&FE_DIVBYZERO));
 }
 
+static long double dot(const long double a[3],const long double b[3])
+{
+    return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+}
+
+static void reference_motion(const gh_om041c_state *flag,long double position[15][3],long double velocity[15][3])
+{
+    const uint8_t *root=flag->common.model.root.bytes;
+    long double mass[15],inverse[15];
+    uint8_t pinned[15];
+    for(unsigned i=0;i<15;i++){
+        const uint8_t *p=root+0x600+i*0x50;
+        for(unsigned axis=0;axis<3;axis++){
+            position[i][axis]=number(p+4*axis);
+            velocity[i][axis]=number(p+0x10+4*axis);
+        }
+        mass[i]=number(p+0x40);
+        inverse[i]=number(p+0x44);
+        pinned[i]=p[0x48];
+    }
+    for(unsigned substep=0;substep<3;substep++){
+        long double force[15][3]={{0}};
+        for(unsigned i=0;i<15;i++)if(!pinned[i]){
+            const long double speed=sqrtl(dot(velocity[i],velocity[i]));
+            force[i][1]=-9.8L*mass[i];
+            for(unsigned axis=0;axis<3;axis++)force[i][axis]-=0.15L*speed*velocity[i][axis];
+        }
+        for(unsigned j=0;j<30;j++){
+            const uint8_t *cfg=flag->spring_setup+5*j,*s=root+0xab0+j*0x18;
+            unsigned a=3*cfg[1]+cfg[0],b=3*cfg[3]+cfg[2];
+            long double sep[3],relative[3];
+            for(unsigned axis=0;axis<3;axis++){
+                sep[axis]=position[a][axis]-position[b][axis];
+                relative[axis]=velocity[a][axis]-velocity[b][axis];
+            }
+            const long double length=sqrtl(dot(sep,sep));
+            const long double impulse=-(number(s+8)*(length-number(s+0x10))+number(s+0xc)*dot(relative,sep)/length)/length;
+            for(unsigned axis=0;axis<3;axis++){
+                if(!pinned[a])force[a][axis]+=sep[axis]*impulse;
+                if(!pinned[b])force[b][axis]-=sep[axis]*impulse;
+            }
+        }
+        for(unsigned i=0;i<15;i++)if(!pinned[i]){
+            const long double magnitude=sqrtl(dot(force[i],force[i]));
+            const long double scale=magnitude>50?50/magnitude:1;
+            for(unsigned axis=0;axis<3;axis++){
+                velocity[i][axis]+=force[i][axis]*scale*inverse[i]/90;
+                position[i][axis]+=velocity[i][axis]/90;
+            }
+        }
+    }
+}
+
+static void check_object_moves(gh_r003_event *event,gh_om_factory *factory,gh_boot_work *work,
+    const gh_motion_ik_globals *ik)
+{
+    gh_om_frame_state frames[6]={0};
+    gh_game_init_state *init=calloc(1,sizeof(*init));
+    gh_game_collision_solids *solids=calloc(1,sizeof(*solids));
+    CHECK(init&&solids);
+    const float rate=1;
+    const gh_om_frame_runtime runtime={.init=init,.canonical_rate=&rate,.solids=solids,.ik_globals=ik};
+    const gh_object_opacity_environment env={.init=init};
+    gh_game_mt mt;
+    gh_frame_random random;
+    CHECK(!gh_frame_seed_0031ceb8(&random,&mt,GH_FRAME_CHOP_REFERENCE));
+    for(unsigned frame=0;frame<24;frame++){
+        uint32_t pc;
+        CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,&pc)&&!pc);
+        for(unsigned i=0;i<6;i++){
+            gh_om_object *o=&factory->objects[i];
+            gh_om041c_state *flag=(gh_om041c_state *)o->initialization;
+            gh_om_frame_state *state=&frames[i];
+            gh_object_move_request request={.handle=o->handle,.original_entry=0x17ba28,.actor=o->view};
+            uint8_t *root=o->view.bytes;
+            long double position[15][3],velocity[15][3];
+            reference_motion(flag,position,velocity);
+            if(!frame){
+                CHECK(!gh_om_frame_bind_runtime(state,&runtime));
+                /* The first real call can pause at opacity. Binding its
+                 * environment resumes without a second cloth integration. */
+                CHECK(gh_om_frame_move(state,factory,&request,work,GH_STATIC_BINARY32_REFERENCE,&pc)==GH_OBJSTEP_UNSUPPORTED&&
+                    pc==0x2db6b0&&state->phase==4&&state->special_phase==2);
+                CHECK(!gh_om_frame_bind_environment(state,&env));
+            }else CHECK(!gh_om_frame_next_call(state));
+            const gh_object_step_status status=gh_om_frame_move(state,factory,&request,work,GH_STATIC_BINARY32_REFERENCE,&pc);
+            if(status)fprintf(stderr,"frame %u flag %u status %u pc %08x phase %u/%u\n",frame,i,status,pc,state->phase,state->special_phase);
+            CHECK(!status&&!pc&&state->complete);
+            for(unsigned j=0;j<15;j++){
+                const uint8_t *p=root+0x600+j*0x50;
+                for(unsigned axis=0;axis<3;axis++){
+                    CHECK(fabsl(number(p+4*axis)-position[j][axis])<0.000025L);
+                    CHECK(fabsl(number(p+0x10+4*axis)-velocity[j][axis])<0.00015L);
+                }
+                CHECK(word(p+0x1c)==0x3f800000&&word(p+0xc)==0x3f800000);
+            }
+            for(unsigned column=0;column<2;column++)for(unsigned row=0;row<4;row++){
+                const uint8_t *part=flag->common.model.parts[5*column+row].bytes;
+                const unsigned a=3*row+2*column,b=a+3;
+                long double direction[3],axis_y[3];
+                for(unsigned axis=0;axis<3;axis++){
+                    direction[axis]=number(root+0x600+b*0x50+4*axis)-number(root+0x600+a*0x50+4*axis);
+                    axis_y[axis]=-number(part+0x90+4*axis);
+                }
+                CHECK(dot(direction,axis_y)/sqrtl(dot(direction,direction)*dot(axis_y,axis_y))>0.9999L);
+            }
+            CHECK(fegetround()==FE_UPWARD&&(fetestexcept(FE_ALL_EXCEPT)&FE_DIVBYZERO));
+        }
+    }
+    free(solids);
+    free(init);
+}
+
 int main(int argc,char **argv)
 {
     CHECK(argc==3);
@@ -218,6 +331,9 @@ int main(int argc,char **argv)
     }
     CHECK(serial==6);
     check_wind_forces(&r003,&factory);
+    gh_motion_ik_globals ik={0};
+    CHECK(!gh_motion_ik_globals_from_elf(&ik,elf,(size_t)elf_size));
+    check_object_moves(&r003,&factory,&work,&ik);
     CHECK(!gh_r003_event_release(&r003)&&!gh_room_module_release(&loader.module)&&!gh_task_threads_destroy(threads));
     CHECK(!gh_om_factory_release(&factory)&&!pools.blocks[0].used_count&&!pools.blocks[1].used_count);
     CHECK(!pools.vectors[0].count&&!pools.arenas[2].live_allocations&&gh_heap_used(heap)==baseline);
@@ -228,6 +344,6 @@ int main(int argc,char **argv)
     free(resource);
     free(room_data);
     gh_disc_close(disc);
-    puts("PASS actual R003 six 041C flag constructors, OL1C model/pose, 15 points, 30 constraints, original MoveFlag RNG/force/phase, and scoped release");
+    puts("PASS actual R003 six 041C flag constructors, OL1C model/pose, 15 points, 30 constraints, original MoveFlag RNG/force/phase, 144 state-0 moves, and scoped release");
     return 0;
 }

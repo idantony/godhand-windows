@@ -10,6 +10,9 @@ extern "C" {
 #endif
 
 enum {GH_ENEMY_WEAPON_363_BYTES=0x790, GH_ROOM_OBJECT_ENEMY_WEAPON=0x363};
+/* Shared original 1C9140, used by both held and room-placed weapons. */
+gh_actor_model_status gh_om_weapon_construct_001c9140(void *,size_t,gh_title_player_view *);
+
 typedef struct {
     gh_game_title_player object;
     gh_enemy_entry_bindings bindings;
@@ -41,6 +44,11 @@ typedef struct {
     gh_collision_scroll_mutation *scroll;
     uint8_t stage, hit_owned, attach_stage;
 } gh_enemy_weapon_init;
+
+/* Common 1C9268 receiver/attacker sphere setup and scoped ownership. */
+gh_actor_model_status gh_om_weapon_spheres_001c9268(gh_actor_model *,gh_title_player_view *,gh_game_init_state *,
+    const gh_hitarea_shape_bindings *,gh_hitarea_object[2],int[2],uint8_t *owned,uint8_t *phase,uint32_t *frontier);
+gh_actor_model_status gh_om_weapon_spheres_release(gh_hitarea_object[2],uint8_t *owned,uint32_t *frontier);
 
 /* Actual VT42AA98+44, narrowly for factory 363. */
 gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *,

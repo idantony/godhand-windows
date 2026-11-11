@@ -805,10 +805,11 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-load")){qa_load=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-control")&&i+1<argc){
             const char *mode=argv[++i];
-            qa_repeat_square.enabled=!std::strcmp(mode,"repeat-square");
+            qa_repeat_square.triangle=!std::strcmp(mode,"repeat-triangle");
+            qa_repeat_square.enabled=qa_repeat_square.triangle||!std::strcmp(mode,"repeat-square");
             qa_control.mode=qa_repeat_square.enabled?nullptr:mode;
             if(qa_control.mode&&std::strcmp(qa_control.mode,"walk")&&std::strcmp(qa_control.mode,"run")&&!qa_control.attacks()){
-                std::fprintf(stderr,"QA control mode must be walk, run, square, approach-square or repeat-square.\n");return 2;
+                std::fprintf(stderr,"QA control mode must be walk, run, square, approach-square, repeat-square or repeat-triangle.\n");return 2;
             }
         }
         else if(!std::strcmp(argv[i],"--qa-capture")&&i+1<argc)qa_capture=argv[++i];

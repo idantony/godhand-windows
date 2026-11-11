@@ -2,6 +2,7 @@
 #include "bgm_requests.h"
 #include "game_effect_release.h"
 #include "game_enemy_other_move.h"
+#include "game_enemy_timers.h"
 #include "game_enemy_ems.h"
 #include "game_enemy_row2.h"
 #include "game_camera_envelope.h"
@@ -343,8 +344,21 @@ int main(int argc,char **argv)
     gh_enemy_other_move next_heavy={0};
     CHECK(!gh_enemy_other_move_bind_targets(&next_heavy,&targets));
     CHECK(!gh_enemy_other_move_bind_2a2_services(&next_heavy,&opacity,release_effect,&effect_bindings,NULL,NULL));
-    CHECK(!gh_enemy2a2_move_002856c0(&next_heavy,heavy_live.enemy2a2,target));
-    CHECK(next_heavy.original_returned&&word(heavy_raw+0x430)==0x40000000u);
+    memset(heavy_actor->view.bytes+0x15bc,0,4);
+    gh_game_mt expected_timer_random=init->random;
+    uint32_t timer_word,timer_bits;
+    CHECK(!gh_game_mt_next_0030f348(&expected_timer_random,&timer_word));
+    CHECK(!gh_enemy2a2_mt_timer_reference(timer_word,bindings.actor.numeric_policy,&timer_bits));
+    gh_actor_motion_status timer_status=gh_enemy2a2_move_002856c0(&next_heavy,heavy_live.enemy2a2,target);
+    CHECK(word(heavy_raw+0x15bc)==timer_bits&&next_heavy.timer_word==timer_word);
+    CHECK(!memcmp(&init->random,&expected_timer_random,sizeof(init->random)));
+    if(next_heavy.nearby){
+        CHECK(timer_status==GH_ACTOR_MOTION_UNSUPPORTED&&next_heavy.frontier==0x2cba48);
+        CHECK(next_heavy.sound_request.bank==1&&next_heavy.sound_request.program==0x5a);
+        CHECK(gh_enemy2a2_move_002856c0(&next_heavy,heavy_live.enemy2a2,target)==timer_status);
+        CHECK(!memcmp(&init->random,&expected_timer_random,sizeof(init->random)));
+    }else CHECK(!timer_status&&next_heavy.original_returned);
+    CHECK(word(heavy_raw+0x430)==0x40000000u);
     CHECK(!gh_enemy363_move_001c9860(&weapon_move,weapon_live.weapon,release_effect,&effect_bindings));
     CHECK(weapon_move.original_returned&&!weapon_move.frontier&&held->weapon->object.view.bytes[0x2f6]==1);
     CHECK(!memcmp(held->weapon->object.view.bytes+0x490,held->weapon->object.view.alias_f0,12));

@@ -57,11 +57,38 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,int reaction){
   }
   s->phase=14;
  }
- if(s->phase==14){if(p[0x622])return fail(s,0x124540,GH_PLAYER_FRAME_UNSUPPORTED);s->phase=5;}
+ if(s->phase==14){
+  if(p[0x622]){
+   /* 123CE4 first selects the real current attack target. The analog
+    * target-height transition remains outside this neutral Triangle route. */
+   if(p[0x61f])return fail(s,0x123d80,GH_PLAYER_FRAME_UNSUPPORTED);
+   gh_player_target selected={.handle=w(p+0x640)};
+   if(selected.handle&&(int8_t)p[0x648]>0){
+    if(!s->b.targets.resolve)return fail(s,0x124540,GH_PLAYER_FRAME_UNSUPPORTED);
+    gh_player_target_status e=s->b.targets.resolve(s->b.targets.context,selected.handle,&selected.view,&pc);
+    if(e)return target_status(s,e,pc?pc:0x124540);
+   }
+   gh_player_target_status e=gh_player_attack_target_00124540(&s->b.targets,b->init,&selected,&pc);
+   if(e)return target_status(s,e,pc?pc:0x124540);
+   if(selected.handle){
+    /* Original +6C is 275978 for cEm00. It also writes actor+1680. */
+    float xyz[3];
+    e=gh_enemy_target_position_00275978(&selected.view,xyz);
+    if(e)return target_status(s,e,0x123d04);
+   }
+  }
+  s->phase=5;
+ }
  if(s->phase==5){if(s->b.targets.player!=&b->player->view)return fail(s,0x129cc8,GH_PLAYER_FRAME_ARGUMENT);gh_player_target_status e=gh_player_small_object_gate_00129cc8(&s->b.targets,&pc);if(e)return target_status(s,e,pc);s->phase=6;}
  if(s->phase==6){/*2948C8's TWO original fields, notenemy_kept16. */if(w(b->init->enemies+0x5ac)||w(b->init->enemies+0x5b0))return fail(s,0x2948c8,GH_PLAYER_FRAME_UNSUPPORTED);s->phase=7;}
  if(s->phase==7&&reaction)return done(s,out,0);
- if(s->phase==7&&!p[0x623]&&p[0x621]){
+ if(s->phase==7&&!p[0x623]&&p[0x622]){
+  int selected;
+  gh_player_frame_status e=gh_player_triangle_input_00123f44(&b->player->view,b->save,0,&selected,&pc);
+  if(e)return fail(s,pc,e);
+  if(selected)return done(s,out,1);
+ }
+ if(s->phase==7&&!p[0x623]&&!p[0x622]&&p[0x621]){
   int selected;
   gh_player_frame_status e=gh_player_square_input_00123fc8(&b->player->view,b->save,b->init,0,&selected,&pc);
   if(e)return fail(s,pc,e);

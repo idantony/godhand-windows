@@ -8,7 +8,7 @@
 #include <cstring>
 
 struct QARepeatSquareProbe {
-    bool enabled=false;
+    bool enabled=false,triangle=false;
     bool saw_event=false;
     unsigned attempts=0,edges=0,animations=0,hits=0;
     uint32_t player_handle=0,enemy_handle=0;
@@ -74,7 +74,7 @@ struct QARepeatSquareProbe {
             return pad;
         }
         if(!idle||s.player_updates_completed<next_square)return pad;
-        pad.buttons=0x4000;
+        pad.buttons=triangle?0x8000:0x4000;
         ++attempts;
         attack_pending=true;
         press_tick=s.ticks;
@@ -91,7 +91,7 @@ struct QARepeatSquareProbe {
     void observe(const gh_startup_snapshot &s,const gh_native_input_snapshot &input)
     {
         if(!enabled||!player_handle||s.player_handle!=player_handle)return;
-        if(attack_pending&&!edge_seen&&s.ticks==press_tick+1&&(input.raw_pressed&0x80u)){
+        if(attack_pending&&!edge_seen&&s.ticks==press_tick+1&&(input.raw_pressed&(triangle?0x10u:0x80u))){
             edge_seen=true;
             ++edges;
         }
@@ -109,7 +109,8 @@ struct QARepeatSquareProbe {
         frame.attributed=attack_pending&&edge_seen&&target_seen;
         if(attack_pending&&edge_seen&&!motion_reported&&!s.player_update_frontier&&
            s.player_state_entry==0x10d3a8u&&!s.player_state[0]&&s.player_state[1]==0x0b&&
-           s.player_state[2]==1&&std::isfinite(s.player_motion_sample)&&s.player_motion_sample>=0){
+           s.player_state[2]==1&&s.player_attack_skill==(triangle?29u:0u)&&
+           std::isfinite(s.player_motion_sample)&&s.player_motion_sample>=0){
             frame.sample=s.player_motion_sample;
             frame.motion=true;
         }
@@ -134,7 +135,7 @@ struct QARepeatSquareProbe {
         }
         motion_attempt=pending.motion?pending.attempt:0;
         last_sample=pending.sample;
-        if(hp_known&&pending.attributed&&pending.hp<last_hp&&pending.hit_kind&&pending.hit_power>0){
+        if(hp_known&&pending.attributed&&pending.hp<last_hp&&pending.hit_kind&&(triangle?pending.hit_power==12:pending.hit_power>0)){
             ++hits;
             std::fprintf(stderr,"QA_REPEAT_HIT_PRESENTED scene=%llu tick=%llu attempt=%u player=%u enemy=%u hp=%u->%u kind=%u power=%d\n",
                 (unsigned long long)serial,(unsigned long long)pending.tick,pending.attempt,player_handle,enemy_handle,

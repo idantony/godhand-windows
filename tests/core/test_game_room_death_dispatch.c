@@ -217,6 +217,9 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
    pools.vectors[0].count==known&&(w(player.view.bytes+0x250)&0xe0000002u)==0xc0000002u);
  /* Original Main5 op11 deletes still-live R100 door collision boxes after
   * the first death pass and before later mode3 actor destruction. */
+ gh_game_player_spawn spawn={.begun=1,.complete=1,.room=0x100};
+ C(gh_game_player_reset_room_cursors(&prefix,&tail,&spawn,&player,&child)==GH_PLAYER_INIT_ARGUMENT);
+ C(prefix.stage==4&&tail.stage==13&&spawn.complete);
  C(dynamic.allocation_count>=3&&tables.pending_actor_head&&tables.pending_actor_count>=3);
  for(unsigned i=0;i<3;++i)C(doors.objects[i].initialization->geometry_state.box);
  C(gh_scene_actors_reset_0012e800(&tables)==GH_TABLE_OK&&dynamic.bound&&!dynamic.allocation_count);
@@ -301,6 +304,10 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
    !pools.vectors[0].count&&!pools.vectors[1].count&&!pools.vectors[3].count&&
    !pools.blocks[0].used_count&&!pools.blocks[1].used_count&&
    !player.view.bytes&&!child.object.view.bytes&&!c.publication&&!attachment.attached);
+ C(prefix.stage==4&&tail.stage==13&&spawn.complete);
+ C(!gh_game_player_reset_room_cursors(&prefix,&tail,&spawn,&player,&child));
+ C(!prefix.stage&&!prefix.factory&&!tail.stage&&!tail.player&&!tail.motion_entry.bytes&&
+   !spawn.begun&&!spawn.complete&&!spawn.room);
  for(unsigned i=0;i<73;++i)C(!doors.objects[i].view.bytes);
  C(!gh_game_objects_find(global,0x3eb,&tutorial)&&tutorial.use_count==0&&tutorial.state==5);
  C(control.recent[10].bank==7);
@@ -322,6 +329,15 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
    (w(b30a.record)&0x200)&&(w(a310.record)&0x200)&&(w(b310.record)&0x200));
  C(!a322_record[0x2e]&&!b322_record[0x2e]&&(w(a322.record)&0x200)&&(w(b322.record)&0x200));
  uint32_t frontier;
+ /* The same stable wrappers receive a fresh actor and model on the next
+  * original constructor call. The authored resource still comes from PL00. */
+ C(!gh_game_player_factory_create_0030fa98(&factory,&fb,&original)&&original);
+ C(!gh_actor_model_bind_packet_inputs(&c.model,c.heap,light->scalar+4));
+ C(gh_game_player_initialize_00107f58(&prefix,&pb)==GH_PLAYER_INIT_UNSUPPORTED&&
+   prefix.frontier==0x30fa98&&prefix.model_call_complete&&c.model.ready&&
+   c.model.parts_allocated==32&&c.model.root.bytes==player.view.bytes);
+ C(!gh_actor_model_release(&c.model)&&!gh_game_player_factory_release_prefix(&factory));
+ puts("PASS retired PL00/PL01 cursors accept a fresh actual PL00 constructor");
  C(!gh_om_factory_release(&doors)&&!gh_scene_meshes_release_prefix(&meshes)&&
    !gh_game_object_pool_release_001fdfa8(init,&frontier)&&
    !gh_collision_scroll_mutation_release(&scroll)&&!gh_scene_dynamic_release(&dynamic)&&

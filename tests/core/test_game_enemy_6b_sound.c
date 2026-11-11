@@ -215,6 +215,26 @@ int main(int argc,char **argv)
       info.sample_slot,info.pitch_q12,info.channel,submitted[i].frames);
  }
  C(!gh_actor_attached_sound_abort(&source)&&submissions==2&&stops==2);
+
+ int spawn;
+ int16_t saved;
+ uint32_t frontier=0;
+ C(!gh_enemy_request_from_room_00294ca0(&selected_room,14,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,
+     &req,&spawn,&saved,&frontier)&&spawn&&req.entry_number==19&&req.dependency_kind==0x203);
+ dep=req.dependency_kind;
+ memcpy(enemy.view.bytes+0x564,&dep,4);
+ C(!gh_actor_attached_sound_bind(&source,&binding));
+ C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+ gh_motion_sound_request turn={.model=&model.model,.actor=&enemy.view,.bank=0,.program=0x8d};
+ uint32_t handle=0,duplicate=99;
+ C(!gh_actor_attached_sound_motion(&source,&turn,&handle,&frontier)&&handle&&!frontier);
+ C(!gh_actor_attached_sound_motion(&source,&turn,&duplicate,&frontier)&&!duplicate&&!frontier);
+ C(!gh_se_voice_update(voices));
+ gh_se_voice_info voice;
+ C(!gh_se_voice_query(voices,handle,&voice)&&voice.bank==0&&voice.program==0x8d&&
+    voice.sample_slot==92&&voice.rate==16000&&voice.native_voice&&voice.adsr2==0x5fc0);
+ C(submissions==3&&submitted[2].frames);
+ C(!gh_actor_attached_sound_abort(&source)&&stops==3);
  C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
  C(!gh_enemy_se_banks_destroy(banks));
  gh_se_voice_destroy(voices);

@@ -20,8 +20,12 @@ finished port or execute guest instructions in the production runtime.
 - `tools/rebase-source-overlay.py` moves a pinned text overlay to a newer frozen
   source snapshot. It verifies both receipts and prerequisites, merges disjoint
   edits, and writes a fresh bundle to project scratch. Absolute worker receipts
-  also check their relative source and predecessor paths. Overlapping edits fail
-  before the new bundle is published.
+  also check their relative source and predecessor paths. A new file may omit
+  the predecessor when the pinned base confirms it was absent. To combine
+  changes to different tokens on one line, pass the worker recipe with
+  `--tokens` and `--tokens-sha256`. Each replacement must have a unique
+  match and the recipe must reproduce the complete pinned worker file from
+  its base. Unresolved conflicts fail before publishing a new bundle.
 - `tools/record-startup-frontier.py` verifies a completed Windows QA process
   against its source and executable receipts, records the observed original
   stop or native rendering error, and fingerprints its logs and optional raw

@@ -47,6 +47,7 @@ gh_child_status gh_game_children_save_map_open_00160020(gh_game_children *,const
 gh_child_status gh_game_children_save_map_move_001601d8(gh_game_children *,const gh_save_map_bindings *,uint32_t *frontier);
 /* Original manager Quit and borrowed map release for an active Door screen. */
 gh_child_status gh_game_children_save_map_quit_0015ff10(gh_game_children *,const gh_save_map_bindings *,uint32_t *frontier);
+gh_child_status gh_game_children_save_map_room(const gh_game_children *,uint16_t *room);
 gh_child_status gh_game_children_save_map_view(const gh_game_children *,gh_save_map_view *);
 #ifdef __cplusplus
 }

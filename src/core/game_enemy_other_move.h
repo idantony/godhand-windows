@@ -28,11 +28,11 @@ typedef struct {
     gh_player_terrain_call wall, floor;
     gh_scene_ray_report report;
     float old[3];
-    uint32_t frontier;
+    uint32_t frontier, timer_word;
     unsigned texture_cursor;
     uint8_t stage, original_returned, nearby;
     uint16_t reaction_resource_offset;
-    gh_motion_sound_request reaction_sound;
+    gh_motion_sound_request sound_request;
 } gh_enemy_other_move;
 
 /* Borrow the same room/player resolver and ELF as ordinary player target queries. */
