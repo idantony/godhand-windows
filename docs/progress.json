@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-11T12:50:17.283909+00:00",
-  "stage": "native-windows-R100-title-load-and-first-player-hit",
+  "verified_utc": "2026-11-11T18:57:56.625845+00:00",
+  "stage": "native-windows-R100-two-way-combat",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -32,7 +32,7 @@
     "nonblack_rgb_pixels": 229336
   },
   "original_title_UI_scene_observed_in_native_port": true,
-  "source_verification": "immutable authored source copy",
+  "source_verification": "immutable authored source copies for Windows execution and native regression",
   "strategy": "Recover readable original logic and implement native platform dependencies",
   "input": {
     "serial": "SLUS-21503",
@@ -173,26 +173,49 @@
     }
   },
   "native_windows_execution": {
-    "scope": "Separate New Game replay with first presented player hit",
+    "scope": "R100 New Game with original opening and two-way combat",
     "hidden": true,
     "muted": true,
     "synthetic_input_fixture": true,
-    "ticks": 1810,
+    "ticks": 1957,
     "original_GameMain_state": 4,
     "current_room": "0100",
-    "scene_frames_presented": 1669,
-    "frontier": "0020B394",
+    "scene_frames_presented": 1816,
+    "frontier": "0023C620",
     "frontier_module": "main ELF",
-    "original_world_packets_submitted": 1372727,
-    "presented_player_damage": {
-      "enemy_stamp": 19,
-      "hit_kind": 7,
-      "hit_power": 3,
-      "hp_before": 74,
-      "hp_after": 71,
-      "contact_scene_serial": 1638,
-      "damage_scene_serial": 1638
-    }
+    "original_world_packets_submitted": 1649361,
+    "enemy_damage_presented": [
+      {
+        "scene_serial": 1655,
+        "hp_before": 74,
+        "hp_after": 62,
+        "hit_kind": 18,
+        "hit_power": 12
+      },
+      {
+        "scene_serial": 1658,
+        "hp_before": 62,
+        "hp_after": 50,
+        "hit_kind": 18,
+        "hit_power": 12
+      }
+    ],
+    "protagonist_damage_presented": [
+      {
+        "scene_serial": 1797,
+        "hp_before": 100,
+        "hp_after": 91,
+        "state": 1,
+        "reaction": 1
+      },
+      {
+        "scene_serial": 1812,
+        "hp_before": 91,
+        "hp_after": 81,
+        "state": 1,
+        "reaction": 3
+      }
+    ]
   },
   "tests": {
     "native_build": "passed",
@@ -322,6 +345,7 @@
       "game_esp_update",
       "game_effects_trans",
       "game_effect_sprite",
+      "game_esp_trail_draw",
       "effect_postprocess_reference",
       "game_actor_model_trans",
       "game_actor_shadow_draw",
@@ -396,6 +420,8 @@
       "game_scenario_exec",
       "game_scenario_soft_event",
       "game_scenario_end_soft_event",
+      "r003_event",
+      "r003_flags",
       "r100_init",
       "game_object_sound",
       "game_scene_exit_leaves",
@@ -478,6 +504,7 @@
       "r100_roof_task",
       "r100_counter_task",
       "r100_live_tasks",
+      "r100_exit",
       "r100_watch_geometry",
       "r100_init_tail",
       "game_cockpit_tutorial",
@@ -537,12 +564,17 @@
       "game_om322",
       "game_om323",
       "game_om324",
+      "game_om339",
       "game_om33f",
       "game_om346",
       "game_om354",
+      "game_om355",
       "game_om35d",
+      "game_om382",
       "game_om309",
       "game_om3eb",
+      "game_om041c",
+      "game_om31a",
       "game_enemy_placements",
       "game_om_fragments",
       "game_camera_follow",
@@ -599,7 +631,6 @@
       "test-id-texture",
       "test-mc-control",
       "test-game-stage",
-      "test-game-children",
       "test-nested-tasks",
       "test-id-path",
       "test-mc-error",
@@ -607,7 +638,10 @@
       "test-mc-file-load",
       "test-memory-card",
       "test-mc-file-save",
+      "test-mc-save-control",
+      "test-game-save-roundtrip",
       "test-game-cockpit",
+      "test-game-children",
       "test-game-objects",
       "test-game-prepare",
       "test-game-room-state",
@@ -687,9 +721,11 @@
       "test-game-om322",
       "test-game-om323",
       "test-game-om324",
+      "test-r003-om339",
       "test-game-om33f",
       "test-game-om346",
       "test-game-om354",
+      "test-r003-om355",
       "test-game-om35d",
       "test-game-om309",
       "test-game-om3eb",
@@ -732,6 +768,7 @@
       "test-game-enemy-near",
       "test-game-enemy-first-damage",
       "test-game-enemy-weapon",
+      "test-r003-om382",
       "test-game-enemy-2a2-init",
       "test-game-enemy-row2-actor",
       "test-mc-exit",
@@ -808,6 +845,7 @@
       "test-game-om-damage-frame",
       "test-game-object-opacity",
       "test-game-effects-frame",
+      "test-game-esp07",
       "test-game-esp14",
       "test-game-effect-exp",
       "test-game-effect-node",
@@ -859,6 +897,7 @@
       "test-game-om324-started-pitch",
       "test-game-enemy-started-pitch",
       "test-game-ema2-impact-sound",
+      "test-game-enemy-impact-sound",
       "test-game-enemy-state71-sound",
       "test-game-enemy-6b-sound",
       "test-se-pitch",
@@ -891,6 +930,8 @@
       "test-game-scene-post",
       "test-game-cockpit-frame",
       "test-game-door",
+      "test-game-subscreen-save",
+      "test-save-map-sound",
       "test-game-message-step",
       "test-game-objects-update",
       "test-sound-spatial-step",
@@ -911,7 +952,12 @@
       "test-game-scenario-soft-event",
       "test-game-scenario-soft-kind0",
       "test-r100-watch-geometry",
+      "test-r003-event",
+      "test-r003-flag",
+      "test-r003-om31a",
       "test-r100-init",
+      "test-r100-exit",
+      "test-r100-jump-exit",
       "test-static-world-queue",
       "test-id-entry-reset",
       "test-id-layout-rotation",
@@ -1003,7 +1049,7 @@
     ]
   },
   "remaining": [
-    "Advance original combat, enemy retirement and R100 progression",
+    "Complete the first battle, original exit gate and player-driven R003 transition",
     "Complete in-game save and additional room transitions",
     "Recover remaining animation, rendering, audio and input behavior",
     "Verify full game progression and timing"
@@ -1031,5 +1077,14 @@
     "effect_post_error": 0,
     "window_error": 0,
     "next_original_call": "002147D0"
+  },
+  "controlled_room_transition_observation": {
+    "scope": "Actual ISO and native packet collectors with controlled RoomSave and trigger prerequisites",
+    "from_room": "0100",
+    "to_room": "0003",
+    "original_continue_and_room_teardown_completed": true,
+    "first_scene_frame_completed": true,
+    "world_commands": 258,
+    "actor_commands": 75
   }
 }

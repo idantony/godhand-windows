@@ -9,17 +9,17 @@ and assets, and replace platform dependencies with native Windows implementation
 This follows OpenGOAL's source recovery/platform adaptation method. God Hand was
 not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
-**Early development.** A hidden, muted Windows run selects an original-format
-test save from the title menu, verifies and restores it, then presents the
-original R100 room and HUD. Scene frame 1,634 shows Gene in the loaded room.
-The run reaches tick 1,826 with 1,200,273 world packets and zero renderer, GPU,
-postprocess or window errors.
+**Early development.** The Windows New Game replay plays all ten original
+opening cuts and reaches two-way combat in R100. Two Triangle hits lower the
+enemy's HP from 74 to 50. Enemy attacks lower Gene's HP from 100 to 81, with
+a hit reaction and knockdown in presented frames. The hidden, muted run
+presents 1,816 scene frames before reaching the next enemy behavior.
 
-A separate New Game run of the same executable plays the ten original opening
-cuts and accepts synthetic gamepad input. Gene's original Square attack applies
-3 damage in presented frame 1,638, taking the target from HP 74 to 71.
-The run reaches tick 1,810 and 1,669 scene presents. Continued combat,
-in-game saving and later room transitions remain under development.
+A separate Windows title-load run restores an original-format test save and
+presents R100. A controlled native packet test enters R003 through the original
+Door Continue and room teardown flow and completes the first scene frame.
+Completing the first encounter and reaching R003 through normal play remain
+in progress.
 
 ### Verified progress
 
@@ -50,7 +50,7 @@ in-game saving and later room transitions remain under development.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters. Subsequent opening frames create original
   event effects, update their lifetimes and render sprites and framebuffer warp.
-- The latest frozen source builds 370 C modules and passes 351 native checks.
+- The frozen regression build compiles 379 C modules and passes 365 native checks.
   Eighteen checks that need extra tools or devices were skipped in this run.
   Earlier Windows verification exercised muted hardware audio, movie decoding
   and the full independent ADX comparison.
@@ -152,8 +152,8 @@ logs stay under `G:\middle_thing\godhand_windows`. Scripts accept external
 scratch/compiler paths. Original game data remains read-only. Attribution:
 [NOTICE.md](NOTICE.md).
 
-Next work continues the original post-opening Scenario, connects physical input,
-and verifies combat, transitions, save/load and complete game progression.
+Next work continues the first battle and its exit, then verifies the subsequent
+scene, in-game saving and full progression through the original game.
 Local commits retain rollback points. Public pushes mark substantial milestones.
 
 ## 简体中文
@@ -162,13 +162,13 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 平台依赖。采用 OpenGOAL 的源码恢复与平台移植方法；本作不是 GOAL 程序，不能直接
 使用 Jak 专用反编译器。
 
-**仍处于早期开发。** 隐藏、静音的 Windows 实跑从标题菜单选中原版格式的测试存档，
-校验并恢复数据后进入 R100，呈现原版房间和 HUD。第 1634 个场景帧可见 Gene 站在读档后的房间内。
-运行至 tick 1826，共提交 1200273 个世界绘制包，渲染器、GPU、后处理和窗口错误均为 0。
+**仍处于早期开发。** Windows 新游戏回放播完原版开场十个镜头并进入 R100 双向战斗。
+两次三角攻击把敌人 HP 从 74 打到 50。敌人把 Gene 的 HP 从 100 打到 81，
+受击和击倒画面均已呈现。隐藏、静音的实跑共呈现 1,816 个场景帧，随后停在下一个敌人行为。
 
-同一可执行文件的新游戏复跑播完原版开场十个镜头，并接受合成手柄输入。
-Gene 的原版方块攻击在第 1638 帧造成 3 点伤害，敌人 HP 从 74 降至 71。
-运行至 tick 1810，共呈现 1669 个场景帧。后续战斗、游戏内保存及后续房间切换仍在开发。
+独立的 Windows 标题读档实跑恢复了原版格式的测试档，并呈现 R100。受控的原生绘制指令测试
+走完原版 Door Continue 和旧房间清理，进入 R003 并完成首帧。正常打完首战并进入 R003
+的连续流程仍在验证中。
 
 ### 已验证的进展
 
@@ -189,7 +189,7 @@ Gene 的原版方块攻击在第 1638 帧造成 3 点伤害，敌人 HP 从 74 �
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始 FX 调用 0x30F228 创建 4 个环境发射器。
   后续片头帧创建原剧情特效，更新其生命周期，并绘制精灵和画面扭曲。
-- 最新冻结源码编译 370 个 C 模块，通过 351 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
+- 冻结回归构建编译 379 个 C 模块，通过 365 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
   受限 GPU 像素与独立 CPU 方程一致。绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
@@ -226,5 +226,5 @@ FFmpeg、一个不存在的存档目录和正整数 tick 上限。该工具复�
 输入仍在接线。开场最终合成画面已验证淡入、对话姿态和镜头切换，下一段剧情调度和
 战斗仍在恢复。
 
-接下来继续开场后的原剧情调度，接通物理输入，并验证战斗、场景切换、存读档及完整游戏
-流程。本地提交保留回退，大节点才推送。当前状态见 [进展数据](docs/progress.json)。
+接下来继续首战和开门流程，验证后续场景、游戏内存档和完整游戏流程。
+本地提交保留回退，大节点才推送。当前状态见 [进展数据](docs/progress.json)。

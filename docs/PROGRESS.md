@@ -4,6 +4,25 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Two-way combat and a controlled R003 transition
+
+A Windows New Game replay presents 1,816 original scene frames. Two Triangle
+hits take the first enemy from HP 74 to 50. Enemy attacks take Gene from HP
+100 to 91 and then to 81, with the original hit reaction and knockdown visible
+in frames 1,797 and 1,812. The next enemy behavior is `0x0023C620`.
+
+A separate packet test supplies the RoomSave and trigger prerequisites, uses
+the original Door Continue and room teardown, and completes the first R003
+frame. The native regression build passes 365 checks. The Windows route from
+the start of the encounter through the door remains under development.
+
+Windows 新游戏回放呈现 1,816 个原版场景帧。两次三角攻击把首名敌人的 HP 从 74 打到 50。
+Gene 两次受击后 HP 从 100 降到 91，再降到 81。第 1,797 和 1,812 帧呈现原版受击和击倒。
+下一处敌人行为是 `0x0023C620`。
+
+独立测试设置 RoomSave 和触发点前置条件，走完原版 Door Continue 和旧房间清理，完成 R003
+首帧。原生回归构建通过 365 项检查。从首战开始到开门的完整 Windows 流程仍在开发。
+
 ## Title Load restores and presents R100 on Windows
 
 A hidden, muted Windows run restores slot 3 from a synthetic profile encoded
