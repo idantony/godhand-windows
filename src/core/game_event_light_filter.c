@@ -172,6 +172,15 @@ gh_game_event_status gh_event_object_light_move_000086b0(gh_event_light_filter *
     return GH_EVENT_OK;
 }
 
+/* REL71A0 applies the chosen key, with the origin's 0x64-byte field override. */
+static void apply_filter_key(gh_scene_filters *filters, const uint8_t *component,
+                             const uint8_t *key)
+{
+    uint8_t *active = filters->work.active140c8;
+    memcpy(active, key + 0x10, 0x2d8);
+    memcpy(active + 0x208, component + 0x230, 0x64);
+}
+
 gh_game_event_status gh_event_filter_move_000070d0(gh_event_light_filter *state,
                                                      uint32_t *frontier)
 {
@@ -182,9 +191,27 @@ gh_game_event_status gh_event_filter_move_000070d0(gh_event_light_filter *state,
     const uint8_t *key;
     gh_game_event_status status = previous_key(state, FILTER, &component, &key, frontier);
     if (status) return status;
-    uint8_t *active = state->filters->work.active140c8;
-    memcpy(active, key + 0x10, 0x2d8);
-    memcpy(active + 0x208, component.bytes + 0x230, 0x64);
+    apply_filter_key(state->filters, component.bytes, key);
+    *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+gh_game_event_status gh_event_filter_quit_000075a0(gh_event_light_filter *state,
+    const gh_game_event_config *config, uint32_t *frontier)
+{
+    if (!frontier) return GH_EVENT_ARGUMENT;
+    *frontier = 0x75a0;
+    if (!config || !config->initialized) return GH_EVENT_ARGUMENT;
+    if (!(config->flags & 0x100u)) {
+        gh_event_component_view component;
+        *frontier = 0x71a0;
+        if (!state || !state->filters || !state->filters->ready ||
+            !state->data || !state->data->resource || !state->data->resource->loaded ||
+            state->allocation != state->data->resource->allocation.pointer ||
+            !read_component(state->components, FILTER, 0xd268, 0x5e8, &component))
+            return GH_EVENT_ARGUMENT;
+        apply_filter_key(state->filters, component.bytes, component.bytes + 0x18);
+    }
     *frontier = 0;
     return GH_EVENT_OK;
 }

@@ -103,31 +103,42 @@ static gh_game_event_status effect_status(gh_effect_status status)
     }
 }
 
-static gh_game_event_status cut_sweep(gh_event_effect_play *state,
-    const gh_effect_release_bindings *storage, uint32_t *frontier)
+/* Flag sweeps may exclude bank D7. Final resource release selects bank 6
+ * directly. All three active masks are read anew for each slot. */
+static int selected(const uint8_t *p, unsigned offset, uint32_t flags, int bank, int exclude) {
+    if (flags && !(word(p + offset) & flags)) return 0;
+    if (bank < 0) return 1;
+    unsigned tag_offset = offset == 0x104 ? 0x23a : 0x18c;
+    unsigned tag = p[tag_offset] | (unsigned)p[tag_offset + 1] << 8;
+    return (tag == (unsigned)bank) != exclude;
+}
+
+static gh_game_event_status sweep(const gh_effect_release_bindings *storage, unsigned *next_esp,
+    uint32_t flags, int bank, int exclude, uint32_t *frontier)
 {
-    for (; state->next_esp < 1024; ++state->next_esp) {
-        const unsigned i = state->next_esp;
+    for (; *next_esp < 1024; ++*next_esp) {
+        const unsigned i = *next_esp;
         const uint8_t *p = storage->esp + i * 0x400;
-        if (!live(storage->esp + 0x100000, 0x80, i) || !(word(p + 0x104) & 4)) continue;
+        if (!live(storage->esp + 0x100000, 0x80, i) || !selected(p, 0x104, flags, bank, exclude)) continue;
         *frontier = 0x2fbe50;
         gh_effect_esp_view view;
-        if (gh_effect_create_esp_at(state->effects, i, &view) || view.payload != p)
+        if (gh_effect_create_esp_at(storage->effects, i, &view) || view.payload != p)
             return GH_EVENT_UNSUPPORTED;
         uint32_t child = 0;
-        gh_effect_status status = gh_effect_create_esp_pause_002fbe50(state->effects, i, view.serial, &child);
+        gh_effect_status status = gh_effect_create_esp_pause_002fbe50(storage->effects, i, view.serial, &child);
         if (status) {
             if (child) *frontier = child;
             return effect_status(status);
         }
     }
-    /* 300C00 selects the same live slots by flag4. 302918's entire body
-     * sets the emitter retirement request, consumed later by frame update. */
+    /* 302918 only requests emitter retirement. 300628 owns its actual
+     * deferred child unlink, mask progression, and destructor. */
     for (unsigned i = 0; i < 256; ++i) {
         uint8_t *p = storage->emitters + i * 0x260;
-        if (live(storage->emitters + 0x26000, 0x20, i) && (word(p + 0x118) & 4))
+        if (live(storage->emitters + 0x26000, 0x20, i) && selected(p, 0x118, flags, bank, exclude))
             put(p + 0x114, word(p + 0x114) | 0x40000000u);
     }
+    *next_esp = 0;
     return GH_EVENT_OK;
 }
 
@@ -170,7 +181,7 @@ gh_game_event_status gh_event_effect_move_00005050(gh_event_effect_play *state,
     }
     *relative = 0;
     if (state->stage == 1) {
-        status = cut_sweep(state, storage, frontier);
+        status = sweep(storage, &state->next_esp, 4, -1, 0, frontier);
         if (status) return status;
         state->stage = 2;
     }
@@ -194,6 +205,99 @@ gh_game_event_status gh_event_effect_move_00005050(gh_event_effect_play *state,
         }
     }
     state->stage = 0;
+    *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+
+gh_game_event_status gh_event_effect_quit_00005478(gh_event_effect_quit *state,
+    const gh_event_effect_play *play, const gh_effects_frame_bindings *b, uint32_t *frontier)
+{
+    if (!frontier) return GH_EVENT_ARGUMENT;
+    *frontier = 0x2fa310;
+    if (!state || !play || !b || !play->data || !play->data->resource ||
+        play->allocation != play->data->resource->allocation.pointer || play->stage ||
+        play->work != b->work || !play->work || play->effects != b->storage.effects || !play->effects ||
+        !b->storage.esp || b->storage.esp_bytes < 0x100180 ||
+        !b->storage.emitters || b->storage.emitter_bytes < 0x26060) return GH_EVENT_ARGUMENT;
+    if (state->play && (state->play != play || state->esp != b->storage.esp ||
+        state->emitters != b->storage.emitters)) return GH_EVENT_ARGUMENT;
+    if (state->completed) {
+        *frontier = 0;
+        return GH_EVENT_OK;
+    }
+    if (!state->play) {
+        state->play = play;
+        state->esp = b->storage.esp;
+        state->emitters = b->storage.emitters;
+    }
+    gh_game_effects *effects = play->effects;
+    gh_game_event_status status;
+    if (state->stage == 0) {
+        status = sweep(&b->storage, &state->next_esp, 2, 0xd7, 1, frontier);
+        if (status) return status;
+        state->stage = 1;
+    }
+    if (state->stage == 1) {
+        status = sweep(&b->storage, &state->next_esp, 0x40, -1, 0, frontier);
+        if (status) return status;
+        effects->field414 = 0;
+        state->stage = 2;
+    }
+    if (state->stage == 2) {
+        gh_effect_status child = gh_effects_frame_refresh_regions_00305c20(&state->region, b);
+        if (child) {
+            *frontier = state->region.frontier ? state->region.frontier : 0x305c20;
+            return effect_status(child);
+        }
+        state->stage = 3;
+    }
+    if (state->stage == 3) {
+        *frontier = 0x2fa0e8;
+        if (effects->event_registered_41c != 1) state->stage = 5;
+        else {
+            if (!same_bank(play->data, effects)) return GH_EVENT_ARGUMENT;
+            unsigned index;
+            for (index = 0; index < 64 && effects->resources[index].kind != 6; ++index) {}
+            if (index == 64 || !effects->resources[index].references) {
+                *frontier = 0x305778;
+                return GH_EVENT_UNSUPPORTED;
+            }
+            const gh_effect_view emd = effects->emd_tables[6];
+            if (!emd.bytes || emd.size < 16 || word(emd.bytes) != 0x444d45u ||
+                word(emd.bytes + 4) > 64 || word(emd.bytes + 4) > (emd.size - 16) / 4) {
+                *frontier = 0x306bb0;
+                return GH_EVENT_BOUNDS;
+            }
+            if (effects->resources[index].references == 1) {
+                for (uint32_t i = 0; i < word(emd.bytes + 4); ++i) {
+                    if (word(emd.bytes + 16 + 4*i)) {
+                        *frontier = 0x306a48;
+                        return GH_EVENT_UNSUPPORTED;
+                    }
+                }
+            }
+            effects->event_registered_41c = 0;
+            if (--effects->resources[index].references) state->stage = 5;
+            else {
+                /* EV01 EMD has no populated pointer slots. 306BB0 clears its
+                 * bank entry without clearing the shared emitter table. */
+                effects->emd_tables[6] = (gh_effect_view){0};
+                state->resource_slot = index;
+                state->stage = 4;
+            }
+        }
+    }
+    if (state->stage == 4) {
+        status = sweep(&b->storage, &state->next_esp, 0, 6, 0, frontier);
+        if (status) return status;
+        effects->resources[state->resource_slot] = (gh_effect_resource){.kind = 5};
+        effects->event_data = (gh_effect_view){0};
+        state->stage = 5;
+    }
+    uint8_t *system = (uint8_t *)play->work + 0x5e4;
+    put(system, word(system) & ~0x10000u);
+    state->completed = 1;
     *frontier = 0;
     return GH_EVENT_OK;
 }

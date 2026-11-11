@@ -32,6 +32,7 @@ typedef struct {
     gh_player_shadow shadow;
     gh_bundle_entry geometry, texture;
     uint8_t init_stage;
+    uint8_t normal_release_stage;
     size_t actor_index;
 } gh_event_actor_factory;
 

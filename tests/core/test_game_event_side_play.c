@@ -82,6 +82,18 @@ int main(int argc, char **argv) {
 
     gh_event_link link = {0};
     CHECK(!gh_game_event_link_002be890(&link, &module, elf, elf_bytes));
+    static const uint32_t quit_imports[][2] = {
+        {0x977c, 0x3a52f0}, {0x97ac, 0x2d8408}, {0x8b00, 0x2db518},
+        {0x8b08, 0x2db620}, {0x81cc, 0x2aebf8}
+    };
+    unsigned imports_seen = 0;
+    for (unsigned i = 0; i < link.reloc_count; ++i)
+        for (unsigned j = 0; j < sizeof(quit_imports) / sizeof(*quit_imports); ++j)
+            if (link.relocations[i].site == quit_imports[j][0]) {
+                CHECK(link.relocations[i].resolved_original_address == quit_imports[j][1]);
+                imports_seen |= 1u << j;
+            }
+    CHECK(imports_seen == 31);
     gh_event_components *components = &link.components;
     CHECK(gh_event_components_construct_00297680(components, 1) == GH_EVENT_OK);
     CHECK(gh_game_event_resource_begin_00297540(&resource, &event, &dvd, heap) == GH_EVENT_OK);
@@ -236,6 +248,45 @@ int main(int argc, char **argv) {
         }
     }
     CHECK(frames == 1209 && gh_bgm_requests_active(bgm) == 1);
+    CHECK(!gh_event_scr_layer_quit_00008af0(&prefix, &pools, &meshes, &frontier, &relative));
+    CHECK(!frontier && !relative);
+    for (unsigned i = 0; i < 156; ++i) {
+        const gh_scene_mesh_object *object;
+        CHECK(!gh_scene_meshes_object_at(&meshes, i, &object));
+        const uint8_t *bytes = object->allocation.pointer;
+        const unsigned id = bytes[0x2fd];
+        const int hidden = (visible[id / 32] & (0x80000000u >> (id % 32))) != 0;
+        CHECK(word(bytes + 0x250) == ((flags[i] & ~0x8002u) | (hidden ? 2u : 0)));
+    }
+    const unsigned first_id = first[0x2fd];
+    put_word(layer.bytes + 0x38 + 4 * (first_id / 32), 0x80000000u >> (first_id % 32));
+    put_word(layer.bytes + 0x58 + 4 * (first_id / 32), 0);
+    CHECK(!gh_event_scr_layer_quit_00008af0(&prefix, &pools, &meshes, &frontier, &relative));
+    CHECK((word(first + 0x250) & 0x8002u) == 0x8000u);
+
+    gh_event_scr_light preserved = lighting;
+    gh_game_event_config config_preserve = config;
+    config_preserve.flags |= 0x100;
+    put_word(save.bytes + 0x14, 0x92345678);
+    memset(init->side_counter, 0x5a, sizeof(init->side_counter));
+    put_word(light->scalar + 0x16288, 3);
+    light->native_light_owners[255] = &player;
+    CHECK(!gh_event_scr_light_quit_00009728(&preserved, &config_preserve, NULL, &frontier, &relative));
+    CHECK(!frontier && word(save.bytes + 0x14) == 0x12345678 &&
+        word(light->scalar + 0x16288) == 3 && light->native_light_owners[255] == &player);
+    put_word(save.bytes + 0x14, 0x92345678);
+    CHECK(gh_event_scr_light_quit_00009728(&lighting, &config, NULL, &frontier, &relative) == GH_EVENT_UNSUPPORTED);
+    CHECK(!relative && frontier == 0x2db6b0 && lighting.quit_stage == 1);
+    CHECK(word(save.bytes + 0x14) == 0x12345678 && !word(light->scalar + 0x78) &&
+        !light->native_light_owners[255]);
+    for (unsigned i = 0; i < 256; ++i) CHECK(word(light->scalar + 0x80 + i * 0x70) == 0xff);
+    light->scalar[0x80 + 255 * 0x70 + 4] = 0x5a; /* A retry must not run the clear twice. */
+    CHECK(!gh_event_scr_light_quit_00009728(&lighting, &config, &parts, &frontier, &relative));
+    CHECK(!frontier && !word(light->scalar + 0x16288) && word(light->scalar + 0x78) == 13);
+    CHECK(light->scalar[0x80 + 255 * 0x70 + 4] == 0x5a);
+    for (unsigned i = 0; i < 16; ++i)
+        CHECK(init->side_counter[i] == (i == 4 || i >= 8 ? 0 : 0x5a));
+
     gh_menu_state menu = {0};
     gh_game_scene_ui messages = {0};
     CHECK(!gh_scene_message_initialize_002aea18(&messages, &menu, &room, 1));
@@ -249,6 +300,7 @@ int main(int argc, char **argv) {
     CHECK(!gh_event_message_init_00008100(&tool_mode, &prefix, &config, &messages,
         0, 0xffff, NULL, NULL, &frontier, &relative));
     CHECK(!frontier && tool_mode.message_id == 0xffff && tool_mode.stage == 2);
+    CHECK(!gh_event_message_quit_000081b0(&tool_mode, &frontier, &relative) && !frontier);
 
     CHECK(!gh_event_audio_channel1_shutdown(&audio));
     gh_bgm_requests_destroy(bgm);
@@ -269,6 +321,6 @@ int main(int argc, char **argv) {
     CHECK(!gh_heap_used(heap) && !gh_heap_destroy(heap));
     gh_disc_close(disc);
     free(elf);
-    puts("PASS EV01 ScrLight/BGM/ScrLayer across 1209 frames, 156 real R100 scroll objects, Message 1000 create frontier");
+    puts("PASS EV01 side playback and Quit across 1209 frames, original WorldLight preset and both masks on 156 R100 scroll objects");
     return 0;
 }

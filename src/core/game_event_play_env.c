@@ -279,8 +279,15 @@ gh_game_event_status gh_event_play_00296c28(gh_event_play_state *play,
             play->quit_pending = (uint8_t)(end != 0);
         }
         if (play->quit_pending) {
-            *frontier = 0x296ef0;
-            return GH_EVENT_UNSUPPORTED;
+            int ignored = 0;
+            gh_game_event_status status = visit_component(play, b, 0x296ef0, &ignored, frontier);
+            if (status) return status;
+            event->fields.unknown07 = 0;
+            event->fields.state = 4;
+            event->fields.phase = 0;
+            event->fields.unknown06 = 0;
+            play->quit_pending = 0;
+            *original_done = 1;
         }
     }
     *frontier = 0;

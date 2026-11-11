@@ -24,6 +24,8 @@ struct gh_model_renderer{
  std::vector<std::unique_ptr<Material>> materials;
  std::unique_ptr<Material> scene_capture;
  std::vector<uint8_t> scene_capture_pixels;
+ Material display_texel;
+ uint32_t display_texel_rgba=0;
 };
 #define GPU(call) do{HRESULT model_gpu_hr=(call);if(FAILED(model_gpu_hr)){std::fprintf(stderr,"model GPU failure %d %08lx\n",__LINE__,(unsigned long)model_gpu_hr);return GH_MODEL_GPU_FAILURE;}}while(0)
 /* Authored bounded reference raster, independently tested against CPU math.
@@ -89,6 +91,7 @@ int3 select_color(uint selector,int3 source,int3 destination){return selector==0
   int4 source;
   if(((state.w>>16)&3)==3){source.rgb=min(int3(255,255,255),((tex.rgb*tint.rgb)>>7)+tint.a);source.a=tex.a;}
   else source=min(int4(255,255,255,255),(tex*tint)>>7);
+  if((state.w&0x02000000u)!=0)source.a=tint.a;
   bool alpha_ok=alpha_pass(uint(source.a));uint afail=(state.x>>12)&3;
   if(!alpha_ok&&afail==0)continue;bool writeColor=alpha_ok||afail!=2,writeZ=(alpha_ok||afail==2)&&state.y!=0;
   if(writeColor){
@@ -147,7 +150,7 @@ static gh_model_gpu_error structured(gh_model_renderer*r,const void*data,UINT st
  D3D11_SUBRESOURCE_DATA initial={data,0,0};GPU(r->device.p->CreateBuffer(&bd,&initial,buffer.out()));D3D11_SHADER_RESOURCE_VIEW_DESC vd={};vd.Format=DXGI_FORMAT_UNKNOWN;vd.ViewDimension=D3D11_SRV_DIMENSION_BUFFER;vd.Buffer.NumElements=count;GPU(r->device.p->CreateShaderResourceView(buffer.p,&vd,view.out()));return GH_MODEL_GPU_OK;
 }
 static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_state*s,const Material&m,
- const gh_static_gs_vertex*input,size_t count,const uint32_t*indices,size_t n,bool scene_warp){
+ const gh_static_gs_vertex*input,size_t count,const uint32_t*indices,size_t n,bool scene_warp,bool tcc0=false){
  if(!s||!input||!indices||!r->begun||r->thread!=GetCurrentThreadId()||count>1024||n>4096||!count||n%3)return GH_MODEL_GPU_ARGUMENT;
  const bool flat_strip = s->primitive == 0x54;
  unsigned prim=s->primitive&7;if((prim!=3&&prim!=4&&prim!=5)||(!(s->primitive&8)&&!flat_strip)||!(s->primitive&16)||(s->primitive&~0x7fu)||!s->native_float_reference||s->frame_psm||s->zbuf_psm!=58||s->dthe||s->colclamp!=1||s->clamp||s->fba>1||s->pabe>1||s->z_write>1||s->xy_offset_x16>65535||s->xy_offset_y16>65535||(s->texture_function!=0&&s->texture_function!=3))return GH_MODEL_GPU_UNSUPPORTED;
@@ -183,7 +186,7 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
   for(unsigned c=0;c<4;c++){if(v.rgba[c]>255)return GH_MODEL_GPU_UNSUPPORTED;out.rgba[c]=v.rgba[c];}
  }
  Owned<ID3D11Buffer> vb,ib;Owned<ID3D11ShaderResourceView> vv,iv;gh_model_gpu_error e=structured(r,vertices.data(),sizeof(Vertex),(UINT)count,vb,vv);if(e)return e;e=structured(r,indices,4,(UINT)n,ib,iv);if(e)return e;
- Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)|(s->frame_mask?0x01000000u:0u)},
+ Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)|(s->frame_mask?0x01000000u:0u)|(tcc0?0x02000000u:0u)},
   {(uint32_t)s->alpha&3,((uint32_t)s->alpha>>2)&3,((uint32_t)s->alpha>>4)&3,((uint32_t)s->alpha>>6)&3},{m.width,m.height,(uint32_t)((s->tex1>>5)&1),(uint32_t)(s->alpha>>32)&255}};
  r->context.p->UpdateSubresource(r->parameters.p,0,nullptr,&p,0,0);ID3D11Buffer*constant=r->parameters.p;ID3D11ShaderResourceView*views[]={m.view.p,vv.p,iv.p};ID3D11UnorderedAccessView*targets[]={r->color_target.p,r->depth_target.p};
  r->context.p->CSSetShader(r->shader.p,nullptr,0);r->context.p->CSSetConstantBuffers(0,1,&constant);r->context.p->CSSetShaderResources(0,3,views);r->context.p->CSSetUnorderedAccessViews(0,2,targets,nullptr);r->context.p->Dispatch((r->width+7)/8,(r->height+7)/8,1);
@@ -193,6 +196,32 @@ extern "C" gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer*r,const g
  const gh_static_gs_vertex*input,size_t count,const uint32_t*indices,size_t n){
  if(!r||r->thread!=GetCurrentThreadId()||!texture||texture>r->materials.size())return GH_MODEL_GPU_ARGUMENT;
  return draw_material(r,s,*r->materials[texture-1],input,count,indices,n,false);
+}
+extern "C" gh_model_gpu_error gh_model_renderer_draw_display_texel(gh_model_renderer *r,
+ const gh_model_draw_state *state,uint32_t rgba,const gh_static_gs_vertex *vertices,size_t count,
+ const uint32_t *indices,size_t index_count)
+{
+ if(!r||!state||r->thread!=GetCurrentThreadId()||!r->begun)return GH_MODEL_GPU_ARGUMENT;
+ if(state->texture_function)return GH_MODEL_GPU_UNSUPPORTED;
+ Material &texel=r->display_texel;
+ if(!texel.view.p){
+  D3D11_TEXTURE2D_DESC desc={};
+  desc.Width=desc.Height=desc.MipLevels=desc.ArraySize=desc.SampleDesc.Count=1;
+  desc.Format=DXGI_FORMAT_R8G8B8A8_UINT;
+  desc.Usage=D3D11_USAGE_DEFAULT;
+  desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+  D3D11_SUBRESOURCE_DATA data={&rgba,4,0};
+  Owned<ID3D11Texture2D> image;
+  GPU(r->device.p->CreateTexture2D(&desc,&data,image.out()));
+  GPU(r->device.p->CreateShaderResourceView(image.p,nullptr,texel.view.out()));
+  texel.image.p=image.p;
+  image.p=nullptr;
+  texel.width=texel.height=1;
+ }else if(r->display_texel_rgba!=rgba){
+  r->context.p->UpdateSubresource(texel.image.p,0,nullptr,&rgba,4,0);
+ }
+ r->display_texel_rgba=rgba;
+ return draw_material(r,state,texel,vertices,count,indices,index_count,false,true);
 }
 extern "C" gh_model_gpu_error gh_model_renderer_draw_scene_warp(gh_model_renderer *r,
  const gh_model_draw_state *state,const uint8_t *capture,size_t bytes,uint64_t texa,

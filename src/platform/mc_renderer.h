@@ -57,9 +57,13 @@ gh_id_error gh_mc_renderer_queue_fade(gh_mc_renderer *,const gh_fade_draw *,cons
  * discard (including Z), retained as ONE packet group, never NULL sentinel.
  * Positive alpha currently remains explicit15B880 frontier. */
 gh_id_error gh_mc_renderer_queue_cover(gh_mc_renderer *,const gh_child_cover_quad *,gh_ui_ot_tag *);
-/* Original EV01 glyph and shadow groups. Admit the current font mode when
- * both groups provably discard all their samples. Publish two tags or none. */
+/* Original glyph and shadow groups. Publish two tags or none. Groups whose
+ * samples all fail TEST have no color or depth writes. */
 gh_id_error gh_mc_renderer_queue_message(gh_mc_renderer *,const gh_scene_message_glyph_pair *,gh_ui_ot_tag tags[2]);
+/* Query the sorted groups before reading the world depth surface. Positive
+ * glyphs require a tracked depth prefix; discard-only groups need no readback.
+ * Order is a complete permutation, as required by the flush functions. */
+gh_id_error gh_mc_renderer_queued_message_depth(gh_mc_renderer *,const size_t *order,size_t count,int *required);
 /* Plural original packet groups: numeric digits each get their own tag,
  * genuine NULL texture returns count0, font/ordinary ID returns count1.
  * Capacity/memory failures leave queue, tags and count unchanged. */
@@ -75,7 +79,7 @@ gh_id_error gh_mc_renderer_flush_queued(gh_mc_renderer *,const size_t *order,siz
  * common depth surface and remains outside this bounded composition API. */
 gh_id_error gh_mc_renderer_flush_queued_on_background(gh_mc_renderer *,const size_t *order,size_t count,
  const uint8_t *rgba,size_t bytes);
-/* Only a terminal depth-tested Fade can read this same world OT depth.
+/* Positive Message updates and a terminal Fade can use this same world OT depth.
  * Intervening UI with untracked depth mutations invalidates the prefix. */
 gh_id_error gh_mc_renderer_queue_view_groups_at_z(gh_mc_renderer *,const gh_id_render_view *,const gh_id_draw_job *,
  gh_ui_ot_tag *,size_t capacity,size_t *count,uint16_t z);

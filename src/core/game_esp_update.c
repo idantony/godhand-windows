@@ -101,7 +101,7 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
     return stop(c,0x2f01b8,GH_EFFECT_UNSUPPORTED);
  if(!c->identity){c->identity=c;c->b=*b;c->slot=slot;c->serial=serial;c->stage=1;}
  if(c->stage==1){
-  if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector))||w(p+0x114))
+  if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&!gh_effect_event_part_is_bound(v.record,v.actor,v.selector))||w(p+0x114))
     return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);
   if(v.parent_emitter>=0&&v.actor&&(w(v.actor->bytes+0x250)&0x80000000u)){
    uint32_t f=0;gh_effect_status status=gh_effect_create_esp_pause_002fbe50(b->storage.effects,slot,serial,&f);

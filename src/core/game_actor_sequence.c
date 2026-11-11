@@ -8,8 +8,35 @@ static unsigned surface(unsigned value,const unsigned table[4],unsigned original
 static gh_actor_motion_status normalize(gh_actor_motion*s,uint32_t*f){uint8_t*p=s->b.model->root.bytes;gh_motion_sound_request*q=&s->pending_sound;unsigned program=(uint16_t)q->program,id=h(p+0x2fe);if(s->sequence_pending==1){if(id==0x100){if(program==0x4a||program==0x1e||program==0x46){static const unsigned walk[4]={0x48,0x55,0x52,0x4c},run[4]={0x4b,0x57,0x54,0x4e};q->program=(int16_t)surface(w(p+0x474),program==0x4a?run:walk,program);s->sequence_costume_override=(uint8_t)(program==0x4a?0x0b:0x09);s->sequence_pending=2;}else if(program==0x113||program==0x114||program==0x111||program==0x112||program==0x11d)return fail(f,0x3a5678,GH_ACTOR_MOTION_UNSUPPORTED);else s->sequence_pending=3;}else if(id>=0x200&&id<=0x2ff){if(program==0xaa||program==0xae){static const unsigned walk[4]={0xac,0xb9,0xb6,0xb0},run[4]={0xaf,0xbb,0xb8,0xb2};q->program=(int16_t)surface(w(p+0x474),program==0xaa?walk:run,program);if(local_footstep(w(p+0x564))){q->bank=1;q->program=(int16_t)((h(p+0x424)+0x11)&0xffff);}}else if(program==0x111||program==0x112||program==0x113||program==0x114||program==0x11d)return fail(f,0x3a5678,GH_ACTOR_MOTION_UNSUPPORTED);s->sequence_pending=3;}else s->sequence_pending=3;}
  if(s->sequence_pending==2){if(!s->b.save_binding_known)return fail(f,0x1fc0a8,GH_ACTOR_MOTION_UNSUPPORTED);unsigned costume=0;if(s->b.save.bytes){if(s->b.save.size<=0xae)return fail(f,0x1fc0a8,GH_ACTOR_MOTION_BOUNDS);costume=s->b.save.bytes[0xae];}if(costume==4||costume==5)q->program=(int16_t)(0x100|s->sequence_costume_override);s->sequence_pending=3;}
  return GH_ACTOR_MOTION_OK;}
-static gh_actor_motion_status sound(gh_actor_motion*s,uint32_t*f){uint8_t*p=s->b.model->root.bytes;gh_actor_motion_status e=normalize(s,f);if(e)return e;if(s->sequence_pending==3){if((s->sequence_source_flags&1)&&p[0x436]){s->sequence_pending=0;s->sequence_index++;return GH_ACTOR_MOTION_OK;}unsigned id=h(p+0x2fe),index=UINT32_MAX;gh_motion_sound_request*q=&s->pending_sound;if(id==0x350)index=1;else if(id==0x359)index=5;else if(id>=0x200&&id<=0x2ff&&w(p+0x564)==0x26a)index=16;if(index!=UINT32_MAX&&p[0x2b4]>index){if(index>=s->b.model->part_count||!s->b.model->parts[index].bytes)return fail(f,0x2c7fd0,GH_ACTOR_MOTION_BOUNDS);q->part=&s->b.model->parts[index];}if(id>=0x200&&id<=0x2ff&&q->bank!=0&&q->bank!=2)return fail(f,0x2cb418,GH_ACTOR_MOTION_UNSUPPORTED);if(s->sequence_variations)return fail(f,0x31cef8,GH_ACTOR_MOTION_UNSUPPORTED);s->sequence_pending=4;}
+static gh_actor_motion_status sound(gh_actor_motion*s,uint32_t*f){uint8_t*p=s->b.model->root.bytes;gh_actor_motion_status e=normalize(s,f);if(e)return e;if(s->sequence_pending==3){if((s->sequence_source_flags&1)&&p[0x436]){s->sequence_pending=0;s->sequence_index++;return GH_ACTOR_MOTION_OK;}unsigned id=h(p+0x2fe),index=UINT32_MAX;gh_motion_sound_request*q=&s->pending_sound;if(id==0x350)index=1;else if(id==0x359)index=5;else if(id>=0x200&&id<=0x2ff&&w(p+0x564)==0x26a)index=16;if(index!=UINT32_MAX&&p[0x2b4]>index){if(index>=s->b.model->part_count||!s->b.model->parts[index].bytes)return fail(f,0x2c7fd0,GH_ACTOR_MOTION_BOUNDS);q->part=&s->b.model->parts[index];}if(id>=0x200&&id<=0x2ff&&q->bank!=0&&q->bank!=2&&!s->b.sound)return fail(f,0x2cb418,GH_ACTOR_MOTION_UNSUPPORTED);if(s->sequence_variations)return fail(f,0x31cef8,GH_ACTOR_MOTION_UNSUPPORTED);s->sequence_pending=4;}
  if(s->sequence_pending==4){if(!s->b.sound)return fail(f,0x2cba48,GH_ACTOR_MOTION_UNSUPPORTED);uint32_t original_handle=0;e=s->b.sound(s->b.sound_context,&s->pending_sound,&original_handle,f);if(e){if(!*f)*f=0x2cba48;return e;}/* Original2C7FD0 ignores genuineoriginalhandle0(poolfull). */s->sequence_pending=0;s->sequence_index++;}return GH_ACTOR_MOTION_OK;}
+/* 2C8864..2C8974, with original 2C7E30 decoding an eight-byte
+ * record only for format 1. The selected masks are ORed into 3AC. */
+static gh_actor_motion_status sequence_interval_flags(gh_actor_motion *s,
+ const uint8_t *sequence,uint32_t *frontier)
+{
+ const unsigned count=h(sequence+0x12);
+ if(!count || sequence[0x1b]!=1)return GH_ACTOR_MOTION_OK;
+ const size_t offset=s->sequence_offset+h(sequence+0x10);
+ if(offset<s->sequence_offset || !span(s->b.resource_bytes,offset,(size_t)count*8))
+  return fail(frontier,0x2c7e30,GH_ACTOR_MOTION_BOUNDS);
+ uint8_t *actor=s->b.model->root.bytes;
+ const float time=rf(actor+0x430);
+ const float rate=rf(&s->sequence_rate_bits);
+ const float phase_rate=s->b.work->phase569==1?mul(rate,.5f):rate;
+ const float window=mul(mul(rf(actor+0x444),rf(actor+0x3a8)),phase_rate);
+ if(!isfinite(time)||!isfinite(window))return fail(frontier,0x2c7e30,GH_ACTOR_MOTION_UNSUPPORTED);
+ unsigned flags=0;
+ for(unsigned i=0;i<count;i++){
+  const uint8_t *record=s->b.resource+offset+(size_t)i*8;
+  const float first=(float)h(record),last=(float)h(record+2);
+  if((first<=time && time<=last) ||
+     (time<=last && add(last,window)<time) ||
+     (first<=time && time<add(first,window)))flags|=h(record+4);
+ }
+ sh(actor+0x3ac,flags);
+ return GH_ACTOR_MOTION_OK;
+}
 static gh_actor_motion_status body(gh_actor_motion*s,float rate,uint32_t*f){if(!s->sequence_valid)return s->sequence_stage?GH_ACTOR_MOTION_ARGUMENT:GH_ACTOR_MOTION_OK;const uint8_t*b=s->b.resource;size_t n=s->b.resource_bytes,o=s->sequence_offset;if(!span(n,o,0x20))return GH_ACTOR_MOTION_BOUNDS;const uint8_t*seq=b+o;uint8_t*p=s->b.model->root.bytes;if(memcmp(seq,"SEQ\0",4))return GH_ACTOR_MOTION_BOUNDS;uint32_t rate_bits;memcpy(&rate_bits,&rate,4);if(s->sequence_stage&&s->sequence_rate_bits!=rate_bits)return GH_ACTOR_MOTION_BUSY;
  if(!s->sequence_stage){if(w(p+0x418))return fail(f,0x2c7fd0,GH_ACTOR_MOTION_UNSUPPORTED);float time=rf(p+0x430),step=mul(mul(rf(p+0x444),rf(p+0x3a8)),s->b.work->phase569==1?mul(rate,.5f):rate);if(!isfinite(time)||!isfinite(step)||step<0)return fail(f,0x2c7fd0,GH_ACTOR_MOTION_UNSUPPORTED);s->sequence_time=time;s->sequence_window=step;s->sequence_rate_bits=rate_bits;
  /* Actual802C/8080 bug:418 is assigned only when ALREADYequal. OriginalNULL
@@ -17,7 +44,7 @@ static gh_actor_motion_status body(gh_actor_motion*s,float rate,uint32_t*f){if(!
  if(!(h(p+0x434)&0x20)){memset(p+0x410,0,8);unsigned count=h(seq+10);size_t table=o+h(seq+8);if(seq[0x19]==1&&count&&(table<o||!span(n,table,(size_t)count*8)))return GH_ACTOR_MOTION_BOUNDS;if(count)put(p+0x440,0x3f800000);for(unsigned i=0;i<count;i++){uint8_t zero[8]={0};const uint8_t*r=seq[0x19]==1?b+table+i*8:zero;if((float)h(r)<=time&&time<(float)h(r+2)){float speed=rf(r+4);if(!isfinite(speed))return fail(f,0x2c7d18,GH_ACTOR_MOTION_UNSUPPORTED);memcpy(p+0x440,&speed,4);}}}
  if(h(seq+14)){sh(p+0x3a0,0);sh(p+0x3a2,0);sh(p+0x3a4,0);}s->sequence_index=0;s->sequence_pending=0;s->sequence_stage=1;}
  if(s->sequence_stage==1){unsigned count=h(seq+14);size_t table=o+h(seq+12);if(seq[0x1a]==1&&count&&(table<o||!span(n,table,(size_t)count*12)))return GH_ACTOR_MOTION_BOUNDS;while(s->sequence_index<count){if(!s->sequence_pending){uint8_t zero[12]={0};const uint8_t*r=seq[0x1a]==1?b+table+s->sequence_index*12:zero;float first=(float)h(r);if(!(first<=s->sequence_time&&s->sequence_time<add(first,s->sequence_window)&&rf(p+0x41c)!=s->sequence_time)){s->sequence_index++;continue;}unsigned program=h(r+2)+(r[8]&0x30)*16;sh(p+0x3a0,h(r+2));sh(p+0x3a2,r[8]);sh(p+0x3a4,h(r+4));s->pending_sound=(gh_motion_sound_request){.model=s->b.model,.actor=&s->b.model->root,.bank=(int16_t)r[8],.program=(int16_t)program};s->sequence_source_flags=r[6];s->sequence_variations=(uint16_t)h(r+4);s->sequence_pending=1;}gh_actor_motion_status e=sound(s,f);if(e)return e;}sh(p+0x3ac,0);s->sequence_stage=2;}
- if(s->sequence_stage==2){if(h(seq+18))return fail(f,0x2c7e30,GH_ACTOR_MOTION_UNSUPPORTED);s->sequence_effect_gate=(uint8_t)(!(p[0x420]&1));s->sequence_stage=3;}
+ if(s->sequence_stage==2){gh_actor_motion_status status=sequence_interval_flags(s,seq,f);if(status)return status;s->sequence_effect_gate=(uint8_t)(!(p[0x420]&1));s->sequence_stage=3;}
  if(s->sequence_stage==3){if(s->sequence_effect_gate){if(h(seq+22))return fail(f,0x2c7f00,GH_ACTOR_MOTION_UNSUPPORTED);sh(p+0x3ae,0);}put(p+0x41c,w(p+0x430));put(p+0x3a8,w(p+0x440));s->sequence_stage=0;}
  return GH_ACTOR_MOTION_OK;}
 gh_actor_motion_status gh_actor_motion_sequence_002c7fd0(gh_actor_motion*s,float rate,gh_static_transform_policy policy,uint32_t*f){if(!s||!s->bound||!s->complete||!s->b.model||!s->b.work||!f)return GH_ACTOR_MOTION_ARGUMENT;*f=0;if(policy!=GH_STATIC_BINARY32_REFERENCE||!isfinite(rate)||rate<0)return fail(f,0x2c7fd0,GH_ACTOR_MOTION_UNSUPPORTED);fenv_t env;if(feholdexcept(&env))return GH_ACTOR_MOTION_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_ACTOR_MOTION_UNSUPPORTED;}gh_actor_motion_status e=body(s,rate,f);if(fesetenv(&env))return GH_ACTOR_MOTION_UNSUPPORTED;return e;}

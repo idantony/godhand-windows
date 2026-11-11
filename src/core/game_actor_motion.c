@@ -1,3 +1,4 @@
+#include "game_actor_axis_rotation.h"
 #include "game_actor_motion.h"
 #include "game_actor_motion_ik.h"
 #include "game_actor_inverse.h"
@@ -27,10 +28,55 @@ static gh_actor_motion_status reset_pose(gh_actor_motion*s){
  }
  return GH_ACTOR_MOTION_OK;
 }
-static gh_actor_motion_status capture_blend(gh_actor_motion*s){gh_actor_model*m=s->b.model;float captured[255][16];uint32_t pc=0;if(rd(m->root.bytes+0x154)&0x800)return fail(s,0x1501d0,0);const uint8_t*external=NULL;if(m->external_owner){if(gh_actor_model_external_parent_at(m,0,&external))return fail(s,0x1501d0,0);}else if(m->external_parent)return fail(s,0x1501d0,0);if(external&&(rd(external+0x154)&0x800))return fail(s,0x1501d0,0);
- for(unsigned i=0;i<m->part_count;i++){gh_actor_part*part=m->parts+i;if(!part->bytes)return GH_ACTOR_MOTION_ARGUMENT;/* Actual800 ancestor entails1501D0/special motion; never snapshot staleworld. */unsigned index=i;for(unsigned n=0;;n++){if(n>m->part_count)return GH_ACTOR_MOTION_BOUNDS;gh_actor_part*q=m->parts+index;if(rd(q->bytes+0x154)&0x800)return fail(s,0x1501d0,i);if(q->parent_is_model)break;if(q->parent<0||(unsigned)q->parent>=m->part_count)return GH_ACTOR_MOTION_BOUNDS;index=(unsigned)q->parent;}
- const uint8_t*parent=(i==0&&external)?external:part->parent_is_model?m->root.bytes:part->parent>=0&&(unsigned)part->parent<m->part_count?m->parts[part->parent].bytes:NULL;if(!parent)return GH_ACTOR_MOTION_BOUNDS;float pm[16],world[16],inverse[16];memcpy(pm,parent+0x80,64);memcpy(world,part->bytes+0x80,64);if(gh_actor_matrix_inverse_00147568(pm,inverse,GH_STATIC_BINARY32_REFERENCE,&pc)||gh_actor_matrix_product_00147548(inverse,world,captured[i],GH_STATIC_BINARY32_REFERENCE,&pc))return fail(s,pc?pc:0x147568,i);
- }for(unsigned i=0;i<m->part_count;i++)memcpy(m->parts[i].bytes+0x40,captured[i],64);m->blend_globals=s->b.ik_globals;return GH_ACTOR_MOTION_OK;}
+static gh_actor_motion_status capture_blend(gh_actor_motion*s)
+{
+ gh_actor_model*m=s->b.model;
+ const uint8_t*external=NULL;
+ if(m->external_owner){
+  if(gh_actor_model_external_parent_at(m,0,&external))return fail(s,0x1501d0,0);
+ }else if(m->external_parent)return fail(s,0x1501d0,0);
+ if(m->external_parts)return fail(s,0x1501d0,0);
+ for(;s->release_index<m->part_count;s->release_index++){
+  unsigned i=(unsigned)s->release_index,index=i;
+  gh_actor_part*part=&m->parts[i];
+  if(!part->bytes)return GH_ACTOR_MOTION_ARGUMENT;
+  int affected=0;
+  for(unsigned n=0;;n++){
+   if(n>m->part_count)return GH_ACTOR_MOTION_BOUNDS;
+   gh_actor_part*q=&m->parts[index];
+   if(!q->bytes)return GH_ACTOR_MOTION_ARGUMENT;
+   if(rd(q->bytes+0x154)&0x800u){affected=1;break;}
+   if(!index&&external){affected=!!(rd(external+0x154)&0x800u);break;}
+   if(q->parent_is_model){affected=!!(rd(m->root.bytes+0x154)&0x800u);break;}
+   if(q->parent<0||(unsigned)q->parent>=m->part_count)return GH_ACTOR_MOTION_BOUNDS;
+   index=(unsigned)q->parent;
+  }
+  const uint8_t*parent=(!i&&external)?external:part->parent_is_model?m->root.bytes:
+   part->parent>=0&&(unsigned)part->parent<m->part_count?m->parts[part->parent].bytes:NULL;
+  if(!parent)return GH_ACTOR_MOTION_BOUNDS;
+  uint32_t pc=0;
+  if(affected){
+   uint32_t flags=rd(part->bytes+0x154);
+   wr(part->bytes+0x154,flags&~0x800u);
+   if(gh_actor_part_world_001501d0(part,parent,rd(m->root.bytes+0x250),
+      GH_STATIC_BINARY32_REFERENCE,&pc)){
+    wr(part->bytes+0x154,flags);
+    return fail(s,pc?pc:0x1501d0,i);
+   }
+   /* 157840 sets this bit even when only the ancestor originally had it. */
+   wr(part->bytes+0x154,flags|0x800u);
+  }
+  float pm[16],world[16],inverse[16],captured[16];
+  memcpy(pm,parent+0x80,64);memcpy(world,part->bytes+0x80,64);
+  if(gh_actor_matrix_inverse_00147568(pm,inverse,GH_STATIC_BINARY32_REFERENCE,&pc)||
+     gh_actor_matrix_product_00147548(inverse,world,captured,GH_STATIC_BINARY32_REFERENCE,&pc))
+   return fail(s,pc?pc:0x147568,i);
+  memcpy(part->bytes+0x40,captured,64);
+ }
+ s->release_index=0;
+ m->blend_globals=s->b.ik_globals;
+ return GH_ACTOR_MOTION_OK;
+}
 static gh_actor_motion_status begin_motion(gh_actor_motion*s,const gh_actor_motion_bindings*b,size_t motion,size_t sequence,uint32_t start_frame_bits,uint32_t blend_frames,uint16_t flags,int direct_initial){
  if(!s||!b||!b->model||!b->model->parts_ready||!b->model->root.bytes||b->model->root.size<0x5ac||b->model->part_count>255||!b->resource||!b->work)return GH_ACTOR_MOTION_ARGUMENT;
  uint8_t*p=b->model->root.bytes;

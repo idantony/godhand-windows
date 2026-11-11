@@ -1,3 +1,4 @@
+#include "game_actor_axis_rotation.h"
 #include "game_actor_finish_model.h"
 #include "game_actor_matrix.h"
 #include "game_actor_external_parent.h"
@@ -47,11 +48,8 @@ gh_actor_model_status gh_actor_finish_model_resume_0014a038(gh_actor_finish_mode
   }
   if(c->stage==2)c->stage=3;
   if(c->stage==3){
-  if((flags&0x40004)==0x40000){e=fail(m,0x1501d0,i,GH_ACTOR_MODEL_UNSUPPORTED);break;}
-  float pm[16],local[16],world[16];memcpy(pm,parent+0x80,64);memcpy(local,part->bytes,64);
-  if(gh_actor_matrix_product_00147548(pm,local,world,policy,&frontier)){e=fail(m,frontier?frontier:0x1501d0,i,GH_ACTOR_MODEL_UNSUPPORTED);break;}memcpy(part->bytes+0x80,world,64);c->stage=4;
+  if(gh_actor_part_world_001501d0(part,parent,flags,policy,&frontier)){e=fail(m,frontier?frontier:0x1501d0,i,GH_ACTOR_MODEL_UNSUPPORTED);break;}c->stage=4;
   }
-  if(pf&0x800){e=fail(m,0x159fc8,i,GH_ACTOR_MODEL_UNSUPPORTED);break;}
   c->part_index++;c->stage=1;
  }
  if(!e)c->stage=5;

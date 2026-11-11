@@ -60,7 +60,31 @@ static void verify_event_texture(const uint8_t *raw,size_t bytes,gh_stage_textur
  C(!gh_stage_tm3_resolve(manager,texture.bytes,texture.size,0,0,&again)&&again==material);
  free(seen);free(expected);
 }
-int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t room_bytes,core_bytes,el0d_bytes;unsigned char*raw=load(d,"st1/r100.dat",&room_bytes),*core=load(d,"etc/core.dat",&core_bytes),*el0d=load(d,"el/el0d.dat",&el0d_bytes);gh_disc_close(d);
+static void verify_el01_direct(const uint8_t *raw,size_t bytes,gh_stage_textures *manager){
+ gh_bundle el01;
+ gh_bundle_entry texture;
+ gh_tm3_bundle tm3;
+ gh_tm3_picture picture;
+ C(!gh_bundle_open(raw,bytes,&el01)&&!gh_bundle_find(&el01,"TM3",0,&texture));
+ C(!gh_tm3_open(texture.bytes,texture.size,&tm3)&&tm3.count==3&&!gh_tm3_member(&tm3,0,&picture));
+ C(picture.width==64&&picture.height==64&&!picture.transfer_kind&&picture.tex0==UINT64_C(0x199308000));
+ C(picture.image_bytes==4096&&picture.clut_bytes==1024);
+ uint8_t expected[64*64*4];
+ unsigned rearranged=0;
+ for(size_t i=0;i<4096;i++){
+  unsigned index=picture.image[i];
+  unsigned palette=index%8+16*((index/8)%2)+8*((index/16)%2)+32*(index/32);
+  rearranged+=palette!=index;
+  memcpy(expected+i*4,picture.clut+palette*4,4);
+ }
+ C(rearranged);
+ const gh_stage_material *material,*again;
+ C(!gh_stage_tm3_resolve(manager,texture.bytes,texture.size,0,1,&material));
+ C(material->source==picture.source&&material->cache_pool==1&&material->psm==19&&
+   material->rgba_bytes==sizeof(expected)&&!memcmp(material->rgba_gs,expected,sizeof(expected)));
+ C(!gh_stage_tm3_resolve(manager,texture.bytes,texture.size,0,1,&again)&&again==material);
+}
+int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t room_bytes,core_bytes,el0d_bytes,el01_bytes;unsigned char*raw=load(d,"st1/r100.dat",&room_bytes),*core=load(d,"etc/core.dat",&core_bytes),*el0d=load(d,"el/el0d.dat",&el0d_bytes);unsigned char*el01=load(d,"el/el01.dat",&el01_bytes);gh_disc_close(d);
  gh_bundle room,scp;gh_bundle_entry entry;C(!gh_bundle_open(raw,room_bytes,&room)&&!gh_bundle_find(&room,"SCP",0,&entry)&&!gh_bundle_open(entry.bytes,entry.size,&scp)&&!gh_bundle_find(&scp,"TM3",0,&entry));gh_tm3_bundle tm3;C(!gh_tm3_open(entry.bytes,entry.size,&tm3)&&tm3.count==69);
  unsigned normal=0,fast=0;size_t pixels=0;uint64_t hash=UINT64_C(14695981039346656037);
  for(unsigned i=0;i<69;i++){gh_tm3_picture p;C(!gh_tm3_member(&tm3,i,&p));size_t bytes=(size_t)p.width*p.height*4;unsigned char*rgba=malloc(bytes),*expected=malloc(bytes);C(rgba&&expected&&!gh_tm3_rgba_gs(&p,rgba,bytes));oracle(&p,expected);C(!memcmp(rgba,expected,bytes));for(size_t j=0;j<bytes;j++)hash=(hash^rgba[j])*UINT64_C(1099511628211);pixels+=bytes/4;if(p.transfer_kind==6)fast++;else normal++;C(gh_tm3_rgba_gs(&p,rgba,bytes-1)==GH_TM3_CAPACITY);free(expected);free(rgba);}
@@ -69,8 +93,9 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  C(gh_tm3_member(&tm3,69,&p)==GH_TM3_BOUNDS);unsigned char*flag=(unsigned char*)tm3.bytes+5;unsigned char saved=*flag;*flag=0xff;gh_tm3_bundle bad;C(gh_tm3_open(tm3.bytes,tm3.size,&bad)==GH_TM3_BOUNDS);*flag=saved;
  gh_stage_textures*manager;C(!gh_stage_textures_create(&manager)&&!gh_stage_core_textures(manager,core,core_bytes));gh_stage_texture_cursor before,after;gh_stage_channel global;uint32_t pixel_before,pixel_after;C(!gh_stage_texture_cursor_get(manager,&before)&&!gh_stage_texture_channel(manager,0,&global)&&!gh_stage_vram_ct32(manager,global.base,1,0,0,&pixel_before));
  verify_event_texture(el0d,el0d_bytes,manager);
+ verify_el01_direct(el01,el01_bytes,manager);
  const gh_stage_material*a,*b,*c;C(!gh_stage_tm3_resolve(manager,tm3.bytes,tm3.size,37,1,&a)&&a->width==32&&a->height==32&&a->record_mode==1&&a->cache_pool==1);C(!gh_stage_tm3_resolve(manager,tm3.bytes,tm3.size,37,1,&b)&&a==b);C(!gh_stage_tm3_resolve(manager,tm3.bytes,tm3.size,37,3,&c)&&c!=a&&c->cache_pool==0&&c->cache_id>a->cache_id);C(!gh_stage_tm3_resolve(manager,tm3.bytes,tm3.size,37,0,&b)&&b==c);uint64_t last=c->cache_id;unsigned char*copy=malloc(tm3.size);C(copy);memcpy(copy,tm3.bytes,tm3.size);const gh_stage_material*outside;C(!gh_stage_tm3_resolve(manager,copy,tm3.size,37,1,&outside));uint64_t outside_id=outside->cache_id;last=outside_id;
  C(gh_stage_texture_forget_source_range(manager,(void*)(UINTPTR_MAX-2),8)==GH_STAGE_BOUNDS);C(!gh_stage_texture_forget_source_range(manager,tm3.bytes,tm3.size));C(!gh_stage_texture_cursor_get(manager,&after)&&!memcmp(&before,&after,sizeof(before))&&!gh_stage_texture_channel(manager,0,&global)&&!gh_stage_vram_ct32(manager,global.base,1,0,0,&pixel_after)&&pixel_before==pixel_after);
  C(!gh_stage_tm3_resolve(manager,copy,tm3.size,37,1,&b)&&b==outside&&b->cache_id==outside_id);C(!gh_stage_tm3_resolve(manager,tm3.bytes,tm3.size,37,1,&a)&&a->cache_id>last);C(gh_stage_tm3_resolve(manager,tm3.bytes,tm3.size,37,4,&b)==GH_STAGE_UNSUPPORTED&&!b);
- C(!gh_stage_texture_forget_source_range(manager,core,core_bytes)&&gh_stage_texture_channel(manager,0,&global)==GH_STAGE_UNAVAILABLE);C(!gh_stage_texture_cursor_get(manager,&after)&&!memcmp(&before,&after,sizeof(before)));gh_stage_textures_destroy(manager);free(copy);free(el0d);free(core);free(raw);printf("PASS actualR100TM3 69 materials(%u direct/%u CT32-fast),%zu pixels independenttransfer/sampleinverse RGBA-GS hash%016llx; EL0D PSMT8 all 16384 pixels; rawalpha129 retained, modecacheidentity/rangeforget/coreVRAM/lifecycle\n",normal,fast,pixels,(unsigned long long)hash);return 0;
+ C(!gh_stage_texture_forget_source_range(manager,core,core_bytes)&&gh_stage_texture_channel(manager,0,&global)==GH_STAGE_UNAVAILABLE);C(!gh_stage_texture_cursor_get(manager,&after)&&!memcmp(&before,&after,sizeof(before)));gh_stage_textures_destroy(manager);free(copy);free(el01);free(el0d);free(core);free(raw);printf("PASS actualR100TM3 69 materials(%u direct/%u CT32-fast),%zu pixels independenttransfer/sampleinverse RGBA-GS hash%016llx; EL0D fast PSMT8 16384 pixels and EL01 direct PSMT8 4096 pixels; rawalpha129 retained, modecacheidentity/rangeforget/coreVRAM/lifecycle\n",normal,fast,pixels,(unsigned long long)hash);return 0;
 }

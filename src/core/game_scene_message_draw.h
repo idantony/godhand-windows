@@ -32,6 +32,13 @@ gh_scene_ui_status gh_scene_message_render_002af028(gh_game_scene_ui *, const gh
 gh_scene_ui_status gh_scene_message_glyph_discarded(const gh_id_text_glyph *,
     const uint8_t *atlas_rgba, size_t atlas_bytes, int *discarded);
 
+/* Original font sprite on a 512x448 CT32 surface using the native separable
+ * 4-bit linear sampler. Optional depth is the writable main Z16S plane.
+ * The original depth test always passes, so existing depth is not sampled. */
+gh_scene_ui_status gh_scene_message_glyph_blit(const gh_id_text_glyph *,
+    const uint8_t *atlas_rgba, size_t atlas_bytes, uint8_t *rgba, size_t rgba_bytes,
+    uint32_t *depth, size_t depth_count);
+
 #ifdef __cplusplus
 }
 #endif

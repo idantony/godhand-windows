@@ -37,6 +37,10 @@
 #include "../core/game_scene_message_create.h"
 #include "../core/game_motion_camera.h"
 #include "../core/game_event_play_env.h"
+#include "../core/game_event_quit.h"
+#include "../core/game_event_release_stage.h"
+#include "../core/game_scene_finish.h"
+#include "../core/game_event_actor_release.h"
 #include "../core/game_event_audio.h"
 #include "../core/game_event_link.h"
 #include "../core/game_hitarea_objects.h"
@@ -167,11 +171,20 @@ struct gh_startup_host {
     gh_event_actor_play event_actor_play;
     gh_actor_motion event_actor_motions[9];
     gh_event_effect_play event_effect_play;
+    gh_event_effect_quit event_effect_quit;
     gh_event_light_filter event_light_filter;
     gh_event_additional_light event_additional_light;
     gh_event_scr_light event_scr_light;
     gh_event_message_play event_message_play;
     gh_event_play_state event_play;
+    gh_event_quit event_quit;
+    gh_event_camera_quit event_camera_quit;
+    gh_event_actor_release event_actor_release;
+    gh_event_release_stage event_release;
+    uint8_t event_release_module_unloaded;
+    /* ONE recovered native 5CAE40 screen-state word. No restored reader
+     * consumes its cold value; original Event release writes15 explicitly. */
+    uint16_t screen_state_5cae40;
     gh_event_audio_channel1 event_audio;
     int event_link_relative;
     gh_display_state display;
@@ -308,7 +321,8 @@ static gh_game_actor_render_provider actor_render_provider(gh_startup_host *h)
 {
     const gh_game_pl_camera *camera=h->game_init.active_camera==&h->event_camera.identity?&h->event_camera.camera:NULL;
     return (gh_game_actor_render_provider){.depth_shift=&h->object_step.depth_shift,.shadow_templates=&h->shadow_templates,
-        .shadow_emit=h->shadow_emit,.shadow_context=h->shadow_context,.actor_emit=h->actor_emit,.actor_context=h->actor_context,.camera=camera};
+        .shadow_emit=h->shadow_emit,.shadow_context=h->shadow_context,.actor_emit=h->actor_emit,.actor_context=h->actor_context,.camera=camera,
+        .marker_emit=h->effect_emit,.marker_context=h->effect_context};
 }
 static gh_object_step_status move_actor_invoke(void *context,const gh_object_move_request*r,const gh_boot_work*work,uint32_t*frontier)
 {
@@ -533,6 +547,24 @@ static gh_effect_status event_effect_actor(void *context, uint16_t kind, uint8_t
     return GH_EFFECT_OK;
 }
 
+static gh_effects_frame_bindings effects_frame_bindings(gh_startup_host *h,
+    const gh_game_services_scene_view *scene)
+{
+    gh_game_pl_camera *camera = h->game_init.active_camera == &h->event_camera.identity ?
+        &h->event_camera.camera : scene->pl_camera;
+    return (gh_effects_frame_bindings){
+        .storage = {.effects = scene->effects, .esp = scene->scene_buffer_a,
+            .esp_bytes = scene->scene_buffer_a_size, .emitters = scene->scene_buffer_b,
+            .emitter_bytes = scene->scene_buffer_b_size,
+            .actor_match = gh_effect_create_actor_match, .context = scene->effects},
+        .work = &h->work, .init = &h->game_init, .current_player = &scene->title_player->view,
+        .globals = &h->effects_globals, .profile = &h->scene_aux, .clock = scene_profile_clock,
+        .clock_context = h, .atan_coeff = h->camera_envelope.atan_coeff,
+        .policy = GH_STATIC_BINARY32_REFERENCE, .actors = scene->scene_tables,
+        .model_effect = scene->model_effect, .camera = camera, .display = &h->display
+    };
+}
+
 static gh_game_event_status event_play_visit(void *context, uint32_t site, int *end,
     uint32_t *frontier, int *relative)
 {
@@ -546,6 +578,49 @@ static gh_game_event_status event_play_visit(void *context, uint32_t site, int *
     *frontier = 0;
     *relative = 1;
     switch (site) {
+    case 0x296ef0: {
+        const gh_event_quit_bindings bindings = {
+            .event = &host->event, .components = components, .work = &host->work,
+            .visit = event_play_visit, .context = host
+        };
+        return gh_event_quit_00296ef0(&host->event_quit, &bindings, frontier, relative);
+    }
+    case 0x296f3c: {
+        const gh_event_camera_quit_bindings bindings = {
+            .components = components, .data = data, .config = &host->event_config,
+            .init = &host->game_init, .motion = &host->event_camera,
+            .player_camera = scene.pl_camera, .work = &host->work,
+            .display = {&host->display.screen_width, &host->display.screen_height_bits,
+                &host->display.pixel_aspect_bits, &host->display.initialized,
+                GH_CAMERA_NATIVE_BINARY32_REFERENCE}
+        };
+        gh_game_event_status status = gh_event_camera_quit_play_00004d50(
+            &host->event_camera_quit, &bindings, frontier);
+        *relative = host->event_camera_quit.frontier_relative;
+        return status;
+    }
+    case 0x296f48: {
+        const gh_event_actor_release_bindings bindings = {
+            .creation = &host->event_actor_create, .roster = &host->event_actor_roster,
+            .extra = &host->event_actor_extra, .play = &host->event_actor_play,
+            .sound = &host->sound_control, .effects = scene.effects
+        };
+        return gh_event_actor_quit_00001588(&host->event_actor_release, &bindings, frontier);
+    }
+    case 0x296f68: {
+        gh_effects_frame_bindings bindings = effects_frame_bindings(host, &scene);
+        *relative = 0;
+        return gh_event_effect_quit_00005478(&host->event_effect_quit,
+            &host->event_effect_play, &bindings, frontier);
+    }
+    case 0x296f8c:
+        return gh_event_filter_quit_000075a0(&host->event_light_filter, &host->event_config, frontier);
+    case 0x296fa4:
+        return gh_event_se_quit_play_00009cb8(&host->event_link, &host->event_audio, frontier, relative);
+    case 0x296fb0:
+        return gh_event_scr_layer_quit_00008af0(data, scene.pools, scene.meshes, frontier, relative);
+    case 0x296fbc:
+        return gh_event_message_quit_000081b0(&host->event_message_play, frontier, relative);
     case 0x296d08:
         if (!host->event_camera.camera.constructed) {
             gh_camera_status status = gh_game_motion_camera_construct_00138be8(&host->event_camera,
@@ -579,6 +654,7 @@ static gh_game_event_status event_play_visit(void *context, uint32_t site, int *
     case 0x296d2c:
         return gh_event_effect_init_00005000(&host->event_effect_play, data, &host->event_config,
             &host->work, scene.effects, frontier);
+    case 0x296f74:
     case 0x296d38: {
         const void *parts[255];
         gh_light_player_parts player = {0};
@@ -589,6 +665,9 @@ static gh_game_event_status event_play_visit(void *context, uint32_t site, int *
             for (unsigned i = 0; i < model->part_count; ++i) parts[i] = model->parts[i].bytes;
             player = (gh_light_player_parts){.owner = model->root.bytes, .parts = parts, .count = model->part_count};
         }
+        if (site == 0x296f74)
+            return gh_event_scr_light_quit_00009728(&host->event_scr_light, &host->event_config,
+                &player, frontier, relative);
         return gh_event_scr_light_init_00008b20(&host->event_scr_light, data, scene.world_light, &host->game_init,
             save, &player, frontier, relative);
     }
@@ -713,6 +792,125 @@ static int event_play_stage(void *context, gh_game_event *event, int *done)
     return status;
 }
 
+static gh_game_event_status event_release_leaf(void *context,uint32_t site,uint32_t *frontier,int *relative)
+{
+    gh_startup_host *h=context;
+    gh_game_services_scene_view scene;
+    if(gh_game_services_get_scene_view(h->services,&scene))return GH_EVENT_ARGUMENT;
+    *frontier=0;
+    *relative=0;
+    switch(site){
+    case 0x2970dc:
+        return event_loading_menu(h,frontier);
+    case 0x297158: {
+        const gh_title_player_view *player=&scene.title_player->view;
+        if(!scene.title_player->ready||!player->bytes||player->size<0x6ac){*frontier=0x2db6b0;return GH_EVENT_ARGUMENT;}
+        if(!scene.work5f8){*frontier=0x2db6c0;return GH_EVENT_UNSUPPORTED;}
+        const gh_game_player_child *child=*scene.work5f8;
+        if(child&&(!child->object.ready||!child->object.view.bytes||child->object.view.size<0x254)){
+            *frontier=0x2db6c0;return GH_EVENT_ARGUMENT;
+        }
+        const gh_event_weapon_slot *slot=scene.event_weapon;
+        if(!slot||!slot->known){*frontier=0x2971b4;return GH_EVENT_UNSUPPORTED;}
+        const gh_title_player_view *weapon=slot->current?slot->current->weapon:NULL;
+        uint32_t token;
+        memcpy(&token,player->bytes+0x6a8,4);
+        if((!weapon&&token)||(slot->current&&(!weapon||!weapon->bytes||weapon->size<0x254))){
+            *frontier=0x2971b4;return GH_EVENT_UNSUPPORTED;
+        }
+        uint32_t flags;
+        memcpy(&flags,h->save_bytes+0x14,4);
+        flags&=~0x40000000u;
+        memcpy(h->save_bytes+0x14,&flags,4);
+        const gh_title_player_view *owners[]={player,child?&child->object.view:NULL,weapon};
+        for(unsigned i=0;i<sizeof(owners)/sizeof(*owners);++i)if(owners[i]){
+            uint8_t *p=owners[i]->bytes+0x250;
+            memcpy(&flags,p,4);
+            flags&=~0x8002u;
+            memcpy(p,&flags,4);
+        }
+        return GH_EVENT_OK;
+    }
+    case 0x2971f4:
+        return gh_game_services_event_return_0031c7e0(h->services,&h->event,frontier);
+    case 0x297244: {
+        gh_event_component_view env;
+        *frontier=0x65c8;
+        *relative=1;
+        if(gh_event_component_at(&h->event_link.components,0,&env)||env.original_offset!=0xd200||env.size!=0x44)
+            return GH_EVENT_ARGUMENT;
+        uint32_t mode,flags;
+        memcpy(&mode,env.bytes+0xc,4);
+        memcpy(&flags,env.bytes+0x28,4);
+        if((mode<1||mode>3)&&(flags&4)&&!(h->event_config.flags&0x68u))return GH_EVENT_UNSUPPORTED;
+        return GH_EVENT_OK;
+    }
+    case 0x29724c:
+        /* REL data stay live until all component Quit calls have succeeded. */
+        if(!h->event_quit.completed||h->event_timing.allocation.pointer||
+            !scene.effects||scene.effects->event_registered_41c){*frontier=0x2be670;return GH_EVENT_UNSUPPORTED;}
+        if(h->event_resource.allocation.pointer){
+            const void *source = h->event_resource.allocation.pointer;
+            size_t bytes = h->event_resource.allocated_bytes;
+            int borrowed;
+            *frontier = 0x30ee08;
+            if(gh_effect_create_source_has_live_refs(scene.effects,source,bytes,&borrowed))
+                return GH_EVENT_CALLEE;
+            if(borrowed)return GH_EVENT_UNSUPPORTED;
+            if(gh_stage_texture_forget_source_range(h->game_stage.textures,source,bytes))return GH_EVENT_CALLEE;
+        }
+        if(!h->event_release_module_unloaded){
+            gh_game_event_status status=gh_game_event_module_abort(&h->event_module);
+            if(status){*frontier=h->event_module.frontier;return status;}
+            memset(&h->event_link,0,sizeof(h->event_link));
+            h->event_release_module_unloaded=1;
+        }
+        if(h->event_resource.allocation.pointer){
+            gh_game_event_status status=gh_game_event_resource_abort(&h->event_resource);
+            if(status){*frontier=h->event_resource.frontier;return status;}
+        }
+        memset(&h->event_data,0,sizeof(h->event_data));
+        h->event_effect_play = (gh_event_effect_play){0};
+        h->event_effect_quit = (gh_event_effect_quit){0};
+        h->event_light_filter = (gh_event_light_filter){0};
+        h->event_scr_light = (gh_event_scr_light){0};
+        h->event_message_play = (gh_event_message_play){0};
+        h->event.fields.resource_token=0;
+        h->event.fields.flags&=~0x80u;
+        return GH_EVENT_OK;
+    case 0x2972b0: {
+        int detail;
+        gh_game_services_status status = gh_game_services_enemy_set_all_00294ca0(h->services,frontier,&detail);
+        if(!status)return GH_EVENT_OK;
+        return status == GH_SERVICES_FRONTIER ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+    }
+    case 0x297358:
+        if(!scene.system_menu_enabled)return GH_EVENT_UNSUPPORTED;
+        gh_scene_system_menu_enable_002b65f0(scene.system_menu_enabled);
+        return GH_EVENT_OK;
+    default:
+        /* Preserve the frontier for any later unrecovered release operation. */
+        return GH_EVENT_UNSUPPORTED;
+    }
+}
+
+static int event_release_stage(void *context,gh_game_event *event,int *done)
+{
+    gh_startup_host *h=context;
+    *done=0;
+    if(event!=&h->event)return GH_EVENT_ARGUMENT;
+    gh_game_services_scene_view scene;
+    if(gh_game_services_get_scene_view(h->services,&scene))return GH_EVENT_ARGUMENT;
+    const gh_event_release_bindings bindings={event,&h->work,&h->event_config,&h->event_actor_release,
+        &h->event_timing,&h->fade,&h->display,event_release_leaf,h,
+        scene.world_light?scene.world_light->scalar:NULL,&h->screen_state_5cae40};
+    uint32_t frontier;
+    int relative;
+    gh_game_event_status status=gh_event_release_00297038(&h->event_release,&bindings,&frontier,&relative);
+    if(status){event->frontier=frontier;h->event_link_relative=(uint8_t)relative;}
+    return status;
+}
+
 static gh_game_event_status event_abort_resources(gh_startup_host *h)
 {
     gh_game_event_status status=gh_event_timing_abort(&h->event_timing);
@@ -721,6 +919,16 @@ static gh_game_event_status event_abort_resources(gh_startup_host *h)
     if(status)return status;
     memset(&h->event_data, 0, sizeof(h->event_data));
     memset(&h->event_play, 0, sizeof(h->event_play));
+    h->event_effect_play = (gh_event_effect_play){0};
+    h->event_effect_quit = (gh_event_effect_quit){0};
+    h->event_light_filter = (gh_event_light_filter){0};
+    h->event_scr_light = (gh_event_scr_light){0};
+    h->event_message_play = (gh_event_message_play){0};
+    h->event_quit = (gh_event_quit){0};
+    h->event_camera_quit = (gh_event_camera_quit){0};
+    h->event_actor_release = (gh_event_actor_release){0};
+    h->event_release = (gh_event_release_stage){0};
+    h->event_release_module_unloaded=0;
     /* Link symbol names borrow the module allocation. Drop those views first. */
     memset(&h->event_link,0,sizeof(h->event_link));
     return gh_game_event_module_abort(&h->event_module);
@@ -873,11 +1081,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2bf2d0)aux=gh_scene_cursor_step_002bf2d0(&h->scene_aux,&h->work,s.prepare->fields);
     else if(address==0x30f228){
-        gh_effects_frame_bindings b={.storage={.effects=s.effects,.esp=s.scene_buffer_a,.esp_bytes=s.scene_buffer_a_size,
-            .emitters=s.scene_buffer_b,.emitter_bytes=s.scene_buffer_b_size,.actor_match=gh_effect_create_actor_match,.context=s.effects},
-            .work=&h->work,.init=&h->game_init,.current_player=&s.title_player->view,.globals=&h->effects_globals,
-            .profile=&h->scene_aux,.clock=scene_profile_clock,.clock_context=h,.atan_coeff=h->camera_envelope.atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE,.actors=s.scene_tables,
-            .model_effect=s.model_effect,.camera=camera,.display=&h->display};
+        gh_effects_frame_bindings b = effects_frame_bindings(h, &s);
         gh_effect_status e=gh_game_effects_frame_update_0030f228(&h->effects_frame,&b);
         if(e&&frontier)*frontier=h->effects_frame.frontier?h->effects_frame.frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -938,6 +1142,7 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(!event_status)event_status=gh_game_event_set_stage(&h->event,1,event_clear_stage,h);
     if(!event_status)event_status=gh_game_event_set_stage(&h->event,2,event_create_stage,h);
     if(!event_status)event_status=gh_game_event_set_stage(&h->event,3,event_play_stage,h);
+    if(!event_status)event_status=gh_game_event_set_stage(&h->event,4,event_release_stage,h);
     gh_display_status display_status=gh_display_state_from_elf(&h->display,elf,(size_t)bytes);
     if(!display_status)display_status=gh_display_static_initialize_002a48a8(&h->display,1,0xffff);
     gh_render_step_status env_status=gh_render_draw_env_from_elf(&h->draw_env,elf,(size_t)bytes);

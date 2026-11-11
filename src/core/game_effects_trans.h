@@ -22,7 +22,7 @@ typedef struct {gh_ui_order_group order;uint32_t original_callee,slot,serial;
  uint8_t writes_tex0,inherited_sampler,quad_count;
  uint8_t restores_scene_target,texture_flush_after;uint32_t restore_frame_mask;uint64_t restore_zbuf;
  gh_effect_trans_quad quads[25];
- uint8_t writes_clamp,writes_texa;uint64_t clamp,texa;const gh_stage_material *material;} gh_effect_trans_packet;
+ uint8_t writes_clamp,writes_texa,writes_tex1,inherits_scene_target;uint64_t clamp,texa,tex1;const gh_stage_material *material;} gh_effect_trans_packet;
 typedef gh_effect_status (*gh_effect_trans_emit)(void *,const gh_effect_trans_packet *);
 typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;gh_effects_frame_globals *globals;const gh_display_state *display;
  gh_static_transform_policy policy;gh_frame_numeric_policy cvt_policy;

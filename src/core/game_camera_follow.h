@@ -18,6 +18,14 @@ typedef struct {gh_game_pl_camera *camera;const gh_title_player_view *player;
  * 3F0 remain zero; the typed borrowed identity above replaces those links.
  * Other explicit target/copy-active-camera modes are outside this API. */
 gh_camera_status gh_game_camera_bind_default_00139db8(gh_camera_follow *,gh_game_pl_camera *,const gh_game_init_state *,const gh_title_player_view *,const gh_boot_work *,const void *elf,size_t elf_bytes,uint32_t *frontier);
+/* Original 13B9B8(0) on the already-bound ordinary player camera.
+ * Retains its live offsets and target identity. The caller owns 138D40. */
+gh_camera_status gh_game_camera_reset_pose_0013b9b8(gh_camera_follow *,
+ const gh_game_init_state *,uint32_t *frontier);
+/* Original 13B9B8(0) on the already-bound ordinary player camera.
+ * Retains its live offsets and target identity. The caller owns 138D40. */
+gh_camera_status gh_game_camera_reset_pose_0013b9b8(gh_camera_follow *,
+ const gh_game_init_state *,uint32_t *frontier);
 /* Actual ordinary139FF8 prefix through terrain rays and smoothed target/eye.
  * NULL ray callback invokes SAME canonical game_ray_query, never a fake miss.
  * Remaining collision-envelope/FOV/mode blend is a precise internal frontier,

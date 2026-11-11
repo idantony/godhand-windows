@@ -20,6 +20,9 @@ gh_display_status gh_display_state_from_elf(gh_display_state *,const void *,size
  * font batch counters. The complete earlier static-constructor sequence is
  * still outside the developer startup host's claimed execution scope. */
 gh_display_status gh_display_static_initialize_002a48a8(gh_display_state *,int initialize,int priority);
+/* Default NTSC display copy 30B870, at destination (0,0). RGB from the
+ * previous complete frame's first two rows at x=0. TEX0=0 uses TCC0. */
+uint32_t gh_display_copy_base0_0030b870(const uint8_t top_rgb[3],const uint8_t next_rgb[3]);
 #ifdef __cplusplus
 }
 #endif

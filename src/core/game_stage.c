@@ -66,9 +66,9 @@ gh_stage_status gh_stage_tim2_sprite_resolve(gh_stage_textures*s,const void*raw,
  gh_tim2_picture picture;
  gh_tim2_error e=gh_tim2_first(raw,n,&picture);
  if(e)return e==GH_TIM2_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;
- if(picture.width!=128||picture.height!=128||picture.image_type!=4||
+ if(picture.width!=128||(picture.height!=128&&picture.height!=64)||picture.image_type!=4||
     picture.clut_type!=3||picture.colors!=16||((picture.tex0>>20)&63)!=20||
-    ((picture.tex0>>26)&15)!=7||((picture.tex0>>30)&15)!=7)
+    ((picture.tex0>>26)&15)!=7||((picture.tex0>>30)&15)!=(picture.height==128?7u:6u))
     return GH_STAGE_UNSUPPORTED;
  for(stage_material_node*p=s->materials;p;p=p->next)
     if(p->view.source==raw&&p->view.cache_pool==1){*out=&p->view;return GH_STAGE_OK;}
@@ -93,6 +93,44 @@ gh_stage_status gh_stage_tim2_sprite_resolve(gh_stage_textures*s,const void*raw,
  s->materials=p;
  s->material_count++;
  *out=&p->view;
+ return GH_STAGE_OK;
+}
+gh_stage_status gh_stage_tim2_marker_resolve_0015e0a0(gh_stage_textures *s,
+ const void *raw,size_t n,const gh_stage_material **out)
+{
+ if(!s||!raw||!out)return GH_STAGE_ARGUMENT;
+ *out=NULL;
+ gh_tim2_picture picture;
+ gh_tim2_error status=gh_tim2_first(raw,n,&picture);
+ if(status)return status==GH_TIM2_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;
+ if(picture.width!=64||(picture.height!=32&&picture.height!=64)||picture.image_type!=5||
+    picture.clut_type!=3||picture.colors!=256||picture.tex0!=(picture.height==64?UINT64_C(0x199308000):UINT64_C(0x159308000)))
+  return GH_STAGE_UNSUPPORTED;
+ /* 15E0A0 replaces temporary TEX0 TBP/CBP and writes TCC=1, CLD=1.
+  * The native material handle supplies address identity for this upload. */
+ const uint64_t tex0=UINT64_C(0x2000000400000000)|picture.tex0;
+ for(stage_material_node *m=s->materials;m;m=m->next){
+  if(m->view.source==raw&&m->view.source_tex0==tex0){
+   *out=&m->view;
+   return GH_STAGE_OK;
+  }
+ }
+ if(s->material_count>=1024||s->next_material_id==UINT64_MAX)return GH_STAGE_MEMORY;
+ stage_material_node *m=calloc(1,sizeof(*m));
+ if(!m)return GH_STAGE_MEMORY;
+ size_t bytes=(size_t)picture.width*picture.height*4;
+ m->pixels=malloc(bytes);
+ if(!m->pixels){free(m);return GH_STAGE_MEMORY;}
+ for(size_t i=0;i<picture.image_size;i++){
+  unsigned clut=gh_gs_csm1_palette256(picture.image[i]);
+  memcpy(m->pixels+i*4,picture.clut+clut*4,4);
+ }
+ m->view=(gh_stage_material){raw,m->pixels,n,bytes,++s->next_material_id,tex0,
+                             64,picture.height,1,1,19,1,0};
+ m->next=s->materials;
+ s->materials=m;
+ s->material_count++;
+ *out=&m->view;
  return GH_STAGE_OK;
 }
 static gh_stage_status transfer(uint8_t *vram,const gh_font_transfer *t,uint32_t base){

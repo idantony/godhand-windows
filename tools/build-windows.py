@@ -18,7 +18,7 @@ DEFAULT_SCRATCH = Path(r"G:\middle_thing\godhand_windows")
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target", choices=("mc-frame", "title-ui", "native", "startup-qa", "model-qa", "world-qa"), default="mc-frame")
+    parser.add_argument("--target", choices=("mc-frame", "title-ui", "native", "startup-qa", "model-qa", "world-qa", "scene-message-qa"), default="mc-frame")
     parser.add_argument("--scratch", type=Path, default=DEFAULT_SCRATCH)
     parser.add_argument("--jobs", type=int, default=4, help="Independent C compiler processes (1..16)")
     parser.add_argument("--compiler-cache", type=Path, default=DEFAULT_SCRATCH / "cache/zig-global",
@@ -59,6 +59,8 @@ def main():
         cpp_sources = ["src/platform/model_renderer.cpp", "tests/platform/test_model_renderer.cpp"]
     elif args.target == "world-qa":
         cpp_sources += ["src/platform/model_renderer.cpp", "tests/platform/test_world_composition.cpp"]
+    elif args.target == "scene-message-qa":
+        cpp_sources += ["tests/platform/test_scene_message_depth.cpp"]
     elif args.target in ("native", "startup-qa"):
         for source in ("src/platform/native_input.c", "src/platform/video_player.c", "src/platform/audio_events.c",
                        "src/core/se_voice.c", "src/core/sound_control.c", "src/core/mc_exit.c",
@@ -140,7 +142,7 @@ def main():
         return obj
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
         objects = list(executor.map(compile_module, modules))
-    exe = build / {"native": "godhand-windows.exe", "startup-qa": "probe-native-startup.exe", "mc-frame": "probe-mc-frame.exe", "title-ui": "probe-title-ui.exe", "model-qa": "test-model-renderer.exe", "world-qa": "test-world-composition.exe"}[args.target]
+    exe = build / {"native": "godhand-windows.exe", "startup-qa": "probe-native-startup.exe", "mc-frame": "probe-mc-frame.exe", "title-ui": "probe-title-ui.exe", "model-qa": "test-model-renderer.exe", "world-qa": "test-world-composition.exe", "scene-message-qa": "test-scene-message-depth.exe"}[args.target]
     if args.target == "startup-qa":
         flags.append("-DGH_NATIVE_STARTUP_QA=1")
     def compile_cpp(source):

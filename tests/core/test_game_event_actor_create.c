@@ -2,11 +2,19 @@
 #include <fenv.h>
 #include <math.h>
 #include "game_event_actor_create.h"
+#include "game_effects_frame.h"
+#include "game_actor_two_bone.h"
+#include "game_effects_trans.h"
+#include "game_motion_camera.h"
+#include "game_camera_envelope.h"
+#include "game_ray_static.h"
 #include "game_event_accessory_move.h"
 #include "game_event_pendulum.h"
 #include "game_event_actor_factory.h"
 #include "game_event_actor_extra.h"
 #include "game_event_actor_play.h"
+#include "game_event_actor_release.h"
+#include "game_event_release_stage.h"
 #include "game_actor_motion_ik.h"
 #include "game_player_node_cache.h"
 
@@ -41,6 +49,8 @@ typedef struct {
     const uint32_t *handles;
     const uint16_t *kinds;
     size_t count;
+    gh_game_player_factory *player;
+    gh_game_player_child *child;
 } object_scope;
 
 static gh_game_event_status object_view(void *opaque, uint32_t handle, gh_title_player_view *out,
@@ -50,6 +60,19 @@ static gh_game_event_status object_view(void *opaque, uint32_t handle, gh_title_
     if (handle == scope->fail) {
         *frontier = 0x123456;
         return GH_EVENT_UNSUPPORTED;
+    }
+    if (scope->player && handle == scope->player->handle) {
+        const gh_title_player_view *view;
+        if (gh_game_player_factory_scalar_view(scope->player, handle, &view)) return GH_EVENT_ARGUMENT;
+        *out = *view;
+        return GH_EVENT_OK;
+    }
+    if (scope->child && handle == scope->child->handle) {
+        void *object = NULL;
+        if (gh_room_object_lookup(scope->pools, handle, GH_ROOM_OBJECT_PLAYER_CHILD,
+            &scope->child->object, &object) || object != &scope->child->object) return GH_EVENT_ARGUMENT;
+        *out = scope->child->object.view;
+        return GH_EVENT_OK;
     }
     for (size_t i = 0; i < scope->count; ++i) {
         if (handle != scope->handles[i]) continue;
@@ -82,6 +105,333 @@ static gh_game_event_status probe_event_move_shadow(void *opaque, gh_event_actor
         return GH_EVENT_UNSUPPORTED;
     }
     return GH_EVENT_OK;
+}
+
+static void check_event_hand_variants(gh_event_actor_factory *actor, const uint8_t *elf,
+                                      size_t elf_bytes, const gh_player_shared_vector *shared) {
+    static const uint8_t names[2][3][8] = {
+        {"RH_00", "RH_01", "RH_02"}, {"LH_00", "LH_01", "LH_02"}
+    };
+    CHECK(elf_bytes >= 0x34c508 && !memcmp(elf + 0x34c4d8, names, sizeof(names)));
+    uint8_t *root = actor->object.view.bytes;
+    CHECK(actor->kind == 0x630 && root[0x2f4] == 4 && root[0x4d8] == 1);
+    CHECK(!root[0x1390] && !root[0x2fa0] && !root[0x2ff0] && actor->model.part_count >= 28);
+    const gh_actor_part *driver;
+    CHECK(!gh_actor_model_part_at(&actor->model, 27, &driver));
+    uint32_t authored[2] = {word(driver->bytes + 0x100), word(driver->bytes + 0x108)};
+    gh_player_mesh_reference meshes[2][3];
+    uint32_t original[2][3] = {{0}};
+    unsigned present = 0;
+    for (unsigned hand = 0; hand < 2; ++hand) {
+        for (unsigned mesh = 0; mesh < 3; ++mesh) {
+            int found;
+            CHECK(!gh_actor_model_find_mesh_0014b730(&actor->model, names[hand][mesh], 8,
+                &meshes[hand][mesh], &found));
+            if (!found) continue;
+            present |= 1u << (3 * hand + mesh);
+            original[hand][mesh] = word(meshes[hand][mesh].bytes + 0x380);
+        }
+    }
+    CHECK(actor->model.part_count == 30 && present == 0x1f && !authored[0] && !authored[1]);
+    fenv_t environment;
+    CHECK(!feholdexcept(&environment));
+    CHECK(!fesetround(FE_UPWARD) && !feraiseexcept(FE_DIVBYZERO));
+    const uint32_t samples[][2] = {
+        {authored[0], authored[1]}, {0x3e860a91, 0x3edf66f2}, {0x3e860a91, 0x3edf66f2},
+        {0x3eb2b8c2, 0x3e32b8c2}, {0x3f060a91, 0x3e32b8c1},
+        {0xbe860a91, 0x3f060a92}
+    };
+    const unsigned expected[][2] = {{0, 0}, {1, 2}, {1, 2}, {2, 1}, {2, 0}, {0, 0}};
+    for (unsigned sample = 0; sample < sizeof(samples) / sizeof(*samples); ++sample) {
+        put_word(driver->bytes + 0x100, samples[sample][0]);
+        put_word(driver->bytes + 0x108, samples[sample][1]);
+        uint32_t frontier = 0;
+        gh_event_accessory_move move = {0};
+        event_move_shadow_probe shadow = {.actor = actor, .calls = 1};
+        CHECK(gh_game_event_simple_move_002b6930(&move, actor, shared, probe_event_move_shadow,
+              &shadow, &frontier) == GH_EVENT_OK && !frontier && !move.stage);
+        CHECK(fegetround() == FE_UPWARD && fetestexcept(FE_ALL_EXCEPT) == FE_DIVBYZERO);
+        for (unsigned hand = 0; hand < 2; ++hand) {
+            for (unsigned mesh = 0; mesh < 3; ++mesh) {
+                if (!meshes[hand][mesh].bytes) continue;
+                uint32_t flags = word(meshes[hand][mesh].bytes + 0x380);
+                CHECK(flags == ((original[hand][mesh] & ~1u) | (mesh != expected[sample][hand])));
+            }
+        }
+    }
+    CHECK(!fesetenv(&environment));
+    put_word(driver->bytes + 0x100, authored[0]);
+    put_word(driver->bytes + 0x108, authored[1]);
+    uint32_t frontier = 0;
+    gh_event_accessory_move move = {0};
+    event_move_shadow_probe shadow = {.actor = actor, .calls = 1};
+    CHECK(gh_game_event_simple_move_002b6930(&move, actor, shared, probe_event_move_shadow,
+          &shadow, &frontier) == GH_EVENT_OK && !frontier && !move.stage);
+}
+
+static gh_effect_status lookup_el00(void *context,uint16_t kind,uint8_t code,
+    const gh_title_player_view **view,const gh_actor_model **model,uint32_t *frontier){
+    const gh_event_actor_factory *actor=context;
+    CHECK(kind==0x600&&!code&&actor->kind==kind&&actor->model.ready);
+    *view=&actor->object.view;
+    *model=&actor->model;
+    *frontier=0;
+    return GH_EFFECT_OK;
+}
+
+static uint32_t effect_clock(void *context){
+    uint32_t *clock=context;
+    return ++*clock;
+}
+
+typedef struct {
+    gh_game_effects *effects;
+    unsigned rows;
+    int world;
+} ground_packet_probe;
+
+static gh_effect_status verify_ground_packet(void *context,const gh_effect_trans_packet *p){
+    ground_packet_probe *probe=context;
+    gh_effect_esp_view particle;
+    CHECK(!gh_effect_create_esp_at(probe->effects,p->slot,&particle)&&particle.serial==p->serial&&
+      (probe->world?particle.emitter_slot<=3:(particle.emitter_slot>=1&&particle.emitter_slot<=3)));
+    CHECK(p->kind==GH_EFFECT_PASS_SPRITE&&p->original_callee==0x2fec38&&
+      p->material&&p->material->rgba_gs&&p->quad_count==1&&p->quads[0].vertex_count==4&&p->order.bank==2);
+    probe->rows|=1u<<(particle.emitter_slot-(probe->world?0:1));
+    return GH_EFFECT_OK;
+}
+
+static void check_event_ground_particles(gh_disc *disc,const uint8_t *elf,size_t elf_bytes,
+    const gh_bundle *room,const gh_event_data_prefix *prefix,gh_event_actor_factory *actor){
+    size_t core_size;
+    uint8_t *core=load(disc,"etc/core.dat",&core_size);
+    gh_game_effects *effects=calloc(1,sizeof(*effects));
+    gh_game_init_state *init=calloc(1,sizeof(*init));
+    uint8_t *esp=calloc(1,0x100180),*emitters=calloc(1,0x26060);
+    CHECK(effects&&init&&esp&&emitters&&!gh_game_effects_initialize_00305a68(effects,
+      esp,0x100180,emitters,0x26060,core,core_size,room));
+    size_t offset=word(prefix->data+0x1c);
+    CHECK(offset&&offset<prefix->bytes&&!gh_game_effects_register_event_002fa0b0(effects,
+      prefix->data+offset,prefix->bytes-offset));
+    gh_game_init_state_initialize(init);
+    gh_game_mt_seed_0030f2b0(&init->random,123);
+    gh_boot_work work={0};
+    put_word((uint8_t *)&work+0x5e4,0x10040);
+    put_word((uint8_t *)&work+0x574,0x3f800000);
+    gh_effect_release_bindings storage={.effects=effects,.esp=esp,.esp_bytes=0x100180,
+      .emitters=emitters,.emitter_bytes=0x26060};
+    gh_effect_create_bindings producer={.storage=storage,.work=&work,.random=&init->random,
+      .event_actor=lookup_el00,.event_actor_context=actor};
+    gh_effect_create_call cut={0};
+    CHECK(!gh_effect_create_event_cut_begin_002fa158(&cut,2)&&
+      !gh_game_effect_create_00306528(&cut,&producer)&&cut.complete&&cut.count==4);
+    /* Only these three source rows run in the isolated fixture. */
+    put_word(emitters+0x26000,0x70000000);
+    gh_effects_frame_globals globals={0};
+    gh_camera_envelope envelope={0};
+    gh_game_scene_tables actors={0};
+    uint32_t frontier,clock=0;
+    CHECK(!gh_effects_frame_globals_from_elf(&globals,elf,elf_bytes));
+    globals.factor_741dc0=0x3f800000;
+    CHECK(!gh_game_camera_envelope_from_elf(&envelope,elf,elf_bytes,&frontier));
+    CHECK(!gh_scene_actors_0012e670(&actors,room));
+    gh_game_scene_aux aux={0};
+    gh_effects_frame_bindings b={.storage=storage,.work=&work,.init=init,.globals=&globals,
+      .profile=&aux,.clock=effect_clock,.clock_context=&clock,.atan_coeff=envelope.atan_coeff,
+      .policy=GH_STATIC_BINARY32_REFERENCE,.actors=&actors};
+    gh_display_state display={0};
+    gh_game_motion_camera camera={0};
+    gh_event_camera_cut camera_cut;
+    gh_event_camera_track track={.frame=13,.apply_motion=1};
+    CHECK(!gh_display_state_from_elf(&display,elf,elf_bytes));
+    CHECK(!gh_display_static_initialize_002a48a8(&display,1,0xffff));
+    CHECK(!gh_game_motion_camera_construct_00138be8(&camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+    CHECK(!gh_event_camera_init_play_00004bd8((gh_event_components *)prefix->components,init,&camera,&frontier));
+    CHECK(!gh_event_camera_cut_at(prefix,2,&camera_cut)&&camera_cut.primary);
+    CHECK(!gh_motion_open_mtb3(prefix->data,prefix->bytes,camera_cut.primary_offset,&track.track));
+    CHECK(!gh_game_motion_camera_set_001390b8(&camera,&track));
+    gh_camera_projection_display cd={&display.screen_width,&display.screen_height_bits,
+      &display.pixel_aspect_bits,&display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+    CHECK(!gh_game_motion_camera_move_00138600(&camera,init,&work,&cd,&frontier));
+    gh_stage_textures *textures;
+    CHECK(!gh_stage_textures_create(&textures));
+    ground_packet_probe drawn={.effects=effects};
+    gh_effects_trans_bindings trans_b={.storage=storage,.work=&work,.globals=&globals,.display=&display,
+      .policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE,.emit=verify_ground_packet,
+      .context=&drawn,.camera=&camera.camera,.init=init,.textures=textures};
+    gh_game_effects_frame frame={0};
+    unsigned observed=0,spawned=0;
+    const unsigned delays[]={13,14,24};
+    for(unsigned tick=0;tick<240;tick++){
+      gh_effect_status status=gh_game_effects_frame_update_0030f228(&frame,&b);
+      if(status)fprintf(stderr,"EL00 type1A tick%u status%u PC%x emitter=%u stage%u ESPstep=%u\n",
+        tick,status,frame.frontier,frame.emitter_index,frame.emitter_stage,frame.esp_stage);
+      CHECK(!status);
+      track.frame=(float)tick;
+      if(track.frame>(float)(track.track.frames-1))track.frame=(float)(track.track.frames-1);
+      CHECK(!gh_game_motion_camera_set_001390b8(&camera,&track));
+      CHECK(!gh_game_motion_camera_move_00138600(&camera,init,&work,&cd,&frontier));
+      gh_game_effects_trans trans={0};
+      status=gh_game_effects_trans_002fb310(&trans,&trans_b);
+      if(status)fprintf(stderr,"EL00 type1A Trans tick%u status%u PC%x slot%u stage%u\n",
+        tick,status,trans.frontier,trans.esp_index,trans.call_stage);
+      CHECK(!status);
+      for(unsigned row=0;row<3;row++)if(tick==delays[row]){
+        gh_effect_emitter_view emitter;
+        CHECK(!gh_effect_create_emitter_at(effects,row+1,&emitter));
+        CHECK(emitter.actor==&actor->object.view&&emitter.model==&actor->model&&emitter.part&&
+          emitter.record.bytes[0x133]==0x1a&&(word(emitter.payload+0x114)&0x800000u));
+        CHECK(!memcmp(emitter.payload+0x40,emitter.part->bytes+0xb0,12));
+        float root_matrix[16],expected_euler[3];
+        memcpy(root_matrix,actor->object.view.bytes+0x80,64);
+        memcpy(root_matrix+12,emitter.part->bytes+0xb0,12);
+        CHECK(!gh_actor_matrix_extract_euler_00147c88(root_matrix,envelope.atan_coeff,
+          expected_euler,GH_STATIC_BINARY32_REFERENCE,&frontier));
+        CHECK(!memcmp(emitter.payload+0x30,expected_euler,12));
+        observed|=1u<<row;
+      }
+      for(unsigned slot=0;slot<1024;slot++){
+        gh_effect_esp_view particle;
+        if(gh_effect_create_esp_at(effects,slot,&particle))continue;
+        CHECK(particle.initialized&&particle.type==0x1a&&particle.actor==&actor->object.view&&
+          !particle.selector&&particle.parent_emitter==-1&&particle.emitter_slot>=1&&particle.emitter_slot<=3);
+        spawned|=1u<<(particle.emitter_slot-1);
+      }
+    }
+    CHECK(observed==7&&spawned==7&&(drawn.rows&1));
+    int borrowed;
+    CHECK(!gh_effect_create_actor_has_live_refs(effects,&actor->object.view,&borrowed)&&!borrowed);
+    gh_stage_textures_destroy(textures);
+    gh_scene_ray_triangle_state_release(&actors);
+    gh_effect_create_forget_on_owner_destroy(effects);
+    free(emitters);free(esp);free(init);free(effects);free(core);
+    puts("PASS EV01 cut2 actual EL00 part emitter transforms, three type1A lifecycles and visible sprite");
+}
+static void check_event_world_particles(gh_disc *disc,const uint8_t *elf,size_t elf_bytes,
+    const gh_bundle *room,const gh_event_data_prefix *prefix,gh_event_actor_factory *actor){
+    size_t core_size;
+    uint8_t *core=load(disc,"etc/core.dat",&core_size);
+    gh_game_effects *effects=calloc(1,sizeof(*effects));
+    gh_game_init_state *init=calloc(1,sizeof(*init));
+    uint8_t *esp=calloc(1,0x100180),*emitters=calloc(1,0x26060);
+    CHECK(effects&&init&&esp&&emitters&&!gh_game_effects_initialize_00305a68(effects,
+      esp,0x100180,emitters,0x26060,core,core_size,room));
+    size_t offset=word(prefix->data+0x1c);
+    CHECK(offset&&offset<prefix->bytes&&!gh_game_effects_register_event_002fa0b0(effects,
+      prefix->data+offset,prefix->bytes-offset));
+    gh_game_init_state_initialize(init);
+    gh_game_mt_seed_0030f2b0(&init->random,123);
+    gh_boot_work work={0};
+    put_word((uint8_t *)&work+0x5e4,0x10040);
+    put_word((uint8_t *)&work+0x574,0x3f800000);
+    gh_effect_release_bindings storage={.effects=effects,.esp=esp,.esp_bytes=0x100180,
+      .emitters=emitters,.emitter_bytes=0x26060};
+    gh_effect_create_bindings producer={.storage=storage,.work=&work,.random=&init->random,
+      .event_actor=lookup_el00,.event_actor_context=actor};
+    gh_effect_create_call cut={0};
+    CHECK(!gh_effect_create_event_cut_begin_002fa158(&cut,3)&&
+      !gh_game_effect_create_00306528(&cut,&producer)&&cut.complete&&cut.count==4);
+    /* Only these three source rows run in the isolated fixture. */
+
+    gh_effects_frame_globals globals={0};
+    gh_camera_envelope envelope={0};
+    gh_game_scene_tables actors={0};
+    uint32_t frontier,clock=0;
+    CHECK(!gh_effects_frame_globals_from_elf(&globals,elf,elf_bytes));
+    globals.factor_741dc0=0x3f800000;
+    CHECK(!gh_game_camera_envelope_from_elf(&envelope,elf,elf_bytes,&frontier));
+    CHECK(!gh_scene_actors_0012e670(&actors,room));
+    gh_game_scene_aux aux={0};
+    gh_effects_frame_bindings b={.storage=storage,.work=&work,.init=init,.globals=&globals,
+      .profile=&aux,.clock=effect_clock,.clock_context=&clock,.atan_coeff=envelope.atan_coeff,
+      .policy=GH_STATIC_BINARY32_REFERENCE,.actors=&actors};
+    gh_display_state display={0};
+    gh_game_motion_camera camera={0};
+    gh_event_camera_cut camera_cut;
+    gh_event_camera_track track={.frame=0,.apply_motion=1};
+    CHECK(!gh_display_state_from_elf(&display,elf,elf_bytes));
+    CHECK(!gh_display_static_initialize_002a48a8(&display,1,0xffff));
+    CHECK(!gh_game_motion_camera_construct_00138be8(&camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+    CHECK(!gh_event_camera_init_play_00004bd8((gh_event_components *)prefix->components,init,&camera,&frontier));
+    CHECK(!gh_event_camera_cut_at(prefix,3,&camera_cut)&&camera_cut.primary);
+    CHECK(!gh_motion_open_mtb3(prefix->data,prefix->bytes,camera_cut.primary_offset,&track.track));
+    CHECK(!gh_game_motion_camera_set_001390b8(&camera,&track));
+    gh_camera_projection_display cd={&display.screen_width,&display.screen_height_bits,
+      &display.pixel_aspect_bits,&display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+    CHECK(!gh_game_motion_camera_move_00138600(&camera,init,&work,&cd,&frontier));
+    gh_stage_textures *textures;
+    CHECK(!gh_stage_textures_create(&textures));
+    ground_packet_probe drawn={.effects=effects,.world=1};
+    gh_effects_trans_bindings trans_b={.storage=storage,.work=&work,.globals=&globals,.display=&display,
+      .policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE,.emit=verify_ground_packet,
+      .context=&drawn,.camera=&camera.camera,.init=init,.textures=textures};
+    gh_game_effects_frame frame={0};
+    unsigned spawned=0;
+    for(unsigned tick=0;tick<240;tick++){
+      gh_effect_status status=gh_game_effects_frame_update_0030f228(&frame,&b);
+      if(status)fprintf(stderr,"EL00 type1A tick%u status%u PC%x emitter=%u stage%u ESPstep=%u\n",
+        tick,status,frame.frontier,frame.emitter_index,frame.emitter_stage,frame.esp_stage);
+      CHECK(!status);
+      track.frame=(float)tick;
+      if(track.frame>(float)(track.track.frames-1))track.frame=(float)(track.track.frames-1);
+      CHECK(!gh_game_motion_camera_set_001390b8(&camera,&track));
+      CHECK(!gh_game_motion_camera_move_00138600(&camera,init,&work,&cd,&frontier));
+      gh_game_effects_trans trans={0};
+      status=gh_game_effects_trans_002fb310(&trans,&trans_b);
+      if(status)fprintf(stderr,"EL00 type1A Trans tick%u status%u PC%x slot%u stage%u\n",
+        tick,status,trans.frontier,trans.esp_index,trans.call_stage);
+      CHECK(!status);
+      for(unsigned slot=0;slot<1024;slot++){
+        gh_effect_esp_view particle;
+        if(gh_effect_create_esp_at(effects,slot,&particle))continue;
+        CHECK(particle.initialized&&particle.type==0&&!particle.actor&&
+          !particle.selector&&particle.emitter_slot<=3);
+        spawned|=1u<<particle.emitter_slot;
+      }
+    }
+    CHECK(spawned==15&&drawn.rows==15);
+    int borrowed;
+    CHECK(!gh_effect_create_actor_has_live_refs(effects,&actor->object.view,&borrowed)&&!borrowed);
+    gh_stage_textures_destroy(textures);
+    gh_scene_ray_triangle_state_release(&actors);
+    gh_effect_create_forget_on_owner_destroy(effects);
+    free(emitters);free(esp);free(init);free(effects);free(core);
+    puts("PASS EV01 cut3 actual four class0 world sprite lifecycles");
+}
+
+typedef struct {
+    gh_event_release_stage stage;
+    gh_event_release_bindings bindings;
+    uint32_t sites[12];
+    size_t count;
+    int block_enemy;
+} release_fixture;
+
+static gh_game_event_status release_test_leaf(void *context,uint32_t site,uint32_t *frontier,int *relative)
+{
+    release_fixture *f=context;
+    CHECK(f->count<sizeof(f->sites)/sizeof(*f->sites));
+    f->sites[f->count++]=site;
+    *frontier=0;*relative=0;
+    if(site==0x2972b0){
+        const gh_game_event_prefix *p=&f->bindings.event->fields;
+        CHECK(!p->flags&&!p->state&&!p->phase&&!p->unknown06&&!p->unknown07&&!p->data_number&&!p->text_token);
+        CHECK(f->bindings.config->flags==8);
+        if(f->block_enemy){*frontier=0x294ca0;return GH_EVENT_UNSUPPORTED;}
+    }
+    return GH_EVENT_OK;
+}
+
+static int release_test_stage(void *context,gh_game_event *event,int *done)
+{
+    release_fixture *f=context;
+    CHECK(event==f->bindings.event);
+    *done=0;
+    uint32_t frontier;
+    int relative;
+    gh_game_event_status status=gh_event_release_00297038(&f->stage,&f->bindings,&frontier,&relative);
+    if(status)event->frontier=frontier;
+    return status;
 }
 
 int main(int argc, char **argv) {
@@ -612,11 +962,37 @@ int main(int argc, char **argv) {
             if (motion_result) fprintf(stderr, "cut%u frame%u row%zu status%u pc%x detail%u\n",
                 scene_cut, frame, motion_play.row, motion_result, frontier, motions[motion_play.row].detail);
             CHECK(motion_result == GH_EVENT_OK);
+            /* Run the original EL00 Move hierarchy after ActorPlay samples
+             * each frame. Cuts 5 and 8 contain large unwrapped Euler channels. */
+            unsigned probe_part = scene_cut == 5 ? 14 : 8;
+            int check_wrap = !frame && (scene_cut == 5 || scene_cut == 8);
+            const uint8_t *angles = el00->model.parts[probe_part].bytes + 0x100;
+            if (check_wrap) {
+                static const uint32_t cut5[] = {0x42d59fa9, 0xbf36bdc8, 0xc2d5a25c};
+                static const uint32_t cut8[] = {0x4300c643, 0x4024a0c7, 0x4300d461};
+                const uint32_t *expected = scene_cut == 5 ? cut5 : cut8;
+                for (unsigned axis = 0; axis < 3; ++axis)
+                    CHECK(word(angles + axis * 4) == expected[axis]);
+            }
+            CHECK(gh_actor_model_update_hierarchy_00149eb8(&el00->model,
+                  GH_STATIC_BINARY32_REFERENCE) == GH_ACTOR_MODEL_OK);
+            if (check_wrap) {
+                static const uint32_t cut5[] = {0xbb180000, 0xbf36bdc8, 0xbb418000};
+                static const uint32_t cut8[] = {0x40471680, 0x4024a0c7, 0xc04781c0};
+                const uint32_t *expected = scene_cut == 5 ? cut5 : cut8;
+                for (unsigned axis = 0; axis < 3; ++axis)
+                    CHECK(word(angles + axis * 4) == expected[axis]);
+            }
+            if (scene_cut == 8 && !frame)
+                check_event_hand_variants(&rows[6], elf, elf_bytes, &shared);
+            if(scene_cut==2&&frame==13)
+                check_event_ground_particles(disc,elf,elf_bytes,&room_bundle,&prefix,&rows[0]);
+            if(scene_cut==3&&frame==0)
+                check_event_world_particles(disc,elf,elf_bytes,&room_bundle,&prefix,&rows[0]);
             ++played;
         }
     }
     CHECK(played > 100);
-    free(motions);
     CHECK(rows[6].object.view.bytes[0x4d8] == 1 && rows[7].object.view.bytes[0x4d8] == 1);
     CHECK(rows[8].kind == 0x667 && rows[8].model.ready && !rows[8].object.view.bytes[0x4d8]);
     gh_actor_external_parent_set rejected = {0};
@@ -643,10 +1019,85 @@ int main(int argc, char **argv) {
         CHECK(gh_actor_model_update_hierarchy_00149eb8(&member->model, GH_STATIC_BINARY32_REFERENCE) == GH_ACTOR_MODEL_OK);
         free(file);
     }
+    scope.player = &parent;
+    scope.child = &child;
+    gh_sound_control sound = {.initialized = 1, .recent_initialized = 1};
+    sound.recent[10] = (gh_sound_recent){.bank = -1, .program = -1, .key = 0x1234};
+    sound.recent[9].bank = 2;
+    gh_event_actor_release release = {0};
+    gh_event_actor_release_bindings release_bindings = {&state, &roster, &extra, &motion_play, &sound, NULL};
+    CHECK(gh_event_actor_quit_00001588(&release, &release_bindings, &frontier) == GH_EVENT_OK && !frontier);
+    gh_game_event_config release_config={0};
+    CHECK(!gh_game_event_config_from_elf(&release_config,elf,elf_bytes));
+    CHECK(!gh_game_event_config_set_00299320(&release_config,1,elf,elf_bytes));
+    CHECK(release_config.flags==8);
+    gh_event_timing release_timing={0};
+    CHECK(!gh_event_timing_prepare_000054c0(&release_timing,&components,heap,&original)&&original);
+    gh_screen_fade release_fade={0};
+    gh_display_state release_display={0};
+    CHECK(!gh_display_state_from_elf(&release_display,elf,elf_bytes));
+    CHECK(!gh_display_static_initialize_002a48a8(&release_display,1,0xffff));
+    const uint8_t release_background[3]={17,34,51};
+    uint16_t screen_state=0xabcd;
+    release_fixture release_path={.block_enemy=1};
+    release_path.bindings=(gh_event_release_bindings){&event,&work,&release_config,&release,&release_timing,
+        &release_fade,&release_display,release_test_leaf,&release_path,release_background,&screen_state};
+    event.fields.state=4;
+    event.fields.phase=0;
+    event.fields.flags|=0x181;
+    CHECK(!gh_game_event_set_stage(&event,4,release_test_stage,&release_path));
+    CHECK(!gh_game_event_update_00296530(&event)&&event.fields.phase==1&&release.release_started);
+    for(unsigned phase=2;phase<=8;++phase)
+        CHECK(!gh_game_event_update_00296530(&event)&&event.fields.phase==phase);
+    CHECK(!gh_game_event_update_00296530(&event)&&event.fields.phase==8&&!release_path.stage.in_cleanup);
+    CHECK(gh_event_actor_start_release_00297a88(&release, &frontier) == GH_EVENT_OK && !frontier);
+    CHECK(child.model.external_parent == &parent_model && attachment.parent_model == &parent_model);
+    CHECK((word(child.object.view.bytes + 0x2f0) & 1) && !(word(child.object.view.bytes + 0x250) & 0x10000));
+    CHECK(!motions[0].bound && !extra.accessory_handle && !state.actor_handles[0] && !state.actor_handles[8]);
+    size_t before_unload = gh_heap_used(heap);
+    const gh_object_resource_bindings *resource_bindings = &factory_bindings.resources;
+    for (unsigned i = 0; i < 3; ++i) {
+        gh_object_view disposing;
+        CHECK(gh_game_objects_find(objects, 0x601, &disposing) == GH_OBJECT_OK &&
+              disposing.use_count == 0 && disposing.state == 5 + i);
+        CHECK(gh_event_actor_wait_release_00297aa8(&release, &ready, &frontier) == GH_EVENT_OK && !ready);
+        CHECK(gh_game_objects_update_bound_001fe748(objects, resource_bindings, &frontier) == GH_OBJECT_OK);
+    }
+    CHECK(gh_event_actor_wait_release_00297aa8(&release, &ready, &frontier) == GH_EVENT_OK && ready);
+    CHECK(gh_heap_used(heap) < before_unload && sound.recent[10].bank == 3 && !sound.recent[10].program);
+    CHECK(sound.recent[10].key == 0x1234 && sound.recent[9].bank == 2);
+    for (unsigned i = 0; i < sizeof(ids) / sizeof(*ids); ++i) {
+        CHECK(gh_game_objects_is_unloaded_001fefd0(objects, ids[i], &ready) == GH_OBJECT_OK && ready);
+    }
+    CHECK(gh_game_objects_is_unloaded_001fefd0(objects, 0x60d, &ready) == GH_OBJECT_OK && ready);
+    CHECK(gh_game_objects_update_bound_001fe748(objects, resource_bindings, &frontier) == GH_OBJECT_OK);
+    size_t before_work = gh_heap_used(heap);
+    scope.fail = handles[2];
+    CHECK(gh_event_actor_release_work_00297ad0(&release, &frontier) == GH_EVENT_UNSUPPORTED);
+    CHECK(frontier == 0x123456 && release.unsuspend_cursor == 2 && release.work_released && !state.work.pointer);
+    CHECK(gh_heap_used(heap) == before_work - 648 && !word(actor.bytes + 4));
+    CHECK(!(word(raw[0] + 0x250) & 0x8000) && (word(raw[2] + 0x250) & 0x8000));
+    scope.fail = 0;
+    CHECK(gh_event_actor_release_work_00297ad0(&release, &frontier) == GH_EVENT_OK && !frontier);
+    CHECK(!(word(raw[2] + 0x250) & 0x8000) && !(word(raw[3] + 0x250) & 0x8000));
+    CHECK(gh_heap_used(heap) == before_work - 648);
+    CHECK(gh_event_actor_release_work_00297ad0(&release, &frontier) == GH_EVENT_OK);
+    CHECK(gh_game_event_update_00296530(&event)==GH_EVENT_CALLEE&&event.frontier==0x294ca0&&event.release_resume);
+    CHECK(!release_timing.allocation.pointer&&!word(env.bytes+8));
+    const uint32_t ordered[]={0x2970dc,0x297158,0x2971f4,0x297244,0x29724c,0x2972b0};
+    CHECK(release_path.count==sizeof(ordered)/sizeof(*ordered)&&!memcmp(ordered,release_path.sites,sizeof(ordered)));
+    release_path.block_enemy=0;
+    CHECK(!gh_game_event_update_00296530(&event)&&!event.release_resume&&release_path.stage.complete);
+    CHECK(release_path.count==8&&release_path.sites[6]==0x2972b0&&release_path.sites[7]==0x297358);
+    CHECK(word((uint8_t *)&work+0x60c)==0x332211&&!(word((uint8_t *)&work+0x5e0)&0x2000000u));
+    CHECK(release_fade.state==9&&release_fade.kind==0&&release_fade.time==15&&
+        release_fade.color_from==0xff000000u&&!release_fade.color_to&&screen_state==15);
+    CHECK(!gh_game_event_update_00296530(&event)&&release_path.count==8);
+    puts("PASS EV01 297038 release delay, actual actor/Env owners, 297660 before enemy gate and post-reset retry");
     CHECK(gh_event_actor_create_abort(&state) == GH_EVENT_OK);
-    CHECK(gh_event_actor_roster_abort(&roster) == GH_EVENT_CALLEE);
     CHECK(gh_event_actor_extra_abort(&extra) == GH_EVENT_OK);
     CHECK(gh_event_actor_roster_abort(&roster) == GH_EVENT_OK);
+    free(motions);
     CHECK(pools.vectors[0].count == 7 && pools.vectors[3].count == 2);
     free(rows);
     gh_game_player_child_attachment_clear(&attachment);
@@ -669,6 +1120,6 @@ int main(int argc, char **argv) {
     free(pl01);
     free(elf);
     gh_disc_close(disc);
-    printf("PASS EV01 nine actors and EL0D, EL00 parts=%u, ready, cut0 plus %u positive-cut ActorMove frames\n", model_parts, played);
+    printf("PASS EV01 creation, %u positive-cut ActorMove frames, normal actor deletion/holder unload/work release\n", played);
     return 0;
 }

@@ -6,7 +6,7 @@
 #include "boot.h"
 #include <string.h>
 #define OFFSET(field, value) _Static_assert(offsetof(gh_boot_work, field) == value, #field " layout")
-OFFSET(phase569, 0x569); OFFSET(language, 0x56c); OFFSET(mode, 0x578);
+OFFSET(phase569, 0x569); OFFSET(language, 0x56c); OFFSET(canonical_rate574, 0x574); OFFSET(mode, 0x578);
 OFFSET(unknown57c, 0x57c); OFFSET(unknown580, 0x580); OFFSET(flags, 0x584);
 OFFSET(system_flags, 0x58c); OFFSET(flags598, 0x598); OFFSET(flags59c, 0x59c);
 OFFSET(room, 0x5b0);

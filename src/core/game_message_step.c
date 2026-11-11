@@ -202,6 +202,29 @@ static gh_scene_ui_status recycle_window(gh_game_scene_ui *ui, unsigned slot, ui
     return GH_SCENE_UI_OK;
 }
 
+gh_scene_ui_status gh_scene_message_delete_002aebf8(gh_game_scene_ui *ui,
+    uint16_t work_id, int *original_found, uint32_t *frontier)
+{
+    if (!frontier || !original_found) return GH_SCENE_UI_ARGUMENT;
+    *frontier = 0x2aebf8;
+    *original_found = 0;
+    if (!ui) return GH_SCENE_UI_ARGUMENT;
+    unsigned slots[16], count;
+    *frontier = 0x2aed10;
+    gh_scene_ui_status status = active_slots(ui, slots, &count);
+    if (status) return status;
+    for (unsigned i = 0; i < count; ++i) {
+        const unsigned slot = slots[i];
+        if (ui->blocks[slot].flags != work_id) continue;
+        status = recycle_window(ui, slot, frontier);
+        if (status) return status;
+        *original_found = 1;
+        break;
+    }
+    *frontier = 0;
+    return GH_SCENE_UI_OK;
+}
+
 static gh_scene_ui_status wait_english(uint8_t *p, gh_scene_message_sources *source,
     gh_game_scene_ui *ui, const gh_boot_work *work, gh_event_timing *timing, uint32_t *frontier)
 {

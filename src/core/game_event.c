@@ -37,8 +37,10 @@ static gh_game_event_status invoke(gh_game_event *event,unsigned stage,int *done
     static const uint32_t addresses[]={0x2965f0,0x296818,0x296958,0x296c28,0x297038,0x296dd8};
     event->frontier=addresses[stage];
     if(!event->stages[stage])return GH_EVENT_UNSUPPORTED;
+    if(stage==4)event->release_resume=1;
     event->callee_error=event->stages[stage](event->contexts[stage],event,done);
     if(event->callee_error)return GH_EVENT_CALLEE;
+    if(stage==4)event->release_resume=0;
     event->frontier=0;return GH_EVENT_OK;
 }
 gh_game_event_status gh_game_event_update_00296530(gh_game_event *event)
@@ -46,6 +48,9 @@ gh_game_event_status gh_game_event_update_00296530(gh_game_event *event)
     int done=0;gh_game_event_status status;
     if(!event||!event->initialized)return GH_EVENT_ARGUMENT;
     event->frontier=0;event->callee_error=0;
+    /* 297128 resets guest state before the remaining host-owned calls.
+     * A native callback failure must resume the in-flight original call. */
+    if(event->release_resume)return invoke(event,4,&done);
     uint32_t flags=event->fields.flags;
     if(flags&8)return invoke(event,5,&done);
     if(!(flags&1)||event->fields.state>=5)return GH_EVENT_OK;

@@ -16,7 +16,7 @@ typedef struct {
     gh_game_world_light *world;
     gh_game_init_state *init;
     gh_core_save_view save;
-    uint8_t stage;
+    uint8_t stage, quit_stage;
 } gh_event_scr_light;
 
 /* Main 296D38 / 296E48. The absent EV01 track still installs and writes
@@ -25,6 +25,8 @@ gh_game_event_status gh_event_scr_light_init_00008b20(gh_event_scr_light *,
     const gh_event_data_prefix *, gh_game_world_light *, gh_game_init_state *,
     gh_core_save_view, const gh_light_player_parts *, uint32_t *, int *relative);
 gh_game_event_status gh_event_scr_light_move_00008ef8(gh_event_scr_light *, uint32_t *);
+gh_game_event_status gh_event_scr_light_quit_00009728(gh_event_scr_light *,
+    const gh_game_event_config *, const gh_light_player_parts *, uint32_t *, int *relative);
 
 /* Main 296D5C / 296E6C. The Init still stops scene BGM while preserving
  * mode 5. EV01's absent track has no Move command, even on cut changes. */
@@ -38,6 +40,8 @@ gh_game_event_status gh_event_bgm_move_00004708(const gh_event_data_prefix *, ui
 gh_game_event_status gh_event_scr_layer_init_00008948(const gh_event_data_prefix *,
     const gh_room_pools *, const gh_scene_meshes *, uint32_t *, int *relative);
 gh_game_event_status gh_event_scr_layer_move_00008a40(const gh_event_data_prefix *,
+    const gh_room_pools *, const gh_scene_meshes *, uint32_t *, int *relative);
+gh_game_event_status gh_event_scr_layer_quit_00008af0(const gh_event_data_prefix *,
     const gh_room_pools *, const gh_scene_meshes *, uint32_t *, int *relative);
 
 typedef gh_game_event_status (*gh_event_message_create)(
@@ -57,6 +61,8 @@ gh_game_event_status gh_event_message_init_00008100(gh_event_message_play *,
     uint32_t filter_flags, uint16_t filter_message, gh_event_message_create,
     void *context, uint32_t *, int *relative);
 void gh_event_message_move_000081a8(void);
+gh_game_event_status gh_event_message_quit_000081b0(const gh_event_message_play *,
+    uint32_t *, int *relative);
 
 #ifdef __cplusplus
 }

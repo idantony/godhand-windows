@@ -14,6 +14,9 @@ typedef struct {int32_t bank,resource_id;uint32_t state,load_flags,source_heap_g
  * verify dynamic12slots are not already committed. Rawguest pointers remain IDs. */
 gh_enemy_se_status gh_enemy_se_banks_from_startup(const gh_enemy_se_bindings *,gh_enemy_se_banks **);
 gh_enemy_se_status gh_enemy_se_normalize_002cb3a8(const gh_enemy_se_banks *,int32_t resource_id,int32_t *);
+/* Original 2CB418 scans the dynamic bank table in order. A known no-match
+ * returns -1; an unbound or inconsistent registry reports a native error. */
+gh_enemy_se_status gh_enemy_se_resolve_002cb418(const gh_enemy_se_banks *,int32_t dependency,int32_t *original_bank);
 /* Actual2CB278: -1 only actualdisabled/outofrange/duplicate/full/not-found branches.
  * Positive result means a realDVD allocation queued, NOT ready or audible. */
 gh_enemy_se_status gh_enemy_se_request_002cb278(gh_enemy_se_banks *,const gh_boot_work *,int32_t resource_id,int32_t *original_slot);

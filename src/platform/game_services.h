@@ -158,11 +158,15 @@ gh_game_services_status gh_game_services_mask_actor_nodes(gh_game_services *,uin
  uint32_t and_mask,uint32_t or_mask,uint32_t *frontier);
 /* Dispatches a verified original Move descriptor on the SAME canonical actor.
  * Unknown methods/this-adjustments retain their exact original entry frontier. */
+/* The caller owns the original Event/room condition and task. Re-entry
+ * resumes the same RoomSave-backed resource and native actor construction. */
+gh_game_services_status gh_game_services_enemy_set_all_00294ca0(gh_game_services *,uint32_t *,int *);
 gh_game_services_status gh_game_services_move_actor(gh_game_services *,uint32_t handle,uint32_t original_entry,
  int16_t this_delta,const gh_title_player_view *,const gh_boot_work *,uint32_t *frontier);
 typedef struct {const uint8_t *depth_shift;const gh_shadow_templates *shadow_templates;
  gh_shadow_emit shadow_emit;void *shadow_context;
- gh_actor_draw_emit actor_emit;void *actor_context;const gh_game_pl_camera *camera;} gh_game_actor_render_provider;
+ gh_actor_draw_emit actor_emit;void *actor_context;const gh_game_pl_camera *camera;
+ gh_effect_trans_emit marker_emit;void *marker_context;} gh_game_actor_render_provider;
 /* Move may produce an original shadow packet on Root's current OT. */
 gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services *,uint32_t handle,
  uint32_t original_entry,int16_t this_delta,const gh_title_player_view *,const gh_boot_work *,
@@ -175,6 +179,8 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services *,const gh
 /* Inspect native script errors immediately after a real Scenario visit. */
 gh_scene_step_status gh_game_services_task_status(gh_game_services *,uint32_t *frontier);
 /* Actual12C418 on SAME player/model/motion, with one invocation cursor. */
+gh_game_event_status gh_game_services_event_return_0031c7e0(gh_game_services *,
+ const gh_game_event *, uint32_t *frontier);
 gh_game_event_status gh_game_services_event_player_clear(gh_game_services *,const gh_event_clear_bindings *,uint32_t *frontier);
 /* Native continuation/cache metadata only, after original state5 chooses the
  * next Main2/3 visit. Actual room allocations expire later at2A6210. */

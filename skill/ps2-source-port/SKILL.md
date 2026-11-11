@@ -109,6 +109,11 @@ Run meaningful known vectors, boundaries and state transitions. Turn a
 reproducible problem observed twice into a small reusable check, diagnostic or repair
 tool, then exercise it on the real case so a third occurrence is caught early.
 Keep tool development tied to original-code recovery and actual native execution.
+If several original frames or scenes use the same dispatch, batch a bounded
+source inventory and run independent native fixtures against the later inputs.
+Report the first missing operation with its owner, source row and frame. Keep
+empty table slots distinct from invalid offsets. Use the native startup path to
+verify the composed result and expose dependencies outside the fixture.
 Where useful,
 compare actual instruction words with native output using a small offline model
 or isolated oracle. Record supported instructions, inputs, states and raw return

@@ -50,3 +50,49 @@ gh_camera_status gh_game_camera_follow_00139ff8(gh_camera_follow*s,gh_game_scene
  fenv_t env;if(feholdexcept(&env))return GH_CAMERA_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_CAMERA_NUMERIC;}gh_camera_status e=follow_impl(s,t,cb,ctx,f);if(fesetenv(&env))return GH_CAMERA_NUMERIC;return e;
 }
 gh_camera_status gh_game_camera_step_follow_00138fc8(gh_game_pl_camera*c,gh_game_init_state*i,gh_acd_scene_binding*p,const gh_title_player_view*v,const gh_boot_work*w,gh_camera_follow*s,gh_game_scene_tables*t,gh_camera_follow_ray cb,void*ctx,uint32_t*f){if(f)*f=0;if(!c||!i||!p||!v||!w||c->identity!=&i->camera)return GH_CAMERA_ARGUMENT;/* Resume the SAME pending update, not a new path-blend frame. */if(s&&s->bound&&s->stage){if(s->camera!=c||s->player!=v)return GH_CAMERA_ARGUMENT;return gh_game_camera_follow_00139ff8(s,t,cb,ctx,f);}uint32_t pc=0;gh_camera_status e=gh_game_camera_step_00138fc8(c,i,p,v,w,&pc);if(e==GH_CAMERA_UNSUPPORTED&&pc==0x139ff8){if(!s||!s->bound||s->camera!=c||s->player!=v)return stop(s,f,0x139db8,GH_CAMERA_UNSUPPORTED);e=gh_game_camera_follow_00139ff8(s,t,cb,ctx,&pc);}if(f)*f=pc;return e;}
+
+gh_camera_status gh_game_camera_reset_pose_0013b9b8(gh_camera_follow *follow,
+    const gh_game_init_state *init, uint32_t *frontier) {
+    if (frontier) *frontier = 0x13b9b8;
+    if (!init) return GH_CAMERA_ARGUMENT;
+    /* The original reads no camera fields when the active global is NULL. */
+    if (!init->active_camera) {
+        if (frontier) *frontier = 0;
+        return GH_CAMERA_OK;
+    }
+    if (!follow || !follow->bound || follow->stage || !follow->camera ||
+        !follow->camera->constructed || follow->camera->identity != &init->camera ||
+        !valid_player(follow->player) ||
+        follow->camera->policy != GH_CAMERA_NATIVE_BINARY32_REFERENCE)
+        return GH_CAMERA_UNSUPPORTED;
+
+    gh_game_pl_camera *camera = follow->camera;
+    float matrix_data[16], local[3], target[4], eye[4];
+    fenv_t env;
+    if (feholdexcept(&env)) return GH_CAMERA_NUMERIC;
+    if (fesetround(FE_TONEAREST)) {
+        (void)fesetenv(&env);
+        return GH_CAMERA_NUMERIC;
+    }
+    int valid = target_matrix(follow->player, matrix_data);
+    for (unsigned i = 0; i < 3; ++i) local[i] = number(camera->fields + 0x400 + i * 4);
+    if (valid) {
+        apply(target, matrix_data, local);
+        valid = finite3(target) && eye_position(camera, follow->player, target, eye) && finite3(eye);
+    }
+    if (fesetenv(&env)) return GH_CAMERA_NUMERIC;
+    if (!valid) {
+        if (frontier) *frontier = 0x147728;
+        return GH_CAMERA_UNSUPPORTED;
+    }
+
+    put(camera->fields + 0x51c, 0);
+    memcpy(camera->fields + 0x200, target, 12);
+    memcpy(camera->fields + 0x210, eye, 12);
+    put(camera->fields + 0x3d0, 0);
+    put(camera->fields + 0x3d4, 0x3f800000);
+    put(camera->fields + 0x3d8, 0);
+    put(camera->fields + 0x250, 0x41f80000);
+    if (frontier) *frontier = 0;
+    return GH_CAMERA_OK;
+}

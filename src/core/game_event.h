@@ -30,7 +30,7 @@ struct gh_game_event {
     void *contexts[6];
     uint32_t frontier;
     int callee_error;
-    uint8_t initialized;
+    uint8_t initialized, release_resume;
 };
 /* Actual initial mapped ELF/BSS bytes at00586AF0. This is not a claim that
  * every earlier boot/constructor ran or a way to restore a live event session. */

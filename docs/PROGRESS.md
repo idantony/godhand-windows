@@ -4,6 +4,42 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Complete native R100 opening and return to the room
+
+An immutable Windows build plays all ten original EV01 camera cuts from the
+patched ISO. The recovered quit path retires the opening camera and event
+actors, then returns to the R100 scene loop. The hidden, muted New Game run
+reaches 1,735 ticks, presents 1,594 scene frames and submits 1,224,912 world
+packets. Renderer, GPU, postprocess and window error counts are zero.
+The matching native suite passes 355 C modules and 349 checks, with muted
+audio devices, movie decoding, two ADX sample comparisons and both RNG suites.
+
+The late opening includes the original costume meshes, animation, scene
+lighting and attached effects. One EL31 stream keeps the original zero TEX0
+write and samples the previous complete frame's GS display-copy texel. Its
+texture color is modulated by the vertex color while alpha comes from the vertex.
+Final composites at scene frames 1232 and 1238 show the original characters
+and camera change. The native model test also checks this sampling path
+against independent RGBA and depth calculations.
+
+The run reaches R100 Scenario task registration `0x002C3890` after EV01 cleanup.
+It used synthetic menu input. Continuous player control, combat, room
+transitions and save/load still need verification.
+
+固定 Windows 构建从补丁 ISO 播完 EV01 的十个原版镜头，清理开场相机与角色后回到
+R100 场景循环。隐藏、静音的“新游戏”运行达到 1735 ticks，呈现 1594 个场景帧，
+累计提交 1224912 个世界绘制包，渲染器、GPU、后处理和窗口错误均为 0。
+对应原生回归通过 355 个 C 模块和 349 项检查，包含真实静音音频设备、片头解码、两组
+ADX 逐样本对照和两组随机数验证。
+
+开场后段包含原服装网格、动画、场景灯光及附属特效。EL31 的一条网格保留原始零值
+TEX0 写入，从上一完整帧的 GS 显示拷贝取样。纹理 RGB 受顶点颜色调制，透明度
+取自顶点。已检查场景帧 1232、1238 的最终画面，可见原角色和镜头变化。原生模型测试
+用独立的 RGBA 和深度计算核对了该采样路径。
+
+运行完成 EV01 清理后到达 R100 的 Scenario 任务注册 `0x002C3890`。菜单使用合成
+输入，连续操作、战斗、房间切换和存读档仍待验证。
+
 ## Native opening through the first camera cut
 
 The immutable source snapshot passes **316 C modules and 340 checks**, including

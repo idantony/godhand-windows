@@ -37,6 +37,8 @@ struct NativeApp {
     uint64_t resource_epoch=0,frame_serial=0,presented_mc=0,presented_movie=0;
     uint64_t scene_resource_epoch=0;
     uint64_t presented_fade_serial=0;
+    uint32_t display_base0_rgb=0;
+    bool display_base0_known=false;
     unsigned surface_kind=0; /*1=actual UI512448,2=Movie640448*/
     gh_window_error window_error=GH_WINDOW_OK;
     gh_model_gpu_error world_gpu_error=GH_MODEL_GPU_OK;
@@ -90,7 +92,8 @@ static void qa_actor_gpu_failure(const gh_actor_world_group &g,const gh_actor_wo
 {
     std::fprintf(stderr,"QA_ACTOR_GPU_INPUT {\"node_index\":%llu,\"program\":%u,\"bank\":%u,\"depth\":%u,\"triangles\":%llu,\"vertex_count\":%llu,\"tex0\":\"%016llX\",\"test\":\"%016llX\",\"alpha\":\"%016llX\",\"tex1\":\"%016llX\",\"clamp\":\"%016llX\",\"primitive\":%u,\"texture_function\":%u,\"offset_x\":%u,\"offset_y\":%u,\"fog_rgb\":%u,\"texture_width\":%u,\"texture_height\":%u,\"texture_psm\":%u,\"indices\":[",
         (unsigned long long)g.command.node_index,g.command.selected_program,g.command.bank,g.command.depth,(unsigned long long)p.triangles,(unsigned long long)p.vertex_count,
-        (unsigned long long)p.tex0,(unsigned long long)s.test,(unsigned long long)s.alpha,(unsigned long long)s.tex1,(unsigned long long)s.clamp,s.primitive,s.texture_function,s.xy_offset_x16,s.xy_offset_y16,s.fog_rgb,p.material->width,p.material->height,p.material->psm);
+        (unsigned long long)p.tex0,(unsigned long long)s.test,(unsigned long long)s.alpha,(unsigned long long)s.tex1,(unsigned long long)s.clamp,s.primitive,s.texture_function,s.xy_offset_x16,s.xy_offset_y16,s.fog_rgb,
+        p.material?p.material->width:1,p.material?p.material->height:1,p.material?p.material->psm:0);
     for(size_t i=0;i<p.triangles*3;i++)std::fprintf(stderr,"%s%u",i?",":"",p.indices[i]);
     std::fprintf(stderr,"],\"vertices\":[");
     for(size_t i=0;i<p.vertex_count;i++){
@@ -342,13 +345,26 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
     if(p.kind==GH_EFFECT_PASS_SCENE_CAPTURE||p.kind==GH_EFFECT_PASS_SCENE_WARP)
         return consume_scene_warp(app,p,sampler,post,x,y);
     if(p.kind==GH_EFFECT_PASS_SPRITE){
-        // 2FEC38 writes CLAMP_1, but consumes the current TEX1_1.
-        if(!p.writes_clamp||p.clamp||!p.inherited_sampler||!p.writes_tex0||p.prim!=0x54||
+        // 15BCF0 writes TEX1_1/CLAMP_1 and inherits the scene target.
+        // ESP 2FEC38 instead inherits TEX1_1 and restores FRAME/ZBUF.
+        const bool marker=p.original_callee==0x15bcf0;
+        if(!p.writes_clamp||p.clamp||!p.writes_tex0||p.prim!=0x54||
             p.source!=GH_EFFECT_SURFACE_MATERIAL||p.destination!=GH_EFFECT_SURFACE_SCENE_COLOR||
-            !p.material||p.tex0!=p.material->source_tex0||p.quad_count!=1||p.quads[0].vertex_count!=4||
-            !p.restores_scene_target||p.restore_frame_mask||p.restore_zbuf!=0x3a0000f8||
-            (p.zbuf!=0x3a0000f8&&p.zbuf!=UINT64_C(0x13a0000f8)))return GH_ID_UNSUPPORTED;
-        sampler.clamp=p.clamp;sampler.clamp_known=true;
+            !p.material||p.tex0!=p.material->source_tex0||p.quad_count!=1||p.quads[0].vertex_count!=4)
+            return GH_ID_UNSUPPORTED;
+        if(marker){
+            if(!p.inherits_scene_target||!p.writes_tex1||p.tex1!=0x60||p.inherited_sampler||
+                p.order.bank!=6||p.test!=0x5000d||p.alpha!=UINT64_C(0x8000000044)||
+                p.frame_mask||p.zbuf||p.restores_scene_target)
+                return GH_ID_UNSUPPORTED;
+            sampler.write(p.tex1,p.clamp);
+        }else{
+            if(!p.inherited_sampler||p.inherits_scene_target||p.writes_tex1||
+                !p.restores_scene_target||p.restore_frame_mask||p.restore_zbuf!=0x3a0000f8||
+                (p.zbuf!=0x3a0000f8&&p.zbuf!=UINT64_C(0x13a0000f8)))
+                return GH_ID_UNSUPPORTED;
+            sampler.clamp=p.clamp;sampler.clamp_known=true;
+        }
         if(!sampler.known())return GH_ID_UNSUPPORTED;
         gh_static_gs_vertex vertices[4]={};
         for(unsigned k=0;k<4;k++){
@@ -434,7 +450,11 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
         auto &seen=shadow?shadow_seen:actor?actor_seen:effect?effect_seen:world_seen;
         if(i>=seen.size()||seen[i])return GH_ID_ARGUMENT;seen[i]=1;}
     for(size_t i:ui_order){if(i>=ui_seen.size()||ui_seen[i])return GH_ID_ARGUMENT;ui_seen[i]=1;}
-    if(!world_order.empty()){
+    int message_depth=0;
+    gh_id_error depth_status=gh_mc_renderer_queued_message_depth(app.renderer,ui_order.data(),ui_order.size(),&message_depth);
+    if(depth_status!=GH_ID_OK)return depth_status;
+    const bool world_surface=!world_order.empty()||message_depth;
+    if(world_surface){
         const gh_display_state *display=app.snapshot.display;
         if(!scene||!display||!display->initialized||display->screen_width!=512||display->screen_lines!=448||display->gs_y_origin!=1824)return GH_ID_UNSUPPORTED;
         if(!app.world_renderer)app.world_gpu_error=gh_model_renderer_create(512,448,&app.world_renderer);
@@ -478,13 +498,20 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
                     gh_actor_world_packet packet={};
                     if(gh_actor_world_queue_packet_at(app.actor_queue,i,j,&packet)!=GH_ACTOR_WORLD_OK)return GH_ID_ARGUMENT;
                     if((packet.primitive&32)&&!fog_known){app.world_frontier=0x14c5a0;return GH_ID_UNSUPPORTED;}
-                    uint32_t texture=0;app.world_gpu_error=gh_model_renderer_upload(app.world_renderer,packet.material,&texture);
-                    if(app.world_gpu_error!=GH_MODEL_GPU_OK){app.world_frontier=0x151368;return GH_ID_UNSUPPORTED;}
                     gh_model_draw_state state={};state.test=g.command.test;state.alpha=g.command.alpha;state.tex1=g.command.tex1;state.clamp=g.command.clamp;state.primitive=packet.primitive;
                     state.texture_function=(uint8_t)((packet.tex0>>35)&3);
                     state.xy_offset_x16=(2048-display->screen_width/2)*16;state.xy_offset_y16=display->gs_y_origin*16;state.fog_rgb=fog_rgb;
                     state.zbuf_psm=58;state.z_write=state.colclamp=state.native_float_reference=1;
-                    app.world_gpu_error=gh_model_renderer_draw(app.world_renderer,&state,texture,packet.vertices,packet.vertex_count,packet.indices,packet.triangles*3);
+                    if(packet.samples_display_base0){
+                        if(!app.display_base0_known){app.world_frontier=0x30b870;return GH_ID_UNSUPPORTED;}
+                        app.world_gpu_error=gh_model_renderer_draw_display_texel(app.world_renderer,&state,app.display_base0_rgb,
+                            packet.vertices,packet.vertex_count,packet.indices,packet.triangles*3);
+                    }else{
+                        uint32_t texture=0;
+                        app.world_gpu_error=gh_model_renderer_upload(app.world_renderer,packet.material,&texture);
+                        if(app.world_gpu_error!=GH_MODEL_GPU_OK){app.world_frontier=0x151368;return GH_ID_UNSUPPORTED;}
+                        app.world_gpu_error=gh_model_renderer_draw(app.world_renderer,&state,texture,packet.vertices,packet.vertex_count,packet.indices,packet.triangles*3);
+                    }
                     if(app.world_gpu_error!=GH_MODEL_GPU_OK){
 #ifdef GH_NATIVE_STARTUP_QA
                         qa_actor_gpu_failure(g,packet,state);
@@ -516,12 +543,12 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
             }
         }
         app.world_pixels.resize(512*448*4);
-        if(app.frame_fade_seen&&app.frame_fade.test==0x70000)world_depth.resize(512*448);
+        if(message_depth||(app.frame_fade_seen&&app.frame_fade.test==0x70000))world_depth.resize(512*448);
         app.world_gpu_error=gh_model_renderer_readback(app.world_renderer,app.world_pixels.data(),app.world_pixels.size(),
             world_depth.empty()?nullptr:world_depth.data(),world_depth.size());
         if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
     }
-    gh_id_error error=world_order.empty()?gh_mc_renderer_flush_queued(app.renderer,ui_order.data(),ui_order.size(),clear):
+    gh_id_error error=!world_surface?gh_mc_renderer_flush_queued(app.renderer,ui_order.data(),ui_order.size(),clear):
         world_depth.empty()?gh_mc_renderer_flush_queued_on_background(app.renderer,ui_order.data(),ui_order.size(),
             app.world_pixels.data(),app.world_pixels.size()):
         gh_mc_renderer_flush_queued_on_background_with_depth(app.renderer,ui_order.data(),ui_order.size(),
@@ -674,6 +701,10 @@ int main(int argc,char **argv)
             if(app.display_pending){
                 app.window_error=gh_window_present(app.window,app.queued_pixels.data(),app.queued_pixels.size(),512,448,4,3);
                 if(app.window_error!=GH_WINDOW_OK)break;
+                // The original display copy follows the complete frame OT.
+                // Its base-zero texel is visible to the following frame.
+                app.display_base0_rgb=gh_display_copy_base0_0030b870(app.queued_pixels.data(),app.queued_pixels.data()+512*4);
+                app.display_base0_known=true;
                 app.frame_serial=app.pending_mc_serial;app.presented_fade_serial=app.pending_fade_serial;
                 if(app.pending_scene)++app.presented_scene;else ++app.presented_mc;
                 app.display_pending=false;

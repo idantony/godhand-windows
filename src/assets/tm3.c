@@ -29,7 +29,10 @@ gh_tm3_error gh_tm3_member(const gh_tm3_bundle*t,unsigned index,gh_tm3_picture*o
  unsigned indexed8=psm==19;
  if(u16(p+14)!=(indexed8?256:16)||p[19]!=(indexed8?5:4)||
     image!=(size_t)w*h/(indexed8?1:2)||clut!=(indexed8?1024:64))return GH_TM3_UNSUPPORTED;
- if(indexed8){if(b[5]!=6||w<128||w>512||h<64||h>512)return GH_TM3_UNSUPPORTED;}
+ if(indexed8){
+  if(b[5]==0){if(w!=64||h!=64)return GH_TM3_UNSUPPORTED;}
+  else if(w<128||w>512||h<64||h>512)return GH_TM3_UNSUPPORTED;
+ }
  else if(b[5]==0){if((w!=32&&w!=64&&w!=128)||(h!=16&&h!=32&&h!=64))return GH_TM3_UNSUPPORTED;}
  else if((w!=128&&w!=256)||(h!=128&&h!=256&&h!=512))return GH_TM3_UNSUPPORTED;
  *out=(gh_tm3_picture){b,p+head,p+head+image,end-off,image,clut,w,h,tex0,b[5]};return GH_TM3_OK;
@@ -54,9 +57,21 @@ gh_tm3_error gh_tm3_rgba_gs(const gh_tm3_picture*p,void*raw,size_t capacity){
  if(!pixels||p->image_bytes!=pixels/(indexed8?1:2)||p->clut_bytes!=(indexed8?1024:64))return GH_TM3_BOUNDS;if(capacity<pixels*4)return GH_TM3_CAPACITY;
  if(p->transfer_kind!=0&&p->transfer_kind!=6)return GH_TM3_UNSUPPORTED;
  if(indexed8){
-  if(p->transfer_kind!=6||p->width<128||p->width>512||p->height<64||p->height>512||
+  uint8_t *out=raw;
+  if(p->transfer_kind==0){
+   if(p->width!=64||p->height!=64)return GH_TM3_UNSUPPORTED;
+   /* 151990 uses 150F68 with PSMT8 and unscaled width/height.
+    * The direct image transfer reads rows in order. The CT32 CLUT
+    * still follows the common 16x16 CSM1 index permutation. */
+   for(size_t i=0;i<pixels;i++){
+    unsigned palette=gh_gs_csm1_palette256(p->image[i]);
+    memcpy(out+i*4,p->clut+palette*4,4);
+   }
+   return GH_TM3_OK;
+  }
+  if(p->width<128||p->width>512||p->height<64||p->height>512||
      (p->width&(p->width-1))||(p->height&(p->height-1)))return GH_TM3_UNSUPPORTED;
-  uint8_t *out=raw;unsigned pitch=p->width/128;
+  unsigned pitch=p->width/128;
   /* 151168 uploads PSMT8 through CT32 at half width and half height. */
   for(unsigned y=0;y<p->height;y++)for(unsigned x=0;x<p->width;x++){
    size_t address=(size_t)gh_gs_psmt8_offset(x,y,pitch);

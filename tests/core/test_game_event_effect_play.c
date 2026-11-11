@@ -9,6 +9,7 @@
 #include "game_esp_update.h"
 #include "game_effects_frame.h"
 #include "game_effects_trans.h"
+#include "game_ray_static.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +39,11 @@ static gh_game_event_status register_effects(void *context, const uint8_t *data,
     gh_effect_status status = gh_game_effects_register_event_002fa0b0(effects, data, size);
     if (status) *frontier = effects->frontier;
     return status == GH_EFFECT_OK ? GH_EVENT_OK : GH_EVENT_CALLEE;
+}
+
+static uint32_t quit_clock(void *context) {
+    uint32_t *clock=context;
+    return ++*clock;
 }
 
 static uint32_t word(const uint8_t *p) {
@@ -642,6 +648,73 @@ int main(int argc, char **argv) {
         }
     }
     CHECK(frames == 1209 && produced == 24 && queries == 3 && live_emitters(effects) == produced);
+    gh_effect_emitter_view quit_source;
+    CHECK(!gh_effect_create_emitter_at(effects,0,&quit_source));
+    gh_esp_create_call quit_particle={0};
+    gh_esp_create_bindings quit_particle_b={.storage=producer.storage,.work=&work,
+        .globals=&globals,.random=&rng,.policy=GH_STATIC_BINARY32_REFERENCE};
+    CHECK(!gh_esp_create_begin_00300e30(&quit_particle,0,quit_source.serial));
+    CHECK(!gh_game_esp_create_00300e30(&quit_particle,&quit_particle_b)&&quit_particle.complete);
+    gh_effect_esp_view held;
+    CHECK(!gh_effect_create_esp_at(effects,quit_particle.slot,&held)&&held.initialized);
+    const gh_effect_view original_record=held.record, original_texture=held.texture;
+    const gh_effect_view original_bank1=effects->emd_tables[1], original_emitter0=effects->emitter_entries[0];
+    unsigned bank6=0;
+    while(bank6<64&&effects->resources[bank6].kind!=6)++bank6;
+    CHECK(bank6<64&&effects->resources[bank6].references==1);
+    gh_game_init_state *quit_init=calloc(1,sizeof(*quit_init));
+    CHECK(quit_init);
+    gh_game_init_state_initialize(quit_init);
+    gh_game_mt_seed_0030f2b0(&quit_init->random,123);
+    uint8_t quit_player_raw[GH_TITLE_PLAYER_BYTES]={0};
+    gh_title_player_view quit_player;
+    CHECK(!gh_title_player_construct_00107e40(quit_player_raw,sizeof(quit_player_raw),&quit_player));
+    gh_effects_frame_bindings quit_b={.storage=producer.storage,.work=&work,.init=quit_init,
+        .current_player=&quit_player,.globals=&globals,.policy=GH_STATIC_BINARY32_REFERENCE};
+    gh_event_effect_quit quit={0};
+    put_word((uint8_t *)&work+0x5e4,0x4010001u);
+    CHECK(effects->ear.bytes&&effects->ssd.bytes);
+    put_word(quit_player_raw+0x214,0);
+    CHECK(gh_event_effect_quit_00005478(&quit,&state,&quit_b,&frontier)==GH_EVENT_UNSUPPORTED&&
+      frontier==0x305c20&&quit.stage==2&&effects->event_registered_41c);
+    CHECK(!effects->field414&&(word((uint8_t *)&work+0x5e4)&0x10000u));
+    put_word(quit_player_raw+0x214,0x41d220);
+    CHECK(!gh_event_effect_quit_00005478(&quit,&state,&quit_b,&frontier)&&!frontier&&quit.completed);
+    CHECK(word((uint8_t *)&work+0x5e4)==0x4000001u);
+    CHECK(!effects->event_registered_41c&&!effects->event_data.bytes&&!effects->emd_tables[6].bytes&&
+      effects->resources[bank6].kind==5&&!effects->resources[bank6].references);
+    CHECK(effects->emd_tables[1].bytes==original_bank1.bytes&&effects->emitter_entries[0].bytes==original_emitter0.bytes);
+    CHECK(word(quit_source.payload+0x114)&0x40000000u);
+    CHECK((word(esp+0x100000)&0x80000000u)&&(word(esp+0x100080)&0x80000000u)&&!word(esp+0x100100));
+    CHECK(!gh_effect_create_esp_at(effects,quit_particle.slot,&held)&&held.record.bytes==original_record.bytes&&
+      held.texture.bytes==original_texture.bytes&&held.serial==quit_particle.serial);
+    int borrowed;
+    CHECK(!gh_effect_create_source_has_live_refs(effects,prefix.data,prefix.bytes,&borrowed)&&borrowed);
+    gh_game_mt after_quit=quit_init->random;
+    CHECK(!gh_event_effect_quit_00005478(&quit,&state,&quit_b,&frontier)&&!frontier&&
+      !memcmp(&after_quit,&quit_init->random,sizeof(after_quit)));
+    gh_game_scene_tables quit_actors={0};
+    CHECK(!gh_scene_actors_0012e670(&quit_actors,&room));
+    gh_camera_envelope quit_envelope={0};
+    CHECK(!gh_game_camera_envelope_from_elf(&quit_envelope,elf,elf_bytes,&frontier));
+    gh_game_scene_aux quit_profile={0};
+    uint32_t quit_tick=0;
+    quit_b.profile=&quit_profile;
+    quit_b.clock=quit_clock;
+    quit_b.clock_context=&quit_tick;
+    quit_b.actors=&quit_actors;
+    quit_b.atan_coeff=quit_envelope.atan_coeff;
+    put_word((uint8_t *)&work+0x574,0x3f800000);
+    gh_game_effects_frame retirement={0};
+    for(unsigned i=0;i<3;i++){
+      gh_effect_status e=gh_game_effects_frame_update_0030f228(&retirement,&quit_b);
+      if(e)fprintf(stderr,"Quit FX retirement frame%u status%u entry%x\n",i,e,retirement.frontier);
+      CHECK(!e);
+    }
+    CHECK(!gh_effect_create_source_has_live_refs(effects,prefix.data,prefix.bytes,&borrowed)&&!borrowed);
+    CHECK(gh_effect_create_esp_at(effects,quit_particle.slot,&held)==GH_EFFECT_UNSUPPORTED);
+    gh_scene_ray_triangle_state_release(&quit_actors);
+    free(quit_init);
     CHECK(!gh_event_timing_abort(&timing));
     gh_effect_create_forget_on_owner_destroy(effects);
     free(effects);
@@ -654,6 +727,6 @@ int main(int argc, char **argv) {
     CHECK(!gh_heap_used(heap) && !gh_heap_destroy(heap));
     gh_disc_close(disc);
     free(elf);
-    puts("PASS actual EV01 1209 frames, 24 emitters, Vertex absence, type12 capture/warp, type0 lifecycles, and type13 zero emission, and type18 camera shake gate");
+    puts("PASS actual EV01 1209 frames, 24 emitters, Vertex absence, type12 capture/warp, type0 lifecycles, and type13 zero emission, type18 camera shake gate and original Quit FX with deferred source retirement");
     return 0;
 }

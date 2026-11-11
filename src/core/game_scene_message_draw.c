@@ -86,18 +86,38 @@ gh_scene_ui_status gh_scene_message_render_002af028(gh_game_scene_ui *ui,
     return status;
 }
 
-gh_scene_ui_status gh_scene_message_glyph_discarded(const gh_id_text_glyph *glyph,
-    const uint8_t *atlas, size_t bytes, int *discarded)
+static unsigned channel(const uint8_t *atlas, unsigned x, unsigned y, unsigned component)
+{
+    const unsigned value = atlas[4u * ((y & 255u) * 512u + (x & 511u)) + component];
+    return component == 3 ? (value == 255 ? 128 : value / 2) : value;
+}
+
+static unsigned sample(const uint8_t *atlas, uint32_t u, uint32_t v, unsigned component)
+{
+    /* TEX1=0x60 selects linear. Shift the fixed16 coordinates by half a
+     * texel before extracting the repeat index and native 4-bit weights. */
+    u -= 32768u;
+    v -= 32768u;
+    const unsigned x = u >> 16, y = v >> 16;
+    const unsigned fx = (u >> 12) & 15u, fy = (v >> 12) & 15u;
+    const unsigned a = (channel(atlas, x, y, component) * (16u - fx) +
+                        channel(atlas, x + 1, y, component) * fx) >> 4;
+    const unsigned b = (channel(atlas, x, y + 1, component) * (16u - fx) +
+                        channel(atlas, x + 1, y + 1, component) * fx) >> 4;
+    return (a * (16u - fy) + b * fy) >> 4;
+}
+
+static gh_scene_ui_status raster_glyph(const gh_id_text_glyph *glyph,
+    const uint8_t *atlas, size_t bytes, uint8_t *rgba, uint32_t *depth, int *discarded)
 {
     if (!glyph || !atlas || !discarded) return GH_SCENE_UI_ARGUMENT;
     if (bytes < 512u * 256u * 4u) return GH_SCENE_UI_BOUNDS;
     const gh_font_quad *q = &glyph->quad;
     if (q->slot || q->palette_parity != (glyph->code & 1) ||
         q->x0 >= q->x1 || q->y0 >= q->y1 || q->u0 > q->u1 || q->v0 > q->v1 ||
-        q->u1 > 512u * 16u + 8u || q->v1 > 256u * 16u + 8u)
+        q->u1 > 512u * 16u + 8u || q->v1 > 256u * 16u + 8u || q->z != 65535)
         return GH_SCENE_UI_UNSUPPORTED;
 
-    /* The first integer pixel at or beyond the sprite's fixed-point edge. */
     const int left = ((int)q->x0 - 28672 + 15) / 16;
     const int right = ((int)q->x1 - 28672 + 15) / 16;
     const int top = ((int)q->y0 - 29184 + 15) / 16;
@@ -105,7 +125,7 @@ gh_scene_ui_status gh_scene_message_glyph_discarded(const gh_id_text_glyph *glyp
     const uint32_t du = (uint32_t)(q->u1 - q->u0) << 12;
     const uint32_t dv = (uint32_t)(q->v1 - q->v0) << 12;
     const unsigned tint_alpha = q->rgba >> 24;
-    *discarded = 0;
+    *discarded = 1;
     for (int y = top < 0 ? 0 : top; y < bottom && y < 448; ++y) {
         const unsigned offset_y = (unsigned)(29184 + y * 16 - q->y0);
         const uint32_t v = ((uint32_t)q->v0 << 12) +
@@ -114,11 +134,41 @@ gh_scene_ui_status gh_scene_message_glyph_discarded(const gh_id_text_glyph *glyp
             const unsigned offset_x = (unsigned)(28672 + x * 16 - q->x0);
             const uint32_t u = ((uint32_t)q->u0 << 12) +
                 (uint32_t)((uint64_t)du * offset_x / (q->x1 - q->x0));
-            const unsigned expanded = atlas[4u * (((v >> 16) & 255u) * 512u + ((u >> 16) & 511u)) + 3u];
-            const unsigned alpha = expanded == 255 ? 128 : expanded / 2;
-            if (((alpha * tint_alpha) >> 7) > 1) return GH_SCENE_UI_OK;
+            unsigned alpha = (sample(atlas, u, v, 3) * tint_alpha) >> 7;
+            if (alpha <= 1) continue; /* TEST3001D: GREATER 1, AFAIL KEEP. */
+            *discarded = 0;
+            if (!rgba) return GH_SCENE_UI_OK;
+            if (alpha > 255) alpha = 255;
+            const size_t pixel = (size_t)y * 512u + (unsigned)x;
+            uint8_t *destination = rgba + pixel * 4u;
+            for (unsigned k = 0; k < 3; ++k) {
+                const unsigned tint = (q->rgba >> (8u * k)) & 255u;
+                unsigned source = sample(atlas, u, v, k) * tint >> 7;
+                if (source > 255) source = 255;
+                const int numerator = (int)(destination[k] * 128u) +
+                    ((int)source - destination[k]) * (int)alpha;
+                destination[k] = numerator <= 0 ? 0 : numerator >= 255 * 128 ? 255 : (uint8_t)(numerator / 128);
+            }
+            destination[3] = (uint8_t)alpha;
+            if (depth) depth[pixel] = q->z;
         }
     }
-    *discarded = 1;
     return GH_SCENE_UI_OK;
+}
+
+gh_scene_ui_status gh_scene_message_glyph_discarded(const gh_id_text_glyph *glyph,
+    const uint8_t *atlas, size_t bytes, int *discarded)
+{
+    return raster_glyph(glyph, atlas, bytes, NULL, NULL, discarded);
+}
+
+gh_scene_ui_status gh_scene_message_glyph_blit(const gh_id_text_glyph *glyph,
+    const uint8_t *atlas, size_t atlas_bytes, uint8_t *rgba, size_t rgba_bytes,
+    uint32_t *depth, size_t depth_count)
+{
+    if (!rgba || (!depth && depth_count)) return GH_SCENE_UI_ARGUMENT;
+    if (rgba_bytes < 512u * 448u * 4u || (depth && depth_count < 512u * 448u))
+        return GH_SCENE_UI_BOUNDS;
+    int discarded;
+    return raster_glyph(glyph, atlas, atlas_bytes, rgba, depth, &discarded);
 }

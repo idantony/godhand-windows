@@ -40,6 +40,10 @@ typedef struct {gh_effects_frame_bindings b;const void *identity;uint32_t stage,
  * only after emitter -> region/SSD -> pool-age -> ESP ->factor1/end clock.
  * Unsupported live consumers never become empty success. */
 gh_effect_status gh_game_effects_frame_update_0030f228(gh_game_effects_frame *,const gh_effects_frame_bindings *);
+/* Original standalone 305C20 region/ambient refresh. Use a separate cursor
+ * so a Quit call cannot consume or reset the regular 30F228 invocation. */
+gh_effect_status gh_effects_frame_refresh_regions_00305c20(gh_game_effects_frame *,
+ const gh_effects_frame_bindings *);
 #ifdef __cplusplus
 }
 #endif

@@ -118,7 +118,9 @@ gh_init_status gh_game_init_002a5b18(gh_game_init_state *s,gh_boot_work *work,
  {float maximum=(float)((uint32_t)save.bytes[0x155]*30+120);uint32_t bits;memcpy(&bits,&maximum,4);
   w32(s->heat,0x14,0);w32(s->heat,0,bits);w32(s->heat,4,0);w32(s->heat,8,0);w32(s->heat,12,0x42f00000);}
  w32(s->input,0,0);w32(s->input,8,0);w16(s->input,12,0);w16(s->input,14,0);w16(s->input,16,0);w16(s->input,18,0);
- e=gh_core_save_game_init(save,work);if(e)return e;*rate=0.5f;return GH_INIT_OK;
+ e=gh_core_save_game_init(save,work);if(e)return e;
+ s->navigation_height_bits=0x3f000000;s->navigation_height_initialized=1;
+ *rate=0.5f;return GH_INIT_OK;
 }
 
 

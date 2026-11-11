@@ -47,6 +47,10 @@ gh_effect_status gh_effect_create_emitter_at(const gh_game_effects *,unsigned,gh
  * slots stay strict, not assumed to have NULL actor. */
 gh_effect_status gh_effect_create_actor_match(void *effects,int emitter,unsigned slot,
  const gh_title_player_view *,int *match,uint32_t *frontier);
+/* The admitted EV01 bank-6 sprites borrow an actor root.
+ * The emitter retains the selected part through a separate typed binding. */
+int gh_effect_event_part_is_bound(gh_effect_view,const gh_title_player_view *,
+ const gh_title_player_view *);
 /* Actual1024-slot ESP companion. Verified type6/type1A constructors are admitted;
  * unknown actor domains remain strict before allocation. Serial binds the SAME
  * payload and source; initialized stays false until real virtualInit returns. */
@@ -94,6 +98,10 @@ gh_effect_status gh_effect_create_esp_finish_hidden_14(struct gh_esp14_instance 
 gh_effect_status gh_effect_create_actor_has_live_refs(const gh_game_effects *,
  const gh_title_player_view *,int *borrowed);
 gh_effect_status gh_effect_create_esp_destroy_hidden_native(gh_game_effects *,unsigned,uint32_t,uint32_t *frontier);
+/* Check a backing allocation before freeing it. Includes paused/hidden slots
+ * until their original destructor clears the active mask. */
+gh_effect_status gh_effect_create_source_has_live_refs(const gh_game_effects *,
+ const void *source,size_t bytes,int *borrowed);
 #ifdef __cplusplus
 }
 #endif

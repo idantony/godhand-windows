@@ -10,7 +10,9 @@ typedef enum {GH_ACTOR_WORLD_OK,GH_ACTOR_WORLD_ARGUMENT,GH_ACTOR_WORLD_BOUNDS,
 typedef struct {gh_actor_draw_command command;size_t packets;} gh_actor_world_group;
 typedef struct {const gh_static_gs_vertex *vertices;size_t vertex_count;
  const uint32_t *indices;size_t triangles;uint16_t primitive;
- const gh_stage_material *material;uint64_t tex0;size_t stream,batch;} gh_actor_world_packet;
+ const gh_stage_material *material;uint64_t tex0;size_t stream,batch;
+ /* TEX0=0 binds the prior display-page texel at GS VRAM base zero. */
+ uint8_t samples_display_base0;} gh_actor_world_packet;
 /* Single original group per append; caller owns the ONE global OT. Geometry
  * captures values and truly converts all original stream/batch vertices.
  * Owned outputs survive palette/node changes; model/cache/source references

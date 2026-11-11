@@ -738,7 +738,8 @@ gh_effect_status gh_esp14_nested_sprite_alpha_002fec38(const gh_effect_esp_view 
     *frontier = 0x2ff1f0;
     if (!v || !v->payload || v->payload_size != 0x400 || !out ||
         !isfinite(alpha) || !isfinite(fade)) return GH_EFFECT_ARGUMENT;
-    if (!gh_esp14_nested_sprite_is_bound(v->record, v->actor, v->selector)) return GH_EFFECT_UNSUPPORTED;
+    if (!gh_esp14_nested_sprite_is_bound(v->record, v->actor, v->selector) &&
+        !gh_effect_event_part_is_bound(v->record, v->actor, v->selector)) return GH_EFFECT_UNSUPPORTED;
     const uint8_t *p = v->actor->bytes;
     float result;
     if (v->payload[0x11c] & 0x80u) {

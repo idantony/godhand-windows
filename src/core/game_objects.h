@@ -51,6 +51,12 @@ gh_object_status gh_game_objects_update_001fe748(gh_game_objects *,uint32_t *fro
 /* Same holder pass with canonical DVD and sound owners for the state 1 check. */
 gh_object_status gh_game_objects_update_bound_001fe748(gh_game_objects *,const gh_object_resource_bindings *,uint32_t *frontier);
 typedef gh_object_status (*gh_object_slot_release)(void *,int32_t slot,uint32_t *frontier);
+/* Event actor destructor's original 1FED78 -> 1FF2E0. Supported owned
+ * file domain has no positive sound slots or dependency keys. Last reference
+ * requests state5; the canonical 1FE748 update performs the later free. */
+gh_object_status gh_game_objects_release_event_001fed78(gh_game_objects *, uint32_t kind,
+ const uint8_t *expected_source, gh_object_slot_release, void *context, uint32_t *frontier);
+gh_object_status gh_game_objects_is_unloaded_001fefd0(const gh_game_objects *, uint32_t kind, int *unloaded);
 /* Original descending1FEF30: negative use-count pins persist. Required sound
  * slot consumer is invoked even for-1. Retry resumes after completed calls. */
 gh_object_status gh_game_objects_release_nonpinned_001fef30(gh_game_objects *,gh_object_slot_release,void *,uint32_t *frontier);

@@ -42,6 +42,10 @@ int main(int argc, char **argv) {
     CHECK(elf && gh_disc_read_boot_elf(disc, 0, elf, elf_bytes) == GH_DISC_OK);
     gh_game_event event = {0};
     CHECK(gh_game_event_from_elf(&event, elf, elf_bytes) == GH_EVENT_OK);
+    gh_game_event_config config = {0};
+    CHECK(!gh_game_event_config_from_elf(&config, elf, elf_bytes));
+    CHECK(!gh_game_event_init_environment_002975f8(&event, &config, 1, elf, elf_bytes));
+    CHECK(config.flags == 8);
     event.fields.data_number = 1;
 
     gh_heap *heap = NULL;
@@ -147,6 +151,14 @@ int main(int argc, char **argv) {
     camera.bytes[4] = 1;
     CHECK(gh_event_object_light_move_000086b0(&state, &frontier) == GH_EVENT_UNSUPPORTED);
     CHECK(frontier == 0xbcc8 && !memcmp(light->scalar + 0x40, lights.records + 0x0c, 0x0c));
+    memset(filters->work.active140c8, 0x5a, sizeof(original_filter));
+    gh_game_event_config config_preserve = config;
+    config_preserve.flags |= 0x100;
+    CHECK(!gh_event_filter_quit_000075a0(&state, &config_preserve, &frontier) && !frontier);
+    for (unsigned i = 0; i < sizeof(original_filter); ++i)
+        CHECK(filters->work.active140c8[i] == 0x5a);
+    CHECK(!gh_event_filter_quit_000075a0(&state, &config, &frontier) && !frontier);
+    CHECK(!memcmp(filters->work.active140c8, original_filter, sizeof(original_filter)));
 
     CHECK(!gh_game_world_light_release_presets(light));
     free(light);
@@ -161,6 +173,6 @@ int main(int argc, char **argv) {
     CHECK(!gh_heap_used(heap) && !gh_heap_destroy(heap));
     gh_disc_close(disc);
     free(elf);
-    puts("PASS actual EV01 ObjectLight and Filter across 1209 primary camera frames with real R100 owners");
+    puts("PASS actual EV01 ObjectLight and Filter across 1209 primary camera frames and original Filter Quit");
     return 0;
 }

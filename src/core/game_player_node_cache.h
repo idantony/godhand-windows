@@ -14,6 +14,9 @@ typedef struct {gh_game_title_player *player;gh_actor_model *model;const gh_play
  * Non-ASCII signedchars preserveoriginalquirk; boundedreadfornativeinput. */
 gh_player_nodes_status gh_actor_mesh_name_key_0014b730(const uint8_t *,size_t,uint64_t *);
 gh_player_nodes_status gh_actor_model_find_mesh_0014b730(gh_actor_model *,const uint8_t *,size_t,gh_player_mesh_reference *,int *original_nonnull);
+/* Visibility lookup returns original_found=0 when the named mesh is absent. */
+gh_player_nodes_status gh_actor_model_set_mesh_visible_0014a338(gh_actor_model *,
+    const uint8_t *, size_t, int visible, int *original_found);
 /* Ownedcopy of caller's actual15 eight-byte staticnames41B828..41B898.
  * No gamebytes embeddedinsource, no ELF lifetime neededafterthiscopy. */
 gh_player_nodes_status gh_player_node_names_from_elf(gh_player_node_names *,const void *,size_t);

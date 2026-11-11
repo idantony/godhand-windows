@@ -39,6 +39,8 @@ typedef struct gh_game_init_state {
  /* Native replacements for enemy slot prev/next guest pointers; SAME64 slots. */
  uint8_t enemy_prev[64],enemy_next[64];
  struct gh_hitarea_native *hitarea_native;uint32_t hitarea_generation;uint8_t hitarea_cold_constructed;
+ uint32_t navigation_height_bits;
+ uint8_t navigation_height_initialized;
 } gh_game_init_state;
 /* Host storage initialization, not the earlier complete PS2 boot. Existing
  * save data must separately be system-initialized or loaded by its owner. */

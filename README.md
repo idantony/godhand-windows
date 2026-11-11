@@ -10,17 +10,16 @@ This follows OpenGOAL's source recovery/platform adaptation method. God Hand was
 not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
 **Early development.** The original R100 opening renders natively from the
-user's ISO and completes its first camera cut. Captured final composites show
-the original black fade revealing the street, sky and moving effects. The
-matching hidden, muted synthetic New Game run reaches 632 ticks and presents
-512 scene frames, including earlier title and room startup frames. It submits
-134,036 world packets with renderer, GPU, postprocess and window errors all zero.
+user's ISO. All ten camera cuts play, and EV01 completes cleanup and returns to
+the R100 scene loop. A hidden, muted Windows run with synthetic New Game input
+reaches 1,735 ticks and presents 1,594 scene frames, including title and room
+startup. It submits 1,224,912 world packets with zero renderer, GPU,
+postprocess and window errors.
 
-The next frontier is Event actor Move `0x002B6930`, state4 at the start of the
-second camera cut. Counters through that stop include one player update, 141
-child updates and 9,654 object updates. Later opening cuts, physical gameplay
-controls, combat, transitions and save/load remain active work. The run starts
-at original startup task `0x0030D358`; earlier boot recovery is ongoing.
+The next original call is R100 Scenario task registration `0x002C3890`,
+reached after EV01.
+Gameplay controls, combat, scene transitions and save/load still need
+end-to-end verification. The run starts at original startup task `0x0030D358`.
 
 ### Verified progress
 
@@ -33,10 +32,10 @@ at original startup task `0x0030D358`; earlier boot recovery is ongoing.
 - Actual MC prompts, text, window and TIM2 cursor draw through restricted D3D11
   backends. Absent-card and empty-profile paths execute original Control,
   digital input mapping, limited real SFX and normal resource cleanup.
-- A hidden, muted native Windows synthetic New Game run completes the opening
-  camera cut with the original nine-actor roster, motion playback, model-backed
-  particles, nested emitters and shared render queues. Final composited frames
-  were read back and visually inspected. Actual human gameplay remains pending.
+- The opening runs with the original nine-actor roster, motion playback,
+  model-backed particles, nested emitters and shared render queues. Final
+  composites near the ninth cut show the original characters and street.
+  The opening camera and event actor owners retire through the recovered quit path.
 - Limited MC ADPCM voices use real XAudio2. Movie0 uses an explicit native
   FFmpeg codec process and Windows audio. Reference DSP/GS numerical profiles
   are documented; they are not PS2 hardware-equivalence claims or complete audio.
@@ -51,7 +50,7 @@ at original startup task `0x0030D358`; earlier boot recovery is ongoing.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters. Subsequent opening frames create original
   event effects, update their lifetimes and render sprites and framebuffer warp.
-- 316 C modules pass 340 checks with hardware-muted audio, movie decoding and
+- 355 C modules pass 349 checks with hardware-muted audio, movie decoding and
   the full independent ADX comparison enabled.
   The earlier foundation also passes in an independent clean source snapshot.
   Restricted GPU pixels match separate CPU equations. The recovered OT traversal
@@ -66,9 +65,9 @@ pitch. Native world rendering preserves the original shared OT order, material
 state and packed coordinates; exact wide integer coverage is independently
 checked across the full 16-bit XY range. Original walk/run states and their
 PL00 animation/root displacement pass focused tests, while platform analog
-input is still being connected. The opening's final composite is verified
-through the fade and the complete first camera cut. Further Event actor states
-and full gameplay remain under recovery.
+input is still being connected. The opening's final composites include the
+original fade, dialogue poses and camera changes. The next scenario and
+combat paths remain under recovery.
 
 Project evidence tools verify actual instruction bytes, calls, imports and
 static memory sites. Their generated reports remain private; see
@@ -122,7 +121,7 @@ For the explicitly synthetic, hidden startup acceptance check:
 python -B .\tools\build-windows.py --target startup-qa
 & 'G:\middle_thing\godhand_windows\build\windows-startup-qa\probe-native-startup.exe' `
   --iso 'X:\your\God Hand.iso' --profile 'X:\your\native-profile' `
-  --ffmpeg 'X:\tools\ffmpeg.exe' --hidden --muted --qa-new-game --max-ticks 1100
+  --ffmpeg 'X:\tools\ffmpeg.exe' --hidden --muted --qa-new-game --max-ticks 2000
 python -B .\tools\build-native.py --hardware-audio --movie-codec 'X:\tools\ffmpeg.exe'
 ```
 
@@ -143,7 +142,7 @@ logs stay under `G:\middle_thing\godhand_windows`. Scripts accept external
 scratch/compiler paths. Original game data remains read-only. Attribution:
 [NOTICE.md](NOTICE.md).
 
-Next work continues the original Event actor states, connects physical input,
+Next work continues the original post-opening Scenario, connects physical input,
 and verifies combat, transitions, save/load and complete game progression.
 Local commits retain rollback points. Public pushes mark substantial milestones.
 
@@ -153,15 +152,13 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 平台依赖。采用 OpenGOAL 的源码恢复与平台移植方法；本作不是 GOAL 程序，不能直接
 使用 Jak 专用反编译器。
 
-**仍处于早期开发。** 已从用户 ISO 原生运行 R100 片头，并完成第一个镜头。
-连续捕获的最终合成画面显示原版黑场逐步淡入街道、天空和动态特效。匹配的隐藏、
-静音合成“新游戏”运行达到 632 ticks，提交 512 个场景帧，包含前面的标题和房间
-启动帧。累计提交 134036 个世界包，渲染器、GPU、后处理和窗口错误均为 0。
+**仍处于早期开发。** 已从用户 ISO 原生播完 R100 开场的十个镜头，完成 EV01
+清理并回到 R100 场景循环。隐藏、静音的 Windows“新游戏”验证使用合成输入，运行
+到 1735 ticks，呈现 1594 个场景帧，包含标题和房间启动帧。累计提交 1224912 个
+世界绘制包，渲染器、GPU、后处理和窗口错误均为 0。
 
-下一边界位于第二个镜头开始时的原剧情角色更新 `0x002B6930`，角色状态为 4。
-截至该处，累计完成玩家更新 1 次、附属模型更新 141 次、物件更新 9654 次。后续镜头、
-物理输入操作、战斗、场景切换和存读档仍待完成。程序从原启动任务 `0x0030D358`
-开始，更早的启动恢复仍在进行。
+下一原调用为开场后 R100 的 Scenario 任务注册 `0x002C3890`。实际操作、战斗、场景切换
+和存读档仍待端到端验证。程序从原启动任务 `0x0030D358` 开始。
 
 ### 已验证的进展
 
@@ -171,9 +168,8 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
   真实 ISO，保留排序、扇区补齐和原等待逻辑。
 - 存储卡提示文字、窗口和原 TIM2 光标已实际绘制。无卡和空目录分支执行原 Control、
   按键映射、有限真实音效及正常资源释放；完整存档读写尚未实现。
-- 隐藏、静音的 Windows 原生合成“新游戏”运行完成片头第一个镜头，执行原九角色
-  阵容、动作播放、模型粒子、嵌套发射器和共享绘制队列。最终合成帧已实际读回并
-  进行视觉检查，真人游玩验收仍待完成。
+- 开场使用原版九个角色、动作、模型粒子、嵌套发射器和共享绘制队列。第九个镜头
+  附近的最终合成帧可见原版角色和街道，开场相机和角色由恢复的清理流程退出。
 - 存储卡 ADPCM 音效通过真实 XAudio2 处理；片头通过原生 FFmpeg 进程及 Windows
   音频设备播放。数值参考策略有明确范围，不声称完整音频或 PS2 实机位精确。
 - 原系统、HUD、房间、相机和内存池初始化共用真实原生状态；描述解析不代表模型、
@@ -183,7 +179,7 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始 FX 调用 0x30F228 创建 4 个环境发射器。
   后续片头帧创建原剧情特效，更新其生命周期，并绘制精灵和画面扭曲。
-- 启用硬件静音音频、片头解码和完整独立 ADX 对照后，316 个 C 模块通过 340 项检查，
+- 启用硬件静音音频、片头解码和完整独立 ADX 对照后，355 个 C 模块通过 349 项检查，
   在固定源码副本验证。受限 GPU 像素与独立 CPU 方程一致；绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
@@ -211,8 +207,8 @@ Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音
 原加密标题 BGM 已逐样本匹配独立 vgmstream 输出；真实资源测试也覆盖附属 ADPCM
 音效与原随机音高。世界绘制保留原共享 OT 顺序、材质和打包坐标，完整 16 位 XY 覆盖
 通过独立逐像素检查。原行走／跑步状态及 PL00 动画根位移已通过分项测试，平台模拟量
-输入仍在接线。片头最终合成画面已通过淡入和完整第一个镜头的验证，后续剧情角色状态
-及完整玩法仍在恢复。
+输入仍在接线。开场最终合成画面已验证淡入、对话姿态和镜头切换，下一段剧情调度和
+战斗仍在恢复。
 
-接下来继续原剧情角色状态，接通物理输入，并验证战斗、场景切换、存读档及完整游戏
+接下来继续开场后的原剧情调度，接通物理输入，并验证战斗、场景切换、存读档及完整游戏
 流程。本地提交保留回退，大节点才推送。当前状态见 [进展数据](docs/progress.json)。

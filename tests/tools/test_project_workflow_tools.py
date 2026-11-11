@@ -6,6 +6,7 @@ import subprocess
 import sys
 import unittest
 import uuid
+from unittest.mock import patch
 
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT / "tools"))
@@ -14,6 +15,12 @@ from test_contracts import check_contracts, literal_argc, manifest_cases, TestCo
 spec = importlib.util.spec_from_file_location("staged_eof", PROJECT / "tools/normalize-staged-eof.py")
 eof = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(eof)
+spec = importlib.util.spec_from_file_location("stage_snapshot", PROJECT / "tools/stage-verified-snapshot.py")
+snapshot_stage = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(snapshot_stage)
+spec = importlib.util.spec_from_file_location("freeze_source", PROJECT / "tools/freeze-source.py")
+snapshot_freeze = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(snapshot_freeze)
 SCRATCH = Path(os.environ.get("GH_TEST_SCRATCH", r"G:/middle_thing/godhand_windows/tool-tests"))
 
 
@@ -35,6 +42,25 @@ class WorkflowTools(unittest.TestCase):
         path.write_bytes(data)
         self.git("add", "--", name)
         return path
+
+    def test_worker_hash_pairs_keep_both_file_versions(self):
+        name = "src/model.c"
+        old, new = "A" * 64, "B" * 64
+        hash_rows = [{"path": name, "base": old, "overlay": new}]
+        file_map = {"files": {name: {"base_sha256": old, "overlay_sha256": new}}}
+        for receipt in (hash_rows, file_map):
+            normalized, predecessors = snapshot_freeze.overlay_receipt(receipt)
+            self.assertEqual(normalized["files"], [{"path": name, "sha256": new.lower()}])
+            self.assertEqual(predecessors, {name: old.lower()})
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            snapshot_freeze.overlay_receipt(hash_rows * 2)
+        normalized, predecessors = snapshot_freeze.overlay_receipt([{"path": name, "base": None, "overlay": new}])
+        self.assertEqual(normalized["files"], [{"path": name, "sha256": new.lower()}])
+        self.assertEqual(predecessors, {name: None})
+        with self.assertRaisesRegex(ValueError, "SHA-256"):
+            snapshot_freeze.overlay_receipt([{"path": name, "base": "", "overlay": new}])
+        with self.assertRaisesRegex(ValueError, "hash pair"):
+            snapshot_freeze.overlay_receipt([{"path": name, "overlay": new}])
 
     def test_index_only_preserves_worker_and_snapshot(self):
         path = self.stage("src/demo.c", b"int value;\n\n\n")
@@ -59,6 +85,33 @@ class WorkflowTools(unittest.TestCase):
             eof.normalize(self.root, apply=True)
         self.assertEqual((self.root / ".git/index").read_bytes(), before)
         self.assertEqual(path.read_bytes(), b"trailing space \n\n")
+
+    def test_snapshot_batch_filters_immutable_bytes_at_the_original_path(self):
+        attrs = b"*.c text eol=lf\n*.py -text\n"
+        self.stage(".gitattributes", attrs)
+        snapshot = self.root / "snapshot"
+        (snapshot / "src").mkdir(parents=True)
+        (snapshot / ".gitattributes").write_bytes(attrs)
+        files = {"src/测试 name.c": b"int frozen;\r\n", "src/raw.py": b"pass\r\n"}
+        for name, data in files.items():
+            (snapshot / name).write_bytes(data)
+            live = self.stage(name, b"worker edit\n")
+            live.write_bytes(b"new worker edit\n")
+        index = (self.root / ".git/index").read_bytes()
+        with patch.object(snapshot_stage, "git", wraps=snapshot_stage.git) as git:
+            blobs = snapshot_stage.filtered_blobs(self.root, snapshot, files)
+            self.assertTrue(any("--stdin-paths" in call.args[1] for call in git.call_args_list))
+        self.assertEqual([self.git("cat-file", "blob", blob) for blob in blobs],
+                         [b"int frozen;\n", b"pass\r\n"])
+        self.assertEqual((self.root / ".git/index").read_bytes(), index)
+        self.assertEqual((self.root / "src/测试 name.c").read_bytes(), b"new worker edit\n")
+        self.assertEqual((snapshot / "src/测试 name.c").read_bytes(), b"int frozen;\r\n")
+
+        # A snapshot with stale attributes still uses the live repository rule.
+        (snapshot / ".gitattributes").write_bytes(b"*.c -text\n*.py -text\n")
+        with patch.object(snapshot_stage, "git", wraps=snapshot_stage.git) as git:
+            self.assertEqual(snapshot_stage.filtered_blobs(self.root, snapshot, files), blobs)
+            self.assertFalse(any("--stdin-paths" in call.args[1] for call in git.call_args_list))
 
     def test_unicode_spaces_and_executable_mode(self):
         name = "src/测试 名称.py"

@@ -47,7 +47,7 @@ static gh_r100_script_status advance(gh_r100_scripts*s){
  if(s->stage==1){while(rd(w+0x5e4)&0x10){e=sleep_one(s);if(e)return e;}s->stage=2;}
  if(s->stage==2){gh_soft_event_status x=gh_scenario_start_soft_event_002c39b0(&s->soft_start,&s->b.soft,4);if(x)return fail(s,s->soft_start.frontier?s->soft_start.frontier:0x2c39b0,0,GH_R100_SCRIPT_CALLEE);s->stage=3;}
  if(s->stage==3){uint32_t f=0;gh_game_event_status x=gh_game_event_play_start_00296458(&s->b.play,1,&f);if(x)return fail(s,f?f:0x296458,0,GH_R100_SCRIPT_CALLEE);s->stage=4;}
- if(s->stage==4){while(s->b.play.event->fields.flags&1){e=sleep_one(s);if(e)return e;}s->stage=5;}
+ if(s->stage==4){while((s->b.play.event->fields.flags&1)||s->b.play.event->release_resume){e=sleep_one(s);if(e)return e;}s->stage=5;}
  if(s->stage==5){if(!s->b.end_soft_002c3c10)return fail(s,0x2c3c10,0,GH_R100_SCRIPT_UNSUPPORTED);uint32_t f=0;e=s->b.end_soft_002c3c10(s->b.context,&f);if(e)return fail(s,f?f:0x2c3c10,0,e);s->stage=6;}
  if(s->stage==6){if(!s->b.checkpoint_002c05b0)return fail(s,0x2c05b0,0,GH_R100_SCRIPT_UNSUPPORTED);uint32_t f=0;e=s->b.checkpoint_002c05b0(s->b.context,&f);if(e)return fail(s,f?f:0x2c05b0,0,e);s->stage=7;}
  if(s->stage==7){e=other(s,0x10f8);if(e)return e;s->stage=8;}

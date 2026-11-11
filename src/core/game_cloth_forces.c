@@ -1,5 +1,6 @@
 #include "game_cloth_forces.h"
 #include "id_layout_rotation.h"
+#include "sdk_rotation_trig.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -9,7 +10,29 @@ static void sf(uint8_t*p,float v){memcpy(p,&v,4);}
 static float add(float a,float b){volatile float f=a+b;return f;}
 static float mul(float a,float b){volatile float f=a*b;return f;}
 static gh_cloth_status fail(gh_cloth_forces*s,uint32_t f,gh_cloth_status e){s->frontier=f;return e;}
-static gh_cloth_status wave(const gh_cloth_operands*s,const uint8_t*p,unsigned i,float*out,uint32_t*f){float sine=0;if((s->tables&(1u<<8))){float phase,coef;memcpy(&coef,s->coefficients[1]+i,4);if(gh_id_angle_reference_001f7d48(add(rf(p+0x48),coef),&phase)){*f=0x1f7d48;return GH_CLOTH_UNSUPPORTED;}float cosine;if(gh_id_sincos_reference(phase,&sine,&cosine)){*f=0x1f7ef0;return GH_CLOTH_UNSUPPORTED;}sine=add(sine,1);}*out=sine;return GH_CLOTH_OK;}
+static gh_cloth_status wave(const gh_cloth_step_prefix *prefix, unsigned row,
+                            float *out, uint32_t *frontier)
+{
+    const gh_cloth_operands *springs = &prefix->operands;
+    *out = 0;
+    if (!(springs->tables & (1u << 8))) return GH_CLOTH_OK;
+    float coefficient, phase;
+    memcpy(&coefficient, springs->coefficients[1] + row, sizeof(coefficient));
+    if (gh_id_angle_reference_001f7d48(add(rf(springs->config + 0x48), coefficient), &phase)) {
+        *frontier = 0x1f7d48;
+        return GH_CLOTH_UNSUPPORTED;
+    }
+    /* Patched ELF 1F7EF0 and SDK 30A5D0 return the same signed VF4.x
+     * with identical coefficient bits. VSQRT takes the radical's magnitude. */
+    float sine, cosine;
+    if (gh_sdk_rotation_sincos_reference_0030a5d0(phase, &sine, &cosine,
+            prefix->bindings.matrix_policy, frontier)) {
+        *frontier = 0x1f7ef0;
+        return GH_CLOTH_UNSUPPORTED;
+    }
+    *out = add(sine, 1);
+    return GH_CLOTH_OK;
+}
 static gh_cloth_status body(gh_cloth_forces*s,gh_cloth_step_prefix*prefix){
  const gh_cloth_operands*springs=&prefix->operands;uint8_t*p=springs->config;uint32_t flags=u32(p+0x5c);
  if(flags&0x20){s->complete=1;s->frontier=0x10497c;return GH_CLOTH_OK;}
@@ -23,8 +46,8 @@ static gh_cloth_status body(gh_cloth_forces*s,gh_cloth_step_prefix*prefix){
  for(unsigned i=0;i<springs->count;i++){unsigned id=springs->indices[0][i];if(id>=44)return fail(s,0x104480,GH_CLOTH_BOUNDS);uint8_t*r=records+id*0xa0;
   for(unsigned k=0;k<3;k++)sf(r+0x40+4*k,add(rf(r+0x40+4*k),translation[k]));memcpy(r+0x50,r+0x40,12);
   sf(r+0x34,add(rf(r+0x34),-rf(p+0x3c)));for(unsigned k=0;k<3;k++)sf(r+0x40+4*k,add(rf(r+0x40+4*k),rf(r+0x30+4*k)));
-  if(!(flags&0x40)&&(springs->tables&(1u<<9))){float amplitude;uint32_t pc;gh_cloth_status e=wave(springs,p,i,&amplitude,&pc);if(e)return fail(s,pc,e);float coef;memcpy(&coef,springs->coefficients[2]+i,4);for(unsigned k=0;k<3;k++){float wind=mul(rf(prefix->bindings.globals->wind+4*k),amplitude);wind=mul(wind,coef);sf(r+0x40+4*k,add(rf(r+0x40+4*k),wind));}}
-  if(flags&0x400){float amplitude;uint32_t pc;gh_cloth_status e=wave(springs,p,i,&amplitude,&pc);if(e)return fail(s,pc,e);float coef=(springs->tables&(1u<<9))?rf((const uint8_t*)(springs->coefficients[2]+i)):1;for(unsigned k=0;k<3;k++){float wind=mul(rf(p+0x60+4*k),amplitude);if((springs->tables&(1u<<9)))wind=mul(wind,coef);sf(r+0x40+4*k,add(rf(r+0x40+4*k),wind));}}
+  if(!(flags&0x40)&&(springs->tables&(1u<<9))){float amplitude;uint32_t pc;gh_cloth_status e=wave(prefix,i,&amplitude,&pc);if(e)return fail(s,pc,e);float coef;memcpy(&coef,springs->coefficients[2]+i,4);for(unsigned k=0;k<3;k++){float wind=mul(rf(prefix->bindings.globals->wind+4*k),amplitude);wind=mul(wind,coef);sf(r+0x40+4*k,add(rf(r+0x40+4*k),wind));}}
+  if(flags&0x400){float amplitude;uint32_t pc;gh_cloth_status e=wave(prefix,i,&amplitude,&pc);if(e)return fail(s,pc,e);float coef=(springs->tables&(1u<<9))?rf((const uint8_t*)(springs->coefficients[2]+i)):1;for(unsigned k=0;k<3;k++){float wind=mul(rf(p+0x60+4*k),amplitude);if((springs->tables&(1u<<9)))wind=mul(wind,coef);sf(r+0x40+4*k,add(rf(r+0x40+4*k),wind));}}
   if(r[0x91]&1)memcpy(r+0x40,r+0x80,12);
   for(unsigned off=0x30;off<=0x58;off+=4)if(off!=0x3c&&off!=0x4c&&!isfinite(rf(r+off)))return fail(s,0x104978,GH_CLOTH_NUMERIC);
  }

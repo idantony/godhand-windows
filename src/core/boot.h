@@ -11,7 +11,8 @@ extern "C" {
 typedef struct gh_boot_work {
     uint8_t pad000[0x569], phase569, pad56a[2];
     int32_t language;
-    uint8_t pad570[8];
+    uint8_t pad570[4];
+    float canonical_rate574;        /* original 00747A14 */
     int32_t mode, unknown57c, unknown580;
     uint32_t flags;
     uint8_t pad588[4];

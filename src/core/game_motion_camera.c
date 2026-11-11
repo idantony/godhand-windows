@@ -194,3 +194,87 @@ gh_camera_status gh_game_motion_camera_move_00138600(gh_game_motion_camera *s,
     if (!status) s->move_stage = 0;
     return status;
 }
+
+static int same_quit(const gh_event_camera_quit_bindings *a, const gh_event_camera_quit_bindings *b) {
+    return a->components == b->components && a->data == b->data && a->config == b->config &&
+        a->init == b->init && a->motion == b->motion && a->player_camera == b->player_camera &&
+        a->work == b->work && a->display.screen_width == b->display.screen_width &&
+        a->display.screen_height_bits == b->display.screen_height_bits &&
+        a->display.pixel_aspect_bits == b->display.pixel_aspect_bits &&
+        a->display.initialized == b->display.initialized && a->display.policy == b->display.policy;
+}
+
+static gh_game_event_status quit_error(gh_event_camera_quit *s, uint32_t *frontier, uint32_t pc,
+    int relative, gh_game_event_status status) {
+    s->frontier_relative = (uint8_t)relative;
+    *frontier = pc;
+    return status;
+}
+
+gh_game_event_status gh_event_camera_quit_play_00004d50(gh_event_camera_quit *s,
+    const gh_event_camera_quit_bindings *b, uint32_t *frontier) {
+    if (!s || !frontier) return GH_EVENT_ARGUMENT;
+    *frontier = 0x4d50;
+    s->frontier_relative = 1;
+    if (!b || !b->components || !b->components->constructed || !b->data ||
+        b->data->components != b->components || !b->config || !b->config->initialized ||
+        !b->init || !b->motion || !b->player_camera || !b->work ||
+        (s->stage && !same_quit(&s->bindings, b))) return GH_EVENT_ARGUMENT;
+
+    if (!s->stage) {
+        gh_event_component_view env;
+        if (gh_event_component_at(b->components, 0, &env) || !env.bytes ||
+            env.original_offset != 0xd200 || env.size != 0x44) return GH_EVENT_ARGUMENT;
+        if (read_word(env.bytes + 0x28) & 0x40000000u) {
+            s->bindings = *b;
+            s->stage = 4;
+            return quit_error(s, frontier, 0, 0, GH_EVENT_OK);
+        }
+        const uint32_t count = read_word(env.bytes + 8);
+        if (!count || count != b->data->camera_count) return quit_error(s, frontier, 0x4e40, 1, GH_EVENT_BOUNDS);
+        gh_event_camera_cut cut;
+        gh_game_event_status status = gh_event_camera_cut_at(b->data, count - 1, &cut);
+        if (status) return quit_error(s, frontier, 0x4e40, 1, status);
+        if (!cut.primary && !cut.alternate) return quit_error(s, frontier, 0x4e40, 1, GH_EVENT_FORMAT);
+        gh_event_camera_track last = {.apply_motion = 1};
+        gh_motion_status decoded = gh_motion_open_mtb3(b->data->data, b->data->bytes,
+            cut.primary ? cut.primary_offset : cut.alternate_offset, &last.track);
+        if (decoded || !last.track.frames) return quit_error(s, frontier, 0x4e40, 1, GH_EVENT_FORMAT);
+        last.frame = (float)(last.track.frames - 1u);
+        if (b->init->active_camera != &b->motion->identity) {
+            return quit_error(s, frontier, 0x138600, 0, GH_EVENT_UNSUPPORTED);
+        }
+        if (gh_game_motion_camera_set_001390b8(b->motion, &last)) {
+            return quit_error(s, frontier, 0x1390b8, 0, GH_EVENT_CALLEE);
+        }
+        s->bindings = *b;
+        s->stage = 1;
+    }
+    if (s->stage == 1) {
+        gh_camera_status status = gh_game_motion_camera_move_00138600(b->motion, b->init, b->work,
+            &b->display, frontier);
+        s->frontier_relative = 0;
+        if (status) return status == GH_CAMERA_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+        s->stage = 2;
+    }
+    if (s->stage == 2) {
+        // The other branch calls setMode138238, which is exactly jr ra/nop.
+        if (!(b->config->flags & 0x80u) && gh_game_camera_restore_00138d40(b->init)) {
+            return quit_error(s, frontier, 0x138d40, 0, GH_EVENT_CALLEE);
+        }
+        s->stage = 3;
+    }
+    if (s->stage == 3) {
+        gh_game_pl_camera *active = b->init->active_camera == &b->motion->identity ?
+            &b->motion->camera : b->player_camera;
+        if (!active->constructed || active->identity != b->init->active_camera) {
+            return quit_error(s, frontier, 0x138528, 0, GH_EVENT_ARGUMENT);
+        }
+        uint8_t *p = active->fields;
+        p[0x264] = p[0x278] = 0;
+        static const unsigned offsets[] = {0x254, 0x258, 0x25c, 0x260, 0x268, 0x26c, 0x270, 0x274};
+        for (unsigned i = 0; i < sizeof(offsets) / sizeof(*offsets); ++i) write_word(p + offsets[i], 0);
+        s->stage = 4;
+    }
+    return quit_error(s, frontier, 0, 0, GH_EVENT_OK);
+}

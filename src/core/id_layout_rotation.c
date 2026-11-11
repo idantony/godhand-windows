@@ -12,9 +12,17 @@ static float mul(float a,float b){volatile float v=a*b;return v;}
 static float add(float a,float b){volatile float v=a+b;return v;}
 static int normal(float f){return isfinite(f)&&(f==0||fabsf(f)>=FLT_MIN);}
 static gh_id_error angle(float f,float*out){float q,t;int32_t n;uint32_t raw;
- if(!normal(f)||fabsf(f)>100.0f)return GH_ID_UNSUPPORTED;
- q=mul(f,bits(0x3ea2f983));n=(int32_t)q;memcpy(&raw,&f,4);
- n=(n+((int32_t)raw>0?1:0))&~1;t=mul((float)n,bits(0x40490fdb));*out=add(f,-t);
+ if(!normal(f))return GH_ID_UNSUPPORTED;
+ q=mul(f,bits(0x3ea2f983));
+ /* CVT.W.S / VFTOI0 truncate. Saturated conversion is outside this
+  * finite reference. The last admitted positive binary32 q is
+  * 2147483520, leaving room for the sign correction before even rounding. */
+ if(!(q>=-0x1p31f&&q<0x1p31f))return GH_ID_UNSUPPORTED;
+ n=(int32_t)q;memcpy(&raw,&f,4);
+ n+=(raw>0&&raw<0x80000000u);
+ n-=(int32_t)((uint32_t)n&1u);
+ t=mul((float)n,bits(0x40490fdb));*out=add(f,-t);
+
  return normal(*out)?GH_ID_OK:GH_ID_UNSUPPORTED;
 }
 static gh_id_error sincos_original(float theta,float*s,float*c){

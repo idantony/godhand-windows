@@ -215,8 +215,8 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
  if(c->stage==8){status=initial_colour(c,p,r,source);if(status)return status;c->stage=9;}
  if(c->stage==9){status=finish_source(c,p,r);if(status)return status;c->stage=10;}
  if(view.type==0&&c->stage==10){
-  if(w(p+0xf0)!=0x44fad0u||((w(p+0x11c)&0x01000000u)&&
-      !gh_esp14_nested_sprite_is_bound(view.record,view.actor,view.selector)))
+  /* Original 2FBEC8 has no body beyond returning 1. */
+  if(w(p+0xf0)!=0x44fad0u)
       return fail(c,0x2fbec8,GH_EFFECT_UNSUPPORTED);
   status=gh_effect_create_esp_commit_base(b->storage.effects,c->slot,c->serial);
   if(status)return fail(c,0x2fbec8,status);

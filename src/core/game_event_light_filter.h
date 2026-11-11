@@ -1,6 +1,7 @@
 #ifndef GH_GAME_EVENT_LIGHT_FILTER_H
 #define GH_GAME_EVENT_LIGHT_FILTER_H
 #include "game_event_data_prefix.h"
+#include "game_event_environment.h"
 #include "game_scene_filters.h"
 #include "game_world_light.h"
 
@@ -24,6 +25,8 @@ gh_game_event_status gh_event_filter_init_00007040(gh_event_light_filter *,
     gh_event_components *, const gh_event_data_prefix *, gh_scene_filters *, uint32_t *);
 gh_game_event_status gh_event_object_light_move_000086b0(gh_event_light_filter *, uint32_t *);
 gh_game_event_status gh_event_filter_move_000070d0(gh_event_light_filter *, uint32_t *);
+gh_game_event_status gh_event_filter_quit_000075a0(gh_event_light_filter *,
+    const gh_game_event_config *, uint32_t *);
 
 #ifdef __cplusplus
 }

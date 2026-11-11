@@ -1,4 +1,5 @@
 #include "game_event_side_play.h"
+#include "game_message_step.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -123,6 +124,48 @@ gh_game_event_status gh_event_scr_light_move_00008ef8(gh_event_scr_light *state,
     memcpy(world + 0x10, key + 0x40, 8);
     memcpy(world + 0x64, key + 0x48, 8);
     memcpy(world + 0x18, key + 0x50, 0x10);
+    *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+gh_game_event_status gh_event_scr_light_quit_00009728(gh_event_scr_light *state,
+    const gh_game_event_config *config, const gh_light_player_parts *player,
+    uint32_t *frontier, int *relative)
+{
+    if (!frontier || !relative) return GH_EVENT_ARGUMENT;
+    *frontier = 0x9728;
+    *relative = 1;
+    if (!state || state->stage != 2 || !config || !config->initialized ||
+        !state->save.bytes || state->save.size < 0x18 || !state->world ||
+        !state->world->ready || !state->init) return GH_EVENT_ARGUMENT;
+    gh_game_world_light *world = state->world;
+    if (!state->quit_stage) {
+        uint8_t *save_flags = state->save.bytes + 0x14;
+        put(save_flags, word(save_flags) & 0x7fffffffu);
+        if (config->flags & 0x100u) {
+            state->quit_stage = 2;
+        } else {
+            put(world->scalar + 0x78, 0);
+            memset(world->scalar + 0x80, 0, 0x7000);
+            memset(world->native_light_owners, 0, sizeof(world->native_light_owners));
+            for (unsigned i = 0; i < 256; ++i)
+                world->scalar[0x80 + i * 0x70] = 0xff;
+            state->quit_stage = 1;
+        }
+    }
+    if (state->quit_stage == 1) {
+        *frontier = 0x2d8408;
+        *relative = 0;
+        gh_light_status status = gh_game_world_light_select_002d8408(world, 0, player);
+        if (status) {
+            if (world->frontier) *frontier = world->frontier;
+            return status == GH_LIGHT_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+        }
+        state->init->side_counter[4] = 0;
+        put(state->init->side_counter + 8, 0);
+        put(state->init->side_counter + 0x0c, 0);
+        state->quit_stage = 2;
+    }
     *frontier = 0;
     return GH_EVENT_OK;
 }
@@ -263,6 +306,28 @@ gh_game_event_status gh_event_scr_layer_move_00008a40(const gh_event_data_prefix
     return GH_EVENT_OK;
 }
 
+gh_game_event_status gh_event_scr_layer_quit_00008af0(const gh_event_data_prefix *data,
+    const gh_room_pools *pools, const gh_scene_meshes *meshes, uint32_t *frontier, int *relative)
+{
+    if (!frontier || !relative) return GH_EVENT_ARGUMENT;
+    *frontier = 0x8af0;
+    *relative = 1;
+    gh_event_component_view component;
+    gh_game_event_status status = get_component(data, 10, 0xd898, 0x78, &component);
+    if (status) return status;
+    *frontier = 0x2db518;
+    *relative = 0;
+    uint8_t **rows;
+    uint32_t count;
+    status = scroll_views(pools, meshes, &rows, &count);
+    if (status) return status;
+    apply_layer(rows, count, component.bytes + 0x38, 0x8000);
+    apply_layer(rows, count, component.bytes + 0x58, 2);
+    free(rows);
+    *frontier = 0;
+    return GH_EVENT_OK;
+}
+
 gh_game_event_status gh_event_message_init_00008100(gh_event_message_play *state,
     const gh_event_data_prefix *data, const gh_game_event_config *config, gh_game_scene_ui *ui,
     uint32_t filter_flags, uint16_t filter_message, gh_event_message_create create,
@@ -305,4 +370,25 @@ gh_game_event_status gh_event_message_init_00008100(gh_event_message_play *state
 
 void gh_event_message_move_000081a8(void)
 {
+}
+
+gh_game_event_status gh_event_message_quit_000081b0(const gh_event_message_play *state,
+    uint32_t *frontier, int *relative)
+{
+    if (!frontier || !relative) return GH_EVENT_ARGUMENT;
+    *frontier = 0x81b0;
+    *relative = 1;
+    if (!state || state->stage != 2) return GH_EVENT_ARGUMENT;
+    if (state->message_id == UINT16_MAX) {
+        *frontier = 0;
+        return GH_EVENT_OK;
+    }
+    int found;
+    *relative = 0;
+    switch (gh_scene_message_delete_002aebf8(state->ui, state->work_id, &found, frontier)) {
+        case GH_SCENE_UI_OK: return GH_EVENT_OK; /* The original caller ignores found. */
+        case GH_SCENE_UI_ARGUMENT: return GH_EVENT_ARGUMENT;
+        case GH_SCENE_UI_BOUNDS: return GH_EVENT_BOUNDS;
+        default: return GH_EVENT_UNSUPPORTED;
+    }
 }

@@ -45,3 +45,11 @@ gh_display_status gh_display_static_initialize_002a48a8(gh_display_state*s,int i
  s->pixel_aspect_bits=a;s->gs_y_origin_bits=o;s->gs_y_origin=2048-s->screen_lines/2;
  s->font_batch_count[0]=s->font_batch_count[1]=0;s->initialized=1;return GH_DISPLAY_OK;
 }
+uint32_t gh_display_copy_base0_0030b870(const uint8_t top_rgb[3],const uint8_t next_rgb[3]){
+ uint32_t rgb=0;
+ for(unsigned c=0;c<3;c++){
+  const uint32_t channel=(top_rgb[c]>>1)+(next_rgb[c]>>2);
+  rgb|=channel<<(8*c);
+ }
+ return rgb;
+}

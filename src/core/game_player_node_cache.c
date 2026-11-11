@@ -11,6 +11,20 @@ gh_player_nodes_status gh_actor_model_find_mesh_0014b730(gh_actor_model*m,const 
  for(unsigned i=0;i<m->script.mesh_count;i++){const uint8_t*node;size_t mesh_index;gh_actor_model_status status=gh_actor_model_node_at(m,i,&node,&mesh_index);if(status==GH_ACTOR_MODEL_BOUNDS)return GH_PLAYER_NODES_OK;if(status)return GH_PLAYER_NODES_UNSUPPORTED;gh_model_mesh mesh;if(gh_model_mesh_at(&m->script,mesh_index,&mesh))return GH_PLAYER_NODES_BOUNDS;if(u64((const uint8_t*)mesh.name)==key){*out=(gh_player_mesh_reference){m,node,mesh_index};*original=1;return GH_PLAYER_NODES_OK;}}
  return GH_PLAYER_NODES_OK;
 }
+gh_player_nodes_status gh_actor_model_set_mesh_visible_0014a338(gh_actor_model *model,
+    const uint8_t *name, size_t name_bytes, int visible, int *original_found) {
+    gh_player_mesh_reference mesh;
+    int found;
+    if (!original_found) return GH_PLAYER_NODES_ARGUMENT;
+    *original_found = 0;
+    gh_player_nodes_status status = gh_actor_model_find_mesh_0014b730(model, name, name_bytes, &mesh, &found);
+    if (status || !found) return status;
+    if (gh_actor_model_node_mask_flags(model, (unsigned)mesh.mesh_index, 0x380, ~1u, !visible))
+        return GH_PLAYER_NODES_UNSUPPORTED;
+    *original_found = 1;
+    return GH_PLAYER_NODES_OK;
+}
+
 static int mapped(const uint8_t*elf,size_t bytes,uint32_t table,unsigned stride,unsigned count,uint32_t va,uint8_t*out,size_t n){for(unsigned i=0;i<count;i++){const uint8_t*p=elf+table+(size_t)i*stride;uint32_t off=u32(p+4),base=u32(p+8),files=u32(p+16);if(u32(p)!=1||va<base||(uint64_t)va+n>(uint64_t)base+files)continue;if(off>bytes||files>bytes-off)return 0;memcpy(out,elf+off+(va-base),n);return 1;}return 0;}
 gh_player_nodes_status gh_player_node_names_from_elf(gh_player_node_names*s,const void*raw,size_t bytes){if(!s||!raw)return GH_PLAYER_NODES_ARGUMENT;const uint8_t*elf=raw;if(bytes<52)return GH_PLAYER_NODES_BOUNDS;if(memcmp(elf,"\177ELF\1\1\1",7)||u16(elf+18)!=8)return GH_PLAYER_NODES_UNSUPPORTED;uint32_t table=u32(elf+28);unsigned stride=u16(elf+42),count=u16(elf+44);if(stride<32||count>128||table>bytes||count>(bytes-table)/stride)return GH_PLAYER_NODES_BOUNDS;
  uint8_t instruction[4];if(!mapped(elf,bytes,table,stride,count,0x14b730,instruction,4))return GH_PLAYER_NODES_BOUNDS;if(u32(instruction)!=0x80a20000)return GH_PLAYER_NODES_UNSUPPORTED;gh_player_node_names n={0};for(unsigned i=0;i<15;i++)if(!mapped(elf,bytes,table,stride,count,0x41b828+i*8,n.names[i],8))return GH_PLAYER_NODES_BOUNDS;n.initialized=1;*s=n;return GH_PLAYER_NODES_OK;}

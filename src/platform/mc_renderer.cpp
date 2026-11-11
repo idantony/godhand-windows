@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstring>
 #include <new>
+#include <memory>
 #include <vector>
 #include <cmath>
 
@@ -20,9 +21,14 @@ struct QueuedID {
     uint16_t z=0;bool z_known=false;
 };
 enum class CommandKind {ID,FAN,FADE,NUMBER,COVER,MESSAGE};
+struct QueuedMessage {
+    gh_id_text_glyph glyph={};
+    std::shared_ptr<const std::vector<uint8_t>> atlas;
+};
 struct QueuedCommand {
     CommandKind kind=CommandKind::ID;
     QueuedID id={};gh_cockpit_fan fan={};gh_fade_draw fade={};gh_ui_fade_context fade_context={};gh_id_texture_quad number={};gh_child_cover_quad cover={};
+    QueuedMessage message;
 };
 struct gh_mc_renderer {
     gh_ui_text_renderer *text=nullptr;
@@ -32,7 +38,7 @@ struct gh_mc_renderer {
     const unsigned char *font_mst=nullptr,*font_msa=nullptr;
     const unsigned char *message_mst=nullptr,*message_msa=nullptr;
     unsigned message_parity=0;
-    std::vector<uint8_t> message_atlas;
+    std::shared_ptr<const std::vector<uint8_t>> message_atlas;
     std::vector<unsigned char> palette,frame,next;
     std::vector<gh_id_text_glyph> glyphs;
     std::vector<CachedTexture> textures;
@@ -132,6 +138,7 @@ extern "C" void gh_mc_renderer_reset_resources(gh_mc_renderer *r)
     gh_ui_fade_destroy(r->fade);r->fade=nullptr;
     r->font_mst=r->font_msa=nullptr;r->textures.clear();r->polygon_textures.clear();r->fan_textures.clear();r->number_textures.clear();
     r->message_mst=r->message_msa=nullptr;
+    r->message_atlas.reset();
 }
 extern "C" gh_id_error gh_mc_renderer_enable_reference_polygons(gh_mc_renderer *r,int enabled)
 {if(!r||(enabled!=0&&enabled!=1))return GH_ID_ARGUMENT;if(r->begun)return GH_ID_BUSY;r->reference_polygons=enabled!=0;return GH_ID_OK;}
@@ -311,26 +318,29 @@ extern "C" gh_id_error gh_mc_renderer_queue_message(gh_mc_renderer *r,
     if(r->queued.size()>8190)return GH_ID_CAPACITY;
     try{
         if(r->message_mst!=font.mst||r->message_msa!=font.msa||r->message_parity!=parity){
-            r->message_mst=r->message_msa=nullptr;
-            r->message_atlas.resize(512*256*4);
-            if(gh_font_atlas_bank_rgba(&font,parity,r->message_atlas.data(),r->message_atlas.size()))
-                return GH_ID_UNSUPPORTED;
+            gh_font_transfer clut={};
+            if(gh_font_transfer_at(&font,1,0,&clut)!=GH_FONT_OK)return GH_ID_UNSUPPORTED;
+            for(size_t i=3;i<clut.pixel_bytes;i+=4)if(clut.pixels[i]>128)return GH_ID_UNSUPPORTED;
+            auto atlas=std::make_shared<std::vector<uint8_t>>(512*256*4);
+            if(gh_font_atlas_bank_rgba(&font,parity,atlas->data(),atlas->size()))return GH_ID_UNSUPPORTED;
+            r->message_atlas=std::move(atlas);
             r->message_mst=font.mst;
             r->message_msa=font.msa;
             r->message_parity=parity;
         }
         const gh_id_text_glyph *glyphs[]={&pair->normal,&pair->shadow};
-        for(const auto *glyph:glyphs){
+        QueuedCommand commands[2];
+        for(unsigned i=0;i<2;++i){
             int discarded=0;
-            if(gh_scene_message_glyph_discarded(glyph,r->message_atlas.data(),r->message_atlas.size(),&discarded)||
-                !discarded)return GH_ID_UNSUPPORTED;
+            if(gh_scene_message_glyph_discarded(glyphs[i],r->message_atlas->data(),r->message_atlas->size(),&discarded))
+                return GH_ID_UNSUPPORTED;
+            commands[i].kind=CommandKind::MESSAGE;
+            if(!discarded)commands[i].message={*glyphs[i],r->message_atlas};
         }
         const size_t first=r->queued.size();
         r->queued.reserve(first+2);
-        QueuedCommand command;
-        command.kind=CommandKind::MESSAGE;
-        r->queued.push_back(command);
-        r->queued.push_back(command);
+        r->queued.push_back(std::move(commands[0]));
+        r->queued.push_back(std::move(commands[1]));
         tags[0]={pair->bank,(int32_t)pair->depth,first};
         tags[1]={pair->bank,(int32_t)pair->depth,first+1};
         return GH_ID_OK;
@@ -358,6 +368,40 @@ static gh_id_error draw_fade(gh_mc_renderer*r,const gh_fade_draw&draw,const gh_u
     gh_id_error e=gpu==GH_UI_OK?GH_ID_OK:GH_ID_UNSUPPORTED;if(e==GH_ID_OK){r->frame.swap(r->next);++r->status.jobs;}else r->status.frontier=0x15c928;
     r->status.id_error=e;r->status.gpu_error=(unsigned)gpu;return e;
 }
+static bool tracks_depth(const QueuedCommand &command)
+{
+    return command.kind==CommandKind::COVER || command.kind==CommandKind::MESSAGE ||
+        (command.kind==CommandKind::ID && command.id.z_known);
+}
+
+static gh_id_error message_depth_unavailable(gh_mc_renderer *r)
+{
+    r->status.consumer=0x2a5930;
+    r->status.frontier=0x2a53a8;
+    r->status.opcode=0;
+    r->status.gpu_error=0;
+    return r->status.id_error=GH_ID_UNSUPPORTED;
+}
+
+extern "C" gh_id_error gh_mc_renderer_queued_message_depth(gh_mc_renderer *r,
+    const size_t *order,size_t count,int *required)
+{
+    if(!r||!r->begun||!required||(!order&&count)||count!=r->queued.size())return GH_ID_ARGUMENT;
+    bool tracked=true;
+    int needed=0;
+    for(size_t i=0;i<count;++i){
+        if(order[i]>=count)return GH_ID_ARGUMENT;
+        const auto &command=r->queued[order[i]];
+        if(command.kind==CommandKind::MESSAGE&&command.message.atlas){
+            if(!tracked)return message_depth_unavailable(r);
+            needed=1;
+        }
+        if(!tracks_depth(command))tracked=false;
+    }
+    *required=needed;
+    return GH_ID_OK;
+}
+
 static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t count,uint32_t clear_rgb,const uint8_t *background,size_t background_bytes,const uint32_t *depth,size_t depth_count)
 {
     if(!r||!r->begun||(!order&&count)||count!=r->queued.size())return GH_ID_ARGUMENT;
@@ -367,6 +411,10 @@ static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t cou
     try {
         std::vector<unsigned char> seen(count,0);
         for(size_t i=0;i<count;++i){if(order[i]>=count||seen[order[i]])return GH_ID_ARGUMENT;seen[order[i]]=1;}
+        int message_depth=0;
+        gh_id_error preflight=gh_mc_renderer_queued_message_depth(r,order,count,&message_depth);
+        if(preflight!=GH_ID_OK)return preflight;
+        if(message_depth&&!depth)return message_depth_unavailable(r);
 #ifdef GH_NATIVE_STARTUP_QA
         if(depth)for(size_t i=0;i<count;i++){
             const auto &c=r->queued[order[i]];
@@ -396,18 +444,23 @@ static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t cou
             else if(command.kind==CommandKind::COVER){r->status.consumer=0x160d50;r->status.frontier=0;r->status.opcode=0;r->status.id_error=GH_ID_OK;r->status.gpu_error=0;++r->status.jobs;error=GH_ID_OK;} /* alpha test KEEP discards color AND Z */
             else if(command.kind==CommandKind::MESSAGE){
                 r->status.consumer=0x2a5930;r->status.frontier=0;r->status.opcode=0;
-                r->status.id_error=GH_ID_OK;r->status.gpu_error=0;
-                ++r->status.glyphs;++r->status.jobs;error=GH_ID_OK;
+                r->status.gpu_error=0;error=GH_ID_OK;
+                const auto &message=command.message;
+                if(message.atlas&&gh_scene_message_glyph_blit(&message.glyph,
+                    message.atlas->data(),message.atlas->size(),r->frame.data(),r->frame.size(),
+                    depth_known?depth_samples.data():nullptr,depth_known?depth_samples.size():0)){
+                    r->status.frontier=0x2a53a8;
+                    error=GH_ID_UNSUPPORTED;
+                }
+                if(error==GH_ID_OK){++r->status.glyphs;++r->status.jobs;}
+                r->status.id_error=error;
             }
             else {auto view=command.id.view;view.base=&command.id.base;
                 gh_id_draw_job job={command.id.entry_index,&command.id.entry,command.id.consumer};
                 gh_ui_depth_write plane={depth_samples.data(),depth_samples.size(),command.id.z};
                 error=draw_view(r,&view,&job,depth_known&&command.id.z_known?&plane:nullptr);}
             if(error!=GH_ID_OK){r->flushing=false;r->queue_failed=true;return error;}
-            // COVER always discards both writes. Each admitted SystemMenu
-            // batch returns the real depth writes from its color shader.
-            if(command.kind!=CommandKind::COVER&&command.kind!=CommandKind::MESSAGE&&
-               !(command.kind==CommandKind::ID&&command.id.z_known))depth_known=false;
+            if(!tracks_depth(command))depth_known=false;
         }
         r->flushing=false;r->queued.clear();return GH_ID_OK;
     }catch(const std::bad_alloc&){r->flushing=false;r->queue_failed=true;return GH_ID_MEMORY;}

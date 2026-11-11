@@ -2,9 +2,11 @@
 
 #include "game_actor_external_parent.h"
 #include "game_model_texture_scroll.h"
+#include "game_player_node_cache.h"
 #include "game_scene_at_geometry.h"
 
 #include <fenv.h>
+#include <math.h>
 #include <string.h>
 
 static uint32_t word(const uint8_t *p) {
@@ -58,6 +60,51 @@ static gh_game_event_status follow_parent(gh_actor_model *model,
     return GH_EVENT_OK;
 }
 
+/* 002B6E54/002B6EFC DIV.S, then CVT.W.S. Only integers 1 and 2 select
+ * a different mesh. Keep the binary32 chop reference independent of caller FEnv. */
+static unsigned hand_variant(float angle) {
+    volatile float quotient = angle / 0x1.657184p-3f; // 3E32B8C2
+    return quotient >= 1.0f && quotient < 3.0f ? (unsigned)quotient : 0;
+}
+
+static gh_game_event_status update_hands_002b6da0(gh_actor_model *model, uint32_t *frontier) {
+    static const uint8_t names[2][3][8] = {
+        {"RH_00", "RH_01", "RH_02"}, {"LH_00", "LH_01", "LH_02"}
+    }; // 44B4D8..44B500
+    *frontier = 0x2b6da0;
+    if (model->root.bytes[0x2b4] != model->part_count) return GH_EVENT_BOUNDS;
+    const int has_driver = model->part_count > 27;
+    unsigned variants[2] = {0, 0};
+    if (has_driver) {
+        const gh_actor_part *driver;
+        if (gh_actor_model_part_at(model, 27, &driver) || !driver->bytes) return GH_EVENT_BOUNDS;
+        float x, z;
+        memcpy(&x, driver->bytes + 0x100, sizeof(x));
+        memcpy(&z, driver->bytes + 0x108, sizeof(z));
+        if (!isfinite(x) || !isfinite(z)) return GH_EVENT_UNSUPPORTED;
+        fenv_t environment;
+        if (feholdexcept(&environment)) return GH_EVENT_CALLEE;
+        if (fesetround(FE_TOWARDZERO)) {
+            (void)fesetenv(&environment);
+            return GH_EVENT_CALLEE;
+        }
+        variants[0] = hand_variant(x);
+        variants[1] = hand_variant(z);
+        if (fesetenv(&environment)) return GH_EVENT_CALLEE;
+    }
+    *frontier = 0x14a338;
+    int found;
+    for (unsigned hand = 0; hand < 2; ++hand) {
+        for (unsigned mesh = 0; mesh < 3; ++mesh) {
+            if (gh_actor_model_set_mesh_visible_0014a338(model, names[hand][mesh], 8,
+                    !has_driver && mesh == 0, &found)) return GH_EVENT_CALLEE;
+        }
+        if (has_driver && gh_actor_model_set_mesh_visible_0014a338(model,
+                names[hand][variants[hand]], 8, 1, &found)) return GH_EVENT_CALLEE;
+    }
+    return GH_EVENT_OK;
+}
+
 gh_game_event_status gh_game_event_simple_move_with_tails_002b6930(gh_event_accessory_move *s,
     gh_event_actor_factory *actor, const gh_player_shared_vector *shared,
     gh_event_simple_shadow shadow, void *shadow_context,
@@ -98,7 +145,10 @@ gh_game_event_status gh_game_event_simple_move_with_tails_002b6930(gh_event_acce
     if (s->stage == 2) {
         *frontier = 0x149eb8;
         gh_actor_model_status status = gh_actor_model_update_hierarchy_00149eb8(&actor->model, GH_STATIC_BINARY32_REFERENCE);
-        if (status) return status == GH_ACTOR_MODEL_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+        if (status) {
+            if (actor->model.frontier) *frontier = actor->model.frontier;
+            return status == GH_ACTOR_MODEL_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+        }
         s->stage = 3;
     }
     if (s->stage == 3) {
@@ -111,15 +161,22 @@ gh_game_event_status gh_game_event_simple_move_with_tails_002b6930(gh_event_acce
         s->stage = 4;
     }
     static const struct { unsigned offset; uint32_t entry; } calls[] = {
-        {0x1390,0x2df860}, {0x2fa0,0x2b6a40}, {0x2ff0,0x2b79e0}, {0x4d8,0x2b6da0}
+        {0x1390,0x2df860}, {0x2fa0,0x2b6a40}, {0x2ff0,0x2b79e0}
     };
-    for (; s->stage < 8; ++s->stage) {
+    for (; s->stage < 7; ++s->stage) {
         unsigned index = s->stage - 4;
         if (!p[calls[index].offset]) continue;
         *frontier = calls[index].entry;
         if (!tail) return GH_EVENT_UNSUPPORTED;
         gh_game_event_status status = tail(tail_context, actor, calls[index].entry, frontier);
         if (status) return status;
+    }
+    if (s->stage == 7) {
+        if (p[0x4d8]) {
+            gh_game_event_status status = update_hands_002b6da0(&actor->model, frontier);
+            if (status) return status;
+        }
+        s->stage = 8;
     }
     if (!actor->model.root.alias_f0) return GH_EVENT_BOUNDS;
     if (p + 0x490 != actor->model.root.alias_f0)

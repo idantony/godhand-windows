@@ -1,3 +1,4 @@
+#include "game_actor_axis_rotation.h"
 #include "game_actor_motion_solve.h"
 #include "game_actor_two_bone.h"
 #include <string.h>
@@ -67,8 +68,7 @@ static const uint8_t*parent_matrix(const gh_actor_model*m,unsigned index){const 
   }
   if(s->stage==4){
    if(rd(a+0x154)&0x4000){unsigned child=i+3;uint8_t*q=m->parts[child].bytes;const uint8_t*parent=parent_matrix(m,child);if(!q||!parent){result=GH_ACTOR_MOTION_BOUNDS;break;}
-    if((rd(p+0x250)&0x40004)==0x40000){result=fail(s,f,0x1501d0);break;}
-    product(q+0x80,parent,q);if(rd(q+0x154)&0x800){result=fail(s,f,0x159fc8);break;}
+    if(gh_actor_part_world_001501d0(&m->parts[child],parent,rd(p+0x250),policy,f)){result=fail(s,f,*f?*f:0x1501d0);break;}
    }s->stage=5;
   }
   if(s->stage==5){if(!b->ik_globals||!b->atan_coeff){result=fail(s,f,0x153158);break;}result=gh_actor_two_bone_00153158(m,i,b->work,b->ik_globals,b->atan_coeff,policy,f);if(result){s->frontier=*f;break;}s->stage=6;}
@@ -79,7 +79,7 @@ static const uint8_t*parent_matrix(const gh_actor_model*m,unsigned index){const 
    else{memcpy(saved,m->parts[target].alias_d0,12);product(q,inv,q+0x80);memcpy(m->parts[target].alias_d0,saved,12);}s->stage=9;
   }
   if(s->stage==9){unsigned target=(rd(a+0x154)&0x4000)?i+2:i+1;result=gh_actor_part_extract_rebuild_00147c88(m,target,b->atan_coeff,policy,f);if(result){s->frontier=*f;break;}wr(last->bytes+0x154,rd(last->bytes+0x154)&~0x200000u);s->stage=10;}
-  if(s->stage==10){if(rd(a+0x154)&0x4000){unsigned child=i+3;result=gh_actor_part_rebuild_00150138(m,child,policy,f);if(result){s->frontier=*f;break;}const uint8_t*parent=parent_matrix(m,child);if(!parent){result=GH_ACTOR_MOTION_BOUNDS;break;}if((rd(p+0x250)&0x40004)==0x40000){result=fail(s,f,0x1501d0);break;}product(m->parts[child].bytes+0x80,parent,m->parts[child].bytes);if(rd(m->parts[child].bytes+0x154)&0x800){result=fail(s,f,0x159fc8);break;}}s->stage=0;s->index++;}
+  if(s->stage==10){if(rd(a+0x154)&0x4000){unsigned child=i+3;result=gh_actor_part_rebuild_00150138(m,child,policy,f);if(result){s->frontier=*f;break;}const uint8_t*parent=parent_matrix(m,child);if(!parent){result=GH_ACTOR_MOTION_BOUNDS;break;}if(gh_actor_part_world_001501d0(&m->parts[child],parent,rd(p+0x250),policy,f)){result=fail(s,f,*f?*f:0x1501d0);break;}}s->stage=0;s->index++;}
  }
  if(!result)memset(s,0,sizeof(*s));if(fesetenv(&env))return fail(s,f,0x152a20);return result;
 }

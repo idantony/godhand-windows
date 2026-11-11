@@ -3,6 +3,7 @@
 
 #include "game_camera_projection.h"
 #include "game_event_camera_track.h"
+#include "game_event_environment.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,6 +26,27 @@ gh_camera_status gh_game_motion_camera_set_001390b8(gh_game_motion_camera *, con
  * The EVT caller supplies the original zero blend/parent/offset setup. */
 gh_camera_status gh_game_motion_camera_move_00138600(gh_game_motion_camera *,
     const gh_game_init_state *, const gh_boot_work *, const gh_camera_projection_display *, uint32_t *frontier);
+
+typedef struct {
+    gh_event_components *components;
+    const gh_event_data_prefix *data;
+    const gh_game_event_config *config;
+    gh_game_init_state *init;
+    gh_game_motion_camera *motion;
+    gh_game_pl_camera *player_camera;
+    const gh_boot_work *work;
+    gh_camera_projection_display display;
+} gh_event_camera_quit_bindings;
+
+typedef struct {
+    gh_event_camera_quit_bindings bindings;
+    uint8_t stage, frontier_relative;
+} gh_event_camera_quit;
+
+/* Main 296F3C -> REL4D50. Final actual camera motion sample, canonical
+ * switch, then shake reset on the camera that is active after the switch. */
+gh_game_event_status gh_event_camera_quit_play_00004d50(gh_event_camera_quit *,
+    const gh_event_camera_quit_bindings *, uint32_t *frontier);
 
 #ifdef __cplusplus
 }

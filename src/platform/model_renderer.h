@@ -42,6 +42,11 @@ gh_model_gpu_error gh_model_renderer_begin(gh_model_renderer *,uint32_t clear_rg
  * integer edge tests preserve coverage for large/offscreen triangles. */
 gh_model_gpu_error gh_model_renderer_draw(gh_model_renderer *,const gh_model_draw_state *,uint32_t texture,
  const gh_static_gs_vertex *,size_t vertex_count,const uint32_t *indices,size_t index_count);
+/* TEX0=0 samples the 1x1 CT32 view at GS display base zero. TCC0 uses
+ * the vertex alpha for MODULATE, alpha testing and blending. */
+gh_model_gpu_error gh_model_renderer_draw_display_texel(gh_model_renderer *,
+ const gh_model_draw_state *,uint32_t tex0_zero_rgba,
+ const gh_static_gs_vertex *,size_t vertex_count,const uint32_t *indices,size_t index_count);
 /* The original mode1 warp reads the first 256 rows of its 256x448 CT24
  * capture with TEXA TA0=128 and AEM=0. Draw the original four fan triangles
  * using the same scene color, depth and rasterization as world packets. */

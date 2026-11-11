@@ -19,5 +19,7 @@ int main(int argc,char**argv){
  }
  CHECK(!fesetenv(&original));before=s;s.screen_lines=-1;CHECK(gh_display_static_initialize_002a48a8(&s,1,0xffff)==GH_DISPLAY_NUMERIC&&s.pixel_aspect_bits==before.pixel_aspect_bits);
  CHECK(gh_display_state_from_elf(&s,elf,51)==GH_DISPLAY_BOUNDS);free(elf);
+ const uint8_t top[]={255,5,157},next[]={255,255,9};
+ CHECK(gh_display_copy_base0_0030b870(top,next)==0x5041be);
  puts("PASS actual ELF display scalars/BSS plus conditional2A48A8 writes, both font counters and preserved caller FEnv");return 0;
 }

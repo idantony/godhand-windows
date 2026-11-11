@@ -7,6 +7,7 @@
 #include "font_texture.h"
 
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -44,21 +45,47 @@ static gh_scene_ui_status capture_glyph(void *context, const gh_scene_message_gl
     return GH_SCENE_UI_OK;
 }
 
-static unsigned covered(const gh_font_quad *q, const uint8_t *atlas)
+static unsigned oracle(const gh_font_quad *q, const uint8_t *atlas, uint8_t *rgba, uint32_t *depth)
 {
     unsigned hits = 0;
     for (unsigned y = 0; y < 448; ++y) {
         const unsigned fy = 29184 + y * 16;
         if (fy < q->y0 || fy >= q->y1) continue;
-        const uint32_t v = ((uint32_t)q->v0 << 12) +
-            (uint32_t)(((uint64_t)(q->v1 - q->v0) << 12) * (fy - q->y0) / (q->y1 - q->y0));
+        unsigned v = (q->v0 * (q->y1 - fy) + q->v1 * (fy - q->y0)) / (q->y1 - q->y0);
+        v = (v + 4096 - 8) % 4096;
         for (unsigned x = 0; x < 512; ++x) {
             const unsigned fx = 28672 + x * 16;
             if (fx < q->x0 || fx >= q->x1) continue;
-            const uint32_t u = ((uint32_t)q->u0 << 12) +
-                (uint32_t)(((uint64_t)(q->u1 - q->u0) << 12) * (fx - q->x0) / (q->x1 - q->x0));
-            const uint8_t alpha = atlas[4 * ((v >> 16) * 512 + (u >> 16)) + 3];
-            hits += ((alpha == 255 ? 128u : alpha / 2u) * (q->rgba >> 24) >> 7) > 1;
+            unsigned u = (q->u0 * (q->x1 - fx) + q->u1 * (fx - q->x0)) / (q->x1 - q->x0);
+            u = (u + 8192 - 8) % 8192;
+            const double uf = (u % 16) / 16.0, vf = (v % 16) / 16.0;
+            unsigned color[4];
+            for (unsigned k = 0; k < 4; ++k) {
+                double row[2];
+                for (unsigned j = 0; j < 2; ++j) {
+                    const uint8_t *line = atlas + 4 * (((v / 16 + j) % 256) * 512);
+                    double left = line[4 * (u / 16) + k], right = line[4 * ((u / 16 + 1) % 512) + k];
+                    if (k == 3) {
+                        left = left == 255 ? 128 : left / 2;
+                        right = right == 255 ? 128 : right / 2;
+                    }
+                    row[j] = floor(left * (1 - uf) + right * uf);
+                }
+                double value = floor(row[0] * (1 - vf) + row[1] * vf);
+                value = floor(value * ((q->rgba >> (k * 8)) & 255) / 128);
+                color[k] = (unsigned)fmin(255, value);
+            }
+            if (color[3] <= 1) continue;
+            ++hits;
+            if (!rgba) continue;
+            size_t i = (size_t)y * 512 + x;
+            for (unsigned k = 0; k < 3; ++k) {
+                double ratio = color[3] / 128.0;
+                rgba[4 * i + k] = (uint8_t)fmax(0, fmin(255,
+                    floor(color[k] * ratio + rgba[4 * i + k] * (1 - ratio))));
+            }
+            rgba[4 * i + 3] = (uint8_t)color[3];
+            depth[i] = q->z;
         }
     }
     return hits;
@@ -192,15 +219,53 @@ int main(int argc, char **argv) {
         normal.v0 == shadow.v0 && normal.v1 == shadow.v1);
     uint8_t *atlas = malloc(512 * 256 * 4);
     CHECK(atlas && !gh_font_atlas_bank_rgba(draw.pair.font, normal.palette_parity, atlas, 512 * 256 * 4));
-    const unsigned normal_hits = covered(&normal, atlas), shadow_hits = covered(&shadow, atlas);
+    const unsigned normal_hits = oracle(&normal, atlas, NULL, NULL), shadow_hits = oracle(&shadow, atlas, NULL, NULL);
     int discarded = 0;
     CHECK(!gh_scene_message_glyph_discarded(&draw.pair.normal, atlas, 512 * 256 * 4, &discarded) && discarded);
     CHECK(!gh_scene_message_glyph_discarded(&draw.pair.shadow, atlas, 512 * 256 * 4, &discarded) && discarded);
     memset(atlas, 255, 512 * 256 * 4);
     CHECK(!gh_scene_message_glyph_discarded(&draw.pair.normal, atlas, 512 * 256 * 4, &discarded) && !discarded);
     CHECK(gh_scene_message_glyph_discarded(&draw.pair.normal, atlas, 512 * 256 * 4 - 1, &discarded) == GH_SCENE_UI_BOUNDS);
-    free(atlas);
     CHECK(!normal_hits && !shadow_hits);
+    /* A positive glyph comes from the same original font, with explicit QA
+       position. EV01's actual 1000 stream is checked separately above. */
+    gh_font_draw_state positive_state = {.scale_x = .81f, .scale_y = 1.1f, .alignment_flags = 9,
+        .screen_width = 512, .screen_height = 448, .gs_y_origin = 1824, .rgba = color};
+    gh_id_text_glyph positive = {0}, positive_shadow = {0};
+    unsigned positive_hits = 0;
+    for (uint16_t code = 14; code < 120 && !positive_hits; ++code) {
+        if (gh_font_draw_quad(&fonts, &positive_state, code, 211.25f, 187.125f, 65535, &positive.quad)) continue;
+        positive.code = code;
+        CHECK(!gh_font_atlas_bank_rgba(draw.pair.font, positive.quad.palette_parity, atlas, 512 * 256 * 4));
+        positive_hits = oracle(&positive.quad, atlas, NULL, NULL);
+    }
+    CHECK(positive_hits && positive.code != first);
+    positive_state.rgba = 0xff000000u;
+    positive_shadow.code = positive.code;
+    CHECK(!gh_font_draw_quad(&fonts, &positive_state, positive.code, 213.25f, 189.125f, 65535, &positive_shadow.quad));
+    const size_t pixels = 512u * 448u;
+    uint8_t *actual_rgba = malloc(pixels * 4), *expected_rgba = malloc(pixels * 4);
+    uint32_t *actual_depth = malloc(pixels * sizeof(*actual_depth)), *expected_depth = malloc(pixels * sizeof(*expected_depth));
+    CHECK(actual_rgba && expected_rgba && actual_depth && expected_depth);
+    memset(actual_rgba, 73, pixels * 4);
+    memcpy(expected_rgba, actual_rgba, pixels * 4);
+    for (size_t i = 0; i < pixels; ++i) actual_depth[i] = expected_depth[i] = 2000 + (uint32_t)(i % 100);
+    /* Both original OT nodes share a bucket, so LIFO runs shadow first. */
+    CHECK(oracle(&positive_shadow.quad, atlas, expected_rgba, expected_depth));
+    CHECK(oracle(&positive.quad, atlas, expected_rgba, expected_depth) == positive_hits);
+    CHECK(!gh_scene_message_glyph_blit(&positive_shadow, atlas, 512 * 256 * 4, actual_rgba, pixels * 4, actual_depth, pixels));
+    CHECK(!gh_scene_message_glyph_blit(&positive, atlas, 512 * 256 * 4, actual_rgba, pixels * 4, actual_depth, pixels));
+    CHECK(!memcmp(actual_rgba, expected_rgba, pixels * 4));
+    CHECK(!memcmp(actual_depth, expected_depth, pixels * sizeof(*actual_depth)));
+    CHECK(gh_scene_message_glyph_blit(&positive, atlas, 512 * 256 * 4, actual_rgba, pixels * 4,
+        actual_depth, pixels - 1) == GH_SCENE_UI_BOUNDS);
+    CHECK(!memcmp(actual_rgba, expected_rgba, pixels * 4));
+    printf("PASS font positive original glyph code %u, %u samples, full RGBA/Z oracle\n", positive.code, positive_hits);
+    free(actual_rgba);
+    free(expected_rgba);
+    free(actual_depth);
+    free(expected_depth);
+    free(atlas);
 
     CHECK(!gh_scene_message_update_002aefa8(&ui, &work, &frontier) && !frontier);
     CHECK(block->payload[0] == 3 && !block->payload[1] && ui.sources[0].cursor_8c == 2);
@@ -245,6 +310,8 @@ int main(int argc, char **argv) {
             capture_glyph, &draw, &frontier) && !frontier && draw.calls == 2);
     }
     CHECK(ui.free_head == 0 && !ui.sources[0].bound && !block->flags && ui.blocks[1].previous == 0);
+    CHECK(!gh_event_message_quit_000081b0(&message, &frontier, &relative));
+    CHECK(!frontier && !relative && ui.active_head == -1 && ui.free_head == 0);
     CHECK(!gh_event_message_init_00008100(&message, &prefix, &config, &ui, 0, UINT16_MAX,
         gh_scene_event_message_create_002aeb68, &work, &frontier, &relative));
     CHECK(!frontier && ui.active_head == -1 && ui.generation_bd8 == 2);
@@ -269,6 +336,16 @@ int main(int argc, char **argv) {
     CHECK(ui.free_head == -1);
     CHECK(!gh_scene_message_create_002aeb68(&ui, &work, 0x1000, &id, &frontier));
     CHECK(!frontier && id == UINT16_MAX && ui.active_head == 15 && ui.blocks[15].payload[0] == 6);
+    int found;
+    CHECK(!gh_scene_message_delete_002aebf8(&ui, UINT16_MAX, &found, &frontier) && !found);
+    gh_event_message_play early_quit = message;
+    early_quit.work_id = ui.blocks[7].flags;
+    CHECK(!gh_event_message_quit_000081b0(&early_quit, &frontier, &relative));
+    CHECK(!frontier && !relative && ui.active_head == 15 && ui.free_head == 7);
+    CHECK(ui.blocks[8].next == 6 && ui.blocks[6].previous == 8 &&
+        !ui.sources[7].bound && ui.sources[6].bound && ui.sources[8].bound);
+    CHECK(!gh_event_message_quit_000081b0(&early_quit, &frontier, &relative) && !frontier);
+    CHECK(ui.free_head == 7 && ui.blocks[7].next == -1);
     CHECK(!gh_scene_message_initialize_002aea18(&ui, &menu, &room, work.language));
     for (unsigned i = 0; i < 16; ++i) CHECK(!ui.sources[i].bound && !ui.sources[i].primary.bytes);
 
@@ -279,7 +356,7 @@ int main(int argc, char **argv) {
     CHECK(!gh_heap_used(heap) && !gh_heap_destroy(heap));
     gh_disc_close(disc);
     free(elf);
-    printf("PASS actual EV01 Message 1000 glyph and shadow packets (%u/%u alpha-covered CPU samples), A301 timing, 8001 six-tick recycle\n",
-        normal_hits, shadow_hits);
+    printf("PASS actual EV01 Message 1000 glyph %u and shadow packets (%u/%u alpha-covered CPU samples), A301 timing, 8001 six-tick recycle\n",
+        first, normal_hits, shadow_hits);
     return 0;
 }

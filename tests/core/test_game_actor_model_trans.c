@@ -41,5 +41,18 @@ int main(int argc,char**argv){
   * predicates differ, while14E4C8 is verifiedactualJRRA/NOP. */
  uint32_t originalvt=w(bytes+0x214);put(bytes+0x214,0x41b6a0);put((uint8_t*)&work+0x5e0,0x200000);call=(gh_actor_trans_call){0};C(!gh_actor_model_trans_0014a3e8(&call,&model,&b,&pc)&&call.complete);put((uint8_t*)&work+0x5e0,0);b.shadow=NULL;call=(gh_actor_trans_call){0};C(gh_actor_model_trans_0014a3e8(&call,&model,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x14ac90);
  put(bytes+0x214,0x4292f0);put((uint8_t*)&work+0x5e0,0x20000000);call=(gh_actor_trans_call){0};C(!gh_actor_model_trans_0014a3e8(&call,&model,&b,&pc)&&call.complete);put(bytes+0x214,originalvt);
+ const uint32_t enemy_vtables[]={0x4479c8,0x448ca0};
+ for(unsigned i=0;i<sizeof(enemy_vtables)/sizeof(*enemy_vtables);++i){
+  put(bytes+0x214,enemy_vtables[i]);
+  put((uint8_t*)&work+0x5e0,0x40000000);
+  observer=(observe){0};call=(gh_actor_trans_call){0};
+  C(!gh_actor_model_trans_0014a3e8(&call,&model,&b,&pc)&&call.complete&&!observer.calls);
+  put((uint8_t*)&work+0x5e0,0);put((uint8_t*)&work+0x58c,0x00400000);
+  call=(gh_actor_trans_call){0};
+  C(!gh_actor_model_trans_0014a3e8(&call,&model,&b,&pc)&&call.complete&&!observer.calls);
+  put((uint8_t*)&work+0x58c,0);call=(gh_actor_trans_call){0};
+  C(gh_actor_model_trans_0014a3e8(&call,&model,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x28edd0&&observer.calls==1);
+ }
+ put(bytes+0x214,originalvt);
  C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(light);free(data);free(elf);free(room);puts("PASS actualPL00 wholemodel+ELFVT, depth/predicate/frustum independentlongdouble/truegates/shadowowner/alpha153+retry/4FEnv; exact14EFA8/14D828/14AC90frontiers, no body/GPUack");return 0;
 }

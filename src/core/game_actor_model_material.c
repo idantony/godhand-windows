@@ -28,12 +28,22 @@ static gh_actor_model_status prepare(gh_actor_model *model,unsigned index,gh_sta
   if(word(root+0x254)&0x10000000u){if(model->root.size<0x2d4+256)return fail(frontier,0x148690,GH_ACTOR_MODEL_BOUNDS);uint8_t replacement=root[0x2d4+source];if(replacement!=255&&!(word(node+0x410)&0x40000000))member=replacement;}
   if(flags&4)member=0;
   next.streams[i].source_member=(uint8_t)source;next.streams[i].selected_member=(uint8_t)member;
-  if(member==255)continue;
+  if(member==255){
+   /* 154DA0 wrote TEX0 from 747BB8 + (node384 + raw slot) * B0.
+    * 148690 skips replacing FF. The unloaded FF entry is zero-filled,
+    * so this is a PSMCT32 1x1/TCC0 sample from display page base zero. */
+   gh_stage_channel constructor_slot;
+   if(source!=255||stream->material_slot!=255||node[0x384]||
+      gh_stage_texture_channel(textures,255,&constructor_slot)!=GH_STAGE_UNAVAILABLE)
+    return fail(frontier,0x154da0,GH_ACTOR_MODEL_UNSUPPORTED);
+   next.streams[i].samples_display_base0=1;
+   continue;
+  }
   const gh_stage_material *material=NULL;
   gh_stage_status status=gh_stage_tm3_resolve(textures,packet->texture.bytes,packet->texture.size,member,mode,&material);
   if(status)return fail(frontier,status==GH_STAGE_BOUNDS?0x1522c0:0x151398,status==GH_STAGE_MEMORY?GH_ACTOR_MODEL_MEMORY:status==GH_STAGE_BOUNDS?GH_ACTOR_MODEL_BOUNDS:GH_ACTOR_MODEL_UNSUPPORTED);
   uint64_t tex0=(material->source_tex0&UINT64_C(0xfff80007ffffffff))|UINT64_C(0x2000000400000000)|(((material->source_tex0>>37)&0x3fff)<<37)|((uint64_t)tfx<<35);
-  next.streams[i]=(gh_actor_stream_material){material,tex0,(uint8_t)source,(uint8_t)member,1};
+  next.streams[i]=(gh_actor_stream_material){material,tex0,(uint8_t)source,(uint8_t)member,1,0};
   size_t offset=stream->frame_offset[next.parity];if(offset>packet->bytes||0x28>packet->bytes-offset)return fail(frontier,0x148690,GH_ACTOR_MODEL_BOUNDS);
  }
  /* Preflight all streams before publishing; no half-ready returned view.
