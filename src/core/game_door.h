@@ -4,6 +4,8 @@
 #include "game_scene_ui.h"
 #include "game_scene_step.h"
 #include "display_state.h"
+#include "game_subscreen_save.h"
+#include "sound_control.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -14,6 +16,7 @@ typedef struct {
  uint8_t point,kind;uint32_t flags;uint8_t backup[24];uint32_t unknown34;
  uint8_t phase38,verify_phase39,force3a,unknown3b;
  uint8_t initialized,step_stage,begin_stage;uint32_t frontier;
+ uint8_t save_prompt_stage;
 } gh_game_door;
 typedef enum {GH_DOOR_OK,GH_DOOR_ARGUMENT,GH_DOOR_BOUNDS,GH_DOOR_FORMAT,
  GH_DOOR_BUSY,GH_DOOR_UNSUPPORTED,GH_DOOR_CALLEE} gh_door_status;
@@ -21,12 +24,20 @@ typedef enum {GH_DOOR_OK,GH_DOOR_ARGUMENT,GH_DOOR_BOUNDS,GH_DOOR_FORMAT,
  * No callback is needed or invoked on a genuine original branch which skips it. */
 typedef gh_door_status (*gh_door_external)(void*,uint32_t address,uint32_t *frontier);
 typedef struct {
+ gh_game_children *children;
+ const gh_save_map_bindings *map;
+ gh_sound_control *sound;
+ gh_door_external scenario_end;
+ void *context;
+} gh_door_save_prompt;
+typedef struct {
  gh_boot_work *work;gh_game_loop *loop;gh_scene_scenario_view scenario;
  gh_game_scene_ui *messages;gh_game_prepare *prepare;
  gh_game_title_player *player; /*borrowed, required only on original active-player branches*/
  gh_game_scene_step *scene_step; /*canonical Main+1B0 cooldown*/
  gh_screen_fade *fade;gh_display_state *display;
  gh_door_external external;void *context;
+ const gh_door_save_prompt *save_prompt;
 } gh_game_door_bindings;
 /* Zero-initialize native owner first. These load the exact cold ELF file/BSS
  * scalar values; they do not claim the whole original static constructor chain. */

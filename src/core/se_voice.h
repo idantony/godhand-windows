@@ -31,7 +31,7 @@ gh_voice_status gh_se_mix_boot_defaults_002c9e78(gh_se_mix *,uint32_t system_fla
 typedef struct gh_se_voice_info {uint32_t original_handle,native_voice,sample_slot,frames,rate;uint16_t pitch_q12,adsr1,adsr2,level_q14;int16_t program,bank;uint8_t pending,channel;int16_t stop_current,stop_step;uint16_t stop_count;uint8_t stopping,retiring;
  const struct gh_actor_model *attached_model;int32_t attached_part;float source_position[4];uint8_t attached,position_mode;
  uint16_t distance,azimuth,pan,left_q14,right_q14;} gh_se_voice_info;
-/* Narrow real origin MC event path: core bank0 programs2D/15E/160/161 and R020 bank2 programs0/10/11/12, original
+/* Narrow real origin MC event path: core bank0 programs2D/15E/15F/160/161 and R020 bank2 programs0/10/11/12, original
  * default args(-1,-1,0,0), stereo/mono and explicit original SFX master level.
  * Caller supplies real registry/device; no emulated device or empty command
  * acknowledgment. Hardware DSP becomes a documented native linear resampler

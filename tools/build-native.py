@@ -6,12 +6,14 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import subprocess
 import sys
 import time
 import threading
 from test_contracts import check_contracts, TestContractError
 from compiler_response import write_response_file
+from compiled_objects import OBJECT_CACHE_DIRECTORY, ObjectCache, c_driver, project_inputs, source_hashes
 
 PROJECT = Path(__file__).resolve().parents[1]
 SCRATCH = Path(r"G:\middle_thing\godhand_windows")
@@ -21,7 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument("--focus", action="append", default=[], metavar="TEST",
-                        help="Run only this manifest test after a fresh native module build; repeat for more tests")
+                        help="Run only this manifest test after the native module build; repeat for more tests")
     parser.add_argument("--jobs", type=int, default=4, help="Independent compiler processes (1..16); device tests remain serial")
     parser.add_argument("--hardware-audio", action="store_true", help="Run muted real-device voice, ADX, BGM and scene-flow checks")
     parser.add_argument("--adx-reference-wave", type=Path, help="Independent vgmstream WAV for the full native ADX sample comparison")
@@ -31,7 +33,10 @@ def main():
     parser.add_argument("--compiler", type=Path, default=PROJECT / ".tools" / "zig-x86_64-windows-0.17.1" / "zig.exe", help="Zig executable; permits reusing an installed toolchain")
     parser.add_argument("--scratch", type=Path, default=SCRATCH, help="External build/cache root")
     parser.add_argument("--compiler-cache", type=Path, default=SCRATCH / "cache/zig-global",
-                        help="Shared Zig toolchain cache; each scratch rebuilds its project objects")
+                        help="Shared Zig toolchain cache")
+    parser.add_argument("--object-cache", type=Path, default=SCRATCH / OBJECT_CACHE_DIRECTORY,
+                        help="Share unchanged compiled objects with Windows and native verification builds")
+    parser.add_argument("--no-object-cache", action="store_true", help="Compile every object afresh")
     args = parser.parse_args()
     wave_inputs = {"adx-reference": args.adx_reference_wave,
                    "event-adx-reference": args.event_adx_reference_wave}
@@ -43,6 +48,9 @@ def main():
     compiler_cache = args.compiler_cache.resolve()
     if compiler_cache == PROJECT or PROJECT in compiler_cache.parents:
         parser.error("Compiler cache must stay outside the permanent project tree")
+    cache_root = args.object_cache.resolve()
+    if not args.no_object_cache and (cache_root == PROJECT or PROJECT in cache_root.parents):
+        parser.error("Object cache must stay outside the source snapshot")
     try:
         scratch.relative_to(PROJECT)
     except ValueError:
@@ -102,8 +110,7 @@ def main():
             print(result.stdout, flush=True)
             raise SystemExit(result.returncode)
 
-    common = [compiler, "cc", "-target", "x86_64-windows-gnu", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
-              "-ffp-contract=off", "-fno-fast-math", "-D_CRT_SECURE_NO_WARNINGS"]
+    common = c_driver(compiler)
     modules = [("rng", "src/core/rng.c"), ("boot", "src/core/boot.c"),
                ("disc", "src/platform/disc.c"), ("r207", "src/rooms/r207.c"),
                ("memory", "src/platform/memory.c"), ("tasks", "src/core/tasks.c"),
@@ -438,7 +445,10 @@ def main():
         ("mc-file-load", "tests/core/test_mc_file_load.c", "none"),
         ("memory-card", "tests/platform/test_memory_card.c", "scratch-iso"),
         ("mc-file-save", "tests/platform/test_mc_file_save.c", "scratch"),
+        ("mc-save-control", "tests/core/test_mc_save_control.c", "scratch-iso"),
+        ("game-save-roundtrip", "tests/core/test_game_save_roundtrip.c", "scratch-iso"),
         ("game-cockpit", "tests/core/test_game_cockpit.c", "both"),
+        ("game-children", "tests/core/test_game_children.c", "elf"),
         ("game-objects", "tests/core/test_game_objects.c", "both"),
         ("game-prepare", "tests/core/test_game_prepare.c", "none"),
         ("game-room-state", "tests/core/test_game_room_state.c", "elf"),
@@ -735,6 +745,8 @@ def main():
         ("game-scene-post", "tests/core/test_game_scene_post.c", "iso"),
         ("game-cockpit-frame", "tests/core/test_game_cockpit_frame.c", "iso"),
         ("game-door", "tests/core/test_game_door.c", "iso"),
+        ("game-subscreen-save", "tests/core/test_game_subscreen_save.c", "iso"),
+        ("save-map-sound", "tests/core/test_save_map_sound.c", "iso"),
         ("game-message-step", "tests/core/test_game_message_step.c", "iso"),
         ("game-objects-update", "tests/core/test_game_objects_update.c", "none"),
         ("sound-spatial-step", "tests/core/test_sound_spatial_step.c", "iso"),
@@ -778,6 +790,7 @@ def main():
     recording_transport_tests = {
         "game-om324-started-pitch", "game-enemy-started-pitch", "game-ema2-impact-sound",
         "game-enemy-state71-sound", "game-enemy-6b-sound", "se-adx-sequence",
+        "save-map-sound",
     }
     recording_voice_object = output / "se_voice_recording_transport.o"
     try:
@@ -786,7 +799,8 @@ def main():
         manifest.update(status="failed", error=str(error))
         report.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         raise SystemExit(str(error))
-    source_inputs = {"tools/build-native.py", "tools/test_contracts.py", "tools/compiler_response.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
+    source_inputs = {"tools/build-native.py", "tools/test_contracts.py", "tools/compiler_response.py",
+                     "tools/compiled_objects.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
                      "tests/platform/test_memory.c", "tests/core/test_tasks.c",
                      "tests/platform/test_task_threads.c", "tests/assets/test_tim2.c", "tools/decode-tim2.c",
@@ -818,16 +832,48 @@ def main():
     for name, source in modules:
         source_inputs.add(source)
         source_inputs.add(shared_headers.get(name, str(Path(source).with_suffix(".h")).replace("\\", "/")))
-    initial_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
+    initial_sources, includes, time_sensitive = project_inputs(
+        PROJECT, (source for _, source in modules), source_inputs)
+    cache = None if args.no_object_cache else ObjectCache.for_build(cache_root, compiler, env)
+    cache_writes = []
     report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     last_report = time.monotonic()
+
+    def compile_object(label, source, target, extra_flags=()):
+        command = common + [*extra_flags, "-c", source, "-o", target]
+        key = None
+        if cache:
+            key, command = cache.prepare(PROJECT, command, source, initial_sources, includes, time_sensitive)
+        started = time.monotonic()
+        if key and cache.restore(key, target):
+            log = logs / (label + ".log")
+            log.write_text(f"Restored verified object from cache {key}\n", encoding="utf-8")
+            with report_lock:
+                manifest["steps"].append({"name": label, "command": [str(item) for item in command],
+                    "returncode": 0, "seconds": round(time.monotonic() - started, 3),
+                    "log": str(log), "object_cache": key})
+                print(label + ": PASS (cache)", flush=True)
+            return
+        run(label, command)
+        if key:
+            with report_lock:
+                cache_writes.append((key, target))
+
     def finish_build(status):
         manifest["status"] = status
-        final_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
+        final_sources = source_hashes(PROJECT, initial_sources)
         if initial_sources != final_sources:
             manifest["status"] = "failed-source-changed-during-build"
             report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
             raise SystemExit("Source changed during compilation/testing; rebuild the stabilized inputs")
+        if cache:
+            for key, target in cache_writes:
+                cache.store(key, target)
+            manifest["object_cache"] = {
+                "path": str(cache_root), "hits": sum("object_cache" in step for step in manifest["steps"]),
+                "compiled": len(cache_writes),
+            }
+            print(f"Object cache: {manifest['object_cache']['hits']} reused, {len(cache_writes)} compiled", flush=True)
         manifest["source_sha256"] = final_sources
         manifest["module_names"] = [name for name, _ in modules]
         manifest["artifacts"] = [{"path": str(path), "size": path.stat().st_size,
@@ -839,16 +885,15 @@ def main():
     def extra_test_path(name):
         return output / ("test_" + name.replace("-", "_") + ".exe")
 
+    native_archive = output / "native-modules.a"
+
     def compile_extra_test(test):
         name, source, _ = test
-        test_objects = list(objects.values())
-        if name in recording_transport_tests:
-            test_objects = [recording_voice_object if module == "se_voice" else obj
-                            for module, obj in objects.items()]
-        if name == "bgm-title-output-mode":
-            test_objects.remove(objects["adx_stream"])  # Fixture supplies the recording endpoint.
+        transport = [recording_voice_object] if name in recording_transport_tests else []
+        # A fixture's own transport symbols precede the archive, so the linker
+        # selects only production modules still needed by that fixture.
         run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms", "-Isrc/assets"]
-            + test_objects + [source, "-o", extra_test_path(name)])
+            + [source, *transport, native_archive, "-o", extra_test_path(name)])
 
     def extra_test_command(test, baseline):
         name, _, inputs = test
@@ -890,18 +935,25 @@ def main():
     def compile_module(module):
         name, source = module
         target = output / (name + ".o")
-        run("compile-" + name, common + ["-c", source, "-o", target])
+        compile_object("compile-" + name, source, target)
         return name, target
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as workers:
         objects = dict(workers.map(compile_module, modules))
+        with TemporaryDirectory(prefix="native-archive-", dir=output) as directory:
+            fresh_archive = Path(directory) / native_archive.name
+            response = write_response_file(output / "native-modules.rsp",
+                                           ["rcs", fresh_archive, *objects.values()])
+            manifest.setdefault("response_files", []).append(response)
+            run("archive-native-modules", [compiler, "ar", "@" + response["path"]])
+            fresh_archive.replace(native_archive)
         if any(case[0] in recording_transport_tests for case in (focused or extra_tests)):
             # Windows COFF links the recording transport by renaming only the
             # calls in this test object. The ordinary voice object stays intact.
             functions = ("play", "active", "stop", "voice_gain", "voice_pitch_ratio")
             symbols = ["-Dgh_audio_output_" + name + "=__wrap_gh_audio_output_" + name
                        for name in functions]
-            run("compile-se-voice-recording-transport", common + symbols
-                + ["-c", "src/core/se_voice.c", "-o", recording_voice_object])
+            compile_object("compile-se-voice-recording-transport",
+                           "src/core/se_voice.c", recording_voice_object, symbols)
         if focused:
             list(workers.map(compile_extra_test, focused))
     if focused:
@@ -946,7 +998,6 @@ def main():
     run("compile-id-texture-tests", common + id_objects + ["tests/core/test_id_texture.c", "-o", output / "test_id_texture.exe"])
     run("compile-mc-control-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_control.c", "-o", output / "test_mc_control.exe"])
     run("compile-game-stage-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_game_stage.c", "-o", output / "test_game_stage.exe"])
-    run("compile-game-children-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_children", "game_render_steps", "id_base", "id_path", "core_bundle")] + ["tests/core/test_game_children.c", "-o", output / "test_game_children.exe"])
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as workers:
         list(workers.map(compile_extra_test, extra_tests))
     run("compile-core-dll", common + ["-shared", "-Wl,--export-all-symbols"] + list(objects.values()) + ["-o", output / "godhand_core.dll"])
@@ -984,7 +1035,6 @@ def main():
         run("test-id-texture", [output / "test_id_texture.exe", baseline["source_iso"]["path"]])
         run("test-mc-control", [output / "test_mc_control.exe", baseline["source_iso"]["path"]])
         run("test-game-stage", [output / "test_game_stage.exe", baseline["source_iso"]["path"]])
-        run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
         for test in extra_tests:
             label = "test-" + test[0]
             command = extra_test_command(test, baseline)

@@ -25,6 +25,8 @@ void gh_memory_card_close(gh_memory_card *);
  * objectandmustcloseit. No guestRPC/thread/semaphore success isfabricated. */
 gh_mc_error gh_memory_card_begin(gh_memory_card *);
 gh_mc_error gh_memory_card_end(gh_memory_card *);
+/* Abandon unexecuted native I/O and close the current file during teardown. */
+gh_mc_error gh_memory_card_abort(gh_memory_card *);
 gh_mc_error gh_memory_card_request_info(gh_memory_card *);
 /* USA original folder base, slot0..19, icon.sys. No caller path interpolation. */
 gh_mc_error gh_memory_card_request_icon(gh_memory_card *,uint32_t save_slot);
@@ -40,6 +42,10 @@ gh_mc_error gh_memory_card_request_save_record(gh_memory_card *,uint8_t out[GH_M
 gh_mc_error gh_memory_card_request_save_write_open(gh_memory_card *,uint32_t save_slot);
 gh_mc_error gh_memory_card_request_save_write(gh_memory_card *,const uint8_t record[GH_MC_SAVE_RECORD_BYTES]);
 gh_mc_error gh_memory_card_request_save_close(gh_memory_card *);
+typedef enum {GH_MC_SAVE_ICON_MODEL=1,GH_MC_SAVE_ICON_SYSTEM=2} gh_mc_save_icon_kind;
+gh_mc_error gh_memory_card_request_slot_create(gh_memory_card *,uint32_t slot);
+gh_mc_error gh_memory_card_request_save_icon_write_open(gh_memory_card *,uint32_t slot,gh_mc_save_icon_kind);
+gh_mc_error gh_memory_card_request_save_icon_write(gh_memory_card *,gh_mc_save_icon_kind,const uint8_t *,uint32_t bytes);
 /* pending command executes real filesystem query here; completed=1 reports
  * completed result. With no queued command completed=0. Overlap is BUSY. */
 gh_mc_error gh_memory_card_poll(gh_memory_card *,int *completed,gh_mc_result *);

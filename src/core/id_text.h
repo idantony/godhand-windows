@@ -22,6 +22,11 @@ gh_id_error gh_id_text_palette_from_elf(const void *,size_t,gh_id_view *);
 gh_id_error gh_id_text_prepare(const gh_id_base *,const gh_id_entry *,const gh_menu_state *,
  const gh_packed_message_state *,const gh_font_state *,const gh_id_text_context *,
  gh_id_text_glyph *,size_t capacity,gh_id_text_result *);
+/* Door map 2022 embeds the typed cMenu+0xBEE chapter message through
+ * 9401. Only actual plain chapter rows in the same packed bank are admitted. */
+gh_id_error gh_id_text_prepare_with_chapter(const gh_id_base *,const gh_id_entry *,const gh_menu_state *,
+ const gh_packed_message_state *,const gh_font_state *,const gh_id_text_context *,
+ uint16_t chapter_message,gh_id_text_glyph *,size_t capacity,gh_id_text_result *);
 /* Original 2B1300 uses the canonical language pad atlas, OT bank6/depth5. */
 gh_id_error gh_id_text_icon_quad(const gh_id_state *,const gh_id_text_glyph *,gh_id_texture_quad *);
 #ifdef __cplusplus

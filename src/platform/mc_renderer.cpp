@@ -287,14 +287,14 @@ extern "C" gh_id_error gh_mc_renderer_queue_fan(gh_mc_renderer*r,const gh_cockpi
     try {QueuedCommand c;c.kind=CommandKind::FAN;c.fan=*fan;r->queued.push_back(c);*tag={6,5,r->queued.size()-1};return GH_ID_OK;}
     catch(const std::bad_alloc&){return GH_ID_MEMORY;}
 }
-static gh_id_error queue_title_prompt(gh_mc_renderer *r,const gh_id_render_view *view,
-    const gh_id_draw_job *job,gh_ui_ot_tag *tags,size_t capacity,size_t *count)
+static gh_id_error queue_text_groups(gh_mc_renderer *r,const gh_id_render_view *view,
+    const gh_id_draw_job *job,uint16_t chapter_message,gh_ui_ot_tag *tags,size_t capacity,size_t *count)
 {
     if(!view->font||!view->menu||!view->messages)return GH_ID_ARGUMENT;
     gh_id_text_result result={};
     const gh_id_text_context context={r->language,512,448,1824,{r->palette.data(),r->palette.size(),0}};
-    gh_id_error status=gh_id_text_prepare(view->base,job->entry,view->menu,view->messages,view->font,
-        &context,r->glyphs.data(),r->glyphs.size(),&result);
+    gh_id_error status=gh_id_text_prepare_with_chapter(view->base,job->entry,view->menu,view->messages,view->font,
+        &context,chapter_message,r->glyphs.data(),r->glyphs.size(),&result);
     if(status){r->status.opcode=result.opcode;r->status.frontier=result.frontier_address;return status;}
     const bool has_font=result.glyph_count>result.icon_count;
     const size_t group_count=result.icon_count+(has_font?1u:0u);
@@ -334,14 +334,17 @@ static gh_id_error queue_title_prompt(gh_mc_renderer *r,const gh_id_render_view 
     }catch(const std::bad_alloc&){return GH_ID_MEMORY;}
 }
 
-extern "C" gh_id_error gh_mc_renderer_queue_view_groups(gh_mc_renderer*r,const gh_id_render_view*view,const gh_id_draw_job*job,gh_ui_ot_tag*tags,size_t capacity,size_t*count)
+extern "C" gh_id_error gh_mc_renderer_queue_view_groups_with_chapter(gh_mc_renderer*r,const gh_id_render_view*view,
+    const gh_id_draw_job*job,uint16_t chapter_message,gh_ui_ot_tag*tags,size_t capacity,size_t*count)
 {
     if(!r||!r->begun||!view||!view->base||!view->manager||!job||!job->entry||!count)return GH_ID_ARGUMENT;
     if(r->flushing||r->queue_failed||r->status.jobs)return GH_ID_BUSY;
     if(null_texture(view,job->entry)){*count=0;return GH_ID_OK;}
     if(job->entry->kind==2&&view->base->resource_number==11&&
        (job->entry->message==0x20a4||job->entry->message==0x20a5))
-        return queue_title_prompt(r,view,job,tags,capacity,count);
+        return queue_text_groups(r,view,job,0,tags,capacity,count);
+    if(chapter_message&&job->entry->kind==2&&view->base->resource_number==7&&job->entry->message==0x2022)
+        return queue_text_groups(r,view,job,chapter_message,tags,capacity,count);
     if(job->entry->kind!=1){if(!capacity)return GH_ID_CAPACITY;if(!tags)return GH_ID_ARGUMENT;gh_ui_ot_tag tag;gh_id_error e=gh_mc_renderer_queue_view(r,view,job,&tag);if(e)return e;tags[0]=tag;*count=1;return GH_ID_OK;}
     gh_id_texture_quad digits[10];size_t n=0;gh_id_error e=gh_id_number_prepare(view->manager,view->base,job->entry,digits,10,&n,&r->status.frontier);if(e)return e;
     if(n>capacity||n>8192-r->queued.size())return GH_ID_CAPACITY;if(n&&!tags)return GH_ID_ARGUMENT;
@@ -354,6 +357,11 @@ extern "C" gh_id_error gh_mc_renderer_queue_view_groups(gh_mc_renderer*r,const g
         }
         for(size_t i=0;i<n;i++)tags[i]={digits[i].color_mode,digits[i].font_mode,first+i};*count=n;return GH_ID_OK;
     }catch(const std::bad_alloc&){return GH_ID_MEMORY;}
+}
+extern "C" gh_id_error gh_mc_renderer_queue_view_groups(gh_mc_renderer *r,const gh_id_render_view *view,
+    const gh_id_draw_job *job,gh_ui_ot_tag *tags,size_t capacity,size_t *count)
+{
+    return gh_mc_renderer_queue_view_groups_with_chapter(r,view,job,0,tags,capacity,count);
 }
 extern "C" gh_id_error gh_mc_renderer_queue_view_groups_at_z(gh_mc_renderer *r,const gh_id_render_view *view,
  const gh_id_draw_job *job,gh_ui_ot_tag *tags,size_t capacity,size_t *count,uint16_t z)

@@ -24,6 +24,10 @@ gh_mc_task_status gh_mc_exit_run_final_frame(gh_mc_exit_state*,gh_mc_control_sta
 gh_mc_task_status gh_mc_title_exit_step_00001458(gh_mc_exit_state *,gh_mc_title_load *,
     gh_mc_task_state *,const gh_mc_task_bindings *,gh_screen_fade *,
     const gh_screen_fade_context *);
+/* Save 3E40→3EC8→3F20. After RoomHeap/ID release, FRAME requires
+ * one original no-UI sleep. OK returns the dispatcher to its native slot. */
+gh_mc_task_status gh_mc_save_exit_step_00003e40(gh_mc_exit_state *,gh_mc_save_task_state *,
+    const gh_mc_task_bindings *,gh_screen_fade *,const gh_screen_fade_context *);
 #ifdef __cplusplus
 }
 #endif

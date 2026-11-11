@@ -1,3 +1,4 @@
+#include "game_scene_aux.h"
 #include "game_loaded_room.h"
 #include <string.h>
 static uint32_t word(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
@@ -15,6 +16,30 @@ void gh_scene_background_mode_0030e5c0(gh_boot_work*w,int mode,uint32_t a,uint32
  memcpy(p+0x3e0,&x,8);memcpy(p+0x270,&y,8);
  if(mode){uint32_t config=(a&255)|((b&255)<<8)|((c&255)<<16);memcpy(p+0x60c,&config,4);}
 }
+static void reset_cursor(gh_game_scene_aux *s)
+{
+ memset(s->save_load,0,8);
+ memset(s->save_load+9,0,2);
+ memset(s->save_load+0xc,0,2);
+ s->load_flags_saved=0;
+}
+gh_scene_aux_status gh_scene_cursor_open_save_002bf1a0(gh_game_scene_aux *s,gh_boot_work *w,int32_t mode)
+{
+ if(!s||!w)return GH_AUX_ARGUMENT;
+ uint8_t *work=(uint8_t*)w;
+ uint32_t flags=word(work+0x5e8);
+ if((word(work+0x598)&UINT32_C(0x80000000))||(word(work+0x594)&UINT32_C(0x800))){
+  flags&=~UINT32_C(0x40000000);
+ }else{
+  reset_cursor(s); /* Availability leaf 2BF700 returns one. */
+  if(mode!=-1)s->save_mode=mode;
+  flags|=UINT32_C(0x40000000);
+  s->save_load[0]=3;
+  s->save_load[1]=1;
+ }
+ memcpy(work+0x5e8,&flags,4);
+ return GH_AUX_OK;
+}
 gh_scene_aux_status gh_scene_cursor_open_load_002bf268(gh_game_scene_aux *s,gh_boot_work *w)
 {
  if(!s||!w)return GH_AUX_ARGUMENT;
@@ -22,12 +47,42 @@ gh_scene_aux_status gh_scene_cursor_open_load_002bf268(gh_game_scene_aux *s,gh_b
   * only the listed cursor fields before openLoad selects mode two. */
  uint8_t *busy=(uint8_t*)w+0x5e8;
  uint32_t flags=word(busy)|UINT32_C(0x40000000);
- memset(s->save_load+1,0,7);
- memset(s->save_load+9,0,2);
- memset(s->save_load+0xc,0,2);
+ reset_cursor(s);
  memcpy(busy,&flags,sizeof(flags));
  s->save_load[0]=2;
- s->load_flags_saved=0;
+ return GH_AUX_OK;
+}
+
+static void save_cursor_work_flags(gh_game_scene_aux *s,uint8_t *work)
+{
+ if(s->load_flags_saved)return;
+ uint8_t *cursor=s->save_load;
+ memcpy(cursor+0x70,work+0x5e0,4);
+ memcpy(cursor+0x74,work+0x5d8,8);
+ uint32_t mask=word(work+0x5e0)|UINT32_C(0xfff00000);
+ uint32_t flags=(word(work+0x5d8)&UINT32_C(0xfdffffff))|UINT32_C(0xd8862000);
+ memcpy(work+0x5e0,&mask,4);
+ memcpy(work+0x5d8,&flags,4);
+ s->load_flags_saved=1;
+}
+gh_scene_aux_status gh_scene_cursor_save_step_002bf478(gh_game_scene_aux *s,gh_boot_work *w,
+ gh_scene_start_save start,void *context)
+{
+ if(!s||!w||s->save_load[0]!=3)return GH_AUX_ARGUMENT;
+ uint8_t *work=(uint8_t*)w;
+ if(!(word(work+0x5e8)&UINT32_C(0x40000000)))return GH_AUX_ARGUMENT;
+ gh_scene_background_mode_0030e5c0(w,1,0,0,0);
+ s->frontier=0;
+ uint8_t *cursor=s->save_load;
+ if(cursor[1]==1){
+  save_cursor_work_flags(s,work);
+  if(!start||start(context,s->save_mode))return stop(s,0x2ae740);
+  cursor[1]=2;
+  cursor[2]=cursor[3]=0;
+ }else if(cursor[1]==2&&!(word(work+0x5e8)&UINT32_C(0x80000000))){
+  cursor[0]=5;
+  cursor[1]=cursor[2]=cursor[3]=0;
+ }
  return GH_AUX_OK;
 }
 
@@ -37,16 +92,7 @@ static gh_scene_aux_status cursor_load_step(gh_game_scene_aux *s,gh_boot_work *w
  uint8_t *cursor=s->save_load;
  uint8_t *work=(uint8_t*)w;
  if(!cursor[1]){
-  /* 002BF3D0 calls 002BF708 then 002BF790 before launching the MC task. */
-  if(!s->load_flags_saved){
-   memcpy(cursor+0x70,work+0x5e0,4);
-   memcpy(cursor+0x74,work+0x5d8,8);
-   uint32_t mask=word(work+0x5e0)|UINT32_C(0xfff00000);
-   uint32_t flags=(word(work+0x5d8)&UINT32_C(0xfdffffff))|UINT32_C(0xd8862000);
-   memcpy(work+0x5e0,&mask,4);
-   memcpy(work+0x5d8,&flags,4);
-   s->load_flags_saved=1;
-  }
+  save_cursor_work_flags(s,work);
   if(!start||start(context))return stop(s,0x2ae7f0);
   cursor[1]=1;
   cursor[2]=cursor[3]=0;

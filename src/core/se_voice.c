@@ -308,6 +308,28 @@ static int player_fall_impact_profile(const struct voice *v,const uint8_t *p)
     !w(p+0x24)&&w(p+0x28)==0xffffu&&!w(p+0x2c);
 }
 
+/* Original 25E790 voice for R100 stamp19/dependency0203, after the
+ * actor-attached bank1 alias has resolved the actual EM03.SES bank. */
+static int em03_death_profile(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ if(!v->source_owner||v->requested_program!=8||bank<1||bank==2||bank==3||
+    (program!=8&&program!=9)||v->part_index!=-1)return 0;
+ if(v->model){
+  const gh_title_player_view *root=&v->model->root;
+  if(!root->bytes||root->size<0x642||root->original_vtable214!=0x4479c8||
+     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=0x203||
+     h(root->bytes+0x640)!=19||!v->model->work||(uint16_t)v->model->work->room!=0x100)return 0;
+ }else if(!v->combat_profile)return 0;
+ if(w(p+4)!=(program==8?0x012e0007u:0x012e0008u)||w(p+8)!=0x25f||
+    h(p+12)||h(p+14)!=0x20||w(p+16)!=(program==8?0x005f005fu:0x007d007du)||
+    w(p+20)!=0x005a0040||w(p+24)!=0x0064ff38||w(p+28)||
+    w(p+32)!=(program==8?0x00010145u:0x00010045u)||w(p+36)!=0x400||
+    w(p+40)!=0xffff||w(p+44))return 0;
+ return !sample||(w(sample)==(program==8?0xa550u:0xbd40u)&&w(sample+4)==11025&&
+        w(sample+8)==0x5fcb80ff&&!w(sample+12));
+}
+
 static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,int16_t program,const uint8_t*p,struct voice*candidate,uint16_t selected_pitch){
  gh_audio_pcm_release(&candidate->pcm);
  unsigned slot=h(p+4),rate,level;gh_sound_span descriptor,tail;gh_voice_status result;
@@ -324,6 +346,16 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
     w(p+0x14)==0x005a0040&&!w(p+0x18)&&w(p+0x1c)==0x00ff0000&&
     w(p+0x20)==5&&!w(p+0x24)&&
     w(descriptor.data)==(program==7?54128u:57568u)&&w(descriptor.data+4)==11025;
+ /* Logical CORE CD maps to the original PL00 voice bank row 5. */
+ int player_cd=adsr2==0x5fcb&&candidate->source_owner&&bank==3&&program==5&&
+    candidate->requested_bank==0&&candidate->requested_program==0xcd&&
+    candidate->part_index==-1&&candidate->model&&candidate->model->root.size>=0x300&&
+    candidate->model->root.original_vtable214==0x41d220&&
+    h(candidate->model->root.bytes+0x2fe)==0x100&&
+    w(p+4)==0x000f0005&&w(p+8)==0x50&&w(p+12)==0x00210000&&
+    w(p+16)==0x007f007f&&w(p+20)==0x005a0040&&w(p+24)==0xff00ff00u&&
+    w(p+28)==0x00ff0000&&w(p+32)==5&&!w(p+36)&&w(p+40)==0xffff&&!w(p+44)&&
+    w(descriptor.data)==0x3540&&w(descriptor.data+4)==11025;
  int fall_grunt=adsr2==0x5fcb&&player_fall_grunt_profile(candidate,bank,program,p,descriptor.data);
  if(player_fall_impact_profile(candidate,p)&&(w(descriptor.data)!=0x35460||
     w(descriptor.data+4)!=18000||w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))
@@ -334,9 +366,10 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  int sequence_voice=adsr2==0x5fcb&&enemy_state71_sequence_profile(candidate,bank,program,p,descriptor.data);
  int selector6b_voice=adsr2==0x5fcb&&em00_selector6b_profile(candidate,bank,program,p,descriptor.data);
  int attack_voice=adsr2==0x5fcb&&em03_attack_sequence_profile(candidate,bank,program,p,descriptor.data);
+ int death_voice=adsr2==0x5fcb&&em03_death_profile(candidate,bank,program,p,descriptor.data);
  int timed_voice=adsr2==0x5fcb&&em0a_timed_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==0x5be0&&w(descriptor.data+4)==16000;
- if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!square_voice&&!hurt_voice&&!fall_grunt&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!selector6b_voice&&!attack_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
+ if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!square_voice&&!player_cd&&!hurt_voice&&!fall_grunt&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!selector6b_voice&&!attack_voice&&!death_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
  static const uint32_t ema2_impact_offsets[]={0x553c0,0x56490,0x54300};
  int ema2_voice=adsr2==0x5fc0&&core_ema2_impact_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==ema2_impact_offsets[program-0x96]&&w(descriptor.data+4)==22050;
@@ -350,7 +383,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  if(attack_core&&!core_em03_attack_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
  if(impact_voice||reaction_voice||ema2_voice||timed_voice||footstep||sequence_voice||attack_core||
-    selector6b_voice||selector6b_core||attack_voice)candidate->combat_profile=1;
+    selector6b_voice||selector6b_core||attack_voice||death_voice)candidate->combat_profile=1;
  rate=w(descriptor.data+4);if(rate<1000 || rate>48000)return unsupported(s,0x38e4);
  candidate->info.pitch_q12=selected_pitch?selected_pitch:(uint16_t)((uint64_t)rate*4096/48000);
  result=gh_audio_decode_ps_adpcm(tail.data,tail.size,&candidate->pcm);if(result){s->frontier=0x35fc;return result;}
@@ -480,7 +513,7 @@ gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *s,int16_t bank,in
  int title=bank==2&&(program==0||(program>=10&&program<=12)||program==15);
  const int sequence=bank==2&&(program==0x32||program==0x33)&&s->sequence.disc;
  const int empty_load=bank==0&&program==0x122;
- if((!title&&!sequence&&!empty_load&&(bank || (program!=0x2d && program!=0x15e && program!=0x160 && program!=0x161))) || arg3!=-1 || arg4!=-1 || flags || delay)return unsupported(s,0x2cb8a0);
+ if((!title&&!sequence&&!empty_load&&(bank || (program!=0x2d && program!=0x15e && program!=0x15f && program!=0x160 && program!=0x161))) || arg3!=-1 || arg4!=-1 || flags || delay)return unsupported(s,0x2cb8a0);
  if(s->mix.system_flags&0x08000040)return unsupported(s,0x2ce588);
  if(gh_audio_get_program(s->registry,bank,program,0,p)!=GH_AUDIO_OK)return unsupported(s,0x374cb8);
  /* Exact audited subsets; +21 controls random variants, +22 duplicate age
@@ -509,6 +542,8 @@ gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *s,int16_t bank,in
  }else if(p[6]||p[7]!=4||p[8]!=120||p[9]||h(p+0xe)!=0x23||w(p+0x20))return unsupported(s,0x2cdff0);
  if(!sequence&&(h(p+0x10)!=h(p+0x12)||h(p+0x14)!=64||h(p+0x16)!=90||(!empty_load&&w(p+0x18))||h(p+0x1c)||h(p+0x28)!=65535||h(p+0x2a)||w(p+0x2c)))return unsupported(s,0x2cdff0);
  if(!title&&!sequence&&(h(p+0x1e)!=255||w(p+0x24)))return unsupported(s,0x2cdff0);
+ if(bank==0&&program==0x15f&&(h(p+4)!=171||h(p+0x10)!=75))
+  return unsupported(s,0x2cdff0);
  /* Actual2CBF78 compares bank AND program; duplicate-age suppression for
   * equal-origin zero-delay is shared by logo and room confirmation0. */
  if(p[0x22])for(int j=s->head;j!=-1;j=s->voices[j].next)if(s->voices[j].info.bank==bank&&s->voices[j].info.program==program&&(s->voices[j].ee_age<=p[0x22]||s->voices[j].ee_age>=UINT32_C(0x80000000)))return GH_VOICE_OK;
@@ -573,6 +608,7 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
      !enemy_state71_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em03_attack_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !em03_death_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_em03_attack_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em0a_timed_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)&&

@@ -97,18 +97,70 @@ def merge_text(base, target, overlay, temporary, name):
     return merged, "merged"
 
 
+def worker_receipt(record, receipt):
+    """Normalize a worker's pinned absolute records to relative source paths."""
+    if set(record) - {"schema", "base", "files", "dependencies", "evidence", "proof", "verification", "scope", "history"}:
+        raise RebaseError(f"Unsupported worker overlay fields: {receipt}")
+    base = record.get("base")
+    if not isinstance(base, dict) or not isinstance(base.get("path"), str) or not isinstance(record.get("files"), list):
+        raise RebaseError(f"Missing worker base or file records: {receipt}")
+    base_receipt = Path(base["path"]).resolve()
+    if SCRATCH_ROOT not in base_receipt.parents:
+        raise RebaseError(f"Worker base receipt escaped scratch: {base_receipt}")
+    root = base_receipt.parent.parent
+    output = {"schema": record.get("schema"), "base_receipt": str(base_receipt),
+              "base_receipt_sha256": base.get("sha256"), "files": [], "supersedes": {}}
+    if "dependencies" in record:
+        output["dependencies"] = record["dependencies"]
+    for item in record["files"]:
+        if not isinstance(item, dict) or "supersedes" not in item:
+            raise RebaseError(f"Missing worker file predecessor: {receipt}")
+        name = item.get("relative")
+        if not isinstance(item.get("path"), str) or Path(item["path"]).resolve() != source_path(receipt.parent, name):
+            raise RebaseError(f"Worker source path differs from its relative name: {name}")
+        predecessor = item["supersedes"]
+        if predecessor is not None:
+            if (not isinstance(predecessor, dict) or not isinstance(predecessor.get("path"), str) or
+                    not isinstance(predecessor.get("sha256"), str) or
+                    Path(predecessor["path"]).resolve() != source_path(root, name)):
+                raise RebaseError(f"Invalid worker source predecessor: {name}")
+            output["supersedes"][name] = predecessor["sha256"]
+        output["files"].append({"path": name, "sha256": item.get("sha256")})
+    return output
+
+
+def checked_dependencies(record, receipt):
+    rows = record.get("dependencies", [])
+    if not isinstance(rows, list):
+        raise RebaseError(f"Invalid pinned dependencies in {receipt}")
+    seen = set()
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("path"), str):
+            raise RebaseError(f"Invalid pinned dependency in {receipt}")
+        source = Path(row["path"])
+        path = source.resolve()
+        if not source.is_absolute() or SCRATCH_ROOT not in path.parents or path in seen:
+            raise RebaseError(f"Invalid or duplicate scratch dependency: {source}")
+        checked(path, row.get("sha256"))
+        seen.add(path)
+
+
 def load_overlay(receipt, sha256):
     record = pinned_json(receipt, sha256)
+    if "base" in record:
+        record = worker_receipt(record, receipt)
     supported = {
         "schema", "files", "base_receipt", "base_receipt_sha256", "supersedes",
         "dependency_files", "requires_overlay_receipt", "requires_overlay_receipt_sha256",
-        "input_overlay_receipt", "input_overlay_receipt_sha256", "rebase_results",
+        "input_overlay_receipt", "input_overlay_receipt_sha256", "rebase_results", "verification", "scope",
+        "dependencies", "merge",
     }
     if record.get("schema") != 1 or set(record) - supported:
         raise RebaseError(f"Unsupported overlay receipt format: {receipt}")
     if (not isinstance(record["files"], list) or not isinstance(record["supersedes"], dict) or
         not isinstance(record.get("dependency_files", {}), dict)):
         raise RebaseError(f"Invalid file manifest in {receipt}")
+    checked_dependencies(record, receipt)
     old_receipt = Path(record["base_receipt"]).resolve()
     base, manifest = load_snapshot(old_receipt, record["base_receipt_sha256"])
     files = {}
@@ -195,7 +247,7 @@ def rebase(overlay_receipt, overlay_sha256, target_receipt, target_sha256, outpu
         "files": [],
         "rebase_results": {},
     }
-    for key in ("dependency_files", "requires_overlay_receipt", "requires_overlay_receipt_sha256"):
+    for key in ("dependencies", "dependency_files", "requires_overlay_receipt", "requires_overlay_receipt_sha256"):
         if key in record:
             result[key] = record[key]
 

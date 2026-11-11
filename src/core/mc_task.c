@@ -65,12 +65,12 @@ static gh_id_error disp_init(gh_mc_task_state *s,const gh_mc_task_bindings *b,in
 {
     gh_id_entry *e;gh_id_error error;int i;
 #define ID_CALL(expr) do{error=(expr);if(error)return error;}while(0)
-    if(mode==1){ID_CALL(display(s,b,0xa,0));ID_CALL(display(s,b,0xb,1));}
+    if(mode!=2){ID_CALL(display(s,b,0xa,mode==0));ID_CALL(display(s,b,0xb,mode==1));}
     ID_CALL(display(s,b,0xc,1));
     for(i=0;i<3;++i) {ID_CALL(number(s,b,0x14+i,i));ID_CALL(display(s,b,0x10+i,0));ID_CALL(display(s,b,0x60+i,0));}
     ID_CALL(display(s,b,0xd,1));ID_CALL(display(s,b,5,0));
     ID_CALL(gh_id_base_restart_anim(&s->id_base,0,0));
-    if(mode==1){
+    if(mode!=2){
         static const unsigned ids[]={2,3,4,9};
         static const uint16_t messages[]={0x20a4,0x20a5,0x20a4,0x20a5};
         for(i=0;i<4;++i)ID_CALL(display(s,b,ids[i],1));
@@ -224,12 +224,150 @@ gh_mc_task_status gh_mc_task_title_load_step_000012b0(gh_mc_task_state *s,const 
 
 gh_mc_task_status gh_mc_task_title_load_sleep_00008aa8(const gh_mc_task_state *s,const gh_mc_task_bindings *b)
 {
-    if(!s||!b||!b->work||!b->threads||!s->load_mode||s->ui_initialized)
+    if(!s||!b||!b->work||!b->threads||(!s->load_mode&&!(s->flags&0x00800000u))||s->ui_initialized)
         return GH_MC_TASK_ARGUMENT;
     if(!(work_word(b->work,0x5e8)&UINT32_C(0x80000000)))return GH_MC_TASK_OK;
     if(s->flags&UINT32_C(0x50000000))return GH_MC_TASK_UNSUPPORTED;
     return gh_task_threads_sleep(b->threads,1)==GH_THREAD_OK?GH_MC_TASK_OK:GH_MC_TASK_PLATFORM_ERROR;
 }
+gh_mc_task_status gh_mc_task_start_save_002ae740(const gh_mc_task_bindings *b,
+    gh_native_task_entry entry,void *context,int32_t *slot)
+{
+    /* Main 2C09E8 uses the same scheduler slot and Work busy bit as Load. */
+    return gh_mc_task_start_title_load_002ae7f0(b,entry,context,slot);
+}
+
+gh_mc_task_status gh_mc_task_prepare_save_002ae788(gh_mc_save_task_state *save,
+    const gh_mc_task_bindings *b,gh_heap *room_heap,int32_t mode,
+    gh_mc_save_retire_active retire,void *context)
+{
+    if(!save||!bindings_valid(b)||!room_heap||(save->room_heap&&save->room_heap!=room_heap)||
+       !(work_word(b->work,0x5e8)&UINT32_C(0x80000000)))return GH_MC_TASK_ARGUMENT;
+    gh_mc_task_state *s=&save->common;
+    if(mode!=0)return frontier(s,GH_MC_TASK_UNSUPPORTED,0x3f78,"cMcSave mode");
+    save->room_heap=room_heap;
+    if(!s->stage){
+        gh_mc_task_status status=load_module(s,b);
+        if(status)return status;
+    }
+    if(s->stage!=2)return GH_MC_TASK_BUSY;
+    if(!save->card_begun){
+        if(gh_memory_card_begin(b->card)!=GH_MC_OK)
+            return frontier(s,GH_MC_TASK_PLATFORM_ERROR,0x71e8,"McSave card service initialization");
+        save->card_begun=1;
+        initialize_system(s,b);
+        s->flags|=UINT32_C(0x00800000); /* REL 39A0 */
+    }
+    if(!save->release_requested){
+        uint32_t address=0;
+        if(!retire)return frontier(s,GH_MC_TASK_UNSUPPORTED,0x2908c0,"McSave active heap release");
+        gh_mc_task_status status=retire(context,&address);
+        if(status)return frontier(s,status,address?address:0x2908c0,"McSave active heap release");
+        save->release_requested=1;
+        save->release_wait=5; /* 2A6C18 Game+1B2 */
+    }
+    while(save->release_wait){
+        --save->release_wait; /* 2A6C50 reports false before this decrement. */
+        if(gh_mc_task_title_load_sleep_00008aa8(s,b)!=GH_MC_TASK_OK)
+            return frontier(s,GH_MC_TASK_PLATFORM_ERROR,0x8aa8,"McSave room release wait");
+    }
+    if(!s->checks.icon_work.pointer&&gh_mc_boot_checks_create(&s->checks,room_heap)!=GH_MC_BOOT_OK)
+        return frontier(s,GH_MC_TASK_MEMORY_ERROR,0x3ae4,"McSave slot records");
+    if(!save->current_record.pointer&&gh_heap_allocate(room_heap,0xb400,128,&save->current_record)!=GH_MEM_OK)
+        return frontier(s,GH_MC_TASK_MEMORY_ERROR,0x3afc,"McSave new record");
+    if(!save->previous_record.pointer&&gh_heap_allocate(room_heap,0xb400,128,&save->previous_record)!=GH_MEM_OK)
+        return frontier(s,GH_MC_TASK_MEMORY_ERROR,0x3b14,"McSave previous record");
+    s->stage=3;
+    return frontier(s,GH_MC_TASK_OK,0,"McSave ready");
+}
+
+static gh_mc_task_status load_save_file(gh_mc_save_task_state *save,
+    const gh_mc_task_bindings *b,gh_heap *room_heap)
+{
+    gh_mc_task_state *s=&save->common;
+    size_t index;
+    gh_disc_entry entry;
+    if(gh_disc_find(b->dvd->disc,"etc/mcfile.dat",&index)!=GH_DISC_OK||
+       gh_disc_entry_at(b->dvd->disc,index,&entry)!=GH_DISC_OK)
+        return frontier(s,GH_MC_TASK_DISC_ERROR,0x3bc0,"McFile.dat lookup");
+    save->save_file_job=gh_dvd_read_alloc(b->dvd,"etc/mcfile.dat",&save->save_file,room_heap,0,0,0,0);
+    if(!save->save_file_job)return frontier(s,GH_MC_TASK_DISC_ERROR,0x3bc0,"McFile.dat read");
+    while(gh_dvd_check(b->dvd,save->save_file_job))
+        if(gh_mc_task_title_load_sleep_00008aa8(s,b)!=GH_MC_TASK_OK)
+            return frontier(s,GH_MC_TASK_PLATFORM_ERROR,0x8aa8,"McFile.dat wait");
+    if(b->dvd->failed_id==save->save_file_job&&b->dvd->last_error==GH_DVD_IO)
+        return frontier(s,GH_MC_TASK_DISC_ERROR,0x3bc0,"McFile.dat I/O");
+    const uint8_t *bytes=save->save_file.pointer;
+    uint32_t count,icon,model;
+    if(!bytes||entry.size!=103136)return frontier(s,GH_MC_TASK_UNSUPPORTED,0x3bc0,"McFile.dat size");
+    memcpy(&count,bytes,4);memcpy(&icon,bytes+4,4);memcpy(&model,bytes+8,4);
+    if(count!=2||icon!=0x20||model!=0x18ee0||memcmp(bytes+model,"PS2D",4))
+        return frontier(s,GH_MC_TASK_UNSUPPORTED,0x3bc0,"McFile.dat layout");
+    save->icon_model=(gh_id_view){bytes+icon,model-icon,icon};
+    save->icon_template=(gh_id_view){bytes+model,(size_t)entry.size-model,model};
+    return GH_MC_TASK_OK;
+}
+
+gh_mc_task_status gh_mc_task_save_step_00003c80(gh_mc_save_task_state *save,
+    const gh_mc_task_bindings *b,gh_heap *room_heap,gh_screen_fade *fade,
+    const gh_screen_fade_context *context)
+{
+    if(!save||!bindings_valid(b)||!room_heap||save->room_heap!=room_heap||!fade||!context||save->common.stage<3||
+       !(work_word(b->work,0x5e8)&UINT32_C(0x80000000)))return GH_MC_TASK_ARGUMENT;
+    gh_mc_task_state *s=&save->common;
+    if(!save->phase){
+        if(gh_screen_fade_start_00307208(fade,context,0,10,0,0,0xff000000,10))
+            return frontier(s,GH_MC_TASK_UNSUPPORTED,0x307208,"McSave fade to black");
+        save->phase=1;
+        return GH_MC_TASK_LOAD_FRAME;
+    }
+    const uint8_t status=gh_screen_fade_status_00307718(fade);
+    if(status&&!(status&4))return GH_MC_TASK_LOAD_FRAME;
+    if(save->phase==1){
+        /* REL 8A88 StopSet is JR RA/NOP. */
+        gh_mc_task_status result;
+        if(!save->icon_model.bytes){
+            if(save->save_file.pointer)return frontier(s,GH_MC_TASK_UNSUPPORTED,0x3bc0,"McFile.dat incomplete");
+            result=load_save_file(save,b,room_heap);
+            if(result)return result;
+        }
+        if(!s->ui_initialized){
+            result=load_display(s,b,0);
+            if(result)return result;
+        }
+        if(gh_screen_fade_start_00307208(fade,context,0,10,0,0xff000000,0,10))
+            return frontier(s,GH_MC_TASK_UNSUPPORTED,0x307208,"McSave fade from black");
+        save->phase=2;
+        s->stage=4;
+        return GH_MC_TASK_LOAD_FRAME;
+    }
+    return frontier(s,GH_MC_TASK_CONTROL_FRONTIER,0x3f78,"cMcSave Control");
+}
+
+gh_mc_task_status gh_mc_task_abort_save(gh_mc_save_task_state *save,
+    const gh_mc_task_bindings *b,gh_heap *room_heap)
+{
+    if(!save||!bindings_valid(b)||!room_heap||(save->room_heap&&save->room_heap!=room_heap))
+        return GH_MC_TASK_ARGUMENT;
+    gh_mc_task_state *s=&save->common;
+    if(save->save_file_job&&gh_dvd_check(b->dvd,save->save_file_job))
+        (void)gh_dvd_cancel(b->dvd,save->save_file_job);
+    if(save->card_begun){
+        gh_mc_error result=gh_memory_card_abort(b->card);
+        if(result)return result==GH_MC_BUSY?GH_MC_TASK_BUSY:GH_MC_TASK_PLATFORM_ERROR;
+        save->card_begun=0;
+    }
+    if(gh_mc_boot_checks_release(&s->checks,room_heap)!=GH_MC_BOOT_OK)return GH_MC_TASK_MEMORY_ERROR;
+    gh_r207_allocation *owned[]={&save->current_record,&save->previous_record,&save->save_file};
+    for(unsigned i=0;i<sizeof(owned)/sizeof(*owned);++i){
+        if(owned[i]->pointer&&gh_heap_release(room_heap,*owned[i])!=GH_MEM_OK)return GH_MC_TASK_MEMORY_ERROR;
+        memset(owned[i],0,sizeof(*owned[i]));
+    }
+    save->icon_template=(gh_id_view){0};
+    save->icon_model=(gh_id_view){0};
+    return gh_mc_task_abort(s,b);
+}
+
 gh_mc_task_status gh_mc_task_abort(gh_mc_task_state *s,const gh_mc_task_bindings *b)
 {
     int original,reclaimed;

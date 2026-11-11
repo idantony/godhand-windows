@@ -6,11 +6,12 @@ import datetime
 import hashlib
 import json
 import os
-import re
 from pathlib import Path
 import subprocess
 import threading
 from compiler_response import write_response_file
+from compiled_objects import (OBJECT_CACHE_DIRECTORY, WINDOWS_COMPILER_FLAGS, ObjectCache,
+                              c_driver, project_inputs, source_hashes)
 
 PROJECT = Path(__file__).resolve().parents[1]
 DEFAULT_SCRATCH = Path(r"G:\middle_thing\godhand_windows")
@@ -18,13 +19,16 @@ DEFAULT_SCRATCH = Path(r"G:\middle_thing\godhand_windows")
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target", choices=("mc-frame", "title-ui", "native", "startup-qa", "model-qa", "world-qa", "scene-message-qa"), default="mc-frame")
+    parser.add_argument("--target", choices=("mc-frame", "title-ui", "native", "startup-qa", "model-qa", "world-qa", "scene-message-qa", "save-map-qa"), default="mc-frame")
     parser.add_argument("--scratch", type=Path, default=DEFAULT_SCRATCH)
     parser.add_argument("--jobs", type=int, default=4, help="Independent C compiler processes (1..16)")
     parser.add_argument("--compiler-cache", type=Path, default=DEFAULT_SCRATCH / "cache/zig-global",
-                        help="Content-addressed toolchain cache; game objects are rebuilt in --scratch")
+                        help="Shared Zig toolchain cache")
     parser.add_argument("--compiler", type=Path, default=PROJECT / ".tools/zig-x86_64-windows-0.17.1/zig.exe")
     parser.add_argument("--sdk-lib", type=Path, help="Windows SDK um/x64 import-library directory")
+    parser.add_argument("--object-cache", type=Path, default=DEFAULT_SCRATCH / OBJECT_CACHE_DIRECTORY,
+                        help="Share unchanged compiled objects with Windows and native verification builds")
+    parser.add_argument("--no-object-cache", action="store_true", help="Compile every object afresh")
     args = parser.parse_args()
     if not 1 <= args.jobs <= 16:
         parser.error("--jobs must be in 1..16")
@@ -38,7 +42,13 @@ def main():
         if not versions:
             parser.error("Install Windows SDK or supply --sdk-lib")
         sdk = max(versions, key=lambda v: tuple(int(p) for p in v.parents[1].name.split(".")))
+    sdk = sdk.resolve()
+    if not sdk.is_dir():
+        parser.error(f"Windows SDK library directory does not exist: {sdk}")
     compiler = args.compiler.resolve()
+    cache_root = args.object_cache.resolve()
+    if not args.no_object_cache and (cache_root == PROJECT or PROJECT in cache_root.parents):
+        parser.error("Object cache must stay outside the source snapshot")
     build = scratch / "build" / ("windows-" + args.target)
     logs = scratch / "logs" / ("windows-" + args.target)
     for p in (build, logs, scratch / "cache/tmp", args.compiler_cache, scratch / "cache/zig-local"):
@@ -61,6 +71,8 @@ def main():
         cpp_sources += ["src/platform/model_renderer.cpp", "tests/platform/test_world_composition.cpp"]
     elif args.target == "scene-message-qa":
         cpp_sources += ["tests/platform/test_scene_message_depth.cpp"]
+    elif args.target == "save-map-qa":
+        modules.append(("test_save_map_chapter", "tests/core/test_save_map_chapter.c"))
     elif args.target in ("native", "startup-qa"):
         for source in ("src/platform/native_input.c", "src/platform/video_player.c", "src/platform/audio_events.c",
                        "src/core/se_voice.c", "src/core/sound_control.c", "src/core/mc_exit.c",
@@ -72,31 +84,15 @@ def main():
         cpp_sources += ["tools/probe-title-ui.cpp"]
     else:
         cpp_sources += ["tools/probe-mc-frame.cpp"]
-    inputs = {"tools/build-native.py", "tools/build-windows.py", "tools/compiler_response.py", *cpp_sources, *(s for _, s in modules)}
+    inputs = {"tools/build-native.py", "tools/build-windows.py", "tools/compiler_response.py",
+              "tools/compiled_objects.py", *cpp_sources, *(s for _, s in modules)}
     if args.target in ("native","startup-qa"):
         inputs.add("tests/test_cpp_abi.cpp")
     # Fingerprint actual project include dependencies. Unrelated headers being
     # written by another worker are not inputs to this executable.
-    pending = list(inputs)
-    while pending:
-        name = pending.pop()
-        source = PROJECT / name
-        if source.suffix not in (".c", ".cpp", ".h"):
-            continue
-        for include in re.findall(r'^\s*#\s*include\s*"([^"\r\n]+)"', source.read_text(encoding="utf-8"), re.MULTILINE):
-            header = (source.parent / include).resolve()
-            if not header.is_file():
-                raise SystemExit("Unresolved project include: " + name + " -> " + include)
-            try:
-                dependency = header.relative_to(PROJECT).as_posix()
-            except ValueError:
-                raise SystemExit("Project include escaped source tree: " + name + " -> " + include)
-            if dependency not in inputs:
-                inputs.add(dependency)
-                pending.append(dependency)
-    def hashes():
-        return {p: hashlib.sha256((PROJECT / p).read_bytes()).hexdigest() for p in sorted(inputs)}
-    initial = hashes()
+    initial, includes, time_sensitive = project_inputs(PROJECT, inputs)
+    cache = None if args.no_object_cache else ObjectCache.for_build(cache_root, compiler, env)
+    cache_writes = []
     report_path = PROJECT / "analysis" / ("windows-" + args.target + "-build.json")
     report = {"created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "status": "running", "target": args.target, "steps": [], "is_playable_game": False}
@@ -126,38 +122,66 @@ def main():
             print(result.stdout)
             raise SystemExit(result.returncode)
         print(name + ": PASS", flush=True)
-    flags = ["-target", "x86_64-windows-gnu", "-O2", "-Wall", "-Wextra", "-Werror", "-ffp-contract=off",
-             "-fno-fast-math", "-D_CRT_SECURE_NO_WARNINGS"]
+
+    def compile_object(name, command, source, output):
+        key = None
+        if cache:
+            key, command = cache.prepare(PROJECT, command, source, initial, includes, time_sensitive)
+        if key and cache.restore(key, output):
+            log = logs / (name + ".log")
+            log.write_text(f"Restored verified object from cache {key}\n", encoding="utf-8")
+            with report_lock:
+                report["steps"].append({"name": name, "returncode": 0, "log": str(log), "object_cache": key})
+            print(name + ": PASS (cache)", flush=True)
+            return
+        run(name, command)
+        if key:
+            with report_lock:
+                cache_writes.append((key, output))
+
+    flags = list(WINDOWS_COMPILER_FLAGS)
     if args.target in ("native","startup-qa"):
-        run("check-windows-public-headers", [compiler,"c++","-std=c++17",*flags,"-c","tests/test_cpp_abi.cpp",
-            "-o",build/"windows-public-headers.o"])
+        source = "tests/test_cpp_abi.cpp"
+        output = build / "windows-public-headers.o"
+        compile_object("check-windows-public-headers",
+                       [compiler, "c++", "-std=c++17", *flags, "-c", source, "-o", output], source, output)
     if args.target=="startup-qa":
         # QA-only diagnostics must not break the ordinary native executable.
-        run("check-native-driver", [compiler,"c++","-std=c++17",*flags,"-c","src/main.cpp",
-            "-o",build/"native-driver-check.o"])
+        source = "src/main.cpp"
+        output = build / "native-driver-check.o"
+        compile_object("check-native-driver",
+                       [compiler, "c++", "-std=c++17", *flags, "-c", source, "-o", output], source, output)
     def compile_module(module):
         name, source = module
         obj = build / (name + ".o")
-        run("compile-" + name, [compiler, "cc", "-std=c11", *flags, "-c", source, "-o", obj])
+        compile_object("compile-" + name, c_driver(compiler) + ["-c", source, "-o", obj], source, obj)
         return obj
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
         objects = list(executor.map(compile_module, modules))
-    exe = build / {"native": "godhand-windows.exe", "startup-qa": "probe-native-startup.exe", "mc-frame": "probe-mc-frame.exe", "title-ui": "probe-title-ui.exe", "model-qa": "test-model-renderer.exe", "world-qa": "test-world-composition.exe", "scene-message-qa": "test-scene-message-depth.exe"}[args.target]
+    exe = build / {"native": "godhand-windows.exe", "startup-qa": "probe-native-startup.exe", "mc-frame": "probe-mc-frame.exe", "title-ui": "probe-title-ui.exe", "model-qa": "test-model-renderer.exe", "world-qa": "test-world-composition.exe", "scene-message-qa": "test-scene-message-depth.exe", "save-map-qa": "test-save-map-chapter.exe"}[args.target]
     if args.target == "startup-qa":
         flags.append("-DGH_NATIVE_STARTUP_QA=1")
     def compile_cpp(source):
         name = "cxx-" + Path(source).stem
         obj = build / (name + ".o")
-        run("compile-" + name, [compiler, "c++", "-std=c++17", *flags, "-c", source, "-o", obj])
+        compile_object("compile-" + name, [compiler, "c++", "-std=c++17", *flags, "-c", source, "-o", obj], source, obj)
         return obj
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
         cpp_objects = list(executor.map(compile_cpp, cpp_sources))
     run("link", [compiler, "c++", "-std=c++17", *flags, *objects, *cpp_objects,
                  "-L" + str(sdk), "-ld3d11", "-ldxgi", "-ld3dcompiler", "-luser32", "-lwinmm", "-o", exe])
-    if hashes() != initial:
+    if source_hashes(PROJECT, initial) != initial:
         report["status"] = "failed-source-changed-during-build"
         save()
         raise SystemExit("Sources changed during build; rebuild the stabilized inputs")
+    if cache:
+        for key, output in cache_writes:
+            cache.store(key, output)
+        report["object_cache"] = {
+            "path": str(cache_root), "hits": sum("object_cache" in step for step in report["steps"]),
+            "compiled": len(cache_writes),
+        }
+        print(f"Object cache: {report['object_cache']['hits']} reused, {len(cache_writes)} compiled", flush=True)
     report.update(status="built", source_sha256=initial, compiler=str(compiler), sdk_lib=str(sdk),
                   compiler_cache=str(args.compiler_cache.resolve()),
                   executable=str(exe), executable_sha256=hashlib.sha256(exe.read_bytes()).hexdigest(),

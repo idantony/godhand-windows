@@ -1,6 +1,9 @@
 /* Native execution driver. Unrecovered original consumers remain explicit
  * frontiers; reaching one never means the game has finished or is playable. */
 #include "platform/startup_host.h"
+#ifdef GH_NATIVE_STARTUP_QA
+#include "platform/startup_qa_repeat_square.h"
+#endif
 #include "platform/window_host.h"
 #include "platform/mc_renderer.h"
 #include "platform/ui_fade_renderer.h"
@@ -169,18 +172,25 @@ static gh_id_error draw_mc(void *opaque,const gh_id_draw_job *job)
         catch(const std::bad_alloc&){return GH_ID_MEMORY;}}
     return error;
 }
-static gh_id_error draw_scene(void *opaque,const gh_id_base *base,const gh_id_draw_job *job,uint32_t *frontier)
+static gh_id_error queue_scene_id(void *opaque,const gh_id_base *base,const gh_id_draw_job *job,
+    const gh_packed_message_state *messages,uint16_t chapter_message,uint32_t *frontier)
 {
     auto &app=*(NativeApp*)opaque;gh_startup_snapshot s={};
     if(gh_startup_host_snapshot(app.host,&s)!=GH_HOST_OK)return GH_ID_ARGUMENT;
-    gh_id_render_view view={s.font,s.menu,s.id,base,nullptr};gh_ui_ot_tag tags[10];size_t count=0;
-    gh_id_error error=s.id_vertex_z_known?
+    gh_id_render_view view={s.font,s.menu,s.id,base,messages};gh_ui_ot_tag tags[10];size_t count=0;
+    gh_id_error error=messages?
+        gh_mc_renderer_queue_view_groups_with_chapter(app.renderer,&view,job,chapter_message,tags,10,&count):
+        s.id_vertex_z_known?
         gh_mc_renderer_queue_view_groups_at_z(app.renderer,&view,job,tags,10,&count,s.id_vertex_z):
         gh_mc_renderer_queue_view_groups(app.renderer,&view,job,tags,10,&count);
     if(error==GH_ID_OK){try {for(size_t i=0;i<count;++i)app.groups.push_back({tags[i].bank,(uint32_t)tags[i].depth,(uint64_t)tags[i].index});}
         catch(const std::bad_alloc&){return GH_ID_MEMORY;}}
     else if(frontier){gh_mc_render_status status={};gh_mc_renderer_inspect(app.renderer,&status);*frontier=status.frontier?status.frontier:job->consumer_address;}
     return error;
+}
+static gh_id_error draw_scene(void *opaque,const gh_id_base *base,const gh_id_draw_job *job,uint32_t *frontier)
+{
+    return queue_scene_id(opaque,base,job,nullptr,0,frontier);
 }
 static gh_id_error draw_fan(void *opaque,const gh_cockpit_fan *fan,uint32_t *frontier)
 {
@@ -783,6 +793,7 @@ int main(int argc,char **argv)
 #ifdef GH_NATIVE_STARTUP_QA
     bool qa_confirm=false,qa_new_game=false,qa_load=false;unsigned qa_choice_step=0,qa_captured=0,qa_capture_count=1;gh_native_input qa_input={};
     QAControlProbe qa_control;
+    QARepeatSquareProbe qa_repeat_square;
     const char *qa_capture=nullptr;uint64_t qa_capture_frame=1,qa_last_capture_scene=0;
     uint32_t qa_title_trace=UINT32_MAX,qa_load_trace=UINT32_MAX;
 #endif
@@ -793,9 +804,11 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-new-game")){qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-load")){qa_load=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-control")&&i+1<argc){
-            qa_control.mode=argv[++i];
-            if(std::strcmp(qa_control.mode,"walk")&&std::strcmp(qa_control.mode,"run")&&!qa_control.attacks()){
-                std::fprintf(stderr,"QA control mode must be walk, run, square or approach-square.\n");return 2;
+            const char *mode=argv[++i];
+            qa_repeat_square.enabled=!std::strcmp(mode,"repeat-square");
+            qa_control.mode=qa_repeat_square.enabled?nullptr:mode;
+            if(qa_control.mode&&std::strcmp(qa_control.mode,"walk")&&std::strcmp(qa_control.mode,"run")&&!qa_control.attacks()){
+                std::fprintf(stderr,"QA control mode must be walk, run, square, approach-square or repeat-square.\n");return 2;
             }
         }
         else if(!std::strcmp(argv[i],"--qa-capture")&&i+1<argc)qa_capture=argv[++i];
@@ -824,7 +837,9 @@ int main(int argc,char **argv)
 #ifdef GH_NATIVE_STARTUP_QA
     if(qa_confirm&&(!muted||show||!max_ticks)){std::fprintf(stderr,"Synthetic input QA requires --muted --hidden and --max-ticks.\n");return 2;}
     if(qa_load&&(qa_new_game||prefix)){std::fprintf(stderr,"QA load requires the full title flow and a separate profile.\n");return 2;}
-    if(qa_control.mode&&(!qa_new_game||prefix)){std::fprintf(stderr,"QA control requires the full --qa-new-game path.\n");return 2;}
+    if((qa_control.mode||qa_repeat_square.enabled)&&(!qa_new_game||prefix)){
+        std::fprintf(stderr,"QA control requires the full --qa-new-game path.\n");return 2;
+    }
 #endif
     bool synthetic_input=false;
 #ifdef GH_NATIVE_STARTUP_QA
@@ -864,7 +879,7 @@ int main(int argc,char **argv)
         if(host_error!=GH_HOST_OK)break;
         host_error=gh_startup_host_set_fade_consumer(app.host,draw_fade,&app);
         if(host_error!=GH_HOST_OK)break;
-        gh_host_scene_ui_callbacks scene_callbacks={&app,begin_scene,draw_scene,draw_fan,draw_cover,draw_scene_message,draw_radar};
+        gh_host_scene_ui_callbacks scene_callbacks={&app,begin_scene,draw_scene,draw_fan,draw_cover,draw_scene_message,draw_radar,queue_scene_id};
         host_error=gh_startup_host_set_scene_ui_consumers(app.host,&scene_callbacks);
         if(host_error!=GH_HOST_OK)break;
         host_error=gh_startup_host_set_world_consumer(app.host,queue_world,&app);
@@ -905,8 +920,10 @@ int main(int argc,char **argv)
 #ifdef GH_NATIVE_STARTUP_QA
                 if(app.pending_scene){
                     qa_control.presented(app.prepared_scene_serial);
+                    qa_repeat_square.presented(app.prepared_scene_serial);
                     if(app.prepared_scene_serial>=qa_capture_frame&&app.prepared_scene_serial<=qa_last_capture_scene)
                         std::fprintf(stderr,"QA_CAPTURE_PRESENTED %llu\n",(unsigned long long)app.prepared_scene_serial);
+                    if(qa_repeat_square.defeat_scene){result=0;break;}
                 }
 #endif
                 app.display_pending=false;
@@ -932,7 +949,8 @@ int main(int argc,char **argv)
                     }
                 }
                 gh_native_input_key(&qa_input,'Z',key=='Z');gh_native_input_key(&qa_input,39,key==39);
-                const gh_native_gamepad_sample pad=qa_control.sample(app.snapshot);
+                const gh_native_gamepad_sample pad=qa_repeat_square.enabled?qa_repeat_square.sample(app.snapshot):
+                    qa_control.sample(app.snapshot);
                 if(!gh_native_input_tick_device(&qa_input,app.snapshot.work,&pad,&input))break;
             }
 #endif
@@ -941,6 +959,7 @@ int main(int argc,char **argv)
             host_error=gh_startup_host_snapshot(app.host,&app.snapshot);if(host_error!=GH_HOST_OK)break;
 #ifdef GH_NATIVE_STARTUP_QA
             qa_control.observe(app.snapshot,input);
+            qa_repeat_square.observe(app.snapshot,input);
             if(qa_load&&app.snapshot.mc_load_mode){
                 const uint32_t trace=(uint32_t)app.snapshot.mc_load_phase<<16|
                     app.snapshot.mc_phase<<8|app.snapshot.mc_subphase;
@@ -1046,6 +1065,7 @@ int main(int argc,char **argv)
         app.snapshot.hitarea_hit_kinds[0],app.snapshot.hitarea_hit_kinds[1],app.snapshot.hitarea_hit_kinds[2],app.snapshot.hitarea_hit_kinds[3],
         app.snapshot.hitarea_hit_distance_bits[0],app.snapshot.hitarea_hit_distance_bits[1],app.snapshot.hitarea_hit_distance_bits[2],app.snapshot.hitarea_hit_distance_bits[3]);
 #ifdef GH_NATIVE_STARTUP_QA
+    qa_repeat_square.report();
     if(qa_control.mode)
         std::fprintf(stderr,"QA_CONTROL_STATUS mode=%s saw_event=%u pressed=%u motion_presented=%u\n",
             qa_control.mode,(unsigned)qa_control.saw_event,(unsigned)qa_control.pressed,(unsigned)qa_control.reported_motion);
@@ -1055,7 +1075,8 @@ int main(int argc,char **argv)
             "\"flags\":\"%08X\",\"delay\":%d,\"status\":%d}\n",
             voice_failure.frontier,voice_failure.bank,voice_failure.program,voice_failure.part_index,
             voice_failure.flags,voice_failure.delay,(int)voice_failure.status);
-    if(qa_new_game&&app.snapshot.fade){
+    const bool gameplay_qa=qa_new_game||qa_load;
+    if(gameplay_qa&&app.snapshot.fade){
         const auto &d=app.snapshot;const auto &fade=*d.fade;uint32_t shift=0;
         if(d.work)std::memcpy(&shift,(const uint8_t*)d.work+0x564,4);
         std::fprintf(stderr,"QA_EVENT_BOUNDARY number%d flags%08X state%u phase%u config%08X callee%d clearStage%u clearDetail%d audioFlags%X cameraCuts%u actorRecords%u timingRows%u actorHandle%u actorParts%u actorsInitialized%u accessoryHandle%u jacketAttached%u fadeState%02X count%u time%u from%08X to%08X shift%u\n",
@@ -1075,8 +1096,8 @@ int main(int argc,char **argv)
             d.effect_frontier,d.effect_emitter_slot,d.effect_emitter_serial,d.effect_emitter_mode,
             d.effect_emitter_class,d.effect_emitter_step,d.effect_esp_slot,d.effect_esp_step);
     }
-    if(qa_new_game)for(unsigned i=0;i<app.snapshot.emitter_samples;i++)std::fprintf(stderr,"QA Emitter slot%u bank%u kind%u flags%08X known%u type%u\n",app.snapshot.emitter_slots[i],app.snapshot.emitter_banks[i],app.snapshot.emitter_kinds[i],app.snapshot.emitter_flags[i],app.snapshot.emitter_known[i],app.snapshot.emitter_types[i]);
-    if(qa_new_game&&app.snapshot.current_actor_ready){
+    if(gameplay_qa)for(unsigned i=0;i<app.snapshot.emitter_samples;i++)std::fprintf(stderr,"QA Emitter slot%u bank%u kind%u flags%08X known%u type%u\n",app.snapshot.emitter_slots[i],app.snapshot.emitter_banks[i],app.snapshot.emitter_kinds[i],app.snapshot.emitter_flags[i],app.snapshot.emitter_known[i],app.snapshot.emitter_types[i]);
+    if(gameplay_qa&&app.snapshot.current_actor_ready){
         const auto&d=app.snapshot;std::fprintf(stderr,"QA CurrentActor kind%04X flags250%08X state%04X 5B0%08X 5B4%08X 5B8%08X HP548%04X HP54A%04X cooldown54C%08X 5C0XYZ%08X,%08X,%08X\n",d.current_actor_kind,d.current_actor_flags,d.current_actor_state,d.current_actor_5b0,d.current_actor_5b4,d.current_actor_5b8,d.current_actor_hp548,d.current_actor_hp54a,d.current_actor_54c,d.current_actor_5c0[0],d.current_actor_5c0[1],d.current_actor_5c0[2]);
         if(d.current_enemy_placement_ready)std::fprintf(stderr,
             "QA_ENEMY_PLACEMENT {\"handle\":%u,\"stamp\":%u,\"dependency\":\"%04X\","
@@ -1089,7 +1110,7 @@ int main(int argc,char **argv)
             d.current_enemy_flags_16d0,d.current_enemy_flags_16d4,d.current_enemy_reaction_set_17bd);
         for(unsigned i=0;i<d.current_b_samples;i++){std::fprintf(stderr,"QA CurrentB index%u group%u generation%u serial%u source_present%u source_known%u source_kind%04X words00..6C",d.current_b_index[i],d.current_b_group[i],d.current_b_generation[i],d.current_b_serial[i],d.current_b_source_present[i],d.current_b_source_known[i],d.current_b_source_kind[i]);for(unsigned j=0;j<28;j++)std::fprintf(stderr," %08X",d.current_b_words[i][j]);std::fprintf(stderr,"\n");}
     }
-    if(qa_new_game&&app.snapshot.hitarea_diagnostic_ready){
+    if(gameplay_qa&&app.snapshot.hitarea_diagnostic_ready){
         std::fprintf(stderr,"QA HitArea source slot%u actor_present%u actor_kind%04X flags250%08X cooldown54C%08X unitflags%08X excluded38%08X sameplayer%u\n",app.snapshot.hitarea_slot,app.snapshot.hitarea_actor_present,app.snapshot.hitarea_actor_kind,
             app.snapshot.hitarea_actor_flags,app.snapshot.hitarea_actor_cooldown_bits,app.snapshot.hitarea_source_unit_flags,app.snapshot.hitarea_source_excluded_token,app.snapshot.hitarea_source_is_player);
         for(unsigned i=0;i<app.snapshot.hitarea_hit_samples;i++)std::fprintf(stderr,"QA HitArea target%u shape%u unit_known%u slot%u actor_present%u actor_kind%04X raw30%08X flags250%08X cooldown54C%08X same_source_actor%u\n",

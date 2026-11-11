@@ -222,9 +222,13 @@ static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
         const uint16_t flags = half(p + 0x3ac);
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
         const int waiting = p[0x2f4] == 0 && p[0x2f5] == 1;
+        const int pursuing = p[0x2f4] == 0 && p[0x2f5] == 6;
+        const int active = p[0x2f4] == 0 && p[0x2f5] == 0x13 && p[0x2f6] == 1 && !p[0x2f7];
         const int reacting = p[0x2f4] == 1 && p[0x2f5] == 0x11 && p[0x2f6] == 1;
+        /* Pursuit 00/06 and active 00/13 follow 20B3D4 → 20B52C.
+         * 01/16 phase < 4 takes the distinct earlier reaction path. */
         if ((status & 0x80040u) || (behavior & 0x806020u) ||
-            (flags & 0x2cu) || !(waiting || reacting))
+            (flags & 0x2cu) || !(waiting || pursuing || active || reacting))
             return stop(frontier, 0x20b394);
 
         /* 20D138 returns zero. For 2E, 20CAC8 can still draw once
@@ -326,6 +330,18 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         const uint16_t flags = half(p + 0x3ac);
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
         if (p[0x17bd] == 1 && rank >= 3) return stop(frontier, 0x26ecd0);
+        /* 20BB58 is the dead-HP effect switch. Ordinary stamp19 effect7
+         * reaches it with no special reaction, block, or alternate motion. */
+        if (opening_203 && !half(p + 0x54a) && rank && rank < 3 && p[0x17bd] == 1 &&
+            !(flags & 0x12cu) && !(behavior & 0x806020u) &&
+            !(status & 0x180040u) && !(p[0x2f4] == 1 && p[0x2f5] == 0x16)) {
+            p[0x2f4] = 2;
+            p[0x2f5] = 0;
+            p[0x2f6] = p[0x2f7] = 0;
+            call->reacted = 1;
+            call->phase = 5;
+            return GH_ACTOR_MOTION_OK;
+        }
         if (!rank || p[0x17bd] != 1 || !half(p + 0x54a) || (flags & 0x2cu) ||
             (behavior & (opening_203 ? 0x806020u : 0x802020u)) ||
             (status & 0x80040u) || (p[0x2f4] == 1 && p[0x2f5] == 0x16))

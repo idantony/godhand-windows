@@ -71,6 +71,11 @@ gh_id_error gh_mc_renderer_queued_message_depth(gh_mc_renderer *,const size_t *o
  * Capacity/memory failures leave queue, tags and count unchanged. */
 gh_id_error gh_mc_renderer_queue_view_groups(gh_mc_renderer *,const gh_id_render_view *,
  const gh_id_draw_job *,gh_ui_ot_tag *,size_t capacity,size_t *count);
+/* Door map uses the same queue with its typed original chapter message.
+ * Text expansion is captured at submission and ordinary jobs share the
+ * existing group path. */
+gh_id_error gh_mc_renderer_queue_view_groups_with_chapter(gh_mc_renderer *,const gh_id_render_view *,
+ const gh_id_draw_job *,uint16_t chapter_message,gh_ui_ot_tag *,size_t capacity,size_t *count);
 /* CT32 opaque clear before the ordered groups: RGB is Work+60C low24,
  * alpha0, explicit native FBA0 reference. This does not itself implement the
  * outer-loop previous-parity submission or recover all earlier GS state. */

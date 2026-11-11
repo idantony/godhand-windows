@@ -35,6 +35,13 @@ finished port or execute guest instructions in the production runtime.
   snapshot, compiled executable and runner still have matching fingerprints.
   `inspect-title-graphics.exe ISO --texture 1 49` reads a language texture's
   TIM2 dimensions, palette format and TEX0 even before the renderer admits it.
+  Windows builds and native tests share compiled C objects across frozen
+  source copies. A changed source or reachable project header changes that
+  unit's cache key. Cached object bytes are checked before linking. Both
+  builders accept `--object-cache` to select a shared cache and
+  `--no-object-cache` for a cold build. Native test executables link against
+  one archive of compiled modules. `--focus game-save-roundtrip` exercises
+  the real Door map and slot write with an isolated card profile.
   When attached audio fails at the stopping original address, the proof
   records its bank, program, part, flags and delay.
   The QA launcher rejects a mismatch with the snapshot's launcher before it

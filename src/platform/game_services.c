@@ -1746,6 +1746,21 @@ static gh_object_step_status om_remove_sound(void *context,gh_actor_model *model
  return status?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_OK;
 }
 
+static gh_actor_motion_status release_stamp19_enemy(void *context,const gh_enemy_actor *enemy,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ uint32_t handle=0;
+ if(!enemy||!frontier||gh_enemy_ems_handle_for_actor(s->enemies,&enemy->entry.object,&handle)||!handle){
+  if(frontier)*frontier=0x290770;
+  return GH_ACTOR_MOTION_UNSUPPORTED;
+ }
+ int removed=0;
+ gh_actor_motion_status status=gh_enemy_ems_remove_00290770(s->enemies,&s->enemy_removal,
+  handle,s->b.voices,&removed,frontier);
+ if(!status)s->enemy_removal=(gh_enemy_manager_remove){0};
+ return status;
+}
+
 gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services*s,uint32_t handle,
  uint32_t entry,int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,
  const gh_game_actor_render_provider*provider,uint32_t*f){
@@ -1827,6 +1842,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   if(!e)e=gh_enemy202_move_bind_opacity(move,&s->enemy_opacity);
   if(!e)e=gh_enemy202_move_bind_near_sound(move,enemy_ema2_near_sound,s);
   if(!e)e=gh_enemy202_move_bind_room_state(move,&s->room_state);
+  if(!e)e=gh_enemy202_move_bind_death_release(move,release_stamp19_enemy,s);
   if(!e&&s->b.camera_envelope){
    const gh_effect_create_bindings impact={.storage=player_effect_storage(s),
     .work=s->b.work,.random=&s->b.init->random,.atan_coeff=s->b.camera_envelope->atan_coeff};

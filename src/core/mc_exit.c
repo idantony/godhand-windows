@@ -101,3 +101,62 @@ gh_mc_task_status gh_mc_title_exit_step_00001458(gh_mc_exit_state *exit,gh_mc_ti
     exit->stage=GH_MC_EXIT_FINISHED;
     return GH_MC_TASK_OK;
 }
+
+gh_mc_task_status gh_mc_save_exit_step_00003e40(gh_mc_exit_state *exit,
+    gh_mc_save_task_state *save,const gh_mc_task_bindings *bindings,
+    gh_screen_fade *fade,const gh_screen_fade_context *context)
+{
+    if(!exit||!save||!valid(bindings)||!fade||!context||!save->room_heap||
+       !save->common.checks.done||save->phase<2||save->phase>5)
+        return GH_MC_TASK_ARGUMENT;
+    if(exit->stage==GH_MC_EXIT_FINISHED)return GH_MC_TASK_OK;
+    gh_mc_task_state *task=&save->common;
+    const uint8_t fade_state=gh_screen_fade_status_00307718(fade);
+    if(fade_state&&!(fade_state&4))return GH_MC_TASK_LOAD_FRAME;
+    if(save->phase==2){
+        exit->frontier_address=0x307208;
+        if(gh_screen_fade_start_00307208(fade,context,0,10,0,0,0xff000000,10))
+            return GH_MC_TASK_UNSUPPORTED;
+        save->phase=3;
+        return GH_MC_TASK_LOAD_FRAME;
+    }
+    if(save->phase==3){
+        if(exit->stage==GH_MC_EXIT_FINAL_FRAME){
+            /* 039E0 releases the four RoomHeap borrows before 7280. */
+            exit->frontier_address=0x39e0;
+            gh_r207_allocation *owned[]={&task->checks.icon_work,&save->current_record,
+                                       &save->previous_record,&save->save_file};
+            for(unsigned i=0;i<sizeof(owned)/sizeof(*owned);++i){
+                if(!owned[i]->pointer)continue;
+                exit->memory_error=gh_heap_release(save->room_heap,*owned[i]);
+                if(exit->memory_error)return GH_MC_TASK_MEMORY_ERROR;
+                memset(owned[i],0,sizeof(*owned[i]));
+            }
+            save->icon_template=(gh_id_view){0};
+            save->icon_model=(gh_id_view){0};
+            exit->stage=GH_MC_EXIT_SUSPEND;
+        }
+        gh_mc_task_status status=release_system(exit,task,bindings,0);
+        if(status)return status;
+        save->phase=4;
+        return GH_MC_TASK_LOAD_FRAME;
+    }
+    if(save->phase==4){
+        /* REL3F20 clears the task bit before 8AA8, then Main returns. */
+        uint8_t *busy=(uint8_t*)bindings->work+0x5e8;
+        uint32_t flags;
+        memcpy(&flags,busy,4);
+        flags&=~UINT32_C(0x80000000);
+        memcpy(busy,&flags,4);
+        save->phase=5;
+    }
+    gh_mc_task_status status=release_module(exit,task,bindings);
+    if(status)return status;
+    save->card_begun=0;
+    task->stage=5;
+    exit->tail_entry=0;
+    exit->frontier_address=0x2d5a48;
+    exit->body_finished=1;
+    exit->stage=GH_MC_EXIT_FINISHED;
+    return GH_MC_TASK_OK;
+}

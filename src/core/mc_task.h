@@ -59,9 +59,28 @@ gh_mc_task_status gh_mc_task_prepare_title_load_002ae838(gh_mc_task_state *,cons
  * result requires original Sleep(1). Caller drives the canonical Fade. */
 gh_mc_task_status gh_mc_task_title_load_step_000012b0(gh_mc_task_state *,const gh_mc_task_bindings *,
     gh_screen_fade *,const gh_screen_fade_context *);
-/* REL8AA8 before any ID family exists. After DispInit use the existing real
+/* Shared REL8AA8 before any Load or Save ID family exists. After DispInit use the existing real
  * gh_mc_control_sleep_frame with the title draw consumers. */
 gh_mc_task_status gh_mc_task_title_load_sleep_00008aa8(const gh_mc_task_state *,const gh_mc_task_bindings *);
+/* cMcSave uses the same task/UI owner with independent RoomHeap buffers. */
+typedef struct gh_mc_save_task_state {
+    gh_mc_task_state common;
+    gh_heap *room_heap;
+    gh_r207_allocation current_record,previous_record,save_file;
+    gh_id_view icon_template,icon_model;
+    uint32_t save_file_job;
+    uint8_t phase,release_wait,release_requested,card_begun;
+} gh_mc_save_task_state;
+/* Complete original 2908C0 against the active enemy and object owners.
+ * On failure preserve any unfinished iteration and report its frontier. */
+typedef gh_mc_task_status (*gh_mc_save_retire_active)(void *,uint32_t *frontier);
+gh_mc_task_status gh_mc_task_start_save_002ae740(const gh_mc_task_bindings *,
+    gh_native_task_entry,void *context,int32_t *slot);
+gh_mc_task_status gh_mc_task_prepare_save_002ae788(gh_mc_save_task_state *,
+    const gh_mc_task_bindings *,gh_heap *room_heap,int32_t mode,gh_mc_save_retire_active,void *);
+gh_mc_task_status gh_mc_task_save_step_00003c80(gh_mc_save_task_state *,
+    const gh_mc_task_bindings *,gh_heap *room_heap,gh_screen_fade *,const gh_screen_fade_context *);
+gh_mc_task_status gh_mc_task_abort_save(gh_mc_save_task_state *,const gh_mc_task_bindings *,gh_heap *room_heap);
 /* Explicit abort/window-close cleanup of live partial state, not a fabricated
  * normal MC exit or tail-restart. Cancels pending reads, releases real owners,
  * and restores only globals owned by this MC prefix. */

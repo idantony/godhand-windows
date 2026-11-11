@@ -31,12 +31,37 @@ static gh_id_error message_view(const gh_id_view *table,unsigned index,gh_id_vie
  for(i=0;i<count;i++)for(unsigned part=0;part<2;part++){uint32_t next=u32(table->bytes+4+(size_t)i*8+part*4);if(next>off&&next<end)end=next;}
  body->bytes=table->bytes+off;body->size=end-off;body->offset=table->offset+off;return GH_ID_OK;
 }
-gh_id_error gh_id_text_prepare(const gh_id_base *object,const gh_id_entry *entry,const gh_menu_state *menu,
+static gh_id_error measure_chapter(const gh_id_view *table,uint16_t message,
+ const gh_font_state *font,float sx,float sy,float spacing,gh_id_view *chapter,
+ size_t *count,float *width,float *height)
+{
+ gh_id_error error=message_view(table,message&4095,chapter);
+ if(error)return error;
+ *count=0;*width=0;*height=0;
+ for(size_t offset=0;offset+2<=chapter->size;offset+=2){
+  const uint16_t code=u16(chapter->bytes+offset);
+  if((code&0xff00)==0x8000){
+   if(!*count)return GH_ID_UNSUPPORTED;
+   *width-=spacing; /* 2B1090 omits trailing chapter spacing. */
+   return GH_ID_OK;
+  }
+  gh_font_glyph glyph;
+  if(code<14||code>=0x1000||gh_font_glyph_at(font,code,&glyph)!=GH_FONT_OK||glyph.width<=0)
+   return GH_ID_UNSUPPORTED;
+  ++*count;
+  *width+=(float)glyph.width*sx+spacing;
+  const float glyph_height=((float)font->slots[code>>12].cell_height+12.0f)*sy;
+  if(glyph_height>*height)*height=glyph_height;
+ }
+ return GH_ID_BOUNDS;
+}
+
+gh_id_error gh_id_text_prepare_with_chapter(const gh_id_base *object,const gh_id_entry *entry,const gh_menu_state *menu,
  const gh_packed_message_state *packed,const gh_font_state *font,const gh_id_text_context *ctx,
- gh_id_text_glyph *output,size_t capacity,gh_id_text_result *result){
- gh_id_view table,body;gh_id_error error;uint16_t message;unsigned bank,index,color_group,color_index,align;
+ uint16_t chapter_message,gh_id_text_glyph *output,size_t capacity,gh_id_text_result *result){
+ gh_id_view table,body,chapter={0};gh_id_error error;uint16_t message;unsigned bank,index,color_group,color_index,align;
  float sx,sy,spacing,line_gap,line_width=0,line_height=0,page_width=0,page_height=0,startx,starty,x,y;
- size_t offset,glyphs=0,lines=1,icons=0;uint32_t default_color,color;int ended=0;
+ size_t offset,glyphs=0,lines=1,icons=0,chapter_count=0;float chapter_width=0,chapter_height=0;uint32_t default_color,color;int ended=0;
  if(!object||!entry||!menu||!packed||!font||!ctx||!result||(!output&&capacity))return GH_ID_ARGUMENT;
  memset(result,0,sizeof(*result));
  if(entry->kind!=2||ctx->language<1||ctx->language>6)return fail(result,0,0,0x2ab0b8);
@@ -67,6 +92,17 @@ gh_id_error gh_id_text_prepare(const gh_id_base *object,const gh_id_entry *entry
     return fail(result,code,offset,0x2b04c0);
    offset+=2;continue;
   }
+  if(code==0x9401&&object->resource_number==7&&message==0x2022&&
+     chapter_message>=0x2023&&chapter_message<=0x20a3&&ctx->language==1){
+   if(chapter_count)return fail(result,code,offset,0x2b0420);
+   if(measure_chapter(&table,chapter_message,font,sx,sy,spacing,&chapter,
+        &chapter_count,&chapter_width,&chapter_height)!=GH_ID_OK)
+    return fail(result,code,offset,0x2afed0);
+   glyphs+=chapter_count;
+   line_width+=chapter_width;
+   if(chapter_height>line_height)line_height=chapter_height;
+   continue;
+  }
   if(code&0x8000)return fail(result,code,offset,0x2b0028);
   if(code>=0x1000)return fail(result,code,offset,0x2a4cb0);
   if(code<14){
@@ -90,6 +126,23 @@ gh_id_error gh_id_text_prepare(const gh_id_base *object,const gh_id_entry *entry
   if(code==0xb301){color=default_color;continue;}
   if(code==0xb602){color=u32(colors+u16(body.bytes+offset+2)*4);offset+=2;continue;}
   if(code==0xa001){x=startx;y+=((float)font->slots[0].cell_height+12.0f)*sy+line_gap;continue;}
+  if(code==0x9401){
+   const float chapter_x=x;
+   draw=(gh_font_draw_state){.scale_x=sx,.scale_y=sy,.alignment_flags=9,
+    .screen_width=ctx->screen_width,.screen_height=ctx->screen_height,
+    .gs_y_origin=ctx->gs_y_origin,.rgba=color};
+   for(size_t i=0;i<chapter_count;++i){
+    const uint16_t nested=u16(chapter.bytes+2*i);
+    if(gh_font_glyph_at(font,nested,&glyph)!=GH_FONT_OK)return GH_ID_BOUNDS;
+    output[out].code=nested;output[out].x=x;output[out].y=y+12.0f*sy;output[out].icon_extent=0;
+    if(gh_font_draw_quad(font,&draw,nested,x,output[out].y,65535,&output[out].quad)!=GH_FONT_DRAW_OK)
+     return fail(result,code,offset,0x2a53a8);
+    x+=(float)glyph.width*sx+spacing;
+    ++out;
+   }
+   x=chapter_x+chapter_width+spacing; /* Outer 2AF728 advance. */
+   continue;
+  }
   if(code<14){
    memset(&output[out],0,sizeof(output[out]));
    output[out].code=code;output[out].x=x;output[out].y=y+12.0f*sy+3.0f;
@@ -106,6 +159,13 @@ gh_id_error gh_id_text_prepare(const gh_id_base *object,const gh_id_entry *entry
  return GH_ID_OK;
 }
 
+
+gh_id_error gh_id_text_prepare(const gh_id_base *object,const gh_id_entry *entry,
+ const gh_menu_state *menu,const gh_packed_message_state *packed,const gh_font_state *font,
+ const gh_id_text_context *ctx,gh_id_text_glyph *output,size_t capacity,gh_id_text_result *result)
+{
+ return gh_id_text_prepare_with_chapter(object,entry,menu,packed,font,ctx,0,output,capacity,result);
+}
 
 gh_id_error gh_id_text_icon_quad(const gh_id_state *manager,const gh_id_text_glyph *icon,
     gh_id_texture_quad *out)

@@ -1,3 +1,4 @@
+#include "game_effects_frame.h"
 #include "game_enemy_retire.h"
 #include "game_object_live_trans.h"
 #include "game_enemy_damage.h"
@@ -400,6 +401,7 @@ static int scenery_contact(const gh_bundle *room_bundle,unsigned kind,
     CHECK(gh_om_scene_bind_001c3cb8(&placements,&oms,&original)==GH_PLACE_UNSUPPORTED);
     gh_om_placement_record source_row;
     uint8_t *actor=waiting->entry.object.view.bytes;
+    const int active_scenery=kind==0x303 && actor[0x640]==11;
     const gh_hitarea_object *body=&waiting->hitareas.units[0];
     float origin[3];
     memcpy(origin,waiting->entry.object.view.alias_f0,12);
@@ -414,7 +416,12 @@ static int scenery_contact(const gh_bundle *room_bundle,unsigned kind,
         float distance=dx*dx+dz*dz;
         if(distance<nearest){nearest=distance;source_row=row;row_index=i;}
     }
-    CHECK(kind==0x303 ? row_index==6 && nearest<9 : row_index && nearest<4);
+    if (active_scenery)
+        CHECK(row_index==5 && nearest<4);
+    else if (kind==0x303)
+        CHECK(row_index==6 && nearest<9);
+    else
+        CHECK(row_index && nearest<4);
     gh_om_initializer_bindings initializer={.work=b->entry.work,.packet_heap=b->entry.packet_heap,
         .fog_rgb=b->entry.fog_rgb,.init=b->entry.init,.shapes=&b->shapes,.player=player};
     uint8_t serial=0;
@@ -455,8 +462,8 @@ static int scenery_contact(const gh_bundle *room_bundle,unsigned kind,
     uint32_t ignored;
     CHECK(!word(actor+0x54c) && (word(actor+0x2f4)&0xffff)==0x0100);
     if(kind==0x303){
-        memcpy(actor+0x2f4,&(uint32_t){0x00011101},4);
-        memcpy(actor+0x16d0,&(uint32_t){0x04000202},4);
+        memcpy(actor+0x2f4,&(uint32_t){active_scenery?0x00011300:0x00011101},4);
+        memcpy(actor+0x16d0,&(uint32_t){active_scenery?0x04000400:0x04000202},4);
     }
     CHECK(actor[0x17bc]==1 && !gh_game_mt_next_0030f348(&expected,&ignored));
     gh_enemy202_hit_call call={0};
@@ -472,6 +479,25 @@ static int scenery_contact(const gh_bundle *room_bundle,unsigned kind,
         !memcmp(&expected,&b->entry.init->random,sizeof(expected)));
     memcpy(actor,actor_before,sizeof(actor_before));
     b->entry.init->random=rng;
+    if(kind==0x303&&actor[0x640]==8){
+        /* Exact192 title Load stopped on stamp8 in pursuit with HP59. */
+        memcpy(actor+0x2f4,&(uint32_t){0x00010600},4);
+        memcpy(actor+0x16d0,&(uint32_t){0x04000602},4);
+        memcpy(actor+0x54a,&(uint16_t){59},2);
+        call=(gh_enemy202_hit_call){0};
+        CHECK(!gh_enemy202_hit_0020a178(&call,waiting,player,1,&frontier)&&!frontier&&
+            call.reacted&&call.phase==5&&word(actor+0x2f4)==0x00001101&&
+            (word(actor+0x548)>>16)==59&&!memcmp(&expected,&b->entry.init->random,sizeof(expected)));
+        memcpy(actor,actor_before,sizeof(actor_before));
+        b->entry.init->random=rng;
+    }
+    if(active_scenery){
+        memcpy(actor+0x2f4,&(uint32_t){0x00011601},4);
+        call=(gh_enemy202_hit_call){0};
+        CHECK(gh_enemy202_hit_0020a178(&call,waiting,player,1,&frontier)==GH_ACTOR_MOTION_UNSUPPORTED &&
+            frontier==0x20b394 && !call.reacted && !memcmp(&rng,&b->entry.init->random,sizeof(rng)));
+        memcpy(actor,actor_before,sizeof(actor_before));
+    }
     uint8_t *score=b->entry.save.bytes+0x1c;
     const uint16_t original_score=(uint16_t)word(score);
     const uint8_t original_lock=score[2];
@@ -485,8 +511,8 @@ static int scenery_contact(const gh_bundle *room_bundle,unsigned kind,
     memcpy(actor,actor_before,sizeof(actor_before));
 
     if(kind==0x303){
-        memcpy(actor+0x2f4,&(uint32_t){0x00011101},4);
-        memcpy(actor+0x16d0,&(uint32_t){0x04000202},4);
+        memcpy(actor+0x2f4,&(uint32_t){active_scenery?0x00011300:0x00011101},4);
+        memcpy(actor+0x16d0,&(uint32_t){active_scenery?0x04000400:0x04000202},4);
     }
     gh_enemy202_move move={0};
     const void *elf=ledger_bindings->boot_elf;
@@ -708,11 +734,48 @@ restore_scenery_fixture:
     CHECK(!gh_hitarea_frame_resume_bound_001fdfd8(b->entry.init,b->entry.work,1,
         GH_STATIC_BINARY32_REFERENCE,ledger,ledger_bindings,&frontier));
     if(kind==0x303)
-        printf("PASS actual R100 stamp8 OM303 row%u Give, repeated selector11 phase reset and clip rebind %03x\n",
-            row_index,offset);
+        printf("PASS actual R100 stamp%u OM303 row%u Give, selector11 phase reset and clip rebind %03x\n",
+            (unsigned)actor[0x640],row_index,offset);
     else printf("PASS actual R100 stamp%u OM304 row%u, effect2E, 37-frame reaction row %03x and selector8/0 far continuation\n",
         actor[0x640],row_index,offset);
     return 0;
+}
+
+typedef struct {
+    gh_enemy_ems *owner;
+    gh_se_voice_engine *voices;
+    gh_enemy_manager_remove remove;
+    unsigned removed;
+    uint8_t reject_once;
+} stamp19_release_fixture;
+
+static gh_actor_motion_status release_stamp19_effect(void *p,const gh_title_player_view *actor,
+    int32_t kind,uint32_t mode,uint32_t *frontier)
+{
+    const gh_effect_create_bindings *binding=p;
+    gh_effect_release_bindings storage=binding->storage;
+    storage.actor_match=gh_effect_create_actor_match;
+    storage.context=storage.effects;
+    unsigned slot;
+    gh_effect_status status=gh_game_effect_release_00306200(&storage,actor,kind,mode,frontier,&slot);
+    return !status?GH_ACTOR_MOTION_OK:status==GH_EFFECT_UNSUPPORTED?
+        GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_CALLEE;
+}
+
+static gh_actor_motion_status release_stamp19_fixture(void *p,const gh_enemy_actor *enemy,uint32_t *frontier)
+{
+    stamp19_release_fixture *fixture=p;
+    if(fixture->reject_once){
+        fixture->reject_once=0;*frontier=0x290770;return GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    uint32_t handle=0;
+    if(gh_enemy_ems_handle_for_actor(fixture->owner,&enemy->entry.object,&handle)||!handle)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    int removed=0;
+    gh_actor_motion_status status=gh_enemy_ems_remove_00290770(fixture->owner,&fixture->remove,
+        handle,fixture->voices,&removed,frontier);
+    fixture->removed+=(unsigned)removed;
+    return status;
 }
 
 static gh_actor_motion_status record_stamp19_attack_sound(void *context,
@@ -975,9 +1038,55 @@ static int enemy_give_player_take(gh_disc *disc,const gh_bundle *room_bundle,gh_
     return 0;
 }
 
+static int selector9_first_steps(const gh_enemy_ems_live *live,const gh_title_player_view *player,
+    const void *elf,size_t elf_size,const gh_room_state *room,const gh_scene_nearcheck *navigation,
+    const gh_object_opacity_environment *opacity)
+{
+    gh_enemy_actor *enemy=live->enemy202;
+    uint8_t *actor=live->actor->view.bytes;
+    const gh_object_view *resource=&enemy->entry.resource;
+    const unsigned dependency=word(actor+0x564);
+    CHECK(actor[0x640]==10&&dependency==0x200&&!actor[0x17c3]);
+    CHECK(!gh_enemy_timers_held_weapon(&enemy->timers));
+    for(unsigned variant=0;variant<3;variant++){
+        memcpy(actor+0x2f4,&(uint32_t){0x00000900|(variant<<24)},4);
+        gh_game_mt expected=enemy->entry.b.init->random;
+        unsigned side=variant;
+        if(variant==2){
+            uint32_t draw;
+            CHECK(!gh_game_mt_next_0030f348(&expected,&draw));
+            side=draw&1u;
+        }
+        const unsigned row=0xcc+8*side;
+        for(unsigned frame=0;frame<2;frame++){
+            gh_enemy202_move move={0};
+            CHECK(!gh_enemy202_move_bind_opacity(&move,opacity));
+            CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+            CHECK(!gh_enemy202_move_bind_room_state(&move,room));
+            CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+            const gh_actor_motion_status status=gh_enemy202_move_00208be0(&move,enemy,player,elf,elf_size);
+            if(status)fprintf(stderr,"stamp10 selector9 dependency%03x row%03x variant%u frame%u status%d pc%08x stage%u state%08x\n",
+                dependency,row,variant,frame,status,move.frontier,move.substate67_stage,word(actor+0x2f4));
+            CHECK(!status&&!move.frontier&&move.original_returned&&word(actor+0x2f4)==(0x00010900|(variant<<24)));
+            CHECK(word(actor+0x600)==0x42b40000&&word(actor+0x604)==0x42b40000&&
+                (word(actor+0x16d0)&0x400)&&word(actor+0x430)==(frame?0x40000000u:0x3f800000u));
+            if(!frame)CHECK(move.reaction_resource_offset==row&&move.substate67_motion.blend_frames==10&&
+                !move.substate67_motion.flags&&
+                move.substate67_motion.motion_offset==word(resource->bytes+row));
+            CHECK(!memcmp(&expected,&enemy->entry.b.init->random,sizeof(expected)));
+        }
+    }
+    puts("PASS actual R100 stamp10 selector9 two clip rows, MT cadence, and continuing Move");
+    return 0;
+}
+static int retire_stamp19_trans(gh_enemy_ems *,const gh_enemy_ems_live *,uint32_t,
+    const gh_effect_create_bindings *,const gh_title_player_view *,gh_game_init_state *,
+    gh_game_scene_tables *,const void *,size_t,gh_room_pools *,gh_heap *);
+
 static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_t *elf, size_t elf_size,
     const gh_enemy_ems_bindings *bindings, gh_enemy_ems *owner, gh_enemy_ems_live *first,
-    const gh_enemy_ems_live *appearance2, const gh_enemy_ems_live *selector1,const gh_enemy_ems_live *stamp11,
+    const gh_enemy_ems_live *appearance2, const gh_enemy_ems_live *selector1,
+    const gh_enemy_ems_live *stamp10,const gh_enemy_ems_live *stamp11,
     const gh_enemy_ems_live selector1_other[3], const gh_enemy_ems_live *weapon_live,
     const gh_room_state *room, const gh_scene_nearcheck *navigation,
     const gh_effect_create_bindings *effect_bind, const gh_game_world_light *light,
@@ -1235,6 +1344,7 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     CHECK(barrel&&!gh_game_objects_add_pinned_001fece0(global,0x303,barrel,barrel_bytes,&original)&&
         original&&!gh_game_objects_set_file_extent(global,0x303,barrel,barrel_bytes));
     CHECK(!scenery_contact(room_bundle,0x303,room,b,waiting_enemy,&player.view,&lb,&ledger,effect_bind,navigation,&opacity));
+    CHECK(!scenery_contact(room_bundle,0x303,room,b,stamp11->enemy202,&player.view,&lb,&ledger,effect_bind,navigation,&opacity));
     free(barrel);
     free(scenery);
     uint8_t *saved_row=NULL;
@@ -1498,6 +1608,73 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             if(test==1)CHECK(word(actor+0x2f4)==0x00001300&&word(actor+0x16c0)==0x43e10000&&
                 word(actor+0x16c4)==6&&!(word(actor+0x16d0)&2u)&&!memcmp(actor+0x16b0,actor+0x1660,12));
         }
+        memcpy(peer->alias_f0,peer_position,12);
+        memcpy(peer->bytes+0x2f4,&peer_state,4);
+        peer->bytes[0x617]=peer_hidden;
+        gh_title_player_view *rank_peer[3];
+        float rank_positions[3][3];
+        uint8_t rank_hidden[3];
+        unsigned rank_count=0;
+        CHECK(!init->enemies[0x518]);
+        for(unsigned i=0;i<64&&rank_count<3;i++){
+            gh_game_title_player *candidate=init->enemy_actors[i];
+            if(!candidate||candidate==&entry->entry.object||!candidate->view.alias_f0)continue;
+            const unsigned kind=word(candidate->view.bytes+0x2fe)&0xffffu;
+            if(kind<0x200||kind>=0x280)continue;
+            rank_peer[rank_count]=&candidate->view;
+            memcpy(rank_positions[rank_count],candidate->view.alias_f0,12);
+            rank_hidden[rank_count++]=candidate->view.bytes[0x617];
+        }
+        CHECK(rank_count==3);
+        memcpy(target,origin,12);
+        target[2]+=6.787f;
+        memcpy(player.view.alias_f0,target,12);
+        memcpy(player.view.bytes+0x630,target,12);
+        memcpy(score,&(uint16_t){0},2);
+        for(unsigned promoted=0;promoted<2;promoted++){
+            memcpy(actor,actor_before,sizeof(actor_before));
+            entry->motion.motion=motion_before;
+            init->random=rng;
+            if(promoted){
+                for(unsigned i=0;i<rank_count;i++){
+                    const float closer[3]={target[0]+2.0f+i,target[1],target[2]};
+                    memcpy(rank_peer[i]->alias_f0,closer,12);
+                    rank_peer[i]->bytes[0x617]=0;
+                }
+            }
+            init->enemies[0x53b]=0;
+            memcpy(init->enemies+0x510,&shared_timer,4);
+            memcpy(raw_work+0x210,&(uint32_t){word(actor+0x17d0)^1u},4);
+            memcpy(actor+0x2f4,&(uint32_t){0x00000600},4);
+            memcpy(actor+0x16d0,&(uint32_t){0x04000002},4);
+            memcpy(actor+0x16d4,&(uint32_t){0x08000000},4);
+            memcpy(actor+0x1760,&(uint32_t){0},4);
+            memcpy(actor+0x104,&enemy_yaw,4);
+            memcpy(actor+0x16a0,target,12);
+            gh_game_mt expected=rng;
+            uint32_t draw;
+            CHECK(!gh_game_mt_next_0030f348(&expected,&draw));
+            move=(gh_enemy202_move){0};
+            CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+            CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+            CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+            CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+            const gh_actor_motion_status status=gh_enemy202_move_00208be0(&move,entry,&player.view,elf,elf_size);
+            fprintf(stderr,"stamp20 selector6 promoted%u status%d pc%08x state%08x distance%08x rank%u\n",
+                promoted,status,move.frontier,word(actor+0x2f4),word(actor+0x618),word(actor+0x16d8));
+            CHECK(!status&&!move.frontier&&move.original_returned);
+            CHECK(word(actor+0x618)>0x42340000&&word(actor+0x618)<0x42440000&&
+                word(actor+0x5f0)==89&&word(actor+0x5f4)==120+draw%60u&&
+                move.substate67_motion.motion_offset==word(entry->entry.resource.bytes+0xc0)&&
+                !memcmp(&expected,&init->random,sizeof(expected)));
+            CHECK(promoted?word(actor+0x16d8)>=3&&!actor[0x2f6]&&actor[0x2f5]!=6:
+                word(actor+0x16d8)<3&&word(actor+0x2f4)==0x00010600);
+        }
+        for(unsigned i=0;i<rank_count;i++){
+            memcpy(rank_peer[i]->alias_f0,rank_positions[i],12);
+            rank_peer[i]->bytes[0x617]=rank_hidden[i];
+        }
+        puts("PASS actual stamp20 selector6 in Load distance band, both original rank outcomes");
         memcpy(actor,actor_before,sizeof(actor_before));
         entry->motion.motion=motion_before;
         init->enemies[0x53b]=retreat;
@@ -1646,14 +1823,129 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
         fprintf(stderr,"stamp19 attack15 terminal row %04x frames %u active %u state %08x\n",
             first_attack_row,attack_frames,active_frames,word(actor+0x2f4));
         CHECK(attack_frames==64 && active_frames==2 && first_attack_row==0x6a4 && word(actor+0x2f4)==0);
+        /* Only the HP and position are controlled. The original player box,
+         * native collision ledger and original Take select the death mode. */
+        const gh_hitarea_object *death_body=&near->hitareas.units[0];
+        gh_collision_pair_shape death_sphere;
+        CHECK(!gh_hitarea_node_at(death_body,0,&record,&death_sphere));
+        CHECK(!gh_collision_pair_shape_position(&death_sphere,&center));
+        memcpy(location,center,12);
+        location[1]-=1.15f;location[0]-=matrix[8]*.7f;location[2]-=matrix[10]*.7f;
+        memcpy(p+0xb0,location,12);
+        memcpy(player.view.alias_f0,location,12);memcpy(player.view.bytes+0x630,location,12);
+        memcpy(p+0x100,euler,12);
+        p[0x3ac]=2;
+        memcpy(actor+0x54a,&(uint16_t){1},2);
+        memcpy(actor+0x54c,&(uint32_t){0},4);
+        CHECK(!gh_player_attack_hitarea_0010a438(&player.view,tail.give_objects,&frontier));
+        CHECK(!gh_collision_pairs_step_002b9d58(pairs,GH_STATIC_BINARY32_REFERENCE,&frontier));
+        CHECK(!gh_hitarea_frame_resume_bound_001fdfd8(init,work,1,GH_STATIC_BINARY32_REFERENCE,&ledger,&lb,&frontier));
+        CHECK(!gh_hitarea_object_last_hit_actor(death_body,&source)&&source==&player.view&&
+            death_body->bytes[0x46]==7&&word(death_body->bytes+0x4c)==3);
+        gh_enemy202_hit_call lethal={0};
+        status=gh_enemy202_hit_0020a178(&lethal,near,&player.view,1,&frontier);
+        fprintf(stderr,"stamp19 lethal Take status%d pc%08x flags%04x behavior%08x statusflags%08x state%08x HP%u\n",
+            status,frontier,word(actor+0x3ac)&0xffff,word(actor+0x16d0),word(actor+0x16d4),
+            word(actor+0x2f4),word(actor+0x548)>>16);
+        CHECK(!status&&lethal.reacted&&!frontier&&word(actor+0x2f4)==2&&!(word(actor+0x548)>>16));
+        CHECK(!gh_hitarea_object_set_active_001fd668(&tail.give_objects[4],0,&frontier));
+        CHECK(!gh_hitarea_frame_resume_bound_001fdfd8(init,work,1,GH_STATIC_BINARY32_REFERENCE,&ledger,&lb,&frontier));
+        unsigned death_frames=0;
+        uint32_t death_row=0;
+        for(;death_frames<200&&actor[0x2f5]==0;death_frames++){
+            move=(gh_enemy202_move){0};
+            CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+            CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+            CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+            CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+            CHECK(!gh_enemy202_move_bind_impact(&move,effect_bind));
+            status=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+            if(!death_frames)death_row=move.reaction_resource_offset;
+            if(status)fprintf(stderr,"stamp19 death frame%u status%d pc%08x phase%u row%04x flags%08x\n",
+                death_frames,status,move.frontier,move.death_phase,death_row,word(actor+0x16d0));
+            CHECK(!status&&!move.frontier&&move.original_returned);
+        }
+        fprintf(stderr,"stamp19 death terminal after %u complete frames state%08x\n",death_frames,word(actor+0x2f4));
+        CHECK(death_frames==39&&word(actor+0x2f4)==0x0202);
+        unsigned emitters=0;
+        for(unsigned slot=0;slot<256;++slot){
+            gh_effect_emitter_view emitter;
+            if(gh_effect_create_emitter_at(effect_bind->storage.effects,slot,&emitter)||
+               emitter.actor!=&near->entry.object.view)continue;
+            CHECK(emitter.initialized&&emitter.selector==emitter.actor&&
+                emitter.model==selector1_other[1].model&&emitter.part==emitter.model->parts&&
+                emitter.payload[0x18c]==0x58&&emitter.payload[0x18e]==2&&emitter.payload[0x1ec]==0&&
+                word(emitter.payload+0x1e0)==0x3f800000);
+            ++emitters;
+        }
+        CHECK(emitters==1);
+        move=(gh_enemy202_move){0};
+        CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+        CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+        CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+        CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+        gh_audio_registry *death_registry;
+        gh_se_voice_engine *death_voices;
+        gh_se_mix death_mix;
+        unsigned transport_identity=0;
+        CHECK(!gh_audio_registry_create(&death_registry)&&
+            !gh_se_mix_boot_defaults_002c9e78(&death_mix,0,GH_SE_DSP_NATIVE_LINEAR_REFERENCE)&&
+            !gh_se_voice_create(death_registry,(gh_audio_output *)&transport_identity,&death_mix,&death_voices));
+        stamp19_release_fixture removal={.owner=owner,.voices=death_voices,.reject_once=1};
+        uint8_t *save_row=room->active+12+14*24;
+        CHECK(save_row[0x13]==19&&!save_row[0x14]);
+        uint32_t retiring_handle=0;
+        CHECK(!gh_enemy_ems_handle_for_actor(owner,&near->entry.object,&retiring_handle)&&retiring_handle);
+        const uint32_t prior_count=word(init->enemies+0x508);
+        const unsigned prior_pity=word(init->enemies+0x534);
+        gh_game_mt predicted=init->random;
+        uint32_t first_draw,second_draw;
+        CHECK(!gh_game_mt_next_0030f348(&predicted,&first_draw)&&
+            !gh_game_mt_next_0030f348(&predicted,&second_draw)&&first_draw%50>0&&(second_draw&3u));
+        near->motion.motion.b.effect=release_stamp19_effect;
+        near->motion.motion.b.context=(void*)effect_bind;
+        unsigned fade_frames=0;
+        for(;fade_frames<120&&!removal.removed;++fade_frames){
+            int special=0;
+            CHECK(!gh_enemy_manager_step_rates_00290250(init,work->canonical_rate574,&special));
+            move=(gh_enemy202_move){0};
+            CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+            CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+            CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+            CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+            CHECK(!gh_enemy202_move_bind_room_state(&move,room));
+            CHECK(!gh_enemy202_move_bind_death_release(&move,release_stamp19_fixture,&removal));
+            status=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+            if(status){
+                fprintf(stderr,"stamp19 fade frame%u status%d pc%08x phase%u original%u effects%08x\n",
+                    fade_frames,status,move.frontier,move.death_fade_phase,actor[0x2f6],word(actor+0x16d4));
+                if(status==GH_ACTOR_MOTION_UNSUPPORTED&&move.frontier==0x290770)
+                    status=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+            }
+            if(status)fprintf(stderr,"fade retry status%d pc%08x remove stage%u mark%u removed%u\n",
+                status,move.frontier,removal.remove.stage,removal.remove.mark.stage,removal.removed);
+            CHECK(!status&&!move.frontier&&move.original_returned);
+            if(!fade_frames)CHECK(!memcmp(&init->random,&predicted,sizeof(predicted))&&
+                word(init->enemies+0x534)==prior_pity+1&&save_row[0x14]==1);
+        }
+        fprintf(stderr,"fade result frames%u removed%u state%08x alpha%08x timer%08x rate%08x flags%08x\n",
+            fade_frames,removal.removed,word(actor+0x2f4),word(actor+0x24c),word(actor+0x600),word(actor+0x5a8),word(actor+0x250));
+        CHECK(fade_frames&&fade_frames<120&&removal.removed==1&&word(init->enemies+0x508)==prior_count-1&&
+            !word(actor+0x24c)&&actor[0x2f6]==4&&(word(actor+0x250)&0x80000000u));
+        printf("PASS stamp19 original no-drop, %u fade frames, real 290770\n",fade_frames);
+        gh_se_voice_destroy(death_voices);
+        gh_audio_registry_destroy(death_registry);
         near->motion.motion.b.sound=NULL;
         near->motion.motion.b.sound_context=NULL;
+        CHECK(!retire_stamp19_trans(owner,&selector1_other[1],retiring_handle,effect_bind,
+            &player.view,init,b->actors,elf,elf_size,b->entry.pools,b->default_heap));
 
         memcpy(player.view.alias_f0,old_player,12);
         memcpy(player.view.bytes+0x630,old_previous,12);
         memcpy(player.view.bytes+0x104,&old_player_yaw,4);
         memcpy(raw_work+0x210,&old_tick,4);
     }
+    CHECK(!selector9_first_steps(stamp10,&player.view,elf,elf_size,room,navigation,&opacity));
     CHECK(!camera_target_00139ff8(owner,b,&factory,&child,&player,&setup.model,enemy,elf,elf_size));
     motion->b.sound=NULL;
     motion->b.sound_context=NULL;
@@ -1779,6 +2071,69 @@ static gh_object_step_status enemy_trans_erase(void *p,const gh_object_trans_req
     if(status)return GH_OBJSTEP_POOLS;
     *handled=1;
     return GH_OBJSTEP_OK;
+}
+
+static uint32_t stamp19_effect_clock(void *p)
+{
+    uint32_t *clock=p;
+    return (*clock)++;
+}
+
+static int retire_stamp19_trans(gh_enemy_ems *owner,const gh_enemy_ems_live *live,uint32_t handle,
+    const gh_effect_create_bindings *effects,const gh_title_player_view *player,gh_game_init_state *init,
+    gh_game_scene_tables *actors,const void *elf,size_t elf_size,gh_room_pools *pools,gh_heap *heap)
+{
+    gh_effects_frame_globals globals={0};
+    gh_game_scene_aux profile={0};
+    gh_game_effects_frame frame={0};
+    uint32_t clock=0,frontier=0;
+    CHECK(!gh_effects_frame_globals_from_elf(&globals,elf,elf_size));
+    const gh_effects_frame_bindings update={.storage=effects->storage,.work=effects->work,.init=init,
+        .current_player=player,.globals=&globals,.profile=&profile,.clock=stamp19_effect_clock,
+        .clock_context=&clock,.atan_coeff=effects->atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE,.actors=actors};
+    int borrowed=0;
+    CHECK(!gh_effect_create_actor_has_live_refs(effects->storage.effects,&live->actor->view,&borrowed)&&borrowed);
+    gh_scene_dynamic_owner dynamic={0};
+    CHECK(!gh_scene_dynamic_bind(&dynamic,actors,heap));
+    death_effect_trace trace={0};
+    CHECK(!expected_death_effects(&trace,&live->enemy202->motion.motion));
+    enemy_trans_fixture fixture={.enemies=owner,.bindings={.effects=effects->storage.effects,.dynamic=&dynamic,
+        .release_effect=record_death_effect,.effect_context=&trace}};
+    gh_game_object_step trans={0};
+    const gh_object_move_bindings resolve={.resolve=enemy_trans_resolve,.invoke=unused_enemy_move,
+        .context=&fixture,.elf=elf,.elf_bytes=elf_size};
+    const gh_object_trans_bindings callbacks={.invoke=enemy_trans_invoke,.context=&fixture,.erase=enemy_trans_erase};
+    CHECK(!gh_game_object_step_construct_002c53a8(&trans,init)&&
+          !gh_game_object_step_bind_live(&trans,&resolve)&&!gh_game_object_step_bind_trans(&trans,&callbacks));
+    const uint32_t primary=pools->vectors[0].count,secondary=pools->vectors[3].count;
+    const uint32_t parts=pools->blocks[0].used_count-live->model->parts_allocated;
+    const uint32_t nodes=pools->blocks[1].used_count-live->model->script.mesh_count;
+    int erased=0;
+    for(unsigned i=0;i<3;++i){
+        gh_effect_status status=gh_game_effects_frame_update_0030f228(&frame,&update);
+        if(status){
+            fprintf(stderr,"stamp19 fx retire frame%u status%u pc%08x slot%u stage%u\n",i,status,frame.frontier,frame.emitter_index,frame.emitter_stage);
+            if(frame.emitter.payload)fprintf(stderr,"blocked emitter bank%u index%u actor%d flags%08x\n",
+                frame.emitter.payload[0x18c],frame.emitter.payload[0x18e],
+                frame.emitter.actor!=NULL,word(frame.emitter.payload+0x114));
+            const gh_effect_emitter_view *v=&frame.emitter;
+            fprintf(stderr,"detail selector%u model%u part%u kind%04x dep%04x stamp%04x fields%u,%u,%u config%u sizes%zu,%zu\n",
+                v->selector==v->actor,v->model&&v->model->root.bytes==v->actor->bytes,
+                v->model&&v->part==v->model->parts,death_half(v->actor->bytes+0x2fe),
+                word(v->actor->bytes+0x564),death_half(v->actor->bytes+0x640),v->record.bytes[0xbe],
+                v->record.bytes[0x128],v->record.bytes[0x136],v->payload[0x1ec],v->record.size,v->payload_size);
+        }
+        CHECK(!status);
+        gh_object_step_status destroy=gh_object_live_trans_one_0030f650(&trans,pools,effects->work,handle,&erased,&frontier);
+        if(destroy)fprintf(stderr,"stamp19 Trans retire frame%u status%u pc%08x\n",i,destroy,frontier);
+        CHECK(!destroy&&erased==(i==2));
+    }
+    CHECK(!gh_enemy_ems_lookup(owner,handle)&&trace.visited==trace.total&&
+        pools->vectors[0].count==primary-1&&pools->vectors[3].count==secondary-1&&
+        pools->blocks[0].used_count==parts&&pools->blocks[1].used_count==nodes);
+    CHECK(!gh_scene_dynamic_release(&dynamic));
+    puts("PASS stamp19 original 58:02 expiry, ordinary Trans mode3 and physical owner retirement");
+    return 0;
 }
 
 static int check_enemy_destructors(gh_enemy_ems *owner,gh_game_init_state *init,
@@ -2027,7 +2382,7 @@ int main(int argc,char **argv)
         if(!object||object!=init->enemy_actors[i]||object->view.bytes[0x640]!=numbers[i]) fprintf(stderr,"slot %u handle %u actor %p expected %p stamp %u expected %u\n",i,handle,(void*)object,init->enemy_actors[i],object?object->view.bytes[0x640]:255,numbers[i]);
         CHECK(object&&object==init->enemy_actors[i]&&object->view.bytes[0x640]==numbers[i]);
     }
-    gh_enemy_ems_live first_live,second_live,heavy_live,selector1_live,stamp11,selector1_other[3],weapon_live;
+    gh_enemy_ems_live first_live,second_live,heavy_live,selector1_live,stamp10,stamp11,selector1_other[3],weapon_live;
     uint32_t first_handle=word((uint8_t*)v->allocation.pointer);
     uint32_t next_handle=word((uint8_t*)v->allocation.pointer+4);
     CHECK(!gh_enemy_ems_live_at(owner,first_handle,&first_live)&&first_live.actor==init->enemy_actors[0]&&
@@ -2040,6 +2395,7 @@ int main(int argc,char **argv)
     CHECK(!gh_enemy_ems_live_at(owner,word((uint8_t*)v->allocation.pointer+5*4),&selector1_live)&&
         selector1_live.actor==init->enemy_actors[5]&&selector1_live.enemy202&&
         selector1_live.physical_row==6);
+    CHECK(!gh_enemy_ems_live_at(owner,word((uint8_t*)v->allocation.pointer+6*4),&stamp10)&&stamp10.enemy202);
     CHECK(!gh_enemy_ems_live_at(owner,word((uint8_t*)v->allocation.pointer+7*4),&stamp11)&&stamp11.enemy202);
     static const unsigned selector1_slots[3]={8,10,11};
     CHECK(!gh_enemy_ems_live_at(owner,pending_weapon,&weapon_live)&&weapon_live.weapon&&weapon_live.other_move);
@@ -2073,7 +2429,7 @@ int main(int argc,char **argv)
     gh_scene_nearcheck navigation={0};
     CHECK(!gh_bundle_find(&room_bundle,"PFD",0,&pfd) &&
         !gh_scene_nearcheck_bind_0031c1d0(&navigation,&pfd));
-    CHECK(!first_punch(disc,&room_bundle,elf,elf_size,&bindings,owner,&first_live,&second_live,&selector1_live,&stamp11,selector1_other,&weapon_live,
+    CHECK(!first_punch(disc,&room_bundle,elf,elf_size,&bindings,owner,&first_live,&second_live,&selector1_live,&stamp10,&stamp11,selector1_other,&weapon_live,
         &room,&navigation,&effect_bind,&light,&impact));
     gh_scene_nearcheck_release(&navigation);
     uint32_t position[3];

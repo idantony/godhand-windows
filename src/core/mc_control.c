@@ -1,3 +1,4 @@
+#include "mc_save_control.h"
 /* Actual mcport Control/Move/Sleep boot-mode2 slice, not a replacement menu.
  * Binary import/source evidence: analysis/mc-control-semantics.json. */
 #include "mc_title_load.h"
@@ -25,12 +26,12 @@ static gh_id_error ui_move(gh_mc_control_state *c,gh_mc_task_state *s,const gh_m
     static const int hide[]={0x40,0x41,0x42,0x43,0x71,0x50,5,0,1};
     gh_id_entry *entry;gh_id_error error;unsigned i,alpha;
     if(!(s->flags&UINT32_C(0x40000000)))return GH_ID_OK; /* actual original gate */
-    if(s->checks.mode!=2&&!(s->load_mode&&s->checks.mode==1)){c->first_unported=0x72c8;return GH_ID_UNSUPPORTED;}
+    if(s->checks.mode!=2&&!((s->load_mode||(s->flags&0x00800000u))&&s->checks.mode==1)){c->first_unported=0x72c8;return GH_ID_UNSUPPORTED;}
 #define DO(expr)do{error=(expr);if(error)return error;}while(0)
     s->flags&=~UINT32_C(0x02000000);
     for(i=0;i<sizeof(ids)/sizeof(ids[0]);++i)DO(message(s,b,ids[i],0x2005));
     for(i=0;i<sizeof(hide)/sizeof(hide[0]);++i)DO(display(s,b,hide[i],0));
-    if(!s->load_mode){
+    if(!s->load_mode&&!(s->flags&0x00800000u)){
         memset(c->progress,0,sizeof(c->progress));c->zero_b0=0;c->zero_b4=0;c->zero_b8=0;
     }else if(s->checks.file_index||s->checks.load_index){
         const gh_mc_boot_checks *checks=&s->checks;
@@ -303,7 +304,7 @@ static gh_id_error copy_position(gh_mc_task_state *task,const gh_mc_task_binding
     return GH_ID_OK;
 }
 
-static gh_id_error title_select_display(gh_mc_title_load *load,gh_mc_control_state *control,
+static gh_id_error title_select_display(uint8_t choice,gh_mc_control_state *control,
     const gh_mc_load_scan *scan,gh_mc_task_state *task,const gh_mc_task_bindings *bindings)
 {
     static const int text[]={0x55,0x56,0x57,0x58,0x74,0x75};
@@ -324,19 +325,47 @@ static gh_id_error title_select_display(gh_mc_title_load *load,gh_mc_control_sta
         UI(display(task,bindings,0,1));
         UI(display(task,bindings,1,1));
         break;
-    case 9:
+    case 7:
+    case 8:
+    case 9: {
+        const uint16_t code=task->checks.mode==7?0x2010:task->checks.mode==8?0x200e:0x200f;
         UI(display(task,bindings,5,1));
         UI(copy_position(task,bindings,5,scan->selected_row+6));
         UI(display(task,bindings,0x42,1));
-        UI(message(task,bindings,0x43,0x200f));
-        UI(message(task,bindings,0x71,0x200f));
+        UI(message(task,bindings,0x43,code));
+        UI(message(task,bindings,0x71,code));
         UI(message(task,bindings,0x57,0x2003));
         UI(message(task,bindings,0x58,0x2004));
         UI(message(task,bindings,0x74,0x2003));
         UI(message(task,bindings,0x75,0x2004));
         UI(display(task,bindings,0x50,1));
-        UI(copy_position(task,bindings,0x50,load->choice?0x53:0x54));
+        UI(copy_position(task,bindings,0x50,choice?0x53:0x54));
         break;
+    }
+    case 3: {
+        UI(display(task,bindings,0x40,1));
+        UI(message(task,bindings,0x41,0x2015));
+        task->flags|=UINT32_C(0x02000000);
+        static const float weights[]={80,100,100,100,30,80};
+        float total=0,value,increment;
+        unsigned count=0;
+        while(count<6&&record_word(control->progress+count*4)){
+            total+=weights[count];
+            ++count;
+        }
+        if(!count)break;
+        memcpy(&value,&control->zero_b0,4);
+        memcpy(&increment,&control->zero_b4,4);
+        if(count!=control->zero_b8){
+            control->zero_b8=count;
+            increment=(total/490.0f-value)/weights[count-1];
+            memcpy(&control->zero_b4,&increment,4);
+        }
+        volatile float sum=value+increment;
+        value=sum>1.0f?1.0f:sum;
+        memcpy(&control->zero_b0,&value,4);
+        break;
+    }
     case 4: {
         UI(display(task,bindings,0x40,1));
         UI(message(task,bindings,0x41,0x2016));
@@ -362,7 +391,7 @@ static gh_id_error title_select_display(gh_mc_title_load *load,gh_mc_control_sta
             UI(message(task,bindings,0x55,0x2003));
             UI(message(task,bindings,0x56,0x2004));
             UI(display(task,bindings,0x50,1));
-            UI(copy_position(task,bindings,0x50,load->choice?0x51:0x52));
+            UI(copy_position(task,bindings,0x50,choice?0x51:0x52));
         }
         break;
     case 0x16: {
@@ -378,14 +407,17 @@ static gh_id_error title_select_display(gh_mc_title_load *load,gh_mc_control_sta
         UI(message(task,bindings,0x74,0x2003));
         UI(message(task,bindings,0x75,0x2004));
         UI(display(task,bindings,0x50,1));
-        UI(copy_position(task,bindings,0x50,load->choice?0x53:0x54));
+        UI(copy_position(task,bindings,0x50,choice?0x53:0x54));
         break;
     }
-    case 0xb:
+    case 0xa:
+    case 0xb: {
+        const uint16_t code=task->checks.mode==0xa?0x2019:0x201a;
         UI(display(task,bindings,0x42,1));
-        UI(message(task,bindings,0x43,0x201a));
-        UI(message(task,bindings,0x71,0x201a));
+        UI(message(task,bindings,0x43,code));
+        UI(message(task,bindings,0x71,code));
         break;
+    }
     default:
         return GH_ID_UNSUPPORTED;
     }
@@ -632,7 +664,7 @@ gh_mc_load_status gh_mc_control_title_select_00001590(gh_mc_title_load *load,gh_
         *frontier=0x1658;
         return GH_MC_LOAD_UNSUPPORTED;
     }
-    if(title_select_display(load,control,scan,task,bindings)!=GH_ID_OK){
+    if(title_select_display(load->choice,control,scan,task,bindings)!=GH_ID_OK){
         *frontier=0x72c8;
         return GH_MC_LOAD_UNSUPPORTED;
     }
@@ -654,4 +686,374 @@ gh_mc_error gh_mc_control_title_abort_io(gh_mc_title_load *load,gh_memory_card *
         load->info_pending=0;
     }
     return gh_mc_selected_load_abort_io(&load->selected);
+}
+
+static gh_mc_save_status save_fail(uint32_t *frontier,uint32_t address,gh_mc_save_status status)
+{
+    *frontier=address;
+    return status;
+}
+
+static gh_mc_save_status save_sound(const gh_mc_save_providers *b,int program,uint32_t *frontier)
+{
+    const gh_mc_sound_request request={0,program,-1,-1,0,0};
+    if(!b->sound||b->sound(b->sound_context,&request))
+        return save_fail(frontier,0x2cb8a0,GH_MC_SAVE_UNSUPPORTED);
+    return GH_MC_SAVE_PENDING;
+}
+
+/* This path uses the actual native card queue and keeps the selected slot
+ * and record stable from open through CloseCheck and readback. */
+static gh_mc_save_status save_queue(gh_mc_error error,uint32_t address,uint32_t *frontier)
+{
+    return error?save_fail(frontier,address,GH_MC_SAVE_IO):GH_MC_SAVE_PENDING;
+}
+
+static gh_mc_save_status save_poll(gh_memory_card *card,int32_t *result,int *done,uint32_t *frontier)
+{
+    gh_mc_result reply;
+    gh_mc_error error=gh_memory_card_poll(card,done,&reply);
+    if(error)return save_fail(frontier,0x31c8,GH_MC_SAVE_IO);
+    if(*done)*result=reply.result;
+    return GH_MC_SAVE_PENDING;
+}
+
+static void save_move_slot(gh_mc_load_scan *scan,int up)
+{
+    if(up){
+        if(scan->selected_row>0)--scan->selected_row;
+        else if(scan->first_slot>0)--scan->first_slot;
+        else {scan->first_slot=17;scan->selected_row=2;}
+    }else{
+        if(scan->selected_row<2)++scan->selected_row;
+        else if(scan->first_slot<17)++scan->first_slot;
+        else {scan->first_slot=0;scan->selected_row=0;}
+    }
+}
+
+static gh_mc_save_status save_select(gh_mc_save_control *save,gh_mc_control_state *control,
+    gh_mc_task_state *task,const gh_mc_task_bindings *bindings,
+    const gh_mc_save_providers *providers,uint32_t *frontier)
+{
+    gh_mc_boot_checks *checks=&task->checks;
+    const int list=checks->phase==6;
+    if(!save->scan.menu_ready)return GH_MC_SAVE_ARGUMENT;
+    if(!checks->subphase){
+        clear_progress(control);
+        checks->mode=list?0:checks->phase==7?8:7;
+        if(list&&title_list_rows(control,&save->scan,task,bindings)!=GH_ID_OK)
+            return save_fail(frontier,0x7f30,GH_MC_SAVE_UNSUPPORTED);
+        if(!list)save->choice=0;
+        checks->subphase=1;
+    }
+    const uint32_t entering_subphase=checks->subphase;
+    if(entering_subphase==1){
+        gh_mc_save_status status=save_queue(gh_memory_card_request_info(bindings->card),0x3850,frontier);
+        if(status!=GH_MC_SAVE_PENDING)return status;
+        save->info_pending=1;
+        checks->subphase=2;
+    }
+    if(save->info_pending){
+        int done;
+        gh_mc_result reply;
+        gh_mc_error error=gh_memory_card_poll(bindings->card,&done,&reply);
+        if(error)return save_fail(frontier,0x31c8,GH_MC_SAVE_IO);
+        if(done){
+            save->info_pending=0;
+            if(reply.result||reply.card_type!=2||!reply.formatted)
+                return save_fail(frontier,0x6db8,GH_MC_SAVE_UNSUPPORTED);
+            save->free_clusters=reply.free_clusters;
+            if(checks->subphase==2)checks->subphase=1;
+        }
+    }
+    if(entering_subphase==4){
+        if(save->info_pending)return GH_MC_SAVE_PENDING;
+        if(list){
+            unsigned slot=(unsigned)(save->scan.first_slot+save->scan.selected_row);
+            save->selected_slot=(uint8_t)slot;
+            if(checks->present_mask&(UINT32_C(1)<<slot))select_phase(checks,8);
+            else if(save->free_clusters<150)return save_fail(frontier,0x5120,GH_MC_SAVE_UNSUPPORTED);
+            else select_phase(checks,7);
+        }else if(!save->choice)select_phase(checks,6);
+        else if(checks->phase==8)return save_fail(frontier,0x5a20,GH_MC_SAVE_UNSUPPORTED);
+        else{
+            clear_progress(control);
+            checks->mode=3;
+            select_phase(checks,10);
+        }
+        return GH_MC_SAVE_PENDING;
+    }
+
+    const uint32_t pressed=work_button(bindings->work,0x1a0);
+    const uint32_t repeat=work_button(bindings->work,0x1b0);
+    gh_mc_save_status status=GH_MC_SAVE_PENDING;
+    if(list){
+        if(pressed&UINT32_C(0x10000000)){
+            status=save_sound(providers,0x160,frontier);
+            if(status!=GH_MC_SAVE_PENDING)return status;
+            checks->subphase=4;
+        }else if(pressed&UINT32_C(0x20000000)){
+            status=save_sound(providers,0x15e,frontier);
+            if(status!=GH_MC_SAVE_PENDING)return status;
+            checks->error=-1;
+            select_phase(checks,15);
+        }else if(repeat&UINT32_C(0x03000000)){
+            status=save_sound(providers,0x161,frontier);
+            if(status!=GH_MC_SAVE_PENDING)return status;
+            save_move_slot(&save->scan,(repeat&UINT32_C(0x01000000))!=0);
+        }
+        if(title_list_rows(control,&save->scan,task,bindings)!=GH_ID_OK)
+            return save_fail(frontier,0x7f30,GH_MC_SAVE_UNSUPPORTED);
+    }else if(repeat&UINT32_C(0x0c000000)){
+        status=save_sound(providers,0x161,frontier);
+        if(status!=GH_MC_SAVE_PENDING)return status;
+        save->choice=(uint8_t)!save->choice;
+    }else if(pressed&UINT32_C(0x30000000)){
+        const int yes=(pressed&UINT32_C(0x10000000))&&save->choice;
+        status=save_sound(providers,yes?0x160:0x15e,frontier);
+        if(status!=GH_MC_SAVE_PENDING)return status;
+        save->choice=(uint8_t)yes;
+        checks->subphase=4;
+    }
+    return GH_MC_SAVE_PENDING;
+}
+
+static void save_progress(gh_mc_control_state *control,unsigned index)
+{
+    uint32_t value=record_word(control->progress+index*4)+1;
+    memcpy(control->progress+index*4,&value,4);
+}
+
+static gh_mc_save_status save_write_step(gh_mc_save_control *control,gh_mc_save_task_state *save,
+    gh_memory_card *card,const gh_mc_save_providers *b,uint32_t *frontier)
+{
+    gh_mc_boot_checks *checks=&save->common.checks;
+    const unsigned slot=control->selected_slot;
+    int done;
+    int32_t result=0;
+    gh_mc_error error;
+    gh_mc_save_status status;
+    switch(checks->subphase){
+    case 0:
+        error=gh_memory_card_request_slot_directory(card,slot);
+        status=save_queue(error,0x34e8,frontier);
+        if(status!=GH_MC_SAVE_PENDING)return status;
+        checks->subphase=1;
+        /* Original 05AF8 polls the directory immediately after request. */
+        /* fall through */
+    case 1:
+        status=save_poll(card,&result,&done,frontier);
+        if(status!=GH_MC_SAVE_PENDING||!done)return status;
+        if(result!=0&&result!=1)return save_fail(frontier,0x6e18,GH_MC_SAVE_IO);
+        if(!result){
+            error=gh_memory_card_request_slot_create(card,slot);
+            status=save_queue(error,0x3588,frontier);
+            if(status==GH_MC_SAVE_PENDING)checks->subphase=2;
+            return status;
+        }
+        break;
+    case 2:
+        status=save_poll(card,&result,&done,frontier);
+        if(status!=GH_MC_SAVE_PENDING||!done)return status;
+        if(result)return save_fail(frontier,0x7058,GH_MC_SAVE_IO);
+        break;
+    case 3: {
+        status=save_poll(card,&result,&done,frontier);
+        if(status!=GH_MC_SAVE_PENDING||!done)return status;
+        if(result)return save_fail(frontier,0x6ee0,GH_MC_SAVE_IO);
+        checks->subphase=6;
+        /* The open completed. A blocked checkpoint provider resumes here. */
+        /* fall through */
+    }
+    case 6: {
+        if(!b->checkpoint||!b->checkpoint_bindings||!b->door||!b->metadata)
+            return save_fail(frontier,0x6758,GH_MC_SAVE_UNSUPPORTED);
+        gh_mc_save_metadata metadata=*b->metadata;
+        metadata.mode=0;
+        metadata.history_mask=checks->present_mask;
+        metadata.history=checks->icon_work.pointer;
+        metadata.history_bytes=20*GH_MC_SAVE_HEADER_BYTES;
+        gh_mc_load_status capture=gh_mc_save_serialize_00006758(b->checkpoint,
+            b->checkpoint_bindings,b->door,&metadata,save->current_record.pointer,frontier);
+        if(capture!=GH_MC_LOAD_VERIFIED){
+            if(!*frontier)*frontier=0x6758;
+            return GH_MC_SAVE_UNSUPPORTED;
+        }
+        checks->subphase=7;
+        /* fall through */
+    }
+    case 7:
+        error=gh_memory_card_request_save_write(card,save->current_record.pointer);
+        status=save_queue(error,0x3698,frontier);
+        if(status==GH_MC_SAVE_PENDING)checks->subphase=4;
+        return status;
+    case 4:
+        status=save_poll(card,&result,&done,frontier);
+        if(status!=GH_MC_SAVE_PENDING||!done)return status;
+        if(result!=GH_MC_SAVE_RECORD_BYTES)return save_fail(frontier,0x70a8,GH_MC_SAVE_IO);
+        error=gh_memory_card_request_save_close(card);
+        status=save_queue(error,0x3300,frontier);
+        if(status==GH_MC_SAVE_PENDING)checks->subphase=5;
+        return status;
+    case 5:
+        status=save_poll(card,&result,&done,frontier);
+        if(status!=GH_MC_SAVE_PENDING||!done)return status;
+        if(result)return save_fail(frontier,0x6f88,GH_MC_SAVE_IO);
+        select_phase(checks,11);
+        return GH_MC_SAVE_PENDING;
+    default:
+        return GH_MC_SAVE_ARGUMENT;
+    }
+    error=gh_memory_card_request_save_write_open(card,slot);
+    status=save_queue(error,0x3370,frontier);
+    if(status==GH_MC_SAVE_PENDING)checks->subphase=3;
+    return status;
+}
+
+static gh_mc_save_status save_icon_step(gh_mc_save_control *control,gh_mc_save_task_state *save,
+    gh_memory_card *card,uint32_t *frontier)
+{
+    gh_mc_boot_checks *checks=&save->common.checks;
+    const int model=checks->phase==11;
+    const gh_mc_save_icon_kind kind=model?GH_MC_SAVE_ICON_MODEL:GH_MC_SAVE_ICON_SYSTEM;
+    const gh_id_view image=model?save->icon_model:save->icon_template;
+    const uint32_t count=model?0x8618:0x3c4;
+    if(!image.bytes||image.size<count)return save_fail(frontier,0x3bc0,GH_MC_SAVE_UNSUPPORTED);
+    int done;
+    int32_t result;
+    gh_mc_save_status status;
+    switch(checks->subphase){
+    case 0:
+        status=save_queue(gh_memory_card_request_save_icon_write_open(card,control->selected_slot,kind),0x3370,frontier);
+        if(status==GH_MC_SAVE_PENDING)checks->subphase=1;
+        return status;
+    case 1:
+        status=save_poll(card,&result,&done,frontier);
+        if(status!=GH_MC_SAVE_PENDING||!done)return status;
+        if(result)return save_fail(frontier,0x6ee0,GH_MC_SAVE_IO);
+        status=save_queue(gh_memory_card_request_save_icon_write(card,kind,image.bytes,count),0x3698,frontier);
+        if(status==GH_MC_SAVE_PENDING)checks->subphase=2;
+        return status;
+    case 2:
+        status=save_poll(card,&result,&done,frontier);
+        if(status!=GH_MC_SAVE_PENDING||!done)return status;
+        if(result!=(int32_t)count)return save_fail(frontier,0x70a8,GH_MC_SAVE_IO);
+        status=save_queue(gh_memory_card_request_save_close(card),0x3300,frontier);
+        if(status==GH_MC_SAVE_PENDING)checks->subphase=3;
+        return status;
+    case 3:
+        status=save_poll(card,&result,&done,frontier);
+        if(status!=GH_MC_SAVE_PENDING||!done)return status;
+        if(result)return save_fail(frontier,0x6f88,GH_MC_SAVE_IO);
+        select_phase(checks,model?12:14);
+        return GH_MC_SAVE_PENDING;
+    default:
+        return GH_MC_SAVE_ARGUMENT;
+    }
+}
+
+static gh_mc_save_status save_verify_step(gh_mc_save_control *control,gh_mc_save_task_state *save,
+    gh_memory_card *card,uint32_t *frontier)
+{
+    gh_mc_boot_checks *checks=&save->common.checks;
+    int done;
+    int32_t result;
+    gh_mc_save_status status;
+    if(!checks->subphase){
+        status=save_queue(gh_memory_card_request_save_open(card,control->selected_slot),0x3350,frontier);
+        if(status!=GH_MC_SAVE_PENDING)return status;
+        checks->subphase=1;
+    }
+    status=save_poll(card,&result,&done,frontier);
+    if(status!=GH_MC_SAVE_PENDING||!done)return status;
+    switch(checks->subphase){
+    case 1:
+        if(result)return save_fail(frontier,0x6e78,GH_MC_SAVE_IO);
+        status=save_queue(gh_memory_card_request_save_record(card,save->previous_record.pointer),0x35e0,frontier);
+        break;
+    case 2:
+        if(result!=GH_MC_SAVE_RECORD_BYTES)return save_fail(frontier,0x6fc8,GH_MC_SAVE_IO);
+        status=save_queue(gh_memory_card_request_save_close(card),0x3300,frontier);
+        break;
+    case 3:
+        if(result)return save_fail(frontier,0x6f38,GH_MC_SAVE_IO);
+        if(memcmp(save->current_record.pointer,save->previous_record.pointer,GH_MC_SAVE_RECORD_BYTES))
+            return save_fail(frontier,0x6ce0,GH_MC_SAVE_IO);
+        select_phase(checks,13);
+        return GH_MC_SAVE_PENDING;
+    default:
+        return GH_MC_SAVE_ARGUMENT;
+    }
+    if(status==GH_MC_SAVE_PENDING)++checks->subphase;
+    return status;
+}
+
+gh_mc_save_status gh_mc_control_save_00003f78(gh_mc_save_control *save,gh_mc_control_state *control,
+    gh_mc_save_task_state *task,const gh_mc_task_bindings *bindings,gh_mc_load_menu_memory *memory,
+    const gh_mc_save_providers *providers,uint32_t *frontier)
+{
+    if(!save||!control||!task||!bindings||!bindings->card||!bindings->work||!memory||!providers||!frontier||
+       task->phase!=2||!task->common.ui_initialized||!task->current_record.pointer||!task->previous_record.pointer)
+        return GH_MC_SAVE_ARGUMENT;
+    *frontier=0;
+    gh_mc_task_state *common=&task->common;
+    gh_mc_boot_checks *checks=&common->checks;
+    if(checks->done)return GH_MC_SAVE_COMPLETE;
+    const uint32_t phase=checks->phase;
+    gh_mc_save_status status=GH_MC_SAVE_PENDING;
+    switch(phase){
+    case 0:case 1:case 2: {
+        if(!phase&&!checks->subphase)clear_progress(control);
+        gh_mc_boot_error scan=gh_mc_save_scan_00003f78(&save->scan,checks,bindings->card,memory,
+            &save->free_clusters,frontier);
+        if(scan){
+            if(!*frontier)*frontier=0x3f78;
+            return scan==GH_MC_BOOT_IO?GH_MC_SAVE_IO:GH_MC_SAVE_UNSUPPORTED;
+        }
+        break;
+    }
+    case 6:case 7:case 8:
+        status=save_select(save,control,common,bindings,providers,frontier);
+        break;
+    case 10:
+        status=save_write_step(save,task,bindings->card,providers,frontier);
+        if(status==GH_MC_SAVE_PENDING)save_progress(control,0);
+        break;
+    case 11:case 13:
+        status=save_icon_step(save,task,bindings->card,frontier);
+        if(status==GH_MC_SAVE_PENDING&&checks->phase==phase)save_progress(control,phase==11?1:5);
+        break;
+    case 12:
+        status=save_verify_step(save,task,bindings->card,frontier);
+        if(status==GH_MC_SAVE_PENDING&&checks->phase==phase)save_progress(control,4);
+        break;
+    case 14: {
+        if(!checks->subphase){
+            uint8_t *record=(uint8_t*)checks->icon_work.pointer+save->selected_slot*GH_MC_SAVE_HEADER_BYTES;
+            memcpy(record,task->current_record.pointer,GH_MC_SAVE_HEADER_BYTES);
+            checks->present_mask|=UINT32_C(1)<<save->selected_slot;
+            if(title_list_rows(control,&save->scan,common,bindings)!=GH_ID_OK)
+                return save_fail(frontier,0x8058,GH_MC_SAVE_UNSUPPORTED);
+            memory->first_slot=memory->selected_row=-1;
+            checks->frame=90;
+            clear_progress(control);
+            checks->mode=10;
+            bindings->work->flags|=4;
+            checks->subphase=1;
+        }
+        uint64_t pressed;
+        memcpy(&pressed,(const uint8_t*)bindings->work+0x1a0,sizeof(pressed));
+        if(checks->frame&&!(checks->frame<80&&(pressed&UINT64_C(0x8030000000))))--checks->frame;
+        else {checks->done=1;save->complete=1;}
+        break;
+    }
+    case 15:
+        return save_fail(frontier,0x64f8,GH_MC_SAVE_UNSUPPORTED);
+    default:
+        return save_fail(frontier,0x3f78,GH_MC_SAVE_UNSUPPORTED);
+    }
+    if(status!=GH_MC_SAVE_PENDING)return status;
+    if(title_select_display(save->choice,control,&save->scan,common,bindings)!=GH_ID_OK)
+        return save_fail(frontier,0x72c8,GH_MC_SAVE_UNSUPPORTED);
+    return checks->done?GH_MC_SAVE_COMPLETE:GH_MC_SAVE_PENDING;
 }

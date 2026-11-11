@@ -383,7 +383,7 @@ static gh_mc_boot_error title_request(gh_mc_boot_checks *checks,gh_mc_load_menu_
 }
 
 static gh_mc_boot_error title_slot(gh_mc_boot_checks *checks,gh_memory_card *card,
-    gh_mc_load_menu_memory *memory,uint32_t *frontier)
+    gh_mc_load_menu_memory *memory,int32_t *free_clusters,uint32_t *frontier)
 {
     if(checks->subphase<=1){
         if(!checks->subphase){
@@ -401,6 +401,13 @@ static gh_mc_boot_error title_slot(gh_mc_boot_checks *checks,gh_memory_card *car
     gh_mc_boot_error error=platform(gh_memory_card_poll(card,&done,&result),0x31c8,frontier);
     if(error||!done)return error;
     checks->error=-1;
+    if(free_clusters){
+        if(result.result||result.card_type!=2||!result.formatted){
+            *frontier=0x40c0; /* Original no-card, unformatted and retry prompts are distinct. */
+            return GH_MC_BOOT_UNSUPPORTED;
+        }
+        *free_clusters=result.free_clusters;
+    }
     if(result.result==-2){
         if(++checks->retry<=2)checks->subphase=1;
         else checks->error=8; /* original waits in subphase 2 */
@@ -421,7 +428,7 @@ static gh_mc_boot_error title_slot(gh_mc_boot_checks *checks,gh_memory_card *car
 }
 
 static gh_mc_boot_error title_files(gh_mc_boot_checks *checks,gh_memory_card *card,
-    gh_mc_load_menu_memory *memory,uint32_t *frontier)
+    gh_mc_load_menu_memory *memory,const int32_t *free_clusters,uint32_t *frontier)
 {
     while(checks->file_index<20){
         unsigned slot=(unsigned)checks->file_index;
@@ -437,6 +444,7 @@ static gh_mc_boot_error title_files(gh_mc_boot_checks *checks,gh_memory_card *ca
         if(error||!done)return error;
         checks->error=-1;
         if(result.result<0&&result.result!=-4&&result.result!=-6){
+            if(free_clusters){*frontier=0x42e8;return GH_MC_BOOT_UNSUPPORTED;}
             checks->error=result.result==-2?8:1;
             title_phase(checks,7);
             return GH_MC_BOOT_OK;
@@ -452,8 +460,11 @@ static gh_mc_boot_error title_files(gh_mc_boot_checks *checks,gh_memory_card *ca
         ++checks->file_index;
         checks->subphase=0;
     }
-    if(!checks->present_mask)title_empty(checks,memory);
-    else title_phase(checks,2);
+    if(!checks->present_mask&&!free_clusters)title_empty(checks,memory);
+    else if(!checks->present_mask&&*free_clusters<150){
+        *frontier=0x42e8;
+        return GH_MC_BOOT_UNSUPPORTED;
+    }else title_phase(checks,2);
     return GH_MC_BOOT_OK;
 }
 
@@ -473,7 +484,7 @@ static unsigned newest_title_slot(const uint8_t *records,uint32_t mask)
 }
 
 static gh_mc_boot_error title_headers(gh_mc_load_scan *scan,gh_mc_boot_checks *checks,
-    gh_memory_card *card,gh_mc_load_menu_memory *memory,uint32_t *frontier)
+    gh_memory_card *card,gh_mc_load_menu_memory *memory,int save,uint32_t *frontier)
 {
     uint8_t *records=checks->icon_work.pointer;
     if(checks->subphase){
@@ -493,6 +504,7 @@ static gh_mc_boot_error title_headers(gh_mc_load_scan *scan,gh_mc_boot_checks *c
             title_phase(checks,0);
             return GH_MC_BOOT_OK;
         }else if(result.result<0||(phase==3&&result.result)){
+            if(save){*frontier=0x46d0;return GH_MC_BOOT_UNSUPPORTED;}
             if(phase==1)checks->error=result.result==-3?2:1;
             if(phase==2)checks->error=result.result>=-5&&result.result<=-3?5:1;
             if(phase==3)checks->error=result.result<=-4?5:1;
@@ -500,7 +512,7 @@ static gh_mc_boot_error title_headers(gh_mc_load_scan *scan,gh_mc_boot_checks *c
             return GH_MC_BOOT_OK;
         }else if(phase<3){
             return GH_MC_BOOT_OK;
-        }else if(word(record)!=UINT32_C(0x3dcccccd)){
+        }else if(!save&&word(record)!=UINT32_C(0x3dcccccd)){
             memset(record,0,GH_MC_SAVE_HEADER_BYTES);
             memset(record+4,0xff,4);
             checks->present_mask&=~(UINT32_C(1)<<slot);
@@ -518,7 +530,7 @@ static gh_mc_boot_error title_headers(gh_mc_load_scan *scan,gh_mc_boot_checks *c
         }
         ++checks->load_index;
     }
-    if(!checks->present_mask){
+    if(!checks->present_mask&&!save){
         title_empty(checks,memory);
         return GH_MC_BOOT_OK;
     }
@@ -532,7 +544,7 @@ static gh_mc_boot_error title_headers(gh_mc_load_scan *scan,gh_mc_boot_checks *c
     scan->first_slot=first;
     scan->selected_row=row;
     scan->menu_ready=1;
-    title_phase(checks,3);
+    title_phase(checks,save?6:3);
     return GH_MC_BOOT_OK;
 }
 
@@ -546,12 +558,35 @@ gh_mc_boot_error gh_mc_title_load_scan_00001590(gh_mc_load_scan *scan,gh_mc_boot
        (memory->first_slot>=0&&(memory->selected_row<0||memory->selected_row>2)))
         return GH_MC_BOOT_ARGUMENT;
     *frontier=0;
-    if(checks->phase==0){scan->menu_ready=0;return title_slot(checks,card,memory,frontier);}
-    if(checks->phase==1)return title_files(checks,card,memory,frontier);
+    if(checks->phase==0){scan->menu_ready=0;return title_slot(checks,card,memory,NULL,frontier);}
+    if(checks->phase==1)return title_files(checks,card,memory,NULL,frontier);
     if(checks->phase==2){
         if(checks->subphase&&checks->load_index>=20)return GH_MC_BOOT_ARGUMENT;
-        return title_headers(scan,checks,card,memory,frontier);
+        return title_headers(scan,checks,card,memory,0,frontier);
     }
     *frontier=checks->phase==3?0x20b0:0x2a58;
+    return GH_MC_BOOT_UNSUPPORTED;
+}
+
+gh_mc_boot_error gh_mc_save_scan_00003f78(gh_mc_load_scan *scan,gh_mc_boot_checks *checks,
+    gh_memory_card *card,gh_mc_load_menu_memory *memory,int32_t *free_clusters,uint32_t *frontier)
+{
+    if(!scan||!checks||!card||!memory||!free_clusters||!frontier||!checks->icon_work.pointer||
+       checks->file_index<0||checks->file_index>20||checks->load_index<0||checks->load_index>20||
+       checks->subphase>3||memory->first_slot< -1||memory->first_slot>19||
+       (memory->first_slot>=0&&(memory->selected_row<0||memory->selected_row>2)))
+        return GH_MC_BOOT_ARGUMENT;
+    *frontier=0;
+    if(!checks->phase){
+        ++checks->frame;
+        if(!checks->subphase){checks->mode=1;checks->frame=0;scan->menu_ready=0;}
+        return title_slot(checks,card,memory,free_clusters,frontier);
+    }
+    if(checks->phase==1)return title_files(checks,card,memory,free_clusters,frontier);
+    if(checks->phase==2){
+        if(checks->subphase&&checks->load_index>=20)return GH_MC_BOOT_ARGUMENT;
+        return title_headers(scan,checks,card,memory,1,frontier);
+    }
+    *frontier=0x3f78;
     return GH_MC_BOOT_UNSUPPORTED;
 }

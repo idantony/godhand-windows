@@ -36,6 +36,8 @@ typedef struct {
  gh_id_error (*cover)(void *,const gh_child_cover_quad *,uint32_t *frontier);
  gh_scene_message_emit message;
  gh_id_error (*radar)(void *,const gh_cockpit_radar_quad *,uint32_t *frontier);
+ gh_id_error (*draw_save_map)(void *,const gh_id_base *,const gh_id_draw_job *,
+     const gh_packed_message_state *,uint16_t chapter_message,uint32_t *frontier);
 } gh_host_scene_ui_callbacks;
 typedef struct gh_startup_continuation {
     int enabled;
@@ -107,6 +109,8 @@ typedef struct gh_startup_snapshot {
     uint16_t r100_first_enemy_hp,r100_first_enemy_player_hit_kind;
     int32_t r100_first_enemy_player_hit_power;
     float r100_first_enemy_position[3];
+    float player_yaw;
+    uint8_t r100_first_enemy_state[4];
     uint32_t child_update_frontier,child_forces_complete,child_angles_complete,child_distances_complete,child_finish_complete;
     uint32_t emitter_active,esp_active,emitter_samples;
     uint32_t emitter_slots[4],emitter_banks[4],emitter_kinds[4],emitter_flags[4],emitter_known[4],emitter_types[4];

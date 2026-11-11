@@ -25,7 +25,7 @@ typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_req
  uint32_t configuration_nested_scale,configuration_nested_flags;
  const float *configuration_positioned_atan_coeff;
  uint32_t configuration_positioned_position[3],configuration_positioned_yaw;
- uint8_t configuration_positioned;} gh_effect_create_call;
+ uint8_t configuration_positioned,configuration_death_part_zero;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
 /* Only the known non-NULL305E88 configuration (unit scales/VF0 vectors,
@@ -35,6 +35,13 @@ gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_
 gh_effect_status gh_effect_create_nested_begin_002f1d3c(gh_effect_create_call *,
  const gh_effect_create_request *,uint8_t group,uint32_t scale,uint32_t flags);
 gh_effect_status gh_effect_create_ambient_begin_00305e88(gh_effect_create_call *,uint32_t index);
+/* Original 14FB48 explicit configuration for the 58:2D part15 attack. */
+gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call *,
+ const gh_effect_create_request *,uint32_t scale);
+/* Original 14FB48 -> 306900, attached 58:02 with explicit part0
+ * and otherwise identity configuration. */
+gh_effect_status gh_effect_create_enemy_death_part0_00306900(gh_effect_create_call *,
+ const gh_title_player_view *,int32_t mode);
 /* Original OM324 break, 1BFD28 -> 306528 with bank0/index1C, no actor.
  * Caller supplies the 84 virtual world position and 1F8180 yaw as binary32. */
 gh_effect_status gh_effect_create_om324_break_begin_001bfd28(gh_effect_create_call *,
@@ -57,6 +64,8 @@ typedef struct {gh_effect_view record;const gh_title_player_view *actor,*selecto
  /* SAME creator-owned slot, for the original per-frame consumer. Never a
   * duplicate work buffer; consumers also validate payload against storage. */
  uint8_t *payload;size_t payload_size;int32_t first_esp_child;} gh_effect_emitter_view;
+int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
+int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *);
 gh_effect_status gh_effect_create_emitter_at(const gh_game_effects *,unsigned,gh_effect_emitter_view *);
 /* Read same producer metadata for original3039E8 matching. Unknown external
  * slots stay strict, not assumed to have NULL actor. */

@@ -22,6 +22,8 @@ typedef struct {
     uint8_t initialized,visibility,index,complete;
 } gh_enemy_route_query;
 
+typedef gh_actor_motion_status (*gh_enemy202_death_release)(void *,const gh_enemy_actor *,uint32_t *);
+
 typedef struct {
     gh_enemy_actor *enemy;
     const gh_title_player_view *player;
@@ -58,6 +60,13 @@ typedef struct {
     void *near_sound_context;
     const gh_room_state *room_state;
     gh_player_target_bindings targets;
+    uint8_t death_phase,death_effect_cursor,death_ground_cursor;
+    float death_ground[2][4];
+    gh_enemy202_death_release death_release;
+    void *death_release_context;
+    uint16_t death_item;
+    uint8_t death_fade_phase;
+    gh_effect_create_call death_effect_create;
 } gh_enemy202_move;
 
 /* Borrow original Main+18C bound PFD2 owner before entering Move. */
@@ -73,6 +82,8 @@ gh_actor_motion_status gh_enemy202_move_bind_targets(gh_enemy202_move *,const gh
 gh_actor_motion_status gh_enemy202_move_bind_near_sound(gh_enemy202_move *,gh_enemy_ema2_hit_sound,void *);
 /* Borrow the selected RoomSave for original 2736F8 -> 295498. */
 gh_actor_motion_status gh_enemy202_move_bind_room_state(gh_enemy202_move *,const gh_room_state *);
+gh_actor_motion_status gh_enemy202_move_bind_death_release(gh_enemy202_move *,
+    gh_enemy202_death_release,void *);
 /* One invocation of original 208BE0. Keep the cursor on a suspended result;
  * clear it only before a new Move after an original return. The borrowed
  * player is the canonical Work.playerObj, never a raw guest address. */

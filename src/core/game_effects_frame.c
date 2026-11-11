@@ -80,7 +80,7 @@ static gh_effect_status emitter_transform(gh_game_effects_frame*s,uint8_t*p,cons
  uint32_t pc=0;
  gh_effect_status status;
  const gh_effect_emitter_view *v=&s->emitter;
- if(gh_effect_event_part_is_bound(v->record,v->actor,v->selector)){
+ if(gh_effect_event_part_is_bound(v->record,v->actor,v->selector)||gh_effect_stamp19_death_part_is_bound(v)||gh_effect_stamp19_attack_part_is_bound(v)){
   if(!v->model||!v->part||v->model->root.bytes!=v->actor->bytes||!v->part->bytes||
      w(p+4)||w(p+8)||w(p+0x10))return fail(s,0x302b58,GH_EFFECT_UNSUPPORTED);
   /* 303A30 binds the selected part to +104 and the root actor to +108.
@@ -125,7 +125,7 @@ static gh_effect_status emitter_update(gh_game_effects_frame*s,unsigned i){
  }
  if(s->emitter_stage==2){float time=number(p+0x180);if(!isfinite(time))return fail(s,0x302ab0,GH_EFFECT_UNSUPPORTED);if((float)(int16_t)h(p+0x186)<=time){e=emitter_transform(s,p,r);if(e)return e;}s->emitter_stage=3;}
  if(s->emitter_stage==3){
-  if(w(p+0x114)&0x40000000u){if(current.first_esp_child>=0){gh_effect_esp_view child;if(gh_effect_create_esp_at(s->b.storage.effects,(unsigned)current.first_esp_child,&child)||child.parent_emitter!=(int32_t)i||child.parent_serial!=current.serial)return fail(s,0x2b5e58,GH_EFFECT_UNSUPPORTED);return GH_EFFECT_OK;}if(!gh_effect_event_part_is_bound(current.record,current.actor,current.selector)&&
+  if(w(p+0x114)&0x40000000u){if(current.first_esp_child>=0){gh_effect_esp_view child;if(gh_effect_create_esp_at(s->b.storage.effects,(unsigned)current.first_esp_child,&child)||child.parent_emitter!=(int32_t)i||child.parent_serial!=current.serial)return fail(s,0x2b5e58,GH_EFFECT_UNSUPPORTED);return GH_EFFECT_OK;}if(!gh_effect_event_part_is_bound(current.record,current.actor,current.selector)&&!gh_effect_stamp19_death_part_is_bound(&current)&&!gh_effect_stamp19_attack_part_is_bound(&current)&&
   (((current.actor||current.selector)&&!gh_esp14_nested_sprite_is_bound(current.record,current.actor,current.selector))||current.model||current.part))return fail(s,0x2b5cf0,GH_EFFECT_UNSUPPORTED);
   if(w(p+8))return fail(s,0x2b5e58,GH_EFFECT_UNSUPPORTED);if(w(p+4))return fail(s,0x2b5cf0,GH_EFFECT_UNSUPPORTED);unsigned off=(i>>5)*4;uint8_t*mask=s->b.storage.emitters+0x26020+off;put(mask,w(mask)|(UINT32_C(0x80000000)>>(i&31)));return GH_EFFECT_OK;}
   const int scaled=scaled_emitter_clock(s,p,r);

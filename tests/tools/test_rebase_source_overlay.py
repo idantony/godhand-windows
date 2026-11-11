@@ -77,6 +77,22 @@ class RebaseOverlayTest(unittest.TestCase):
             rebase(*self.overlay(), *target, self.output)
         self.assertFalse(self.output.exists())
 
+    def test_absolute_worker_receipt_keeps_relative_and_base_fingerprints(self):
+        root = self.root / "absolute-overlay"
+        self.write_file(root, self.path, self.overlay_content)
+        row = {"path": str(root / self.path), "relative": self.path, "sha256": digest(self.overlay_content),
+               "supersedes": {"path": str(self.base[0].parent.parent / self.path), "sha256": digest(self.base_content)}}
+        record = {"schema": 1, "base": {"path": str(self.base[0]), "sha256": self.base[1]}, "files": [row],
+                  "proof": {"scope": "worker evidence"}}
+        target = self.snapshot("target", {self.path: self.base_content.replace(b"last = 1", b"last = 3")})
+        result = rebase(*self.write_json(root / "receipt.json", record), *target, self.output)
+        self.assertEqual(result["rebase_results"][self.path]["status"], "merged")
+        self.assertEqual((self.output / self.path).read_bytes(), self.overlay_content.replace(b"last = 1", b"last = 3"))
+        row["supersedes"]["path"] = str(target[0].parent.parent / self.path)
+        with self.assertRaisesRegex(RebaseError, "Invalid worker source predecessor"):
+            rebase(*self.write_json(root / "receipt.json", record), *target, self.root / "rejected")
+        self.assertFalse((self.root / "rejected").exists())
+
     def test_tampered_snapshot_bytes_fail_even_when_only_newline_changed(self):
         target = self.snapshot("target", {self.path: self.base_content})
         self.write_file(target[0].parent.parent, self.path, self.base_content.replace(b"\n", b"\r\n"))
@@ -89,6 +105,20 @@ class RebaseOverlayTest(unittest.TestCase):
         with self.assertRaisesRegex(RebaseError, "predecessor does not match"):
             rebase(*self.overlay(supersedes={self.path: "a" * 64}), *target, self.output)
         self.assertFalse(self.output.exists())
+
+    def test_pinned_evidence_survives_rebase_and_rejects_tampering(self):
+        evidence = self.root / "evidence.json"
+        evidence.write_bytes(b"fixture evidence")
+        dependencies = [{"path": str(evidence), "sha256": digest(evidence.read_bytes())}]
+        overlay = self.overlay(dependencies=dependencies, merge={"scope": "worker review"})
+        target = self.snapshot("target", {self.path: self.base_content})
+        result = rebase(*overlay, *target, self.output)
+        self.assertEqual(result["dependencies"], dependencies)
+        evidence.write_bytes(b"modified evidence")
+        output = self.root / "rejected"
+        with self.assertRaisesRegex(RebaseError, "SHA-256 mismatch"):
+            rebase(*overlay, *target, output)
+        self.assertFalse(output.exists())
 
     def test_target_dependency_newline_change_fails(self):
         target = self.snapshot("target", {self.path: self.base_content, self.other: b"required\r\n"})

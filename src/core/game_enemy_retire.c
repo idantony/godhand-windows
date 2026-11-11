@@ -175,7 +175,9 @@ gh_actor_motion_status gh_enemy_destroy_prefix_mode3(gh_enemy_destructor *state,
     if(state->stage==2){
         if(standard){
             const uint32_t dependency=word(bytes+0x564);
-            if(dependency!=0x200&&dependency!=0x20a)return stop(frontier,0x202098);
+            /* 2020A0/2020A4 reject 0203 before the release jump table. */
+            if(dependency!=0x200&&dependency!=0x203&&dependency!=0x20a)
+                return stop(frontier,0x202098);
         }else if(word(bytes+0x15c4))return stop(frontier,0x1c2370);
         state->virtual_mark.stage=1;
         state->stage=3;

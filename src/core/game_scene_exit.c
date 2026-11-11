@@ -27,7 +27,9 @@ static gh_scene_exit_status hook(gh_game_scene_exit*s,gh_scene_hook*h,uint8_t*ra
  uint32_t f=0;gh_scene_status e=h->call(h->context,&f);if(e)return fail(s,f?f:pc,GH_SCENE_EXIT_CALLEE);
  h->kind=GH_SCENE_HOOK_ABSENT;h->call=NULL;put(raw,0);return GH_SCENE_EXIT_OK;
 }
-static gh_scene_exit_status scenario_stop(gh_game_scene_exit*s,const gh_game_scene_exit_bindings*b){
+gh_scene_exit_status gh_game_scene_scenario_stop_002c3858(gh_game_scene_exit*s,const gh_game_scene_exit_bindings*b){
+ if(!s||!b)return GH_SCENE_EXIT_ARGUMENT;
+ s->frontier=0;
  if(!b->scenario.bytes||b->scenario.size<0x114||!b->scenario.manager||!b->scenario_threads)return fail(s,0x2c3858,GH_SCENE_EXIT_ARGUMENT);gh_scene_exit_status e;
  if(!s->scenario_stage){e=hook(s,b->scenario_pending_f4,b->scenario.bytes+0xf4,0x2c4de0);if(e)return e;s->scenario_stage=1;}
  if(s->scenario_stage==1){e=hook(s,b->scenario_exit_ec,b->scenario.bytes+0xec,0x2c3820);if(e)return e;s->scenario_stage=2;}
@@ -48,7 +50,7 @@ static gh_scene_exit_status phase1(gh_game_scene_exit*s,const gh_game_scene_exit
  case 2:if(!b->fade)return fail(s,0x3076e0,GH_SCENE_EXIT_ARGUMENT);gh_screen_fade_kill_003076e0(b->fade);break;
  case 3:if((e=movie_stop_all(s,b)))return e;break;
  case 4:e=gh_scene_exit_effects_00305b90(b->scene_buffer_a,b->scene_buffer_a_size,b->scene_buffer_b,b->scene_buffer_b_size,&f);if(e)return fail(s,f?f:0x305b90,e);break;
- case 5:if((e=scenario_stop(s,b)))return e;break;
+ case 5:if((e=gh_game_scene_scenario_stop_002c3858(s,b)))return e;break;
  case 6:{uint16_t room=b->loop->work->room;int special=(room>=0x40&&room<=0x42)||room==0x4e||room==0x4f;
   if((w(b->save.bytes+0x14)&0x4000000)&&special){if((e=call(s,b,0x2c0038,NULL)))return e;}
   else if(w(p+0x584)&0x4000000){if((e=call(s,b,0x2bf948,NULL)))return e;}}break;

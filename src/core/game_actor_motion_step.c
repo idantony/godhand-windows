@@ -17,12 +17,15 @@ static unsigned motion_flags_allowed(const gh_actor_model *model){
  const uint8_t *p=model->root.bytes;
  /* Original 24C3C8 sets 434 bit 8 for the ordinary frontal reaction.
   * Sample tests bit 2, sequence tests bit 20, and advance tests 1/4/10. */
- if(model->root.size<0x568||half(p+0x2fe)!=0x202||p[0x2f4]!=1||p[0x2f5])
+ if(model->root.size<0x568||half(p+0x2fe)!=0x202||p[0x2f5])
   return 0x40u;
  const uint32_t dependency=rd(p+0x564);
  const int stamp19=model->root.size>=0x642&&dependency==0x203&&half(p+0x640)==19&&
     model->work&&(uint16_t)model->work->room==0x100;
- return dependency==0x20a||stamp19?0x48u:0x40u;
+ /* 25E790 uses the same bit while sampling stamp19's mode2/sub0 clip. */
+ const int allowed=(p[0x2f4]==1&&(dependency==0x20a||stamp19))||
+                   (p[0x2f4]==2&&stamp19);
+ return allowed?0x48u:0x40u;
 }
 static gh_actor_motion_status track_value(gh_actor_motion*s,unsigned index,float time,int cached,float*out,uint32_t*f){
  gh_motion_track t;if(gh_motion_track_at(&s->motion,index,&t))return GH_ACTOR_MOTION_BOUNDS;

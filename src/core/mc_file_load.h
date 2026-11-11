@@ -22,6 +22,10 @@ typedef struct {
  * after each successful visit. Mc+0C/+10 must start at -1 on a fresh owner. */
 gh_mc_boot_error gh_mc_title_load_scan_00001590(gh_mc_load_scan *,gh_mc_boot_checks *,
     gh_memory_card *,gh_mc_load_menu_memory *,uint32_t *frontier);
+/* Save scans the same card, but permits an empty formatted profile and
+ * requires 150 clusters for a new slot. Empty profile selection is slot 0. */
+gh_mc_boot_error gh_mc_save_scan_00003f78(gh_mc_load_scan *,gh_mc_boot_checks *,
+    gh_memory_card *,gh_mc_load_menu_memory *,int32_t *free_clusters,uint32_t *frontier);
 /* Device-free selected-file phases of cMcLoad@REL2700. A verified file
  * does not imply Control/UI completion. Keep cursor and endpoint alive
  * until a terminal result; use one endpoint owner while it is pending. */

@@ -50,6 +50,14 @@ class StartupRunnerTests(unittest.TestCase):
     def prepare(self):
         return tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg)
 
+    def test_frozen_launcher_uses_its_original_project(self):
+        with patch.object(tool, "PROJECT", self.snapshot):
+            prepared = self.prepare()
+            self.assertEqual(prepared["executable"], self.exe)
+        with patch.object(tool, "PROJECT", self.root / "other-project"):
+            with self.assertRaisesRegex(tool.proof.ProofError, "source project mismatch"):
+                self.prepare()
+
     def qa(self, **changes):
         data = dict(hidden=True, muted=True, synthetic_input=True, prefix_mode=False, exit_code=4,
                     frontier="00142060", ticks=489, world_packets_submitted=0,
@@ -63,6 +71,23 @@ class StartupRunnerTests(unittest.TestCase):
             stderr.write(trace)
             return subprocess.CompletedProcess(command, data["exit_code"])
         return launch
+
+    def test_repeat_square_receipt_requires_presented_defeat_for_success(self):
+        for exit_code, defeat_scene, succeeds in ((0, 77, True), (3, 0, True), (0, 0, False), (4, 77, False)):
+            with self.subTest(exit_code=exit_code, defeat_scene=defeat_scene):
+                scratch = self.root / f"repeat-{exit_code}-{defeat_scene}"
+                prepared = tool.prepare(self.snapshot, scratch, self.iso, self.ffmpeg,
+                                        control_probe="repeat-square", build_scratch=self.scratch)
+                self.assertEqual(prepared["command"][-2:], ["--qa-control", "repeat-square"])
+                status = {"attempts": 2, "defeat_scene": defeat_scene}
+                trace = ("QA_REPEAT_STATUS " + json.dumps(status) + "\n").encode("utf-8")
+                qa = self.qa(exit_code=exit_code)
+                with patch.object(tool.subprocess, "run", self.fake_run(qa, trace)):
+                    if succeeds:
+                        self.assertEqual(tool.run(prepared)["repeat_square"], status)
+                    else:
+                        with self.assertRaisesRegex(tool.proof.ProofError, "exit and presented defeat disagree"):
+                            tool.run(prepared)
 
     def test_frontier_record_uses_runner_output_fingerprints(self):
         prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, control_probe="run")

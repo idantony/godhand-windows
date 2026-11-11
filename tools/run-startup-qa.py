@@ -17,6 +17,7 @@ spec.loader.exec_module(proof)
 
 
 MAX_CAPTURE_COUNT = 120
+CONTROL_PROBES = ("walk", "run", "square", "approach-square", "repeat-square")
 
 
 def now():
@@ -29,12 +30,22 @@ def require_frozen_runner(snapshot):
                   "QA launcher differs from the frozen snapshot; freeze the current launcher before running")
 
 
+def launch_project(snapshot):
+    if PROJECT != snapshot:
+        return PROJECT
+    proof.require(proof.under(snapshot, proof.SCRATCH_ROOT), "frozen launcher must be below project G scratch")
+    receipt, _ = proof.Inputs().report(snapshot / "analysis/source-snapshot.json")
+    source = Path(receipt.get("source_project", ""))
+    proof.require(source.is_absolute() and source.resolve() != snapshot,
+                  "frozen launcher has no original source project")
+    return source.resolve()
+
+
 def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370,
             capture_count=1, control_probe=None, title_load=False, build_scratch=None):
     """Read-only preflight. No launch or output creation occurs on rejection."""
     snapshot, scratch = Path(snapshot_arg).resolve(), Path(scratch_arg).resolve()
     build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
-    iso, ffmpeg = Path(iso_arg).resolve(), Path(ffmpeg_arg).resolve()
     proof.require(proof.under(snapshot, proof.SCRATCH_ROOT) and proof.under(scratch, proof.SCRATCH_ROOT),
                   "snapshot and scratch must be below project G scratch")
     proof.require(type(max_ticks) is int and 1 <= capture_frame <= max_ticks <= 100000,
@@ -42,9 +53,12 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
     proof.require(type(capture_count) is int and 1 <= capture_count <= MAX_CAPTURE_COUNT
                   and capture_frame + capture_count - 1 <= max_ticks,
                   f"require 1 <= capture-count <= {MAX_CAPTURE_COUNT} and range within max-ticks")
-    proof.require(control_probe in (None, "walk", "run", "square", "approach-square"), "unknown control probe")
+    proof.require(control_probe is None or control_probe in CONTROL_PROBES, "unknown control probe")
     proof.require(not (title_load and control_probe), "gameplay input requires NewGame")
-    _, executable, exe_sha, receipt_fact, report_fact = proof.startup_build_inputs(snapshot, build_scratch, PROJECT)
+    project = launch_project(snapshot)
+    iso = Path(iso_arg or project / "God Hand (USA)(Uncensor Patch v1.0).iso").resolve()
+    ffmpeg = Path(ffmpeg_arg or project / ".tools/ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe").resolve()
+    _, executable, exe_sha, receipt_fact, report_fact = proof.startup_build_inputs(snapshot, build_scratch, project)
     proof.require(iso.is_file() and ffmpeg.is_file(), "ISO and ffmpeg must be existing files")
     profile = scratch / ("profile-load" if title_load else "profile-absent")
     capture = scratch / "first-scene-candidate.rgba"
@@ -64,7 +78,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
     if control_probe:
         command.extend(("--qa-control", control_probe))
     return {"command": command, "scratch": scratch, "build_scratch": build_scratch, "executable": executable,
-            "executable_sha256": exe_sha, "source_snapshot": receipt_fact, "windows_build": report_fact}
+            "executable_sha256": exe_sha, "source_snapshot": receipt_fact, "windows_build": report_fact,
+            "control_probe": control_probe}
 
 
 def run(prepared):
@@ -102,11 +117,26 @@ def run(prepared):
     qa = json.loads((scratch / "startup-newgame.json").read_text(encoding="utf-8-sig"))
     proof.require(qa.get("hidden") is True and qa.get("muted") is True and qa.get("synthetic_input") is True
                   and qa.get("prefix_mode") is False, "QA did not confirm expected execution flags")
-    proof.require(qa.get("exit_code") == receipt["exit_code"] and receipt["exit_code"] in (0, 4), "unexpected child exit; inspect QA output")
+    repeat_square = prepared.get("control_probe") == "repeat-square"
+    valid_exit_codes = (0, 3, 4) if repeat_square else (0, 4)
+    proof.require(qa.get("exit_code") == receipt["exit_code"] and receipt["exit_code"] in valid_exit_codes,
+                  "unexpected child exit; inspect QA output")
     for field in ("renderer_error", "world_gpu_error", "window_error"):
         proof.require(qa.get(field) == 0, "QA reported " + field)
-    return {"exit_code": receipt["exit_code"], "frontier": qa.get("frontier"), "ticks": qa.get("ticks"),
-            "world_packets_submitted": qa.get("world_packets_submitted"), "receipt": str(scratch / "startup-process.json")}
+    summary = {"exit_code": receipt["exit_code"], "frontier": qa.get("frontier"), "ticks": qa.get("ticks"),
+               "world_packets_submitted": qa.get("world_packets_submitted"), "receipt": str(scratch / "startup-process.json")}
+    if repeat_square:
+        marker = "QA_REPEAT_STATUS "
+        with (scratch / "startup-newgame.stderr.log").open(encoding="utf-8", errors="replace") as stream:
+            status_lines = [line[len(marker):] for line in stream if line.startswith(marker)]
+        proof.require(len(status_lines) == 1, "missing or duplicate repeat-square status")
+        status = json.loads(status_lines[0])
+        defeat_scene = status.get("defeat_scene")
+        proof.require(type(defeat_scene) is int and defeat_scene >= 0
+                      and bool(defeat_scene) == (receipt["exit_code"] == 0),
+                      "repeat-square exit and presented defeat disagree")
+        summary["repeat_square"] = status
+    return summary
 
 
 def main():
@@ -114,13 +144,13 @@ def main():
     parser.add_argument("--snapshot", type=Path, required=True)
     parser.add_argument("--scratch", type=Path, required=True)
     parser.add_argument("--build-scratch", type=Path, help="reuse the exact build in this G: scratch cohort")
-    parser.add_argument("--iso", type=Path, default=PROJECT / "God Hand (USA)(Uncensor Patch v1.0).iso")
-    parser.add_argument("--ffmpeg", type=Path, default=PROJECT / ".tools/ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe")
+    parser.add_argument("--iso", type=Path)
+    parser.add_argument("--ffmpeg", type=Path)
     parser.add_argument("--max-ticks", type=int, default=1100)
     parser.add_argument("--capture-frame", type=int, default=370)
     parser.add_argument("--capture-count", type=int, default=1,
                         help=f"capture up to {MAX_CAPTURE_COUNT} ready scene frames beginning at capture-frame")
-    parser.add_argument("--control-probe", choices=("walk", "run", "square", "approach-square"),
+    parser.add_argument("--control-probe", choices=CONTROL_PROBES,
                         help="send original pad input after EV01 and two neutral player updates")
     parser.add_argument("--title-load", action="store_true", help="select Load Game using the scratch profile-load directory")
     args = parser.parse_args()

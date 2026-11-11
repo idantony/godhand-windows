@@ -35,6 +35,9 @@ typedef struct {uint32_t operation,frontier;uint8_t phase,scenario_stage;
  * an interrupted host continuation; phase2 not-ready remains original samephase
  * andphase3/4 each consume a real Mainvisit. Does not destroy whole services. */
 gh_scene_exit_status gh_game_scene_exit_002a67d0(gh_game_scene_exit*,const gh_game_scene_exit_bindings*);
+/* Shared original Scenario end hooks and task retirement, also used by
+ * the Door progression map before returning to the room transition. */
+gh_scene_exit_status gh_game_scene_scenario_stop_002c3858(gh_game_scene_exit *,const gh_game_scene_exit_bindings *);
 /* Concrete all-kill gates of305B90; native actor destruction is still required
  * for live/unpaused/unhidden bits. No table/resource reconstruction occurs. */
 gh_scene_exit_status gh_scene_exit_effects_00305b90(uint8_t*,size_t,uint8_t*,size_t,uint32_t *);

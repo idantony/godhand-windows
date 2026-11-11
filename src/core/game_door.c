@@ -69,7 +69,7 @@ static gh_door_status begin(gh_game_door*s,const gh_game_door_bindings*b){
  if(!s->begin_stage){if(w(p+0x5e4)&0x2000000){s->frontier=0;return GH_DOOR_OK;}s->begin_stage=1;}
  if(s->begin_stage==1){if(w(p+0x584)&0x100)put(p+0x584,w(p+0x584)&~0x100u);else if((e=kill_messages(s,b->messages)))return e;s->begin_stage=2;}
  if(s->begin_stage==2){if((e=fade(s,b,0)))return e;s->begin_stage=3;}
- if(s->begin_stage==3){s->phase38=s->verify_phase39=0;put(p+0x5e4,w(p+0x5e4)|0x2000000);stop_input(b->work);s->begin_stage=4;}
+ if(s->begin_stage==3){s->phase38=s->verify_phase39=0;s->save_prompt_stage=0;put(p+0x5e4,w(p+0x5e4)|0x2000000);stop_input(b->work);s->begin_stage=4;}
  if(s->begin_stage==4){put(p+0x5e0,w(p+0x5e0)|0x100000);put(p+0x5d8,w(p+0x5d8)|0x4d00000);
   if(!b->scenario.manager)return fail(s,0x2000a8,GH_DOOR_ARGUMENT);b->scenario.manager->flags|=1u;s->begin_stage=5;}
  if(b->work->room!=0x20){
@@ -96,6 +96,49 @@ gh_door_status gh_game_door_request_001ffeb8(gh_game_door*s,const gh_game_door_b
  return gh_game_door_request_001fff30(s,b,target,xyz,yaw_bits,kind,flags,force);
 }
 static int reset_clock_room(uint16_t room){return room==0x100||room==0x200||room==0x300||room==0x400||room==0x500||room==0x600||room==0x700||room==0x802||room==0x806;}
+/* Door progression prompt uses the same child3 and Save cursor owners as
+ * SubScr Move. The Scenario end provider runs the real 2C3858 callbacks. */
+static gh_door_status save_verify(gh_game_door *s,const gh_game_door_bindings *b,int *ready)
+{
+ uint8_t *w0=(uint8_t*)b->work;
+ *ready=0;
+ if(!b->save_prompt)return fail(s,0x2006b8,GH_DOOR_UNSUPPORTED);
+ const gh_door_save_prompt *prompt=b->save_prompt;
+ if(!prompt->children||!prompt->map||prompt->map->work!=b->work||
+    prompt->map->player!=b->player||!prompt->sound||!prompt->sound->initialized||
+    !prompt->scenario_end)return fail(s,0x2006b8,GH_DOOR_ARGUMENT);
+ if(!s->verify_phase39){
+  if(!s->save_prompt_stage){
+   if(!(b->work->flags&0x40)&&b->work->room&&b->work->room!=0x20)
+    memcpy(s->backup,(const uint8_t*)s+4,sizeof(s->backup));
+   prompt->sound->bgm_state_13c=0;
+   s->save_prompt_stage=1;
+  }
+  if(s->save_prompt_stage==1){
+   gh_save_map_bindings map=*prompt->map;
+   map.map_room=h(s->backup+16);
+   map.target_room=(uint16_t)s->target_room;
+   int started;
+   uint32_t frontier=0;
+   if(gh_game_children_save_map_open_00160020(prompt->children,&map,&started,&frontier)!=GH_CHILD_OK)
+    return fail(s,frontier?frontier:0x160020,GH_DOOR_CALLEE);
+   s->save_prompt_stage=2;
+  }
+  uint32_t frontier=0;
+  gh_door_status status=prompt->scenario_end(prompt->context,0x2c3858,&frontier);
+  if(status)return fail(s,frontier?frontier:0x2c3858,status);
+  s->verify_phase39=1;
+ }
+ if(w(w0+0x5e4)&0x08000000)return GH_DOOR_OK;
+ gh_save_map_view map;
+ if(gh_game_children_save_map_view(prompt->children,&map)!=GH_CHILD_OK)
+  return fail(s,0x2007dc,GH_DOOR_CALLEE);
+ if(!map.target)return fail(s,0x2007f0,GH_DOOR_UNSUPPORTED);
+ if(!b->work->room&&s->target_room==0x100&&!(b->work->flags&0x40))
+  memcpy((uint8_t*)s+4,s->backup,sizeof(s->backup));
+ *ready=1;
+ return GH_DOOR_OK;
+}
 gh_door_status gh_game_door_step_001ffe10(gh_game_door*s,const gh_game_door_bindings*b){
  if(!s||!s->initialized||!b||!b->work)return GH_DOOR_ARGUMENT;uint8_t*p=(uint8_t*)b->work;gh_door_status e;
  if(!s->step_stage){if(s->wait)s->wait=(uint16_t)(s->wait-1u);s->step_stage=1;}
@@ -103,7 +146,11 @@ gh_door_status gh_game_door_step_001ffe10(gh_game_door*s,const gh_game_door_bind
  if(!b->fade)return fail(s,0x74748c,GH_DOOR_UNSUPPORTED);
  if(s->step_stage==1){if(b->fade->state&&!(b->fade->state&4)){s->step_stage=0;s->frontier=0;return GH_DOOR_OK;}
   put(p+0x5d8,w(p+0x5d8)|0x10000);
-  if(!(w(p+0x598)&0x40)&&!s->force3a&&s->target_room!=-1&&s->kind!=1)return fail(s,0x2006b8,GH_DOOR_UNSUPPORTED);
+  if(!(w(p+0x598)&0x40)&&!s->force3a&&s->target_room!=-1&&s->kind!=1){
+   int ready;
+   e=save_verify(s,b,&ready);
+   if(e||!ready)return e;
+  }
   put(p+0x5e4,w(p+0x5e4)&~0x20u);stop_input(b->work);s->step_stage=2;
  }
  if(s->target_room==-1){
