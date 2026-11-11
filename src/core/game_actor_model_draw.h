@@ -19,12 +19,15 @@ gh_actor_model_status gh_actor_node_light_00154240_ex(gh_actor_model *,unsigned,
 typedef struct {uint32_t entry,parity;size_t node_index;gh_actor_model *model;
  const gh_game_pl_camera *camera;const gh_game_world_light *light;uint16_t depth;uint8_t far_mode;const gh_actor_materials *materials;} gh_actor_draw_request;
 typedef gh_actor_model_status (*gh_actor_draw_callee)(void *,const gh_actor_draw_request *,uint32_t *);
-typedef enum {GH_ACTOR_DRAW_GEOMETRY,GH_ACTOR_DRAW_SETUP} gh_actor_draw_kind;
+typedef enum {
+ GH_ACTOR_DRAW_GEOMETRY,GH_ACTOR_DRAW_SETUP,
+ GH_ACTOR_DRAW_OPACITY_FRAME,GH_ACTOR_DRAW_OPACITY_GEOMETRY,GH_ACTOR_DRAW_OPACITY_SETUP
+} gh_actor_draw_kind;
 /* One original OT node. Geometry preserves stream then batch order. Setup
  * writes ONLY FOGCOL and object VU/palette references, not FRAME/ZBUF/etc.
  * Same-frame borrowed packet/palette/cache lifetime; no guest DMA execution. */
 typedef struct {gh_actor_draw_kind kind;gh_actor_model *model;size_t node_index;
- uint32_t parity,bank,depth,selected_program;uint64_t test,alpha,tex1,clamp;
+ uint32_t parity,bank,depth,selected_program;uint64_t test,alpha,tex1,clamp,frame;
  const gh_actor_node_packets *packet;const gh_actor_object_packets *object;
  gh_actor_materials materials;gh_skinned_program2_inputs inputs;
  uint32_t fog_rgb;uint8_t packet_group;float specular_half[3];uint16_t specular_squarings;} gh_actor_draw_command;

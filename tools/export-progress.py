@@ -2,6 +2,7 @@
 import argparse
 import datetime
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 
@@ -50,12 +51,48 @@ def world_layer_summary(path, source_root, execution, window_build):
             "final_composite": "opaque opening fade; continuous scene frames remain unfinished" if not final_nonblack and observation["capture_metadata"].get("fade_visible") == 1 and observation["capture_metadata"]["fade_rgba"] == "FF000000" else "world-layer evidence only; final display requires separate visual verification"}
 
 
+def presented_scene_summary(scratch, source_root, execution, window_build):
+    """Revalidate original captures and accept only frames submitted to the window."""
+    spec = importlib.util.spec_from_file_location("startup_frontier", ROOT / "tools/record-startup-frontier.py")
+    startup = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(startup)
+    frontier = f"{execution['frontier_module']}:{execution['frontier']}"
+    proof, _ = startup.validate(source_root, scratch, expected_frontier=frontier, capture_series=True)
+    observed = proof["observation"]
+    if (proof["artifacts"]["executable"]["sha256"] != window_build["executable_sha256"]
+            or any(observed[key] != execution[key] for key in (
+                "ticks", "room", "scene_frame_serial", "scene_frames_presented", "world_packets_submitted"))):
+        raise ValueError("Presented scene proof does not match the exported execution")
+    if observed["room"] != "0100" or observed["game_state"] != 4:
+        raise ValueError("Presented scene proof did not reach the R100 room loop")
+    for frame in proof["captures"]:
+        if not frame["presented"] or not frame["composite"]["nonblack_rgb_pixels"]:
+            continue
+        summary = {
+            "scope": "original R100 room and HUD during the opening fade",
+            "frame_serial": frame["scene_serial"],
+            "nonblack_world_pixels": frame["world"]["nonblack_rgb_pixels"],
+            "nonblack_composite_pixels": frame["composite"]["nonblack_rgb_pixels"],
+            "opening_fade_rgba": frame["fade_rgba"],
+            "fade_active": bool(frame["fade_visible"]),
+        }
+        control = observed.get("control_probe")
+        if control and control["motion_presented"]:
+            summary["synthetic_control"] = {
+                "mode": control["mode"], "first_motion_presented_frame": control["presented_motion"]["scene_serial"],
+            }
+        return summary
+    raise ValueError("No nonblack R100 composite reached the window")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verified-source-root", type=Path,
                         help="Validate a recorded immutable source copy while workers continue editing")
     parser.add_argument("--world-layer-proof", type=Path,
                         help="Private hash-linked world-layer observation; exports no local images/paths")
+    parser.add_argument("--presented-scene-scratch", type=Path,
+                        help="Revalidate actual R100 window presentation from the captured startup run")
     args = parser.parse_args()
     source_root = args.verified_source_root.resolve() if args.verified_source_root else ROOT
     frozen = source_root != ROOT
@@ -91,13 +128,16 @@ def main():
     if hashlib.sha256(current_dll.read_bytes()).hexdigest() != differential["native_sha256"]:
         raise SystemExit("RNG differential report is stale for the rebuilt DLL")
     world_layer = world_layer_summary(args.world_layer_proof, source_root, window["execution"], window_build)
+    presented_scene = (presented_scene_summary(args.presented_scene_scratch, source_root, window["execution"], window_build)
+                       if args.presented_scene_scratch else None)
     progress = {
         "schema_version": 1,
         "verified_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "stage": "native-windows-R100-object-updates" if window["execution"].get("room")=="0100" and window["execution"].get("om_updates_completed",0)>0 else ("native-windows-R100-player-child-update" if window["execution"].get("player_updates_completed", 0) > 0 and window["execution"].get("child_updates_completed", 0) > 0 else ("native-windows-R100-update-entry" if window["execution"].get("game_state") == 4 else "native-windows-new-game-R100-construction") if window["execution"].get("room") == "0100" else "native-windows-original-title-scene"),
         "playable": False,
-        "original_game_scene_observed_in_native_port": False,
-        "original_world_layer_observed_before_UI": world_layer is not None,
+        "original_game_scene_observed_in_native_port": presented_scene is not None,
+        "presented_scene_observation": presented_scene,
+        "original_world_layer_observed_before_UI": world_layer is not None or presented_scene is not None,
         "world_layer_observation": world_layer,
         "original_title_UI_scene_observed_in_native_port": window["execution"].get("scene_frames_presented", 0) > 0,
         "source_verification": "immutable authored source copy" if frozen else "current authored source",
@@ -179,12 +219,14 @@ def main():
                   "passed_steps": [step["name"] for step in native["steps"] if step["name"].startswith("test-") and step["returncode"] == 0],
                   "rng_differential": {"distinct_seeds": differential["distinct_seeds"], "calls_compared": differential["function_calls_compared"],
                                        "comparison": differential["comparison"], "hardware_capture": False}},
-        "remaining": ["Advance original object states and continuous frames beyond the opening fade; execute R100 Scenario/Event flows" if world_layer else "Finish first-frame model visibility and drawing; execute original R100 Scenario/Event flows", "Earlier subsystem initialization and full main-loop integration", "Continuous dynamic animation and actor behavior",
+        "remaining": ["Advance original object states and continuous frames beyond the opening fade; execute R100 Scenario/Event flows" if world_layer or presented_scene else "Finish first-frame model visibility and drawing; execute original R100 Scenario/Event flows", "Earlier subsystem initialization and full main-loop integration", "Continuous dynamic animation and actor behavior",
                       "Native rendering, audio, input and save adapters", "Full game progression and timing validation"],
         "progress_policy": "Upstream PS2 matching coverage is not native port coverage; no synthetic completion percentage",
         "sources": {"upstream": "https://github.com/LucasPicoli/god-hand-decomp", "upstream_commit": "eaae18d0dfab1f9a0df276ae5ca1581ad326faf3",
                     "method": "https://opengoal.dev/docs/developing/decompiling/getting_started/"}}
-    if world_layer:
+    if presented_scene:
+        progress["stage"] = "native-windows-R100-first-visible-room-frame"
+    elif world_layer:
         progress["stage"] = "native-windows-R100-world-layer-opening-fade"
     target = ROOT / "docs" / "progress.json"
     target.parent.mkdir(parents=True, exist_ok=True)

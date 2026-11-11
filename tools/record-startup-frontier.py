@@ -52,9 +52,91 @@ def argument(command, flag):
     return command[index]
 
 
+def capture_observations(inputs, scratch, capture, hashes, command, trace):
+    """Read matching world and final surfaces from a completed range capture."""
+    prefix = "QA_WORLD_CAPTURE "
+    frames = [json.loads(line[len(prefix):]) for line in trace if line.startswith(prefix)]
+    present_prefix = "QA_CAPTURE_PRESENTED "
+    present_records = [line[len(present_prefix):] for line in trace if line.startswith(present_prefix)]
+    proof.require(all(re.fullmatch(r"[1-9][0-9]*", value) for value in present_records),
+                  "invalid captured presentation serial")
+    presented = {int(value) for value in present_records}
+    proof.require(len(presented) == len(present_records), "duplicate captured presentation serial")
+    first = int(argument(command, "--qa-capture-frame"))
+    limit = int(argument(command, "--qa-capture-count")) if "--qa-capture-count" in command else 1
+    proof.require(first > 0 and 1 <= len(frames) <= limit <= 120,
+                  "missing or excessive capture metadata")
+    size = 512 * 448 * 4
+    last = first - 1
+    observations = []
+    for frame in frames:
+        proof.require(isinstance(frame, dict) and type(frame.get("scene_serial")) is int and
+                      frame["scene_serial"] > last and frame.get("world_bytes") == size and
+                      type(frame.get("fade_visible")) is int and frame["fade_visible"] in (0, 1) and
+                      isinstance(frame.get("fade_rgba"), str) and re.fullmatch(r"[0-9A-Fa-f]{8}", frame["fade_rgba"]),
+                      "invalid or out-of-order world capture metadata")
+        last = frame["scene_serial"]
+        name = capture.name if not observations else f"{capture.stem}.scene-{last}.rgba"
+        surfaces = {}
+        for layer, filename in (("composite", name), ("world", name + ".world.rgba")):
+            artifact = output_fact(inputs, scratch, filename, hashes, None)
+            pixels = Path(artifact["path"]).read_bytes()
+            proof.require(len(pixels) == size, f"unexpected RGBA surface size: {filename}")
+            artifact["nonblack_rgb_pixels"] = sum(
+                pixels[i:i + 3] != b"\0\0\0" for i in range(0, size, 4))
+            surfaces[layer] = artifact
+        observation = {"scene_serial": last, "fade_visible": frame["fade_visible"],
+                       "fade_rgba": frame["fade_rgba"], **surfaces}
+        if frame.get("presentation_tracking") is True:
+            observation["presented"] = last in presented
+        observations.append(observation)
+    proof.require(presented <= {frame["scene_serial"] for frame in observations if frame.get("presented")},
+                  "presentation marker has no matching tracked capture")
+    return observations
+
+
+def trace_record(trace, prefix):
+    records = [line[len(prefix):] for line in trace if line.startswith(prefix)]
+    proof.require(len(records) <= 1, f"multiple {prefix.strip()} observations")
+    if not records:
+        return None
+    record = json.loads(records[0])
+    proof.require(isinstance(record, dict), f"invalid {prefix.strip()} observation")
+    return record
+
+
+def control_observation(command, trace):
+    if "--qa-control" not in command:
+        return None
+    mode = argument(command, "--qa-control")
+    status_prefix = "QA_CONTROL_STATUS "
+    records = [line[len(status_prefix):] for line in trace if line.startswith(status_prefix)]
+    proof.require(len(records) <= 1, "multiple control status observations")
+    if not records:
+        return None
+    status = re.fullmatch(r"mode=(walk|run|square) saw_event=([01]) pressed=([01]) motion_presented=([01])",
+                          records[0])
+    proof.require(status is not None and status[1] == mode, "invalid control status observation")
+    observations = [line for line in trace if line.startswith("QA_CONTROL ")]
+    proof.require(len(observations) <= 16 and all(line.startswith(f"QA_CONTROL mode={mode} ")
+                  for line in observations), "invalid control trace observations")
+    present_prefix = "QA_CONTROL_PRESENTED "
+    presented = [line[len(present_prefix):] for line in trace if line.startswith(present_prefix)]
+    motion = status[4] == "1"
+    proof.require(len(presented) == int(motion), "control motion status and presentation differ")
+    result = {"mode": mode, "saw_event": status[2] == "1", "pressed": status[3] == "1",
+              "motion_presented": motion, "input_trace": observations}
+    if presented:
+        match = re.fullmatch(r"mode=(walk|run) handle=([1-9][0-9]*) scene=([1-9][0-9]*)", presented[0])
+        proof.require(match is not None and match[1] == mode and result["pressed"],
+                      "invalid presented control motion observation")
+        result["presented_motion"] = {"handle": int(match[2]), "scene_serial": int(match[3])}
+    return result
+
+
 def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=None,
              expected_native_error=None, process_sha=None, stdout_sha=None, stderr_sha=None,
-             capture_name=None, capture_sha=None):
+             capture_name=None, capture_sha=None, capture_series=False):
     snapshot, scratch, project = (Path(p).resolve() for p in (snapshot_arg, scratch_arg, project))
     stop = proof.expected_stop(expected_frontier)
     error = native_error(expected_native_error)
@@ -136,16 +218,31 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
               "effect_post_error", "window_error", "exit_code", "world_packets_submitted",
               "player_updates_completed", "om_updates_completed", "last_move_handle", "last_move_entry")
     observation = {key: qa[key] for key in fields if key in qa}
-    prefix = "QA_ENEMY_PLACEMENT "
-    records = [line[len(prefix):] for line in Path(stderr["path"]).read_text(
-        encoding="utf-8", errors="replace").splitlines() if line.startswith(prefix)]
-    proof.require(len(records) <= 1, "multiple enemy placement observations")
-    if records:
-        placement = json.loads(records[0])
-        proof.require(isinstance(placement, dict) and type(placement.get("handle")) is int and
-                      placement["handle"] > 0 and placement["handle"] == qa.get("last_move_handle"),
+    trace = Path(stderr["path"]).read_text(encoding="utf-8", errors="replace").splitlines()
+    control = control_observation(command, trace)
+    if control is not None:
+        observation["control_probe"] = control
+    placement = trace_record(trace, "QA_ENEMY_PLACEMENT ")
+    if placement is not None:
+        proof.require(type(placement.get("handle")) is int and placement["handle"] > 0 and
+                      placement["handle"] == qa.get("last_move_handle"),
                       "enemy placement does not match the last actor")
         observation["enemy_placement"] = placement
+    task = trace_record(trace, "QA_SCENARIO_TASK ")
+    if task is not None:
+        proof.require(type(task.get("slot")) is int and 0 <= task["slot"] < 16 and
+                      type(task.get("stage")) is int and 0 <= task["stage"] <= 7,
+                      "invalid failed Scenario task observation")
+        observation["scenario_task"] = task
+    render = trace_record(trace, "GH_ACTOR_FRONTIER ")
+    if render is not None:
+        proof.require(type(render.get("handle")) is int and render["handle"] > 0,
+                      "invalid failed Draw actor handle")
+        render_pc = proof.address(render.get("frontier"))
+        if render_pc != "00000000":
+            proof.require(render_pc == proof.address(qa.get("frontier")),
+                          "Draw diagnostic differs from the recorded original frontier")
+        observation["actor_render"] = render
     result = {"schema": 1, "tool": "record-startup-frontier", "status": "recorded-unfinished-observation",
               "classification": classification, "playable_game_verified": False, "verification_success": False,
               "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -155,6 +252,8 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
               "expected_frontier": expected_frontier, "expected_native_error": expected_native_error,
               "limitations": ["Records matching local evidence, without running the game or certifying completion.",
                               "An external process SHA256 can anchor output fingerprints against coordinated edits."]}
+    if capture_series:
+        result["captures"] = capture_observations(inputs, scratch, capture, hashes, command, trace)
     inputs.recheck()
     return result, inputs
 
@@ -173,6 +272,8 @@ def main():
     parser.add_argument("--stderr-sha256")
     parser.add_argument("--capture", help="optional matching raw frame basename")
     parser.add_argument("--capture-sha256")
+    parser.add_argument("--capture-series", action="store_true",
+                        help="verify captured world/final pairs and count nonblack RGB pixels")
     args = parser.parse_args()
     try:
         output = args.output.resolve()
@@ -183,7 +284,7 @@ def main():
                                    expected_native_error=args.expected_native_error,
                                    process_sha=args.process_sha256, stdout_sha=args.stdout_sha256,
                                    stderr_sha=args.stderr_sha256, capture_name=args.capture,
-                                   capture_sha=args.capture_sha256)
+                                   capture_sha=args.capture_sha256, capture_series=args.capture_series)
         inputs.recheck()
         with output.open("x", encoding="utf-8") as stream:
             json.dump(receipt, stream, indent=2)

@@ -1,3 +1,4 @@
+#include "game_player_child_update.h"
 #include "game_player_child_tail.h"
 #include "game_player_child_move.h"
 #include "game_cloth_forces.h"
@@ -59,9 +60,29 @@ static void move_checks(gh_game_player_springs*springs,const void*elf,size_t byt
   for(unsigned id=0;id<44;id++){for(unsigned k=0;k<3;k++)C(fabsl((long double)value(raw+0x4d0+id*0xa0+0x40+4*k)-expectedPositions[id][k])<0.0005L);for(unsigned off=0;off<0xa0;off++)if(!(off>=0x40&&off<0x4c))C(raw[0x4d0+id*0xa0+off]==angularBefore[id*0xa0+off]);}for(unsigned bone=0;bone<child->model.parts_allocated;bone++){for(unsigned k=0;k<3;k++)C(fabsl((long double)value(child->model.parts[bone].alias_f0+4*k)-expectedPoints[bone][k])<0.0005L);C(w(child->model.parts[bone].alias_f0+12)==pointW[bone]);}C(!gh_cloth_constrain_angles_0010497c(&angles,&force,pivot));
   long double expectedDistances[44][3];distance_oracle(springs,&move.simulation,expectedDistances);uint8_t distanceBefore[44*0xa0];memcpy(distanceBefore,raw+0x4d0,sizeof(distanceBefore));gh_cloth_distances distances={0};C(!fesetround(modes[i])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_INVALID));gh_cloth_status distanceStatus=gh_cloth_constrain_distances_00104ec8(&distances,&angles);C(!distanceStatus&&distances.complete&&distances.frontier==0x105a94&&distances.iterations==1&&distances.pair_queries==72&&!distances.point_hits&&fegetround()==modes[i]&&fetestexcept(FE_ALL_EXCEPT)==FE_INVALID&&!memcmp(&random,&after,sizeof(after)));C(!fesetround(FE_TONEAREST));for(unsigned id=0;id<44;id++){for(unsigned k=0;k<3;k++)C(fabsl((long double)value(raw+0x4d0+id*0xa0+0x40+4*k)-expectedDistances[id][k])<.001L);for(unsigned off=0;off<0xa0;off++)if(!(off>=0x40&&off<0x4c))C(raw[0x4d0+id*0xa0+off]==distanceBefore[id*0xa0+off]);}C(!gh_cloth_constrain_distances_00104ec8(&distances,&angles)&&!memcmp(&random,&after,sizeof(after)));
   long double expectedPost[44][3],expectedVelocity[44][3],expectedMatrices[255][16];uint8_t expectedHits[44],postBefore[44*0xa0];memcpy(postBefore,raw+0x4d0,sizeof(postBefore));unsigned expectedHitCount=post_oracle(springs,move.simulation.geometry,expectedPost,expectedVelocity,expectedMatrices,expectedHits);gh_cloth_finish finish={0};C(!fesetround(modes[i])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_INVALID));gh_cloth_status finalStatus=gh_cloth_finish_00105a94(&finish,&distances);C(!finalStatus&&finish.complete&&!finish.frontier&&finish.rotated_parts==40&&finish.point_hits==expectedHitCount&&fegetround()==modes[i]&&fetestexcept(FE_ALL_EXCEPT)==FE_INVALID&&!memcmp(&random,&after,sizeof(after)));C(!fesetround(FE_TONEAREST));for(unsigned id=0;id<44;id++){for(unsigned k=0;k<3;k++){C(fabsl((long double)value(raw+0x4d0+id*0xa0+0x40+4*k)-expectedPost[id][k])<.001L);C(fabsl((long double)value(raw+0x4d0+id*0xa0+0x30+4*k)-expectedVelocity[id][k])<.001L);}C(raw[0x4d0+id*0xa0+0x90]==expectedHits[id]);for(unsigned off=0;off<0xa0;off++)if(!(off>=0x30&&off<0x3c)&&!(off>=0x40&&off<0x4c)&&off!=0x90)C(raw[0x4d0+id*0xa0+off]==postBefore[id*0xa0+off]);}for(unsigned bone=0;bone<child->model.parts_allocated;bone++)for(unsigned k=0;k<16;k++)C(fabsl((long double)value(child->model.parts[bone].bytes+0x80+4*k)-expectedMatrices[bone][k])<.001L);C(!gh_cloth_finish_00105a94(&finish,&distances));
-  uint8_t afterForces[44*0xa0];memcpy(afterForces,raw+0x4d0,sizeof(afterForces));C(!gh_cloth_integrate_forces_0010430c(&force,&move.simulation)&&!memcmp(afterForces,raw+0x4d0,sizeof(afterForces)));memcpy(raw+0x4d0,beforeForces,sizeof(beforeForces));gh_cloth_forces badForce={0};uint32_t one=0x3f800000;memcpy(pr+0x674,&one,4);C(gh_cloth_integrate_forces_0010430c(&badForce,&move.simulation)==GH_CLOTH_UNSUPPORTED&&badForce.frontier==0x104718&&!memcmp(beforeForces,raw+0x4d0,sizeof(beforeForces)));one=0;memcpy(pr+0x674,&one,4);memset(globals.wind,0,12);memset(pr+0x650,0,12);
+  uint8_t afterForces[44*0xa0];memcpy(afterForces,raw+0x4d0,sizeof(afterForces));C(!gh_cloth_integrate_forces_0010430c(&force,&move.simulation)&&!memcmp(afterForces,raw+0x4d0,sizeof(afterForces)));memcpy(raw+0x4d0,beforeForces,sizeof(beforeForces));gh_cloth_forces badForce={0};uint32_t one=0x7fc00000;memcpy(pr+0x674,&one,4);C(gh_cloth_integrate_forces_0010430c(&badForce,&move.simulation)==GH_CLOTH_NUMERIC&&badForce.frontier==0x1043f8&&!memcmp(beforeForces,raw+0x4d0,sizeof(beforeForces)));one=0;memcpy(pr+0x674,&one,4);memset(globals.wind,0,12);memset(pr+0x650,0,12);
   memcpy(raw,before,sizeof(before));gh_child_move missing={0};b.work5f4=NULL;C(gh_game_player_child_move_00100530(&missing,&b)==GH_PLAYER_UNSUPPORTED&&missing.frontier==0x2db6b0);b.work5f4=&parent->root;parentFlags=0x800;memcpy(pr+0x3ac,&parentFlags,2);gh_child_move wind={0};C(gh_game_player_child_move_00100530(&wind,&b)==GH_PLAYER_UNSUPPORTED&&wind.frontier==0x147988&&!memcmp(&random,&after,sizeof(after)));parentFlags=0;memcpy(pr+0x3ac,&parentFlags,2);C(gh_game_player_child_move_00100530(&wind,&b)==GH_PLAYER_UNSUPPORTED&&wind.frontier==0x10430c);
  }
+ memcpy(raw, before, sizeof(before));
+ gh_game_mt runningRandom;
+ gh_game_mt_seed_0030f2b0(&runningRandom, 5489);
+ gh_child_move_bindings runningBindings = {
+   .cloth = {.springs=springs,.attachment=&attachment,.templates=&tables,.globals=&globals,
+     .random=&runningRandom,.matrix_policy=GH_STATIC_BINARY32_REFERENCE,.random_policy=GH_FRAME_CHOP_REFERENCE},
+   .work=work,.work5f4=&parent->root
+ };
+ float runningMovement[3] = {0.125f, 0, 0}, radial = 0.005f;
+ memcpy(pr + 0x650, runningMovement, 12);
+ memcpy(pr + 0x674, &radial, 4);
+ gh_child_update running = {0};
+ gh_title_player_status status = gh_game_player_child_update_00100530(&running, &runningBindings, shared);
+ C(!status &&
+   running.original_returned && running.stage == 6 && !running.frontier &&
+   running.forces.complete && running.angles.complete && running.distances.complete &&
+   running.finish.complete && running.finish.rotated_parts == 33);
+ C(!w(pr + 0x650) && !w(pr + 0x654) && !w(pr + 0x658));
+ C(!memcmp(pr + 0x674, &radial, 4));
+ memset(pr + 0x674, 0, 4);
  memcpy(raw,before,sizeof(before));gh_game_player_child_attachment_clear(&attachment);C(!attachment.attached);C(!fesetround(FE_TONEAREST));
 }
 int main(int argc,char**argv){C(argc==3);FILE*f=fopen(argv[2],"rb");C(f&&!fseek(f,0,SEEK_END));long el=ftell(f);C(el>0&&!fseek(f,0,SEEK_SET));uint8_t*elf=malloc((size_t)el);C(elf&&fread(elf,1,(size_t)el,f)==(size_t)el);fclose(f);gh_player_shared_vector shared={0};C(gh_player_shared_vector_from_elf(&shared,elf,51)==GH_PLAYER_BOUNDS&&!shared.initialized);C(!gh_player_shared_vector_from_elf(&shared,elf,(size_t)el)&&!w(shared.bytes)&&!w(shared.bytes+4)&&!w(shared.bytes+8)&&w(shared.bytes+12)==0x3f800000);

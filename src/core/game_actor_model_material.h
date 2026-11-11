@@ -13,6 +13,10 @@ typedef struct {gh_actor_model *model;gh_stage_textures *textures;size_t node_in
  * Raw FF with an empty constructor slot retains the TEX0=0 display-page
  * sample. It has no TM3 image and no update write from 148690. */
 gh_actor_model_status gh_actor_materials_0014b4d0(gh_actor_model *,unsigned,gh_stage_textures *,gh_actor_materials *,uint32_t *frontier);
+/* 14B9A0 reuses the parity node's existing stream TEX0 and decoded owner.
+ * Never allocates a missing cache entry or republishes material registers. */
+gh_actor_model_status gh_actor_materials_existing_0014b9a0(gh_actor_model *,unsigned,
+ gh_stage_textures *,gh_actor_materials *,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

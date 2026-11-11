@@ -15,6 +15,28 @@ finished port or execute guest instructions in the production runtime.
 - `tools/freeze-source.py` records immutable authored source and checked worker
   bundles. Build reports fingerprint the exact inputs; staged source can come
   from that verified copy while other workers continue editing.
+- `tools/rebase-source-overlay.py` moves a pinned text overlay to a newer frozen
+  source snapshot. It verifies both receipts and prerequisites, merges disjoint
+  edits, and writes a fresh bundle to project scratch. Overlapping edits fail
+  before the new bundle is published.
+- `tools/record-startup-frontier.py` verifies a completed Windows QA process
+  against its source and executable receipts, records the observed original
+  stop or native rendering error, and fingerprints its logs and optional raw
+  capture. Its output records an unfinished observation.
+  `--capture-series` verifies each logged 512×448 world/composite pair against
+  its process hash and counts nonblack RGB pixels independently of alpha.
+  Compare both surfaces and the logged Fade color when diagnosing a black frame.
+  Builds with capture presentation tracking identify which prepared frames
+  were presented by the window before the execution stopped.
+  The QA `QA_SCENARIO_TASK` marker identifies a failed nested task slot and
+  Scenario substage when the host reports an original script frontier.
+  `GH_ACTOR_FRONTIER` ties the original draw stop to a separate actor handle,
+  class, Draw substage and raw root flags.
+- Windows startup QA records the current 0202 actor's original placement and
+  state bytes in the `QA_ENEMY_PLACEMENT` stderr record when available.
+- `tools/build-native.py --focus game-enemy-started-pitch --focus game-om324-started-pitch`
+  runs the original-disc voice regressions with a test-only recording transport.
+  They verify the PCM and command sequence without opening an audio device.
 - `tools/normalize-staged-eof.py` plans or removes reported terminal blank lines
   from Git's staged text only. Other whitespace errors stop it before the index
   changes. It preserves the working tree, frozen snapshots and executable modes.
@@ -63,6 +85,14 @@ Ghidra 包装工具现在会核对本轮日志、完整函数清单、输出生�
 地址必须写成带引号的十六进制字符串，避免 PowerShell 把含 e 的地址解析为科学计数。
 即使进程返回 0，Java 报错或缺少报告也会失败；已有报告始终保留，请使用新输出文件名。
 
+`tools/inspect-actor-sound.c` audits core sound programs by default. Pass
+`--ses se/em00.ses 0 1 2` after the ISO and report paths to inspect those
+programs in an isolated SES registry. The report includes program fields,
+sample offsets, ADSR and decoded frame counts. It writes JSON only and uses
+no audio device. Registry bank 1 in this report is local to the audit.
+
+声音检查工具可用 `--ses se/em00.ses 0 1 2` 核对指定音效表、样本偏移、ADSR 和解码
+帧数。报告的 bank 1 是检查工具的临时编号，游戏运行时由原版音效表管理器分配编号。
 
 `tools/record-native-milestone.py` consolidates matching private evidence. It
 checks source, artifact and report hashes, the executed Windows path, two RNG

@@ -42,19 +42,33 @@ gh_stage_status gh_stage_texture_forget_source_range(gh_stage_textures*s,const v
  return GH_STAGE_OK;
 }
 void gh_stage_textures_destroy(gh_stage_textures *s){if(s){gh_stage_tm3_cache_clear(s);free(s->vram);free(s);}}
-gh_stage_status gh_stage_tm3_resolve(gh_stage_textures*s,const void*raw,size_t n,unsigned member,unsigned mode,const gh_stage_material**out){
+static gh_stage_status tm3_lookup(const gh_stage_textures*s,const void*raw,size_t n,
+ unsigned member,unsigned mode,gh_tm3_picture *picture,const gh_stage_material**out){
  if(!s||!raw||!out)return GH_STAGE_ARGUMENT;*out=NULL;
  if(mode>3)return GH_STAGE_UNSUPPORTED;
- gh_tm3_bundle bundle;gh_tm3_picture picture;gh_tm3_error e=gh_tm3_open(raw,n,&bundle);
- if(!e)e=gh_tm3_member(&bundle,member,&picture);
+ gh_tm3_bundle bundle;gh_tm3_error e=gh_tm3_open(raw,n,&bundle);
+ if(!e)e=gh_tm3_member(&bundle,member,picture);
  if(e)return e==GH_TM3_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;
  unsigned pool=mode==1?1:mode==2?2:0;
  /* Original151398 key is source identity in its selected cache pool. */
- for(stage_material_node*p=s->materials;p;p=p->next)if(p->view.source==picture.source&&p->view.cache_pool==pool){*out=&p->view;return GH_STAGE_OK;}
+ for(const stage_material_node*p=s->materials;p;p=p->next)
+  if(p->view.source==picture->source&&p->view.cache_pool==pool){*out=&p->view;return GH_STAGE_OK;}
+ return GH_STAGE_UNAVAILABLE;
+}
+gh_stage_status gh_stage_tm3_cached(const gh_stage_textures*s,const void*raw,size_t n,
+ unsigned member,unsigned mode,const gh_stage_material**out){
+ gh_tm3_picture picture;
+ return tm3_lookup(s,raw,n,member,mode,&picture,out);
+}
+gh_stage_status gh_stage_tm3_resolve(gh_stage_textures*s,const void*raw,size_t n,unsigned member,unsigned mode,const gh_stage_material**out){
+ gh_tm3_picture picture;
+ gh_stage_status existing=tm3_lookup(s,raw,n,member,mode,&picture,out);
+ if(existing!=GH_STAGE_UNAVAILABLE)return existing;
+ unsigned pool=mode==1?1:mode==2?2:0;
  if(s->material_count>=1024||s->next_material_id==UINT64_MAX)return GH_STAGE_MEMORY;
  stage_material_node*p=calloc(1,sizeof(*p));if(!p)return GH_STAGE_MEMORY;
  size_t bytes=(size_t)picture.width*picture.height*4;p->pixels=malloc(bytes);if(!p->pixels){free(p);return GH_STAGE_MEMORY;}
- e=gh_tm3_rgba_gs(&picture,p->pixels,bytes);if(e){free(p->pixels);free(p);return e==GH_TM3_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;}
+ gh_tm3_error e=gh_tm3_rgba_gs(&picture,p->pixels,bytes);if(e){free(p->pixels);free(p);return e==GH_TM3_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;}
  p->view=(gh_stage_material){picture.source,p->pixels,picture.source_bytes,bytes,++s->next_material_id,picture.tex0,picture.width,picture.height,(uint8_t)mode,(uint8_t)pool,(uint8_t)((picture.tex0>>20)&63),1,(uint8_t)((picture.tex0>>35)&3)};
  p->next=s->materials;s->materials=p;s->material_count++;*out=&p->view;return GH_STAGE_OK;
 }

@@ -67,6 +67,7 @@ bool alpha_pass(uint a){uint test=state.x;if((test&1)==0)return true;uint ref=(t
 int3 select_color(uint selector,int3 source,int3 destination){return selector==0?source:(selector==1?destination:int3(0,0,0));}
 [numthreads(8,8,1)]void main(uint3 tid:SV_DispatchThreadID){
  uint2 p=tid.xy;if(p.x>=surface.x||p.y>=surface.y)return;int2 pixelPosition=int2(p)*16;
+ bool framebufferMasked=(state.w&0x04000000u)!=0;
  uint4 destination=colorTarget[p];uint oldZ=depthTarget[p];
  [loop]for(uint i=0;i<surface.z;i+=3){Vertex a=vertices[indices[i]],b=vertices[indices[i+1]],c=vertices[indices[i+2]];
   uint2 area=edge(a.xyzd.xy,b.xyzd.xy,c.xyzd.xy);if(wide_zero(area))continue;
@@ -94,7 +95,7 @@ int3 select_color(uint selector,int3 source,int3 destination){return selector==0
   if((state.w&0x02000000u)!=0)source.a=tint.a;
   bool alpha_ok=alpha_pass(uint(source.a));uint afail=(state.x>>12)&3;
   if(!alpha_ok&&afail==0)continue;bool writeColor=alpha_ok||afail!=2,writeZ=(alpha_ok||afail==2)&&state.y!=0;
-  if(writeColor){
+  if(writeColor&&!framebufferMasked){
    if((surface.w&32)!=0){int fog=clamp(int(interpolate(float(a.xyzd.w),float(b.xyzd.w),float(c.xyzd.w),w)),0,255);
     int3 fc=int3(state.z&255,(state.z>>8)&255,(state.z>>16)&255);
     source.rgb=(fc*(256-fog)+source.rgb*fog)>>8;}
@@ -108,7 +109,8 @@ int3 select_color(uint selector,int3 source,int3 destination){return selector==0
   }
   if(writeZ)oldZ=z;
  }
- colorTarget[p]=destination;depthTarget[p]=oldZ;
+ if(!framebufferMasked)colorTarget[p]=destination;
+ depthTarget[p]=oldZ;
 })";
 extern "C" void gh_model_renderer_destroy(gh_model_renderer*r){delete r;}
 extern "C" gh_model_gpu_error gh_model_renderer_create(unsigned width,unsigned height,gh_model_renderer**out){
@@ -154,7 +156,8 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
  if(!s||!input||!indices||!r->begun||r->thread!=GetCurrentThreadId()||count>1024||n>4096||!count||n%3)return GH_MODEL_GPU_ARGUMENT;
  const bool flat_strip = s->primitive == 0x54;
  unsigned prim=s->primitive&7;if((prim!=3&&prim!=4&&prim!=5)||(!(s->primitive&8)&&!flat_strip)||!(s->primitive&16)||(s->primitive&~0x7fu)||!s->native_float_reference||s->frame_psm||s->zbuf_psm!=58||s->dthe||s->colclamp!=1||s->clamp||s->fba>1||s->pabe>1||s->z_write>1||s->xy_offset_x16>65535||s->xy_offset_y16>65535||(s->texture_function!=0&&s->texture_function!=3))return GH_MODEL_GPU_UNSUPPORTED;
- if(s->frame_mask && ((!flat_strip&&!scene_warp) || s->frame_mask != 0xff000000u))return GH_MODEL_GPU_UNSUPPORTED;
+ if(s->frame_mask && s->frame_mask != UINT32_MAX &&
+    ((!flat_strip&&!scene_warp) || s->frame_mask != 0xff000000u))return GH_MODEL_GPU_UNSUPPORTED;
  if (flat_strip) {
   // The original packet is one four-vertex strip with the same RGBA on all
   // vertices, so provoking-vertex selection cannot change its flat color.
@@ -186,7 +189,9 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
   for(unsigned c=0;c<4;c++){if(v.rgba[c]>255)return GH_MODEL_GPU_UNSUPPORTED;out.rgba[c]=v.rgba[c];}
  }
  Owned<ID3D11Buffer> vb,ib;Owned<ID3D11ShaderResourceView> vv,iv;gh_model_gpu_error e=structured(r,vertices.data(),sizeof(Vertex),(UINT)count,vb,vv);if(e)return e;e=structured(r,indices,4,(UINT)n,ib,iv);if(e)return e;
- Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)|(s->frame_mask?0x01000000u:0u)|(tcc0?0x02000000u:0u)},
+ const uint32_t frame_flags=s->frame_mask==UINT32_MAX?0x04000000u:
+                            s->frame_mask==0xff000000u?0x01000000u:0;
+ Parameters p={{r->width,r->height,(uint32_t)n,s->primitive},{(uint32_t)s->test,s->z_write,s->fog_rgb,(uint32_t)s->pabe|((uint32_t)s->fba<<8)|((uint32_t)s->texture_function<<16)|frame_flags|(tcc0?0x02000000u:0u)},
   {(uint32_t)s->alpha&3,((uint32_t)s->alpha>>2)&3,((uint32_t)s->alpha>>4)&3,((uint32_t)s->alpha>>6)&3},{m.width,m.height,(uint32_t)((s->tex1>>5)&1),(uint32_t)(s->alpha>>32)&255}};
  r->context.p->UpdateSubresource(r->parameters.p,0,nullptr,&p,0,0);ID3D11Buffer*constant=r->parameters.p;ID3D11ShaderResourceView*views[]={m.view.p,vv.p,iv.p};ID3D11UnorderedAccessView*targets[]={r->color_target.p,r->depth_target.p};
  r->context.p->CSSetShader(r->shader.p,nullptr,0);r->context.p->CSSetConstantBuffers(0,1,&constant);r->context.p->CSSetShaderResources(0,3,views);r->context.p->CSSetUnorderedAccessViews(0,2,targets,nullptr);r->context.p->Dispatch((r->width+7)/8,(r->height+7)/8,1);

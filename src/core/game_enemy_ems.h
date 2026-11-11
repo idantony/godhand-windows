@@ -66,7 +66,9 @@ gh_actor_motion_status gh_enemy2a2_set_escape_position_00289038(gh_game_title_pl
 /* R100 AT3's original cEmWrap calls, on the same registered live actor. */
 gh_actor_motion_status gh_enemy_ems_start_goto_at3(const gh_enemy_ems *,uint8_t stamp,
     const float destination[3],uint32_t *frontier);
-/* EndSoftEvent argument zero through the canonical enemy manager list. */
+/* Original soft-event suspend/resume through the canonical enemy manager list. */
+gh_actor_motion_status gh_enemy_ems_set_suspend_002948e8(const gh_enemy_ems *,
+    const gh_game_init_state *, int suspend, uint32_t *frontier);
 gh_actor_motion_status gh_enemy_ems_unsuspend_002948e8(const gh_enemy_ems *,
     const gh_game_init_state *, uint32_t *frontier);
 /* Native cancellation after task shutdown, before manager/pools/shape cleanup.

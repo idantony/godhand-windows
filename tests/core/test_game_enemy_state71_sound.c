@@ -191,6 +191,14 @@ int main(int argc,char **argv)
   C(!gh_actor_attached_sound_bind(&source,&binding));
   C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
   gh_motion_sound_request request={.model=&model.model,.actor=&enemy.view,.bank=1,.program=0x11};
+  const unsigned before_timed=submissions;
+  float anchor[4];
+  memcpy(anchor,enemy.view.alias_f0,sizeof(anchor));
+  float listener[4]={anchor[0]-3,anchor[1]+1.3f,anchor[2],1};
+  float matrix[16]={1,0,0,0,0,1,0,0,0,0,1,0,-listener[0],-listener[1],-listener[2],1};
+  memcpy(control.listener_position_c0,listener,sizeof(listener));
+  memcpy(control.listener_matrix_d0,matrix,sizeof(matrix));
+  control.listener_mode110=1;
   uint32_t handle;
   C(!gh_actor_attached_sound_motion(&source,&request,&handle,&frontier)&&!frontier);
   C(!memcmp(&random,&expected,sizeof(random)));
@@ -199,27 +207,41 @@ int main(int argc,char **argv)
    uint32_t duplicate=99;
    C(!gh_actor_attached_sound_motion(&source,&request,&duplicate,&frontier)&&!frontier&&!duplicate);
    C(!gh_se_voice_attached_reservations(voices)&&model.model.sound_borrowers==1);
-   float anchor[4];
-   memcpy(anchor,enemy.view.alias_f0,sizeof(anchor));
-   float listener[4]={anchor[0]-3,anchor[1]+1.3f,anchor[2],1};
-   float matrix[16]={1,0,0,0,0,1,0,0,0,0,1,0,-listener[0],-listener[1],-listener[2],1};
-   memcpy(control.listener_position_c0,listener,sizeof(listener));
-   memcpy(control.listener_matrix_d0,matrix,sizeof(matrix));
-   control.listener_mode110=1;
    C(!gh_se_voice_update(voices));
    gh_se_voice_info info;
    C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&info.channel==35);
    C(info.position_mode==2&&info.distance==3&&!info.pan&&info.pitch_q12);
    C(info.left_q14==0x5a00*(95*80/127)/127/2&&!info.right_q14);
-   C(submissions==1&&submitted[0].frames>15456);
+   C(submissions==before_timed+1&&submitted[before_timed].frames>15456);
   }else{
    C(!handle&&!model.model.sound_borrowers&&!gh_se_voice_active_nodes(voices));
-   C(!gh_se_voice_attached_reservations(voices)&&!submissions);
+   C(!gh_se_voice_attached_reservations(voices)&&submissions==before_timed);
+   /* Selector 11 uses logical program 0. Both variants have a one-frame
+    * duplicate window, and their sample's pitch range is selected by SDE. */
+   request.program=0;
+   const gh_game_mt before_reaction=random;
+   uint32_t draw;
+   C(!gh_game_mt_next_0030f348(&expected,&draw));
+   const int16_t actual_program=(int16_t)(draw&1u);
+   C(!gh_actor_attached_sound_motion(&source,&request,&handle,&frontier)&&handle&&!frontier);
+   C(!memcmp(&random,&expected,sizeof(random))&&model.model.sound_borrowers==1);
+   random=before_reaction;
+   uint32_t duplicate=99;
+   C(!gh_actor_attached_sound_motion(&source,&request,&duplicate,&frontier)&&!frontier&&!duplicate);
+   C(!memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_attached_reservations(voices));
+   gh_voice_status status=gh_se_voice_update(voices);
+   if(status)fprintf(stderr,"reaction sound dep%03x status%d frontier%08x\n",dep,status,gh_se_voice_frontier(voices));
+   C(!status);
+   gh_se_voice_info info;
+   C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&info.channel==40);
+   C(info.bank==bank&&info.program==actual_program&&info.sample_slot==(unsigned)actual_program&&
+     info.rate==11025&&info.pitch_q12&&info.position_mode==2&&info.distance==3&&
+     info.left_q14&&!info.right_q14&&submissions==before_timed+1);
   }
   C(!gh_actor_attached_sound_abort(&source));
   C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
  }
- C(submissions==1&&stops==1);
+ C(submissions==4&&stops==4);
  C(!gh_enemy_se_banks_destroy(banks));
  gh_se_voice_destroy(voices);
  C(!gh_game_room_pools_release(&pools)&&!gh_task_threads_destroy(threads)&&!gh_heap_destroy(heap));
@@ -228,6 +250,6 @@ int main(int argc,char **argv)
  gh_disc_close(disc);
  free(resource_bytes);
  free(room);
- puts("PASS actual R100 timed bank1:11 disabled EM00/EM02/EM03; EM0A original sample, duplicate and PCM command (no device)");
+ puts("PASS actual R100 timed bank1:11 and enemy reaction bank1:0, original MT, duplicates and spatial PCM commands (no device)");
  return 0;
 }

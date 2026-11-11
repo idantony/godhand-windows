@@ -4,6 +4,29 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## First visible R100 room frame and native player movement
+
+A hidden, muted Windows run reaches tick 1,744 and presents scene frame
+1,603. Synthetic gamepad input follows the original mapping into Gene's
+run state. The first movement reaches the window submission at frame 1,599,
+under the fade. At frame 1,603 the final displayed composite has visible
+room geometry, Gene, nearby enemies and HUD. The original fade is still active.
+The run submits 1,243,415 world packets with zero renderer, GPU, postprocess
+and window errors.
+
+Two enemy actors execute the original scenery-contact reaction. The next
+unfinished call is attached enemy footstep playback at `0x002CBF78`.
+Continuous gameplay, player combat, room transitions and save/load remain
+under development. The screenshots and original assets remain local.
+
+隐藏、静音的 Windows 运行到 tick 1744，并呈现第 1603 个场景帧。合成摇杆输入经原版
+映射进入 Gene 的跑步状态。位移从第 1599 帧提交到窗口，第 1603 帧的最终画面开始显示
+房间、Gene、附近敌人和 HUD，淡出仍在进行。共提交 1243415 个世界绘制包，渲染器、
+GPU、后处理和窗口错误均为 0。
+
+两名敌人执行了原版场景物件碰撞反应。当前停在敌人的脚步声请求 `0x002CBF78`。
+连续操作、玩家战斗、房间切换和存读档仍在开发。截图与原始资源留在本地。
+
 ## Complete native R100 opening and return to the room
 
 An immutable Windows build plays all ten original EV01 camera cuts from the

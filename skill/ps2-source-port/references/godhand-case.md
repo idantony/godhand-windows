@@ -22,6 +22,16 @@ native floating interpolation profile. This is not proof of every GS raster
 precision detail. Analytic full-surface coverage and prior RGBA/Z regressions
 must accompany the wider domain.
 
+Actual ESP14 factory 3139E0 allocates 0x4E0 bytes in room arena 754C10.
+The original allocator consumes this size plus its 0x20-byte header. Kind500
+participates in shared visibility at +538 and +5A0. In the actual R100 arena
+fixture, adjacent allocations make these offsets alias the second object's
++38 and +A0. Keep the original allocation size and borrow the validated
+backing bytes only at those accesses. The native accessor authenticates
+registration and allocation identity, checks arena bounds and rejects active
+allocator-header overlaps. Exact145 Windows advances through 308BC0 with the
+same native arena. 308A38 uses the same field when a later event clears masks.
+
 Use immutable authored-source snapshots when workers continue changing shared
 headers. Fingerprint every real input, build/test the copy, and stage its exact
 verified bytes without overwriting newer working files. A passing copy does not

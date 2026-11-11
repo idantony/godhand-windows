@@ -6,6 +6,7 @@
 #include "../platform/adx_stream.h"
 #include "game_children.h"
 #include "game_init.h"
+#include "game_room_state.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -67,8 +68,13 @@ gh_bgm_status gh_bgm_event_stop_002d1800(gh_bgm_requests *,int preserve_mode5);
 gh_bgm_status gh_bgm_requests_update_002d0938(gh_bgm_requests *,const gh_boot_work *);
 /* Actualcase3tail2D0850/2D0D70. Readsoriginal44rowroommap fromuserELF;
  * borrows canonicalchildren/Heat/enemyhead, no defaultroom->trackguess.
- * Activeenemy/specialdoor override consumers remainpreciseunsupported. */
+ * A special-door override remains unsupported. */
 gh_bgm_status gh_bgm_requests_scene_begin_002d0850(gh_bgm_requests *,const gh_boot_work *,const gh_game_children *,const gh_game_init_state *);
+/* The room binding supplies the canonical placement status for 28FB38. */
+gh_bgm_status gh_bgm_requests_scene_begin_with_room_002d0850(gh_bgm_requests *,
+    const gh_boot_work *,const gh_game_children *,const gh_game_init_state *,const gh_room_state *);
+gh_bgm_status gh_bgm_enemy_override_002d0cd0(const gh_game_init_state *,
+    const gh_room_state *,int32_t *original);
 /* Actual2CAA00 BGM pass and2CAB58 BGM predicate. Does not advance audio
  * time; caller retains ordinary2D0938/frame pump. Preserved requests fade to
  * .01 then pause after original20->...->-1 countdown. */

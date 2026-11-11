@@ -23,7 +23,7 @@ def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
-def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370, capture_count=1):
+def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370, capture_count=1, control_probe=None):
     """Read-only preflight. No launch or output creation occurs on rejection."""
     snapshot, scratch = Path(snapshot_arg).resolve(), Path(scratch_arg).resolve()
     iso, ffmpeg = Path(iso_arg).resolve(), Path(ffmpeg_arg).resolve()
@@ -34,24 +34,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
     proof.require(type(capture_count) is int and 1 <= capture_count <= MAX_CAPTURE_COUNT
                   and capture_frame + capture_count - 1 <= max_ticks,
                   f"require 1 <= capture-count <= {MAX_CAPTURE_COUNT} and range within max-ticks")
-    inputs = proof.Inputs()
-    receipt, receipt_fact = inputs.report(snapshot / "analysis/source-snapshot.json")
-    proof.require(receipt.get("status") == "copied-exact-bytes; not-yet-built-or-tested", "invalid source snapshot receipt")
-    proof.require(Path(receipt.get("snapshot", "")).resolve() == snapshot, "source snapshot path mismatch")
-    proof.require(Path(receipt.get("source_project", "")).resolve() == PROJECT, "source project mismatch")
-    hashes = receipt.get("source_sha256")
-    proof.require(isinstance(hashes, dict) and hashes, "empty snapshot source map")
-    for name, sha in hashes.items():
-        inputs.checked(proof.source_path(snapshot, name), sha)
-    report, report_fact = inputs.report(snapshot / "analysis/windows-startup-qa-build.json")
-    proof.require(report.get("status") == "built" and report.get("target") == "startup-qa",
-                  "matching startup-qa build must be built")
-    proof.require(report.get("is_playable_game") is False, "build must retain non-playable scope")
-    proof.steps(report, "windows")
-    proof.source_map(inputs, snapshot, hashes, report, "windows")
-    executable = scratch / "build/windows-startup-qa/probe-native-startup.exe"
-    proof.require(Path(report.get("executable", "")).resolve() == executable, "executable belongs to another scratch")
-    exe_sha = inputs.checked(executable, report.get("executable_sha256"))
+    proof.require(control_probe in (None, "walk", "run", "square"), "unknown control probe")
+    _, executable, exe_sha, receipt_fact, report_fact = proof.startup_build_inputs(snapshot, scratch, PROJECT)
     proof.require(iso.is_file() and ffmpeg.is_file(), "ISO and ffmpeg must be existing files")
     profile, capture = scratch / "profile-absent", scratch / "first-scene-candidate.rgba"
     outputs = [scratch / name for name in ("startup-run.lock", "startup-newgame.json", "startup-newgame.stderr.log", "startup-process.json")]
@@ -64,6 +48,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
         proof.require(not any(scratch.glob(capture.stem + ".scene-*.rgba")),
                       "QA range outputs already exist; use a fresh scratch cohort")
         command.extend(("--qa-capture-count", str(capture_count)))
+    if control_probe:
+        command.extend(("--qa-control", control_probe))
     return {"command": command, "scratch": scratch, "executable": executable,
             "executable_sha256": exe_sha, "source_snapshot": receipt_fact, "windows_build": report_fact}
 
@@ -83,6 +69,13 @@ def run(prepared):
             receipt["exit_code"] = child.returncode
         except OSError as error:
             receipt["launch_error"] = str(error)
+    # Fingerprint even if the child reports a renderer failure below.
+    capture = Path(prepared["command"][prepared["command"].index("--qa-capture") + 1])
+    captures = [capture, Path(str(capture) + ".world.rgba")]
+    captures.extend(sorted(scratch.glob(capture.stem + ".scene-*.rgba")))
+    outputs = [scratch / "startup-newgame.json", scratch / "startup-newgame.stderr.log"]
+    outputs.extend(path for path in captures if path.is_file() and path.resolve().parent == scratch)
+    receipt["outputs_sha256"] = {path.name: proof.digest(path) for path in outputs}
     receipt["finished_utc"] = now()
     receipt["executable_sha256_after"] = proof.digest(prepared["executable"])
     with (scratch / "startup-process.json").open("x", encoding="utf-8") as stream:
@@ -110,9 +103,11 @@ def main():
     parser.add_argument("--capture-frame", type=int, default=370)
     parser.add_argument("--capture-count", type=int, default=1,
                         help=f"capture up to {MAX_CAPTURE_COUNT} ready scene frames beginning at capture-frame")
+    parser.add_argument("--control-probe", choices=("walk", "run", "square"),
+                        help="send original pad input after EV01 and two neutral player updates")
     args = parser.parse_args()
     try:
-        prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame, args.capture_count)
+        prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame, args.capture_count, args.control_probe)
         print(json.dumps(run(prepared)), flush=True)
     except (proof.ProofError, OSError, ValueError) as error:
         parser.exit(1, str(error) + "\n")

@@ -179,6 +179,8 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
  * retain their exact original entry. The provider borrows Root's one OT. */
 gh_game_services_status gh_game_services_trans_actor(gh_game_services *,const gh_object_trans_request *,
  const gh_boot_work *,const gh_game_actor_render_provider *,uint32_t *frontier);
+/* Borrow the same player and object resolver used by ordinary target selection. */
+gh_player_target_bindings gh_game_services_scene_targets(gh_game_services *);
 /* Inspect native script errors immediately after a real Scenario visit. */
 gh_scene_step_status gh_game_services_task_status(gh_game_services *,uint32_t *frontier);
 /* Actual12C418 on SAME player/model/motion, with one invocation cursor. */

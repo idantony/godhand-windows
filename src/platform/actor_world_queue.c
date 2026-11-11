@@ -26,10 +26,23 @@ gh_actor_world_status gh_actor_world_queue_append(gh_actor_world_queue *q,const 
  gh_actor_model *model=command->model;if(!model->ready||model->native_identity!=model||!command->packet_group||command->parity>1||!command->depth||(command->bank!=1&&command->bank!=2))return GH_ACTOR_WORLD_ARGUMENT;
  if(q->count==MAX_GROUPS)return GH_ACTOR_WORLD_BOUNDS;
  group next={0};next.view.command=*command;gh_actor_world_status status=GH_ACTOR_WORLD_OK;
- if(command->kind==GH_ACTOR_DRAW_SETUP){
+ if(command->kind==GH_ACTOR_DRAW_OPACITY_FRAME){
+  if(command->node_index!=SIZE_MAX||command->frame!=UINT64_C(0x00080070)||
+     command->object||command->packet)return GH_ACTOR_WORLD_ARGUMENT;
+ }else if(command->kind==GH_ACTOR_DRAW_SETUP||command->kind==GH_ACTOR_DRAW_OPACITY_SETUP){
   const gh_actor_object_packets *object;if(gh_actor_model_object_packet(model,&object)||!object->ready||command->object!=object||command->node_index!=SIZE_MAX)return GH_ACTOR_WORLD_ARGUMENT;
- }else if(command->kind==GH_ACTOR_DRAW_GEOMETRY){
+  if(command->kind==GH_ACTOR_DRAW_OPACITY_SETUP&&
+     (command->selected_program!=2||command->frame!=UINT64_C(0xffffffff00080070)||
+      command->test!=UINT64_C(0x507fd)||command->alpha!=UINT64_C(0x8000000044)||
+      command->tex1!=UINT64_C(0xffffff3800000360)))
+   return GH_ACTOR_WORLD_ARGUMENT;
+ }else if(command->kind==GH_ACTOR_DRAW_GEOMETRY||command->kind==GH_ACTOR_DRAW_OPACITY_GEOMETRY){
   if(command->selected_program!=2&&command->selected_program!=30)return fail(frontier,0x155ae8,GH_ACTOR_WORLD_UNSUPPORTED);
+  if(command->kind==GH_ACTOR_DRAW_OPACITY_GEOMETRY&&
+     (command->selected_program!=2||command->frame!=UINT64_C(0xffffffff00080070)||
+      command->test!=UINT64_C(0x507fd)||command->alpha!=UINT64_C(0x8000000044)||
+      command->tex1!=UINT64_C(0xffffff3800000360)))
+   return GH_ACTOR_WORLD_ARGUMENT;
   if(command->node_index>UINT32_MAX)return GH_ACTOR_WORLD_BOUNDS;
   const gh_actor_node_packets *packet;if(gh_actor_model_packet_at(model,(unsigned)command->node_index,&packet)||packet!=command->packet||!packet->ready)return GH_ACTOR_WORLD_ARGUMENT;
   uint32_t node_flags;memcpy(&node_flags,packet->node+0x380,4);if(command->selected_program==30&&!(node_flags&0x20000000u))return fail(frontier,0x155ae8,GH_ACTOR_WORLD_UNSUPPORTED);

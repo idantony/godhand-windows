@@ -453,22 +453,25 @@ static int suspend_view(const gh_title_player_view *view, uint32_t vtable, size_
         object_word(view->bytes + 0x214) == vtable;
 }
 
-/* Actual 2A9350 and the own-object prefix of 275308 with argument zero. */
-static void clear_enemy_suspend(const gh_title_player_view *view)
+/* Actual 2A9350 and the own-object prefix of 275308. */
+static void set_enemy_suspend_flags(const gh_title_player_view *view, int suspend)
 {
-    uint32_t flags = object_word(view->bytes + 0x250) & ~0x8000u;
+    uint32_t flags = object_word(view->bytes + 0x250);
+    flags = suspend ? flags | 0x8000u : flags & ~0x8000u;
     memcpy(view->bytes + 0x250, &flags, sizeof(flags));
-    flags = object_word(view->bytes + 0x5a0) & ~8u;
+    flags = object_word(view->bytes + 0x5a0);
+    flags = suspend ? flags | 8u : flags & ~8u;
     memcpy(view->bytes + 0x5a0, &flags, sizeof(flags));
 }
 
-static gh_actor_motion_status unsuspend_entry(const ems_entry *entry, uint32_t *frontier)
+static gh_actor_motion_status set_entry_suspend(const ems_entry *entry, int suspend,
+    uint32_t *frontier)
 {
     const gh_title_player_view *view = &entry->actor->view;
     if (entry->enemy2a2) {
         *frontier = 0x2a9350;
         if (!suspend_view(view, 0x448ca0, 0x5a4)) return GH_ACTOR_MOTION_ARGUMENT;
-        clear_enemy_suspend(view);
+        set_enemy_suspend_flags(view, suspend);
         return GH_ACTOR_MOTION_OK;
     }
     *frontier = 0x275308;
@@ -490,8 +493,8 @@ static gh_actor_motion_status unsuspend_entry(const ems_entry *entry, uint32_t *
         *frontier = 0x275384;
         return GH_ACTOR_MOTION_UNSUPPORTED;
     }
-    clear_enemy_suspend(view);
-    if (weapon) clear_enemy_suspend(weapon);
+    set_enemy_suspend_flags(view, suspend);
+    if (weapon) set_enemy_suspend_flags(weapon, suspend);
     return GH_ACTOR_MOTION_OK;
 }
 
@@ -523,13 +526,13 @@ gh_actor_motion_status gh_enemy_ems_start_goto_at3(const gh_enemy_ems *owner,uin
         memcpy(p+0x16c4,&mode,4);
         if(object_word(p+0x738)){*frontier=0x1d0408;return GH_ACTOR_MOTION_UNSUPPORTED;}
     }
-    status=unsuspend_entry(entry,frontier);
+    status=set_entry_suspend(entry,0,frontier);
     if(!status)*frontier=0;
     return status;
 }
 
-gh_actor_motion_status gh_enemy_ems_unsuspend_002948e8(const gh_enemy_ems *owner,
-    const gh_game_init_state *manager, uint32_t *frontier)
+gh_actor_motion_status gh_enemy_ems_set_suspend_002948e8(const gh_enemy_ems *owner,
+    const gh_game_init_state *manager, int suspend, uint32_t *frontier)
 {
     if (!frontier) return GH_ACTOR_MOTION_ARGUMENT;
     *frontier = 0x2948e8;
@@ -561,7 +564,7 @@ gh_actor_motion_status gh_enemy_ems_unsuspend_002948e8(const gh_enemy_ems *owner
                     if (owner->entries[i].actor == actor) { entry = &owner->entries[i]; break; }
                 if (!entry || !entry->entered || !actor_registered(owner, entry))
                     return GH_ACTOR_MOTION_UNSUPPORTED;
-                gh_actor_motion_status status = unsuspend_entry(entry, frontier);
+                gh_actor_motion_status status = set_entry_suspend(entry, suspend, frontier);
                 if (status) return status;
             }
         }
@@ -569,6 +572,12 @@ gh_actor_motion_status gh_enemy_ems_unsuspend_002948e8(const gh_enemy_ems *owner
     }
     *frontier = 0;
     return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy_ems_unsuspend_002948e8(const gh_enemy_ems *owner,
+    const gh_game_init_state *manager, uint32_t *frontier)
+{
+    return gh_enemy_ems_set_suspend_002948e8(owner, manager, 0, frontier);
 }
 
 gh_actor_motion_status gh_enemy_ems_release_native(gh_enemy_ems **slot,uint32_t *frontier)

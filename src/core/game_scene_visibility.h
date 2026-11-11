@@ -16,6 +16,11 @@ gh_scene_post_status gh_scene_visibility_create(gh_scene_visibility **);
 /* Host metadata only; not original visibility reset or model destruction. */
 void gh_scene_visibility_destroy(gh_scene_visibility *);
 gh_scene_post_status gh_scene_visibility_step_00307b28(gh_scene_visibility *,const gh_scene_visibility_bindings *,uint32_t *frontier);
+/* Borrow one original name/visibility field from a canonical object. The
+ * kind500 cObjBase fields are resolved in the owner arena, never by extending
+ * the 4E0-byte object view. Valid offsets are 538 and 5A0. */
+gh_scene_post_status gh_scene_object_visibility_field(const gh_room_pools *,uint32_t handle,
+ const gh_title_player_view *,unsigned offset,uint8_t **out);
 /* Completed original invocation only; retains the canonical32-slot companion. */
 gh_scene_post_status gh_scene_visibility_next_call(gh_scene_visibility *);
 #ifdef __cplusplus

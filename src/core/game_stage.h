@@ -33,6 +33,8 @@ typedef struct gh_stage_material {const uint8_t *source,*rgba_gs;size_t source_b
  uint64_t cache_id,source_tex0;uint16_t width,height;uint8_t record_mode,cache_pool,psm,draw_tcc,draw_tfx;} gh_stage_material;
 gh_stage_status gh_stage_tm3_resolve(gh_stage_textures *,const void *tm3,size_t,
  unsigned zero_based_member,unsigned record_mode,const gh_stage_material **);
+gh_stage_status gh_stage_tm3_cached(const gh_stage_textures *,const void *tm3,size_t,
+ unsigned zero_based_member,unsigned record_mode,const gh_stage_material **);
 /* Bounded platform sampling of the SAME registered core-channel VRAM. Raw
  * GS alpha is retained. TEX0 must identify an existing channel; a TBW change
  * is admitted only when every sampled address is unchanged. No texture

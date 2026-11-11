@@ -4,6 +4,7 @@
 #include "game_actor_scroll_links.h"
 #include "game_ray_query.h"
 #include "game_scene_box_visibility.h"
+#include "game_esp14.h"
 #include <stdlib.h>
 #include <string.h>
 struct gh_scene_visibility {gh_scene_visibility_bindings b;const void*identity;
@@ -23,6 +24,51 @@ void gh_scene_visibility_destroy(gh_scene_visibility*s){free(s);}
 gh_scene_post_status gh_scene_visibility_next_call(gh_scene_visibility*s){if(!s||s->identity!=s||!s->bound||!s->complete)return GH_POST_ARGUMENT;s->phase=s->previous=s->index=s->registry_count=s->ray_index=s->report_count=s->report_index=s->static_row=s->actor_row=s->actor_index=s->dynamic_index=s->dynamic_count=0;s->ray_count=0;s->complete=s->registry_bound=0;return GH_POST_OK;}
 static gh_scene_post_status registry(gh_scene_visibility*s,const gh_room_vector**out,uint32_t*f){const gh_room_vector*v;if(gh_room_registry_view(s->b.scene.pools,0x754c58,&v)||(!v->allocation.pointer&&v->count))return fail(f,0x308bc0,GH_POST_POOLS);if(s->registry_bound&&s->registry_count!=v->count)return fail(f,0x308bc0,GH_POST_POOLS);s->registry_bound=1;s->registry_count=v->count;*out=v;return GH_POST_OK;}
 static gh_scene_post_status actor(gh_scene_visibility*s,const gh_room_vector*v,unsigned i,gh_title_player_view*out,uint32_t*f){if(i>=v->count)return GH_POST_ARGUMENT;if(!s->b.resolve_handle)return fail(f,0x308bc0,GH_POST_UNSUPPORTED);uint32_t h=word((uint8_t*)v->allocation.pointer+(size_t)i*4),pc=0;gh_scene_post_status e=s->b.resolve_handle(s->b.context,h,out,&pc);if(e)return fail(f,pc?pc:0x308bc0,e);if(!out->bytes||out->size<0x300)return fail(f,0x308bc0,GH_POST_ARGUMENT);return GH_POST_OK;}
+
+gh_scene_post_status gh_scene_object_visibility_field(const gh_room_pools *pools,uint32_t handle,
+    const gh_title_player_view *actor_view,unsigned offset,uint8_t **out)
+{
+    if(!out)return GH_POST_ARGUMENT;
+    *out=NULL;
+    if(!actor_view||!actor_view->bytes||(offset!=0x538&&offset!=0x5a0))return GH_POST_ARGUMENT;
+    if(actor_view->size>=0x5a4){
+        *out=actor_view->bytes+offset;
+        return GH_POST_OK;
+    }
+    /* Kind500 cObjBase requests 4E0, yet the original shared visibility
+     * list accesses its name/flags through the backing room arena. */
+    if(actor_view->size!=0x4e0||actor_view->original_vtable214!=0x44b840||
+        half(actor_view->bytes+0x2fe)!=GH_ESP_MODEL_KIND)
+        return GH_POST_ARGUMENT;
+    if(!pools||!handle||pools->object_slots>pools->object_capacity||
+        (pools->object_slots&&!pools->objects))return GH_POST_POOLS;
+    for(size_t i=0;i<pools->object_slots;i++){
+        const gh_room_object_binding *registered=pools->objects+i;
+        if(registered->handle!=handle||!registered->object)continue;
+        if(registered->kind!=GH_ESP_MODEL_KIND||!registered->owner)
+            return GH_POST_POOLS;
+        const gh_esp14_model *model=registered->owner;
+        if(model->handle!=handle||model->pools!=pools||registered->object!=&model->object||
+            !model->object.ready||model->object.view.bytes!=actor_view->bytes||
+            model->object.arena_allocation.pointer!=actor_view->bytes||
+            model->object.allocation_domain!=GH_PLAYER_ALLOCATION_ROOM_ARENA)
+            return GH_POST_POOLS;
+        gh_room_pool_status status=gh_room_arena_model_visibility_field(
+            &model->object.arena_allocation,offset,out);
+        return status?GH_POST_UNSUPPORTED:GH_POST_OK;
+    }
+    return GH_POST_POOLS;
+}
+
+static gh_scene_post_status visibility_field(gh_scene_visibility *s,const gh_room_vector *v,
+    unsigned index,const gh_title_player_view *actor_view,unsigned offset,uint8_t **out,
+    uint32_t entry,uint32_t *frontier)
+{
+    const uint32_t handle=word((const uint8_t*)v->allocation.pointer+(size_t)index*4);
+    gh_scene_post_status status=gh_scene_object_visibility_field(s->b.scene.pools,handle,
+        actor_view,offset,out);
+    return status?fail(frontier,entry,status):GH_POST_OK;
+}
 static gh_scene_post_status mask(gh_scene_visibility*s,uint32_t h,int hide,uint32_t*f){if(!s->b.mask_nodes)return fail(f,0x14b6f8,GH_POST_UNSUPPORTED);uint32_t pc=0;gh_scene_post_status e=s->b.mask_nodes(s->b.context,h,hide?UINT32_MAX:~1u,hide?1u:0u,&pc);return e?fail(f,pc?pc:0x14b6f8,e):GH_POST_OK;}
 static gh_scene_post_status insert(gh_scene_visibility*s,uint32_t h,int*accepted,uint32_t*f){*accepted=0;for(unsigned i=0;i<32;i++){uint32_t old=s->b.scene.tables->scroll_link_words[i];if(old){if(s->known_previous[i]!=old)return fail(f,0x3089f0,GH_POST_UNSUPPORTED);if(old==h){*accepted=1;return GH_POST_OK;}}else{s->known_previous[i]=h;s->b.scene.tables->scroll_link_words[i]=h;*accepted=1;return GH_POST_OK;}}return GH_POST_OK;}
 static gh_scene_post_status report(gh_scene_visibility*s,const gh_room_vector*v,uint32_t*f){
@@ -32,7 +78,20 @@ static gh_scene_post_status report(gh_scene_visibility*s,const gh_room_vector*v,
   s->static_row++;
  }
  while(s->actor_row<ac){unsigned n=base+sc+s->actor_row;if(n>65535)return fail(f,0x1333b8,GH_POST_ARGUMENT);gh_actor_scroll_entry entry;if(gh_scene_actor_scroll_entry_001333b8(s->b.scene.tables,(uint16_t)n,&entry)||entry.resolved)return fail(f,0x1333b8,GH_POST_UNSUPPORTED);
-  while(s->actor_index<v->count){gh_title_player_view x;gh_scene_post_status e=actor(s,v,s->actor_index,&x,f);if(e)return e;if(eligible(half(x.bytes+0x2fe))){if(x.size<0x5a4)return fail(f,0x307b28,GH_POST_ARGUMENT);if(key(x.bytes+0x538)==entry.current_key)put(x.bytes+0x5a0,word(x.bytes+0x5a0)|2u);}s->actor_index++;}s->actor_index=0;s->actor_row++;
+  while(s->actor_index<v->count){
+   gh_title_player_view x;gh_scene_post_status e=actor(s,v,s->actor_index,&x,f);if(e)return e;
+   if(eligible(half(x.bytes+0x2fe))){
+    uint8_t *name;
+    e=visibility_field(s,v,s->actor_index,&x,0x538,&name,0x307b28,f);if(e)return e;
+    if(key(name)==entry.current_key){
+     uint8_t *flags;
+     e=visibility_field(s,v,s->actor_index,&x,0x5a0,&flags,0x307b28,f);if(e)return e;
+     put(flags,word(flags)|2u);
+    }
+   }
+   s->actor_index++;
+  }
+  s->actor_index=0;s->actor_row++;
  }return GH_POST_OK;
 }
 gh_scene_post_status gh_scene_visibility_step_00307b28(gh_scene_visibility*s,const gh_scene_visibility_bindings*b,uint32_t*f){
@@ -47,7 +106,18 @@ gh_scene_post_status gh_scene_visibility_step_00307b28(gh_scene_visibility*s,con
  if(!s->phase){if(word((const uint8_t*)b->scene.work+0x5d8)&0x200000u){s->complete=1;return GH_POST_OK;}s->phase=1;}
  if(s->phase==1){while(s->previous<32){uint32_t h=b->scene.tables->scroll_link_words[s->previous];if(h){if(s->known_previous[s->previous]!=h)return fail(f,0x14b6f8,GH_POST_UNSUPPORTED);gh_scene_post_status e=mask(s,h,0,f);if(e)return e;}s->previous++;}s->phase=2;}
  const gh_room_vector*v;gh_scene_post_status e=registry(s,&v,f);if(e)return e;
- if(s->phase==2){while(s->index<v->count){gh_title_player_view x;e=actor(s,v,s->index,&x,f);if(e)return e;if(eligible(half(x.bytes+0x2fe))){if(x.size<0x5a4)return fail(f,0x308bc0,GH_POST_ARGUMENT);put(x.bytes+0x5a0,word(x.bytes+0x5a0)&~2u);}s->index++;}s->phase=3;}
+ if(s->phase==2){
+  while(s->index<v->count){
+   gh_title_player_view x;e=actor(s,v,s->index,&x,f);if(e)return e;
+   if(eligible(half(x.bytes+0x2fe))){
+    uint8_t *flags;
+    e=visibility_field(s,v,s->index,&x,0x5a0,&flags,0x308bc0,f);if(e)return e;
+    put(flags,word(flags)&~2u);
+   }
+   s->index++;
+  }
+  s->phase=3;
+ }
  if(s->phase==3){gh_scene_hidden_clear_00308d40(b->scene.tables);memset(s->known_previous,0,sizeof(s->known_previous));e=gh_scene_model_rays_00307b28(&b->scene,s->rays,&s->ray_count,f);if(e)return e;s->phase=4;}
  while(s->ray_index<s->ray_count){
   if(s->phase==4){memset(s->reports,0,sizeof(s->reports));gh_scene_ray_request q={0};memcpy(q.from,s->rays[s->ray_index].from,16);memcpy(q.to,s->rays[s->ray_index].to,16);q.mask=7;q.report_limit=8;q.native_reports=s->reports;int hit=0;uint32_t pc=0;gh_scene_ray_status z=gh_scene_ray_query_00131e10(b->scene.tables,&q,&hit,&pc);if(z)return fail(f,pc?pc:0x131e10,z==GH_RAY_UNSUPPORTED?GH_POST_UNSUPPORTED:GH_POST_QUERY);s->report_count=hit?b->scene.tables->ray.triangle17c:0;if(s->report_count>8)return fail(f,0x3085a4,GH_POST_ARGUMENT);s->phase=5;}
@@ -55,5 +125,25 @@ gh_scene_post_status gh_scene_visibility_step_00307b28(gh_scene_visibility*s,con
   if(s->phase==6){gh_scene_ray_request q={0};memcpy(q.from,s->rays[s->ray_index].from,16);memcpy(q.to,s->rays[s->ray_index].to,16);q.mask=7;s->dynamic_count=0;gh_ray_dynamic_reports d={s->dynamic_objects,8,&s->dynamic_count};q.dynamic_reports=&d;int hit=0;uint32_t pc=0;gh_scene_ray_status z=gh_scene_ray_query_00131e10(b->scene.tables,&q,&hit,&pc);if(z)return fail(f,pc?pc:0x131e10,z==GH_RAY_UNSUPPORTED?GH_POST_UNSUPPORTED:GH_POST_QUERY);if(!hit)s->dynamic_count=0;if(s->dynamic_count>8)return fail(f,0x308810,GH_POST_ARGUMENT);s->phase=7;}
   if(s->phase==7){while(s->dynamic_index<s->dynamic_count){const void*id=s->dynamic_objects[s->dynamic_index];if(id){int found=0;for(unsigned i=0;i<v->count;i++){gh_title_player_view x;e=actor(s,v,i,&x,f);if(e)return e;if(x.bytes==id){found=1;unsigned k=half(x.bytes+0x2fe);if(k>0x2ff&&k<0x500){if(x.size<0x5bc)return fail(f,0x308810,GH_POST_ARGUMENT);if(word(x.bytes+0x5b8)&4)put(x.bytes+0x5a0,word(x.bytes+0x5a0)|2u);}break;}}if(!found)return fail(f,0x308810,GH_POST_UNSUPPORTED);}s->dynamic_index++;}s->ray_index++;s->report_count=s->report_index=s->static_row=s->actor_row=s->actor_index=s->dynamic_index=0;s->phase=4;}
  }
- if(s->phase==4)s->phase=8;if(s->phase==8){if(s->index==s->registry_count)s->index=0;while(s->index<v->count){gh_title_player_view x;e=actor(s,v,s->index,&x,f);if(e)return e;if(eligible(half(x.bytes+0x2fe))){if(x.size<0x5a4)return fail(f,0x307b28,GH_POST_ARGUMENT);if(word(x.bytes+0x5a0)&0x10){int hit=0;uint32_t pc=0;e=gh_scene_box_rays_001f92c0(x.bytes+0x260,x.bytes+0x80,s->rays,s->ray_count,GH_STATIC_BINARY32_REFERENCE,&hit,&pc);if(e)return fail(f,pc?pc:0x1f92c0,e);if(hit)put(x.bytes+0x5a0,word(x.bytes+0x5a0)|2u);}}s->index++;}s->phase=9;s->complete=1;}return GH_POST_OK;
+ if(s->phase==4)s->phase=8;
+ if(s->phase==8){
+  if(s->index==s->registry_count)s->index=0;
+  while(s->index<v->count){
+   gh_title_player_view x;e=actor(s,v,s->index,&x,f);if(e)return e;
+   if(eligible(half(x.bytes+0x2fe))){
+    uint8_t *flags;
+    e=visibility_field(s,v,s->index,&x,0x5a0,&flags,0x307b28,f);if(e)return e;
+    if(word(flags)&0x10){
+     int hit=0;uint32_t pc=0;
+     e=gh_scene_box_rays_001f92c0(x.bytes+0x260,x.bytes+0x80,s->rays,s->ray_count,
+        GH_STATIC_BINARY32_REFERENCE,&hit,&pc);
+     if(e)return fail(f,pc?pc:0x1f92c0,e);
+     if(hit)put(flags,word(flags)|2u);
+    }
+   }
+   s->index++;
+  }
+  s->phase=9;s->complete=1;
+ }
+ return GH_POST_OK;
 }

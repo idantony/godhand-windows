@@ -19,9 +19,9 @@ typedef struct {
 typedef struct {
     gh_enemy202_impact_request impact;
 
-    uint8_t phase, reacted;
+    uint8_t phase, reacted, effect;
 } gh_enemy202_hit_call;
-/* Ordered positive first effect-7 response at 20A178. The caller keeps
+/* Ordered positive effect-7 and OM304 effect-2E responses at 20A178. The caller keeps
  * this cursor across strict stops and only resets it for a new Move. */
 gh_actor_motion_status gh_enemy202_hit_0020a178(
     gh_enemy202_hit_call *, gh_enemy_actor *, const gh_title_player_view *current_player,
@@ -31,6 +31,8 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
  * original CoreSave rank words at 3BF160. */
 gh_actor_motion_status gh_enemy202_hit_rank_001fa280(
     gh_enemy_actor *, const uint8_t *thresholds, uint32_t *frontier);
+gh_actor_motion_status gh_enemy202_hit_rank_points_001fa280(
+    gh_enemy_actor *, const uint8_t *thresholds, unsigned points, uint32_t *frontier);
 gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *, uint32_t *frontier);
 /* Position and stage the original unattached 306838 request. The effect
  * consumer owns allocation. A pending request keeps the three MT draws. */

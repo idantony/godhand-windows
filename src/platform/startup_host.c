@@ -1109,7 +1109,12 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
             else {if(frontier)*frontier=pc;return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;}
             e=GH_CAMERA_OK; /* the exact continuation below now supplies it */
         }
-        if(h->camera_update_stage==1){e=gh_game_camera_finish_follow_00139c88(&h->camera_envelope,&h->camera_follow,&pc);if(!e)h->camera_update_stage=2;}
+        if(h->camera_update_stage==1){
+            const gh_player_target_bindings targets=gh_game_services_scene_targets(h->services);
+            e=gh_game_camera_finish_follow_target_00139c88(&h->camera_envelope,&h->camera_follow,
+                &targets,&h->game_init,&h->frame_random,&pc);
+            if(!e)h->camera_update_stage=2;
+        }
         if(!e&&h->camera_update_stage==2){e=gh_game_camera_shake_step_00138558(s.pl_camera,&pc);if(!e)h->camera_update_stage=3;}
         if(!e&&h->camera_update_stage==3){e=gh_game_camera_project_00138740(s.pl_camera,&display,&pc);if(!e)h->camera_update_stage=0;}
         if(frontier)*frontier=pc;return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -2054,6 +2059,11 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
         if(!gh_game_services_get_scene_view(h->services,&scene)){
             const gh_hitarea_frame*c=&scene.step->hitarea_frame;
             out->scene_stage=scene.step->stage;out->hitarea_phase=c->phase;out->hitarea_slot=c->slot;out->hitarea_node=c->node;
+            if(scene.step->scenario_status_pending){
+                out->scenario_task_failed=1;
+                out->scenario_task_stage=scene.step->scenario_stage;
+                out->scenario_task_slot=scene.step->detail;
+            }
             const gh_title_player_view *player=&scene.title_player->view;
             if(out->player_handle&&scene.title_player->ready&&player->bytes&&player->size>=0x622&&
                player->alias_f0==player->bytes+0xb0){
@@ -2081,6 +2091,10 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
                     memcpy(&out->current_enemy_serial,p+0x17d0,4);
                     memcpy(&out->current_enemy_distance_bits,p+0x618,4);
                     memcpy(&out->current_enemy_route_bits,p+0x510,4);
+                    out->current_enemy_flags_3ac=(uint32_t)p[0x3ac]|(uint32_t)p[0x3ad]<<8;
+                    memcpy(&out->current_enemy_flags_16d0,p+0x16d0,4);
+                    memcpy(&out->current_enemy_flags_16d4,p+0x16d4,4);
+                    out->current_enemy_reaction_set_17bd=p[0x17bd];
                 }
                 for(unsigned j=0;j<672&&out->current_b_samples<4;j++){
                     const gh_native_hitarea_node*t=&n->nodes[j];unsigned index=t->object.index;

@@ -19,8 +19,8 @@ typedef struct {
  /* TEX0 TCC1 profile:0 MODULATE,3 HIGHLIGHT2. Other functions are strict.
   * The selector belongs to this draw, not the cached texture image. */
  uint8_t texture_function;
- /* Original 0x54 same-color STQ strip admits FF000000 to preserve the
-  * destination alpha byte. The other supported primitives require zero. */
+ /* FFFFFFFF preserves all framebuffer channels while running alpha and Z
+  * tests. FF000000 preserves destination alpha for the flat strip and warp. */
  uint32_t frame_mask;
 } gh_model_draw_state;
 gh_model_gpu_error gh_model_renderer_create(unsigned width,unsigned height,gh_model_renderer **);

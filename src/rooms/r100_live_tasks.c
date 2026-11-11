@@ -1,4 +1,5 @@
 #include "r100_live_tasks.h"
+#include "r100_watch_geometry.h"
 #include "../core/game_enemy_ems.h"
 #include <string.h>
 #include <fenv.h>
@@ -107,17 +108,57 @@ static gh_r100_script_status at3_payload(gh_r100_live_task *s)
     return GH_R100_SCRIPT_OK;
 }
 
+static gh_r100_script_status enemy_actor(const gh_game_init_state *init,uint8_t stamp,
+    gh_game_title_player **actor,uint32_t *frontier)
+{
+    if(gh_enemy_manager_get_00290868(init,stamp,actor)){
+        *frontier=0x290868;
+        return GH_R100_SCRIPT_UNSUPPORTED;
+    }
+    if(!*actor&&rd(init->enemies+0x500)&&!init->enemy_top){
+        *frontier=0x295978;
+        return GH_R100_SCRIPT_UNSUPPORTED;
+    }
+    return GH_R100_SCRIPT_OK;
+}
+
+static int actor_position(const gh_title_player_view *actor,float out[4])
+{
+    uintptr_t base=(uintptr_t)actor->bytes, alias=(uintptr_t)actor->alias_f0;
+    if(!base||!alias||alias<base||alias-base>actor->size||16>actor->size-(alias-base))return 0;
+    memcpy(out,actor->alias_f0,16);
+    return 1;
+}
+
+gh_r100_script_status gh_r100_enemy_position_00295ab8(const gh_game_init_state *init,
+    uint8_t stamp,const gh_game_math_globals *math,float out[4],uint32_t *frontier)
+{
+    if(!frontier)return GH_R100_SCRIPT_ARGUMENT;
+    *frontier=0;
+    if(!init||!out)return GH_R100_SCRIPT_ARGUMENT;
+    gh_game_title_player *actor;
+    gh_r100_script_status status=enemy_actor(init,stamp,&actor,frontier);
+    if(status)return status;
+    if(actor){
+        if(actor_position(&actor->view,out))return GH_R100_SCRIPT_OK;
+    }else if(math&&math->initialized){
+        memcpy(out,math->zero_vector,16);
+        return GH_R100_SCRIPT_OK;
+    }
+    *frontier=0x295ab8;
+    return GH_R100_SCRIPT_UNSUPPORTED;
+}
+
 static gh_r100_script_status dead(gh_r100_live_task *s,uint8_t stamp,
     const gh_game_title_player **object,int *original)
 {
     gh_game_title_player *actor;
-    if(gh_enemy_manager_get_00290868(s->b.init,stamp,&actor))
-        return fail(s,0x290868,GH_R100_SCRIPT_UNSUPPORTED);
-    if(!actor&&rd(s->b.init->enemies+0x500)&&!s->b.init->enemy_top)
-        return fail(s,0x295978,GH_R100_SCRIPT_UNSUPPORTED);
+    uint32_t frontier=0;
+    gh_r100_script_status status=enemy_actor(s->b.init,stamp,&actor,&frontier);
+    if(status)return fail(s,frontier,status);
     if(object)*object=actor;
     if(!actor){*original=1;return GH_R100_SCRIPT_OK;}
-    gh_r100_script_status status=gh_r100_enemy_dead_0028fb38(s->b.room,actor,original);
+    status=gh_r100_enemy_dead_0028fb38(s->b.room,actor,original);
     return status?fail(s,0x28fb38,status):GH_R100_SCRIPT_OK;
 }
 
@@ -143,6 +184,51 @@ static gh_r100_script_status active(gh_r100_live_task *s,const gh_game_title_pla
     return GH_R100_SCRIPT_OK;
 }
 
+static gh_r100_script_status start_soft_event(gh_r100_live_task *s,uint32_t next)
+{
+    if(!s->b.start_soft_event)return fail(s,0x2c39b0,GH_R100_SCRIPT_UNSUPPORTED);
+    uint32_t frontier=0;
+    gh_r100_script_status status=s->b.start_soft_event(s->b.context,&s->soft_start,0,&frontier);
+    if(status)return fail(s,frontier?frontier:0x2c39b0,status);
+    return fail(s,next,GH_R100_SCRIPT_UNSUPPORTED);
+}
+
+static gh_r100_script_status at1_payload(gh_r100_live_task *s)
+{
+    float enemy[4],player[4];
+    uint32_t frontier=0;
+    gh_r100_script_status status=gh_r100_enemy_position_00295ab8(s->b.init,0,s->b.math,enemy,&frontier);
+    if(status)return fail(s,frontier?frontier:0x295ab8,status);
+    const gh_title_player_view *view=s->b.player;
+    /* cPl virtual +84 is 2A9458 (F0 position), and +8C is 2A9460 (+100 angles). */
+    if(!view||view->original_vtable214!=0x41d220||!actor_position(view,player))
+        return fail(s,0x2a9458,GH_R100_SCRIPT_UNSUPPORTED);
+    if(view->size<0x110)return fail(s,0x2a9460,GH_R100_SCRIPT_BOUNDS);
+    if(!s->b.elf||!s->b.scene_tables)return fail(s,0x2da2d0,GH_R100_SCRIPT_UNSUPPORTED);
+    int payload=0;
+    status=gh_r100_at1_geometry(s->b.elf,s->b.elf_size,s->b.scene_tables,
+        player,enemy,scalar(view->bytes+0x104),&payload,&frontier);
+    if(status)return fail(s,frontier?frontier:0x2da2d0,status);
+    if(!payload)return GH_R100_SCRIPT_OK;
+
+    wr(s->b.room->active+4,rd(s->b.room->active+4)|0x20000000u);
+    gh_game_title_player *actor;
+    status=enemy_actor(s->b.init,0,&actor,&frontier);
+    if(status)return fail(s,frontier,status);
+    int already_active=0,died=0;
+    status=active(s,actor,&already_active);
+    if(status)return status;
+    if(!already_active){
+        status=dead(s,0,NULL,&died);
+        if(status)return status;
+    }
+    if(already_active||died){
+        s->finished=1;
+        return GH_R100_SCRIPT_OK;
+    }
+    return start_soft_event(s,0x2c3ed8); /* REL2B18 setCam. */
+}
+
 static gh_r100_script_status watch(gh_r100_live_task *s)
 {
     int triggered=0,ready=0,died=0;
@@ -151,19 +237,20 @@ static gh_r100_script_status watch(gh_r100_live_task *s)
     case 0x2920:case 0x2650:{
         static const uint8_t stamps[][3]={{19,20,0},{3,4,5}};
         const int second=s->entry==0x2650;
-        unsigned deaths=0;
+        unsigned alive=0;
         for(unsigned i=0;i<(second?3u:2u);i++){
             status=dead(s,stamps[second][i],NULL,&died);
             if(status)return status;
-            deaths+=(unsigned)died;
+            alive+=!died;
         }
         status=hit(s,second?2:1,&triggered);
-        if(status||!triggered||deaths>(unsigned)second)return status;
+        /* REL2920 requires zero survivors, while REL2650 admits one. */
+        if(status||!triggered||alive>(unsigned)second)return status;
         status=event_ready(s,&ready);
         if(status||!ready)return status;
-        if(!second)return fail(s,0x295ab8,GH_R100_SCRIPT_UNSUPPORTED); /* positive EmWrap GetPos. */
+        if(!second)return at1_payload(s);
         wr(s->b.room->active+4,rd(s->b.room->active+4)|0x10000000u);
-        return fail(s,0x2c39b0,GH_R100_SCRIPT_UNSUPPORTED);
+        return start_soft_event(s,0x2cb8a0); /* REL2794 SeCall, bank 2 program 0x33. */
     }
     case 0x2490:
         if(!s->at3_stage){

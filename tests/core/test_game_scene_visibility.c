@@ -4,6 +4,8 @@
 #include "disc.h"
 #include "game_scene_dynamic_geometry.h"
 #include "game_om_door_geometry.h"
+#include "game_esp14.h"
+#include "game_event_start.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,8 +14,72 @@
 #define C(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
 static unsigned half(const uint8_t*p){return p[0]|(unsigned)p[1]<<8;}static uint32_t word(const void*p){uint32_t v;memcpy(&v,p,4);return v;}static float val(const uint8_t*p){float v;memcpy(&v,p,4);return v;}static void put(uint8_t*p,uint32_t v){memcpy(p,&v,4);}
 static uint8_t*load(gh_disc*d,const char*path,size_t*n){size_t i;gh_disc_entry e;C(!gh_disc_find(d,path,&i)&&!gh_disc_entry_at(d,i,&e));*n=(size_t)e.size;uint8_t*p=malloc(*n);C(p&&!gh_disc_read(d,i,0,p,*n));return p;}
-typedef struct {gh_room_pools*pools;gh_scene_meshes*meshes;gh_title_player_view*player;uint32_t player_handle;unsigned masks,clears,fail_positive;} context;
-static gh_scene_post_status resolve(void*ctx,uint32_t h,gh_title_player_view*out,uint32_t*f){context*c=ctx;(void)f;void*owned=NULL;if(h!=c->player_handle||gh_room_object_lookup(c->pools,h,0x100,c,&owned)||owned!=c->player)return GH_POST_UNSUPPORTED;*out=*c->player;return GH_POST_OK;}
+typedef struct {gh_room_pools*pools;gh_scene_meshes*meshes;gh_title_player_view*player;uint32_t player_handle;unsigned masks,clears,fail_positive;gh_esp14_model *children[2];} context;
+static gh_scene_post_status resolve(void*ctx,uint32_t h,gh_title_player_view*out,uint32_t*f)
+{
+ context*c=ctx;(void)f;void*owned=NULL;
+ for(unsigned i=0;i<2;i++){
+  gh_esp14_model *child=c->children[i];
+  if(child&&h==child->handle){
+   if(gh_room_object_lookup(c->pools,h,GH_ESP_MODEL_KIND,child,&owned)||owned!=&child->object)
+    return GH_POST_UNSUPPORTED;
+   *out=child->object.view;return GH_POST_OK;
+  }
+ }
+ if(h!=c->player_handle||gh_room_object_lookup(c->pools,h,0x100,c,&owned)||owned!=c->player)
+  return GH_POST_UNSUPPORTED;
+ *out=*c->player;return GH_POST_OK;
+}
+
+static gh_game_event_status event_resolve(void *ctx,uint32_t handle,gh_title_player_view *out,uint32_t *f)
+{
+ return resolve(ctx,handle,out,f)==GH_POST_OK?GH_EVENT_OK:GH_EVENT_UNSUPPORTED;
+}
+
+static void kind500_backing_visibility(context *c,gh_scene_visibility_bindings *binding,
+    gh_game_pl_camera *camera,gh_boot_work *work,uint8_t *serial,
+    const float actor_from[3],const float actor_to[3],uint64_t actor_key)
+{
+ gh_esp14_model children[2]={0};
+ const gh_esp14_model_bindings create={.pools=c->pools,.work=work,.factory_serial=serial};
+ uint32_t pc=0;int found;
+ for(unsigned i=0;i<2;i++){
+  C(!gh_esp14_model_create_0030fa98(&children[i],&create,&found,&pc)&&found&&!pc);
+  C(children[i].object.view.size==0x4e0&&children[i].object.view.original_vtable214==0x44b840);
+  c->children[i]=&children[i];
+ }
+ uint8_t *name,*flags,*last_name,*last_flags;
+ const gh_room_arena_allocation *first=&children[0].object.arena_allocation;
+ const gh_room_arena_allocation *last=&children[1].object.arena_allocation;
+ C(!gh_room_arena_model_visibility_field(first,0x538,&name)&&
+    !gh_room_arena_model_visibility_field(first,0x5a0,&flags)&&
+    !gh_room_arena_model_visibility_field(last,0x538,&last_name)&&
+    !gh_room_arena_model_visibility_field(last,0x5a0,&last_flags));
+ C(name==children[1].object.view.bytes+0x38&&flags==children[1].object.view.bytes+0xa0);
+ memcpy(name,&actor_key,8);
+ memcpy(last_name,&(uint64_t){0},8);
+ put(flags,0x3f800002u);put(last_flags,0x22u);
+ gh_scene_visibility *visibility=NULL;C(!gh_scene_visibility_create(&visibility));
+ const float far[]={1000,1000,1000},far_eye[]={1001,1000,1000};
+ memcpy(camera->fields+0x200,far,12);memcpy(camera->fields+0x210,far_eye,12);
+ C(!gh_scene_visibility_step_00307b28(visibility,binding,&pc)&&!pc);
+ C(word(flags)==0x3f800000u&&word(last_flags)==0x20u);
+ C(!gh_scene_visibility_next_call(visibility));
+ memcpy(camera->fields+0x200,actor_from,12);memcpy(camera->fields+0x210,actor_to,12);
+ C(!gh_scene_visibility_step_00307b28(visibility,binding,&pc)&&!pc);
+ C(word(flags)==0x3f800002u&&word(last_flags)==0x20u);
+ const gh_event_start_bindings event={.pools=c->pools,.meshes=c->meshes,.object_view=event_resolve,.context=c};
+ C(!gh_event_clear_object_hidden_00308a38(&event,&pc)&&!pc&&word(flags)==0x3f800000u);
+ uint32_t effect250=word(children[0].object.view.bytes+0x250);
+ C(!gh_event_hide_scenario_objects_002c5068(&event,1,&pc)&&!pc&&
+    word(children[0].object.view.bytes+0x250)==effect250);
+ gh_scene_visibility_destroy(visibility);
+ for(unsigned i=2;i>0;i--){
+  C(!gh_esp14_model_dispose(&children[i-1]));
+  c->children[i-1]=NULL;
+ }
+ puts("PASS R100 original kind500 arena visibility alias and positive named ray");
+}
 static gh_scene_post_status mask_nodes(void*ctx,uint32_t h,uint32_t a,uint32_t b,uint32_t*f){context*c=ctx;if(b&&c->fail_positive){c->fail_positive--;*f=0x14b6f8;return GH_POST_UNSUPPORTED;}void*owned=NULL;if(gh_room_object_lookup(c->pools,h,GH_ROOM_OBJECT_SCROLL_MESH,c->meshes,&owned))return GH_POST_UNSUPPORTED;gh_scene_mesh_object*o=owned;if(!o->constructor_complete||!o->node)return GH_POST_ARGUMENT;uint8_t*n=o->node;put(n+0x380,(word(n+0x380)&a)|b);if(b)c->masks++;else c->clears++;return GH_POST_OK;}
 static int request_for(const gh_game_scene_tables*t,unsigned id,float from[3],float to[3],int actors){const uint8_t*p=t->actor_links[4].view.bytes+(size_t)id*20;unsigned attr=half(p+12);if((size_t)attr*16+16>t->actor_links[1].view.size)return 0;const uint8_t*a=t->actor_links[1].view.bytes+(size_t)attr*16;if(actors?!a[11]:(!a[10]||a[11]))return 0;unsigned base=half(a+8);int found=actors;for(unsigned k=0;k<(actors?0:a[10]);k++){gh_actor_scroll_entry e;if(!gh_scene_actor_scroll_entry_001333b8(t,(uint16_t)(base+k),&e)&&e.resolved&&e.scroll_handle)found=1;}if(!found)return 0;const uint8_t*n=t->actor_links[3].view.bytes+(size_t)half(p+8)*12;double norm[3]={val(n),val(n+4),val(n+8)},length=sqrt(norm[0]*norm[0]+norm[1]*norm[1]+norm[2]*norm[2]);if(length<.1||fabs(norm[0])+fabs(norm[2])<.1)return 0;unsigned count=(word(p+16)&1)?4:3;double center[3]={0};for(unsigned j=0;j<count;j++){const uint8_t*v=t->actor_links[2].view.bytes+(size_t)half(p+j*2)*12;for(unsigned k=0;k<3;k++)center[k]+=val(v+k*4)/count;}for(unsigned k=0;k<3;k++){from[k]=(float)(center[k]+norm[k]/length*.125);to[k]=(float)(center[k]-norm[k]/length*.125);}return 1;}
 int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t rn,en=(size_t)gh_disc_boot_elf_size(d);uint8_t*raw=load(d,"st1/r100.dat",&rn),*original=malloc(rn),*elf=malloc(en);C(original&&elf&&!gh_disc_read_boot_elf(d,0,elf,en));memcpy(original,raw,rn);gh_bundle room;C(!gh_bundle_open(raw,rn,&room));gh_heap*heap;gh_room_pools pools={0};C(!gh_heap_create(64*1024*1024,&heap)&&!gh_game_room_pools_initialize_002a5d80(&pools,&room,heap));gh_game_world_light*light=calloc(1,sizeof(*light));C(light&&!gh_game_world_light_construct_002d6d80(light)&&!gh_game_world_light_initialize_with_heap_002d6f40(light,&room,heap));gh_stage_textures*textures;C(!gh_stage_textures_create(&textures));gh_boot_work work={0};gh_game_scene_tables tables={0};gh_scene_meshes meshes={0};uint8_t serial;C(!gh_scene_mesh_factory_serial_from_elf(elf,en,&serial));meshes.factory_serial=&serial;gh_scene_mesh_construction_bindings cb={textures,light,elf,en};C(!gh_scene_meshes_bind_construction(&meshes,&cb)&&!gh_scene_meshes_construct_0031d1b0(&meshes,&tables,&work,&room,&pools,heap)&&meshes.constructed_count==156);C(!gh_scene_actors_0012e670(&tables,&room)&&!gh_scene_actor_scroll_links_native_00307a60(&tables,&pools,&meshes));
@@ -33,4 +99,5 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  C(!fesetround(FE_TONEAREST));C(!gh_scene_dynamic_box_abort(&dynamic,box)&&!gh_scene_dynamic_release(&dynamic));
  /* Unknown previous slots and skip gate retain their precise observable prefix. */
  gh_scene_visibility*unknown;C(!gh_scene_visibility_create(&unknown));tables.scroll_link_words[0]=0xdeadbeef;put((uint8_t*)&work+0x5d8,0x200000);uint64_t queries=tables.ray.native_queries;C(!gh_scene_visibility_step_00307b28(unknown,&b,&f)&&tables.scroll_link_words[0]==0xdeadbeef&&tables.ray.native_queries==queries);C(!gh_scene_visibility_next_call(unknown));put((uint8_t*)&work+0x5d8,0);C(gh_scene_visibility_step_00307b28(unknown,&b,&f)==GH_POST_UNSUPPORTED&&f==0x14b6f8&&tables.scroll_link_words[0]==0xdeadbeef);tables.scroll_link_words[0]=0;gh_scene_visibility_destroy(unknown);
+ kind500_backing_visibility(&c,&b,&camera,&work,&serial,actor_from,actor_to,actor_key);
  C(!memcmp(raw,original,rn));C(!gh_room_object_unregister(&pools,c.player_handle,&c));C(!gh_scene_actors_reset_0012e800(&tables));C(!gh_scene_meshes_release_prefix(&meshes)&&!gh_game_world_light_release_presets(light));free(light);gh_stage_textures_destroy(textures);C(!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(player_bytes);free(init);free(original);free(raw);free(elf);gh_disc_close(d);printf("PASS actualR100 156meshes staticpositive triangle%u/realray+32previouscompanion/registry actor flagclear/failedmask resume-noqueryreplay/FEnv/immutableassets; dynamic positive identity/class5B8bit4 consumer + unknownslot/skip; QAactor constructor not fullPlayerInit\n",selected);return 0;}

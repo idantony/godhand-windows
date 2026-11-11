@@ -1,6 +1,7 @@
 /* Readable recovery of2965F0/296738/2967B0/308A38/2C5068.
  * MIT reconstruction reference: LICENSE.upstream. See private evidence. */
 #include "game_event_start.h"
+#include "game_scene_visibility.h"
 #include <string.h>
 static uint32_t rd(const void*p){uint32_t x;memcpy(&x,p,4);return x;}
 static void wr(void*p,uint32_t x){memcpy(p,&x,4);}
@@ -15,10 +16,10 @@ static gh_game_event_status registry(const gh_event_start_bindings*b,uint32_t ad
  if(gh_room_registry_view(b->pools,address,v)!=GH_POOL_OK)return fail(f,0x308a38);
  return GH_EVENT_OK;
 }
-static gh_game_event_status om(const gh_event_start_bindings*b,uint32_t handle,gh_title_player_view*out,uint32_t*f){
+static gh_game_event_status resolve_actor(const gh_event_start_bindings*b,uint32_t handle,gh_title_player_view*out,uint32_t*f){
  if(!b->object_view)return fail(f,0x308a38);
  gh_game_event_status e=b->object_view(b->context,handle,out,f);if(e)return e;
- if(!out->bytes||out->size<0x5bc)return GH_EVENT_BOUNDS;
+ if(!out->bytes||out->size<0x300)return GH_EVENT_BOUNDS;
  return GH_EVENT_OK;
 }
 gh_game_event_status gh_event_clear_object_hidden_00308a38(const gh_event_start_bindings*b,uint32_t*f){
@@ -36,18 +37,35 @@ gh_game_event_status gh_event_clear_object_hidden_00308a38(const gh_event_start_
  }
  e=registry(b,0x754c58,&v,f);if(e)return e;
  for(uint32_t i=0;i<v->count;i++){
-  gh_title_player_view p;e=om(b,rd((const uint8_t*)v->allocation.pointer+i*4),&p,f);if(e)return e;
+  uint32_t handle=rd((const uint8_t*)v->allocation.pointer+i*4);
+  gh_title_player_view p;
+  e=resolve_actor(b,handle,&p,f);if(e)return e;
   unsigned id=p.bytes[0x2fe]|(unsigned)p.bytes[0x2ff]<<8;
-  if((id>=0x100&&id<0x1ff)||(id>=0x200&&id<0x300)||(id>=0x300&&id<0x500)||(id>=0x500&&id<0x600))wr(p.bytes+0x5a0,rd(p.bytes+0x5a0)&~2u);
+  if((id>=0x100&&id<0x1ff)||(id>=0x200&&id<0x600)){
+   uint8_t *flags;
+   gh_scene_post_status status=gh_scene_object_visibility_field(b->pools,handle,&p,0x5a0,&flags);
+   if(status){
+    if(f)*f=0x308a38;
+    return status==GH_POST_ARGUMENT?GH_EVENT_BOUNDS:GH_EVENT_UNSUPPORTED;
+   }
+   wr(flags,rd(flags)&~2u);
+  }
  }
  return GH_EVENT_OK;
 }
 gh_game_event_status gh_event_hide_scenario_objects_002c5068(const gh_event_start_bindings*b,int hide,uint32_t*f){
  if(f)*f=0;const gh_room_vector*v;gh_game_event_status e=registry(b,0x754c58,&v,f);if(e)return e;
  for(uint32_t i=0;i<v->count;i++){
-  gh_title_player_view p;e=om(b,rd((const uint8_t*)v->allocation.pointer+i*4),&p,f);if(e){if(f)*f=0x2c5068;return e;}
+  uint32_t handle=rd((const uint8_t*)v->allocation.pointer+i*4);
+  gh_title_player_view p;
+  e=resolve_actor(b,handle,&p,f);if(e){if(f)*f=0x2c5068;return e;}
   unsigned id=p.bytes[0x2fe]|(unsigned)p.bytes[0x2ff]<<8;
-  if(id>=0x300&&id<0x500){if(hide==1){if(!(rd(p.bytes+0x5b8)&0x40))wr(p.bytes+0x250,rd(p.bytes+0x250)|0x8000);}else wr(p.bytes+0x250,rd(p.bytes+0x250)&~0x8000u);}
+  if(id>=0x300&&id<0x500){
+   if(hide==1){
+    if(p.size<0x5bc){if(f)*f=0x2c5068;return GH_EVENT_BOUNDS;}
+    if(!(rd(p.bytes+0x5b8)&0x40))wr(p.bytes+0x250,rd(p.bytes+0x250)|0x8000);
+   }else wr(p.bytes+0x250,rd(p.bytes+0x250)&~0x8000u);
+  }
  }
  return GH_EVENT_OK;
 }

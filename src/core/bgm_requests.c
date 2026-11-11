@@ -1,5 +1,6 @@
 #include "bgm_requests.h"
 #include "game_event_audio.h"
+#include "../rooms/r100_counter_task.h"
 #include <stdlib.h>
 #include <string.h>
 #include <fenv.h>
@@ -16,7 +17,7 @@ typedef struct {uint8_t scalar[0xdc],row[32];gh_r207_allocation encoded,work;
 struct gh_bgm_requests {gh_audio_registry *registry;gh_sound_control *control;gh_disc *disc;gh_heap *heap;
  request requests[16];uint32_t frontier;DWORD owner;gh_adx_key key;int16_t decibels[128];
  int native_enabled,event_output_enabled,muted,head;int32_t current128;uint32_t field138,field44,field48;
- uint8_t fallback_map[24],scene_event_valid;int32_t scene_event;const gh_game_children *scene_children;const gh_game_init_state *scene_init;uint32_t field134;};
+ uint8_t fallback_map[24],scene_event_valid;int32_t scene_event;const gh_game_children *scene_children;const gh_game_init_state *scene_init;const gh_room_state *scene_room;uint32_t field134;};
 static uint16_t u16(const uint8_t*p){return (uint16_t)((unsigned)p[0]|(unsigned)p[1]<<8);}
 static uint32_t u32(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static uint32_t be32(const uint8_t*p){return (uint32_t)p[3]|(uint32_t)p[2]<<8|(uint32_t)p[1]<<16|(uint32_t)p[0]<<24;}
@@ -512,7 +513,51 @@ gh_bgm_status gh_bgm_event_stop_002d1800(gh_bgm_requests*s,int preserve_mode5){
  if(fesetenv(&saved))return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);if(!e)s->frontier=0;return e;
 }
 int gh_bgm_requests_scene_event(const gh_bgm_requests*s,int32_t*out){if(!own(s)||!out||!s->scene_event_valid)return 0;*out=s->scene_event;return 1;}
-static gh_bgm_status select_scene_event(gh_bgm_requests*s,const gh_boot_work*w,const gh_game_children*children,const gh_game_init_state*init,int32_t*out){
+/* Original 2D0C10 tests placement death even before comparing the kind. */
+static gh_bgm_status enemy_alive(const gh_game_init_state *init,const gh_room_state *room,
+    uint16_t kind,int *alive)
+{
+ *alive=0;
+ if(!init->enemy_top)return GH_BGM_OK;
+ unsigned index=0;
+ while(index<64&&init->enemy_top!=init->enemies+index*20)++index;
+ uint64_t visited=0;
+ while(index!=UINT8_MAX){
+  if(index>=64||(visited&(UINT64_C(1)<<index)))return GH_BGM_UNSUPPORTED;
+  visited|=UINT64_C(1)<<index;
+  const gh_game_title_player *actor=init->enemy_actors[index];
+  index=init->enemy_next[index];
+  if(!actor)continue;
+  const gh_title_player_view *v=&actor->view;
+  if(!v->bytes||v->size<0x300)return GH_BGM_UNSUPPORTED;
+  const uint16_t actor_kind=u16(v->bytes+0x2fe);
+  if(actor_kind<0x200||actor_kind>=0x2a0)continue;
+  if(v->size<0x642)return GH_BGM_UNSUPPORTED;
+  int dead=0;
+  if(u16(v->bytes+0x640)!=0xff&&gh_r100_enemy_dead_0028fb38(room,actor,&dead))
+   return GH_BGM_UNSUPPORTED;
+  if(!dead&&actor_kind==kind){*alive=1;return GH_BGM_OK;}
+ }
+ return GH_BGM_OK;
+}
+
+gh_bgm_status gh_bgm_enemy_override_002d0cd0(const gh_game_init_state *init,
+    const gh_room_state *room,int32_t *original)
+{
+ if(!init||!original)return GH_BGM_ARGUMENT;
+ static const uint16_t kinds[]={0x209,0x223,0x220,0x221,0x222};
+ static const int32_t events[]={0x1b,0x2e,1,1,1};
+ *original=-2;
+ for(unsigned i=0;i<sizeof(kinds)/sizeof(*kinds);++i){
+  int alive;
+  gh_bgm_status status=enemy_alive(init,room,kinds[i],&alive);
+  if(status)return status;
+  if(alive){*original=events[i];break;}
+ }
+ return GH_BGM_OK;
+}
+
+static gh_bgm_status select_scene_event(gh_bgm_requests*s,const gh_boot_work*w,const gh_game_children*children,const gh_game_init_state*init,const gh_room_state *room_state,int32_t*out){
  if(!own(s)||!w||!children||!init)return GH_BGM_ARGUMENT;
  const uint8_t*c;size_t bytes;if(gh_game_children_manager_view(children,&c,&bytes)||bytes<0xeec)return GH_BGM_ARGUMENT;
  uint32_t mode=u32(c+0x48);if((mode==3||mode==12)&&u32(c+0xee8))return fail(s,0x2d0d70,GH_BGM_UNSUPPORTED);
@@ -530,22 +575,29 @@ static gh_bgm_status select_scene_event(gh_bgm_requests*s,const gh_boot_work*w,c
   unsigned column=4;int32_t state=s->control->bgm_state_13c;
   if(state==1)column=8;
   else {
-   /*2D0CD0 calls2D0C10 forfiveenemykinds; canonicalemptylist genuinely
-    * returns-2. Do not silentlyignore an actualenemyoverride. */
-   if(init->enemy_top)return fail(s,0x2d0c10,GH_BGM_UNSUPPORTED);
+   gh_bgm_status status=gh_bgm_enemy_override_002d0cd0(init,room_state,&selected);
+   if(status)return fail(s,0x2d0c10,status);
+   if(selected!=-2){*out=selected;return GH_BGM_OK;}
    if(state==2)column=12;else if(state==3)column=16;else if(state==4)column=20;
   }
   uint32_t raw=u32(row+column);memcpy(&selected,&raw,4);
  }
  *out=selected;return GH_BGM_OK;
 }
-gh_bgm_status gh_bgm_requests_scene_begin_002d0850(gh_bgm_requests*s,const gh_boot_work*w,const gh_game_children*children,const gh_game_init_state*init){
- int32_t selected;gh_bgm_status status=select_scene_event(s,w,children,init,&selected);if(status)return status;s->scene_children=children;s->scene_init=init;
+gh_bgm_status gh_bgm_requests_scene_begin_with_room_002d0850(gh_bgm_requests*s,const gh_boot_work*w,
+ const gh_game_children*children,const gh_game_init_state*init,const gh_room_state *room_state){
+ int32_t selected;gh_bgm_status status=select_scene_event(s,w,children,init,room_state,&selected);
+ if(status)return status;
+ s->scene_children=children;s->scene_init=init;s->scene_room=room_state;
  for(int i=s->head;i>=0;i=s->requests[i].next){request*q=&s->requests[i];uint32_t raw=u32(q->scalar+0x90);int32_t event;memcpy(&event,&raw,4);
   if(u32(q->scalar+0xb0)!=2&&event!=selected&&q->player)fade(q,0,15);
  }
  if(w->room!=0x20&&w->room!=0x23){s->current128=-2;s->control->flags_b0|=0x200000;s->control->flags_ac|=0x200000;}
  s->field48=s->field44=0;s->field138=3;s->scene_event=selected;s->scene_event_valid=1;s->frontier=0;return GH_BGM_OK;
+}
+gh_bgm_status gh_bgm_requests_scene_begin_002d0850(gh_bgm_requests*s,const gh_boot_work*w,
+ const gh_game_children*children,const gh_game_init_state*init){
+ return gh_bgm_requests_scene_begin_with_room_002d0850(s,w,children,init,NULL);
 }
 /*373A78's single-AFD-channel path tests target18, not current volume14. */
 static int fully_faded(const request*q){return !q->player||!(u32(q->scalar+0x4c)&1)||!(rf(q->scalar+0x18)>0);}
@@ -553,7 +605,7 @@ static gh_bgm_status fade_out_request(gh_bgm_requests*s,request*q,float frames){
 static gh_bgm_status resume_request(gh_bgm_requests*s,request*q,float frames,uint32_t set,uint32_t clear){putf(q->scalar+0xc8,frames);w32(q->scalar+0x98,(u32(q->scalar+0x98)|set)&~clear);if(q->player&&(u32(q->scalar+0x4c)&2)){gh_adx_error e=q->transport.started?gh_adx_stream_pause(q->player,0):gh_adx_stream_start(q->player);if(e||gh_adx_stream_poll(q->player,&q->transport))return fail(s,0x3734f0,GH_BGM_NATIVE);w32(q->scalar+0x4c,u32(q->scalar+0x4c)&~2u);}fade(q,1,frames);return GH_BGM_OK;}
 static gh_bgm_status automatic_body(gh_bgm_requests*s,const gh_boot_work*w){
  if(!s->scene_children||!s->scene_init)return fail(s,0x2d0d70,GH_BGM_UNSUPPORTED);
- int32_t selected;gh_bgm_status e=select_scene_event(s,w,s->scene_children,s->scene_init,&selected);if(e)return e;s->scene_event=selected;s->scene_event_valid=1;
+ int32_t selected;gh_bgm_status e=select_scene_event(s,w,s->scene_children,s->scene_init,s->scene_room,&selected);if(e)return e;s->scene_event=selected;s->scene_event_valid=1;
  if(selected!=-2&&selected!=s->current128){
   for(int i=s->head;i>=0;i=s->requests[i].next){request*q=&s->requests[i];uint32_t event=u32(q->scalar+0x90),flags=u32(q->scalar+0x98);if(u32(q->scalar+0xb0)==2||event==(uint32_t)selected)continue;float frames=30;
    if(((uint16_t)w->room>>8)==8&&selected!=10&&selected!=1&&event!=0x2e&&selected!=0x1b){e=fade_out_request(s,q,10);if(e)return e;continue;}
@@ -570,7 +622,10 @@ static gh_bgm_status automatic_body(gh_bgm_requests*s,const gh_boot_work*w){
  }
  if(w->room){
   if(!s->scene_init->heat[0x10])for(int i=s->head;i>=0;i=s->requests[i].next){request*q=&s->requests[i];if(u32(q->scalar+0xb0)!=2&&u32(q->scalar+0x90)==10&&!fully_faded(q)){e=fade_out_request(s,q,60);if(e)return e;}}
-  if(s->scene_init->enemy_top)return fail(s,0x2d0c10,GH_BGM_UNSUPPORTED); /*actual2D0CD0 nonempty predicate*/
+  int32_t override;
+  e=gh_bgm_enemy_override_002d0cd0(s->scene_init,s->scene_room,&override);
+  if(e)return fail(s,0x2d0c10,e);
+  if(override==-2||(s->control->bgm_state_13c==1&&(w->room==0x604||w->room==0x606)))
   for(int i=s->head;i>=0;i=s->requests[i].next){request*q=&s->requests[i];uint32_t event=u32(q->scalar+0x90);if(u32(q->scalar+0xb0)!=2&&!fully_faded(q)&&(event==1||event==0x2e||event==0x1b)){e=fade_out_request(s,q,20);if(e)return e;}}
   if(s->control->bgm_state_13c!=1&&(w->room==0x604||w->room==0x606))for(int i=s->head;i>=0;i=s->requests[i].next){request*q=&s->requests[i];if(u32(q->scalar+0xb0)!=2&&u32(q->scalar+0x90)==0x26&&!fully_faded(q)){e=fade_out_request(s,q,20);if(e)return e;}}
  }

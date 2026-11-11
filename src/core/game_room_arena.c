@@ -26,4 +26,47 @@ gh_room_pool_status gh_room_arena_free_002a9680(gh_room_pools*s,gh_room_arena_al
  size_t i=1;while(i<t->count&&(!t->nodes[i].active||t->nodes[i].handle!=allocation.handle))i++;if(i==t->count)return GH_POOL_ARGUMENT;arena_node*n=&t->nodes[i];if((uint8_t*)a->allocation.pointer+n->offset+32!=allocation.pointer||n->consumed!=allocation.bytes+32||n->previous>=t->count||n->next>=t->count||!a->live_allocations)return GH_POOL_ARGUMENT;
  arena_node*previous=&t->nodes[n->previous];if(!previous->active||previous->next!=i||(n->next&&t->nodes[n->next].previous!=i))return GH_POOL_BOUNDS;uint64_t merged=(uint64_t)previous->free_bytes+n->consumed+n->free_bytes;if(merged>UINT32_MAX)return GH_POOL_BOUNDS;previous->next=n->next;previous->free_bytes=(uint32_t)merged;if(n->next)t->nodes[n->next].previous=n->previous;n->active=0;a->live_allocations--;header(a,previous,(unsigned)(a-s->arenas)+1);a->free_payload=t->nodes[0].free_bytes;return GH_POOL_OK;
 }
+/* ESP14's original factory reserves 0x4E0 bytes, but the visibility sweep
+ * reads these two offsets from its address in the shared room arena. */
+gh_room_pool_status gh_room_arena_model_visibility_field(
+    const gh_room_arena_allocation *object, unsigned offset, uint8_t **out)
+{
+    if (!out) return GH_POOL_ARGUMENT;
+    *out = NULL;
+    const size_t width = offset == 0x538 ? 8 : offset == 0x5a0 ? 4 : 0;
+    if (!width || !object || !object->pointer || !object->handle ||
+        object->original_global != 0x754c10 || object->bytes != 0x4e0)
+        return GH_POOL_ARGUMENT;
+    const gh_room_arena *a = arena(object->pools, object->original_global);
+    if (!a || a->native_owner != object->pools || !a->allocation.pointer ||
+        !a->native || a->native->owner != object->pools || a->bytes < 32)
+        return GH_POOL_ARGUMENT;
+
+    const struct gh_room_arena_native *native = a->native;
+    size_t index = 1;
+    while (index < native->count && (!native->nodes[index].active ||
+        native->nodes[index].handle != object->handle))
+        ++index;
+    if (index == native->count) return GH_POOL_ARGUMENT;
+    const arena_node *node = &native->nodes[index];
+    if (node->offset > a->bytes - 32 || node->consumed != object->bytes + 32 ||
+        node->consumed > a->bytes - node->offset)
+        return GH_POOL_BOUNDS;
+    uint8_t *base = a->allocation.pointer;
+    size_t payload = (size_t)node->offset + 32;
+    if (base + payload != object->pointer) return GH_POOL_ARGUMENT;
+    if (offset > a->bytes - payload || width > a->bytes - payload - offset)
+        return GH_POOL_BOUNDS;
+    size_t start = payload + offset, end = start + width;
+    for (size_t i = 0; i < native->count; ++i) {
+        const arena_node *block = &native->nodes[i];
+        if (!block->active) continue;
+        if (block->offset > a->bytes - 32 ||
+            ((size_t)block->offset < end && start < (size_t)block->offset + 32))
+            return GH_POOL_BOUNDS;
+    }
+    *out = base + start;
+    return GH_POOL_OK;
+}
+
 gh_room_pool_status gh_room_arena_dispose_metadata(gh_room_arena*a){if(!a)return GH_POOL_ARGUMENT;if(a->live_allocations)return GH_POOL_BUSY;if(a->native){free(a->native->nodes);free(a->native);a->native=NULL;}return GH_POOL_OK;}

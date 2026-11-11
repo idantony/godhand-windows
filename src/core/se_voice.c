@@ -79,13 +79,38 @@ static int em0a_impact_profile(const struct voice *v,int16_t bank,int16_t progra
         w(p+0x1c)==0x00ff0000&&w(p+0x20)==(alternate?5u:0x105u)&&w(p+0x24)==0x300;
 }
 
-static int em0a_reaction_profile(const struct voice *v,int16_t bank,int16_t program,const uint8_t *p)
+static int enemy_reaction_profile(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
 {
- if(!em0a_actor_bank(v,bank)||v->requested_program!=0||program<0||program>2)return 0;
- return h(p+4)==(unsigned)program&&w(p+6)==0x02550228&&h(p+0xe)==0x20&&
-        w(p+0x10)==(program?0x00780078u:0x007d007du)&&w(p+0x14)==0x005a0040&&
-        !w(p+0x18)&&w(p+0x1c)==0x00010000&&
-        w(p+0x20)==(program?0x10045u:0x10245u)&&w(p+0x24)==0x400;
+ /* Original program 0 and its MT-selected variations in R100 enemy banks.
+  * A detached pending voice still has the verified descriptor and sample. */
+ static const struct {
+  uint32_t dependency,pitch_range;
+  uint16_t offsets[3];
+  uint8_t gains[3],variations;
+ } profiles[]={
+  {0x200,0x00c8ff38,{0x5530,0x5b00,0x6350},{127,120,127},1},
+  {0x202,0x00c8ff38,{0x5220,0x5970,0x6050},{125,125,125},1},
+  {0x203,0x00c8ff38,{0x8bf0,0x9230,0x98f0},{110,125,125},1},
+  {0x20a,0,{0xdca0,0xe580,0xf040},{125,120,120},2},
+ };
+ if(!v->source_owner||bank<1||bank==2||bank==3||v->requested_program!=0||program<0||program>2||
+    h(p+4)!=(unsigned)program||w(p+6)!=0x02550228||h(p+0xe)!=0x20||
+    w(p+0x14)!=0x005a0040||w(p+0x1c)!=0x00010000||w(p+0x24)!=0x400)return 0;
+ uint32_t dependency=0;
+ if(v->model){
+  if(v->model->root.size<0x568||h(v->model->root.bytes+0x2fe)!=0x202)return 0;
+  dependency=w(v->model->root.bytes+0x564);
+  if(!dependency)return 0;
+ }else if(!v->combat_profile)return 0;
+ for(unsigned i=0;i<sizeof(profiles)/sizeof(*profiles);++i){
+  if(dependency&&dependency!=profiles[i].dependency)continue;
+  const unsigned gain=profiles[i].gains[program];
+  const unsigned flags=program?0x10045u:0x10045u|((unsigned)profiles[i].variations<<8);
+  if(w(p+0x10)!=gain*0x10001u||w(p+0x18)!=profiles[i].pitch_range||w(p+0x20)!=flags)continue;
+  if(!sample||(w(sample)==profiles[i].offsets[program]&&w(sample+4)==11025))return 1;
+ }
+ return 0;
 }
 /* Original state71 timed program 11 exists for EM0A. The other R100
  * 0202 dependencies retain their original disabled-program path. */
@@ -119,9 +144,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  int square_voice=candidate->source_owner&&bank==3&&program>=1&&program<=3&&adsr2==0x5fcb;
  int impact_voice=adsr2==0x5fcb&&em0a_impact_profile(candidate,bank,program,p)&&
                   w(descriptor.data)==(program==0x2a?0u:0x2b80u)&&w(descriptor.data+4)==16000;
- static const uint32_t reaction_offsets[]={0xdca0,0xe580,0xf040};
- int reaction_voice=adsr2==0x5fcb&&em0a_reaction_profile(candidate,bank,program,p)&&
-                    w(descriptor.data)==reaction_offsets[program]&&w(descriptor.data+4)==11025;
+ int reaction_voice=adsr2==0x5fcb&&enemy_reaction_profile(candidate,bank,program,p,descriptor.data);
  int timed_voice=adsr2==0x5fcb&&em0a_timed_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==0x5be0&&w(descriptor.data+4)==16000;
  if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!square_voice&&!impact_voice&&!reaction_voice&&!timed_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
@@ -222,7 +245,7 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
  *suppressed=0;
  if(!candidate->descriptor[0x22])return GH_VOICE_OK;
  if(candidate->info.bank!=2||candidate->info.program!=10||candidate->descriptor[0x22]!=3){
-  if(!em0a_reaction_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)&&
+  if(!enemy_reaction_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em0a_timed_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor))
    return unsupported(s,0x2cbf78);
  }

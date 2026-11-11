@@ -31,6 +31,11 @@ typedef struct {gh_room_pools *pools;void *pointer;uint32_t original_global,hand
 gh_room_pool_status gh_room_arena_allocate_002a9538(gh_room_pools *,uint32_t original_global,uint32_t work594,uint32_t bytes,uint32_t alignment,gh_room_arena_allocation *);
 gh_room_pool_status gh_room_arena_free_002a9680(gh_room_pools *,gh_room_arena_allocation);
 /* Native bookkeeping only; refuses live allocations, doesnot freebacking. */
+/* Borrow the actual backing bytes for an ESP14 visibility read or flag update.
+ * Only original +538 (8 bytes) and +5A0 (4 bytes) are supported. The pointer
+ * is valid until the next arena mutation. */
+gh_room_pool_status gh_room_arena_model_visibility_field(
+    const gh_room_arena_allocation *,unsigned offset,uint8_t **);
 gh_room_pool_status gh_room_arena_dispose_metadata(gh_room_arena *);
 /* Actual2A5D80 using realRHT. Caller zero-inits; three arenas and both concrete
  * fixed block pools own actual native storage. STL metadata is typed hoststate,

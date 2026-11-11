@@ -147,6 +147,97 @@ static gh_actor_motion_status first_punch_wall(gh_enemy_actor *enemy, uint32_t *
     return GH_ACTOR_MOTION_OK;
 }
 
+static int scenery_reaction_dependency(uint32_t dependency) {
+    return dependency == 0x200 || dependency == 0x202 || dependency == 0x203;
+}
+
+/* The OM304 Give sphere selects effect 2E with zero power and the
+ * environment flag set in 20A5DC's VT+AC call. */
+static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
+    gh_enemy_actor *enemy, const gh_title_player_view *source, unsigned rank,
+    uint32_t *frontier)
+{
+    gh_title_player_view *actor = &enemy->entry.object.view;
+    uint8_t *p = actor->bytes;
+    const gh_hitarea_object *body = &enemy->hitareas.units[0];
+    if (!source || !source->bytes || source->size < 0x300 ||
+        half(source->bytes + 0x2fe) != 0x304 || source->original_vtable214 != 0x423338 ||
+        word(source->bytes + 0x214) != 0x423338 ||
+        actor->original_vtable214 != 0x4479c8 || word(p + 0x214) != 0x4479c8 ||
+        half(p + 0x2fe) != 0x202 || !scenery_reaction_dependency(word(p + 0x564)) ||
+        word(body->bytes + 0x4c) || word(body->bytes + 0x40) != UINT32_MAX)
+        return stop(frontier, 0x20a178);
+
+    if (call->phase == 0) {
+        const float drain = number(p + 0x770), cooldown = number(p + 0x54c);
+        const float block = number(p + 0x1740), armor = number(p + 0x1734);
+        const int16_t hp = (int16_t)half(p + 0x54a);
+        uint32_t behavior = word(p + 0x16d0);
+        uint16_t flags = half(p + 0x3ac);
+        if (!isfinite(drain) || !isfinite(cooldown) || !isfinite(block) || !isfinite(armor) ||
+            (drain > 0 && hp > 0))
+            return stop(frontier, 0x20a178);
+        if (cooldown > 0) return GH_ACTOR_MOTION_OK;
+        call->effect = 0x2e;
+        if (half(p + 0x17ca)) flags &= (uint16_t)~0x100u;
+        if ((behavior & 0x40000u) || block > 0 || armor > 0) {
+            flags |= 0x100;
+            put(p + 0x16d4, word(p + 0x16d4) | 0x8000u);
+        }
+        put_half(p + 0x3ac, flags);
+        put_half(p + 0x17ca, 10);
+        if (hp <= 0 || (behavior & 0x1000u)) {
+            call->phase = 5;
+            return GH_ACTOR_MOTION_OK;
+        }
+        if (flags & 0x100) {
+            behavior &= ~0x800000u;
+            put(p + 0x16d0, behavior);
+        }
+        put(p + 0x17ac, (uint32_t)hp);
+        /* 28FB88 rounds zero power to zero for this non-player source. */
+        put_half(p + 0x54a, (uint16_t)hp);
+        put(p + 0x17b4, 0);
+        put(p + 0x1940, 0xbd4ccccd);
+        put(p + 0x54c, 0x41700000);
+        put(p + 0x16dc, 0);
+        call->phase = 1;
+    }
+    if (call->phase == 1) {
+        if ((p[0x17bd] == 1 && rank >= 3) || (p[0x17bd] == 2 && rank >= 2)) {
+            uint32_t points = word(p + 0x16e8);
+            if ((int32_t)word(p + 0x16ec) < 1) points += 5;
+            if ((int32_t)points > 200) return stop(frontier, 0x26ecd0);
+            put(p + 0x16e8, points);
+        }
+        if (!rank && (p[0x17bd] == 1 || p[0x17bd] == 2))
+            return stop(frontier, 0x1fa010);
+        call->phase = 2;
+    }
+    if (call->phase == 2) {
+        const uint16_t flags = half(p + 0x3ac);
+        const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
+        if ((status & 0x80040u) || (behavior & 0x806020u) ||
+            (flags & 0x2cu) || p[0x2f4] != 0 || p[0x2f5] != 1)
+            return stop(frontier, 0x20b394);
+
+        /* 20D138 returns zero. For 2E, 20CAC8 can still draw once
+         * on +17BC == 1 before rejecting. The other probes reject
+         * 2E without drawing from the shared random owner. */
+        if (p[0x17bc] == 1) {
+            uint32_t random;
+            if (gh_game_mt_next_0030f348(&body->state->random, &random))
+                return stop(frontier, 0x31cfe0);
+        }
+        p[0x2f4] = 1;
+        p[0x2f5] = 0x11;
+        p[0x2f6] = p[0x2f7] = 0;
+        call->reacted = 1;
+        call->phase = 5;
+    }
+    return GH_ACTOR_MOTION_OK;
+}
+
 gh_actor_motion_status gh_enemy202_hit_0020a178(
     gh_enemy202_hit_call *call, gh_enemy_actor *enemy, const gh_title_player_view *player,
     unsigned rank, uint32_t *frontier) {
@@ -163,8 +254,12 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     if (body->fallback || body->group != 2 || body->size < 0x64 ||
         body->state != enemy->entry.b.init || gh_hitarea_object_actor(body, &owner) ||
         owner != &enemy->entry.object.view || gh_hitarea_object_last_hit_actor(body, &source) ||
-        source != player || half(player->bytes + 0x2fe) != 0x100 ||
-        !(word(body->bytes + 0x60) & 1) || half(body->bytes + 0x46) != 7)
+        !(word(body->bytes + 0x60) & 1))
+        return stop(frontier, 0x20a178);
+
+    if (half(body->bytes + 0x46) == 0x2e)
+        return scenery_hit(call, enemy, source, rank, frontier);
+    if (source != player || half(player->bytes + 0x2fe) != 0x100 || half(body->bytes + 0x46) != 7)
         return stop(frontier, 0x20a178);
 
     if (call->phase == 0) {
@@ -256,11 +351,11 @@ static unsigned save_rank_for(int score, const uint8_t *thresholds) {
     return bracket < 3 ? bracket + 1 : 5;
 }
 
-gh_actor_motion_status gh_enemy202_hit_rank_001fa280(
-    gh_enemy_actor *enemy, const uint8_t *thresholds, uint32_t *frontier) {
+gh_actor_motion_status gh_enemy202_hit_rank_points_001fa280(
+    gh_enemy_actor *enemy, const uint8_t *thresholds, unsigned points, uint32_t *frontier) {
     if (!frontier) return GH_ACTOR_MOTION_ARGUMENT;
     *frontier = 0;
-    if (!enemy || !thresholds || !enemy->entry.b.work || !enemy->entry.b.init)
+    if (!enemy || !thresholds || points > INT16_MAX || !enemy->entry.b.work || !enemy->entry.b.init)
         return GH_ACTOR_MOTION_ARGUMENT;
     const gh_enemy_entry_bindings *b = &enemy->entry.b;
     gh_core_save_view save = b->save;
@@ -282,7 +377,7 @@ gh_actor_motion_status gh_enemy202_hit_rank_001fa280(
     }
     volatile float multiplier = gain[old_rank-1];
     if ((uint16_t)b->init->continue_count > 1) multiplier = multiplier * 0.8f;
-    volatile float gain_points = multiplier * 4.0f;
+    volatile float gain_points = multiplier * (float)points;
     if (fesetenv(&saved)) return stop(frontier, 0x1fa3fc);
 
     int score = (int16_t)(uint16_t)(old + (int)gain_points);
@@ -300,6 +395,12 @@ gh_actor_motion_status gh_enemy202_hit_rank_001fa280(
     }
     put_half(save.bytes + 0x1c, (uint16_t)score);
     return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy202_hit_rank_001fa280(
+    gh_enemy_actor *enemy, const uint8_t *thresholds, uint32_t *frontier)
+{
+    return gh_enemy202_hit_rank_points_001fa280(enemy, thresholds, 4, frontier);
 }
 
 gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint32_t *frontier) {
@@ -335,7 +436,9 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     const uint8_t *p = actor->bytes;
     gh_game_init_state *init = enemy->entry.b.init;
     gh_core_save_view save = enemy->entry.b.save;
-    if (actor->size < 0x1944 || !actor->alias_f0 || word(p + 0x564) != 0x20a ||
+    const uint32_t dependency = word(p + 0x564);
+    if (actor->size < 0x1944 || !actor->alias_f0 ||
+        (call->effect == 0x2e ? !scenery_reaction_dependency(dependency) : dependency != 0x20a) ||
         (half(p + 0x3ac) & 0x100u) || init->heat[0x10] || word(player->bytes + 0x5fc) ||
         (int32_t)word(init->enemies + 0x514) > 0 || !save.bytes || save.size < 0xaf)
         return stop(frontier, 0x271810);

@@ -56,8 +56,40 @@ static void move_checks(gh_game_player_springs*springs,const void*elf,size_t byt
   for(unsigned row=0;row<springs->count;row++){unsigned id=springs->indices[0][row];const uint8_t*old=beforeForces+id*0xa0,*now=raw+0x4d0+id*0xa0;float offset,coef;memcpy(&offset,springs->coefficients[1]+row,4);memcpy(&coef,springs->coefficients[2]+row,4);long double angle=(long double)value(raw+0x2098)+offset;while(angle>3.1415926535897932384626433832795L)angle-=6.283185307179586476925286766559L;long double amplitude=sinl(angle)+1;
    for(unsigned axis=0;axis<3;axis++){long double previous=(long double)value(old+0x40+axis*4)+movement[axis];long double velocity=value(old+0x30+axis*4);if(axis==1)velocity-=value(raw+0x208c);long double expected=previous+velocity+(long double)windVector[axis]*amplitude*coef;C(fabsl((long double)value(now+0x40+axis*4)-expected)<0.0001L&&fabsl((long double)value(now+0x50+axis*4)-previous)<0.00001L);}for(unsigned off=0;off<0xa0;off++)if(!(off>=0x34&&off<0x38)&&!(off>=0x40&&off<0x4c)&&!(off>=0x50&&off<0x5c))C(old[off]==now[off]);
   }
+  uint8_t baseline[44 * 0xa0];
+  memcpy(baseline, raw + 0x4d0, sizeof(baseline));
+  memcpy(raw + 0x4d0, beforeForces, sizeof(beforeForces));
+  float radial = 0.125f;
+  memcpy(pr + 0x674, &radial, 4);
+  gh_cloth_forces running = {0};
+  C(!fesetround(modes[i]) && !feclearexcept(FE_ALL_EXCEPT) && !feraiseexcept(FE_INVALID));
+  C(!gh_cloth_integrate_forces_0010430c(&running, &move.simulation) && running.complete &&
+    fegetround() == modes[i] && fetestexcept(FE_ALL_EXCEPT) == FE_INVALID &&
+    !memcmp(&random, &after, sizeof(after)));
+  C(!fesetround(FE_TONEAREST));
+  unsigned changed = 0;
+  for (unsigned row = 0; row < springs->count; ++row) {
+    unsigned id = springs->indices[0][row];
+    const uint8_t *base = baseline + id * 0xa0, *now = raw + 0x4d0 + id * 0xa0;
+    long double dx = (long double)value(base + 0x40) - xyz[0];
+    long double dz = (long double)value(base + 0x48) - xyz[2];
+    long double length = sqrtl(dx * dx + dz * dz);
+    float phase;
+    memcpy(&phase, springs->coefficients[1] + row, 4);
+    long double scale = 0;
+    if (!(base[0x91] & 1) && length > 0)
+      scale = radial * (sinl((long double)value(raw + 0x2098) + phase) + 0.8L) / length;
+    C(fabsl((long double)value(now + 0x40) - (value(base + 0x40) + dx * scale)) < 0.0001L);
+    C(fabsl((long double)value(now + 0x48) - (value(base + 0x48) + dz * scale)) < 0.0001L);
+    C(!memcmp(base + 0x44, now + 0x44, 4) && !memcmp(base + 0x50, now + 0x50, 12));
+    changed += memcmp(base + 0x40, now + 0x40, 12) != 0;
+  }
+  C(changed > 0);
+  radial = 0;
+  memcpy(pr + 0x674, &radial, 4);
+  memcpy(raw + 0x4d0, baseline, sizeof(baseline));
   check_small_wave(&move.simulation, modes[i]);
-  uint8_t afterForces[44*0xa0];memcpy(afterForces,raw+0x4d0,sizeof(afterForces));C(!gh_cloth_integrate_forces_0010430c(&force,&move.simulation)&&!memcmp(afterForces,raw+0x4d0,sizeof(afterForces)));memcpy(raw+0x4d0,beforeForces,sizeof(beforeForces));gh_cloth_forces badForce={0};uint32_t one=0x3f800000;memcpy(pr+0x674,&one,4);C(gh_cloth_integrate_forces_0010430c(&badForce,&move.simulation)==GH_CLOTH_UNSUPPORTED&&badForce.frontier==0x104718&&!memcmp(beforeForces,raw+0x4d0,sizeof(beforeForces)));one=0;memcpy(pr+0x674,&one,4);memset(globals.wind,0,12);memset(pr+0x650,0,12);
+  uint8_t afterForces[44*0xa0];memcpy(afterForces,raw+0x4d0,sizeof(afterForces));C(!gh_cloth_integrate_forces_0010430c(&force,&move.simulation)&&!memcmp(afterForces,raw+0x4d0,sizeof(afterForces)));memcpy(raw+0x4d0,beforeForces,sizeof(beforeForces));gh_cloth_forces badForce={0};uint32_t one=0x7fc00000;memcpy(pr+0x674,&one,4);C(gh_cloth_integrate_forces_0010430c(&badForce,&move.simulation)==GH_CLOTH_NUMERIC&&badForce.frontier==0x1043f8&&!memcmp(beforeForces,raw+0x4d0,sizeof(beforeForces)));one=0;memcpy(pr+0x674,&one,4);memset(globals.wind,0,12);memset(pr+0x650,0,12);
   memcpy(raw,before,sizeof(before));gh_child_move missing={0};b.work5f4=NULL;C(gh_game_player_child_move_00100530(&missing,&b)==GH_PLAYER_UNSUPPORTED&&missing.frontier==0x2db6b0);b.work5f4=&parent->root;parentFlags=0x800;memcpy(pr+0x3ac,&parentFlags,2);gh_child_move wind={0};C(gh_game_player_child_move_00100530(&wind,&b)==GH_PLAYER_UNSUPPORTED&&wind.frontier==0x147988&&!memcmp(&random,&after,sizeof(after)));parentFlags=0;memcpy(pr+0x3ac,&parentFlags,2);C(gh_game_player_child_move_00100530(&wind,&b)==GH_PLAYER_UNSUPPORTED&&wind.frontier==0x10430c);
  }
  memcpy(raw,before,sizeof(before));gh_game_player_child_attachment_clear(&attachment);C(!attachment.attached);C(!fesetround(FE_TONEAREST));
@@ -68,4 +100,4 @@ int main(int argc,char**argv){C(argc==3);FILE*f=fopen(argv[2],"rb");C(f&&!fseek(
  for(unsigned mode=0;mode<4;mode++){gh_game_player_child child={0};int original;C(!gh_game_player_child_create_0030fa98(&child,&bindings,&original)&&original);uint32_t fog=0;C(!gh_actor_model_bind_packet_inputs(&child.model,heap,&fog));C(gh_game_player_child_initialize_00100378(&child,&original)==GH_PLAYER_UNSUPPORTED&&child.frontier==0x100420&&child.model.ready&&child.init_stage==2&&!original);gh_player_child_tail tail={0};gh_game_player_child marker={0},*publication=&marker;
  if(mode==3){float xyz[3]={.125f,-.25f,.5f};memcpy(shared.bytes,xyz,12);uint8_t snapshot[16];memcpy(snapshot,shared.bytes,16);C(gh_player_shared_vector_from_elf(&shared,elf,(size_t)el)==GH_PLAYER_UNSUPPORTED&&!memcmp(shared.bytes,snapshot,16));}
  C(!fesetround(modes[mode])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));uint32_t angle=0x501502f9;memcpy(child.model.parts[1].bytes+0x100,&angle,4);C(gh_game_player_child_finish_00100420(&tail,&child,&shared,&publication,save,elf,(size_t)el,GH_STATIC_BINARY32_REFERENCE,&original)==GH_PLAYER_UNSUPPORTED&&!original&&tail.frontier==0x1f7da0&&publication==&marker&&tail.stage==1&&!tail.springs.initialized);angle=0;memcpy(child.model.parts[1].bytes+0x100,&angle,4);C(!gh_game_player_child_finish_00100420(&tail,&child,&shared,&publication,save,elf,(size_t)el,GH_STATIC_BINARY32_REFERENCE,&original)&&original&&tail.complete&&tail.springs.initialized&&tail.springs.count==40&&publication==&child&&child.init_stage==3&&!child.frontier);C(fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);C(!memcmp(child.model.parts[0].bytes+0xe0,shared.bytes,12)&&!memcmp(child.model.parts[0].alias_d0,shared.bytes,12)&&w(child.model.parts[0].bytes+0xec)==0x3f800000);C((w(child.object.view.bytes+0x254)&0x8000000)&&(w(child.object.view.bytes+0x2f0)&0x81)==0x81&&w(child.object.view.bytes+0x2050)==40);move_checks(&tail.springs,elf,(size_t)el,&parentFactory,&parentModel,save,&work);uint8_t snapshot[44*0xa0];memcpy(snapshot,child.object.view.bytes+0x4d0,sizeof(snapshot));C(!gh_game_player_child_finish_00100420(&tail,&child,&shared,&publication,save,elf,(size_t)el,GH_STATIC_BINARY32_REFERENCE,&original)&&!memcmp(snapshot,child.object.view.bytes+0x4d0,sizeof(snapshot)));publication=NULL;C(!gh_game_player_child_release_prefix(&child)&&pools.blocks[0].used_count==parentParts&&pools.blocks[1].used_count==parentNodes&&pools.arenas[2].live_allocations==parentArena&&gh_heap_used(heap)==parentBaseline);}
- C(!fesetround(FE_TONEAREST));C(!gh_actor_model_release(&parentModel)&&!gh_game_player_factory_release_prefix(&parentFactory)&&gh_heap_used(heap)==baseline);free(parentFile);gh_game_objects_destroy(objects);gh_game_objects_destroy(global);C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));free(file);free(room);free(elf);gh_disc_close(d);puts("PASS actualPL00/PL01 attached40spring force10430C->10497C sameparentmovement/gravity/perrecordphasewave/position+history, longdouble+sinlboundedreferenceoracle/4FEnv/atomicradialstrict/idempotent/sourcepadding; nofullclothframeclaim");return 0;}
+ C(!fesetround(FE_TONEAREST));C(!gh_actor_model_release(&parentModel)&&!gh_game_player_factory_release_prefix(&parentFactory)&&gh_heap_used(heap)==baseline);free(parentFile);gh_game_objects_destroy(objects);gh_game_objects_destroy(global);C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));free(file);free(room);free(elf);gh_disc_close(d);puts("PASS actualPL00/PL01 attached40spring force10430C->10497C sameparentmovement/gravity/perrecordphasewave/position+history, longdouble+sinlboundedreferenceoracle/4FEnv/runningradialoracle/atomicnumericstrict/idempotent/sourcepadding; nofullclothframeclaim");return 0;}

@@ -1,4 +1,5 @@
 #include "r100_live_tasks.h"
+#include "bgm_requests.h"
 #include "game_effect_release.h"
 #include "game_enemy_other_move.h"
 #include "game_enemy_ems.h"
@@ -51,6 +52,25 @@ static uint32_t word(const uint8_t *bytes)
     uint32_t value;
     memcpy(&value,bytes,4);
     return value;
+}
+
+typedef struct {
+    const uint8_t *room;
+    unsigned calls,kind;
+    uint32_t flags;
+    gh_soft_event_start *state;
+} watch_soft_probe;
+
+static gh_r100_script_status watch_soft(void *context,gh_soft_event_start *state,
+    unsigned kind,uint32_t *frontier)
+{
+    watch_soft_probe *probe=context;
+    ++probe->calls;
+    probe->kind=kind;
+    probe->flags=word(probe->room+4);
+    probe->state=state;
+    *frontier=0;
+    return GH_R100_SCRIPT_OK;
 }
 
 int main(int argc,char **argv)
@@ -342,15 +362,53 @@ int main(int argc,char **argv)
         CHECK(object&&object==init->enemy_actors[9+i]&&object->view.bytes[0x640]==19+i);
         CHECK(word(object->view.bytes+0x2f4)==0x100&&object->view.bytes[0x548]==74);
     }
+    /* Original BGM checks RoomSave death, not HP or the actor suspend bit.
+     * The actual R100 opening roster has no special BGM override. */
+    int32_t bgm_event;
+    CHECK(!gh_bgm_enemy_override_002d0cd0(init,&room,&bgm_event)&&bgm_event==-2);
+    CHECK(gh_bgm_enemy_override_002d0cd0(init,NULL,&bgm_event)==GH_BGM_UNSUPPORTED);
+    gh_game_title_player *music_actors[]={init->enemy_actors[0],init->enemy_actors[1],init->enemy_actors[2]};
+    const uint16_t music_kinds[]={0x220,0x223,0x209};
+    uint8_t *music_rows[3];
+    uint8_t saved_death[3];
+    uint16_t saved_kind[3];
+    for(unsigned i=0;i<3;i++){
+        uint8_t *actor=music_actors[i]->view.bytes;
+        uint16_t stamp;
+        memcpy(&stamp,actor+0x640,2);
+        unsigned j=0;
+        while(j<room.active[8]&&room.active[12+j*24+0x13]!=stamp)++j;
+        CHECK(j<room.active[8]);
+        music_rows[i]=room.active+12+j*24;
+        saved_death[i]=music_rows[i][0x14];
+        music_rows[i][0x14]=0;
+        memcpy(&saved_kind[i],actor+0x2fe,2);
+        memcpy(actor+0x2fe,&music_kinds[i],2);
+    }
+    const int32_t music_priority[]={1,0x2e,0x1b};
+    for(unsigned i=3;i;i--){
+        CHECK(!gh_bgm_enemy_override_002d0cd0(init,&room,&bgm_event)&&bgm_event==music_priority[i-1]);
+        music_rows[i-1][0x14]=1;
+    }
+    CHECK(!gh_bgm_enemy_override_002d0cd0(init,&room,&bgm_event)&&bgm_event==-2);
+    for(unsigned i=0;i<3;i++){
+        music_rows[i][0x14]=saved_death[i];
+        memcpy(music_actors[i]->view.bytes+0x2fe,&saved_kind[i],2);
+    }
     uint32_t flags250[12], flags5a0[12];
     for (unsigned i=0; i<12; ++i) {
         gh_game_title_player *object=i==11?weapon_live.actor:init->enemy_actors[i];
         CHECK(object && object->view.size>=0x5a4);
         flags250[i]=word(object->view.bytes+0x250)&~0x8000u;
         flags5a0[i]=word(object->view.bytes+0x5a0)&~8u;
-        uint32_t suspended250=flags250[i]|0x8000u, suspended5a0=flags5a0[i]|8u;
-        memcpy(object->view.bytes+0x250,&suspended250,4);
-        memcpy(object->view.bytes+0x5a0,&suspended5a0,4);
+        memcpy(object->view.bytes+0x250,&flags250[i],4);
+        memcpy(object->view.bytes+0x5a0,&flags5a0[i],4);
+    }
+    CHECK(!gh_enemy_ems_set_suspend_002948e8(owner,init,1,&frontier)&&!frontier);
+    for (unsigned i=0; i<12; ++i) {
+        gh_game_title_player *object=i==11?weapon_live.actor:init->enemy_actors[i];
+        CHECK(word(object->view.bytes+0x250)==(flags250[i]|0x8000u)&&
+            word(object->view.bytes+0x5a0)==(flags5a0[i]|8u));
     }
     CHECK(!gh_enemy_ems_unsuspend_002948e8(owner,init,&frontier)&&!frontier);
     for (unsigned i=0; i<12; ++i) {
@@ -360,15 +418,17 @@ int main(int argc,char **argv)
     /* Actual REL2490 with native Scenario fiber and the same eleven-actor EMS owner. */
     gh_scene_at_manager at={0};
     CHECK(!gh_scene_at_initialize_units_002c0f90(&at,&room_bundle,heap,0x100,1));
-    gh_at_native_unit trigger={0},destinations[2]={{0}},unit;
+    gh_at_native_unit at1={0},at2={0},trigger={0},destinations[2]={{0}},unit;
     CHECK(!gh_scene_at_first_unit_002c30c0(&at,&unit));
     while(unit.bytes){
         uint16_t id;memcpy(&id,unit.bytes+0x36,2);
+        if(id==1)at1=unit;
+        if(id==2)at2=unit;
         if(id==3)trigger=unit;
         if(id==5||id==6)destinations[id-5]=unit;
         CHECK(!gh_scene_at_next_unit_002c30c8(&at,unit,&unit));
     }
-    CHECK(trigger.bytes&&destinations[0].bytes&&destinations[1].bytes);
+    CHECK(at1.bytes&&at2.bytes&&trigger.bytes&&destinations[0].bytes&&destinations[1].bytes);
     uint32_t saved_count=4,flag=0x80000000u;
     memcpy(room.active+0x1610,&saved_count,4);
     flag|=word(trigger.bytes+0x50);
@@ -385,9 +445,95 @@ int main(int argc,char **argv)
     CHECK(!gh_task_threads_create(&task_manager,&scenario_threads));
     uint8_t scenario_bytes[0x114]={0};
     gh_r100_live_tasks tasks={0};
+    watch_soft_probe soft_probe={.room=room.active};
     const gh_r100_live_bindings live_b={.scenario={scenario_bytes,sizeof(scenario_bytes),&task_manager},
         .threads=scenario_threads,.room_init=&room_runtime,.room=&room,.at=&at,
-        .init=init,.work=&work,.player=target,.enemies=&owner};
+        .init=init,.work=&work,.player=target,.enemies=&owner,.context=&soft_probe,
+        .math=&math,.elf=elf,.elf_size=elf_size,.scene_tables=&actors,.start_soft_event=watch_soft};
+    /* REL2920's real AT1 and original EMS stamps 19/20, with their canonical RoomSave rows. */
+    uint8_t *watched_rows[2]={room.active+12+24*14,room.active+12+24*15};
+    for(unsigned i=0;i<2;i++){
+        gh_game_title_player *watched=NULL;
+        CHECK(watched_rows[i][0x13]==19+i&&!watched_rows[i][0x14]);
+        CHECK(!gh_enemy_manager_get_00290868(init,(uint8_t)(19+i),&watched)&&watched==init->enemy_actors[9+i]);
+    }
+    const uint32_t saved_at1_flags=word(at1.bytes+0x50), saved_room_flags=word(room.active+4);
+    const uint32_t at1_hit=saved_at1_flags|0x80000000u;
+    memcpy(at1.bytes+0x50,&at1_hit,4);
+    CHECK(!gh_r100_live_register(&tasks,&live_b,0x2920,-1,&frontier));
+    for(unsigned i=0;i<2;i++)CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(tasks.tasks[0].entered&&!tasks.tasks[0].finished&&!tasks.tasks[0].status&&!tasks.tasks[0].frontier);
+    watched_rows[0][0x14]=1;
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(!tasks.tasks[0].finished&&!tasks.tasks[0].status&&!tasks.tasks[0].frontier);
+    gh_game_title_player *stamp0=init->enemy_actors[0];
+    CHECK(stamp0->view.original_kind4ac==0x42c7f0);
+    float enemy_position[4],zero_position[4],saved_player_position[4];
+    CHECK(!gh_r100_enemy_position_00295ab8(init,0,&math,enemy_position,&frontier)&&!frontier);
+    CHECK(!memcmp(enemy_position,stamp0->view.alias_f0,16));
+    CHECK(!gh_r100_enemy_position_00295ab8(init,UINT8_MAX,&math,zero_position,&frontier)&&!frontier);
+    CHECK(!memcmp(zero_position,math.zero_vector,16));
+    CHECK(gh_r100_enemy_position_00295ab8(init,UINT8_MAX,NULL,zero_position,&frontier)==GH_R100_SCRIPT_UNSUPPORTED&&frontier==0x295ab8);
+    uint8_t *stamp0_save=room.active+12;
+    CHECK(!stamp0_save[0x13]&&!stamp0_save[0x14]);
+    const uint32_t saved_player_yaw=word(target->bytes+0x104), saved_stamp0_flags=word(stamp0->view.bytes+0x16d0);
+    const uint32_t inactive_stamp0=saved_stamp0_flags&~2u, active_stamp0=saved_stamp0_flags|2u;
+    memcpy(saved_player_position,target->alias_f0,16);
+    memcpy(target->alias_f0,enemy_position,16);
+    memcpy(target->bytes+0x104,&(uint32_t){0},4);
+    memcpy(stamp0->view.bytes+0x16d0,&inactive_stamp0,4);
+
+    watched_rows[1][0x14]=1;
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(!tasks.tasks[0].finished&&tasks.tasks[0].status==GH_R100_SCRIPT_UNSUPPORTED&&tasks.tasks[0].frontier==0x2c3ed8);
+    CHECK(soft_probe.calls==1&&!soft_probe.kind&&soft_probe.state==&tasks.tasks[0].soft_start);
+    CHECK(soft_probe.flags==(saved_room_flags|0x20000000u)&&word(room.active+4)==soft_probe.flags);
+    CHECK(!gh_task_threads_cancel(scenario_threads,tasks.tasks[0].slot));
+
+    for(unsigned i=0;i<2;i++){
+        /* Active and dead stamp0 each consume the AT1 flag and exit without starting an event. */
+        memcpy(stamp0->view.bytes+0x16d0,i?&inactive_stamp0:&active_stamp0,4);
+        stamp0_save[0x14]=(uint8_t)i;
+        memcpy(room.active+4,&saved_room_flags,4);
+        tasks.tasks[0]=(gh_r100_live_task){0};
+        CHECK(!gh_r100_live_register(&tasks,&live_b,0x2920,-1,&frontier));
+        for(unsigned visit=0;visit<2;visit++)CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+        CHECK(tasks.tasks[0].finished&&!tasks.tasks[0].status&&!tasks.tasks[0].frontier);
+        CHECK(soft_probe.calls==1&&word(room.active+4)==(saved_room_flags|0x20000000u));
+        CHECK(!gh_task_threads_cancel(scenario_threads,tasks.tasks[0].slot));
+    }
+    stamp0_save[0x14]=0;
+    memcpy(room.active+4,&saved_room_flags,4);
+    memcpy(stamp0->view.bytes+0x16d0,&saved_stamp0_flags,4);
+    memcpy(target->alias_f0,saved_player_position,16);
+    memcpy(target->bytes+0x104,&saved_player_yaw,4);
+    watched_rows[0][0x14]=watched_rows[1][0x14]=0;
+    memcpy(at1.bytes+0x50,&saved_at1_flags,4);
+
+    /* REL2650 admits one surviving member of the actual AT2 group. */
+    uint8_t *at2_rows[3]={room.active+12+24*2,room.active+12+24*3,room.active+12+24*4};
+    for(unsigned i=0;i<3;i++){
+        gh_game_title_player *watched=NULL;
+        CHECK(at2_rows[i][0x13]==3+i&&!at2_rows[i][0x14]);
+        CHECK(!gh_enemy_manager_get_00290868(init,(uint8_t)(3+i),&watched)&&watched==init->enemy_actors[1+i]);
+    }
+    const uint32_t saved_at2_flags=word(at2.bytes+0x50), at2_hit=saved_at2_flags|0x80000000u;
+    memcpy(at2.bytes+0x50,&at2_hit,4);
+    CHECK(!gh_r100_live_register(&tasks,&live_b,0x2650,-1,&frontier));
+    for(unsigned i=0;i<2;i++)CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(tasks.tasks[1].entered&&!tasks.tasks[1].finished&&!tasks.tasks[1].status&&!tasks.tasks[1].frontier);
+    at2_rows[0][0x14]=1;
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(!tasks.tasks[1].finished&&!tasks.tasks[1].status&&!tasks.tasks[1].frontier);
+    at2_rows[1][0x14]=1;
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(!tasks.tasks[1].finished&&tasks.tasks[1].status==GH_R100_SCRIPT_UNSUPPORTED&&tasks.tasks[1].frontier==0x2cb8a0);
+    CHECK(soft_probe.calls==2&&!soft_probe.kind&&soft_probe.state==&tasks.tasks[1].soft_start);
+    CHECK(soft_probe.flags==(saved_room_flags|0x10000000u)&&word(room.active+4)==soft_probe.flags);
+    CHECK(!gh_task_threads_cancel(scenario_threads,tasks.tasks[1].slot));
+    at2_rows[0][0x14]=at2_rows[1][0x14]=0;
+    memcpy(at2.bytes+0x50,&saved_at2_flags,4);
+    memcpy(room.active+4,&saved_room_flags,4);
     CHECK(!gh_r100_live_register(&tasks,&live_b,0x2490,-1,&frontier));
     for(unsigned i=0;i<2;i++)CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
     CHECK(tasks.tasks[2].entered&&!tasks.tasks[2].finished&&!tasks.tasks[2].frontier);
@@ -444,6 +590,6 @@ int main(int argc,char **argv)
     CHECK(!gh_game_world_light_release_presets(&light)&&!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));
     gh_disc_close(disc);
     free(weapon_data);free(aux);free(heavy);free(init);free(id);free(elf);free(language_data);free(model_data);free(room_data);
-    puts("PASS actual R100 eleven EMS actors, attached weapon, retry, full 2A2/held363 Moves and REL2490 AT3 SetEm31/32, Goto, unsuspend, duplicate gates and scoped release");
+    puts("PASS actual R100 BGM roster/death/priority and eleven EMS actors, attached weapon, retry, full 2A2/held363 Moves, AT1 live/absent GetPos, AT1/AT2 survivor gates and kind0, and AT3 SetEm31/32, Goto, unsuspend, duplicate gates and scoped release");
     return 0;
 }

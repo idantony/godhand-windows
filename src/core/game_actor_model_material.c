@@ -7,7 +7,8 @@ static float number(const void*p){float n;memcpy(&n,p,4);return n;}
 static float mul(float a,float b){volatile float n=a*b;return n;}
 static float divf(float a,float b){volatile float n=a/b;return n;}
 static gh_actor_model_status fail(uint32_t*f,uint32_t pc,gh_actor_model_status e){*f=pc;return e;}
-static gh_actor_model_status prepare(gh_actor_model *model,unsigned index,gh_stage_textures *textures,gh_actor_materials *out,uint32_t *frontier){
+static gh_actor_model_status prepare(gh_actor_model *model,unsigned index,gh_stage_textures *textures,
+ int existing,gh_actor_materials *out,uint32_t *frontier){
  const uint8_t *node;size_t mesh;const gh_actor_node_packets *packet;
  gh_actor_model_status e=gh_actor_model_node_at(model,index,&node,&mesh);if(e)return e;
  e=gh_actor_model_packet_at(model,index,&packet);if(e)return e;
@@ -40,19 +41,35 @@ static gh_actor_model_status prepare(gh_actor_model *model,unsigned index,gh_sta
    continue;
   }
   const gh_stage_material *material=NULL;
-  gh_stage_status status=gh_stage_tm3_resolve(textures,packet->texture.bytes,packet->texture.size,member,mode,&material);
+  gh_stage_status status=existing?
+   gh_stage_tm3_cached(textures,packet->texture.bytes,packet->texture.size,member,mode,&material):
+   gh_stage_tm3_resolve(textures,packet->texture.bytes,packet->texture.size,member,mode,&material);
   if(status)return fail(frontier,status==GH_STAGE_BOUNDS?0x1522c0:0x151398,status==GH_STAGE_MEMORY?GH_ACTOR_MODEL_MEMORY:status==GH_STAGE_BOUNDS?GH_ACTOR_MODEL_BOUNDS:GH_ACTOR_MODEL_UNSUPPORTED);
   uint64_t tex0=(material->source_tex0&UINT64_C(0xfff80007ffffffff))|UINT64_C(0x2000000400000000)|(((material->source_tex0>>37)&0x3fff)<<37)|((uint64_t)tfx<<35);
   next.streams[i]=(gh_actor_stream_material){material,tex0,(uint8_t)source,(uint8_t)member,1,0};
   size_t offset=stream->frame_offset[next.parity];if(offset>packet->bytes||0x28>packet->bytes-offset)return fail(frontier,0x148690,GH_ACTOR_MODEL_BOUNDS);
+  if(existing){
+   uint64_t stored;
+   memcpy(&stored,(const uint8_t*)packet->allocation.pointer+offset+0x20,8);
+   if(stored!=tex0)return fail(frontier,0x14b9a0,GH_ACTOR_MODEL_UNSUPPORTED);
+  }
  }
  /* Preflight all streams before publishing; no half-ready returned view.
   * Side effects in the unique texture cache are ordinary deduplicated loads. */
- for(size_t i=0;i<next.count;i++)if(next.streams[i].written)memcpy((uint8_t*)packet->allocation.pointer+packet->streams[i].frame_offset[next.parity]+0x20,&next.streams[i].tex0,8);
+ if(!existing)for(size_t i=0;i<next.count;i++)if(next.streams[i].written)memcpy((uint8_t*)packet->allocation.pointer+packet->streams[i].frame_offset[next.parity]+0x20,&next.streams[i].tex0,8);
  next.ready=1;*out=next;return GH_ACTOR_MODEL_OK;
 }
-gh_actor_model_status gh_actor_materials_0014b4d0(gh_actor_model *model,unsigned index,gh_stage_textures *textures,gh_actor_materials *out,uint32_t *frontier){
+static gh_actor_model_status materials(gh_actor_model *model,unsigned index,gh_stage_textures *textures,
+ int existing,gh_actor_materials *out,uint32_t *frontier){
  uint32_t local=0;if(!frontier)frontier=&local;*frontier=0;if(!model||!model->ready||model->native_identity!=model||!model->root.bytes||!model->work||!textures||!out)return GH_ACTOR_MODEL_ARGUMENT;
  fenv_t env;if(feholdexcept(&env))return GH_ACTOR_MODEL_UNSUPPORTED;if(fesetround(FE_TONEAREST)){fesetenv(&env);return GH_ACTOR_MODEL_UNSUPPORTED;}
- gh_actor_model_status e=prepare(model,index,textures,out,frontier);if(fesetenv(&env))return GH_ACTOR_MODEL_UNSUPPORTED;return e;
+ gh_actor_model_status e=prepare(model,index,textures,existing,out,frontier);if(fesetenv(&env))return GH_ACTOR_MODEL_UNSUPPORTED;return e;
+}
+gh_actor_model_status gh_actor_materials_0014b4d0(gh_actor_model *model,unsigned index,
+ gh_stage_textures *textures,gh_actor_materials *out,uint32_t *frontier){
+ return materials(model,index,textures,0,out,frontier);
+}
+gh_actor_model_status gh_actor_materials_existing_0014b9a0(gh_actor_model *model,unsigned index,
+ gh_stage_textures *textures,gh_actor_materials *out,uint32_t *frontier){
+ return materials(model,index,textures,1,out,frontier);
 }

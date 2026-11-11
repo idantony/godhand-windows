@@ -162,6 +162,119 @@ static gh_actor_model_status invoke(gh_actor_draw_call *call,uint32_t entry,uint
  gh_actor_draw_request request={entry,call->parity,call->node_index,call->model,call->bindings.camera,call->bindings.light,call->depth,call->far_mode,&call->materials};
  gh_actor_model_status e=call->bindings.callee(call->bindings.context,&request,frontier);if(e&&!*frontier)*frontier=entry;return e;
 }
+static void opacity_destination(const gh_actor_draw_call *call,const uint8_t *node,
+ gh_actor_draw_command *command)
+{
+ const uint8_t *root=call->model->root.bytes;
+ if(word(root+0x2c0)==10){
+  const int translucent=!!(word(node+0x380)&0x4080u);
+  command->bank=translucent?2:1;
+  command->depth=translucent?call->depth:13;
+ }else{
+  uint16_t depth;
+  memcpy(&depth,root+0x2ac,2);
+  command->bank=word(root+0x2c0);
+  command->depth=depth;
+ }
+}
+
+static gh_actor_model_status emit_opacity(gh_actor_draw_call *call,
+ const gh_actor_draw_command *command,uint32_t *frontier)
+{
+ const uint32_t entry=command->kind==GH_ACTOR_DRAW_OPACITY_FRAME?0x31a600:0x31a650;
+ if(!call->bindings.emit)return fail(frontier,entry,GH_ACTOR_MODEL_UNSUPPORTED);
+ gh_actor_model_status status=call->bindings.emit(call->bindings.emit_context,command,frontier);
+ if(status&&!*frontier)*frontier=entry;
+ return status;
+}
+
+static gh_actor_model_status opacity_pass(gh_actor_draw_call *call,uint32_t *frontier)
+{
+ gh_actor_model *model=call->model;
+ const uint8_t *root=model->root.bytes;
+ const uint64_t frame=UINT64_C(0x00080070);
+ const uint64_t masked_frame=UINT64_C(0xffffffff00080070);
+ const uint64_t test=UINT64_C(0x507fd),alpha=UINT64_C(0x8000000044);
+ const uint64_t tex1=UINT64_C(0xffffff3800000360);
+ const uint8_t *first;size_t first_mesh;
+ if(gh_actor_model_node_at(model,0,&first,&first_mesh))
+  return fail(frontier,0x14b6f8,GH_ACTOR_MODEL_BOUNDS);
+ if(call->phase==10){
+  gh_actor_draw_command command={.kind=GH_ACTOR_DRAW_OPACITY_FRAME,.model=model,
+   .node_index=SIZE_MAX,.parity=call->parity,.frame=frame,.packet_group=1};
+  opacity_destination(call,first,&command);
+  gh_actor_model_status status=emit_opacity(call,&command,frontier);
+  if(status)return status;
+  call->node_index=0;
+  call->phase=11;
+ }
+ while(call->node_index<root[0x2b1]){
+  if(call->phase==11){
+   const uint8_t *node;size_t mesh_index;
+   if(gh_actor_model_node_at(model,(unsigned)call->node_index,&node,&mesh_index))
+    return fail(frontier,0x14b6f8,GH_ACTOR_MODEL_BOUNDS);
+   gh_model_mesh mesh;
+   if(gh_model_mesh_at(&model->script,mesh_index,&mesh))
+    return fail(frontier,0x14b6f8,GH_ACTOR_MODEL_BOUNDS);
+   const uint32_t actor_flags=word(root+0x250);
+   if((word(node+0x380)&1u)||(!(actor_flags&0x400u)&&call->far_mode!=!!(mesh.flags&0x1000000u))){
+    call->node_index++;
+    continue;
+   }
+   if(actor_flags&0x2000u)return fail(frontier,0x155c68,GH_ACTOR_MODEL_UNSUPPORTED);
+   const gh_actor_light_globals *globals=call->bindings.light_globals;
+   const gh_player_shared_vector *pivot=call->bindings.pivot_owner;
+   if(!globals||!globals->initialized||!pivot||!pivot->initialized||!call->bindings.textures)
+    return fail(frontier,0x14b9a0,GH_ACTOR_MODEL_UNSUPPORTED);
+   const gh_actor_node_packets *packet;
+   if(gh_actor_model_packet_at(model,(unsigned)call->node_index,&packet))
+    return fail(frontier,0x14b9a0,GH_ACTOR_MODEL_BOUNDS);
+   gh_actor_draw_command command={.kind=GH_ACTOR_DRAW_OPACITY_GEOMETRY,.model=model,
+    .node_index=call->node_index,.parity=call->parity,.selected_program=2,.packet=packet,
+    .test=test,.alpha=alpha,.tex1=tex1,.frame=masked_frame,.packet_group=1};
+   opacity_destination(call,node,&command);
+   gh_actor_model_status status=gh_actor_materials_existing_0014b9a0(model,
+    (unsigned)call->node_index,call->bindings.textures,&command.materials,frontier);
+   if(status)return status;
+   status=gh_actor_model_program2_inputs(model,(unsigned)call->node_index,&command.inputs,frontier);
+   if(status)return status;
+   /* 14B9A0 uploads the C8 packet constants, then the same node UV and
+    * stream chain. The 255 fog write shares the second vector's W lane. */
+   memcpy(command.inputs.normal_light,globals->bytes_3bd860,16);
+   memcpy(command.inputs.normal_light+4,globals->bytes_3bd870,16);
+   memcpy(command.inputs.normal_light+8,globals->bytes_3bd870,16);
+   memcpy(command.inputs.normal_light+12,pivot->bytes,16);
+   command.inputs.normal_light[7]=255;
+   for(unsigned i=0;i<3;i++)memcpy(command.inputs.light_color+4*i,pivot->bytes,16);
+   memcpy(command.inputs.light_color+12,globals->bytes_3bd890,16);
+   memcpy(command.inputs.uv,node+0x38c,8);
+   command.inputs.fog=255;
+   call->pending=command;
+   call->phase=12;
+  }
+  if(call->phase==12){
+   gh_actor_model_status status=emit_opacity(call,&call->pending,frontier);
+   if(status)return status;
+   call->node_index++;
+   call->phase=11;
+  }
+ }
+ if(call->phase==11)call->phase=13;
+ if(call->phase==13){
+  const gh_actor_object_packets *object;
+  if(gh_actor_model_object_packet(model,&object))
+   return fail(frontier,0x14c5a0,GH_ACTOR_MODEL_BOUNDS);
+  gh_actor_draw_command command={.kind=GH_ACTOR_DRAW_OPACITY_SETUP,.model=model,
+   .node_index=SIZE_MAX,.parity=call->parity,.selected_program=2,.object=object,
+   .test=test,.alpha=alpha,.tex1=tex1,.frame=masked_frame,.packet_group=1};
+  opacity_destination(call,first,&command);
+  gh_actor_model_status status=emit_opacity(call,&command,frontier);
+  if(status)return status;
+  call->phase=14;
+ }
+ return GH_ACTOR_MODEL_OK;
+}
+
 static gh_actor_model_status draw(gh_actor_draw_call *call,uint32_t *frontier) {
  gh_actor_model *model=call->model;const uint8_t *root=model->root.bytes;
  if(call->phase==0) {
@@ -192,7 +305,7 @@ static gh_actor_model_status draw(gh_actor_draw_call *call,uint32_t *frontier) {
   uint64_t nop=0x10000000;memcpy(header+0x50,&nop,8);memcpy(header+0x60,&nop,8);if(gh_actor_model_object_program_reset(model,call->parity))return fail(frontier,0x155be8,GH_ACTOR_MODEL_BOUNDS);
   call->node_index=0;call->phase=3;
  }
- while(call->node_index<root[0x2b1]) {
+ while(call->phase>=3&&call->phase<=7&&call->node_index<root[0x2b1]) {
   const uint8_t *node;size_t mesh_index;gh_actor_model_status e=gh_actor_model_node_at(model,(unsigned)call->node_index,&node,&mesh_index);if(e)return fail(frontier,0x14b6f8,e);
   gh_model_mesh mesh;if(gh_model_mesh_at(&model->script,mesh_index,&mesh))return fail(frontier,0x14b6f8,GH_ACTOR_MODEL_BOUNDS);
   uint32_t flags=word(node+0x380),actor_flags=word(root+0x250);
@@ -246,9 +359,10 @@ static gh_actor_model_status draw(gh_actor_draw_call *call,uint32_t *frontier) {
   if(!call->bindings.emit)return fail(frontier,0x31a650,GH_ACTOR_MODEL_UNSUPPORTED);
   gh_actor_model_status e=call->bindings.emit(call->bindings.emit_context,&call->pending,frontier);if(e){if(!*frontier)*frontier=0x31a650;return e;}call->phase=10;
  }
- /* Original250 bit10 adds a separate framebuffer/material pass after setup.
-  * Its allocation/second-pass draw must not disappear behind this profile. */
- if(word(root+0x250)&0x10)return fail(frontier,0x15b0f0,GH_ACTOR_MODEL_UNSUPPORTED);
+ if(word(root+0x250)&0x10){
+  gh_actor_model_status status=opacity_pass(call,frontier);
+  if(status)return status;
+ }
  call->complete=1;return GH_ACTOR_MODEL_OK;
 }
 gh_actor_model_status gh_actor_model_draw_0014ac90(gh_actor_draw_call *call,gh_actor_model *model,uint16_t depth,uint8_t far_mode,const gh_actor_draw_bindings *bindings,uint32_t *frontier) {

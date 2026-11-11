@@ -9,17 +9,17 @@ and assets, and replace platform dependencies with native Windows implementation
 This follows OpenGOAL's source recovery/platform adaptation method. God Hand was
 not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
-**Early development.** The original R100 opening renders natively from the
-user's ISO. All ten camera cuts play, and EV01 completes cleanup and returns to
-the R100 scene loop. A hidden, muted Windows run with synthetic New Game input
-reaches 1,735 ticks and presents 1,594 scene frames, including title and room
-startup. It submits 1,224,912 world packets with zero renderer, GPU,
-postprocess and window errors.
+**Early development.** The original R100 opening plays all ten camera cuts
+from the user's ISO and returns to the room. In a hidden, muted Windows run,
+a synthetic gamepad stick enters the original run state and moves Gene.
+The first visible room frame reaches the window as the opening fade lifts.
+The run reaches 1,744 ticks and presents 1,603 scene frames, including earlier
+title and room startup frames. It submits 1,243,415 world packets with zero
+renderer, GPU, postprocess and window errors.
 
-The next original call is R100 Scenario task registration `0x002C3890`,
-reached after EV01.
-Gameplay controls, combat, scene transitions and save/load still need
-end-to-end verification. The run starts at original startup task `0x0030D358`.
+The run stops during an enemy footstep sound request at `0x002CBF78` while
+the fade is still active. Continuous control, combat, room transitions and
+save/load still need end-to-end verification.
 
 ### Verified progress
 
@@ -152,13 +152,13 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 平台依赖。采用 OpenGOAL 的源码恢复与平台移植方法；本作不是 GOAL 程序，不能直接
 使用 Jak 专用反编译器。
 
-**仍处于早期开发。** 已从用户 ISO 原生播完 R100 开场的十个镜头，完成 EV01
-清理并回到 R100 场景循环。隐藏、静音的 Windows“新游戏”验证使用合成输入，运行
-到 1735 ticks，呈现 1594 个场景帧，包含标题和房间启动帧。累计提交 1224912 个
-世界绘制包，渲染器、GPU、后处理和窗口错误均为 0。
+**仍处于早期开发。** 已从用户 ISO 播完 R100 开场十个镜头并回到房间。隐藏、静音的
+Windows 运行通过合成摇杆输入进入原版跑步状态，Gene 随之移动。首个可见房间帧已在
+淡出期间提交到窗口。运行到 1744 ticks，呈现 1603 个场景帧，包含此前的标题和房间
+启动帧。累计提交 1243415 个世界绘制包，渲染器、GPU、后处理和窗口错误均为 0。
 
-下一原调用为开场后 R100 的 Scenario 任务注册 `0x002C3890`。实际操作、战斗、场景切换
-和存读档仍待端到端验证。程序从原启动任务 `0x0030D358` 开始。
+淡出尚未结束，运行停在敌人的脚步声请求 `0x002CBF78`。连续操作、战斗、房间切换和
+存读档仍待端到端验证。
 
 ### 已验证的进展
 

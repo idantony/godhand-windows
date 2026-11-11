@@ -32,6 +32,7 @@ typedef struct {
     const gh_scene_nearcheck *navigation;
     gh_enemy_route_query target_query, origin_query;
     gh_enemy202_hit_call damage;
+    gh_motion_sound_request hit_sound;
     gh_effect_create_call impact_create;
     gh_effect_create_bindings impact_bindings;
     uint32_t target_vertex, origin_vertex;
@@ -50,6 +51,7 @@ typedef struct {
     const gh_title_player_view *player_aux_698;
     uint8_t player_aux_698_known, state1_phase, state71_phase, state71_exit;
     uint16_t reaction_resource_offset;
+    gh_motion_sound_request reaction_sound;
     gh_enemy_ema2_damage_call near_damage;
     gh_enemy_ema2_hit_sound near_sound;
     void *near_sound_context;

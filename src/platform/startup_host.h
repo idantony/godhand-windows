@@ -93,6 +93,8 @@ typedef struct gh_startup_snapshot {
     uint16_t current_room,next_room;
     /* Read-only developer frontier diagnostics; no actor pointers escape. */
     uint32_t scene_stage,hitarea_phase,hitarea_slot,hitarea_node;
+    uint8_t scenario_task_failed,scenario_task_stage;
+    int scenario_task_slot;
     uint64_t player_updates_completed,child_updates_completed,om_updates_completed;
     uint32_t last_move_handle,last_move_entry,player_update_stage,child_update_stage;
     uint32_t player_handle,player_state_entry,player_update_frontier;
@@ -106,6 +108,8 @@ typedef struct gh_startup_snapshot {
     uint32_t current_enemy_placement_ready,current_enemy_stamp,current_enemy_dependency,current_enemy_appearance;
     uint32_t current_enemy_spawn_flags,current_enemy_phase,current_enemy_variant,current_enemy_serial;
     uint32_t current_enemy_distance_bits,current_enemy_route_bits;
+    uint32_t current_enemy_flags_3ac,current_enemy_flags_16d0,current_enemy_flags_16d4;
+    uint32_t current_enemy_reaction_set_17bd;
     uint32_t current_b_samples,current_b_index[4],current_b_group[4],current_b_generation[4],current_b_serial[4];
     uint32_t current_b_source_present[4],current_b_source_known[4],current_b_source_kind[4],current_b_words[4][28];
     uint32_t hitarea_shape_index,hitarea_shape_flags,hitarea_shape_kind;
