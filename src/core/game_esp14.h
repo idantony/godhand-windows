@@ -69,6 +69,7 @@ gh_effect_status gh_esp14_model_dispose(gh_esp14_model *);
 
 /* Shared 300EF8 positive record flag 0x00200000. Inputs use the same staged
  * slot as the caller. It consumes the original three LCG steps. */
+gh_effect_status gh_effect_position_init_scaled_00301c20(uint8_t[0x400],gh_effect_view,int,float,float[3],uint32_t*);
 gh_effect_status gh_esp14_position_init_00301c20(uint8_t staged_payload[0x400],
     gh_effect_view, int mirrored, float position[3], uint32_t *frontier);
 typedef struct {
@@ -137,6 +138,8 @@ gh_effect_status gh_esp14_nested_emitter_pose_00302bb4(gh_game_effects *,
 
 /* True 2FEC38 final alpha branch. The attached actor path replaces the
  * ordinary sprite fade with its own tint / three byte opacity factors. */
+gh_effect_status gh_effect_actor_sprite_alpha_002fec38(const gh_game_effects *,const gh_effect_esp_view *,
+ float alpha,float fade,float *out,uint32_t *frontier);
 gh_effect_status gh_esp14_nested_sprite_alpha_002fec38(const gh_effect_esp_view *,
     float alpha, float fade, float *out, uint32_t *frontier);
 

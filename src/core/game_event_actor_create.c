@@ -108,12 +108,16 @@ static gh_game_event_status create_row(gh_event_actor_create *s, size_t index) {
     s->frontier = 0x297a48;
     s->frontier_rel = 0x04d0;
     if ((source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60c) &&
-        source != 0x630 && source != 0x631 && source != 0x667) return GH_EVENT_UNSUPPORTED;
+        (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x667) return GH_EVENT_UNSUPPORTED;
     const unsigned costume = gh_core_save_costume(b->save);
     uint16_t create = source;
     if ((source == 0x600 || source == 0x602) && costume >= 2 && costume < 8) {
         const uint16_t variants[] = {0x6f0, 0x6f2, 0x6f6};
         create = variants[(costume - 2) / 2] + (source == 0x602);
+    }
+    if ((source == 0x605 || source == 0x607) && costume >= 2 && costume < 8) {
+        const uint16_t variants[] = {0x690, 0x693, 0x696};
+        create = variants[(costume - 2) / 2] + (source == 0x607);
     }
     if (source == 0x60a) {
         gh_event_component_view env;

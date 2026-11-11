@@ -736,12 +736,17 @@ gh_id_error gh_game_cockpit_tutorial_finish_00147028(gh_game_cockpit*s){
  entries[3]->message=0x200c;entries[4]->message=0x200c;
  w16(s,o+0xac,0xffff);s->fields[o+0xb8]=0;return GH_ID_OK;
 }
+static void forget_tutorial_links(gh_game_cockpit*s,gh_id_base*b){
+ for(unsigned i=0;i<s->owned_count;)if(s->owned[i]==b){memmove(s->owned+i,s->owned+i+1,(s->owned_count-i-1)*sizeof(*s->owned));s->owned_count--;}else i++;
+ for(unsigned i=0;i<s->ref_count;)if(s->refs[i].offset>=0x1a20+0x90&&s->refs[i].offset<0x1a20+0xac){memmove(s->refs+i,s->refs+i+1,(s->ref_count-i-1)*sizeof(*s->refs));s->ref_count--;}else i++;
+ w32(s,0x1a20+0xb0,0);w16(s,0x1a20+0xac,0xffff);s->fields[0x1a20+0xb8]=0;
+}
+
+
 gh_id_error gh_game_cockpit_tutorial_detach(gh_game_cockpit*s){
  if(!s||!s->ready)return GH_ID_ARGUMENT;gh_id_base*b=base(s,0x1a20);
  if(b->owns_run){int original,freed;gh_id_error e=gh_id_base_release_002aa078(s->runtime,b,&original,&freed);if(e)return e;(void)original;(void)freed;}
- for(unsigned i=0;i<s->owned_count;)if(s->owned[i]==b){memmove(s->owned+i,s->owned+i+1,(s->owned_count-i-1)*sizeof(*s->owned));s->owned_count--;}else i++;
- for(unsigned i=0;i<s->ref_count;)if(s->refs[i].offset>=0x1a20+0x90&&s->refs[i].offset<0x1a20+0xac){memmove(s->refs+i,s->refs+i+1,(s->ref_count-i-1)*sizeof(*s->refs));s->ref_count--;}else i++;
- w32(s,0x1a20+0xb0,0);w16(s,0x1a20+0xac,0xffff);s->fields[0x1a20+0xb8]=0;return GH_ID_OK;
+ forget_tutorial_links(s,b);return GH_ID_OK;
 }
 
 gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit*s,gh_core_save_view save,const uint8_t heat[0x18]){
@@ -750,7 +755,15 @@ gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit*s,gh_core_save_vi
  w32(s,0x1910+0x90,0);unsigned o=0x1dc0;w32(s,o+0xb8,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);w32(s,o+0xa0,0);
  o=0x1e90;for(unsigned i=0;i<5;i++){w32(s,o+0x260-4*i,0);w32(s,o+0x2d0-4*i,0x3f800000);w32(s,o+0xb8-4*i,0);}s->fields[o+0x384]=0;w32(s,o+0xa0,0);s->fields[o+0x358]=0;
  o=0x2220;if(u32(s->fields+o+0x94)){s->frontier=0x2aa078;return GH_ID_UNSUPPORTED;}w32(s,o+0xa0,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);
- o=0x1a20;if(u32(s->fields+o+0xb0)){s->fields[o+0xb8]=0;w16(s,o+0xac,0xffff);w32(s,o+0xb0,0);}
+ o=0x1a20;
+ gh_id_base*tutorial=base(s,o);
+ if(u32(s->fields+o+0xb0)||tutorial->owns_run){
+  /* Original 147188 clears the active tutorial slot. Its pool rows
+   * still exist until 2AD108; retire the native typed views here. */
+  gh_id_error e=gh_id_base_detach_for_compaction(s->runtime,tutorial);
+  if(e){s->frontier=0x147188;return e;}
+  forget_tutorial_links(s,tutorial);
+ }
  if(u32(s->fields+0x460+0x80)!=0x41e620){s->frontier=0x1434a8;return GH_ID_UNSUPPORTED;}
  TRY(room_heat_reset_00141ce8(s,save,heat));s->gameplay_bound=0;s->radar_player=NULL;s->hud_cold_known=7;s->gameplay_index=s->radar_move_stage=s->radar_move_index=s->heat_move_stage=s->widget_step=0;s->gameplay_error=GH_ID_OK;s->gameplay_error_frontier=0;s->room_begun=s->room_ready=0;s->radar_draw_pass=s->radar_draw_index=s->radar_arrow_moved=0;s->update_stage=s->draw_stage=s->radar_stage=s->heat_stage=0;return GH_ID_OK;
 }

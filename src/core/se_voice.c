@@ -155,26 +155,29 @@ static int enemy_state71_sequence_profile(const struct voice *v,int16_t bank,int
  return !sample||(w(sample)==offset&&w(sample+4)==11025&&w(sample+8)==0x5fcb80ff&&!w(sample+12));
 }
 
-/* Actual dep0203 selector 15 uses EM03 programs 4/6 and their MT variants. */
-static int em03_attack_sequence_profile(const struct voice *v,int16_t bank,int16_t program,
+/* EM00/EM03 attack SEQs use local programs 4/6 and their MT variants. */
+static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
  const int16_t request=v->requested_program;
  if(!v->source_owner||bank<1||bank==2||bank==3||(request!=4&&request!=6)||
     program<request||program>request+1||h(p)!=(unsigned)bank||h(p+2)!=(unsigned)program)
   return 0;
+ const unsigned gain=h(p+0x10);
+ const uint32_t dependency=gain==127?0x200:gain==125?0x203:0;
+ if(!dependency)return 0;
  if(v->model){
   const gh_title_player_view *root=&v->model->root;
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
-     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=0x203)return 0;
+     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=dependency)return 0;
  }else if(!v->combat_profile)return 0;
  const unsigned variants=program==request?0x10185u:0x10085u;
  if(h(p+4)!=(unsigned)(program-1)||w(p+6)!=0x0250022au||h(p+0xe)!=0x20||
-    w(p+0x10)!=0x007d007d||w(p+0x14)!=0x005a0040||w(p+0x18)!=0x00c8ff38u||
+    h(p+0x12)!=gain||w(p+0x14)!=0x005a0040||w(p+0x18)!=0x00c8ff38u||
     w(p+0x1c)!=0x00060000u||w(p+0x20)!=variants||w(p+0x24)!=0x400||
     w(p+0x28)!=0xffff||w(p+0x2c))return 0;
- static const uint32_t offsets[]={0x4a20,0x5280,0x5b60,0x7700};
- return !sample||(w(sample)==offsets[program-4]&&w(sample+4)==11025&&
+ static const uint32_t offsets[][4]={{8928,11408,13360,16624},{0x4a20,0x5280,0x5b60,0x7700}};
+ return !sample||(w(sample)==offsets[dependency==0x203][program-4]&&w(sample+4)==11025&&
     w(sample+8)==0x5fcb80ffu&&!w(sample+12));
 }
 
@@ -275,28 +278,33 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
      w(sample+8)==0x5fc080ff&&!w(sample+12));
 }
 
-/* The late EM03 selector15 CORE cues use the same spatial owner as
- * their local-bank voices, with separately authenticated sample rows. */
-static int core_em03_attack_profile(const struct voice *v,int16_t bank,int16_t program,
+/* The selector15 CORE cues use the same spatial owner as the local bank. */
+static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
  if(!v->source_owner||bank||v->requested_program!=program||
-    (program!=0x85&&program!=0x87&&program!=0xa0)||h(p)||h(p+2)!=(unsigned)program)
+    h(p)||h(p+2)!=(unsigned)program)
   return 0;
+ const int em00_only=program==0x84;
+ const int aged=program==0xa0;
+ if(program!=0x83&&!em00_only&&program!=0x85&&program!=0x87&&!aged)return 0;
  if(v->model){
   const gh_title_player_view *root=&v->model->root;
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
-     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=0x203)return 0;
+     h(root->bytes+0x2fe)!=0x202)return 0;
+  const uint32_t dependency=w(root->bytes+0x564);
+  if((dependency!=0x200||aged)&&(dependency!=0x203||em00_only))return 0;
  }else if(!v->combat_profile)return 0;
- const int aged=program==0xa0,second=program==0x87;
- const unsigned slot=aged?98u:second?90u:88u;
- const uint32_t gain=aged?0x00780078u:second?0x005a005au:0x00460046u;
+ const unsigned slot=aged?98u:(unsigned)(program-0x2d);
+ const unsigned gain=aged?120u:program==0x83?60u:program==0x85?70u:90u;
+ const uint32_t pitch=program==0x85||aged?0x0080ff80u:0x00800080u;
  if(h(p+4)!=slot||w(p+6)!=(aged?0x025a020bu:0x0246020bu)||
-    h(p+0xe)!=0x20||w(p+0x10)!=gain||w(p+0x14)!=0x005a0040u||
-    w(p+0x18)!=(second?0x00800080u:0x0080ff80u)||w(p+0x1c)!=(aged?0x60000u:0)||
+    h(p+0xe)!=0x20||w(p+0x10)!=gain*0x10001u||w(p+0x14)!=0x005a0040u||
+    w(p+0x18)!=pitch||w(p+0x1c)!=(aged?0x60000u:0)||
     w(p+0x20)!=(aged?0x30005u:4u)||w(p+0x24)!=(aged?0x300u:0x301u)||
     w(p+0x28)!=0xffffu||w(p+0x2c))return 0;
- const uint32_t offset=aged?0x6f7d0u:second?0xa1ed0u:0xa2f60u;
+ const uint32_t offset=aged?0x6f7d0u:program==0x83?657040u:program==0x84?674208u:
+     program==0x85?0xa2f60u:0xa1ed0u;
  return !sample||(w(sample)==offset&&w(sample+4)==16000&&
     w(sample+8)==0x5fc080ffu&&!w(sample+12));
 }
@@ -426,7 +434,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  int reaction_voice=adsr2==0x5fcb&&enemy_reaction_profile(candidate,bank,program,p,descriptor.data);
  int sequence_voice=adsr2==0x5fcb&&enemy_state71_sequence_profile(candidate,bank,program,p,descriptor.data);
  int selector6b_voice=adsr2==0x5fcb&&em00_selector6b_profile(candidate,bank,program,p,descriptor.data);
- int attack_voice=adsr2==0x5fcb&&em03_attack_sequence_profile(candidate,bank,program,p,descriptor.data);
+ int attack_voice=adsr2==0x5fcb&&enemy_attack_sequence_profile(candidate,bank,program,p,descriptor.data);
  int death_voice=adsr2==0x5fcb&&r100_death_profile(candidate,bank,program,p,descriptor.data);
  int timed_voice=adsr2==0x5fcb&&em0a_timed_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==0x5be0&&w(descriptor.data+4)==16000;
@@ -444,8 +452,8 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  const int knockdown_core=core_r100_knockdown_profile(candidate,bank,program,p,NULL);
  if(knockdown_core&&!core_r100_knockdown_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
- const int attack_core=core_em03_attack_profile(candidate,bank,program,p,NULL);
- if(attack_core&&!core_em03_attack_profile(candidate,bank,program,p,descriptor.data))
+ const int attack_core=core_enemy_attack_profile(candidate,bank,program,p,NULL);
+ if(attack_core&&!core_enemy_attack_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
  if(impact_voice||reaction_voice||ema2_voice||ema2_timer_voice||timed_voice||footstep||sequence_voice||attack_core||
     selector6b_voice||turn_core||attack_voice||death_voice||knockdown_core)candidate->combat_profile=1;
@@ -672,10 +680,10 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
   if(!enemy_reaction_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_state71_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
-     !em03_attack_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !enemy_attack_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !r100_death_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_r100_knockdown_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
-     !core_em03_attack_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !core_enemy_attack_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_enemy_turn_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em0a_timed_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)&&
      !player_fall_impact_profile(candidate,candidate->descriptor)&&
@@ -735,6 +743,19 @@ static gh_voice_status attached_request_body(gh_se_voice_engine*s,const void*own
  if(v->setup_stage==6){if(!++s->serial)++s->serial;v->info.original_handle=s->serial;v->request_key=NULL;v->setup_stage=0;v->random=NULL;v->random_context=NULL;v->used=1;v->next=s->head;s->head=(int)index;*handle=v->info.original_handle;}
  return GH_VOICE_OK;
 }
+static void note_attached_failure(gh_se_voice_engine *s,gh_se_attached_failure failure,
+ const gh_actor_model *model)
+{
+ if(!s->frontier)return;
+ failure.frontier=s->frontier;
+ if(model&&model->root.bytes&&model->root.size>=0x300){
+  failure.actor_kind=(uint16_t)h(model->root.bytes+0x2fe);
+  if(failure.actor_kind>=0x200&&failure.actor_kind<0x300&&model->root.size>=0x568)
+   failure.actor_dependency=w(model->root.bytes+0x564);
+ }
+ s->attached_failure=failure;
+}
+
 gh_voice_status gh_se_voice_request_attached(gh_se_voice_engine *s,const void *owner,
  const void *key,gh_actor_model *model,int32_t part,int16_t bank,int16_t program,
  uint32_t flags,int32_t delay,gh_se_attached_probe probe,void *probe_context,
@@ -749,11 +770,11 @@ gh_voice_status gh_se_voice_request_attached(gh_se_voice_engine *s,const void *o
  gh_voice_status status=attached_request_body(s,owner,key,model,part,bank,program,
      flags,delay,probe,probe_context,random,random_context,handle);
  if(fesetenv(&env))return GH_VOICE_PLATFORM;
- if(status&&s->frontier)
-  s->attached_failure=(gh_se_attached_failure){
-      .frontier=s->frontier,.flags=flags,.part_index=part,.delay=delay,
+ if(status)
+  note_attached_failure(s,(gh_se_attached_failure){
+      .flags=flags,.part_index=part,.delay=delay,
       .bank=bank,.program=program,.status=status
-  };
+  },model);
  return status;
 }
 
@@ -1111,7 +1132,15 @@ static gh_voice_status voice_update_body(gh_se_voice_engine *s)
    if(error&&error!=GH_VOICE_BOUNDS)return error;
    if(error==GH_VOICE_BOUNDS||!active){drop(s,i,error==GH_VOICE_OK);i=next;continue;}
   }
-  if(!v->info.retiring){gh_voice_status attached=attached_update(s,v);if(attached)return attached;}
+  if(!v->info.retiring){
+   gh_voice_status attached=attached_update(s,v);
+   if(attached){
+    note_attached_failure(s,(gh_se_attached_failure){.flags=v->flags18,
+        .part_index=v->part_index,.bank=v->info.bank,.program=v->info.program,
+        .during_update=1,.position_mode=v->info.position_mode,.status=attached},v->model);
+    return attached;
+   }
+  }
   if(v->info.pending){
    /* Original shared SDE queue has48 entries. Overflowed EE voices observe
     * no SDE handle on the next update; don't invent extra queue capacity. */

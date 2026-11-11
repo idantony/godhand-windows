@@ -139,7 +139,7 @@ static gh_game_event_status release_associated(gh_event_actor_release *s, size_t
         if (frontier) *frontier = 0x1cf160;
         return GH_EVENT_UNSUPPORTED; // Original release reattaches a positive weapon to the player.
     }
-    if (index == 3 && extra->accessory_handle) {
+    if (index == extra->olivia_accessory.actor_index && extra->accessory_handle) {
         gh_game_event_status status = check_effect_borrows(s, &extra->olivia_accessory, frontier);
         if (status) return status;
         if (frontier) *frontier = 0x312778;

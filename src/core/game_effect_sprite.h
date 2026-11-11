@@ -10,7 +10,8 @@ extern "C" {
 #endif
 typedef struct {const gh_game_pl_camera *camera;const gh_game_init_state *init;const gh_display_state *display;
  gh_static_transform_policy policy;gh_frame_numeric_policy cvt_policy;} gh_effect_sprite_camera;
-typedef struct {int32_t xyz_fixed4[4][3],original_depth;float q[4];uint8_t visible;} gh_effect_sprite_projection;
+typedef struct {int32_t xyz_fixed4[4][3],original_depth;float q[4];uint8_t visible;
+ int32_t center_fixed4[3];float center_q;} gh_effect_sprite_projection;
 /* Original2FE0D8 bounded projectedquad domain. SAME CNode cache/identity,
  * no renderer/material acknowledgment. Clipped quads genuinely returnvisible0. */
 gh_effect_status gh_effect_sprite_project_002fe0d8(gh_game_effects *,unsigned,uint32_t,const gh_effect_sprite_camera *,gh_effect_sprite_projection *,uint32_t *frontier);

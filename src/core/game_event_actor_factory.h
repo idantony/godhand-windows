@@ -9,6 +9,8 @@ extern "C" {
 #endif
 
 enum { GH_ROOM_OBJECT_EVENT_ACTOR = 0x600, GH_EVENT_ACTOR_BYTES = 0x30e0 };
+/* EV02 is the largest admitted roster. One extra actor is bound separately. */
+enum { GH_EVENT_ACTOR_ROSTER_CAPACITY = 22 };
 
 typedef struct {
     gh_room_pools *pools;

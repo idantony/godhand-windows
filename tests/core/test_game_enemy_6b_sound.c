@@ -216,6 +216,61 @@ int main(int argc,char **argv)
  }
  C(!gh_actor_attached_sound_abort(&source)&&submissions==2&&stops==2);
 
+ const size_t attack_frames[]={4312,3388,5684,9044};
+ for(int16_t program=4;program<=6;program+=2){
+  for(unsigned variant=0;variant<2;++variant){
+   const int16_t actual=(int16_t)(program+variant);
+   check_program(registry,(int16_t)bank,actual,actual-1,11025,attack_frames[actual-4]);
+   gh_game_mt_seed_0030f2b0(&random,variant?1:2);
+   expected=random;
+   uint32_t roll;
+   C(!gh_game_mt_next_0030f348(&expected,&roll)&&(roll&1u)==variant);
+   C(!gh_actor_attached_sound_bind(&source,&binding));
+   C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+   gh_motion_sound_request attack={.model=&model.model,.actor=&enemy.view,.bank=1,.program=program};
+   uint32_t handle=0,frontier=0;
+   C(!gh_actor_attached_sound_motion(&source,&attack,&handle,&frontier)&&handle&&!frontier);
+   C(!memcmp(&random,&expected,sizeof(random)));
+   const unsigned before=submissions;
+   if(actual==6){
+    control.listener_mode110=2;
+    C(gh_se_voice_update(voices)==GH_VOICE_UNSUPPORTED&&gh_se_voice_frontier(voices)==0x2cf058);
+    gh_se_attached_failure failure;
+    gh_se_voice_last_attached_failure(voices,&failure);
+    C(failure.during_update&&failure.frontier==0x2cf058&&failure.actor_kind==0x202&&
+      failure.actor_dependency==0x200&&failure.bank==bank&&failure.program==actual&&
+      failure.position_mode==2&&failure.status==GH_VOICE_UNSUPPORTED&&submissions==before);
+    control.listener_mode110=1;
+   }
+   C(!gh_se_voice_update(voices));
+   gh_se_voice_info info;
+   C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&
+     info.bank==bank&&info.program==actual&&info.sample_slot==(uint32_t)(actual-1)&&info.position_mode==2&&
+     info.rate==11025&&info.adsr2==0x5fcb&&info.channel>=42&&info.channel<=44);
+   C(submissions==before+1&&submitted[before].frames);
+   C(!gh_actor_attached_sound_abort(&source)&&stops==submissions);
+  }
+ }
+
+ const int16_t core_attack[]={0x83,0x84,0x85,0x87};
+ for(unsigned i=0;i<sizeof(core_attack)/sizeof(core_attack[0]);++i){
+  const int16_t program=core_attack[i];
+  const unsigned before=submissions;
+  expected=random;
+  C(!gh_actor_attached_sound_bind(&source,&binding));
+  C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+  gh_motion_sound_request attack={.model=&model.model,.actor=&enemy.view,.bank=0,.program=program};
+  uint32_t handle=0,frontier=0;
+  C(!gh_actor_attached_sound_motion(&source,&attack,&handle,&frontier)&&handle&&!frontier);
+  C(!memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_update(voices));
+  gh_se_voice_info info;
+  C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&
+    info.bank==0&&info.program==program&&info.sample_slot==(uint32_t)(program-0x2d)&&info.position_mode==2&&
+    info.rate==16000&&info.adsr2==0x5fc0&&info.channel>=11&&info.channel<=13);
+  C(submissions==before+1&&submitted[before].frames);
+  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions);
+ }
+
  int spawn;
  int16_t saved;
  uint32_t frontier=0;
@@ -225,16 +280,29 @@ int main(int argc,char **argv)
  memcpy(enemy.view.bytes+0x564,&dep,4);
  C(!gh_actor_attached_sound_bind(&source,&binding));
  C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+ gh_motion_sound_request shared_attack={.model=&model.model,.actor=&enemy.view,.bank=0,.program=0x83};
+ uint32_t shared_handle=0;
+ C(!gh_actor_attached_sound_motion(&source,&shared_attack,&shared_handle,&frontier)&&shared_handle&&!frontier);
+ const unsigned before_shared=submissions;
+ C(!gh_se_voice_update(voices)&&submissions==before_shared+1&&submitted[before_shared].frames);
+ gh_se_voice_info shared_info;
+ C(!gh_se_voice_query(voices,shared_handle,&shared_info)&&shared_info.program==0x83&&
+   shared_info.sample_slot==86&&shared_info.native_voice&&shared_info.position_mode==2);
+ C(!gh_actor_attached_sound_abort(&source)&&stops==submissions);
+
+ C(!gh_actor_attached_sound_bind(&source,&binding));
+ C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
  gh_motion_sound_request turn={.model=&model.model,.actor=&enemy.view,.bank=0,.program=0x8d};
  uint32_t handle=0,duplicate=99;
+ const unsigned before_turn=submissions;
  C(!gh_actor_attached_sound_motion(&source,&turn,&handle,&frontier)&&handle&&!frontier);
  C(!gh_actor_attached_sound_motion(&source,&turn,&duplicate,&frontier)&&!duplicate&&!frontier);
  C(!gh_se_voice_update(voices));
  gh_se_voice_info voice;
  C(!gh_se_voice_query(voices,handle,&voice)&&voice.bank==0&&voice.program==0x8d&&
     voice.sample_slot==92&&voice.rate==16000&&voice.native_voice&&voice.adsr2==0x5fc0);
- C(submissions==3&&submitted[2].frames);
- C(!gh_actor_attached_sound_abort(&source)&&stops==3);
+ C(submissions==before_turn+1&&submitted[before_turn].frames);
+ C(!gh_actor_attached_sound_abort(&source)&&stops==submissions);
  C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
  C(!gh_enemy_se_banks_destroy(banks));
  gh_se_voice_destroy(voices);
@@ -244,6 +312,6 @@ int main(int argc,char **argv)
  gh_disc_close(disc);
  free(resource_bytes);
  free(room);
- puts("PASS actual R100 dep0200 stamp20 EM00 0A/0B attached cues, duplicate suppression and two recorded PCM commands");
+ puts("PASS actual R100 EM00 selector6B and selector15 attached cues, MT, and PCM commands");
  return 0;
 }

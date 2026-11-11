@@ -61,12 +61,14 @@ gh_voice_status gh_se_voice_detach_actor_002ce488(gh_se_voice_engine *,struct gh
 gh_voice_status gh_se_voice_abort_attached_owner(gh_se_voice_engine *,const void *owner);
 unsigned gh_se_voice_attached_reservations(const gh_se_voice_engine *);
 typedef struct {
- uint32_t frontier,flags;
+ uint32_t frontier,flags,actor_dependency;
  int32_t part_index,delay;
  int16_t bank,program;
+ uint16_t actor_kind;
+ uint8_t during_update,position_mode;
  gh_voice_status status;
 } gh_se_attached_failure;
-/* Most recent attached request with a known original boundary. */
+/* Most recent attached request or update with a known original boundary. */
 void gh_se_voice_last_attached_failure(const gh_se_voice_engine *,gh_se_attached_failure *);
 /* Original active-list (newest first), descriptor-selected channel groups0..4 and15..16, priority/oldest
  * replacement semantics for audited MC/logo records. Starts real

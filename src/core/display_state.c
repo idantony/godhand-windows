@@ -53,3 +53,24 @@ uint32_t gh_display_copy_base0_0030b870(const uint8_t top_rgb[3],const uint8_t n
  }
  return rgb;
 }
+gh_display_status gh_display_copy_base0_surface_0030b870(const uint8_t *source,size_t source_bytes,
+ uint8_t *target,size_t target_bytes)
+{
+ enum {row_bytes=512*4,rows=448,bytes=row_bytes*rows};
+ if(!source||!target||source==target)return GH_DISPLAY_ARGUMENT;
+ if(source_bytes!=bytes||target_bytes!=bytes)return GH_DISPLAY_BOUNDS;
+ static const uint8_t outside[3]={0};
+ for(unsigned y=0;y<rows;++y){
+  const uint8_t *line=source+y*row_bytes;
+  for(unsigned x=0;x<row_bytes;x+=4){
+   const uint8_t *above=y?line+x-row_bytes:outside;
+   const uint8_t *below=y+1<rows?line+x+row_bytes:outside;
+   const uint32_t rgb=gh_display_copy_base0_0030b870(line+x,below);
+   uint8_t *pixel=target+y*row_bytes+x;
+   for(unsigned channel=0;channel<3;++channel)
+    pixel[channel]=(uint8_t)(((rgb>>(channel*8))&0xff)+(above[channel]>>2));
+   pixel[3]=0;
+  }
+ }
+ return GH_DISPLAY_OK;
+}

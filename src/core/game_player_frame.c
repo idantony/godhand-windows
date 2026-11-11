@@ -519,9 +519,12 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      w(b->take_object->bytes+0x40)!=UINT32_MAX)
    return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   const uint32_t dependency=w(source->bytes+0x564);
-  const int short_hit=s->pending_damage_kind==0x37&&s->pending_damage==15&&dependency==0x20a;
+  const unsigned stamp=half(source->bytes+0x640);
+  const int close_enemy=(dependency==0x203&&stamp==19)||(dependency==0x200&&stamp==20);
+  const int short_hit=s->pending_damage_kind==0x37&&
+    ((s->pending_damage==15&&dependency==0x20a)||(s->pending_damage==20&&close_enemy));
   const int stamp19_fall=s->pending_damage_kind==0x3e&&s->pending_damage==45&&
-    dependency==0x203&&half(source->bytes+0x640)==19;
+    dependency==0x203&&stamp==19;
   if(!short_hit&&!stamp19_fall)return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   gh_player_frame_status status=damage_hp_0012c0f8(s,s->pending_damage);
   if(status)return status;

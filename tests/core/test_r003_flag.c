@@ -33,6 +33,18 @@ static void load_module(void *context,int32_t argument)
     loader->done=1;
 }
 
+typedef struct {uint8_t bytes[0x540];size_t size;uint32_t handle;unsigned visits;} foreign_actor;
+
+static gh_r100_init_status foreign_view(void *context,uint32_t handle,gh_r100_om_view *out,
+    uint32_t *frontier)
+{
+    foreign_actor *actor=context;
+    if(handle!=actor->handle){*frontier=0x14fd98;return GH_R100_INIT_BOUNDS;}
+    *out=(gh_r100_om_view){actor->bytes,actor->size,actor};
+    actor->visits++;
+    return GH_R100_INIT_OK;
+}
+
 static void check_wind(gh_r003_event *event,gh_om_factory *factory)
 {
     gh_game_mt mt,original;
@@ -41,7 +53,19 @@ static void check_wind(gh_r003_event *event,gh_om_factory *factory)
     original=mt;
     const uint32_t auxiliary=random.auxiliary_word;
     uint32_t pc=0;
-    CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,&pc)&&!pc);
+    CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,NULL,NULL,&pc)&&!pc);
+    foreign_actor actor={.size=0x300};
+    actor.bytes[0x2ff]=1; /* Canonical SearchOM checks type100 before +538. */
+    gh_room_pools *pools=factory->bindings.pools;
+    CHECK(!gh_room_object_register(pools,&actor,&actor,0x100,8,&actor.handle));
+    CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,foreign_view,&actor,&pc)&&!pc&&actor.visits==6);
+    actor.bytes[0x2ff]=3;
+    actor.size=sizeof(actor.bytes);
+    CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,foreign_view,&actor,&pc)&&!pc&&actor.visits==12);
+    memcpy(actor.bytes+0x538,"om030",6);
+    CHECK(gh_r003_move_flags_000003d8(event,factory,&mt,&random,foreign_view,&actor,&pc)==GH_R003_UNSUPPORTED&&
+        pc==0x2ae218&&actor.visits==13);
+    CHECK(!gh_room_object_unregister(pools,actor.handle,&actor));
     CHECK(!memcmp(&mt,&original,sizeof(mt))&&random.auxiliary_word==auxiliary);
 }
 
@@ -60,7 +84,7 @@ static void check_wind_forces(gh_r003_event *event,gh_om_factory *factory)
     float start[3]={0.125f,0.5f,0.0f};
     memcpy(event->work.pointer,start,sizeof(start));
     uint32_t pc=0;
-    CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,&pc)&&!pc);
+    CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,NULL,NULL,&pc)&&!pc);
     CHECK(random.auxiliary_word==expected_aux&&mt.index==consumed);
     CHECK(!memcmp(start,event->work.pointer,sizeof(start))&&fegetround()==FE_UPWARD);
     for(unsigned actor=0;actor<6;actor++){
@@ -91,7 +115,7 @@ static void check_wind_forces(gh_r003_event *event,gh_om_factory *factory)
     random.auxiliary_word=0;
     const float before_reset[3]={4.0f,0.5f,0.01f};
     memcpy(event->work.pointer,before_reset,sizeof(before_reset));
-    CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,&pc)&&!pc);
+    CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,NULL,NULL,&pc)&&!pc);
     float after_reset[3];
     memcpy(after_reset,event->work.pointer,sizeof(after_reset));
     CHECK(mt.index==20&&!random.auxiliary_word);
@@ -168,7 +192,7 @@ static void check_object_moves(gh_r003_event *event,gh_om_factory *factory,gh_bo
     CHECK(!gh_frame_seed_0031ceb8(&random,&mt,GH_FRAME_CHOP_REFERENCE));
     for(unsigned frame=0;frame<24;frame++){
         uint32_t pc;
-        CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,&pc)&&!pc);
+        CHECK(!gh_r003_move_flags_000003d8(event,factory,&mt,&random,NULL,NULL,&pc)&&!pc);
         for(unsigned i=0;i<6;i++){
             gh_om_object *o=&factory->objects[i];
             gh_om041c_state *flag=(gh_om041c_state *)o->initialization;

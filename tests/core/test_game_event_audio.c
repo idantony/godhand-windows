@@ -183,6 +183,42 @@ int main(int argc,char **argv)
     CHECK(job && gh_dvd_check(&dvd,job));
     CHECK(!gh_event_audio_channel1_shutdown(&state) && !gh_dvd_check(&dvd,job) && !gh_heap_used(heap));
     CHECK(!gh_event_audio_channel1_shutdown(&state));
+    /* R003 requests Event 2 on the same channel. Prove Create's original
+     * pre-roll through the actual AFD, AFS, encrypted ADX and event resource. */
+    CHECK(!gh_event_audio_channel1_bind(&state,&control,&dvd,heap));
+    CHECK(!gh_event_audio_channel1_bind_registry(&state,registry));
+    CHECK(!gh_bgm_requests_create(registry,&control,disc,heap,&bgm));
+    CHECK(!gh_bgm_requests_enable_native(bgm,&key,1,GH_BGM_GAIN_NATIVE_DB_REFERENCE));
+    CHECK(!gh_event_audio_channel1_bind_prefetch(&state,prefetch,bgm));
+    CHECK(!gh_event_audio_channel1_bind_lifecycle(&state,bgm));
+    CHECK(!gh_event_audio_channel1_service(&state,GH_EVENT_AUDIO_PREPARE_002D1900,2,0,&ready,&frontier));
+    for(unsigned i=0;i<8 && gh_dvd_check(&dvd,state.job);++i)CHECK(!gh_dvd_pump(&dvd));
+    CHECK(!gh_event_audio_channel1_tick_002d0068(&state));
+    CHECK(!gh_event_audio_channel1_tick_002d0068(&state) && state.flags==15);
+    CHECK(!gh_audio_event_afs_member(registry,&state,0,&offset,&size) && offset==0x800 && size==0x4e303a);
+
+    event.fields.data_number=2;
+    event.fields.state=2;
+    event.fields.phase=3;
+    resource=(gh_event_resource){0};
+    create=(gh_event_create_state){0};
+    CHECK(!gh_game_event_resource_begin_00297540(&resource,&event,&dvd,heap));
+    for(unsigned i=0;i<8 && gh_dvd_check(&dvd,resource.job);++i)CHECK(!gh_dvd_pump(&dvd));
+    CHECK(gh_game_event_create_00296958(&create,&bindings,&done)==GH_EVENT_UNSUPPORTED);
+    if(create.frontier!=0x2977e8)fprintf(stderr,"EV02 Create frontier %08x\n",create.frontier);
+    CHECK(create.frontier==0x2977e8 && !done && event.fields.phase==4 && create.substep==1 && resource.loaded);
+    CHECK(!gh_bgm_requests_inspect(bgm,0,&view) && view.logical_id==0x81 && view.event==0 &&
+          view.encoded.size==size && view.linked && view.request_flags==1 && view.stream_flags==3 &&
+          !view.transport.started && !view.transport.submitted_frames);
+    CHECK(!gh_adx_open(view.encoded.data,view.encoded.size,&key,&decoder));
+    gh_adx_info info;
+    CHECK(!gh_adx_inspect(decoder,&info) && info.sample_count==0x458000 && gh_adx_tell(decoder)==0);
+    gh_adx_close(decoder);
+    CHECK(!gh_game_event_resource_abort(&resource));
+    gh_bgm_requests_destroy(bgm);
+    CHECK(!gh_event_audio_channel1_shutdown(&state) && !gh_heap_used(heap));
+    puts("PASS ev02 actual paused Create prefetch and phase4 handoff without audio output");
+
     gh_audio_registry_destroy(registry);
     CHECK(!gh_heap_destroy(heap));
     gh_disc_close(disc);

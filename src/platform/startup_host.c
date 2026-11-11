@@ -178,11 +178,11 @@ struct gh_startup_host {
     gh_event_timing event_timing;
     gh_event_actor_create event_actor_create;
     gh_event_actor_roster event_actor_roster;
-    gh_event_actor_factory event_actor_rows[9];
+    gh_event_actor_factory event_actor_rows[GH_EVENT_ACTOR_ROSTER_CAPACITY];
     gh_event_actor_extra event_actor_extra;
     gh_game_motion_camera event_camera;
     gh_event_actor_play event_actor_play;
-    gh_actor_motion event_actor_motions[9];
+    gh_actor_motion event_actor_motions[GH_EVENT_ACTOR_ROSTER_CAPACITY];
     gh_event_effect_play event_effect_play;
     gh_event_effect_quit event_effect_quit;
     gh_event_light_filter event_light_filter;
@@ -1135,7 +1135,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         }else if(!e)e=gh_game_children_move_001601d8(h->game_children,&h->work,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2c5470){
-        gh_scene_post_status e=gh_scene_scroll_forward_002c5470(s.pools,&h->work,frontier);
+        gh_object_step_status e=gh_game_object_step_forward_scroll_002c5470(&h->object_step,s.pools,&h->work,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x307b28){
         uint64_t epoch=gh_game_services_ui_resource_epoch(h->services);
@@ -1162,7 +1162,8 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_object_status e=gh_game_objects_update_bound_001fe748(objects,&resources,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2d7560){
-        gh_light_move_bindings bindings={s.scene_at,light_actor_view,h};
+        gh_light_move_bindings bindings={.scene_at=s.scene_at,.actor_view=light_actor_view,.context=h,
+            .player=s.title_player->ready?&s.title_player->view:NULL};
         gh_light_status e=gh_game_world_light_move_native_002d7560(s.world_light,&h->work,s.pools,&bindings,GH_CAMERA_NATIVE_BINARY32_REFERENCE);
         if(e&&frontier)*frontier=s.world_light->frontier?s.world_light->frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -1228,6 +1229,10 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         }
     }else if(address==0x30f228){
         gh_effects_frame_bindings b = effects_frame_bindings(h, &s);
+        if(b.storage.effects&&b.storage.effects->ready){
+            gh_effect_status bound=gh_effect_create_bind_trail_pools(b.storage.effects,s.pools);
+            if(bound){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
+        }
         gh_effect_status e=gh_game_effects_frame_update_0030f228(&h->effects_frame,&b);
         if(e&&frontier)*frontier=h->effects_frame.frontier?h->effects_frame.frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -2363,9 +2368,22 @@ static const uint8_t* diagnostic_hitarea_slot(const gh_game_init_state*s,unsigne
 {
     return slot<160?s->object_pool+(size_t)slot*0x60:slot<416?s->object_pool+0x3c00+(size_t)(slot-160)*0x70:NULL;
 }
-static void diagnostic_r100_first_enemy(const gh_game_services_scene_view *scene,
+static void diagnostic_r100_opening_enemies(const gh_game_services_scene_view *scene,
     const gh_game_init_state *init,const gh_title_player_view *player,gh_startup_snapshot *out)
 {
+    const gh_room_state *room=scene->room_state;
+    if(room&&room->record&&room->record->room==0x100&&room->active&&room->size>=12&&
+       room->active[8]<=64&&12+(size_t)room->active[8]*24<=room->size){
+        memcpy(&out->r100_scenario_flags,room->active+4,4);
+        for(unsigned i=0;i<room->active[8];i++){
+            const uint8_t *record=room->active+12+i*24;
+            const unsigned stamp=record[0x13];
+            if(stamp!=19&&stamp!=20)continue;
+            const uint8_t bit=(uint8_t)(1u<<(stamp-19));
+            out->r100_placement_known|=bit;
+            if(record[0x14]==1)out->r100_placement_dead|=bit;
+        }
+    }
     const gh_room_pools *pools=scene->pools;
     const struct gh_hitarea_native *hitarea=init->hitarea_native;
     if(!pools||!pools->objects||!hitarea||hitarea->owner!=init)return;
@@ -2377,20 +2395,26 @@ static void diagnostic_r100_first_enemy(const gh_game_services_scene_view *scene
         if(!enemy->ready||!view->bytes||view->size<0x642||!view->alias_f0)continue;
         uint16_t stamp;
         memcpy(&stamp,view->bytes+0x640,sizeof(stamp));
-        if(stamp!=19)continue;
-        out->r100_first_enemy_handle=entry->handle;
-        memcpy(&out->r100_first_enemy_hp,view->bytes+0x54a,2);
-        memcpy(out->r100_first_enemy_position,view->alias_f0,sizeof(out->r100_first_enemy_position));
-        memcpy(out->r100_first_enemy_state,view->bytes+0x2f4,sizeof(out->r100_first_enemy_state));
+        if(stamp!=19&&stamp!=20)continue;
+        const int first=stamp==19;
+        uint16_t *hp=first?&out->r100_first_enemy_hp:&out->r100_second_enemy_hp;
+        uint16_t *kind=first?&out->r100_first_enemy_player_hit_kind:&out->r100_second_enemy_player_hit_kind;
+        int32_t *power=first?&out->r100_first_enemy_player_hit_power:&out->r100_second_enemy_player_hit_power;
+        float *position=first?out->r100_first_enemy_position:out->r100_second_enemy_position;
+        uint8_t *state=first?out->r100_first_enemy_state:out->r100_second_enemy_state;
+        *(first?&out->r100_first_enemy_handle:&out->r100_second_enemy_handle)=entry->handle;
+        memcpy(hp,view->bytes+0x54a,2);
+        memcpy(position,view->alias_f0,3*sizeof(*position));
+        memcpy(state,view->bytes+0x2f4,4);
         for(unsigned slot=160;slot<416;slot++){
             if(hitarea->actors[slot]!=view||hitarea->last_hit_actors[slot]!=player)continue;
             const uint8_t *take=diagnostic_hitarea_slot(init,slot);
             if(!(take[0x60]&1))continue;
-            memcpy(&out->r100_first_enemy_player_hit_kind,take+0x46,2);
-            memcpy(&out->r100_first_enemy_player_hit_power,take+0x4c,4);
+            memcpy(kind,take+0x46,2);
+            memcpy(power,take+0x4c,4);
             break;
         }
-        return;
+        if(out->r100_first_enemy_handle&&out->r100_second_enemy_handle)break;
     }
 }
 gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snapshot *out)
@@ -2444,6 +2468,17 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
         memcpy(&out->event_cut_frame,event_env->bytes+0x14,4);
     }
     out->event_motion_camera_active=h->game_init.active_camera==&h->event_camera.identity;
+    if(h->game_children){
+        gh_save_map_view map;
+        const uint8_t *manager;
+        size_t bytes;
+        if(!gh_game_children_save_map_view(h->game_children,&map)&&map.active&&
+           !gh_game_children_manager_view(h->game_children,&manager,&bytes)&&bytes>=0x52){
+            out->save_map_active=1;
+            out->save_map_selected=map.selected;
+            memcpy(&out->save_map_phase,manager+0x50,sizeof(out->save_map_phase));
+        }
+    }
     const gh_game_effects_frame *effects_frame=&h->effects_frame;
     out->effect_frontier=effects_frame->frontier;
     out->effect_emitter_slot=UINT32_MAX;
@@ -2480,6 +2515,11 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     if(h->services){gh_game_services_scene_view scene={0};
         if(!gh_game_services_get_scene_view(h->services,&scene)){
             const gh_hitarea_frame*c=&scene.step->hitarea_frame;
+            const gh_action_button_frame *action=&scene.step->action_frame;
+            out->r100_exit_prompt=(uint8_t)(out->current_room==0x100&&out->game_state==4&&
+                action->complete&&action->bindings==&h->action_bindings&&action->callback_kind==2&&
+                action->callback_entry==0x2c2138&&action->callback_argument&&
+                h->action_bindings.callback==gh_r100_exit_action_002c2138);
             out->scene_stage=scene.step->stage;out->hitarea_phase=c->phase;out->hitarea_slot=c->slot;out->hitarea_node=c->node;
             if(scene.step->scenario_status_pending){
                 out->scenario_task_failed=1;
@@ -2498,7 +2538,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
                 memcpy(&out->player_attack_target,player->bytes+0x640,sizeof(out->player_attack_target));
                 memcpy(&out->player_attack_skill,player->bytes+0x5e8,sizeof(out->player_attack_skill));
                 if(out->current_room==0x100&&out->game_state==4)
-                    diagnostic_r100_first_enemy(&scene,&h->game_init,player,out);
+                    diagnostic_r100_opening_enemies(&scene,&h->game_init,player,out);
             }
             const struct gh_hitarea_native*n=h->game_init.hitarea_native;
             gh_title_player_view current={0};

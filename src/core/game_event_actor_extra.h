@@ -38,8 +38,8 @@ typedef struct {
     uint32_t old_250, old_2f0, old_2088, old_20d4;
     const gh_event_weapon_attachment *weapon;
     uint8_t bound, stage, mesh_cursor, retargeted, weapon_started;
-    gh_actor_external_parent_set row_parts[4];
-    uint8_t row_stage[4], row_mesh_cursor[4];
+    gh_actor_external_parent_set row_parts[6];
+    uint8_t row_stage[6], row_mesh_cursor[6];
     gh_event_actor_factory olivia_accessory;
     gh_actor_external_parent_set accessory_parts;
     uint32_t accessory_handle;
@@ -48,6 +48,8 @@ typedef struct {
     gh_actor_model *pendulum_parent;
     uint8_t one_body_mesh[2];
     uint8_t finish_stage;
+    uint8_t el05_stage;
+    gh_actor_model *jacket_parent;
 } gh_event_actor_extra;
 
 /* Borrow the same published player, jacket attachment and known weapon slot.
@@ -56,7 +58,7 @@ gh_game_event_status gh_event_actor_extra_bind(gh_event_actor_extra *, const gh_
 gh_game_event_status gh_event_actor_extra_run(void *, const gh_event_actor_create_request *,
     uint32_t handle, int *original_success, uint32_t *frontier);
 gh_game_event_status gh_event_actor_extra_finish(void *, uint32_t *frontier);
-/* Restore the previous jacket attachment before releasing the EL00 model.
+/* Restore the previous jacket attachment before releasing the event models.
  * A positive weapon provider must release its own external link first. */
 gh_game_event_status gh_event_actor_extra_abort(gh_event_actor_extra *);
 

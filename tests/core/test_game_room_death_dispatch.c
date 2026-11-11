@@ -297,6 +297,8 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
  void *retired=NULL;
  C(gh_room_object_lookup(&pools,live.selected,GH_ROOM_OBJECT_OM,&doors,&retired)==GH_POOL_BOUNDS);
  puts("PASS real OM324 ordinary 30F650 descriptor198CE0, same canonical handle and both registry compactions");
+ const gh_om_object *retiring_objects=doors.objects;
+ C(gh_om_factory_release_retired(&doors)==GH_PLACE_BUSY&&doors.objects==retiring_objects&&doors.bound);
  gh_room_pool_status final=gh_room_death_dispatch_0030f8b0(&dispatch,&bindings);
  if(final)fprintf(stderr,"retire status%d frontier %08x handle %u kind %x stage %u prefix %u\n",final,dispatch.frontier,dispatch.blocked_handle,dispatch.retiring_kind,dispatch.door.stage,dispatch.door.prefix.stage);
  C(!final&&
@@ -338,7 +340,10 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
    c.model.parts_allocated==32&&c.model.root.bytes==player.view.bytes);
  C(!gh_actor_model_release(&c.model)&&!gh_game_player_factory_release_prefix(&factory));
  puts("PASS retired PL00/PL01 cursors accept a fresh actual PL00 constructor");
- C(!gh_om_factory_release(&doors)&&!gh_scene_meshes_release_prefix(&meshes)&&
+ C(!gh_om_factory_release_retired(&doors)&&!doors.bound&&!doors.objects&&!doors.capacity&&
+   !doors.count&&!doors.runtime_pending);
+ C(!gh_om_factory_bind(&doors,&om_bindings,6)&&doors.bound&&doors.capacity==6);
+ C(!gh_om_factory_release_retired(&doors)&&!gh_scene_meshes_release_prefix(&meshes)&&
    !gh_game_object_pool_release_001fdfa8(init,&frontier)&&
    !gh_collision_scroll_mutation_release(&scroll)&&!gh_scene_dynamic_release(&dynamic)&&
    !gh_scene_actors_reset_0012e800(&tables)&&!gh_collision_pairs_clear_002a71f0(&pairs,&frontier)&&

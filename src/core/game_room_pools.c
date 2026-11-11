@@ -115,6 +115,24 @@ gh_room_pool_status gh_room_object_lookup(const gh_room_pools*s,uint32_t h,uint3
  }
  return GH_POOL_BOUNDS;
 }
+gh_room_pool_status gh_room_object_append_003129d0(gh_room_pools *s,uint32_t address,
+ uint32_t handle,uint32_t kind,const void *owner)
+{
+ const gh_room_vector *view;
+ gh_room_pool_status e=gh_room_registry_view(s,address,&view);
+ if(e)return e;
+ void *object;
+ e=gh_room_object_lookup(s,handle,kind,owner,&object);
+ if(e)return e;
+ gh_room_vector *vector=&s->vectors[view-s->vectors];
+ uint8_t *bytes=vector->allocation.pointer;
+ for(uint32_t i=0;i<vector->count;++i)
+  if(u32(bytes+(size_t)i*4)==handle)return GH_POOL_BUSY;
+ if(vector->count==vector->capacity)return GH_POOL_MEMORY;
+ w32(bytes+(size_t)vector->count*4,handle);
+ ++vector->count;
+ return GH_POOL_OK;
+}
 gh_room_pool_status gh_room_object_unregister(gh_room_pools*s,uint32_t h,const void*owner){
  if(!s||!h||!owner)return GH_POOL_ARGUMENT;if(!s->initialized)return GH_POOL_BUSY;
  size_t slot=0;while(slot<s->object_slots&&(!s->objects[slot].object||s->objects[slot].handle!=h))slot++;

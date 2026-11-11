@@ -11,8 +11,24 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
   uint32_t pool=id->pool_used,jobs=id->job_count,job=t.job;void*source=t.resource.pointer;gh_id_entry*entries=v.base->entries;
   gh_cockpit_tutorial foreign={0};C(gh_cockpit_tutorial_room_init_00147028(&foreign,&b)==GH_TUTORIAL_BUSY&&!foreign.resource.pointer);C(!gh_cockpit_tutorial_release(&foreign)&&v.base->entries==entries&&v.base->owns_run&&id->pool_used==pool&&id->pair[0x1d].bound);
   refs[0]->scale_x=4;refs[1]->flags&=~0x8000000u;refs[3]->message=0;v.base->frame=37;C(!gh_cockpit_tutorial_next_call(&t)&&!gh_cockpit_tutorial_room_init_00147028(&t,&b));C(t.completed_calls==2&&t.job==job&&t.resource.pointer==source&&id->pool_used==pool&&id->job_count==jobs&&v.base->entries==entries&&v.base->frame==0&&!refs[0]->scale_x&&(refs[1]->flags&0x8000000)&&refs[3]->message==0x200c);printf("actual tutorial path=%s bytes=%zu entries=%u pool=%u jobs=%u repeat-source-preserved\n",t.path,t.image.size,v.base->entry_count,pool,jobs);
-  /* Original roomQuit only clears source-presence/scalars. Native teardown
-   * severs canonical borrowed Base/ref views before real roomheap disposal. */
-  uint8_t heat[0x18]={0};uint32_t max=0x42f00000;memcpy(heat,&max,4);C(!gh_game_cockpit_room_quit_00141628(c,save,heat));C(!gh_game_cockpit_get_tutorial(c,&v)&&!v.data_present);C(!gh_cockpit_tutorial_release(&t)&&!gh_heap_used(heap)&&!id->pair[0x1d].bound&&id->pool_used==405&&id->job_count==39);gh_id_entry*unused;C(gh_game_cockpit_entry_at(c,0x1a20+0x90,&unused)==GH_ID_NOT_FOUND);work.language=-1;
+  /* Actual scene exit invokes 147188 before original 2AD108. The
+   * source allocation survives both, until the room heap cleanup. */
+  int compacted=99;
+  C(gh_id_pool_compact_002ad108(runtime,&compacted)==GH_ID_BUSY&&!compacted);
+  C(id->pool_used==pool&&id->job_count==jobs&&v.base->entries==entries);
+  gh_id_job_view tutorial_job;
+  C(!gh_id_runtime_job(runtime,jobs-1,&tutorial_job)&&tutorial_job.tag==0x1d&&tutorial_job.start==405);
+  uint8_t heat[0x18]={0};uint32_t max=0x42f00000;memcpy(heat,&max,4);
+  C(!gh_game_cockpit_room_quit_00141628(c,save,heat));
+  C(!gh_game_cockpit_get_tutorial(c,&v)&&!v.data_present&&!v.base->owns_run&&!v.base->entries);
+  C(id->pool_used==pool&&id->job_count==jobs&&t.resource.pointer==source&&id->pair[0x1d].bound);
+  C(!gh_id_runtime_job(runtime,jobs-1,&tutorial_job)&&tutorial_job.tag==0x1d&&tutorial_job.active);
+  gh_id_entry*unused;
+  C(gh_game_cockpit_entry_at(c,0x1a20+0x90,&unused)==GH_ID_NOT_FOUND);
+  C(!gh_id_pool_compact_002ad108(runtime,&compacted)&&compacted&&id->pool_used==405&&id->job_count==39);
+  C(gh_id_runtime_job(runtime,39,&tutorial_job)==GH_ID_BOUNDS&&t.resource.pointer==source);
+  C(!gh_cockpit_tutorial_release(&t)&&!gh_heap_used(heap)&&!id->pair[0x1d].bound);
+  C(id->pool_used==405&&id->job_count==39);
+  work.language=-1;
  }
- C(!gh_game_cockpit_destroy(c)&&!id->pool_used&&!id->job_count&&!gh_id_runtime_destroy(runtime)&&!gh_heap_destroy(heap));free(id);free(language);gh_disc_close(d);puts("PASS actual USA/fallback tutorial IDD through DVD201160, sameCockpit ownedrun/7refs/packed/font state, explicit repeat-call restart, roomQuit and safe native resource lifecycle");return 0;}
+ C(!gh_game_cockpit_destroy(c)&&!id->pool_used&&!id->job_count&&!gh_id_runtime_destroy(runtime)&&!gh_heap_destroy(heap));free(id);free(language);gh_disc_close(d);puts("PASS actual USA/fallback tutorial IDD through DVD201160, sameCockpit ownedrun/7refs/packed/font state, explicit repeat-call restart, roomQuit preserves counts, original 2AD108 compacts, then safe resource lifecycle");return 0;}

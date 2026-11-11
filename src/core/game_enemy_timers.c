@@ -109,6 +109,18 @@ gh_enemy_weapon_init *gh_enemy_timers_held_weapon_runtime(gh_enemy_timers *s)
 }
 
 
+gh_actor_motion_status gh_enemy_timers_finish_held_retirement(gh_enemy_timers *s)
+{
+ if(!s||!s->held)return GH_ACTOR_MOTION_ARGUMENT;
+ gh_enemy_held_weapon *held=s->held;
+ if(held->factory.handle||held->factory.object.view.bytes||held->factory.resource_owner||
+    held->init.hit_owned||held->init.model.ready)
+  return GH_ACTOR_MOTION_BUSY;
+ free(held);
+ s->held=NULL;
+ return GH_ACTOR_MOTION_OK;
+}
+
 gh_actor_motion_status gh_enemy_timers_release_native(gh_enemy_timers *s)
 {
  if(!s)return GH_ACTOR_MOTION_ARGUMENT;

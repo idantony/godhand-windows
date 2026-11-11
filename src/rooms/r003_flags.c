@@ -13,15 +13,27 @@ enum {FLAG_COUNT=6};
 static float add(float a,float b){volatile float v=a+b;return v;}
 static float mul(float a,float b){volatile float v=a*b;return v;}
 
+typedef struct {
+    const gh_om_factory *factory;
+    gh_r100_om_scalar_view other_view;
+    void *other_context;
+    const gh_om_object *matched_owner;
+} flag_lookup;
+
 static gh_r100_init_status object_view(void *context,uint32_t handle,gh_r100_om_view *out,uint32_t *frontier)
 {
-    const gh_om_factory *factory=context;
+    flag_lookup *lookup=context;
+    lookup->matched_owner=NULL;
+    const gh_om_factory *factory=lookup->factory;
     void *found=NULL;
     if(gh_room_object_lookup(factory->bindings.pools,handle,GH_ROOM_OBJECT_OM,factory,&found)){
         *frontier=0x14fd98;
-        return GH_R100_INIT_BOUNDS;
+        if(!lookup->other_view)return GH_R100_INIT_BOUNDS;
+        /* SearchOM checks the real kind before reading an OM name. */
+        return lookup->other_view(lookup->other_context,handle,out,frontier);
     }
     const gh_om_object *object=found;
+    lookup->matched_owner=object;
     *out=(gh_r100_om_view){object->view.bytes,object->view.size,object};
     return GH_R100_INIT_OK;
 }
@@ -82,7 +94,8 @@ static uint32_t move_flag(gh_om041c_state *flag,unsigned index,gh_game_mt *mt,gh
 }
 
 gh_r003_status gh_r003_move_flags_000003d8(gh_r003_event *room,const gh_om_factory *factory,
-    gh_game_mt *mt,gh_frame_random *random,uint32_t *frontier)
+    gh_game_mt *mt,gh_frame_random *random,gh_r100_om_scalar_view other_view,void *other_context,
+    uint32_t *frontier)
 {
     if(!frontier)return GH_R003_ARGUMENT;
     *frontier=0x3d8;
@@ -91,13 +104,15 @@ gh_r003_status gh_r003_move_flags_000003d8(gh_r003_event *room,const gh_om_facto
         return GH_R003_ARGUMENT;
     static const char *const names[FLAG_COUNT]={"om030","om031","om032","om033","om034","om035"};
     gh_om041c_state *flags[FLAG_COUNT]={0};
+    flag_lookup lookup={.factory=factory,.other_view=other_view,.other_context=other_context};
     for(unsigned i=0;i<FLAG_COUNT;i++){
         gh_r100_om_view found;
-        if(gh_r100_find_om_0014fd98(factory->bindings.pools,object_view,(void *)factory,names[i],&found,frontier))
+        if(gh_r100_find_om_0014fd98(factory->bindings.pools,object_view,&lookup,names[i],&found,frontier))
             return GH_R003_CALLEE;
         if(!found.identity)continue;
-        const gh_om_object *object=found.identity;
-        if(object->source.type!=0x41c||object->stage!=7||!object->initialization){
+        /* SearchOM returns immediately at the matching resolver visit. */
+        const gh_om_object *object=lookup.matched_owner;
+        if(!object||found.identity!=object||object->source.type!=0x41c||object->stage!=7||!object->initialization){
             *frontier=0x2ae218;
             return GH_R003_UNSUPPORTED;
         }

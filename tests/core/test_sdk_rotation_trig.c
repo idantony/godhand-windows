@@ -278,6 +278,10 @@ static const uint32_t vectors[][4]={
 {0xbf800000u,0xbf576aa4u,0x3f0a5141u,0x3f35444cu},
 {0xbfc90fdbu,0xbf800000u,0x0u,0x3f800000u},
 {0xc0490fdbu,0x80000000u,0xbf800000u,0x0u},
+{0x40490fdcu,0x0u,0xbf800000u,0x0u},
+{0x405f66f2u,0x3eaf1c4du,0xbf708fdfu,0x3def8f68u},
+{0xc05f66f2u,0xbeaf1c4du,0xbf708fdfu,0x3def8f68u},
+{0x40800000u,0x3f41b78au,0xbf275c72u,0x3f129642u},
 };
 int main(void){const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};unsigned negatives=0;
  for(unsigned mode=0;mode<4;mode++){C(!fesetround(modes[mode]));for(unsigned i=0;i<sizeof(vectors)/sizeof(vectors[0]);i++){
@@ -287,6 +291,6 @@ int main(void){const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZE
  if(vectors[i][3]&0x80000000u){negatives++;C(fabsf(sine)>0&&fabsf(cosine)>1);}
  }
  float sine=123,cosine=456;uint32_t f;C(gh_sdk_rotation_sincos_reference_0030a5d0(value(0x7fc00000),&sine,&cosine,GH_STATIC_BINARY32_REFERENCE,&f)==GH_ACTOR_MATRIX_UNSUPPORTED&&f==0x30a5d0&&sine==123&&cosine==456);
- C(gh_sdk_rotation_sincos_reference_0030a5d0(value(0x40490fdc),&sine,&cosine,GH_STATIC_BINARY32_REFERENCE,&f)==GH_ACTOR_MATRIX_UNSUPPORTED&&sine==123&&cosine==456);
+ C(gh_sdk_rotation_sincos_reference_0030a5d0(1000,&sine,&cosine,GH_STATIC_BINARY32_REFERENCE,&f)==GH_ACTOR_MATRIX_UNSUPPORTED&&f==0x30a5d0&&sine==123&&cosine==456);
  }
  C(negatives>0&&!fesetround(FE_TONEAREST));printf("PASS SDK30A5D0 %zu independentVU-lane vectors x4FEnv, negativeSQRT magnitude notclamp, atomics\n",sizeof(vectors)/sizeof(vectors[0]));return 0;}

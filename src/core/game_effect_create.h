@@ -68,6 +68,7 @@ typedef struct {gh_effect_view record;const gh_title_player_view *actor,*selecto
   * duplicate work buffer; consumers also validate payload against storage. */
  uint8_t *payload;size_t payload_size;int32_t first_esp_child;} gh_effect_emitter_view;
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
+int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *);
 gh_effect_status gh_effect_create_emitter_at(const gh_game_effects *,unsigned,gh_effect_emitter_view *);
@@ -85,6 +86,17 @@ int gh_effect_event_part_is_bound(gh_effect_view,const gh_title_player_view *,
 struct gh_effects_frame_globals;
 typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;
  uint8_t *payload;size_t payload_size;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t initialized,type;struct gh_effects_frame_globals *globals;gh_game_scene_tables *scene_actors;int32_t parent_emitter,previous,next;uint32_t parent_serial;/* Snapshot of known300458-zeroed source218, not a removedtoken test. */uint8_t target120_known_null;} gh_effect_esp_view;
+int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
+int gh_effect_knockdown_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
+int gh_effect_esp_trail_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
+/* Borrow the canonical room arenas; release effects before tearing them down. */
+gh_effect_status gh_effect_create_bind_trail_pools(gh_game_effects *,gh_room_pools *);
+gh_effect_status gh_effect_create_esp_trail_init_002ebf98(gh_game_effects *,unsigned,uint32_t,
+ uint32_t work594,const float position[4],uint32_t *frontier);
+gh_effect_status gh_effect_create_esp_trail_sample_002ec218(gh_game_effects *,unsigned,uint32_t,
+ const float position[4],uint32_t *frontier);
+gh_effect_status gh_effect_create_esp_trail_view(const gh_game_effects *,unsigned,uint32_t,
+ const float **positions,unsigned *count);
 gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_bindings *,unsigned emitter_slot,uint32_t emitter_serial,unsigned *slot,uint32_t *serial,int *allocated,uint32_t *frontier);
 gh_effect_status gh_effect_create_esp_at(const gh_game_effects *,unsigned,gh_effect_esp_view *);
 /* Native cancellation of only this unfinished original virtualInit. Never a

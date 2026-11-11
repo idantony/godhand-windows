@@ -8,7 +8,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-typedef enum {GH_EFFECT_SURFACE_SCENE_COLOR,GH_EFFECT_SURFACE_3900,GH_EFFECT_SURFACE_3A00,GH_EFFECT_SURFACE_3B00,GH_EFFECT_SURFACE_MATERIAL,GH_EFFECT_SURFACE_3C00} gh_effect_surface;
+typedef enum {GH_EFFECT_SURFACE_SCENE_COLOR,GH_EFFECT_SURFACE_3900,GH_EFFECT_SURFACE_3A00,GH_EFFECT_SURFACE_3B00,GH_EFFECT_SURFACE_MATERIAL,GH_EFFECT_SURFACE_3C00,GH_EFFECT_SURFACE_DISPLAY_BASE0} gh_effect_surface;
 typedef enum {GH_EFFECT_PASS_CLEAR,GH_EFFECT_PASS_DOWNSAMPLE,GH_EFFECT_PASS_GAUSSIAN,GH_EFFECT_PASS_COMPOSITE,GH_EFFECT_PASS_SPRITE,GH_EFFECT_PASS_SCENE_WARP,GH_EFFECT_PASS_SCENE_CAPTURE} gh_effect_pass_kind;
 typedef struct {int32_t x12_4,y12_4;uint32_t z;uint16_t u12_4,v12_4;uint32_t rgba;float q;float s,t;} gh_effect_trans_vertex;
 typedef struct {uint8_t vertex_count;gh_effect_trans_vertex vertices[6];} gh_effect_trans_quad;

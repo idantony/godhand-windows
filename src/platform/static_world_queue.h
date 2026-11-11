@@ -14,6 +14,7 @@ typedef struct {
  uint16_t primitive;uint8_t material_index;
  const gh_stage_material *material;
  size_t substream,batch;
+ uint8_t samples_display_base0;
 } gh_static_world_packet;
 /* One original emit = one group, including setup/zero-coverage geometry.
  * No second OT: append returned index to the caller's SINGLE global OT.

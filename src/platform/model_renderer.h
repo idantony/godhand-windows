@@ -53,6 +53,14 @@ gh_model_gpu_error gh_model_renderer_draw_display_texel(gh_model_renderer *,
 gh_model_gpu_error gh_model_renderer_draw_scene_warp(gh_model_renderer *,
  const gh_model_draw_state *, const uint8_t *captured_rgba, size_t bytes, uint64_t texa,
  const gh_static_gs_vertex vertices[6]);
+/* Base-zero CT24 from the previous display copy. The caller verifies that
+ * the fan's texture samples use the available 512x448 rows. */
+gh_model_gpu_error gh_model_renderer_draw_display_warp(gh_model_renderer *,
+ const gh_model_draw_state *, const uint8_t *captured_rgba, size_t bytes, uint64_t texa,
+ const gh_static_gs_vertex vertices[6]);
+/* ADC-filtered PRIM54 trail triangles already in original packet order. */
+gh_model_gpu_error gh_model_renderer_draw_trail(gh_model_renderer *,const gh_model_draw_state *,
+ uint32_t texture,const gh_static_gs_vertex *,size_t vertex_count,const uint32_t *indices);
 /* Packed RGBA8 in top-to-bottom row order. Pass NULL and zero for color-only readback. */
 gh_model_gpu_error gh_model_renderer_readback(gh_model_renderer *,uint8_t *rgba,size_t rgba_bytes,uint32_t *z,size_t z_count);
 /* Replace the active scene color with a complete packed RGBA8 image. All

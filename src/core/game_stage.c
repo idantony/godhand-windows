@@ -80,10 +80,15 @@ gh_stage_status gh_stage_tim2_sprite_resolve(gh_stage_textures*s,const void*raw,
  gh_tim2_picture picture;
  gh_tim2_error e=gh_tim2_first(raw,n,&picture);
  if(e)return e==GH_TIM2_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;
- if(picture.width!=128||(picture.height!=128&&picture.height!=64)||picture.image_type!=4||
-    picture.clut_type!=3||picture.colors!=16||((picture.tex0>>20)&63)!=20||
-    ((picture.tex0>>26)&15)!=7||((picture.tex0>>30)&15)!=(picture.height==128?7u:6u))
-    return GH_STAGE_UNSUPPORTED;
+ const unsigned psm=(unsigned)(picture.tex0>>20)&63u;
+ const unsigned tw=(unsigned)(picture.tex0>>26)&15u,th=(unsigned)(picture.tex0>>30)&15u;
+ const int indexed4=picture.width==128&&(picture.height==128||picture.height==64)&&
+    picture.image_type==4&&picture.clut_type==3&&picture.colors==16&&psm==20&&
+    tw==7&&th==(picture.height==128?7u:6u);
+ /* The actual 58:2F trail uses this single-picture, linear TIM2 PSMT8 profile. */
+ const int indexed8=picture.width==64&&picture.height==64&&picture.image_type==5&&
+    picture.clut_type==3&&picture.colors==256&&psm==19&&tw==6&&th==6;
+ if(!indexed4&&!indexed8)return GH_STAGE_UNSUPPORTED;
  for(stage_material_node*p=s->materials;p;p=p->next)
     if(p->view.source==raw&&p->view.cache_pool==1){*out=&p->view;return GH_STAGE_OK;}
  if(s->material_count>=1024||s->next_material_id==UINT64_MAX)return GH_STAGE_MEMORY;
@@ -92,17 +97,18 @@ gh_stage_status gh_stage_tim2_sprite_resolve(gh_stage_textures*s,const void*raw,
  size_t bytes=(size_t)picture.width*picture.height*4;
  p->pixels=malloc(bytes);
  if(!p->pixels){free(p);return GH_STAGE_MEMORY;}
- e=gh_tim2_rgba4(&picture,p->pixels,bytes);
+ e=indexed8?gh_tim2_rgba8(&picture,p->pixels,bytes):gh_tim2_rgba4(&picture,p->pixels,bytes);
  if(e){free(p->pixels);free(p);return e==GH_TIM2_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;}
  /* The shared preview decoder maps alpha 0..128 losslessly to even bytes
   * and 255. Recover the raw CT32 CLUT alpha used by GS modulation. */
  for(size_t i=3;i<bytes;i+=4)p->pixels[i]=(uint8_t)((p->pixels[i]+1u)/2u);
  /* 151990 sets TCC and CLD and retains TEX0 dimensions. Native cache
   * identity supplies storage, so TEX0's TBP/CBP address fields stay zero. */
- uint64_t tex0=UINT64_C(0x2000000400140000)|
+ const uint64_t format_bits=indexed8?(uint64_t)psm<<20:UINT64_C(0x140000);
+ uint64_t tex0=UINT64_C(0x2000000400000000)|format_bits|
     (picture.tex0&UINT64_C(0x00000001fc000000))|UINT64_C(2)<<14;
  p->view=(gh_stage_material){raw,p->pixels,n,bytes,++s->next_material_id,tex0,
-    picture.width,picture.height,1,1,20,1,0};
+    picture.width,picture.height,1,1,(uint8_t)psm,1,0};
  p->next=s->materials;
  s->materials=p;
  s->material_count++;

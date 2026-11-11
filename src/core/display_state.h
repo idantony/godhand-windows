@@ -23,6 +23,9 @@ gh_display_status gh_display_static_initialize_002a48a8(gh_display_state *,int i
 /* Default NTSC display copy 30B870, at destination (0,0). RGB from the
  * previous complete frame's first two rows at x=0. TEX0=0 uses TCC0. */
 uint32_t gh_display_copy_base0_0030b870(const uint8_t top_rgb[3],const uint8_t next_rgb[3]);
+/* Full base-zero RGB for the same default NTSC profile. Source and target
+ * are distinct 512x448 RGBA buffers. TEXA supplies alpha at sampling time. */
+gh_display_status gh_display_copy_base0_surface_0030b870(const uint8_t *,size_t,uint8_t *,size_t);
 #ifdef __cplusplus
 }
 #endif

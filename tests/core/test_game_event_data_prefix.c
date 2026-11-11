@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     gh_event_module module = {0};
     gh_event_resource resource = {0};
     gh_dvd_jobs dvd;
-    CHECK(gh_heap_create(2 * 1024 * 1024, &heap) == GH_MEM_OK);
+    CHECK(gh_heap_create(4 * 1024 * 1024, &heap) == GH_MEM_OK);
     gh_dvd_jobs_init(&dvd, disc);
     CHECK(gh_game_event_module_begin_00297378(&module, &event, &work, &dvd, heap) == GH_EVENT_OK);
     int ready = 0;
@@ -222,6 +222,47 @@ int main(int argc, char **argv) {
     }
     CHECK(gh_game_event_resource_abort(&resource) == GH_EVENT_OK);
     CHECK(gh_event_camera_cut_at(&prefix, 0, &cut) == GH_EVENT_ARGUMENT);
+    // The shared REL binds the positive EV02 tracks and bank 6 from R003.
+    event.fields.data_number = 2;
+    CHECK(!gh_event_components_construct_00297680(&components, 2));
+    CHECK(!gh_game_event_resource_begin_00297540(&resource, &event, &dvd, heap));
+    ready = 0;
+    for (unsigned i = 0; i < 1024 && !ready; ++i) {
+        CHECK(!gh_dvd_pump(&dvd));
+        CHECK(!gh_game_event_resource_poll_002975d0(&resource, &ready));
+    }
+    CHECK(ready && resource.loaded && resource.file_bytes == 2292096);
+    prefix = (gh_event_data_prefix){0};
+    CHECK(!gh_event_data_bind_prefix_002977e8(&prefix, &components, &resource, &frontier));
+    CHECK(prefix.camera_count == 28 && prefix.actor_count == 22);
+    CHECK(!gh_event_actor_cuts_bind_00297864(&prefix, &frontier));
+    core_data = load(disc, "etc/core.dat", &core_size);
+    room_data = load(disc, "st0/r003.dat", &room_size);
+    CHECK(!gh_bundle_open(room_data, room_size, &room));
+    effects = calloc(1, sizeof(*effects));
+    esp = calloc(1, 0x100180);
+    emitters = calloc(1, 0x26060);
+    CHECK(effects && esp && emitters);
+    CHECK(!gh_game_effects_initialize_00305a68(effects, esp, 0x100180, emitters, 0x26060,
+                                              core_data, core_size, &room));
+    CHECK(!gh_event_data_bind_tail_00297880(&prefix, &components, register_effects, effects, &frontier));
+    CHECK(!frontier && effects->event_registered_41c);
+    CHECK(!gh_event_sequence_at(&prefix, 4, &sequence) && sequence.resource_offset == 0x2218e0 &&
+          sequence.stride == 0x2c && sequence.count == 1 && sequence.bytes == 0x2c);
+    CHECK(!gh_event_sequence_at(&prefix, 5, &sequence) && sequence.resource_offset == 0x2296b0 &&
+          sequence.stride == 0x28 && sequence.count == 2);
+    CHECK(!gh_event_sequence_at(&prefix, 13, &sequence) && sequence.resource_offset == 0x22e090 &&
+          sequence.stride == 0x10 && sequence.count == 14);
+    CHECK(!gh_event_sequence_at(&prefix, 14, &sequence) && sequence.count == 90);
+    CHECK(effects->event_data.bytes == (const uint8_t *)resource.allocation.pointer + 0x221920);
+    free(effects);
+    free(esp);
+    free(emitters);
+    free(core_data);
+    free(room_data);
+    CHECK(!gh_game_event_resource_abort(&resource));
+    puts("PASS EV02 R003 actual 28 cuts, 22 actors, positive sequence binding and event bank");
+
     CHECK(gh_game_event_module_abort(&module) == GH_EVENT_OK);
     CHECK(!gh_heap_used(heap) && gh_heap_destroy(heap) == GH_MEM_OK);
     gh_disc_close(disc);

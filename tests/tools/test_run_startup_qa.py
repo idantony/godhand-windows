@@ -89,6 +89,24 @@ class StartupRunnerTests(unittest.TestCase):
                         with self.assertRaisesRegex(tool.proof.ProofError, "exit and presented defeat disagree"):
                             tool.run(prepared)
 
+    def test_repeat_triangle_pair_requires_two_presented_deaths_and_room_save(self):
+        successful = {"defeat_scene": 77, "stamp19_scene": 62, "stamp20_scene": 75,
+                      "stamp19_handle": 253, "stamp20_handle": 254, "room_dead_mask": 3}
+        cases = ({}, {"room_dead_mask": 1}, {"stamp20_scene": 62}, {"stamp20_handle": 253})
+        for index, changes in enumerate(cases):
+            with self.subTest(changes=changes):
+                scratch = self.root / f"pair-{index}"
+                prepared = tool.prepare(self.snapshot, scratch, self.iso, self.ffmpeg,
+                                        control_probe="repeat-triangle-pair", build_scratch=self.scratch)
+                status = dict(successful, **changes)
+                trace = ("QA_REPEAT_STATUS " + json.dumps(status) + "\n").encode("utf-8")
+                with patch.object(tool.subprocess, "run", self.fake_run(self.qa(exit_code=0), trace)):
+                    if changes:
+                        with self.assertRaisesRegex(tool.proof.ProofError, "lacks two ordered presented defeats"):
+                            tool.run(prepared)
+                    else:
+                        self.assertEqual(tool.run(prepared)["repeat_triangle_pair"], status)
+
     def test_frontier_record_uses_runner_output_fingerprints(self):
         prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, control_probe="run")
         qa = self.qa(playable_game_verified=False, frontier_module="main ELF",

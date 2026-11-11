@@ -59,6 +59,9 @@ gh_room_pool_status gh_room_registry_view(const gh_room_pools *,uint32_t origina
  * One object has one shared handle even when present in several lists. */
 gh_room_pool_status gh_room_object_register(gh_room_pools *,void *object,const void *owner,
  uint32_t kind,uint32_t vector_mask,uint32_t *handle);
+/* Original 3129D0 appends an already registered identity to a later list. */
+gh_room_pool_status gh_room_object_append_003129d0(gh_room_pools *,uint32_t original_global,
+ uint32_t handle,uint32_t kind,const void *owner);
 gh_room_pool_status gh_room_object_lookup(const gh_room_pools *,uint32_t handle,
  uint32_t kind,const void *owner,void **object);
 /* Stable erase from every list. Foreign owner and unknown handles fail before

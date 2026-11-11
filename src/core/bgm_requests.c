@@ -361,6 +361,21 @@ gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
     if(gh_audio_event_afs_member(s->registry,source->archive_owner,0,&offset,&size)||
        offset!=source->member_offset||size!=source->member_size)
         return fail(s,0x32bb48,GH_BGM_BOUNDS);
+    /* The channel ID is shared by the two single-member event archives.
+     * Verify the indexed member belongs to the admitted disc asset before
+     * looking up or retiring an earlier request on the same channel. */
+    const char *path;
+    switch(source->member_size){
+    case 0x21ae3a: path="se/ev/ev01.afs";break;
+    case 0x4e303a: path="se/ev/ev02.afs";break;
+    default:return fail(s,0x32bb48,GH_BGM_DISC);
+    }
+    gh_disc_entry archive;
+    size_t archive_index;
+    if(gh_disc_find(s->disc,path,&archive_index)||archive_index!=source->archive_index||
+       gh_disc_entry_at(s->disc,archive_index,&archive)||source->member_offset!=0x800||
+       source->member_offset+source->member_size>archive.size)
+        return fail(s,0x32bb48,GH_BGM_DISC);
     for(unsigned i=0;i<16;++i){
         request *pending=&s->requests[i];
         if(!pending->occupied||pending->linked)continue;
@@ -385,13 +400,6 @@ gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
     for(unsigned i=0;i<16;++i)if(!u32(s->requests[i].scalar+0x94)){slot=&s->requests[i];break;}
     if(!slot){s->frontier=0;return GH_BGM_OK;}
     if(!s->native_enabled)return fail(s,0x329438,GH_BGM_UNSUPPORTED);
-    gh_disc_entry archive;
-    size_t archive_index;
-    if(gh_disc_find(s->disc,"se/ev/ev01.afs",&archive_index)||archive_index!=source->archive_index||
-       gh_disc_entry_at(s->disc,archive_index,&archive)||source->member_offset!=0x800||
-       source->member_size!=0x21ae3a||source->member_offset+source->member_size>archive.size)
-        return fail(s,0x32bb48,GH_BGM_DISC);
-
     request next={0};
     memcpy(next.row,row,32);
     next.rate=48000;
@@ -518,7 +526,23 @@ gh_bgm_status gh_bgm_requests_update_002d0938(gh_bgm_requests*s,const gh_boot_wo
  if(fesetenv(&saved))return fail(s,0x373ff0,GH_BGM_UNSUPPORTED);if(e)return e;
  if(s->control->flags_ac&0x10000000){int mode5=0;for(int i=s->head;i>=0;i=s->requests[i].next)if(u32(s->requests[i].scalar+0x94)==5){mode5=1;break;}if(!mode5){e=gh_bgm_event_stop_002d1800(s,0);if(e)return e;}}
  uint32_t wf=u32((const uint8_t*)w+0x5e4);
- if(wf&0x20080000){for(int i=s->head;i>=0;i=s->requests[i].next){request*q=&s->requests[i];if(u32(q->scalar+0xb0)!=2&&q->scalar[0x60])return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);}s->current128=-2;s->field138=3;}
+ if(wf&0x20080000){
+  for(int i=s->head;i>=0;i=s->requests[i].next){
+   request *q=&s->requests[i];
+   if(u32(q->scalar+0xb0)==2||!q->scalar[0x60])continue;
+   /* Original 373A78 tests the requested volume, so repeated visits
+    * leave an already-running fade alone. This owner is one ADX stream. */
+   if(!q->player||u32(q->scalar+0x58)!=1)return fail(s,0x373a78,GH_BGM_UNSUPPORTED);
+   const float target=rf(q->scalar+0x18);
+   if(!isfinite(target))return fail(s,0x373a78,GH_BGM_UNSUPPORTED);
+   if(target<=0)continue;
+   const float frames=(u32(q->scalar+0x98)&4)?rf(q->scalar+0xc4):30;
+   if(!isfinite(frames)||frames<0)return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);
+   fade(q,0,frames);
+  }
+  s->current128=-2;
+  s->field138=3;
+ }
  if((s->control->flags_ac&0x200000)&&!(s->control->flags_ac&0x100000)&&!(wf&0x20080000))return automatic_update(s,w);
  s->frontier=0;return GH_BGM_OK;
 }

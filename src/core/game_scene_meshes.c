@@ -172,6 +172,13 @@ static gh_scene_mesh_status run_construction(gh_scene_meshes*s){
   const gh_scene_mesh_construction_bindings*b=&s->construction;
   if(!b->textures||!b->light||!b->elf)return failure(s,0x155678,0,GH_MESH_UNSUPPORTED);
   e=gh_scene_meshes_finish_object_reference(s,o,b->textures,b->light,b->elf,b->elf_bytes);if(e)return e;
+  /* 31D5FC–31D618 publishes this same identity after virtual Init and
+   * hierarchy completion. Constructor retry can resume at this append. */
+  if(u32((const uint8_t *)o->allocation.pointer+0x350)&0x20000000u){
+   gh_room_pool_status status=gh_room_object_append_003129d0(s->pools,0x754c50,
+    o->handle,GH_ROOM_OBJECT_SCROLL_MESH,s);
+   if(status)return failure(s,0x3129d0,status,status==GH_POOL_MEMORY?GH_MESH_MEMORY:GH_MESH_BUSY);
+  }
   s->constructed_count++;s->current_index++;
  }
  s->frontier=0;s->detail=0;return GH_MESH_OK;

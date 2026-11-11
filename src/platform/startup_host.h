@@ -105,6 +105,12 @@ typedef struct gh_startup_snapshot {
     uint32_t player_handle,player_state_entry,player_update_frontier,player_attack_target,player_attack_skill;
     float player_world_position[3],player_motion_sample;
     uint8_t player_pose_ready,player_state[4],player_square_buffer;
+    /* Both original opening EMS stamps. Bits 0/1 correspond to 19/20. */
+    uint32_t r100_second_enemy_handle,r100_scenario_flags;
+    uint16_t r100_second_enemy_hp,r100_second_enemy_player_hit_kind;
+    int32_t r100_second_enemy_player_hit_power;
+    float r100_second_enemy_position[3];
+    uint8_t r100_second_enemy_state[4],r100_placement_known,r100_placement_dead;
     uint32_t r100_first_enemy_handle;
     uint16_t r100_first_enemy_hp,r100_first_enemy_player_hit_kind;
     int32_t r100_first_enemy_player_hit_power;
@@ -145,6 +151,9 @@ typedef struct gh_startup_snapshot {
     uint32_t effect_frontier, effect_emitter_slot, effect_emitter_serial;
     uint32_t effect_emitter_mode, effect_emitter_class, effect_emitter_step;
     uint32_t effect_esp_slot, effect_esp_step;
+    uint8_t save_map_active,save_map_selected;
+    uint16_t save_map_phase;
+    uint8_t r100_exit_prompt;
 } gh_startup_snapshot;
 /* Developer execution slice beginning at original task0030D358 in slot3 of
  * the four-slot manager. Does not run the earlier boot/GS/IOP initialization

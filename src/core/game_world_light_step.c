@@ -11,6 +11,55 @@ static float mul(float a,float b){volatile float r=a*b;return r;}
 static float add(float a,float b){volatile float r=a+b;return r;}
 static gh_light_status fail(gh_game_world_light*s,uint32_t pc,int detail,gh_light_status e){s->frontier=pc;s->detail=detail;return e;}
 typedef struct {uint8_t *bytes;uint32_t flags;uint8_t write_flags,write_area,area;} model_plan;
+typedef struct {uint32_t area,cached_area,cached_row;const uint8_t *fog;} fog_plan;
+
+static gh_light_status fog_region(gh_game_world_light *s,const gh_light_move_bindings *b,fog_plan *plan)
+{
+ const uint8_t *p=s->scalar;
+ *plan=(fog_plan){.cached_area=word(p+0x16128),.cached_row=word(p+0x1612c)};
+ if(!s->area.bytes)return GH_LIGHT_OK;
+ if(!b||!b->player||!b->player->bytes||b->player->size<0xbc)
+  return fail(s,0x2db6b0,0,GH_LIGHT_UNSUPPORTED);
+ const uint8_t *areas=s->area.bytes;
+ if(s->area.size<16||word(areas)>(s->area.size-16)/0x50)
+  return fail(s,0x1f83e8,0,GH_LIGHT_BOUNDS);
+ float point[3];
+ memcpy(point,b->player->bytes+0xb0,sizeof(point));
+ point[1]=add(point[1],.5f);
+ /* FAR uses the first matching volume in authored order. */
+ uint32_t area_count=word(areas);
+ for(uint32_t i=0;i<area_count;i++){
+  const uint8_t *area=areas+16+(size_t)i*0x50;
+  int inside;
+  gh_scene_at_status status=gh_scene_at_region_contains_001f83e8(area+0x20,point,&inside);
+  if(status)return fail(s,0x1f83e8,(int)i,status==GH_AT_BOUNDS?GH_LIGHT_BOUNDS:GH_LIGHT_UNSUPPORTED);
+  if(inside){plan->area=area[2];break;}
+ }
+
+ /* 2D8EB0 takes the active LI33 preset's 16-byte fog rows, whose ID
+  * is the last word. Guest +16100 pointers are borrowed native slots. */
+ uint32_t preset=word(p+0x16288);
+ if(preset>=8)return fail(s,0x2d8eb0,(int)preset,GH_LIGHT_BOUNDS);
+ const gh_bundle_entry *fog=&s->slots[preset];
+ if(!fog->bytes)return GH_LIGHT_OK;
+ if(fog->size<4||word(fog->bytes)>(fog->size-4)/16)
+  return fail(s,0x2d8eb0,(int)preset,GH_LIGHT_BOUNDS);
+ uint32_t fog_count=word(fog->bytes);
+ if(!fog_count)return GH_LIGHT_OK;
+ if(!plan->area){plan->cached_area=0;return GH_LIGHT_OK;}
+ const uint8_t *rows=fog->bytes+4;
+ if(plan->cached_area==plan->area){
+  if(plan->cached_row>=fog_count)return fail(s,0x2d8eb0,(int)plan->cached_row,GH_LIGHT_BOUNDS);
+  plan->fog=rows+(size_t)plan->cached_row*16;
+  return GH_LIGHT_OK;
+ }
+ plan->cached_area=plan->area;
+ for(uint32_t i=0;i<fog_count;i++){
+  const uint8_t *row=rows+(size_t)i*16;
+  if(word(row+12)==plan->area){plan->cached_row=i;plan->fog=row;break;}
+ }
+ return GH_LIGHT_OK;
+}
 int gh_game_world_light_class_002d74b8(uint16_t kind){return (kind>=0x100&&kind<=0x600)||kind==0xff01||kind==0xff02;}
 static gh_light_status models(gh_game_world_light*s,const gh_room_vector*v,const gh_light_move_bindings*b,model_plan*plans){
  for(uint32_t i=0;i<v->count;i++){
@@ -57,7 +106,7 @@ gh_light_status gh_game_world_light_move_native_002d7560(gh_game_world_light*s,g
  if((word(w+0x5d8)&0x4000u)||(word(w+0x5e0)&0x80000u))return GH_LIGHT_OK;
  if(!s->ready)return GH_LIGHT_ARGUMENT;
  if(policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE)return fail(s,0x2d7560,0,GH_LIGHT_UNSUPPORTED);
- if(s->area.bytes)return fail(s,0x1f83e8,0,GH_LIGHT_UNSUPPORTED);
+
  if(word(p+0x16284)&0x10u)return fail(s,0x2d8c60,0,GH_LIGHT_UNSUPPORTED);
  const gh_room_vector*objects;gh_room_pool_status ps=gh_room_registry_view(pools,0x754c58,&objects);
  if(ps)return fail(s,0x2d7560,ps,GH_LIGHT_ARGUMENT);
@@ -65,16 +114,23 @@ gh_light_status gh_game_world_light_move_native_002d7560(gh_game_world_light*s,g
  for(unsigned i=0;i<256;i++)if(word(p+0x80+i*0x70+4))return fail(s,0x2d7560,(int)i,GH_LIGHT_UNSUPPORTED);
  size_t count=word(p+0x78);if(count>256)return fail(s,0x2d8ff8,0,GH_LIGHT_BOUNDS);
  for(size_t i=0;i<count&&i<48;i++)if(word(p+0x80+i*0x70+0x58)&0x100000u)return fail(s,0x156488,(int)i,GH_LIGHT_UNSUPPORTED);
- /* With FAR absent,2D8EB0 genuinely returnsNULL. Prepare model writes from
-  * the SAME registry before committing the complete supported invocation. */
+ /* Prepare fog and model writes before committing the supported invocation. */
  model_plan*plans=objects->count?calloc(objects->count,sizeof(*plans)):NULL;
  if(objects->count&&!plans)return fail(s,0x2d7560,0,GH_LIGHT_MEMORY);
  float target[5]={scalar(p+0x10),scalar(p+0x14),(float)p[4],(float)p[5],(float)p[6]},next[5];
  fenv_t saved;if(feholdexcept(&saved)){free(plans);return fail(s,0x2d7560,0,GH_LIGHT_UNSUPPORTED);}if(fesetround(FE_TONEAREST)){fesetenv(&saved);free(plans);return fail(s,0x2d7560,0,GH_LIGHT_UNSUPPORTED);}
- gh_light_status model_status=models(s,objects,b,plans);if(model_status){(void)fesetenv(&saved);free(plans);return model_status;}
+ fog_plan fog;
+ gh_light_status status=fog_region(s,b,&fog);
+ if(!status)status=models(s,objects,b,plans);
+ if(status){(void)fesetenv(&saved);free(plans);return status;}
+ if(fog.fog){
+  target[0]=scalar(fog.fog+4);target[1]=scalar(fog.fog+8);
+  for(unsigned i=0;i<3;i++)target[2+i]=(float)fog.fog[i];
+ }
  int valid=1;for(unsigned i=0;i<5;i++){next[i]=add(mul(scalar(p+0x16150+4*i),.96f),mul(target[i],.04f));if(!isfinite(next[i]))valid=0;}
  int restore=fesetenv(&saved);if(!valid||restore){free(plans);return fail(s,0x2d7560,0,GH_LIGHT_UNSUPPORTED);}
- put(p+0x16124,0);memcpy(p+0x16150,next,sizeof(next));
+ put(p+0x16124,fog.area);put(p+0x16128,fog.cached_area);put(p+0x1612c,fog.cached_row);
+ memcpy(p+0x16150,next,sizeof(next));
  put(p+0x16138,255);put(p+0x16134,0);put(p+0x16140,255);put(p+0x1613c,255);
  for(uint32_t i=0;i<objects->count;i++){model_plan*q=plans+i;if(q->write_flags)put(q->bytes+0x250,q->flags);if(q->write_area)q->bytes[0x2cc]=q->area;}free(plans);
  gh_game_set_background_0030e5c0(work,1,p[0],p[1],p[2]);

@@ -3432,7 +3432,8 @@ static gh_actor_motion_status stamp19_attack_area_00260b30(gh_enemy202_move *s,u
     if(!hit_flags)return GH_ACTOR_MOTION_OK;
     const unsigned params=hit_flags&2u?0x1884:0x1870;
     const unsigned profile=word(p+params);
-    if(profile!=0&&profile!=2)return stop(s,0x260b30,GH_ACTOR_MOTION_UNSUPPORTED);
+    if(profile>2||(profile==1&&word(p+0x564)!=0x200))
+        return stop(s,0x260b30,GH_ACTOR_MOTION_UNSUPPORTED);
     gh_enemy_actor *enemy=s->enemy;
     gh_hitarea_object *give=&enemy->hitareas.units[1];
     const uint8_t *node;
@@ -3448,17 +3449,19 @@ static gh_actor_motion_status stamp19_attack_area_00260b30(gh_enemy202_move *s,u
         return stop(s,0x1fd820,GH_ACTOR_MOTION_UNSUPPORTED);
     float euler[3],rotation[16];
     uint32_t pc=0;
-    memcpy(euler,p+0x100,sizeof(euler));
-    if(gh_actor_matrix_rotation_00147728(euler,0,rotation,GH_STATIC_BINARY32_REFERENCE,&pc))
-        return stop(s,pc?pc:0x1fd338,GH_ACTOR_MOTION_UNSUPPORTED);
+    if(profile!=1){
+        memcpy(euler,p+0x100,sizeof(euler));
+        if(gh_actor_matrix_rotation_00147728(euler,0,rotation,GH_STATIC_BINARY32_REFERENCE,&pc))
+            return stop(s,pc?pc:0x1fd338,GH_ACTOR_MOTION_UNSUPPORTED);
+    }
     fenv_t env;
     const float scale=number(word(p+0x114)),power_rate=number(word(p+0x76c));
-    if(!isfinite(scale)||scale==0||!isfinite(power_rate)||!set_round(&env,FE_TOWARDZERO))
+    if((profile!=1&&(!isfinite(scale)||scale==0))||!isfinite(power_rate)||!set_round(&env,FE_TOWARDZERO))
         return stop(s,0x260b30,GH_ACTOR_MOTION_UNSUPPORTED);
     int32_t power=(int32_t)word(p+params+4);
     if(word(p+0x16ec))power+=power/2;
     const float scaled_power=mul((float)power,power_rate);
-    volatile float reciprocal=1.0f/scale;
+    volatile float reciprocal=profile==1?1.0f:1.0f/scale;
     const float height=profile==2?mul(reciprocal,0.7f):reciprocal;
     const uint8_t *work=(const uint8_t *)enemy->b.entry.work;
     if(!isfinite(scaled_power)||scaled_power < -2147483648.0f||scaled_power >= 2147483648.0f){
@@ -3473,7 +3476,7 @@ static gh_actor_motion_status stamp19_attack_area_00260b30(gh_enemy202_move *s,u
     if(gh_collision_pair_shape_offset_002bb258(&shapes[3],base,&pc)||
        gh_collision_pair_shape_offset_002bb258(&shapes[0],front,&pc)||
        gh_collision_pair_shape_offset_002bb258(&shapes[1],front,&pc)||
-       gh_collision_pair_shape_offset_002bb258(&shapes[3],box,&pc))
+       (profile!=1&&gh_collision_pair_shape_offset_002bb258(&shapes[3],box,&pc)))
         return stop(s,pc?pc:0x1fd888,GH_ACTOR_MOTION_UNSUPPORTED);
     if(gh_hitarea_object_set_active_001fd668(&give[3],1,&pc))
         return stop(s,pc?pc:0x1fd668,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -3484,7 +3487,15 @@ static gh_actor_motion_status stamp19_attack_area_00260b30(gh_enemy202_move *s,u
     }
     put_half(give[3].bytes+0x46,(uint16_t)word(p+params+8));
     put(give[3].bytes+0x4c,(uint32_t)power);
-    memcpy(give[3].bytes+0x10,rotation+8,12);
+    if(profile==1){
+        const gh_game_math_globals *math=enemy->hitareas.b.math;
+        if(!math||!math->initialized)return stop(s,0x1fd308,GH_ACTOR_MOTION_UNSUPPORTED);
+        memcpy(give[3].bytes+0x10,math->zero_vector,12);
+    }else memcpy(give[3].bytes+0x10,rotation+8,12);
+    /* 26253C (shape1) / 26263C (shape0 and2) resize the same box. */
+    const float size[]={profile==1?1.0f:0.7f,profile==1?0.5f:1.0f,1.0f};
+    if(gh_collision_pair_box_size_002baaa8(&shapes[3],size,&pc))
+        return stop(s,pc?pc:0x1fd820,GH_ACTOR_MOTION_UNSUPPORTED);
     return GH_ACTOR_MOTION_OK;
 }
 
@@ -3558,7 +3569,11 @@ static gh_actor_motion_status advance_r100_attack_0021a538(gh_enemy202_move *s,u
             else{row=0x69c;power=30;kind=0x3e;tracking=50;}
         }
         static const float factors[]={0,.75f,.8f,.9f,.9f,1};
-        put(p+0x5f0,(uint32_t)((float)tracking*factors[heat]));
+        fenv_t env;
+        if(!set_round(&env,FE_TOWARDZERO))return stop(s,0x21f648,GH_ACTOR_MOTION_CALLEE);
+        const uint32_t track_frames=(uint32_t)mul((float)tracking,factors[heat]);
+        if(fesetenv(&env))return stop(s,0x21f648,GH_ACTOR_MOTION_CALLEE);
+        put(p+0x5f0,track_frames);
         put(p+0x5f4,timed);put(p+0x5fc,0);put(p+0x604,0);put(p+0x608,0x3f800000);put(p+0x60c,0);
         p[0x1864]=0;
         stamp19_attack_parameters(p,power,shape,kind);
@@ -3637,10 +3652,19 @@ static gh_actor_motion_status advance_r100_attack_0021a538(gh_enemy202_move *s,u
                 if(status)return status;
             }
         }else{
-            if(word(p+0x5f4)||word(p+0x5fc)||(heat_category(s)>=3&&(half(p+0x3ac)&0x10)))
+            const unsigned hit_flags=half(p+0x3ac);
+            const uint32_t timed=word(p+0x5f4);
+            if((timed&&(!em00||timed!=1))||(!em00&&word(p+0x5fc))||
+               (heat_category(s)>=3&&(hit_flags&0x10u)))
                 return stop(s,0x21f8f8,GH_ACTOR_MOTION_UNSUPPORTED);
+            if(timed){
+                /* 21FB34 default timed row19C rewrites both Give parameter
+                 * sets each nonterminal frame before the hit-area test. */
+                stamp19_attack_parameters(p,hit_flags&2u?20:15,0,hit_flags&2u?0x37:0x3d);
+            }
             gh_actor_motion_status status=stamp19_attack_area_00260b30(s,p);
             if(status)return status;
+            if(word(p+0x5fc))put(p+0x16d4,word(p+0x16d4)&~0x400u);
         }
         s->substate67_stage=5;
     }

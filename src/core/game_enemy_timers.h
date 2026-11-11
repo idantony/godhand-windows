@@ -22,6 +22,8 @@ gh_actor_motion_status gh_enemy_timers_with_weapon_00205ae4(gh_enemy_timers *,
 /* Typed original enemy +6EC. A partial factory never appears as an attached weapon. */
 const gh_enemy_weapon_init *gh_enemy_timers_held_weapon(const gh_enemy_timers *);
 gh_enemy_weapon_init *gh_enemy_timers_held_weapon_runtime(gh_enemy_timers *);
+/* Drop only a previously transferred and fully retired weapon companion. */
+gh_actor_motion_status gh_enemy_timers_finish_held_retirement(gh_enemy_timers *);
 gh_actor_motion_status gh_enemy_timers_release_native(gh_enemy_timers *);
 #ifdef __cplusplus
 }

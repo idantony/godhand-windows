@@ -27,18 +27,18 @@ gh_game_event_status gh_event_actor_extra_bind(gh_event_actor_extra *s, const gh
     return GH_EVENT_OK;
 }
 
-static gh_game_event_status retarget_jacket(gh_event_actor_extra *s) {
+static gh_game_event_status retarget_jacket(gh_event_actor_extra *s, gh_actor_model *model) {
     const gh_event_actor_extra_bindings *b = &s->bindings;
     gh_game_player_child *child = b->child;
     gh_player_child_attachment *attachment = b->attachment;
-    gh_actor_model *model = &b->factory->model;
     void *identity = NULL;
     if (!child->complete || child->b.pools != model->pools || child->object.view.size < 0x20d8 ||
         child->model.root.bytes != child->object.view.bytes || half(child->object.view.bytes + 0x2fe) != 0x101 ||
         gh_room_object_lookup(model->pools, child->handle, GH_ROOM_OBJECT_PLAYER_CHILD, &child->object, &identity) ||
         identity != &child->object || (attachment->attached && (attachment->child != child ||
         attachment->parent_model != child->model.external_parent || child->model.external_owner != attachment ||
-        !attachment->parent_model || attachment->parent_model->root.bytes != b->player->bytes ||
+        !attachment->parent_model || (s->retargeted ? attachment->parent_model != s->jacket_parent :
+            attachment->parent_model->root.bytes != b->player->bytes) ||
         attachment->part_index < 0 || (uint32_t)attachment->part_index != child->model.external_parent_index)) ||
         (!attachment->attached && child->model.external_owner)) return GH_EVENT_ARGUMENT;
 
@@ -48,17 +48,21 @@ static gh_game_event_status retarget_jacket(gh_event_actor_extra *s) {
     if (word(child_part->bytes + 0x148) || word(child->object.view.bytes + 0x20a8) ||
         word(child->object.view.bytes + 0x20d0)) return GH_EVENT_UNSUPPORTED;
     uint8_t *p = child->object.view.bytes;
-    s->previous = *attachment;
-    s->old_250 = word(p + 0x250);
-    s->old_2f0 = word(p + 0x2f0);
-    s->old_2088 = word(p + 0x2088);
-    s->old_20d4 = word(p + 0x20d4);
+    const gh_player_child_attachment previous = *attachment;
     if (gh_actor_model_bind_external_parent(&child->model, 0, model, 17, attachment)) return GH_EVENT_CALLEE;
+    if (!s->retargeted) {
+        s->previous = previous;
+        s->old_250 = word(p + 0x250);
+        s->old_2f0 = word(p + 0x2f0);
+        s->old_2088 = word(p + 0x2088);
+        s->old_20d4 = word(p + 0x20d4);
+    }
     *attachment = (gh_player_child_attachment){
         .child = child, .parent_model = model, .child_part = child_part, .parent_part = parent_part,
         .part_index = 17, .attached = 1
     };
     s->retargeted = 1;
+    s->jacket_parent = model;
     const unsigned costume = gh_core_save_costume(b->save);
     put(p + 0x20d4, 17);
     put(p + 0x2088, costume == 2 || costume == 3 ? 11 : costume == 4 || costume == 5 ? 7 : 12);
@@ -144,8 +148,17 @@ static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
         request->actor_index >= b->roster->capacity || request->actor_index >= request->data->actor_count) {
         return GH_EVENT_ARGUMENT;
     }
-    const unsigned variant = request->source_kind >= 0x60b ? request->source_kind - 0x609 :
-        request->source_kind - 0x601;
+    unsigned variant;
+    uint16_t source;
+    switch (request->source_kind) {
+        case 0x601: variant = 0; source = 0x600; break;
+        case 0x602: variant = 1; source = 0x600; break;
+        case 0x60b: variant = 2; source = 0x60a; break;
+        case 0x60c: variant = 3; source = 0x60a; break;
+        case 0x606: variant = 4; source = 0x605; break;
+        case 0x607: variant = 5; source = 0x605; break;
+        default: return GH_EVENT_ARGUMENT;
+    }
     gh_event_actor_factory *child = &b->roster->rows[request->actor_index];
     if (handle != child->handle || !handle || child->init_stage != 4 ||
         b->creation->actor_handles[request->actor_index] != handle) return GH_EVENT_ARGUMENT;
@@ -171,7 +184,6 @@ static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
     if (*stage == 2) {
         if (frontier) *frontier = 0x297a48;
         gh_event_actor_factory *parent = NULL;
-        const uint32_t source = variant < 2 ? 0x600 : 0x60a;
         for (size_t i = 0; i < request->data->actor_count && i < b->roster->capacity; ++i) {
             const uint8_t *row;
             size_t cut;
@@ -201,7 +213,7 @@ static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
         set_parent_info(&child->model, b->math, wide ? 1 : 2);
         *stage = 3;
     }
-    if (*stage == 3 && variant >= 2) {
+    if (*stage == 3 && source == 0x60a) {
         gh_event_component_view env;
         if (gh_event_component_at(b->creation->bindings.components, 0, &env)) return GH_EVENT_ARGUMENT;
         if (variant == 2) {
@@ -316,6 +328,51 @@ static gh_game_event_status extra_standalone(gh_event_actor_extra *s,
     return GH_EVENT_OK;
 }
 
+/* REL 202C retargets the same GetJacket owner used by EL00. */
+static gh_game_event_status extra_el05(gh_event_actor_extra *s,
+    const gh_event_actor_create_request *request, uint32_t handle, int *original, uint32_t *frontier) {
+    const gh_event_actor_extra_bindings *b = &s->bindings;
+    if (!b->roster || !b->creation || request->data != b->creation->bindings.data ||
+        request->actor_index >= b->roster->capacity || request->actor_index >= request->data->actor_count)
+        return GH_EVENT_ARGUMENT;
+    if (request->data->components->event_no != 2 || request->actor_index != 3)
+        return GH_EVENT_UNSUPPORTED;
+    gh_event_actor_factory *actor = &b->roster->rows[request->actor_index];
+    if (!handle || handle != actor->handle || b->creation->actor_handles[request->actor_index] != handle ||
+        actor->init_stage != 4 || !actor->model.ready)
+        return GH_EVENT_ARGUMENT;
+    if (!s->el05_stage) {
+        put(request->work + 0x34, 0xffff);
+        put(request->work + 0x38, 0);
+        uint8_t *p = actor->object.view.bytes;
+        p[0x2fe] = 5;
+        p[0x2ff] = 6;
+        put(p + 0x2d0, 0x800000);
+        s->el05_stage = 1;
+    }
+    if (!b->child) {
+        if (frontier) *frontier = 0;
+        return GH_EVENT_OK;
+    }
+    if (s->el05_stage == 1) {
+        if (frontier) *frontier = 0x100ed8;
+        gh_game_event_status status = retarget_jacket(s, &actor->model);
+        if (status) return status;
+        put(request->work + 0x30, 0x102);
+        s->el05_stage = 2;
+    }
+    if (s->el05_stage == 2) {
+        static const uint8_t name[8] = "RH_01";
+        if (frontier) *frontier = 0x14a338;
+        gh_game_event_status status = hide_mesh(&actor->model, name);
+        if (status) return status;
+        s->el05_stage = 3;
+    }
+    *original = 1;
+    if (frontier) *frontier = 0;
+    return GH_EVENT_OK;
+}
+
 gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor_create_request *request,
     uint32_t handle, int *original_success, uint32_t *frontier) {
     gh_event_actor_extra *s = opaque;
@@ -324,8 +381,12 @@ gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor
     *original_success = 0;
     const gh_event_actor_extra_bindings *b = &s->bindings;
     if (request->source_kind == 0x601 || request->source_kind == 0x602 ||
-        request->source_kind == 0x60b || request->source_kind == 0x60c) {
+        request->source_kind == 0x60b || request->source_kind == 0x60c ||
+        request->source_kind == 0x606 || request->source_kind == 0x607) {
         return attach_el_pair(s, request, handle, original_success, frontier);
+    }
+    if (request->source_kind == 0x605) {
+        return extra_el05(s, request, handle, original_success, frontier);
     }
     if (request->source_kind == 0x60a) {
         return attach_olivia_accessory(s, request, handle, original_success, frontier);
@@ -354,7 +415,7 @@ gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor
     }
     if (s->stage == 1) {
         if (frontier) *frontier = 0x100ed8;
-        gh_game_event_status status = retarget_jacket(s);
+        gh_game_event_status status = retarget_jacket(s, &factory->model);
         if (status) return status;
         s->stage = 2;
     }
@@ -467,14 +528,14 @@ gh_game_event_status gh_event_actor_extra_abort(gh_event_actor_extra *s) {
     if (!s) return GH_EVENT_ARGUMENT;
     if (gh_actor_model_clear_external_parts(&s->accessory_parts) ||
         gh_event_actor_factory_abort(&s->olivia_accessory)) return GH_EVENT_CALLEE;
-    for (unsigned i = 4; i; --i) {
+    for (size_t i = sizeof(s->row_parts) / sizeof(*s->row_parts); i; --i) {
         if (gh_actor_model_clear_external_parts(&s->row_parts[i - 1])) return GH_EVENT_CALLEE;
     }
     if (s->retargeted) {
         gh_player_child_attachment *current = s->bindings.attachment;
         gh_game_player_child *child = s->bindings.child;
         if (!current->attached || current->child != child ||
-            current->parent_model != &s->bindings.factory->model || child->model.external_owner != current) {
+            current->parent_model != s->jacket_parent || child->model.external_owner != current) {
             return GH_EVENT_CALLEE;
         }
         gh_actor_model_status status = s->previous.attached ?

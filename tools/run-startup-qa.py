@@ -17,7 +17,7 @@ spec.loader.exec_module(proof)
 
 
 MAX_CAPTURE_COUNT = 120
-CONTROL_PROBES = ("walk", "run", "square", "approach-square", "repeat-square")
+CONTROL_PROBES = ("walk", "run", "square", "approach-square", "repeat-square", "repeat-triangle", "repeat-triangle-pair")
 
 
 def now():
@@ -117,25 +117,35 @@ def run(prepared):
     qa = json.loads((scratch / "startup-newgame.json").read_text(encoding="utf-8-sig"))
     proof.require(qa.get("hidden") is True and qa.get("muted") is True and qa.get("synthetic_input") is True
                   and qa.get("prefix_mode") is False, "QA did not confirm expected execution flags")
-    repeat_square = prepared.get("control_probe") == "repeat-square"
-    valid_exit_codes = (0, 3, 4) if repeat_square else (0, 4)
+    control = prepared.get("control_probe")
+    pair = control == "repeat-triangle-pair"
+    repeated_attack = pair or control in ("repeat-square", "repeat-triangle")
+    valid_exit_codes = (0, 3, 4) if repeated_attack else (0, 4)
     proof.require(qa.get("exit_code") == receipt["exit_code"] and receipt["exit_code"] in valid_exit_codes,
                   "unexpected child exit; inspect QA output")
     for field in ("renderer_error", "world_gpu_error", "window_error"):
         proof.require(qa.get(field) == 0, "QA reported " + field)
     summary = {"exit_code": receipt["exit_code"], "frontier": qa.get("frontier"), "ticks": qa.get("ticks"),
                "world_packets_submitted": qa.get("world_packets_submitted"), "receipt": str(scratch / "startup-process.json")}
-    if repeat_square:
+    if repeated_attack:
         marker = "QA_REPEAT_STATUS "
         with (scratch / "startup-newgame.stderr.log").open(encoding="utf-8", errors="replace") as stream:
             status_lines = [line[len(marker):] for line in stream if line.startswith(marker)]
-        proof.require(len(status_lines) == 1, "missing or duplicate repeat-square status")
+        proof.require(len(status_lines) == 1, "missing or duplicate repeated attack status")
         status = json.loads(status_lines[0])
         defeat_scene = status.get("defeat_scene")
         proof.require(type(defeat_scene) is int and defeat_scene >= 0
                       and bool(defeat_scene) == (receipt["exit_code"] == 0),
-                      "repeat-square exit and presented defeat disagree")
-        summary["repeat_square"] = status
+                      "repeated attack exit and presented defeat disagree")
+        if pair and defeat_scene:
+            first, second = (status.get(key) for key in ("stamp19_scene", "stamp20_scene"))
+            first_handle, second_handle = (status.get(key) for key in ("stamp19_handle", "stamp20_handle"))
+            proof.require(type(first) is int and type(second) is int and 0 < first < second < defeat_scene
+                          and type(first_handle) is int and type(second_handle) is int
+                          and first_handle > 0 and second_handle > 0 and first_handle != second_handle
+                          and status.get("room_dead_mask") == 3,
+                          "pair success lacks two ordered presented defeats")
+        summary[control.replace("-", "_")] = status
     return summary
 
 

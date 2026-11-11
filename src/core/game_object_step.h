@@ -18,6 +18,7 @@ typedef struct {
  gh_object_static_command_kind kind;size_t object_index;uint32_t handle,bank,depth,selected_program;
  uint64_t test,tex1,alpha,clamp;const gh_scene_mesh_object *object;
  gh_static_node_packet packet;const gh_stage_material *materials[16];unsigned material_count;
+ uint16_t display_base0_streams;
 } gh_object_static_command;
 /* Queue geometry14B810 first and setup14C6B8 second as distinct groups.
  * OT head insertion later runs setup before geometry. Copy retained values. */
@@ -80,6 +81,10 @@ gh_object_step_status gh_game_objects_trans_0030f650(const gh_room_pools *,uint3
  * SBzero leaf. Rebinding never resets either scalar. Borrow canonicalowners. */
 gh_object_step_status gh_game_object_step_bind_static(gh_game_object_step *,const gh_object_static_bindings *,const void *elf,size_t);
 gh_object_step_status gh_game_object_step_bind_live(gh_game_object_step *,const gh_object_move_bindings *);
+/* Actual 2C5470 late scroll list and bounded 319520 camera-relative
+ * offset. Uses the same camera, visibility predicate and static owner. */
+gh_object_step_status gh_game_object_step_forward_scroll_002c5470(gh_game_object_step *,
+ const gh_room_pools *,const gh_boot_work *,uint32_t *frontier);
 /* Extended entry retains the strict empty-list compatibility API above. */
 gh_object_step_status gh_game_objects_trans_static_0030f650(gh_game_object_step *,const gh_room_pools *,const gh_boot_work *,uint32_t *);
 #ifdef __cplusplus

@@ -50,6 +50,7 @@ gh_scene_mesh_status gh_scene_meshes_object_at(const gh_scene_meshes *,size_t,co
 /* Actual per-record148D30 ->1522C0/151398/151368 TM3 replacement. Must be
  * called at the original draw consumer, not an initialization acknowledgment.
  * Returned decoded GS-domain pixels still need real native GPU upload/draw.
+ * Success with NULL selects the verified TEX0=0 display-page sample.
  * Borrow expires at the SAMEmanager rangeforget/cacheclear/destroy. */
 gh_scene_mesh_status gh_scene_meshes_material_00148d30(gh_scene_meshes *,size_t object_index,
  unsigned submesh,gh_stage_textures *,const gh_stage_material **);

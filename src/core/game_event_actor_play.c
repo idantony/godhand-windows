@@ -93,7 +93,7 @@ static gh_game_event_status hide_inactive(const gh_event_actor_extra *extra, siz
         }
         return GH_EVENT_OK;
     }
-    if (associated == 0x60d && actor == 3 && extra->accessory_handle == extra->olivia_accessory.handle &&
+    if (associated == 0x60d && actor == extra->olivia_accessory.actor_index && extra->accessory_handle == extra->olivia_accessory.handle &&
         extra->accessory_handle && extra->olivia_accessory.object.view.bytes) {
         uint8_t *auxiliary = extra->olivia_accessory.object.view.bytes;
         put(auxiliary + 0x250, word(auxiliary + 0x250) | 0x8002u);
@@ -130,7 +130,7 @@ static gh_game_event_status activate_related(gh_event_actor_play *s, gh_actor_mo
     const gh_event_actor_extra *extra = s->bindings.extra;
     const uint32_t associated = word(row + 0x30);
     if (!associated) return GH_EVENT_OK;
-    if (associated == 0x60d && s->row == 3 && extra->accessory_handle == extra->olivia_accessory.handle &&
+    if (associated == 0x60d && s->row == extra->olivia_accessory.actor_index && extra->accessory_handle == extra->olivia_accessory.handle &&
         extra->accessory_handle && extra->olivia_accessory.object.view.bytes) {
         uint8_t *p = extra->olivia_accessory.object.view.bytes;
         put(p + 0x250, word(p + 0x250) & ~0x8002u);

@@ -516,7 +516,8 @@ static int release_test_stage(void *context,gh_game_event *event,int *done)
 }
 
 int main(int argc, char **argv) {
-    CHECK(argc == 2);
+    CHECK(argc == 2 || (argc == 3 && !strcmp(argv[2], "--ev02")));
+    const int ev02 = argc == 3;
     gh_disc *disc = NULL;
     CHECK(gh_disc_open(argv[1], &disc) == GH_DISC_OK);
     const size_t elf_bytes = (size_t)gh_disc_boot_elf_size(disc);
@@ -561,7 +562,7 @@ int main(int argc, char **argv) {
     CHECK(prefix.actor_count == 9 && prefix.camera_count == 10);
 
     size_t room_bytes, el_bytes;
-    uint8_t *room = load(disc, "st1/r100.dat", &room_bytes);
+    uint8_t *room = load(disc, ev02 ? "st0/r003.dat" : "st1/r100.dat", &room_bytes);
     uint8_t *el = load(disc, "el/el00.dat", &el_bytes);
     gh_bundle room_bundle;
     CHECK(gh_bundle_open(room, room_bytes, &room_bundle) == GH_BUNDLE_OK);
@@ -765,10 +766,27 @@ int main(int argc, char **argv) {
     CHECK(gh_event_actor_factory_abort(&factory) == GH_EVENT_OK);
     CHECK(pools.vectors[0].count == 7 && pools.vectors[3].count == 2);
 
-    gh_event_actor_factory *rows = calloc(9, sizeof(*rows));
+    if (ev02) {
+        CHECK(!gh_game_event_resource_abort(&resource));
+        event.fields.data_number = 2;
+        CHECK(!gh_event_components_construct_00297680(&components, 2));
+        CHECK(!gh_game_event_resource_begin_00297540(&resource, &event, &dvd, heap));
+        ready = 0;
+        for (unsigned i = 0; i < 1024 && !ready; ++i) {
+            CHECK(!gh_dvd_pump(&dvd));
+            CHECK(!gh_game_event_resource_poll_002975d0(&resource, &ready));
+        }
+        CHECK(ready && resource.loaded);
+        prefix = (gh_event_data_prefix){0};
+        CHECK(!gh_event_data_bind_prefix_002977e8(&prefix, &components, &resource, &frontier));
+        CHECK(prefix.actor_count == 22 && prefix.camera_count == 28);
+        CHECK(!gh_event_actor_cuts_bind_00297864(&prefix, &frontier));
+    }
+    const size_t roster_capacity = ev02 ? GH_EVENT_ACTOR_ROSTER_CAPACITY : 9;
+    gh_event_actor_factory *rows = calloc(roster_capacity, sizeof(*rows));
     CHECK(rows);
     gh_event_actor_roster roster = {0};
-    CHECK(gh_event_actor_roster_bind(&roster, &factory_bindings, rows, 9) == GH_EVENT_OK);
+    CHECK(gh_event_actor_roster_bind(&roster, &factory_bindings, rows, roster_capacity) == GH_EVENT_OK);
     gh_game_math_globals math = {0};
     CHECK(gh_game_math_globals_from_elf(&math, elf, elf_bytes) == GH_MATH_GLOBALS_OK);
     CHECK(gh_game_math_static_initialize_003079c8(&math, &work, 1, 0xffff) == GH_MATH_GLOBALS_OK);
@@ -787,7 +805,7 @@ int main(int argc, char **argv) {
     bindings.factory_context = &roster;
     bindings.extra = gh_event_actor_extra_run;
     bindings.extra_context = &extra;
-    bindings.row_limit = 9;
+    bindings.row_limit = roster_capacity;
     bindings.finish = gh_event_actor_extra_finish;
     CHECK(gh_event_actor_create_start_002979f0(&state, &bindings, &frontier) == GH_EVENT_OK);
     task_status = GH_EVENT_OK;
@@ -797,6 +815,73 @@ int main(int argc, char **argv) {
         CHECK(gh_tasks_run_matching_002d52a0(&manager).status == GH_TASK_OK);
         task_status = gh_event_actor_create_task_status(&state, &frontier);
         CHECK(gh_event_actor_creation_poll_00297a68(&components, &ready) == GH_EVENT_OK);
+    }
+    if (ev02) {
+        if (task_status != GH_EVENT_UNSUPPORTED || state.actor_cursor != 11)
+            fprintf(stderr, "EV02 ActorCreate status %u frontier %08x REL %04x row %zu model detail %u\n",
+                task_status, frontier, state.frontier_rel, state.actor_cursor, state.actor_cursor < roster_capacity ? rows[state.actor_cursor].model.detail : 0);
+        CHECK(task_status == GH_EVENT_UNSUPPORTED && frontier == 0x297a48 &&
+              state.frontier_rel == 0x04d0 && state.actor_cursor == 11 && !ready);
+        for (unsigned i = 0; i < 11; ++i)
+            CHECK(state.actor_handles[i] && rows[i].handle == state.actor_handles[i] && rows[i].init_stage == 4);
+        CHECK(rows[0].kind == 0x600 && rows[1].kind == 0x601 && rows[2].kind == 0x602 && rows[3].kind == 0x605);
+        CHECK(rows[6].kind == 0x60a && rows[10].kind == 0x631 && extra.accessory_handle &&
+              extra.olivia_accessory.actor_index == 6 && extra.accessory_parts.parent == &rows[6].model);
+        CHECK(rows[4].kind == 0x606 && rows[5].kind == 0x607);
+        CHECK(!word(rows[4].object.view.bytes + 0x4dc) && !word(rows[5].object.view.bytes + 0x4dc));
+        static const uint8_t parts[][4] = {{0, 1, 2, 0}, {0, 1, 17, 18}};
+        static const uint8_t parents[][4] = {{2, 3, 4, 0}, {15, 16, 9, 10}};
+        for (unsigned i = 0; i < 2; ++i) {
+            CHECK(word(rows[4 + i].object.view.bytes + 0x30a4) == 2 - i);
+            CHECK(extra.row_parts[4 + i].parent == &rows[3].model);
+            for (unsigned j = 0; j < i + 3; ++j) {
+                const uint8_t *world;
+                CHECK(!gh_actor_model_external_parts_at(&rows[4 + i].model, parts[i][j], &world));
+                CHECK(world == rows[3].model.parts[parents[i][j]].bytes);
+            }
+        }
+        CHECK(rows[3].shadow.initialized && word(rows[3].object.view.bytes + 0x4dc) == 3);
+        size_t el05_bytes;
+        uint8_t *el05 = load(disc, "el/el05.dat", &el05_bytes);
+        CHECK(rows[3].resource.file_extent == el05_bytes && !memcmp(rows[3].resource.bytes, el05, el05_bytes));
+        free(el05);
+        gh_player_mesh_reference right_hand;
+        const uint8_t right_hand_name[8] = "RH_01";
+        CHECK(!gh_actor_model_find_mesh_0014b730(&rows[3].model, right_hand_name, 8, &right_hand, &original) &&
+              original && (word(right_hand.bytes + 0x380) & 1));
+        CHECK(!gh_event_actor_create_work_at(&state, 3, &row, &cut));
+        CHECK(word(row + 0x30) == 0x102 && word(row + 0x34) == 0xffff && !word(row + 0x38));
+        CHECK(child.model.external_parent == &rows[3].model && attachment.parent_model == &rows[3].model &&
+              attachment.parent_part == &rows[3].model.parts[17] && rows[0].model.external_borrowers == 2 &&
+              rows[3].model.external_borrowers == 3);
+        CHECK((word(child.object.view.bytes + 0x250) & 0x18002) == 0x10000 &&
+              (word(child.object.view.bytes + 0x2f0) & 1));
+        CHECK(!gh_event_actor_create_abort(&state));
+        CHECK(!gh_event_actor_extra_abort(&extra));
+        CHECK(child.model.external_parent == &parent_model && attachment.parent_model == &parent_model &&
+              parent_model.external_borrowers == 1 && !rows[3].model.external_borrowers);
+        CHECK(!gh_event_actor_roster_abort(&roster));
+        free(rows);
+        gh_game_player_child_attachment_clear(&attachment);
+        CHECK(!gh_game_player_child_release_prefix(&child));
+        CHECK(!gh_actor_model_release(&parent_model));
+        CHECK(!gh_game_player_factory_release_prefix(&parent));
+        CHECK(!gh_task_threads_destroy(threads));
+        gh_game_objects_destroy(room_objects);
+        gh_game_objects_destroy(objects);
+        for (size_t i = 0; i < 5; ++i) CHECK(!gh_room_object_unregister(&pools, handles[i], &scope));
+        CHECK(!gh_game_room_pools_release(&pools));
+        CHECK(!gh_game_event_resource_abort(&resource));
+        CHECK(!gh_game_event_module_abort(&module));
+        CHECK(!gh_heap_used(heap) && !gh_heap_destroy(heap));
+        free(room);
+        free(el);
+        free(pl00);
+        free(pl01);
+        free(elf);
+        gh_disc_close(disc);
+        puts("PASS R003 EV02 EL00 through EL31 creation, jacket and EL06/07 borrows, rollback; EL34 strict");
+        return 0;
     }
     if (task_status || state.actor_cursor != 9) {
         fprintf(stderr, "EL roster status %u frontier %06x REL %04x row %zu details %u/%u\n",

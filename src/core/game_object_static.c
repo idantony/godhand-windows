@@ -2,6 +2,8 @@
  * storage is canonical; numerical policy is finite binary32 nearest reference. */
 #include "game_object_step.h"
 #include "game_object_live_trans.h"
+#include "game_actor_matrix.h"
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -128,6 +130,112 @@ static int visible_box(const uint8_t*model,const gh_game_pl_camera*camera,int*ou
  }
  *out=!common;return 1;
 }
+/* Scroll vtable 450CE8+34, also used by 14A3E8 before draw. */
+static int hidden_00319848(const gh_game_object_step *s,const uint8_t *p,const uint8_t *descriptor,
+ const gh_boot_work *work,int *hidden)
+{
+ const uint8_t *raw=(const uint8_t *)work;
+ *hidden=1;
+ if(w(raw+0x5e0)&0x08000000u)return 1;
+ *hidden=0;
+ if(raw[0x58d]&0x80u)return 1;
+ const uint8_t *side=s->init->side_counter;
+ if(s32(w(side+8))<=0&&((!side[4]&&(descriptor[0x35]&1u))||
+    (side[4]&&(w(descriptor+0x34)&0x200u)))){*hidden=1;return 1;}
+ uint32_t flags=w(p+0x250);
+ if((!p[0x32d]&&side[5]==1)||(p[0x32d]&&side[5]==0)||(flags&2u)){
+  *hidden=1;return 1;
+ }
+ if(flags&0x10000u)return 1;
+ int visible;
+ if(!visible_box(p,s->static_objects.camera,&visible))return 0;
+ *hidden=!visible||(w(raw+0x58c)&0x04000000u);
+ return 1;
+}
+
+typedef struct {uint8_t *object;uint32_t flags;float position[3];} scroll_forward_plan;
+
+static gh_object_step_status plan_scroll_forward(const gh_game_object_step *s,
+ const gh_room_pools *pools,const gh_boot_work *work,uint32_t handle,const float camera_rotation[16],
+ scroll_forward_plan *plan,uint32_t *frontier)
+{
+ void *identity;
+ if(gh_room_object_lookup(pools,handle,GH_ROOM_OBJECT_SCROLL_MESH,s->static_objects.meshes,&identity))
+  return stop(frontier,0x319520,GH_OBJSTEP_POOLS);
+ const gh_scene_mesh_object *object=identity;
+ if(object->handle!=handle||!object->constructor_complete||!object->allocation.pointer||
+    object->rotation_matrix_offset!=0xb0)return stop(frontier,0x319520,GH_OBJSTEP_UNSUPPORTED);
+ uint8_t *p=object->allocation.pointer;
+ const gh_scene_mesh_descriptor *d=&object->descriptor;
+ const uint8_t *raw=d->script.bytes+d->mesh.descriptor_offset;
+ uint32_t info=w(raw+0x34);
+ if(!(w(p+0x350)&0x20000000u)||!(info&0x20u)||(info&0x06000000u))
+  return stop(frontier,0x319520,GH_OBJSTEP_UNSUPPORTED);
+
+ int hidden;
+ if(!hidden_00319848(s,p,raw,work,&hidden))return stop(frontier,0x1f8ad8,GH_OBJSTEP_UNSUPPORTED);
+ plan->object=p;
+ plan->flags=(w(p+0x250)&~0x200000u)|(hidden?0x200000u:0);
+ float angles[3],rotation[16];
+ memcpy(angles,p+0x100,sizeof(angles));
+ if(gh_actor_matrix_rotation_00147728(angles,0,rotation,GH_STATIC_BINARY32_REFERENCE,frontier))
+  return GH_OBJSTEP_UNSUPPORTED;
+
+ /* 150830 rotates the ELF unit Z (3BD8C0). For a pure rotation its
+  * XYZ are column2. 319520 offsets original descriptor translation
+  * by forward * 0.01 * max(dot,0) * horizontal target distance. */
+ float dot=add(add(mul(rotation[8],camera_rotation[8]),mul(rotation[9],camera_rotation[9])),
+               mul(rotation[10],camera_rotation[10]));
+ if(dot<0)dot=0;
+ const uint8_t *camera=s->static_objects.camera->fields;
+ float dx=add(rf(p+0xb0),-rf(camera+0x210)),dz=add(rf(p+0xb8),-rf(camera+0x218));
+ float distance=sqrtf(add(mul(dx,dx),mul(dz,dz)));
+ for(unsigned i=0;i<3;i++){
+  float offset=mul(mul(mul(rotation[8+i],.01f),dot),distance);
+  plan->position[i]=add(rf(raw+0x28+4*i),offset);
+  if(!isfinite(plan->position[i]))return stop(frontier,0x319520,GH_OBJSTEP_UNSUPPORTED);
+ }
+ return GH_OBJSTEP_OK;
+}
+
+gh_object_step_status gh_game_object_step_forward_scroll_002c5470(gh_game_object_step *s,
+ const gh_room_pools *pools,const gh_boot_work *work,uint32_t *frontier)
+{
+ if(!frontier||!pools||!work)return GH_OBJSTEP_ARGUMENT;
+ *frontier=0;
+ if(w((const uint8_t *)work+0x5d8)&0x08000000u)return GH_OBJSTEP_OK;
+ const gh_room_vector *list;
+ if(gh_room_registry_view(pools,0x754c50,&list))return stop(frontier,0x2c5470,GH_OBJSTEP_POOLS);
+ if(!list->count)return GH_OBJSTEP_OK;
+ if(!s||!s->init||!s->static_bound||!s->static_objects.meshes||
+    s->static_objects.meshes->pools!=pools||!s->static_objects.camera||
+    !s->static_objects.camera->constructed)return stop(frontier,0x319520,GH_OBJSTEP_UNSUPPORTED);
+
+ scroll_forward_plan *plans=calloc(list->count,sizeof(*plans));
+ if(!plans)return stop(frontier,0x319520,GH_OBJSTEP_POOLS);
+ fenv_t saved;
+ if(feholdexcept(&saved)){free(plans);return stop(frontier,0x319520,GH_OBJSTEP_UNSUPPORTED);}
+ if(fesetround(FE_TONEAREST)){
+  (void)fesetenv(&saved);free(plans);return stop(frontier,0x319520,GH_OBJSTEP_UNSUPPORTED);
+ }
+ float angles[3],camera_rotation[16];
+ memcpy(angles,s->static_objects.camera->fields+0x220,sizeof(angles));
+ gh_object_step_status status=GH_OBJSTEP_OK;
+ if(gh_actor_matrix_rotation_00147728(angles,0,camera_rotation,GH_STATIC_BINARY32_REFERENCE,frontier))
+  status=GH_OBJSTEP_UNSUPPORTED;
+ for(uint32_t i=0;i<list->count&&!status;i++){
+  uint32_t handle=w((const uint8_t *)list->allocation.pointer+(size_t)i*4);
+  status=plan_scroll_forward(s,pools,work,handle,camera_rotation,plans+i,frontier);
+ }
+ if(fesetenv(&saved))status=stop(frontier,0x319520,GH_OBJSTEP_UNSUPPORTED);
+ if(!status)for(uint32_t i=0;i<list->count;i++){
+  ww(plans[i].object+0x250,plans[i].flags);
+  memcpy(plans[i].object+0xb0,plans[i].position,sizeof(plans[i].position));
+ }
+ free(plans);
+ return status;
+}
+
 static gh_object_step_status trans_prelude(gh_game_object_step*s,gh_scene_mesh_object*o,const gh_boot_work*work,int*draw,uint32_t*f){
  *draw=0;uint8_t*p=o->allocation.pointer;const uint8_t*raw=(const uint8_t*)work,*node=o->node,*d=o->descriptor.script.bytes+o->descriptor.mesh.descriptor_offset;
  const gh_object_static_bindings*b=&s->static_objects;uint32_t frontier=0;gh_object_step_status result=GH_OBJSTEP_OK;
@@ -137,15 +245,8 @@ static gh_object_step_status trans_prelude(gh_game_object_step*s,gh_scene_mesh_o
  float camera[16],pos[3],value[4];memcpy(camera,b->camera->fields,64);for(unsigned i=0;i<3;i++)pos[i]=rf(p+0xb0+i*4);point4(value,camera,pos);
  float depthf=mul(value[3],10);if(!isfinite(depthf)||depthf>=2147483648.0f){frontier=0x31a6b0;goto unsupported;}
  uint32_t z=depthf>=0?(uint32_t)(int32_t)depthf:0;z>>=s->depth_shift&31u;uint16_t short_depth=(uint16_t)z;memcpy(p+0x2ac,&short_depth,2);
- /*319848 returns true to suppress rendering.*/
- if(w(raw+0x5e0)&0x08000000u)goto done;
- int skip=0;
- if(!(raw[0x58d]&0x80u)){
-  const uint8_t*side=s->init->side_counter;
-  if(s32(w(side+8))<=0){if((!side[4]&&(d[0x35]&1u))||(side[4]&&(w(d+0x34)&0x200u)))skip=1;}
-  if((!p[0x32d]&&side[5]==1)||(p[0x32d]&&side[5]==0)||(w(p+0x250)&2u))skip=1;
-  if(!skip&&!(w(p+0x250)&0x10000u)){int visible;if(!visible_box(p,b->camera,&visible)){frontier=0x1f8ad8;goto unsupported;}skip=!visible||(w(raw+0x58c)&0x04000000u);}
- }
+ int skip;
+ if(!hidden_00319848(s,p,d,work,&skip)){frontier=0x1f8ad8;goto unsupported;}
  if(skip)goto done;
  if(w(p+0x254)&0x08000000u){frontier=0x14d828;goto unsupported;}
  ww(p+0x250,w(p+0x250)&~0x200000u); /*14E4C8 preceding this isactualJRRA*/
@@ -232,7 +333,9 @@ gh_object_step_status gh_game_objects_trans_static_0030f650(gh_game_object_step*
    if(!b->textures)return stop(f,0x148d30,GH_OBJSTEP_UNSUPPORTED);
    for(;s->trans_material<o->descriptor.submesh_count;s->trans_material++){
     const gh_stage_material*material;gh_scene_mesh_status r=gh_scene_meshes_material_00148d30(b->meshes,index,(unsigned)s->trans_material,b->textures,&material);
-    if(r)return stop(f,b->meshes->frontier?b->meshes->frontier:0x148d30,GH_OBJSTEP_UNSUPPORTED);s->pending.materials[s->trans_material]=material;
+    if(r)return stop(f,b->meshes->frontier?b->meshes->frontier:0x148d30,GH_OBJSTEP_UNSUPPORTED);
+    s->pending.materials[s->trans_material]=material;
+    if(!material)s->pending.display_base0_streams|=(uint16_t)(1u<<s->trans_material);
    }
    unsigned parity=w((const uint8_t*)work+0x210)&1u;o->object_program[parity]=0x80000000u;o->node_program[parity]=s->pending.selected_program;
    s->pending.kind=GH_OBJECT_NODE_GEOMETRY;s->trans_phase=3;

@@ -1,12 +1,219 @@
 # Active project resume: God Hand
 
-Updated2026-11-11 local. Check live Git/reports/agents before acting. Changing
+Updated 2026-11-12 local. Check live Git/reports/agents before acting. Changing
 history was compacted; private receipts and Git preserve old checkpoints.
 
 ## Current verified checkpoints
 
-- Current public main is `c3be7c41df8258c25e20422fa48df4766b17708f`, pushed
-  after local/public index gate and remote SHA verification. It uses exact125
+- Exact205 `room-transition-205-native-trail-draw`, pin
+  `5a3a87af43e7ffd7ba09615673cea09ccdf779206cd331d1e59af0974f264a3b`.
+  Seven focused checks and Windows QA build passed. Actual Windows at
+  tick1932 reaches 0030A5D0 in new 58:2C slot2 type1A initialization (slot22,
+  2FCB88 detachment), with 1791 scenes presented and no GPU/renderer/window
+  error. This passes 002FAA88 and 002F02B8, including original trail draw and
+  mode0 previous-display warp. Private trace in
+  `analysis/room-transition-205-triangle-pair-execution-private.json`.
+  The original 58:2C EST row2/3 Z angle and variation each equal 3FDF66F2,
+  so pre-Move initialization can exceed pi. Original 30A650/700/7B8 accepts
+  that input with the same polynomial and no range reduction. Local source
+  now admits finite arithmetic and retains strict overflow.
+- R003 first complete frame passed in the isolated CPU replay, with 258
+  static and 75 actor commands. Two static material-FF groups produce eight
+  original display-base-zero packets with 92 triangles. Current E: uses
+  the prior display texel for those packets in the Windows renderer. The
+  subsequent original parentless type08 ESP initialization is still strict
+  at 002FACA8. R003 EV02 uses original data2, 28 cuts, and 22 actor records.
+  Independent EV02 tests pass audio prefetch, sequence bind and EL05; the
+  later EL06/07 overlay proves eleven actors through EL31 and needs integration.
+
+- Exact203 `room-transition-203-shared-core-attack`, pin
+  `7a3139172571761980a19d9994b690177a2fe8ee56e953e8c9716f57d1515688`.
+  Actual Windows New Game now passes original spatial audio 002CF058 and
+  presents 1787 R100 scenes, 10 beyond exact202. At tick1928 original trail
+  ESP type09 initialization stops at 002FAA88. No renderer, GPU or window
+  error. Three exact203 focused checks passed. Independent CPU fixtures
+  complete R100 State5 from controlled Door preconditions and enter R003
+  State3. The fast R003 load fixture independently reached State4 and
+  its first-scene stage11 001F83E8 after restoring six mesh registrations.
+  These CPU fixture scopes do not verify player-driven passage on Windows.
+- Original warp mode0 TEX0 uses display width from 003C1188, PSMCT24 and
+  TBP0 zero. The original 30B870 display copy supplies that surface after
+  the previous parity's complete OT. Exact205 projects the original fan
+  and samples that display copy. Only the authenticated mode0 attack path
+  and available display rows are supported.
+
+- Exact201 `room-transition-201-em00-sequence-shape-pair`, pin
+  `26fbbb3839478a21287900cb378264b16443a577dd945da1e387b6583b49624a`.
+  Windows New Game using the new original Triangle pair input presents 1777
+  R100 scenes, repeats the first enemy's two hits, and creates all four
+  original 58:2C emitters on the second enemy. The next strict boundary is
+  attached voice update 002CF058, tick1918. The process and scene capture
+  are pinned in `analysis/room-transition-201-triangle-pair-execution-private.json`.
+  This run does not verify the pair's defeat or R003 entry.
+- Exact202 `room-transition-202-em00-attack-audio`, pin
+  `4936b192f68817928ea2f12ccba141364cfc72964bd044046562b81fab02a9ab`.
+  Adds EM00 selector15 local/CORE sound handling, typed attached update
+  diagnostics, 58:2C/5A child updates and ground sprite draw, and original
+  State5 tutorial ID compaction plus armed actor/weapon retirement. Nine
+  focused checks and the Windows build passed. Actual Windows retry still
+  stopped at 002CF058 on tick1918. The new diagnostic identifies original
+  CORE 83 from stamp19 dep0203 concurrently with stamp20's effects. Current
+  source accepts that shared descriptor for dep0203 and adds a regression.
+  Mode0 projected type12 warp and type09 trails remain separate. The parallel actual-ISO CPU
+  State5 fixture has already reached phase5/op3 002CB340 after separately
+  restoring original global resource release, which is outside exact202.
+
+- Exact198 `room-transition-198-selector5-triangle-r003` Windows three-way
+  replay reached original EM00 close attack 00263E2C in all paths. New Game
+  with Triangle presented two actual skill29 hits from one input (HP74→62→50,
+  scenes1655/1658), stop tick1913. Square presented five hits (HP74→59),
+  stop tick1936. Title Load passed the EMA2 reload and actual bank10:90
+  audio, stop tick2219. The three private execution receipts are in E:
+  `analysis` under the `room-transition-198-` prefix. The `-fixture` sibling has an isolated fixture
+  peer-position restore and passed eight actual-ISO focused checks.
+- Exact199 `room-transition-199-r100-close-attack-r003-roster`, pin
+  `4949a01e0e0457f4422fc95211d1f4fcd85d4ab5c6b2c536d84da2e1e9d2092e`,
+  adds original close selection and EM00 15/4B motion, Triangle death
+  through actual RoomSave and Trans in a controlled ISO fixture, real
+  attached CORE B4, and the final 0382 R003 OMS kind. Broad native verification
+  passed 378 listed modules and 363 checks with 18 optional skips. Windows
+  Triangle and Load both pass 00263E2C and reach EM00 phase1 sequence FX
+  0014FB48 at ticks1914 and2220. The Triangle hit was captured in scene1655,
+  at `analysis/native-opening/199-triangle/god-hand-windows-triangle-hit-1655.png`.
+  Exact199 fixes the old Square
+  fixture expectation: actual class0 calls the same original SetSize with
+  0.7×1×1.2. Original class1 uses 1.8×1.5×1.8. Current source after exact199
+  includes the independently tested Triangle rank2/3 Take continuation.
+- Local checkpoint `7e124bc` contains exact200 `room-transition-200-em00-sequence-door-map`, pin
+  `f77a88bb367b825cb2684040d77f2edddff7950eb07978f6e1fd63c805975591`.
+  It admits EM00's ordinary pending sequence FX on the same 14FB48 owner,
+  selects EM00's actual 4B row 50C/510/514, and adds the recovered original
+  Door-map BGM branch and Triangle rank2/3 Take. It passes 378 listed modules,
+  363 checks and the Windows QA build. Actual Triangle and title runs pass
+  14FB48 and reach 00306528 at ticks1914/2220. ISO inspection pins the new
+  EM00 SEQ row to effect bank58 index2C. Worker follow-ups recover that
+  effect, the EM00 attack shape and the armed enemy's State5 cleanup.
+- In an isolated CPU startup-host fixture, original R100 EV01 retires and
+  original A38 accepts the authored Door after two fixture death stamps and
+  trigger placement. The recovered original Save-map BGM and Continue
+  advance to R100 State5 with next room0003. Unmodified State5 pauses on
+  the armed stamp18's typed weapon disposal at 1B79B0. Final playable verification
+  still requires real player defeat, normal traversal and native R003 entry.
+  The checked rebase tool can apply same-line worker recipes by unique token
+  replacement. It reproduced the manual R003 0339/0355 merges byte-for-byte
+  modulo line endings across four shared files.
+
+- Local checkpoint `8ee5ba4` contains exact196
+  `room-transition-196-far-timer-r003-flags`. Broad native verification
+  passed 374 modules and 359 checks (18 optional skips). On Windows both
+  New Game and title Load pass the original stamp8 far countdown.
+  New Game presents four attack starts and three hits (HP74→71→68→65),
+  then stops at CORE 8D attached voice 002CBF78 at tick1876. Title Load
+  stops at original heavy enemy timer 0031D000 at tick1959. No renderer,
+  GPU, postprocess or window errors in either run. The two pinned E:
+  `analysis/room-transition-196-*-execution-private.json` receipts preserve
+  the exact traces. Last public milestone remains `0257c6c`.
+- Exact197 `room-transition-197-heavy-timer-r003-objects` is frozen at
+  `c03108396b29b06343e0bc960609320bfcaceee072e61b579c5de92ca542c8f1`.
+  It adds the original heavy timer draw/optional attached cue, CORE 8D
+  for the EM03 source, six flags' original object Move, both 031A
+  initializers and ordinary Move, and the guarded player reentry reset.
+  Six actual-ISO checks passed on exact197 with only the 031A manifest
+  mode corrected (`both`) in the `-test-manifest` sibling. Serial Windows
+  replays are under G: verification with the original cohort name and its
+  `-title` sibling. Square presented the fourth hit (HP65→62, scene1737)
+  before 002130C8, and title stopped at the bank10:90 cue at 000035FC.
+  Both private execution receipts are under E: `analysis`. Triangle skill29's actual-ISO combat checks
+  show HP74→62, the original impact and bank0 hit sound. Its reaction
+  continuation is still independent. Both R003 0339 objects' Init and
+  ordinary Move passed separately in `r003-om339-init-move-over196-delta`;
+  integrate this with the 041C/031A branches after the current frozen run.
+
+- Exact195 `room-transition-195-selector4b-r003` passed 372 native modules,
+  358 tests, and the startup QA build. Windows New Game reproduced three
+  presented hits (HP74→71→68→65, frame1704 final hit). Stamp19's selector4B
+  advances, and New Game and Load both now stop at stamp8 far-state timer
+  002129C8, ticks1862 and1920 respectively. The next source restores the
+  original countdown and ordinary peer/door tail. Exact195 includes R003
+  module lifecycle and shared Event reserve. The current worktree adds six
+  real 041C flags and their original room wind update. R003 flag object Move
+  and full native entry are still under verification.
+- Exact194 first presented third hit in R100 at frame1704. Local screenshot
+  `analysis/native-opening/194-combat/god-hand-windows-third-hit-1704.png`
+  is the final composite from the verified process. Exact194 replay receipts
+  under `analysis/room-transition-194-*-execution-private.json` record both
+  stops (New Game 00234D30, Load 0020B394). Exact195 runs beyond both.
+
+- Exact194 `room-transition-194-room-exit-effects` includes the R100 exit
+  host bindings, Main5 scoped cleanup, bounded GPU dispatch, stamp19 58:2D
+  stop and stamp20 front reaction/death/audio. Actual-ISO focus passed eight
+  checks, including the original R100 action/door request, effect and object
+  cleanup, slot Save round trip, and stamp10's selector13 EM00 C0/C4 return.
+  The actual R100 exit goes through room3 before its deferred R105 destination.
+
+- Local checkpoint `e49f810` pins exact193 `room-transition-193-repeat-effect`.
+  Broad regression passed 370 modules and 355 tests, with 18 optional checks
+  skipped. Windows New Game presents three Square starts and two hits on
+  stamp19, HP74 to 71 to 68. The next hit commits HP65 in native state but
+  stops before its present at original emitter release 00302918, tick1844.
+  Title Load reaches tick1891 and 1566 presents, then stamp10 selector13
+  00218C48. Both execution cohorts have zero renderer/GPU/window errors.
+- Local working source recovers 58:2D release, stamp20 front reaction and
+  bounded death/retirement, R100's original SCA0 action → A38 → Door request,
+  and the original Main5 effect/actor/collision/jump cleanup slices. R100 A38
+  queues interstitial room3 and stores the deferred R105 pose in Event work.
+  The actual-ISO action fixture proves this request with original authored
+  geometry, native input, and ordinary Scenario/Door owners. It enters with
+  the player at the trigger, and does not prove a full Windows combat clear
+  or room transition. Exact193 R003 lifecycle is ready as a separate G overlay.
+- Bounded GPU dispatch passed model QA and an actual A/B title Load run.
+  Identical world/composite frame1634, all stdout/stderr bytes, 1883 ticks,
+  1558 presents, and 1236025 world packets. Measured 108.36 s vs 92.41 s in
+  this pair. Private `analysis/room-transition-192-bounded-dispatch-ab-private.json`
+  pins the evidence. It is integrated in the working source after the match.
+
+- Exact191 local Windows replay of R100 presented two original Square starts
+  with one confirmed hit, HP74 to 71. At tick1806 the second attack encountered
+  attached CORE0:CD voice preparation at 000035FC. Title Load reentered R100
+  and advanced to stamp20 selector6 at 00213710, tick1827. Both addresses have
+  focused actual-ISO fixes merged into local exact192 `room-transition-192-save-death`.
+  The same snapshot adds stamp19's no-drop physical retirement and a Door map
+  plus mode0 Save native host route. The device-free actual-ISO fixture opens
+  the queued R101 Door's map, writes and rereads slot0 and its icons, returns
+  to variant3 and confirms Continue through the same Door. It starts with a
+  queued request and an empty enemy manager. R101 is only the round-trip
+  fixture destination. Actual combat completion and arrival in R105 remain
+  to be verified in Windows.
+- Shared C-object cache verified Windows-to-native with all 370 original
+  objects reused byte-for-byte. The same actual-ISO `game-door` and
+  `game-enemy-first-damage` focus took 5.9 s warm and 50.2 s cold. Frozen
+  receipt `shared-object-cache-over191-delta` pins the separate source copies,
+  logs, and cold bypass. Exact192 passed eight native focused ISO checks plus
+  the Windows map chapter OT test. Its Windows startup QA build restored 350
+  objects and compiled 30. The active replay uses
+  `verification/room-transition-192-save-death` and its `-title` cohort;
+  the native receipt is in `verification/192-save-death-core` on G:.
+
+- Current public main is `0257c6cfbc1dbece8e73dc0fe8eca85f8a44988c`.
+  Exact190 native Windows restores isolated original-format slot3, runs player
+  model/motion reload and presents R100 scene1634. Title Load ends at tick1826
+  and 1501 presents, 1200273 world packets, no render/window errors, next
+  original 002147D0. A separate New Game replay of the same executable reaches
+  tick1810 and scene1669, first hit HP74 to 71 retained, next 0020B394.
+  Broad regression passes 370 modules and 351 tests (18 optional skipped).
+  E analysis `room-transition-190-milestone-private.json` ties source,
+  Windows build, test report, actual replay evidence and private screenshot.
+  Post-push priorities are continued combat and the real Door map to in-game
+  Save route. The latest combined local verification is tracked above.
+- Previous public main was `7a0d083b5245ebab7cb9fad492bb50774fdf8162`.
+  Exact177 Windows presents the first original player hit in scene1638,
+  HP74→71, and reaches 1643 presents. Native regression passed 365 modules
+  and 348 checks (18 skipped), plus 20544 and 20534 same-DLL RNG comparisons.
+  Private execution and aggregate verification are under `analysis` as
+  `room-transition-177-first-hit-*-private.json`. Post-push priorities are
+  live OM324 retirement in ordinary 0030F650 Trans, continued combat and
+  original room exit, plus the independent title Load UI and state handoff.
+- Historical public main `c3be7c41df8258c25e20422fa48df4766b17708f` used exact125
   bounded proof (355 modules, 349 checks, two WAV and two RNG comparisons),
   with index-only whitespace cleanup. English/Chinese README and public
   progress describe all ten EV01 cuts, original Event cleanup, and return to
@@ -555,6 +762,40 @@ history was compacted; private receipts and Git preserve old checkpoints.
   the three corrected motion retry fixtures and reproduces the same
   Windows result. `analysis/room-transition-177-first-hit-execution-private.json`
   pins the two adjacent frames, original Take and exact HP subtraction.
+- Exact179 ports OM324's live 00198CE0 mode3 call after the original
+  secondary-registry detach in 0030F650. Actual Windows now passes it and
+  reaches tick1806, 1665 presents and 1364977 world packets, all renderer/GPU/
+  postprocess/window counters zero. The original next call is 00262AA8,
+  stamp20 dep0200 handle254, 00/00 phase1, distance²41AC99F0,
+  flags16D0=04000402/16D4=08000000. The exact177 first-hit proof still holds
+  in exact179. `analysis/room-transition-179-om324-retire-execution-private.json`
+  pins the run.
+- Exact181 verifies stamp20 dep0200's original 00262AA8 near decision and
+  still shows the same hit at scene1638. Windows reaches tick1808 and 1667
+  presents, with 1368857 world packets and all render/window error counters
+  zero. It stops at the first enemy's attached voice call 002CBF78, stamp19
+  dep0203, handle253, state00/15. The local execution proof is
+  `analysis/room-transition-181-stamp20-ai-execution-private.json`.
+  Exact184 adds the actual ISO EM03 4/5/6/7 PCM and attached request
+  diagnostics. Windows passes the earlier voice stop and reaches tick1809
+  and 1668 presents, still preserving the verified first hit. Next stop is
+  the now-armed stamp20 dep0200 decision at 00262AA8, flags04200402 and
+  distance² bits41B04A88. The local proof is
+  `analysis/room-transition-184-audio-composed-execution-private.json`.
+  Exact187 combines the actual ISO rank1 2630F0 facing/attack-radius gate
+  with the independently tested regular EMS manager and mode3 retirement.
+  Windows build and four focused combat/Trans/room-death/Event Clear checks
+  pass. Exact187 actual reaches 00291010 at the same tick1809/present1668 on
+  stamp20. Its execution proof is
+  `analysis/room-transition-187-active-and-retirement-execution-private.json`.
+  Late EM03 CORE 85/87/A0 and player Take/fall/get-up are verified in separate
+  actual ISO fixtures. The cumulative exact187 overlay is
+  `r100-player-hurt-core-audio-over187-delta/receipt.json`, SHA256
+  6ae8a3fd2319acfb2db10f937bc7317beb332927b09dcabbccf3eadec0d8bca3.
+  Peer-query source and tests from exact187 are now integrated with those
+  verified Take/fall/get-up and audio paths. The next unified replay can
+  exercise them using the same verified Windows build with a fresh
+  gameplay scratch cohort. First 0202 lethal Take remains active work.
 - Exact169 passes broad native verification for the complete selected-file
   load prefix. Exact170 builds the ordinary Windows executable with Heat
   and next-room restore. Exact172 directly exercises the selected-file
@@ -570,17 +811,66 @@ history was compacted; private receipts and Git preserve old checkpoints.
   its boot header, reaches R020 and chooses Load (mode3 phase2 sub20), then
   stops on original bank2 program15 at 002CB8A0. The save is unchanged.
   Exact178 combines that original R020 sound with slot scan, header and
-  first save list recovery. Native and Windows tests for that composition
-  are in progress. Independent selected I/O, real confirm/countdown,
-  successful fade and exit are verified in G fixtures. The title has
-  active BGM when applying saved audio mode; native active output handling
-  and loaded-room handoff remain open.
+  first save list recovery. Five focused tests and the Windows build pass.
+  Actual Windows reaches McLoad mode1/fade phase2 at tick359 with the same
+  isolated slot3. The first Load UI render stops at 002B1300, an original
+  inline controller icon drawing from the global language texture. The
+  stop precedes the card scan and no new MC frame is presented.
+- Exact182 adds original inline controller icons, selected 0xB400 I/O,
+  checksum and typed restore, Load-specific fade and task exit, and the
+  original loaded-room Door handoff. The five focused card/door checks pass.
+  Exact183 actual Windows reads the isolated slot3 header and presents 59 MC
+  frames overall. At tick378 it stops preparing the first save list frame at
+  original 002B0028 on message 2006 (source57). The record retains its original
+  SHA256. The local execution proof is
+  `analysis/room-transition-183-title-select-qa-execution-private.json`.
+  Exact185 restores B602 palette selection/B301 reset and presents the real
+  title Load list, 66 MC presents at tick385. A test save with all-zero RTC
+  selects empty slot0 by original ordering, then stops on a menu cue.
+  `analysis/room-transition-185-title-list-execution-private.json` pins it.
+  The active title event0 stereo restore is in the host and passes original
+  ISO ADX decoding through the recording stream. Exact186 adds phase7 and
+  verifies no-slot/corrupt/cancel routes, fade/card End and cancel without a
+  Door request in CPU fixtures. Its real RTC fixture selects slot3, and
+  Windows reaches the nonempty row's original item49 separator at 002AAEF0.
+  Exact188 adds the actual ISO 128×128 TIM2 PSMT4 to the ordinary sprite path
+  using the existing decoder. Windows and four focused native checks passed.
+  Actual Windows selects slot3, reads and verifies the full B400 record,
+  applies the typed state and reaches Load exit phase4 at tick509. It
+  presents 190 MC frames, all renderer/window errors zero, room0020 and
+  restored next room0100. The requested capture range stopped QA early at
+  the first resumed non-world title frame. Exact189 uses a single later
+  capture and reaches Room0100/Main state3 at tick521, Load phase5, 218
+  total scene presents and zero render/window errors. The next original
+  call is 0030D8E0 before any R100 world packets. Its execution proof is
+  `analysis/room-transition-189-title-world-execution-private.json`.
+  The supplied synthetic slot3 is byte-identical before and after. Original
+  44AD90 selects the same eight costume model/motion pairs as boot.
+  The case3 adapter now uses that shared loader and publishes CoreSave
+  AE/AF after both reads (001FC100). Actual ISO tests confirm an in-place
+  costume2 reload with both original sleeps, one DVD token and no new
+  heap allocation. Its Windows replay is pending.
+  `tools/prepare-title-load-qa.py` creates a fresh synthetic QA profile with
+  valid date and checksum, refusing to replace an existing profile.
+  In-game Save mode0 G fixture now reaches original Control 3F78 after
+  slot2, the five-frame release gate, McFile.dat, ID DispInit(0) and fades.
+  Its receipt is `mc-save-entry-over185-delta/receipt.json`, SHA256
+  a9b1a7ccf21897c29950f90ee39722d4388affd867121e36fda05a48af7ff751.
 - R100 teardown fixture now retires 231 actual actors, including all 69
   cold OMS entries and the four runtime tutorial actors, with original
   deferred holder unload. An independent native fixture verifies the first
-  enemy death mark for weaponless 0202 and 02A2. Armed 0202 stops at
-  original 001B79B0 after its owned HitAreas are marked. Original enemy
-  destructors and the production room-transition integration remain open.
+  enemy death and full native retirement for weaponless 0202 and 02A2. The
+  actual ISO fixtures verify original manager unlink, RoomSave HP write,
+  mode3 sequence release and storage compaction. The G-only production
+  adapter for original Event Clear 296818 to 2908C0 and 290770 passed strict
+  compilation and regression. Its frozen receipt is
+  `r100-enemy-wiring-over181-delta/receipt.json`, SHA256
+  e8f432c4869915c91e757698c9076d66d63b6ee11addbae3fb3007bcb71dd1b7.
+  Integrated in E and verified in the exact187 focused composition.
+  Full active Event Clear, armed actors and a live room transition remain
+  open. A separate actual ISO 02A2 death-mode proof runs its original
+  animation and fade through 290770 to physical retirement, with audio
+  recorded in the fixture. This route does not cover the first 0202 enemy.
 - The original room exit dispatcher now has actual combined CPU proofs
   through all five OM303, ten OM304 and eight OM305/307 after 156 SCP, PL00,
   PL01 and three OM300. G receipt `r100-om305-307-retire-over155-delta`

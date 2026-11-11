@@ -123,8 +123,8 @@ struct gh_game_services {
   gh_event_accessory_move move;
   gh_shadow_call shadow;
   gh_event_pendulum_call pendulum;
- } event_actor_move[10];
- gh_actor_render_call event_actor_render[10];
+ } event_actor_move[GH_EVENT_ACTOR_ROSTER_CAPACITY + 1];
+ gh_actor_render_call event_actor_render[GH_EVENT_ACTOR_ROSTER_CAPACITY + 1];
  gh_esp14_provider model_effect;
  gh_services_esp14_slot *esp14_slots[1024], *esp14_retired;
  size_t esp14_limit;
@@ -179,6 +179,13 @@ static gh_game_services_status finalize_room_lifetime(gh_game_services*s){
  for(unsigned i=0;i<16;i++)if(s->scenario_records[i].running)return fail(s,GH_SERVICES_BUSY,0x2d59f0,0);
  for(size_t i=0;i<s->pools.object_slots;i++)if(s->pools.objects[i].object)return fail(s,GH_SERVICES_FRONTIER,0x30f8b0,0);
  if(s->meshes.descriptors)return fail(s,GH_SERVICES_FRONTIER,0x30f8b0,0);
+ gh_scene_placement_status oms=gh_om_factory_release_retired(&s->om_factory);
+ if(oms)return fail(s,GH_SERVICES_BUSY,0x30f8b0,oms);
+ free(s->om_frames);s->om_frames=NULL;s->om_frames_capacity=0;
+ free(s->om_renders);s->om_renders=NULL;s->om_renders_capacity=0;
+ memset(s->tutorial_create,0,sizeof(s->tutorial_create));
+ memset(s->tutorial_objects,0,sizeof(s->tutorial_objects));
+ gh_om_scene_construct_002a7308(&s->om_placements);
  if(s->r003.work.pointer){
   gh_r003_status status=gh_r003_event_release(&s->r003);
   if(status)return fail(s,GH_SERVICES_BUSY,0x2a94f0,status);
@@ -206,7 +213,6 @@ static gh_game_services_status finalize_room_lifetime(gh_game_services*s){
  for(unsigned i=0;i<8;i++)if(in_pack(s->scene_at.jump_slots[i].bytes,base,bytes)){s->scene_at.jump_slots[i]=(gh_at_unit_view){0};changed=1;}
  if(changed)s->scene_at.ready=0;
  detach_bundle(&s->em_placements.file,base,bytes);detach_bundle(&s->em_placements.source_entries,base,bytes);
- detach_bundle(&s->om_placements.file,base,bytes);detach_bundle(&s->om_placements.entries,base,bytes);
  if(in_pack(s->acd.records,base,bytes)){s->acd.records=NULL;s->acd.record_bytes=0;}
  s->em_resources=(gh_em_resource_prefix){0};
  s->em_resource_bindings=(gh_em_resource_bindings){0};
@@ -851,7 +857,7 @@ static gh_scene_status room_r003_move(void *context,uint32_t *frontier)
 {
  gh_game_services *s=context;
  const gh_r003_status status=gh_r003_move_flags_000003d8(&s->r003,&s->om_factory,
-  &s->b.init->random,s->b.frame_random,frontier);
+  &s->b.init->random,s->b.frame_random,room_r100_om_view,s,frontier);
  if(!status)return GH_SCENE_OK;
  s->frontier=*frontier?*frontier:s->module.move_offset;
  s->frontier_module_code=s->frontier<0x100000?3:0;
@@ -1067,7 +1073,6 @@ gh_game_services_status gh_game_services_create(const gh_game_services_bindings*
  if(b->camera_envelope)(void)gh_game_camera_envelope_bind_model(b->camera_envelope,&s->player_model);
  s->object_resources=(gh_object_resource_bindings){.dvd=b->assets->dvd,.heap=b->assets->heap,.threads=b->threads,
   .sound_check=b->enemy_banks?gh_enemy_se_object_sound_check:NULL,.sound_context=b->enemy_banks};
- s->meshes.factory_serial=b->factory_serial;
  s->old_context=b->stage->context;s->old_children=b->stage->init_children_15fd98;s->old_cockpit=b->stage->init_cockpit_140c88;
  oe=gh_game_objects_create(&b->stage->global_slots,0,&s->objects);if(oe)goto create_failure;
  oe=gh_game_objects_create(&b->stage->room_slots,1,&s->room_objects);if(oe)goto create_failure;
@@ -1246,6 +1251,9 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
   gh_bundle bundle;if(gh_game_room_pack_bundle(&s->room_pack,&bundle))return fail(s,GH_SERVICES_ASSET,0x31ccf0,0);gh_scene_table_status te;
   if(s->case3_stage==12){te=gh_scene_environment_002a71b0(&s->scene_tables,work,&bundle);if(te)return fail(s,te==GH_TABLE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->scene_tables.frontier,te);s->case3_stage=13;}
   if(s->case3_stage==13){
+   /* The previous room retired its mesh companion. The original factory
+    * serial is still the same global byte for every new room. */
+   s->meshes.factory_serial=s->b.factory_serial;
    if(s->b.stage->textures&&s->b.boot_elf&&s->b.boot_elf_bytes){gh_scene_mesh_construction_bindings mb={s->b.stage->textures,&s->world_light,s->b.boot_elf,s->b.boot_elf_bytes};
     gh_scene_mesh_status bound=gh_scene_meshes_bind_construction(&s->meshes,&mb);if(bound)return fail(s,GH_SERVICES_ASSET,0x31d1b0,bound);}
    gh_scene_mesh_status me=gh_scene_meshes_construct_0031d1b0(&s->meshes,&s->scene_tables,work,&bundle,&s->pools,s->b.assets->heap);

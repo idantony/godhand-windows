@@ -21,5 +21,16 @@ int main(int argc,char**argv){
  CHECK(gh_display_state_from_elf(&s,elf,51)==GH_DISPLAY_BOUNDS);free(elf);
  const uint8_t top[]={255,5,157},next[]={255,255,9};
  CHECK(gh_display_copy_base0_0030b870(top,next)==0x5041be);
+ enum {stride=512*4,rows=448,bytes=stride*rows};
+ static uint8_t source[bytes],copy[bytes];
+ memcpy(source,top,sizeof(top));
+ memcpy(source+stride,next,sizeof(next));
+ source[2*stride]=source[(rows-2)*stride]=128;
+ source[(rows-1)*stride]=200;
+ CHECK(gh_display_copy_base0_surface_0030b870(source,bytes,copy,bytes-1)==GH_DISPLAY_BOUNDS);
+ CHECK(!gh_display_copy_base0_surface_0030b870(source,bytes,copy,bytes));
+ CHECK(!memcmp(copy,(const uint8_t[]){190,65,80,0},4));
+ CHECK(!memcmp(copy+stride,(const uint8_t[]){222,128,43,0},4));
+ CHECK(copy[4]==0&&copy[(rows-1)*stride]==132&&copy[bytes-1]==0);
  puts("PASS actual ELF display scalars/BSS plus conditional2A48A8 writes, both font counters and preserved caller FEnv");return 0;
 }

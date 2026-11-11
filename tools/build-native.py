@@ -196,6 +196,7 @@ def main():
                ("game_esp_update", "src/core/game_esp_update.c"),
                ("game_effects_trans", "src/core/game_effects_trans.c"),
                ("game_effect_sprite", "src/core/game_effect_sprite.c"),
+               ("game_esp_trail_draw", "src/core/game_esp_trail_draw.c"),
                ("effect_postprocess_reference", "src/platform/effect_postprocess_reference.c"),
                ("game_actor_model_trans", "src/core/game_actor_model_trans.c"),
                ("game_actor_shadow_draw", "src/core/game_actor_shadow_draw.c"),

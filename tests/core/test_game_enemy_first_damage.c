@@ -1,3 +1,6 @@
+#include "game_esp14.h"
+#include "game_esp_trail_draw.h"
+#include "game_effects_trans.h"
 #include "game_player_square_frame.h"
 #include "game_player_idle_input.h"
 #include "game_actor_motion_ik.h"
@@ -230,7 +233,7 @@ static int first_waiting_opacity_draw(const gh_enemy_ems_live *waiting,const gh_
     printf("PASS actual R100 stamp8 opacity ordering and resume, %u secondary nodes, %u batches\n",
         fixture.secondary,secondary_packets);
     gh_actor_world_queue_destroy(fixture.queue);
-    gh_stage_textures_destroy(textures);
+
     memcpy(root+0x250,&old_flags,4);memcpy(root+0x24c,&old_alpha,4);memcpy(root+0x2c0,&old_bank,4);
     return 0;
 }
@@ -1276,6 +1279,14 @@ static gh_actor_motion_status triangle_impact_sound(void *context,const gh_motio
     return GH_ACTOR_MOTION_OK;
 }
 
+static gh_effect_status capture_knockdown(void *ctx,const gh_effect_trans_packet *p){
+    unsigned *n=ctx;
+    if(*n==15||*n==16){
+        if(p->original_callee!=0x2edf70||p->quad_count!=5)return GH_EFFECT_ARGUMENT;
+    }else if(p->original_callee!=0x2fec38||p->quad_count!=1)return GH_EFFECT_ARGUMENT;
+    ++*n;
+    return GH_EFFECT_OK;
+}
 static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *enemy,
     gh_game_title_player *player, gh_actor_model *model, const uint8_t *pl, size_t pl_size,
     const uint8_t *elf, size_t elf_size, gh_game_player_init_tail *tail, camera_target_fixture *resolver,
@@ -1337,6 +1348,8 @@ static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *ene
     const gh_title_player_view *source;
     CHECK(!gh_hitarea_object_last_hit_actor(body,&source)&&source==&player->view&&
           body->bytes[0x46]==0x12&&word(body->bytes+0x4c)==12);
+    const int active_fx=mode==14||mode==15;
+    if(active_fx)mode-=10;
     const int lethal=mode==4||mode==5;
     if(mode>=6){
         const unsigned wanted=mode>=10?10u:mode>=8?0x70u:0;
@@ -1423,6 +1436,15 @@ static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *ene
         motion->b.context=(void *)effect;
         motion->b.sound=triangle_impact_sound;
         motion->b.sound_context=enemy;
+        gh_effects_frame_globals fx_globals={0};
+        gh_game_scene_aux fx_profile={0};
+        gh_game_effects_frame fx_frame={0};
+        uint32_t fx_clock=0;
+        CHECK(!gh_effects_frame_globals_from_elf(&fx_globals,elf,elf_size));
+        CHECK(!gh_effect_create_bind_trail_pools(effect->storage.effects,b->entry.pools));
+        const gh_effects_frame_bindings fx={.storage=effect->storage,.work=effect->work,.init=b->entry.init,
+            .current_player=&player->view,.globals=&fx_globals,.profile=&fx_profile,.clock=stamp19_effect_clock,
+            .clock_context=&fx_clock,.atan_coeff=effect->atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE,.actors=b->actors};
         unsigned frames=0;
         while(frames<160&&(word(e+0x2f4)&0xffff)!=0x0202){
             CHECK(!gh_collision_pairs_step_002b9d58(b->shapes.pairs,GH_STATIC_BINARY32_REFERENCE,&pc));
@@ -1435,6 +1457,77 @@ static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *ene
             if(tick)fprintf(stderr,"lethal tick %u stamp%u frontier %08x stage%u mode%08x motion%zu frame%08x\n",
                 frames+1,e[0x640],next.frontier,next.stage,word(e+0x2f4),motion->motion.offset,word(e+0x430));
             CHECK(!tick);
+            if(active_fx){
+                const gh_effect_status fx_status=gh_game_effects_frame_update_0030f228(&fx_frame,&fx);
+                if(fx_status)fprintf(stderr,"lethal effects Update %u status%d at %08x\n",frames+1,fx_status,fx_frame.frontier);
+                CHECK(!fx_status);
+                if(frames==4){
+                    gh_display_state display={0};
+                    CHECK(!gh_display_state_from_elf(&display,elf,elf_size)&&
+                          !gh_display_static_initialize_002a48a8(&display,1,0xffff));
+                    const gh_camera_projection_display projection={&display.screen_width,&display.screen_height_bits,
+                        &display.pixel_aspect_bits,&display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+                    float target[3],eye[3];
+                    memcpy(target,enemy->entry.object.view.alias_f0,12);target[1]+=1;
+                    eye[0]=target[0]+2;eye[1]=target[1]+2;eye[2]=target[2]+7;
+                    memcpy(camera.fields+0x200,target,12);memcpy(camera.fields+0x210,eye,12);
+                    CHECK(!gh_game_camera_project_00138740(&camera,&projection,&pc));
+                    gh_stage_textures *textures=NULL;
+                    CHECK(!gh_stage_textures_create(&textures));
+                    unsigned packets=0;
+                    const gh_effects_trans_bindings draw={.emit=capture_knockdown,.context=&packets,.storage=effect->storage,.work=effect->work,.globals=&fx_globals,
+                       .display=&display,.policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE,
+                       .camera=&camera,.init=b->entry.init,.textures=textures};
+                    unsigned trails=0,ground=0;
+                    for(unsigned slot=0;slot<1024;slot++){
+                        gh_effect_esp_view v;
+                        if(!gh_effect_create_esp_at(effect->storage.effects,slot,&v)&&v.type==0x1a&&
+                           gh_effect_knockdown_esp_is_bound(effect->storage.effects,&v)){
+                            CHECK(v.initialized&&v.actor->bytes==e&&v.parent_emitter==-1&&word(v.payload+0x228)>0);
+                            const gh_effect_sprite_camera sprite={&camera,b->entry.init,&display,
+                                GH_STATIC_BINARY32_REFERENCE,GH_FRAME_CHOP_REFERENCE};
+                            gh_effect_sprite_projection projected={0};
+                            float alpha=0;
+                            CHECK(!gh_effect_sprite_project_002fe0d8(effect->storage.effects,slot,v.serial,
+                                &sprite,&projected,&pc)&&projected.visible);
+                            CHECK(!gh_effect_actor_sprite_alpha_002fec38(effect->storage.effects,&v,128,1,&alpha,&pc)
+                                  &&alpha==128);
+                            ground++;
+                        }
+                        if(!gh_effect_create_esp_at(effect->storage.effects,slot,&v)&&
+                           gh_effect_esp_trail_is_bound(effect->storage.effects,&v)&&v.record.bytes[0xbe]==25){
+                            const float *history=NULL;unsigned count=0;
+                            CHECK(v.initialized&&v.actor->bytes==e&&
+                                !gh_effect_create_esp_trail_view(effect->storage.effects,slot,v.serial,&history,&count)&&
+                                count==6&&history[3]==1);
+                            gh_effect_trans_packet packet={0};
+                            gh_effect_status rendered=gh_esp09_draw_002ec398(&draw,slot,&v,&packet,&pc);
+                            fprintf(stderr,"knockdown type09 %u stride%u draw status%d pc%08x count%u\n",
+                                e[0x640],word(v.payload+0x2e4),rendered,pc,packet.quad_count);
+                            CHECK(!rendered&&!pc&&packet.original_callee==0x2edf70&&packet.quad_count==5&&
+                                  packet.material&&packet.material->source==v.texture.bytes&&
+                                  packet.material->width==64&&packet.material->height==64&&
+                                  packet.material->psm==19&&packet.tex0==UINT64_C(0x2000000599308000));
+                            /* Independent physical CLUT check (swap the palette's bits 3/4).
+                             * This compares the actual uploaded bytes, including raw GS alpha. */
+                            const uint8_t *rgba=packet.material->rgba_gs;
+                            for(unsigned pixel=0;pixel<4096;pixel++){
+                                const unsigned src=v.texture.bytes[0x40+pixel];
+                                const unsigned index=(src&0xe7)|((src&8)<<1)|((src&16)>>1);
+                                CHECK(!memcmp(rgba+pixel*4,v.texture.bytes+0x1040+index*4,4));
+                            }
+                            trails++;
+                        }
+                    }
+                    CHECK(trails==1&&ground==2);
+                    gh_game_effects_trans trans={0};
+                    gh_effect_status result=gh_game_effects_trans_002fb310(&trans,&draw);
+                    CHECK(!result&&trans.complete&&packets==28);
+                    gh_stage_textures_destroy(textures);
+                    printf("PASS actual stamp%u 58:2F has %u original type09 trails and native type1A Init/Move through Update5\n",e[0x640],trails);
+
+                }
+            }
             ++frames;
         }
         motion->b.effect=old_effect;
@@ -1480,6 +1573,7 @@ static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *ene
                 fade,e[0x640],tick,next.frontier,next.death_fade_phase,removal.remove.stage,next.death_item);
             CHECK(!tick&&next.original_returned);
             if(!fade)CHECK(!memcmp(&expected,&b->entry.init->random,sizeof(expected)));
+            if(active_fx)CHECK(!gh_game_effects_frame_update_0030f228(&fx_frame,&fx));
         }
         CHECK(removal.removed==1&&word(b->entry.init->enemies+0x508)==count-1&&save_row[0x14]==1);
         printf("PASS lethal Triangle stamp%u actual clips %u + fade %u, RoomSave and 290770\n",e[0x640],frames,fade);
@@ -1487,6 +1581,12 @@ static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *ene
         motion->b.context=old_effect_context;
         gh_se_voice_destroy(voices);
         gh_audio_registry_destroy(registry);
+        if(active_fx){
+            int borrowed=1;
+            CHECK(!gh_effect_create_actor_has_live_refs(effect->storage.effects,&enemy->entry.object.view,&borrowed)&&!borrowed);
+            printf("PASS integrated lethal stamp%u effect lifetime: %u+%u updates, 28 Draw packets at Update5, actor refs cleared\n",e[0x640],frames,fade);
+            return 0;
+        }
         CHECK(!retire_stamp19_trans(resolver->enemies,live,handle,effect,&player->view,
             b->entry.init,b->actors,elf,elf_size,b->entry.pools,b->default_heap));
         return 0;
@@ -1518,6 +1618,156 @@ static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *ene
     return 0;
 }
 #undef VERIFY
+
+static gh_effect_status capture_em00_ground_sprite(void *context,const gh_effect_trans_packet *packet)
+{
+    unsigned *seen=context;
+    if(packet->kind!=GH_EFFECT_PASS_SPRITE||!packet->material||packet->quad_count!=1||
+       packet->quads[0].vertex_count!=4||packet->source!=GH_EFFECT_SURFACE_MATERIAL)
+        return GH_EFFECT_UNSUPPORTED;
+    if(packet->original_callee!=0x2fec38||packet->prim!=0x54||packet->order.bank!=2||
+       packet->quads[0].vertices[0].q<=0||
+       packet->quads[0].vertices[0].x12_4==packet->quads[0].vertices[3].x12_4)
+        return GH_EFFECT_UNSUPPORTED;
+    ++*seen;
+    return GH_EFFECT_OK;
+}
+
+static int em00_attack_effect(gh_enemy_actor *enemy,gh_game_title_player *player,
+    const gh_enemy_actor_bindings *b,const gh_effect_create_bindings *effects,
+    const void *elf,size_t elf_size,int rank5)
+{
+    uint8_t *actor=enemy->entry.object.view.bytes;
+    CHECK(actor[0x640]==20&&word(actor+0x564)==0x200);
+    const unsigned effect_index=rank5?0x5a:0x2c;
+    const unsigned sequence=rank5?0x19a440:0x19a380;
+    if(rank5)memcpy(b->entry.save.bytes+0x1c,&(uint16_t){4000},2);
+    float target[3],origin[3],yaw;
+    memcpy(origin,enemy->entry.object.view.alias_f0,12);
+    memcpy(target,origin,12);
+    target[2]+=1.775f; /* Original observed row144 XZ² interval. */
+    memcpy(player->view.alias_f0,target,12);
+    memcpy(player->view.bytes+0x630,target,12);
+    uint32_t pc;
+    CHECK(!gh_player_target_angle_002da038(elf,elf_size,origin,target,0,3.1415927f,&yaw,&pc));
+    memcpy(actor+0x104,&yaw,4);
+    memcpy(actor+0x2f4,&(uint32_t){0x1500},4); /* Original Windows selected state. */
+    gh_game_pl_camera camera={0};
+    CHECK(!gh_game_camera_construct_pl_00139bc8(&camera,&b->entry.init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+    memcpy(camera.fields+0x200,origin,12);
+    memcpy(camera.fields+0x210,target,12);
+    const gh_object_opacity_environment opacity={b->entry.init,&camera,&player->view,1};
+    enemy->motion.motion.b.sound=record_stamp19_attack_sound;
+    enemy->motion.motion.b.sound_context=enemy;
+    unsigned count=0;
+    for(unsigned frame=0;frame<4&&!count;frame++){
+        gh_enemy202_move move={0};
+        CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+        CHECK(!gh_enemy202_move_bind_impact(&move,effects));
+        const gh_actor_motion_status status=gh_enemy202_move_00208be0(&move,enemy,&player->view,elf,elf_size);
+        if(status)fprintf(stderr,"EM00 effect frame%u status%d frontier %08x stage%u FX%u\n",
+            frame,status,move.frontier,move.stage,word(actor+0x3ac)>>16);
+        CHECK(!status&&move.original_returned);
+        gh_actor_motion *motion=&enemy->motion.motion;
+        fprintf(stderr,"EM00 observed row%x motion%zx seq%zx distance%08x mode%08x cooldown%08x\n",move.reaction_resource_offset,motion->motion.offset,motion->sequence_offset,word(actor+0x618),word(actor+0x2f4),word(actor+0x54c));
+        CHECK(motion->motion.offset==0x198c00&&motion->sequence_offset==sequence);
+        if(word(actor+0x3ac)>>16){
+            CHECK(move.death_effect_create.complete&&move.death_effect_create.row==4&&
+                 move.death_effect_create.request.index==effect_index);
+            const unsigned parts[]={10,0,25,21};
+            for(unsigned slot=0;slot<256;slot++){
+                gh_effect_emitter_view v;
+                if(gh_effect_create_emitter_at(effects->storage.effects,slot,&v)||word(v.payload+0x18c)!=((effect_index<<16)|0x58u))
+                    continue;
+                CHECK(count<4&&v.initialized&&v.model==motion->b.model&&v.part==v.model->parts+parts[count]&&
+                    v.actor->bytes==actor&&v.selector==v.actor&&!word(v.payload+0x110)&&
+                    word(v.payload+0x1e0)==word(actor+0x114));
+                count++;
+            }
+        }
+    }
+    CHECK(count==4);
+    gh_effects_frame_globals globals={0};
+    gh_game_scene_aux profile={0};
+    gh_game_effects_frame update={0};
+    uint32_t clock=0;
+    CHECK(!gh_effects_frame_globals_from_elf(&globals,elf,elf_size));
+    const gh_effects_frame_bindings fx={.storage=effects->storage,.work=effects->work,.init=b->entry.init,
+        .current_player=&player->view,.globals=&globals,.profile=&profile,.clock=stamp19_effect_clock,
+        .clock_context=&clock,.atan_coeff=effects->atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE,.actors=b->actors};
+    gh_display_state display={0};
+    CHECK(!gh_display_state_from_elf(&display,elf,elf_size)&&
+        !gh_display_static_initialize_002a48a8(&display,1,0xffff));
+    const gh_camera_projection_display projection={&display.screen_width,&display.screen_height_bits,
+        &display.pixel_aspect_bits,&display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+    origin[1]+=1;float eye[3]={origin[0]+2,origin[1]+2,origin[2]+7};
+    memcpy(camera.fields+0x200,origin,12);memcpy(camera.fields+0x210,eye,12);
+    CHECK(!gh_game_camera_project_00138740(&camera,&projection,&pc));
+    gh_stage_textures *textures=NULL;
+    CHECK(!gh_stage_textures_create(&textures));
+    unsigned drawn=0;
+    const gh_effects_trans_bindings draw={.storage=effects->storage,.work=effects->work,.globals=&globals,
+        .display=&display,.policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE,
+        .emit=capture_em00_ground_sprite,.context=&drawn,.camera=&camera,.init=b->entry.init,.textures=textures};
+    CHECK(!gh_effect_create_bind_trail_pools(effects->storage.effects,b->entry.pools));
+    const unsigned boundary_frame=(rank5?12:16)+1;
+    for(unsigned frame=1;frame<=boundary_frame;frame++){
+        const gh_effect_status status=gh_game_effects_frame_update_0030f228(&update,&fx);
+        if(frame<boundary_frame)CHECK(!status&&globals.emitter_count_3c3bc0==4);
+        if(!rank5&&frame>=12&&frame<=14){
+            gh_game_effects_trans trans={0};
+            const gh_effect_status rendered=gh_game_effects_trans_002fb310(&trans,&draw);
+            fprintf(stderr,"CPU ground Draw at frame%u status%d frontier%08x packet%u\n",
+                frame,rendered,trans.frontier,drawn);
+            CHECK(!rendered&&trans.complete);
+        }
+        if(frame==boundary_frame){fprintf(stderr,"TRAIL status %d frontier %08x\n",status,update.frontier);CHECK(!status);}
+    }
+    CHECK(drawn==(rank5?0u:4u));
+
+    unsigned warp=0,ground=0,trail=0,nondegenerate=0;
+    for(unsigned slot=0;slot<1024;slot++){
+        gh_effect_esp_view child;
+        if(gh_effect_create_esp_at(effects->storage.effects,slot,&child)||
+           !gh_effect_em00_attack_esp_is_bound(effects->storage.effects,&child))continue;
+        CHECK(child.initialized&&child.actor->bytes==actor&&child.selector==child.actor);
+        if(child.type==0x12)warp++;
+        else if(child.type==9){
+            const float *pos=NULL;unsigned count=0;
+            CHECK(!gh_effect_create_esp_trail_view(effects->storage.effects,slot,child.serial,&pos,&count)&&
+                count==20&&pos[3]==1&&pos[79]==1&&child.parent_emitter>=0&&word(child.payload+0x2e4)==4);
+            fprintf(stderr,"trail %08x %08x flags %08x widths %08x %08x bias %08x opacity %u %u mode %u\n",word(child.payload+0x2e0),word(child.payload+0x2e4),word(child.payload+0x11c),word(child.payload+0x20),word(child.payload+0x24),word(child.payload+0x254),child.payload[0x24c],child.payload[0x24d],child.payload[0x247]); gh_effect_trans_packet pkt; uint32_t drawpc=0; gh_effect_status drawstatus=gh_esp09_draw_002ec398(&draw,slot,&child,&pkt,&drawpc); CHECK(!drawstatus&&!drawpc&&pkt.original_callee==0x2edf70&&pkt.quad_count==19&&
+                pkt.order.bank==2&&pkt.quads[0].vertex_count==6&&pkt.prim==0x54&&
+                pkt.alpha==UINT64_C(0x8000000048)&&pkt.test==0x5000d&&pkt.zbuf==UINT64_C(0x10a0000f8)&&
+                !pkt.frame_mask&&pkt.material&&pkt.material->source==child.texture.bytes);
+            CHECK(pkt.quads[0].vertices[0].t==0&&pkt.quads[18].vertices[5].t==-1);
+            for(unsigned segment=0;segment<pkt.quad_count;segment++){
+                const gh_effect_trans_quad *q=pkt.quads+segment;
+                for(unsigned i=0;i<q->vertex_count;i++){
+                    CHECK(q->vertices[i].q==1&&q->vertices[i].z>0&&q->vertices[i].z<=65535);
+                }
+                for(unsigned i=0;i+2<q->vertex_count;i+=3){
+                    const gh_effect_trans_vertex *v=q->vertices+i;
+                    const int64_t ax=v[1].x12_4-v[0].x12_4,ay=v[1].y12_4-v[0].y12_4;
+                    const int64_t bx=v[2].x12_4-v[0].x12_4,by=v[2].y12_4-v[0].y12_4;
+                    if(ax*by-ay*bx)nondegenerate++;
+                }
+            }
+            trail++;
+        }else{CHECK(child.type==0x1a&&child.parent_emitter==-1&&word(child.payload+0x228)>0);ground++;}
+    }
+    gh_stage_textures_destroy(textures);
+    CHECK(trail==6&&nondegenerate>0&&warp>0&&(rank5||ground>=2));
+    printf("PASS 58:%02X original cubic type09 Draw: %u packets, 19 strips each, %u nondegenerate triangles\n",
+        effect_index,trail,nondegenerate);
+    printf("PASS native 58:%02X Effects Update through frame%u: %u type09 histories, %u warp, %u ground\n",
+        effect_index,boundary_frame,trail,warp,ground);
+    enemy->motion.motion.b.sound=NULL;
+    enemy->motion.motion.b.sound_context=NULL;
+    printf("PASS actual R100 stamp20 21A538 row144 SEQ%06X -> 14FB48 bank58:%02X, four authentic emitter parts\n",
+        sequence,effect_index);
+    return 0;
+}
 
 static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_t *elf, size_t elf_size,
     const gh_enemy_ems_bindings *bindings, gh_enemy_ems *owner, gh_enemy_ems_live *first,
@@ -1605,6 +1855,10 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             init,b->entry.work,1,GH_STATIC_BINARY32_REFERENCE,&ledger,&lb,&frontier));
     }
     CHECK(!word(e+0x54c));
+    if(attack_effect==17||attack_effect==19){
+        CHECK(!em00_attack_effect(target->enemy202,&player,b,effect_bind,elf,elf_size,attack_effect==19));
+        goto release_player;
+    }
     if(attack_effect>=2){
         camera_target_fixture resolver={.enemies=owner,.player=&factory,.child=&child};
         CHECK(!triangle_ledger(b,target->enemy202,&player,&setup.model,pl,pl_size,elf,elf_size,
@@ -2141,6 +2395,74 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             rank_peer[i]->bytes[0x617]=rank_hidden[i];
         }
         puts("PASS actual stamp20 selectors 5/6 in the original distance band, both original rank outcomes");
+        if(!attack_effect){
+            gh_collision_pair_shape colliders[4];
+            uint8_t give_before[4][0x60],shape_before[4][GH_COLLISION_RECORD_BYTES];
+            for(unsigned i=0;i<4;i++){
+                const uint8_t *node;
+                gh_hitarea_object *give=&entry->hitareas.units[i+1];
+                CHECK(!gh_hitarea_node_at(give,0,&node,&colliders[i]));
+                memcpy(give_before[i],give->bytes,0x60);
+                memcpy(shape_before[i],colliders[i].record,GH_COLLISION_RECORD_BYTES);
+            }
+            CHECK(word(entry->entry.resource.bytes+0x144)&&word(entry->entry.resource.bytes+0x19c));
+            memcpy(score,&(uint16_t){0},2);
+            for(unsigned i=0;i<3;i++){
+                memcpy(actor,actor_before,sizeof(actor_before));
+                entry->motion.motion=motion_before;
+                memcpy(actor+0x2f4,&(uint32_t){0x00011500},4);
+                memcpy(actor+0x3ac,&(uint16_t){i==2?2:1},2);
+                memcpy(actor+0x5f4,&(uint32_t){i?1:0},4);
+                memcpy(actor+0x5fc,&(uint32_t){i==2?1:0},4);
+                memcpy(actor+0x16d4,&(uint32_t){0x400},4);
+                memcpy(actor+0x16ec,&(uint32_t){0},4);
+                memcpy(actor+0x76c,&(float){1},4);
+                for(unsigned offset=0x1870;offset<=0x1884;offset+=0x14){
+                    const uint32_t row[]={1,20,0x37,UINT32_MAX,0};
+                    memcpy(actor+offset,row,sizeof(row));
+                }
+                /* Start at the genuine post-sample continuation. The
+                 * live clip's prior effect submission is checked separately. */
+                move=(gh_enemy202_move){0};
+                CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+                CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+                CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+                CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+                move.stage=10;move.pending_ai_pc=0x21a538;move.substate67_stage=166;
+                const gh_actor_motion_status status=gh_enemy202_move_00208be0(&move,entry,&player.view,elf,elf_size);
+                uint8_t *box=colliders[3].record;
+                uint8_t *give=entry->hitareas.units[4].bytes;
+                fprintf(stderr,"EM00 attack continuation %u status %u pc %08x shape %u power %u kind %u box %08x/%08x/%08x\n",
+                    i,status,move.frontier,word(actor+0x1870),word(give+0x4c),give[0x46],
+                    word(box+0x1f0),word(box+0x1f4),word(box+0x1f8));
+                CHECK(!status&&!move.frontier&&move.original_returned);
+                CHECK((word(box)&2u)&&word(box+0x1f8)==0x3f800000);
+                CHECK(give[0x46]==(i==1?0x3d:0x37)&&word(give+0x4c)==(i==1?15u:20u));
+                if(!i){
+                    CHECK(!word(box+0x130)&&word(box+0x134)==0x3fa66666&&!word(box+0x138));
+                    CHECK(word(box+0x1f0)==0x3f800000&&word(box+0x1f4)==0x3f000000);
+                    CHECK(!word(give+0x10)&&!word(give+0x14)&&!word(give+0x18));
+                }else{
+                    CHECK(word(actor+0x1870)==0&&word(actor+0x1884)==0);
+                    CHECK(word(box+0x1f0)==0x3f333333&&word(box+0x1f4)==0x3f800000);
+                    CHECK(word(actor+0x5f4)==1);
+                }
+                if(i==2)CHECK(!(word(actor+0x16d4)&0x400));
+            }
+            for(unsigned i=0;i<4;i++){
+                float offset[3],size[3];
+                memcpy(offset,shape_before[i]+0x130,12);
+                CHECK(!gh_collision_pair_shape_offset_002bb258(&colliders[i],offset,&frontier));
+                if(i==3){
+                    memcpy(size,shape_before[i]+0x1f0,12);
+                    CHECK(!gh_collision_pair_box_size_002baaa8(&colliders[i],size,&frontier));
+                }
+                memcpy(colliders[i].record,shape_before[i],GH_COLLISION_RECORD_BYTES);
+                memcpy(entry->hitareas.units[i+1].bytes,give_before[i],0x60);
+            }
+            puts("PASS actual EM00 Give4 shape1 dimensions/zero vector and original timed row19C both power/kind branches");
+        }
+
         memcpy(actor,actor_before,sizeof(actor_before));
         entry->motion.motion=motion_before;
         init->enemies[0x53b]=retreat;
@@ -2958,15 +3280,8 @@ static int run_fixture(int argc,char **argv,int attack_effect)
     return 0;
 }
 
-int main(int argc,char **argv)
-{
-    CHECK(!run_fixture(argc,argv,0));
-    CHECK(!run_fixture(argc,argv,1));
-    CHECK(!run_fixture(argc,argv,2));
-    CHECK(!run_fixture(argc,argv,3));
-    CHECK(!run_fixture(argc,argv,4));
-    CHECK(!run_fixture(argc,argv,5));
-    for(int mode=6;mode<=9;++mode)CHECK(!run_fixture(argc,argv,mode));
-    CHECK(!run_fixture(argc,argv,11));
-    return run_fixture(argc,argv,13);
+int main(int argc,char **argv){
+    for(int mode=0;mode<=9;++mode)CHECK(!run_fixture(argc,argv,mode));
+    for(int mode=11;mode<=19;mode++)if(mode==11||mode==13||mode==14||mode==15||mode==17||mode==19)CHECK(!run_fixture(argc,argv,mode));
+    return 0;
 }

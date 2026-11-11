@@ -38,6 +38,9 @@ gh_scene_placement_status gh_om_factory_object_view(const gh_om_factory *,uint32
 /* Native abort of this constructor-only prefix. No originalvirtualInit ran;
  * releases acquiredreference and SAMEarena, unregistering ONLYownhandles. */
 gh_scene_placement_status gh_om_factory_release(gh_om_factory *);
+/* Discard descriptors only after the ordinary room retirement has released
+ * every object, resource reference and allocation. */
+gh_scene_placement_status gh_om_factory_release_retired(gh_om_factory *);
 #ifdef __cplusplus
 }
 #endif

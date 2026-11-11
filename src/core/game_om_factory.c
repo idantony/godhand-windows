@@ -165,3 +165,18 @@ gh_scene_placement_status gh_om_factory_release(gh_om_factory*f){
  }
  free(f->objects);*f=(gh_om_factory){0};return GH_PLACE_OK;
 }
+
+gh_scene_placement_status gh_om_factory_release_retired(gh_om_factory *factory)
+{
+ if(!factory||(factory->capacity&&!factory->objects)||factory->count>factory->capacity)
+  return GH_PLACE_ARGUMENT;
+ if(factory->runtime_pending)return GH_PLACE_BUSY;
+ for(size_t i=0;i<factory->capacity;i++){
+  const gh_om_object *object=&factory->objects[i];
+  if(object->registered||object->acquired||object->allocation.pointer||
+     object->initialization||object->view.bytes)return GH_PLACE_BUSY;
+ }
+ free(factory->objects);
+ *factory=(gh_om_factory){0};
+ return GH_PLACE_OK;
+}

@@ -1,4 +1,5 @@
 #include "game_effect_create.h"
+#include "game_actor_external_parent.h"
 #include "game_enemy_retire.h"
 #include "game_enemy_ems.h"
 #include "game_enemy_row2.h"
@@ -16,6 +17,7 @@ typedef struct {
     gh_enemy_actor *enemy202;
     gh_enemy202_move move202;
     gh_enemy_other_move other_move;
+    gh_enemy_timers retiring_weapon;
     ems_2a2 *enemy2a2;
     gh_game_title_player *actor;
     uint32_t handle;
@@ -373,8 +375,9 @@ gh_scene_placement_status gh_enemy_ems_live_at(gh_enemy_ems *owner,uint32_t hand
     }
     for(unsigned i=0;i<EMS_ROWS;i++){
         ems_entry *entry=&owner->entries[i];
-        if(!entry->entered||!entry->enemy202||!actor_registered(owner,entry))continue;
-        gh_enemy_weapon_init *held=gh_enemy_timers_held_weapon_runtime(&entry->enemy202->timers);
+        gh_enemy_weapon_init *held=gh_enemy_timers_held_weapon_runtime(&entry->retiring_weapon);
+        if(!held&&entry->entered&&entry->enemy202&&actor_registered(owner,entry))
+            held=gh_enemy_timers_held_weapon_runtime(&entry->enemy202->timers);
         if(!held||!held->weapon||held->weapon->handle!=handle)continue;
         void *registered=NULL;
         if(gh_room_object_lookup(owner->bindings->actor.entry.pools,handle,GH_ROOM_OBJECT_ENEMY_WEAPON,
@@ -761,6 +764,10 @@ gh_actor_motion_status gh_enemy_ems_release_native(gh_enemy_ems **slot,uint32_t 
     owner->running=0;
     for(unsigned i=EMS_ROWS;i>0;i--){
         ems_entry *entry=&owner->entries[i-1];
+        if(entry->retiring_weapon.held){
+            *frontier=0x1c91b0;
+            return GH_ACTOR_MOTION_UNSUPPORTED;
+        }
         if(entry->enemy2a2){
             gh_actor_motion_status status=release_2a2(entry,frontier);
             if(status)return status;
@@ -943,7 +950,10 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
     if(call->stage==7)return GH_ACTOR_MOTION_OK;
     ems_entry *entry=retire_find(owner,handle);
     gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
-    if(!actor||actor->published||!actor_registered(owner,entry))return retire_stop(frontier,0x290770);
+    if(!actor||!actor_registered(owner,entry)||(detached&&actor->published))
+        return retire_stop(frontier,0x290770);
+    if(actor->published&&(!actor->b.init||!unlink_slot(actor->b.init,actor,0)))
+        return retire_stop(frontier,0x290988);
     if(detached&&call->stage<6&&
        (detached->bytes!=actor->object.view.bytes||detached->size!=actor->object.view.size))
         return GH_ACTOR_MOTION_ARGUMENT;
@@ -1004,6 +1014,10 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
         call->stage=5;
     }
     if(call->stage==5){
+        /* Standalone State5 deletes the registered actor directly. Retire
+         * the native manager borrow before freeing that same wrapper. */
+        if(actor->published&&!unlink_slot(actor->b.init,actor,1))
+            return retire_stop(frontier,0x290988);
         if(gh_game_title_player_release(&actor->object))return retire_stop(frontier,0x30f5a0);
         call->stage=6;
     }
@@ -1030,7 +1044,167 @@ gh_actor_motion_status gh_enemy_ems_finish_detached_mode3(gh_enemy_ems *owner,
         return retire_stop(frontier,0x30f7d0);
     free(entry->enemy202);
     free(entry->enemy2a2);
-    *entry=(ems_entry){0};
+    gh_enemy_timers retiring_weapon=entry->retiring_weapon;
+    *entry=(ems_entry){.retiring_weapon=retiring_weapon};
+    call->stage=7;
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy_ems_mark_held_weapon_00312708(gh_enemy_ems *owner,
+    uint32_t enemy_handle,gh_se_voice_engine *voices,uint32_t *frontier)
+{
+    if(!owner||!voices||!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    ems_entry *entry=retire_find(owner,enemy_handle);
+    if(!entry||!entry->enemy202||entry->retiring_weapon.held)
+        return retire_stop(frontier,0x1b79b0);
+    gh_enemy_timers *timers=&entry->enemy202->timers;
+    gh_enemy_weapon_init *held=gh_enemy_timers_held_weapon_runtime(timers);
+    if(!held||!held->weapon||held->attach_stage!=5||!held->model.ready||
+       held->parent!=&entry->actor->view||
+       held->parent_model!=&entry->enemy202->entry.initialize.model.model||
+       held->model.external_owner!=held)
+        return retire_stop(frontier,0x1b79b0);
+    uint8_t *actor=held->weapon->object.view.bytes;
+    if(!actor||held->weapon->object.view.size!=GH_ENEMY_WEAPON_363_BYTES||
+       held->model.root.bytes!=actor||object_word(actor+0x214)!=0x42aa98||
+       (object_word(actor+0x2fc)>>16)!=0x363)
+        return retire_stop(frontier,0x312748);
+    if(!(object_word(actor+0x250)&0x80000000u)){
+        if(gh_se_voice_detach_actor_002ce488(voices,&held->model)){
+            uint32_t pc=gh_se_voice_frontier(voices);
+            return retire_stop(frontier,pc?pc:0x2ce488);
+        }
+        /* Original VT+4C 14E928 returns before publishing death. */
+        retire_put_word(actor+0x250,object_word(actor+0x250)|0x80000002u);
+    }
+    /* 208858 clears +6EC. End only the corresponding native hierarchy
+     * borrow; the same registered weapon survives to its own 30F8B0 visit. */
+    if(gh_actor_model_clear_external_parent(&held->model,held))
+        return retire_stop(frontier,0x1cf160);
+    held->parent=NULL;
+    held->parent_model=NULL;
+    entry->retiring_weapon.held=timers->held;
+    timers->held=NULL;
+    return GH_ACTOR_MOTION_OK;
+}
+
+static gh_actor_motion_status retire_weapon_hit(gh_enemy_weapon_init *held,unsigned i,uint32_t *frontier)
+{
+    if(!(held->hit_owned&(1u<<i)))return GH_ACTOR_MOTION_OK;
+    gh_hitarea_object *hit=&held->hit[i];
+    int original;
+    if(gh_hitarea_object_clear_shapes_001fd580(hit,&original,frontier)||
+       gh_hitarea_object_release_empty_001fe278(hit,frontier))
+        return retire_stop(frontier,*frontier?*frontier:i?0x1fe148:0x1fe370);
+    held->hit_owned&=(uint8_t)~(1u<<i);
+    *hit=(gh_hitarea_object){0};
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy_ems_retire_weapon_0030f8b0(gh_enemy_ems *owner,
+    gh_enemy_full_retirement *call,uint32_t handle,const gh_enemy_retire_bindings *bindings,
+    uint32_t *frontier)
+{
+    if(!owner||!call||!bindings||!frontier||!handle||owner->running||owner->closing||
+       (call->stage&&(call->owner!=owner||call->handle!=handle||
+        !same_retire_bindings(&call->bindings,bindings))))return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0;
+    if(call->stage==7)return GH_ACTOR_MOTION_OK;
+    gh_enemy_timers *timers=NULL;
+    gh_enemy_weapon_init *held=NULL;
+    for(unsigned i=0;i<EMS_ROWS;i++){
+        gh_enemy_weapon_init *candidate=gh_enemy_timers_held_weapon_runtime(&owner->entries[i].retiring_weapon);
+        if(candidate&&candidate->weapon->handle==handle){
+            held=candidate;
+            timers=&owner->entries[i].retiring_weapon;
+            break;
+        }
+    }
+    if(!held||!timers)return retire_stop(frontier,0x1c91b0);
+    gh_enemy_weapon *weapon=held->weapon;
+    gh_title_player_view *view=&weapon->object.view;
+    uint8_t *actor=view->bytes;
+    gh_room_pools *pools=weapon->bindings.pools;
+    if(!call->stage){
+        const gh_room_vector *primary,*secondary;
+        if(!actor||view->size!=GH_ENEMY_WEAPON_363_BYTES||object_word(actor+0x214)!=0x42aa98||
+           (object_word(actor+0x250)&0xa0000000u)!=0xa0000000u||object_word(actor+0x650)||
+           !held->model.ready||held->model.external_owner||held->model.external_borrowers||
+           held->model.sound_borrowers||gh_room_registry_view(pools,0x754c30,&primary)||
+           gh_room_registry_view(pools,0x754c58,&secondary))
+            return retire_stop(frontier,0x1c91b0);
+        uint8_t *bytes=secondary->allocation.pointer;
+        unsigned at=0,primary_matches=0,secondary_matches=0;
+        for(unsigned i=0;i<primary->count;i++)
+            primary_matches+=object_word((uint8_t*)primary->allocation.pointer+4*i)==handle;
+        for(unsigned i=0;i<secondary->count;i++)if(object_word(bytes+4*i)==handle){
+            at=i;
+            ++secondary_matches;
+        }
+        if(primary_matches!=1||secondary_matches!=1)return retire_stop(frontier,0x30f9a4);
+        memmove(bytes+4*at,bytes+4*(at+1),4*(size_t)(secondary->count-at-1));
+        --pools->vectors[3].count;
+        call->owner=owner;call->handle=handle;call->bindings=*bindings;call->stage=1;
+    }
+    if(call->stage==1){
+        gh_actor_motion_status status=retire_weapon_hit(held,1,frontier);
+        if(status)return status;
+        actor[0x654]=actor[0x655]=actor[0x656]=actor[0x657]=0xff;
+        call->stage=2;
+    }
+    if(call->stage==2){
+        if(!bindings->release_effect)return retire_stop(frontier,0x306200);
+        gh_actor_motion_status status=bindings->release_effect(bindings->effect_context,view,8,2,frontier);
+        if(status)return status;
+        call->stage=3;
+    }
+    if(call->stage==3){
+        if(object_word(actor+0x68c))return retire_stop(frontier,0x1b79b0);
+        retire_put_word(actor+0x214,0x428a20);view->original_vtable214=0x428a20;
+        uint64_t key;
+        memcpy(&key,actor+0x540,sizeof(key));
+        uint32_t changed;
+        if(gh_collision_scroll_set_key_enabled_001331b8(held->actors,held->scroll,key,0,&changed))
+            return retire_stop(frontier,0x1331b8);
+        if(gh_collision_solid_release_unit_001347e8(owner->bindings->actor.solids,view,frontier))
+            return retire_stop(frontier,*frontier?*frontier:0x1347e8);
+        gh_actor_motion_status status=retire_weapon_hit(held,0,frontier);
+        if(status)return status;
+        call->stage=4;
+    }
+    if(call->stage==4){
+        gh_game_objects *resources=weapon->bindings.room_objects;
+        int ready=0;
+        gh_object_status status=gh_game_objects_check_ready_001ff238(resources,0x363,
+            &weapon->bindings.resources,&ready,frontier);
+        if(status!=GH_OBJECT_OK&&status!=GH_OBJECT_MISSING)return retire_stop(frontier,*frontier?*frontier:0x1fe9b8);
+        if(!ready){
+            resources=weapon->bindings.global_objects;
+            status=gh_game_objects_check_ready_001ff238(resources,0x363,&weapon->bindings.resources,&ready,frontier);
+            if(status!=GH_OBJECT_OK&&status!=GH_OBJECT_MISSING)return retire_stop(frontier,*frontier?*frontier:0x1fe9b8);
+        }
+        if(!ready||resources!=weapon->resource_owner)return retire_stop(frontier,0x1fe9b8);
+        if(gh_game_objects_release_event_001fed78(resources,0x363,weapon->resource.bytes,
+            bindings->release_sound_slot,bindings->sound_context,frontier))
+            return retire_stop(frontier,*frontier?*frontier:0x1fed78);
+        weapon->resource_owner=NULL;
+        call->stage=5;
+    }
+    if(call->stage==5){
+        retire_put_word(actor+0x214,0x41eaf0);view->original_vtable214=0x41eaf0;
+        if(gh_collision_pair_shapes_retire_model_native(held->shapes.pairs,&held->model)||
+           gh_hitarea_forget_actor_native(weapon->bindings.init,view))
+            return retire_stop(frontier,0x1496c0);
+        gh_actor_model_status status=gh_actor_model_retire_001496c0(&held->model,&call->model,frontier);
+        if(status)return *frontier?model_error(status):retire_stop(frontier,0x1496c0);
+        call->stage=6;
+    }
+    if(weapon->object.view.bytes&&gh_game_title_player_release(&weapon->object))
+        return retire_stop(frontier,0x30f5a0);
+    if(gh_room_object_unregister(pools,handle,weapon))return retire_stop(frontier,0x30fa08);
+    weapon->handle=0;
+    gh_actor_motion_status status=gh_enemy_timers_finish_held_retirement(timers);
+    if(status)return retire_stop(frontier,0x1c91b0);
     call->stage=7;
     return GH_ACTOR_MOTION_OK;
 }

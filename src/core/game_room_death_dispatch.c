@@ -24,9 +24,10 @@ static gh_room_pool_status retire(gh_room_death_dispatch *state,const gh_room_de
 {
  uint32_t handle=state->retiring_handle,entry=0;
  gh_room_pool_status status;
- if(enemy_kind(state->retiring_kind)){
-  gh_actor_motion_status enemy=gh_enemy_ems_retire_0030f8b0(b->enemies,&state->enemy,
-   handle,&b->enemy,&entry);
+ if(enemy_kind(state->retiring_kind)||state->retiring_kind==0x363){
+  gh_actor_motion_status enemy=state->retiring_kind==0x363?
+   gh_enemy_ems_retire_weapon_0030f8b0(b->enemies,&state->enemy,handle,&b->enemy,&entry):
+   gh_enemy_ems_retire_0030f8b0(b->enemies,&state->enemy,handle,&b->enemy,&entry);
   if(enemy)return fail(state,handle,entry?entry:0x290770);
   state->enemy=(gh_enemy_full_retirement){0};
   state->retiring_kind=state->retiring_handle=0;
@@ -95,17 +96,17 @@ gh_room_pool_status gh_room_death_dispatch_0030f8b0(gh_room_death_dispatch *stat
   if(!actor&&b->enemies){
    gh_enemy_ems_live live;
    if(gh_enemy_ems_live_at(b->enemies,handle,&live))return fail(state,handle,0x312708);
-   if(live.held_weapon)return fail(state,handle,0x312708);
    if(live.actor){
     actor=&live.actor->view;
-    kind=live.enemy202?0x202:live.enemy2a2?0x2a2:0;
+    kind=live.held_weapon?0x363:live.enemy202?0x202:live.enemy2a2?0x2a2:0;
    }
   }
   if(!actor||!actor->bytes||actor->size<0x254)return fail(state,handle,0x312708);
   uint32_t flags=word(actor->bytes+0x250);
-  if(kind!=0x100&&kind!=0x101&&!enemy_kind(kind)&&!gh_om_retire_entry(kind))
+  if(kind!=0x100&&kind!=0x101&&kind!=0x363&&!enemy_kind(kind)&&!gh_om_retire_entry(kind))
    return fail(state,handle,0x312708);
   if(!(flags&0x80000000u)){
+   if(kind==0x363)return fail(state,handle,0x312708);
    if(enemy_kind(kind)){
     gh_actor_motion_status enemy=gh_enemy_death_mark_00312708(&state->enemy_mark,
      b->enemies,handle,b->voices,&frontier);

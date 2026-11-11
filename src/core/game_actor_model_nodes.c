@@ -114,7 +114,8 @@ gh_actor_model_status gh_actor_model_retire_001496c0(gh_actor_model *model,
      model->root.original_vtable214!=0x427690&&
      model->root.original_vtable214!=0x428090&&
      model->root.original_vtable214!=0x4237e8&&
-     model->root.original_vtable214!=0x4296f0)||
+     model->root.original_vtable214!=0x4296f0&&
+     model->root.original_vtable214!=0x42aa98)||
     model->external_owner||model->external_parts||model->external_borrowers||model->sound_borrowers)
   return retirement_error(frontier,0x1496c0);
  struct gh_actor_model_nodes *nodes=model->nodes;

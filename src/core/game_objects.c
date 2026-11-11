@@ -131,12 +131,33 @@ gh_object_status gh_game_objects_release_nonpinned_001fef30(gh_game_objects*s,gh
  if(!s->releasing){s->release_cursor=s->slots->count;s->release_sound=0;s->releasing=1;}
  while(s->release_cursor){unsigned i=s->release_cursor-1;uint8_t*p=s->slots->records+(size_t)i*0x5c;
   if(u32(p+4)&0x80000000u){s->release_cursor--;continue;}
-  if(s->source[i].release){if(f)*f=0x1ff338;return GH_OBJECT_BUSY;}
-  /*1FF3A0 clears usecount/flags before the actualdata free. Borrowed pinned
-   * views never enter this branch; unknown owned data needs original2A9680. */
+  if(s->source[i].release&&
+     (u32(p)<5||u32(p)>7||!event_release_valid(s,i,p))){
+   if(f)*f=0x1ff338;
+   return GH_OBJECT_BUSY;
+  }
+  /* Original 1FF3A0 resolves the allocation header from the data pointer.
+   * The native DVD holder retains the equivalent owning heap token. */
+  const uint32_t token=u32(p+0x10);
+  const gh_r207_allocation allocation=s->source[i].allocation;
+  gh_heap *heap=s->source[i].heap;
+  if(token&&(token!=i+1||!allocation.pointer||allocation.pointer!=s->source[i].bytes||
+      !heap||allocation.owner!=heap)){
+   if(f)*f=0x2a9680;
+   return GH_OBJECT_UNSUPPORTED;
+  }
+  if(!token&&allocation.pointer){if(f)*f=0x2a9680;return GH_OBJECT_UNSUPPORTED;}
+  if(token&&s->source[i].dvd&&s->source[i].job&&gh_dvd_check(s->source[i].dvd,s->source[i].job)){
+   if(f)*f=0x201018;
+   return GH_OBJECT_BUSY;
+  }
   w32(p+4,0);w32(p+8,0);
-  if(u32(p+0x10)){if(f)*f=0x2a9680;return GH_OBJECT_UNSUPPORTED;}
-  w32(p+0xc,UINT32_MAX);w32(p+0x1c,0);w32(p+0x18,0);s->source[i].bytes=NULL;s->source[i].size=0;
+  if(token){
+   if(gh_heap_release(heap,allocation)){if(f)*f=0x2a9680;return GH_OBJECT_BUSY;}
+   w32(p+0x10,0);
+  }
+  memset(&s->source[i],0,sizeof(s->source[i]));
+  w32(p+0xc,UINT32_MAX);w32(p+0x1c,0);w32(p+0x18,0);
   while(s->release_sound<10){uint8_t*q=p+0x24+s->release_sound*4;uint32_t v=u32(q);int32_t slot=v<=INT32_MAX?(int32_t)v:(int32_t)((int64_t)v-4294967296LL);
    gh_object_status e=call(ctx,slot,f);if(e)return e;w32(q,UINT32_MAX);s->release_sound++;
   }

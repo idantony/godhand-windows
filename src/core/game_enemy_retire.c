@@ -21,7 +21,7 @@ static gh_actor_motion_status stop(uint32_t *frontier,uint32_t address)
 }
 
 static gh_actor_motion_status mark_202(gh_enemy_death_mark *state,
-    gh_enemy_ems_live *entry,uint32_t *frontier)
+    gh_enemy_ems *owner,gh_enemy_ems_live *entry,uint32_t *frontier)
 {
     gh_enemy_actor *enemy=entry->enemy202;
     uint8_t *bytes=entry->actor->view.bytes;
@@ -48,7 +48,11 @@ static gh_actor_motion_status mark_202(gh_enemy_death_mark *state,
        owner, because the native constructor does not store guest pointers. */
     static const uint16_t mark_attached[]={0x6ec,0x6f0,0x6f8,0x6fc,0x700,
         0x704,0x708,0x734,0x6f4,0x70c,0x730,0x738};
-    if(gh_enemy_timers_held_weapon(&enemy->timers))return stop(frontier,0x1b79b0);
+    if(gh_enemy_timers_held_weapon(&enemy->timers)){
+        gh_actor_motion_status status=gh_enemy_ems_mark_held_weapon_00312708(
+            owner,state->handle,state->voices,frontier);
+        if(status)return status;
+    }
     for(unsigned i=0;i<sizeof(mark_attached)/sizeof(*mark_attached);++i)
         if(word(bytes+mark_attached[i]))return stop(frontier,0x1b79b0);
     static const uint16_t mark_actor[]={0x1964,0x1968,0x196c,0x1970,0x1974,
@@ -108,7 +112,7 @@ gh_actor_motion_status gh_enemy_death_mark_00312708(gh_enemy_death_mark *state,
         state->handle=handle;
         state->stage=1;
     }
-    gh_actor_motion_status result=em202?mark_202(state,&entry,frontier):mark_2a2(state,&entry,frontier);
+    gh_actor_motion_status result=em202?mark_202(state,owner,&entry,frontier):mark_2a2(state,&entry,frontier);
     if(result)return result;
     put(view->bytes+0x250,word(view->bytes+0x250)|0x80000002u);
     state->stage=3;
@@ -175,15 +179,15 @@ gh_actor_motion_status gh_enemy_destroy_prefix_mode3(gh_enemy_destructor *state,
     if(state->stage==2){
         if(standard){
             const uint32_t dependency=word(bytes+0x564);
-            /* 2020A0/2020A4 reject 0203 before the release jump table. */
-            if(dependency!=0x200&&dependency!=0x203&&dependency!=0x20a)
+            /* Exact 0200/0202/0203/020A take the no effect-bank-release tail. */
+            if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a)
                 return stop(frontier,0x202098);
         }else if(word(bytes+0x15c4))return stop(frontier,0x1c2370);
         state->virtual_mark.stage=1;
         state->stage=3;
     }
     if(state->stage==3){
-        gh_actor_motion_status status=standard?mark_202(&state->virtual_mark,&entry,frontier):
+        gh_actor_motion_status status=standard?mark_202(&state->virtual_mark,owner,&entry,frontier):
             mark_2a2(&state->virtual_mark,&entry,frontier);
         if(status)return status;
         put(bytes+0x214,0x44a660);

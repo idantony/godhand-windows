@@ -525,13 +525,14 @@ static float take_random_signed(uint32_t *seed) {
     return add(add(add(base, base), -2.0f), -1.0f);
 }
 
-gh_effect_status gh_esp14_position_init_00301c20(uint8_t p[0x400], gh_effect_view record,
-    int mirrored, float position[3], uint32_t *frontier) {
+gh_effect_status gh_effect_position_init_scaled_00301c20(uint8_t p[0x400], gh_effect_view record,
+    int mirrored,float amplitude_scale,float position[3],uint32_t *frontier) {
     if (!frontier) return GH_EFFECT_ARGUMENT;
     *frontier = 0x301c20;
     if (!p || !record.bytes || record.size < 0x2f0 || !position) return GH_EFFECT_ARGUMENT;
     const uint8_t *r = record.bytes;
-    if (r[0x133] != 0x14 || !(word(r + 4) & 0x200000u)) return GH_EFFECT_UNSUPPORTED;
+    if ((r[0x133] != 0x14 && r[0x133] != 9) || !isfinite(amplitude_scale) ||
+        !(word(r + 4) & 0x200000u)) return GH_EFFECT_UNSUPPORTED;
     uint32_t seed = word(p + 0x220);
     float random = take_random_signed(&seed);
     float angle = multiply(add((float)signed_byte(r[0x2b3]),
@@ -545,6 +546,7 @@ gh_effect_status gh_esp14_position_init_00301c20(uint8_t p[0x400], gh_effect_vie
     float sine, cosine;
     *frontier = 0x1f7ef0;
     if (gh_id_sincos_reference(angle, &sine, &cosine)) return GH_EFFECT_UNSUPPORTED;
+    amplitude=multiply(amplitude,amplitude_scale);
     if (mirrored) amplitude = -amplitude;
     const float waves[3] = {sine, cosine, cosine};
     float next[3];
@@ -562,6 +564,16 @@ gh_effect_status gh_esp14_position_init_00301c20(uint8_t p[0x400], gh_effect_vie
     memcpy(position, next, 12);
     *frontier = 0;
     return GH_EFFECT_OK;
+}
+
+gh_effect_status gh_esp14_position_init_00301c20(uint8_t p[0x400],gh_effect_view record,
+    int mirrored,float position[3],uint32_t *frontier)
+{
+    if(record.bytes&&record.size>=0x2f0&&record.bytes[0x133]!=0x14){
+        if(frontier)*frontier=0x301c20;
+        return GH_EFFECT_UNSUPPORTED;
+    }
+    return gh_effect_position_init_scaled_00301c20(p,record,mirrored,1.0f,position,frontier);
 }
 
 static gh_effect_status wave(const uint8_t *r, const float angles[3],
@@ -602,7 +614,7 @@ static gh_effect_status position_move(gh_game_effects *effects, unsigned slot,
         (scaled != 0 && scaled != 1) || !isfinite(factor)) return GH_EFFECT_ARGUMENT;
     const uint8_t *r = v->record.bytes;
     const uint32_t flags = word(r + 4);
-    if (v->type != 0x14 || (flags & 0x10200000u) != 0x00200000u || (flags & 0x100000u))
+    if ((v->type != 0x14 && !(v->type==9&&gh_effect_esp_trail_is_bound(effects,v))) || (flags & 0x10200000u) != 0x00200000u || (flags & 0x100000u))
         return GH_EFFECT_UNSUPPORTED;
     gh_effect_esp_view canonical;
     if (gh_effect_create_esp_at(effects, slot, &canonical) ||
@@ -790,14 +802,16 @@ gh_effect_status gh_esp14_nested_emitter_pose_00302bb4(gh_game_effects *effects,
     return GH_EFFECT_OK;
 }
 
-gh_effect_status gh_esp14_nested_sprite_alpha_002fec38(const gh_effect_esp_view *v,
+gh_effect_status gh_effect_actor_sprite_alpha_002fec38(const gh_game_effects *owner,const gh_effect_esp_view *v,
     float alpha, float fade, float *out, uint32_t *frontier) {
     if (!frontier) return GH_EFFECT_ARGUMENT;
     *frontier = 0x2ff1f0;
     if (!v || !v->payload || v->payload_size != 0x400 || !out ||
         !isfinite(alpha) || !isfinite(fade)) return GH_EFFECT_ARGUMENT;
     if (!gh_esp14_nested_sprite_is_bound(v->record, v->actor, v->selector) &&
-        !gh_effect_event_part_is_bound(v->record, v->actor, v->selector)) return GH_EFFECT_UNSUPPORTED;
+        !gh_effect_event_part_is_bound(v->record, v->actor, v->selector) &&
+        !gh_effect_em00_attack_esp_is_bound(owner,v) &&
+        !gh_effect_knockdown_esp_is_bound(owner,v)) return GH_EFFECT_UNSUPPORTED;
     const uint8_t *p = v->actor->bytes;
     float result;
     if (v->payload[0x11c] & 0x80u) {
@@ -816,6 +830,12 @@ gh_effect_status gh_esp14_nested_sprite_alpha_002fec38(const gh_effect_esp_view 
     *out = result;
     *frontier = 0;
     return GH_EFFECT_OK;
+}
+
+gh_effect_status gh_esp14_nested_sprite_alpha_002fec38(const gh_effect_esp_view *v,
+    float alpha, float fade, float *out, uint32_t *frontier)
+{
+    return gh_effect_actor_sprite_alpha_002fec38(NULL,v,alpha,fade,out,frontier);
 }
 
 gh_effect_status gh_esp14_destroy_hidden_002f27e8(gh_esp14_instance *s,

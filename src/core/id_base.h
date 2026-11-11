@@ -62,6 +62,9 @@ gh_id_error gh_id_pool_release_002acf30(gh_id_runtime *,gh_id_pool_run,int32_t t
  * prevents truncating a still-borrowed run (BUSY). Unsafe original signed-byte
  * overflow/all-non1 domains remain explicitunsupported instead of danglingIDs. */
 gh_id_error gh_id_pool_compact_002ad108(gh_id_runtime *,int *original_return);
+/* Retire a room Base after its last original consumer, preserving the job
+ * counters and entries for the following original 2AD108 compaction. */
+gh_id_error gh_id_base_detach_for_compaction(gh_id_runtime *,gh_id_base *);
 gh_id_error gh_id_runtime_job(const gh_id_runtime *,uint32_t,gh_id_job_view *);
 void gh_id_base_clear_002a9df8(gh_id_base *);
 /* Zero-init or previously release object before init. Returns original return

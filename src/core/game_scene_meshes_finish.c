@@ -64,7 +64,7 @@ gh_scene_mesh_status gh_scene_meshes_finish_object_reference(gh_scene_meshes*s,g
  if(!o)return GH_MESH_ARGUMENT;if(o->constructor_complete)return GH_MESH_OK;
  if(!s->prepared||!o->factory_ready||!o->handle||!o->node||!o->packet_allocation.pointer)return GH_MESH_BUSY;
  const gh_scene_mesh_descriptor*d=&o->descriptor;const uint8_t*desc=d->script.bytes+d->mesh.descriptor_offset;
- if((d->mesh.flags&~0xc0174300u)||d->node_flags!=0x1001000u||!s->tables->scroll_texture.bytes)return fail(s,0x31d3d0,0,GH_MESH_UNSUPPORTED);
+ if((d->mesh.flags&~0xc0174320u)||d->node_flags!=0x1001000u||!s->tables->scroll_texture.bytes)return fail(s,0x31d3d0,0,GH_MESH_UNSUPPORTED);
  /* Observed unit-scale, static object profile. In the bounded [-3,3]
   * Euler domain the preceding1F7DA0 range reduction subtracts exactlyzero. */
  float angle[3];for(unsigned i=0;i<3;i++){angle[i]=f32(desc+0x1c+4*i);
@@ -80,8 +80,17 @@ gh_scene_mesh_status gh_scene_meshes_finish_object_reference(gh_scene_meshes*s,g
  for(unsigned i=0;i<d->submesh_count;i++){gh_scene_mesh_stream stream;e=gh_scene_mesh_stream_at(d,i,&stream);if(e)return fail(s,0x155678,(int)i,e);
   gh_stage_channel ch;gh_stage_status status=gh_stage_texture_channel(textures,stream.material,&ch);
   if(status!=GH_STAGE_OK&&status!=GH_STAGE_UNAVAILABLE)return fail(s,0x155678,status,GH_MESH_UNSUPPORTED);
-  material[i].owner=textures;material[i].slot=stream.material;material[i].tm3_override_required=1;
+  material[i].owner=textures;material[i].slot=stream.material;material[i].tm3_override_required=stream.material!=255;
   if(!status){material[i].initial_tex0=ch.tex0;material[i].initial_resolved=1;}
+  else if(stream.material==255){
+   /* 155678 copies the cold TEX0 slot into the packet even for FF.
+    * The authoritative stage channel has no intervening writer. */
+   uint32_t tex0[2];
+   e=elf_constants(elf,elf_bytes,0x752b08,2,tex0);
+   if(e)return fail(s,0x155678,(int)i,e);
+   material[i].initial_tex0=(uint64_t)tex0[0]|(uint64_t)tex0[1]<<32;
+   material[i].initial_resolved=1;
+  }
   for(size_t j=0;j<stream.vertices;j++){int16_t xyz[3];uint16_t raww;e=gh_scene_mesh_position(&stream,j,xyz,&raww);if(e)return e;
    for(unsigned axis=0;axis<3;axis++){if(xyz[axis]<min[axis])min[axis]=xyz[axis];if(xyz[axis]>max[axis])max[axis]=xyz[axis];}}
  }
@@ -115,7 +124,10 @@ gh_scene_mesh_status gh_scene_meshes_finish_object_reference(gh_scene_meshes*s,g
  p[0x32c]=1;p[0x32e]=255;w16(p+0x330,65535);w32(p+0x2f0,u32(p+0x2f0)|0x800u);
  w32(p+0x324,half_bits(u16(desc+0x3e)));w32(p+0x328,half_bits(u16(desc+0x40)));
  w32(p+0x254,0xc0000000);w16(p+0x2ae,(uint16_t)distance_tenths);p[0x2b0]=(uint8_t)((distance_tenths*15)/100);w32(p+0x2b8,half_bits(u16(desc+0x48)));
- w32(p+0x350,u32(p+0x350)&~0x10000000u);
+ uint32_t model_flags=u32(p+0x350)&~0x10000000u;
+ /* 318B20–318B3C routes flag5 meshes to the late Scenario update. */
+ if(d->mesh.flags&0x20u)model_flags|=0x20000000u;
+ w32(p+0x350,model_flags);
  /* 149EB8: no skeletal nodes in this static constructor. */
  memcpy(p+0x80,world,sizeof(world));
  o->constructor_complete=1;o->render_ready=0;s->frontier=0;s->detail=0;

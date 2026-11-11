@@ -268,6 +268,31 @@ gh_id_error gh_id_entry_restore_source_002aa2d0(gh_id_base*o,gh_id_entry*e){
  init_entry(e,e->source,e->source_index);return GH_ID_OK;
 }
 
+gh_id_error gh_id_base_detach_for_compaction(gh_id_runtime *r,gh_id_base *base)
+{
+    if(!runtime_valid(r)||!base)return GH_ID_ARGUMENT;
+    if(!base->owns_run)return base->entries?GH_ID_FORMAT:GH_ID_OK;
+    if(!base->entries||!r->live_objects)return GH_ID_FORMAT;
+    for(unsigned i=0;i<r->manager->job_count;i++)if(r->job_owners[i]==base){
+        const gh_id_job_view *job=&r->jobs[i];
+        if(!job->active||job->tag==1||job->tag!=base->resource_number||
+           job->start>=r->manager->pool_used||job->wire_count<=0||
+           base->entry_count!=(uint32_t)job->wire_count||
+           base->entry_count>r->manager->pool_used-job->start||
+           base->entries!=r->entries+job->start)
+            return GH_ID_FORMAT;
+        r->job_owners[i]=NULL;
+        --r->live_objects;
+        base->source_records=(gh_id_view){0};
+        base->packed=(gh_id_view){0};
+        base->entries=NULL;
+        base->owns_run=0;
+        base->initialized=0;
+        return GH_ID_OK;
+    }
+    return GH_ID_FORMAT;
+}
+
 gh_id_error gh_id_pool_compact_002ad108(gh_id_runtime*r,int*original){
  if(!runtime_valid(r)||!original)return GH_ID_ARGUMENT;*original=0;
  if(!r->manager->pool_used)return GH_ID_OK;
