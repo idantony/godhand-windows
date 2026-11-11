@@ -21,6 +21,7 @@
 #include "../core/game_actor_shadow_draw.h"
 #include "../core/game_actor_model_draw.h"
 #include "../core/game_effects_trans.h"
+#include "../core/game_scene_message_draw.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,6 +34,7 @@ typedef struct {
  gh_id_error (*draw)(void *,const gh_id_base *,const gh_id_draw_job *,uint32_t *frontier);
  gh_id_error (*fan)(void *,const gh_cockpit_fan *,uint32_t *frontier);
  gh_id_error (*cover)(void *,const gh_child_cover_quad *,uint32_t *frontier);
+ gh_scene_message_emit message;
 } gh_host_scene_ui_callbacks;
 typedef struct gh_startup_continuation {
     int enabled;

@@ -34,6 +34,11 @@ static int elfword(const gh_actor_trans_bindings*b,uint32_t pc,uint32_t*out){
 static gh_actor_model_status method(gh_actor_trans_call*c,unsigned offset,uint32_t*entry,uint32_t*f){uint32_t vt=word(c->model->root.bytes+0x214),delta,first;if(vt>UINT32_MAX-offset-8||!elfword(&c->bindings,vt+offset,&delta)||!elfword(&c->bindings,vt+offset+4,entry)||!elfword(&c->bindings,*entry,&first))return stop(f,0x14a3e8,GH_ACTOR_MODEL_UNSUPPORTED);if((uint16_t)delta)return stop(f,*entry,GH_ACTOR_MODEL_UNSUPPORTED);return GH_ACTOR_MODEL_OK;}
 static gh_actor_model_status suppress(gh_actor_trans_call*c,uint32_t entry,int*out,uint32_t*f){
  const uint8_t*p=c->model->root.bytes,*w=(const uint8_t*)c->bindings.work;uint32_t flags=word(w+0x5e0);*out=0;
+ if(entry==0x2b8978&&word(p+0x214)==0x44b840u){
+  /* cObjSimple effect model's Trans predicate reads only Work+5E0. */
+  *out=(flags&0x10000000u)!=0;
+  return GH_ACTOR_MODEL_OK;
+ }
  if(entry==0x107f20){if(flags&0x80000000u){*out=1;return GH_ACTOR_MODEL_OK;}entry=0x2a7448;}
  else if(entry==0x1004c8){if(flags&0x200000u){*out=1;return GH_ACTOR_MODEL_OK;}entry=0x14b470;}
  else if(entry==0x1b80c0){if(flags&0x20000000u){*out=1;return GH_ACTOR_MODEL_OK;}entry=0x2a7448;}
@@ -44,7 +49,7 @@ static gh_actor_model_status suppress(gh_actor_trans_call*c,uint32_t entry,int*o
  if(!c->bindings.camera||!c->bindings.camera->constructed)return stop(f,0x1f8ad8,GH_ACTOR_MODEL_UNSUPPORTED);int visible=0;if(!box(p,c->bindings.camera,&visible))return stop(f,0x1f8ad8,GH_ACTOR_MODEL_UNSUPPORTED);*out=!visible;return GH_ACTOR_MODEL_OK;
 }
 static gh_actor_model_status callee(gh_actor_trans_call*c,uint32_t pc,uint32_t*f){
- c->pending=(gh_actor_trans_request){.entry=pc,.parity=c->parity,.model=c->model,.shadow=c->bindings.shadow,.first_node=c->first_node,.depth=c->depth,.far_mode=(uint8_t)(c->near_limit<c->distance)};
+ c->pending=(gh_actor_trans_request){.entry=pc,.parity=c->parity,.model=c->model,.shadow=c->bindings.shadow,.first_node=c->first_node,.depth=c->depth,.far_mode=(uint8_t)(c->near_limit<c->distance),.camera=c->bindings.camera};
  if(!c->bindings.callee)return stop(f,pc,GH_ACTOR_MODEL_UNSUPPORTED);uint32_t frontier=0;gh_actor_model_status e=c->bindings.callee(c->bindings.context,&c->pending,&frontier);return e?stop(f,frontier?frontier:pc,e):GH_ACTOR_MODEL_OK;
 }
 static gh_actor_model_status shadow_prefix(gh_actor_trans_call*c,uint32_t*f){

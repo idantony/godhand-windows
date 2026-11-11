@@ -102,15 +102,15 @@ static gh_scene_ui_status advance_english(uint8_t *p, gh_scene_message_sources *
     uint16_t current;
     *frontier = 0x2b3338;
     if (!code_at(source, source->cursor_8c, &current)) return GH_SCENE_UI_BOUNDS;
-    if (current == 0x8001) {
-        *frontier = 0x2b3b70;
-        return GH_SCENE_UI_UNSUPPORTED;
-    }
     if (!(current & 0x8000u)) {
         uint16_t next;
         if (!code_at(source, source->cursor_8c + 2, &next)) return GH_SCENE_UI_BOUNDS;
         if (next != 0xa301) return GH_SCENE_UI_UNSUPPORTED;
-    } else if (current != 0xa301) return GH_SCENE_UI_UNSUPPORTED;
+    } else if (current != 0xa301 && current != 0x8001) return GH_SCENE_UI_UNSUPPORTED;
+    if (current == 0x8001 && (word(p + 0xb4 - 0xc) || word(p + 0x40 - 0xc))) {
+        *frontier = 0x2b4428;
+        return GH_SCENE_UI_UNSUPPORTED;
+    }
 
     p[1] = 1; /* 2B45D0 and 2B45D8 are empty. */
     uint32_t flags = word(p + 0x14 - 0xc);
@@ -128,10 +128,77 @@ static gh_scene_ui_status advance_english(uint8_t *p, gh_scene_message_sources *
         put(time, word(time) + 30);
         if (signed_word(budget) < signed_word(time)) return GH_SCENE_UI_OK;
     }
-    /* A301 -> 2B3AD0 returns 2, so 2B3338 holds the cursor on the command. */
-    p[0] = 3;
+    /* A301 -> 2B3AD0 and 8001 -> 2B3B70 both return 2 without consuming
+     * the command. The latter enters the original six-tick close state. */
+    p[0] = current == 0x8001 ? 6 : 3;
     p[1] = p[2] = p[3] = 0;
     put(budget, word(time));
+    return GH_SCENE_UI_OK;
+}
+
+static gh_scene_ui_status close_window(uint8_t *p, const gh_scene_message_sources *source,
+    uint32_t *frontier)
+{
+    *frontier = 0x2b4188;
+    if (p[1] > 1) return GH_SCENE_UI_UNSUPPORTED;
+    uint8_t *flags = p + 0x14 - 0xc;
+    uint32_t tick = p[1] ? word(p + 0x10 - 0xc) : 0;
+    if (tick >= 6) return GH_SCENE_UI_BOUNDS;
+    if (tick == 5 && !(word(flags) & 0x40u)) {
+        uint16_t code;
+        *frontier = 0x2b42f0;
+        if (!code_at(source, source->cursor_8c, &code)) return GH_SCENE_UI_BOUNDS;
+        if ((code & 0xff00u) != 0x8000) return GH_SCENE_UI_UNSUPPORTED;
+    }
+    if (!p[1]) {
+        put(flags, word(flags) & ~0x10u);
+        p[1] = 1;
+    }
+    ++tick;
+    put(p + 0x10 - 0xc, tick);
+    const unsigned left = 6 - tick;
+    const volatile float fraction = (float)left / 6.0f;
+    const volatile float square = (float)(left * left) / 36.0f;
+    const float progress = (fraction + fraction) - square;
+    put_float(p + 0x98 - 0xc, progress);
+    put_float(p + 0x9c - 0xc, progress);
+    put_float(p + 0xa0 - 0xc, square);
+    if (tick == 6) {
+        put(flags, word(flags) & ~8u);
+        p[0] = 7;
+        p[1] = p[2] = p[3] = 0;
+    }
+    return GH_SCENE_UI_OK;
+}
+
+static gh_scene_ui_status recycle_window(gh_game_scene_ui *ui, unsigned slot, uint32_t *frontier)
+{
+    *frontier = 0x2aef10;
+    gh_scene_message_block *block = ui->blocks + slot;
+    uint8_t *p = block->payload;
+    const int32_t previous = block->previous, next = block->next, free_slot = ui->free_head;
+    if (previous < -1 || previous >= 16 || next < -1 || next >= 16 ||
+        free_slot < -1 || free_slot >= 16 || free_slot == (int32_t)slot ||
+        (previous == -1 ? ui->active_head != (int32_t)slot : ui->blocks[previous].next != (int32_t)slot) ||
+        (next != -1 && ui->blocks[next].previous != (int32_t)slot)) return GH_SCENE_UI_BOUNDS;
+    const uint32_t flags = word(p + 0x14 - 0xc);
+    if (flags & 0x1000u) {
+        *frontier = 0x2b2348;
+        if (word(p + 0x1c - 0xc) || word(p + 0xb4 - 0xc) || word(p + 0x40 - 0xc))
+            return GH_SCENE_UI_UNSUPPORTED;
+        put(p + 0x20 - 0xc, UINT32_MAX);
+        ui->root->state = 0;
+        put(p + 0x14 - 0xc, flags & ~0x1000u);
+    }
+    if (previous != -1) ui->blocks[previous].next = next;
+    else ui->active_head = next;
+    if (next != -1) ui->blocks[next].previous = previous;
+    if (free_slot != -1) ui->blocks[free_slot].previous = (int32_t)slot;
+    block->flags = block->mode = 0;
+    block->previous = -1;
+    block->next = free_slot;
+    ui->free_head = (int32_t)slot;
+    ui->sources[slot] = (gh_scene_message_sources){0};
     return GH_SCENE_UI_OK;
 }
 
@@ -179,13 +246,15 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
     const unsigned state = p[0], phase = p[1];
     *frontier = 0x2b2438;
     if (!source->bound) return GH_SCENE_UI_UNSUPPORTED;
-    if (source->confirm_pending || state == 2 || state == 3) {
+    if (source->confirm_pending || state == 2 || state == 3 || state == 6) {
         gh_scene_ui_status status = source->confirm_pending ? clear_event_cut(source, timing, frontier) :
             state == 2 ? advance_english(p, source, ui, work, frontier) :
-            wait_english(p, source, ui, work, timing, frontier);
+            state == 3 ? wait_english(p, source, ui, work, timing, frontier) :
+            close_window(p, source, frontier);
         if (status) return status;
         goto finish;
     }
+    if (state == 7) goto finish;
     if (state > 1) return GH_SCENE_UI_UNSUPPORTED;
     if (p[0xa4 - 0xc] || word(p + 0x18 - 0xc) || word(p + 0x1c - 0xc)) {
         *frontier = state == 0 ? 0x2b2e80 : 0x2b3078;
@@ -248,13 +317,22 @@ gh_scene_ui_status gh_scene_message_update_with_timing_002aefa8(gh_game_scene_ui
     gh_scene_ui_status status = active_slots(ui, slots, &count);
     if (status) return status;
     uint32_t child = 0;
-    for (unsigned i = 0; i < count; ++i) {
+    for (unsigned i = 0; i < count;) {
         unsigned slot = slots[i];
         status = opening(ui->blocks + slot, ui->sources + slot, ui, work, timing, slots, count, &child);
+        if (!status && ui->blocks[slot].payload[0] == 7) {
+            status = recycle_window(ui, slot, &child);
+            if (!status) {
+                for (unsigned j = i; j + 1 < count; ++j) slots[j] = slots[j + 1];
+                --count;
+                continue;
+            }
+        }
         if (status) {
             if (frontier) *frontier = child;
             return status;
         }
+        ++i;
     }
     return GH_SCENE_UI_OK;
 }

@@ -37,6 +37,8 @@ gh_stage_status gh_stage_tm3_resolve(gh_stage_textures *,const void *tm3,size_t,
  * GS alpha is retained. TEX0 must identify an existing channel; a TBW change
  * is admitted only when every sampled address is unchanged. No texture
  * fallback or GPU upload is implied. Views share the existing material cache. */
+gh_stage_status gh_stage_tim2_sprite_resolve(gh_stage_textures *,const void *,size_t,unsigned,
+ const gh_stage_material **);
 gh_stage_status gh_stage_tex0_material(gh_stage_textures *,uint64_t tex0,const gh_stage_material **);
 /* Clear before freeing borrowed room/TM3 source bytes. Core channels and VRAM
  * owner stay intact. Cache IDs are never recycled within this manager. */

@@ -67,6 +67,33 @@ class StartupRunnerTests(unittest.TestCase):
         self.assertEqual(command[command.index("--profile") + 1], str(self.scratch / "profile-absent"))
         self.assertEqual(command[-4:], ["--qa-capture-frame", "370", "--max-ticks", "1100"])
 
+    def test_capture_range_preserves_first_path_and_process_command(self):
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, 500, 370, 3)
+        command = prepared["command"]
+        self.assertEqual(command[-2:], ["--qa-capture-count", "3"])
+        self.assertEqual(command[command.index("--qa-capture") + 1],
+                         str(self.scratch / "first-scene-candidate.rgba"))
+        with patch.object(tool.subprocess, "run", self.fake_run(self.qa())):
+            tool.run(prepared)
+        receipt = json.loads((self.scratch / "startup-process.json").read_text())
+        self.assertEqual(receipt["command"], command)
+
+    def test_capture_range_rejects_existing_scene_or_world_frame(self):
+        for name in ("first-scene-candidate.scene-371.rgba",
+                     "first-scene-candidate.scene-371.rgba.world.rgba"):
+            path = self.scratch / name
+            path.write_bytes(b"preserve")
+            with self.subTest(name=name), self.assertRaises(tool.proof.ProofError):
+                tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, 500, 370, 3)
+            self.assertEqual(path.read_bytes(), b"preserve")
+            path.unlink()
+
+    def test_capture_range_bounds_rejected(self):
+        for capture, count in ((370, 0), (370, tool.MAX_CAPTURE_COUNT + 1), (500, 2)):
+            with self.subTest(capture=capture, count=count), self.assertRaises(tool.proof.ProofError):
+                tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, 500, capture, count)
+        self.assertFalse((self.scratch / "startup-run.lock").exists())
+
     def test_modified_source_rejected_before_launch(self):
         self.source.write_bytes(b"changed")
         with self.assertRaises(tool.proof.ProofError): self.prepare()

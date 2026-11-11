@@ -20,11 +20,16 @@ typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;
 typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_request request;
  gh_effect_view est;uint32_t stage,row,count,slot,serial,frontier,config_flags;gh_game_mt *random_identity;int original_return;
  const gh_title_player_view *event_row_actor;const gh_actor_model *event_row_model;
- uint8_t active,complete,configuration_305e88,configuration_2fa158;} gh_effect_create_call;
+ uint8_t active,complete,configuration_305e88,configuration_2fa158,configuration_nested_group;
+ uint32_t configuration_nested_scale,configuration_nested_flags;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
 /* Only the known non-NULL305E88 configuration (unit scales/VF0 vectors,
  * flags40, actorNULL, mode=index+2200). Caller still owns the414 mark. */
+/* Original explicit config from 2F1D3C; this bounded entry supports group >0
+ * and does not run Event row actor lookup unless flags actually request it. */
+gh_effect_status gh_effect_create_nested_begin_002f1d3c(gh_effect_create_call *,
+ const gh_effect_create_request *,uint8_t group,uint32_t scale,uint32_t flags);
 gh_effect_status gh_effect_create_ambient_begin_00305e88(gh_effect_create_call *,uint32_t index);
 /* 2FA158's explicit configuration and camera cut -> bank 6 index. The
  * 2FA240 row actor is distinct from the original NULL selector argument. */
@@ -57,8 +62,13 @@ gh_effect_status gh_effect_create_esp_abort_partial(gh_game_effects *,unsigned,u
 gh_effect_status gh_effect_create_bind_frame_globals(gh_game_effects *,struct gh_effects_frame_globals *);
 gh_effect_status gh_effect_create_bind_frame_actors(gh_game_effects *,gh_game_scene_tables *);
 /* Called only after actualtype6 virtualInit computation has returned1. */
+gh_effect_status gh_effect_create_esp_commit_base(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_type6(gh_game_effects *,unsigned,uint32_t);
+gh_effect_status gh_effect_create_esp_commit_14(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_12(gh_game_effects *,unsigned,uint32_t);
+gh_effect_status gh_effect_create_esp_commit_13(gh_game_effects *,unsigned,uint32_t);
+/* Non-SSD resource banks use the original one-based EST table index. */
+gh_effect_status gh_effect_est_at_00306030(const gh_game_effects *,uint32_t,uint32_t,gh_effect_view *);
 gh_effect_status gh_effect_create_esp_commit_1a(gh_game_effects *,unsigned,uint32_t);
 /* Explicit host destruction after this slot's tasks/jobs stop; onlyverified
  * type6 NULLactor domain, never originalruntimeESP dtor. */
@@ -75,6 +85,13 @@ gh_effect_status gh_effect_create_esp_bind_textures(gh_game_effects *,unsigned,u
 void gh_effect_create_forget_on_owner_destroy(gh_game_effects *);
 /* Restricted original ambientESP lifecycle; samepool/serial verified. */
 gh_effect_status gh_effect_create_esp_pause_002fbe50(gh_game_effects *,unsigned,uint32_t,uint32_t *frontier);
+struct gh_esp14_instance;
+gh_effect_status gh_effect_create_esp_check_hidden_14(gh_game_effects *,unsigned,uint32_t);
+gh_effect_status gh_effect_create_esp_finish_hidden_14(struct gh_esp14_instance *,uint32_t *frontier);
+/* Queries only the current active metadata, including paused/hidden slots.
+ * Use the same canonical actor view until it reports no live references. */
+gh_effect_status gh_effect_create_actor_has_live_refs(const gh_game_effects *,
+ const gh_title_player_view *,int *borrowed);
 gh_effect_status gh_effect_create_esp_destroy_hidden_native(gh_game_effects *,unsigned,uint32_t,uint32_t *frontier);
 #ifdef __cplusplus
 }

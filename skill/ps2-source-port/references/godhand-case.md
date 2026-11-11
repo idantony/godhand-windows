@@ -274,3 +274,36 @@ Generic model input containing rawzero does not prove that constructor ran.
 The native metadata defaults unknown; a verified factory explicitly records
 constructor-empty provenance on the same model packet owner. Positive/unknown
 references remain strict and cannot be cleared then re-certified as empty.
+
+The original active camera can change between completed draw invocations.
+Actor render continuations borrow the newly selected camera after next_call
+clears the completed nested state. Preserve the old camera on a suspended
+invocation. In 14EFA8, current camera005CAFF0 supplies eye and projection while
+the separate Up global3BD8B0 supplies ground alignment. Their native owners
+can legitimately refer to MotionCamera and PlCamera respectively. The same
+current camera also reaches attached light14D9D4 through the Trans request.
+
+Model-backed ESP14 has two lifetimes. Its numeric particle slot can be reused
+after hidden2F27E8, while nested emitter/particle metadata still borrows its
+child model. Retain that same child until canonical object Trans30F650 has
+unregistered it and the current effect metadata has released every reference.
+The real sound detach and model destructor remain ordered, retryable calls.
+Retirement metadata tracks lifetime while the original registries own identity.
+
+Mode1 warp2F02B8 samples a CT24 capture whose first row can depend on scene
+rows outside the represented 448-line surface. Keep that row unknown until
+its producer is established. A vertex UV bound incorrectly rejected EV01
+scene409 because the offending vertex was outside the viewport. Exact packed
+XY fan coverage and the admitted native binary32 interpolation show600
+source-dependent samples, all safely within known rows. Positive bilinear
+weights determine consumed texels. Under the verified ALPHA44, alpha-preserving
+frame mask and disabled Z writes, an interpolated zero source alpha leaves
+all outputs intact. Other states still require their actual sampled rows.
+These proofs cover the native numerical profile and actual resource packets.
+
+Capture successive final composites together with their pre-UI surfaces and
+original Fade state. EV01's world was already visible underneath its initial
+black overlay. The observed composite becomes nonblack at scene401 and is
+fully revealed at408. A pre-UI image alone would not establish the displayed
+result. QA capture ranges preserve the first output name and record later
+serials so one run can verify the whole transition.

@@ -27,7 +27,8 @@ typedef gh_effect_status (*gh_effect_trans_emit)(void *,const gh_effect_trans_pa
 typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;gh_effects_frame_globals *globals;const gh_display_state *display;
  gh_static_transform_policy policy;gh_frame_numeric_policy cvt_policy;
  gh_effect_trans_emit emit;void *context;
- const gh_game_pl_camera *camera;const gh_game_init_state *init;gh_stage_textures *textures;} gh_effects_trans_bindings;
+ const gh_game_pl_camera *camera;const gh_game_init_state *init;gh_stage_textures *textures;
+ const struct gh_esp14_provider *model_effect;} gh_effects_trans_bindings;
 typedef struct {const void *identity;gh_effects_trans_bindings b;unsigned esp_index;uint32_t serial,call_stage,frontier,enqueued;uint8_t bound,pending,complete,entered;uint32_t gate_10000;
  gh_effect_trans_packet packet;
  gh_effect_sprite_projection sprite;float sprite_fade;const gh_stage_material *sprite_material;} gh_game_effects_trans;

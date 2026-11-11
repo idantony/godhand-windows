@@ -16,11 +16,14 @@ proof = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(proof)
 
 
+MAX_CAPTURE_COUNT = 120
+
+
 def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
-def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370):
+def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370, capture_count=1):
     """Read-only preflight. No launch or output creation occurs on rejection."""
     snapshot, scratch = Path(snapshot_arg).resolve(), Path(scratch_arg).resolve()
     iso, ffmpeg = Path(iso_arg).resolve(), Path(ffmpeg_arg).resolve()
@@ -28,6 +31,9 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
                   "snapshot and scratch must be below project G scratch")
     proof.require(type(max_ticks) is int and 1 <= capture_frame <= max_ticks <= 100000,
                   "require 1 <= capture-frame <= max-ticks <= 100000")
+    proof.require(type(capture_count) is int and 1 <= capture_count <= MAX_CAPTURE_COUNT
+                  and capture_frame + capture_count - 1 <= max_ticks,
+                  f"require 1 <= capture-count <= {MAX_CAPTURE_COUNT} and range within max-ticks")
     inputs = proof.Inputs()
     receipt, receipt_fact = inputs.report(snapshot / "analysis/source-snapshot.json")
     proof.require(receipt.get("status") == "copied-exact-bytes; not-yet-built-or-tested", "invalid source snapshot receipt")
@@ -54,6 +60,10 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
     command = [str(executable), "--iso", str(iso), "--profile", str(profile), "--ffmpeg", str(ffmpeg),
                "--hidden", "--muted", "--qa-new-game", "--qa-capture", str(capture),
                "--qa-capture-frame", str(capture_frame), "--max-ticks", str(max_ticks)]
+    if capture_count > 1:
+        proof.require(not any(scratch.glob(capture.stem + ".scene-*.rgba")),
+                      "QA range outputs already exist; use a fresh scratch cohort")
+        command.extend(("--qa-capture-count", str(capture_count)))
     return {"command": command, "scratch": scratch, "executable": executable,
             "executable_sha256": exe_sha, "source_snapshot": receipt_fact, "windows_build": report_fact}
 
@@ -98,9 +108,11 @@ def main():
     parser.add_argument("--ffmpeg", type=Path, default=PROJECT / ".tools/ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe")
     parser.add_argument("--max-ticks", type=int, default=1100)
     parser.add_argument("--capture-frame", type=int, default=370)
+    parser.add_argument("--capture-count", type=int, default=1,
+                        help=f"capture up to {MAX_CAPTURE_COUNT} ready scene frames beginning at capture-frame")
     args = parser.parse_args()
     try:
-        prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame)
+        prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame, args.capture_count)
         print(json.dumps(run(prepared)), flush=True)
     except (proof.ProofError, OSError, ValueError) as error:
         parser.exit(1, str(error) + "\n")

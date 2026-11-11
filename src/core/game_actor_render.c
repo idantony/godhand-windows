@@ -3,7 +3,7 @@
 
 static int same(const gh_actor_render_bindings *a,const gh_actor_render_bindings *b)
 {
- return a->work==b->work&&a->camera==b->camera&&a->light==b->light&&
+ return a->work==b->work&&a->light==b->light&&
   a->depth_shift==b->depth_shift&&a->elf==b->elf&&a->elf_bytes==b->elf_bytes&&
   a->shadow==b->shadow&&a->actors==b->actors&&a->up_owner==b->up_owner&&
   a->pivot_owner==b->pivot_owner&&a->templates==b->templates&&a->textures==b->textures&&
@@ -42,7 +42,14 @@ gh_actor_model_status gh_actor_render_0014a3e8(gh_actor_render_call *c,gh_actor_
 {
  if(f)*f=0;
  if(!c||!m||!b)return GH_ACTOR_MODEL_ARGUMENT;
- if(c->bound){if(c->identity!=c||c->model!=m||!same(&c->bindings,b))return GH_ACTOR_MODEL_BUSY;}
+ if(c->bound){
+  if(c->identity!=c||c->model!=m||!same(&c->bindings,b))return GH_ACTOR_MODEL_BUSY;
+  if(c->bindings.camera!=b->camera){
+   /* The original current camera can change between invocations. */
+   if(c->trans.active||!b->camera||!b->camera->constructed)return GH_ACTOR_MODEL_BUSY;
+   c->bindings.camera=b->camera;
+  }
+ }
  else{memset(c,0,sizeof(*c));c->bindings=*b;c->model=m;c->identity=c;c->bound=1;}
  gh_actor_trans_bindings trans={.work=b->work,.camera=b->camera,.world_light=b->light,
   .depth_shift=b->depth_shift,.elf=b->elf,.elf_bytes=b->elf_bytes,.shadow=b->shadow,

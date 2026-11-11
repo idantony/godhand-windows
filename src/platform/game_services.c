@@ -38,6 +38,7 @@
 #include "../core/game_player_frame.h"
 #include "../core/game_player_idle_input.h"
 #include "../core/game_effect_create.h"
+#include "../core/game_esp14.h"
 #include "../core/game_player_door_probe.h"
 #include "../core/game_action_button_set.h"
 #include "../core/game_player_child_update.h"
@@ -48,6 +49,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+typedef struct gh_services_esp14_slot {
+    gh_game_services *services;
+    struct gh_services_esp14_slot *retired_next;
+    gh_esp14_instance instance;
+    gh_effect_create_call nested_emitter;
+    gh_actor_render_call render;
+    uint32_t serial;
+} gh_services_esp14_slot;
+
 struct gh_game_services {
  gh_game_services_bindings b;gh_game_cockpit *cockpit;
  gh_game_objects *objects,*room_objects;gh_game_prepare prepare;
@@ -83,6 +93,9 @@ struct gh_game_services {
  gh_event_actor_extra *event_actor_extra;
  gh_event_accessory_move event_accessory_move;
  gh_actor_render_call event_actor_render[10];
+ gh_esp14_provider model_effect;
+ gh_services_esp14_slot *esp14_slots[1024], *esp14_retired;
+ size_t esp14_limit;
  gh_game_player_init player_init;gh_actor_model player_model;
  gh_game_player_init_tail player_tail;gh_game_player_child player_child;
  gh_player_child_attachment player_attachment;
@@ -232,6 +245,163 @@ static gh_title_player_status player_child_initialize(void*p,gh_game_player_chil
 static gh_effect_release_bindings player_effect_storage(gh_game_services*s){
  return (gh_effect_release_bindings){.effects=&s->effects,.esp=s->scene_buffer_a,.emitters=s->scene_buffer_b,
   .esp_bytes=sizeof(s->scene_buffer_a),.emitter_bytes=sizeof(s->scene_buffer_b),.actor_match=gh_effect_create_actor_match,.context=&s->effects};
+}
+static gh_effect_status create_model_emitter(void *context,const gh_esp14_nested_request *request,
+ const gh_actor_model *model,int *original_return,uint32_t *frontier)
+{
+ gh_services_esp14_slot *slot=context;
+ gh_game_services *s=slot->services;
+ gh_effect_create_call *call=&slot->nested_emitter;
+ if(!request||!original_return||!frontier||model!=&slot->instance.child.model||
+    request->request.actor!=&slot->instance.child.object.view)return GH_EFFECT_ARGUMENT;
+ *frontier=0x306528;
+ if(!call->active){
+  gh_effect_status status=gh_effect_create_nested_begin_002f1d3c(call,&request->request,
+   request->group_74,request->config_40,request->config_48);
+  if(status)return status;
+ }
+ const gh_effect_create_bindings bindings={.storage=player_effect_storage(s),.work=s->b.work,
+  .random=&s->b.init->random,.model=model};
+ gh_effect_status status=gh_game_effect_create_00306528(call,&bindings);
+ if(status){if(call->frontier)*frontier=call->frontier;return status;}
+ if(!call->complete)return GH_EFFECT_ARGUMENT;
+ *original_return=call->original_return;
+ *frontier=0;
+ return GH_EFFECT_OK;
+}
+
+static gh_esp14_bindings model_effect_bindings(gh_services_esp14_slot *slot)
+{
+ gh_game_services *s=slot->services;
+ return (gh_esp14_bindings){
+  .model={.pools=&s->pools,.work=s->b.work,.factory_serial=s->b.factory_serial,
+   .packet_heap=s->b.assets->heap,.fog_rgb=s->world_light.scalar+4,.policy=GH_STATIC_BINARY32_REFERENCE},
+  .effects=&s->effects,.atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL,
+  .nested_create=create_model_emitter,.context=slot
+ };
+}
+
+static gh_services_esp14_slot *model_effect_slot(gh_game_services *s,const gh_effect_esp_view *view,unsigned index)
+{
+ if(index>=sizeof(s->esp14_slots)/sizeof(*s->esp14_slots)||view->type!=0x14||!view->serial)return NULL;
+ gh_services_esp14_slot *slot=s->esp14_slots[index];
+ return slot&&slot->serial==view->serial?slot:NULL;
+}
+
+static gh_effect_status initialize_model_effect(void *context,const gh_effect_esp_view *view,unsigned index,
+ uint32_t parameter_40,int *original_return,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ *frontier=0x2f1d58;
+ if(!view||view->type!=0x14||!view->serial||index>=sizeof(s->esp14_slots)/sizeof(*s->esp14_slots))
+  return GH_EFFECT_ARGUMENT;
+ if(!s->esp14_slots[index]){
+  gh_services_esp14_slot *slot=calloc(1,sizeof(*slot));
+  if(!slot)return GH_EFFECT_BOUNDS;
+  slot->services=s;
+  slot->serial=view->serial;
+  s->esp14_slots[index]=slot;
+  if(s->esp14_limit<=index)s->esp14_limit=(size_t)index+1;
+ }
+ gh_services_esp14_slot *slot=model_effect_slot(s,view,index);
+ if(!slot)return GH_EFFECT_ARGUMENT;
+ const gh_esp14_bindings bindings=model_effect_bindings(slot);
+ return gh_esp14_initialize_002f1d58(&slot->instance,&bindings,view,index,parameter_40,original_return,frontier);
+}
+
+static gh_effect_status move_model_effect(void *context,const gh_effect_esp_view *view,unsigned index,
+ int active,uint32_t *frontier)
+{
+ gh_services_esp14_slot *slot=model_effect_slot(context,view,index);
+ if(!slot)return GH_EFFECT_ARGUMENT;
+ const gh_esp14_bindings bindings=model_effect_bindings(slot);
+ return gh_esp14_move_after_base_002f2250(&slot->instance,&bindings,view,active,frontier);
+}
+
+static gh_effect_status trans_model_effect(void *context,const gh_effect_esp_view *view,unsigned index,uint32_t *frontier)
+{
+ gh_services_esp14_slot *slot=model_effect_slot(context,view,index);
+ if(!slot)return GH_EFFECT_ARGUMENT;
+ return gh_esp14_trans_002f2758(&slot->instance,view,frontier);
+}
+
+static gh_effect_status detach_model_effect_sound(void *context,gh_actor_model *model,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ *frontier=0x2cbe18;
+ if(!s->b.voices)return GH_EFFECT_UNSUPPORTED;
+ gh_voice_status status=gh_se_voice_detach_actor_002ce488(s->b.voices,model);
+ if(status){
+  uint32_t detail=gh_se_voice_frontier(s->b.voices);
+  if(detail)*frontier=detail;
+  return GH_EFFECT_UNSUPPORTED;
+ }
+ *frontier=0;
+ return GH_EFFECT_OK;
+}
+
+static gh_effect_status destroy_model_effect(void *context,const gh_effect_esp_view *view,
+ unsigned index,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ gh_services_esp14_slot *slot=model_effect_slot(s,view,index);
+ if(!slot){*frontier=0x2f27e8;return GH_EFFECT_UNSUPPORTED;}
+ gh_effect_status status=gh_esp14_destroy_hidden_002f27e8(&slot->instance,
+     detach_model_effect_sound,s,frontier);
+ if(status)return status;
+ /* The current effect traversal clears the original active bit immediately
+  * after returning. A new serial may then reuse the slot. */
+ s->esp14_slots[index]=NULL;
+ slot->retired_next=s->esp14_retired;
+ s->esp14_retired=slot;
+ while(s->esp14_limit&&!s->esp14_slots[s->esp14_limit-1])s->esp14_limit--;
+ return GH_EFFECT_OK;
+}
+
+static gh_effect_status collect_model_effects(void *context,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ gh_services_esp14_slot **link=&s->esp14_retired;
+ while(*link){
+  gh_services_esp14_slot *slot=*link;
+  int collected=0;
+  gh_effect_status status=gh_esp14_collect_retired(&slot->instance,&collected,frontier);
+  if(status)return status;
+  if(collected){*link=slot->retired_next;free(slot);}
+  else link=&slot->retired_next;
+ }
+ return GH_EFFECT_OK;
+}
+
+static int model_effect_registered(gh_game_services *s,gh_services_esp14_slot *slot,uint32_t handle)
+{
+ if(!slot||slot->instance.child.handle!=handle)return 0;
+ gh_esp14_model *child=&slot->instance.child;
+ void *registered=NULL;
+ return gh_room_object_lookup(&s->pools,handle,GH_ESP_MODEL_KIND,child,&registered)==GH_POOL_OK&&
+        registered==&child->object;
+}
+
+static gh_services_esp14_slot *model_effect_actor(gh_game_services *s,uint32_t handle)
+{
+ if(!handle)return NULL;
+ for(size_t i=0;i<s->esp14_limit;i++){
+  gh_services_esp14_slot *slot=s->esp14_slots[i];
+  if(model_effect_registered(s,slot,handle))return slot;
+ }
+ for(gh_services_esp14_slot *slot=s->esp14_retired;slot;slot=slot->retired_next)
+  if(model_effect_registered(s,slot,handle))return slot;
+ return NULL;
+}
+
+static gh_effect_status shutdown_model_effect(gh_game_services *s,gh_services_esp14_slot *slot)
+{
+ if(slot->instance.child.model.sound_borrowers){
+  uint32_t frontier;
+  gh_effect_status status=detach_model_effect_sound(s,&slot->instance.child.model,&frontier);
+  if(status)return status;
+ }
+ return gh_esp14_model_dispose(&slot->instance.child);
 }
 static gh_actor_motion_status player_motion_effect(void*p,const gh_title_player_view*actor,int32_t kind,uint32_t mode,uint32_t*frontier){
  gh_game_services*s=p;if(!actor||actor->bytes!=s->title_player.view.bytes)return GH_ACTOR_MOTION_ARGUMENT;
@@ -423,6 +593,10 @@ gh_game_services_status gh_game_services_create(const gh_game_services_bindings*
  if(b->camera_envelope&&b->camera_envelope->player_model)return GH_SERVICES_BUSY;
  if(b->stage->global_slots.configured||b->stage->room_slots.configured||b->stage->skills.image)return GH_SERVICES_BUSY;
  s=calloc(1,sizeof(*s));if(!s)return GH_SERVICES_MEMORY;s->b=*b;
+ s->model_effect=(gh_esp14_provider){
+  .context=s,.initialize=initialize_model_effect,.move=move_model_effect,.trans=trans_model_effect,
+  .destroy_hidden=destroy_model_effect,.collect_retired=collect_model_effects
+ };
  if(b->camera_envelope)(void)gh_game_camera_envelope_bind_model(b->camera_envelope,&s->player_model);
  s->object_resources=(gh_object_resource_bindings){.dvd=b->assets->dvd,.heap=b->assets->heap,.threads=b->threads,
   .sound_check=b->enemy_banks?gh_enemy_se_object_sound_check:NULL,.sound_context=b->enemy_banks};
@@ -781,6 +955,22 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
    * models. It neither acknowledges original Kill nor clears live masks. */
   {gh_voice_status e=gh_actor_attached_sound_abort(&s->player_sound);if(e)return fail(s,GH_SERVICES_ASSET,s->player_sound.frontier?s->player_sound.frontier:0x2cba48,e);}
   gh_effect_create_forget_on_owner_destroy(&s->effects);
+  for(size_t i=0;i<s->esp14_limit;i++){
+   gh_services_esp14_slot *slot=s->esp14_slots[i];
+   if(!slot)continue;
+   gh_effect_status status=shutdown_model_effect(s,slot);
+   if(status)return fail(s,GH_SERVICES_ASSET,0x2f27e8,status);
+   free(slot);
+   s->esp14_slots[i]=NULL;
+  }
+  s->esp14_limit=0;
+  while(s->esp14_retired){
+   gh_services_esp14_slot *slot=s->esp14_retired;
+   gh_effect_status status=shutdown_model_effect(s,slot);
+   if(status)return fail(s,GH_SERVICES_ASSET,0x2b8908,status);
+   s->esp14_retired=slot->retired_next;
+   free(slot);
+  }
   if(gh_r100_init_release(&s->r100))return fail(s,GH_SERVICES_ASSET,0x208,0);
  if(gh_scene_at_units_release(&s->scene_at))return fail(s,GH_SERVICES_ASSET,0x2c1270,0);
  gh_scene_dynamic_cancel_update(&s->dynamic_objects);
@@ -888,6 +1078,8 @@ static gh_event_actor_factory *event_actor_for_handle(gh_game_services *s, uint3
 
 gh_game_services_status gh_game_services_actor_view(gh_game_services*s,uint32_t handle,gh_title_player_view*out){
  if(!s||!out)return GH_SERVICES_ARGUMENT;
+ gh_services_esp14_slot *effect_actor=model_effect_actor(s,handle);
+ if(effect_actor){*out=effect_actor->instance.child.object.view;return GH_SERVICES_OK;}
  gh_event_actor_factory*event_actor=event_actor_for_handle(s,handle);
  if(event_actor)return gh_event_actor_factory_view(event_actor,handle,out)==GH_EVENT_OK?GH_SERVICES_OK:GH_SERVICES_ASSET;
  const gh_title_player_view *player=NULL;
@@ -917,8 +1109,10 @@ gh_game_services_status gh_game_services_mask_actor_nodes(gh_game_services*s,uin
   }*f=0x14b6f8;return GH_SERVICES_ASSET;
  }
  gh_actor_model*m=NULL;const gh_title_player_view*player=NULL;
+ gh_services_esp14_slot *effect_actor=model_effect_actor(s,handle);
  gh_event_actor_factory*event_actor=event_actor_for_handle(s,handle);
- if(!gh_game_player_factory_scalar_view(&s->player_factory,handle,&player))m=&s->player_model;
+ if(effect_actor)m=&effect_actor->instance.child.model;
+ else if(!gh_game_player_factory_scalar_view(&s->player_factory,handle,&player))m=&s->player_model;
  else if(handle==s->player_child.handle&&s->player_child.complete){gh_title_player_view v;gh_game_services_status e=gh_game_services_actor_view(s,handle,&v);if(e){*f=0x14b6f8;return e;}m=&s->player_child.model;}
  else if(event_actor){gh_title_player_view v;gh_game_services_status e=gh_game_services_actor_view(s,handle,&v);if(e){*f=0x14b6f8;return e;}m=&event_actor->model;}
  else if(gh_om_factory_model_at(&s->om_factory,handle,&m)){*f=0x14b6f8;return GH_SERVICES_FRONTIER;}
@@ -971,6 +1165,15 @@ static gh_player_frame_status player_frame_door_probe(void*p,const gh_title_play
 gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t handle,uint32_t entry,int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,uint32_t*f){
  if(f)*f=0;if(!s||!v||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
  s->update_diagnostic.last_move_handle=handle;s->update_diagnostic.last_move_entry=entry;
+ gh_services_esp14_slot *effect_actor=model_effect_actor(s,handle);
+ if(effect_actor){
+  gh_esp14_model *child=&effect_actor->instance.child;
+  if(entry!=0x2b8850||delta||v->bytes!=child->object.view.bytes||v->size!=child->object.view.size){
+   *f=entry;return GH_SERVICES_FRONTIER;
+  }
+  gh_effect_status status=gh_esp14_model_move_002b8850(child,work,GH_STATIC_BINARY32_REFERENCE,f);
+  return !status?GH_SERVICES_OK:status==GH_EFFECT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+ }
  if(s->event_actor_extra&&handle&&handle==s->event_actor_extra->accessory_handle){
   gh_event_actor_factory *actor=&s->event_actor_extra->olivia_accessory;
   if(entry!=0x2b6930||delta||v->bytes!=actor->object.view.bytes||v->size!=actor->object.view.size){*f=entry;return GH_SERVICES_FRONTIER;}
@@ -1041,7 +1244,7 @@ gh_game_services_status gh_game_services_move_actor(gh_game_services*s,uint32_t 
 static gh_actor_model_status render_other(void*context,const gh_actor_trans_request*r,uint32_t*f){
  gh_game_services*s=context;if(!s||!r||!f)return GH_ACTOR_MODEL_ARGUMENT;*f=0;
  if(r->entry==0x14d828){
-  gh_actor_light_bindings b={.pivot_owner=s->b.player_shared_vector,.camera=&s->camera};
+  gh_actor_light_bindings b={.pivot_owner=s->b.player_shared_vector,.camera=r->camera};
   return gh_actor_model_light_0014d828(r->model,&s->world_light,&b,GH_STATIC_BINARY32_REFERENCE,f);
  }
  if(r->entry!=0x31a600){*f=r->entry;return GH_ACTOR_MODEL_UNSUPPORTED;}
@@ -1062,11 +1265,21 @@ static void trace_render_frontier(const gh_game_services*s,const gh_object_trans
 gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh_object_trans_request*q,
  const gh_boot_work*work,const gh_game_actor_render_provider*provider,uint32_t*f){
  if(f)*f=0;if(!s||!q||!provider||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
+ gh_services_esp14_slot *effect_actor=model_effect_actor(s,q->handle);
+ if(q->kind==GH_OBJECT_TRANS_DESTROY&&q->original_entry==0x2b8908&&
+    q->argument==3&&!q->this_delta&&effect_actor){
+  gh_esp14_instance *instance=&effect_actor->instance;
+  if(q->actor.bytes!=instance->child.object.view.bytes){*f=0x2b8908;return GH_SERVICES_ASSET;}
+  gh_effect_status status=gh_esp14_child_destroy_002b8908(instance,s->room_objects,s->objects,f);
+  return !status?GH_SERVICES_OK:status==GH_EFFECT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+ }
  if(q->kind!=GH_OBJECT_TRANS_NORMAL||q->original_entry!=0x14a3e8||q->this_delta){*f=q->original_entry;return GH_SERVICES_FRONTIER;}
  gh_actor_model*model=NULL;const gh_player_shadow*shadow=NULL;gh_actor_render_call*call=NULL;
  const gh_title_player_view*player=NULL;
  gh_event_actor_factory *event_actor=event_actor_for_handle(s,q->handle);
- if(!gh_game_player_factory_scalar_view(&s->player_factory,q->handle,&player)){
+ if(effect_actor){
+  model=&effect_actor->instance.child.model;call=&effect_actor->render;
+ }else if(!gh_game_player_factory_scalar_view(&s->player_factory,q->handle,&player)){
   if(!s->player_tail.complete||s->player_model.root.bytes!=player->bytes){*f=0x14a3e8;return GH_SERVICES_FRONTIER;}
   model=&s->player_model;shadow=&s->player_tail.shadow;call=&s->player_render;
  }else if(q->handle==s->player_child.handle&&s->player_child.complete){
@@ -1167,7 +1380,7 @@ gh_game_services_status gh_game_services_get_scene_view(gh_game_services*s,gh_ga
   .scenario_threads=s->scenario_threads,.scenario_bytes=s->scenario_scalar,.scenario_bytes_size=sizeof(s->scenario_scalar),.room_state=&s->room_state,.room_pack=&s->room_pack,.pools=&s->pools,
   .pl_camera=&s->camera,.cockpit=s->cockpit,.objects=s->objects,.room_objects=s->room_objects,
   .module=&s->module,.sound_scene=s->b.sound_scene,.collision_pairs=&s->collision_pairs,
-  .effects=&s->effects,.filters=&s->filters,
+  .effects=&s->effects,.filters=&s->filters,.model_effect=&s->model_effect,
   .world_light=&s->world_light,.model_packets=&s->model_packets,
   .work5f8=&s->work5f8,.event_weapon=&s->player_weapon,.player_model=&s->player_model,
   .collision_solids=&s->collision_solids,.scene_tables=&s->scene_tables,.title_player=&s->title_player,

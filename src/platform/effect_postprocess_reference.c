@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <math.h>
+#include <fenv.h>
 
 static int64_t floor_div(int64_t a,int64_t b){int64_t q=a/b,r=a%b;return q-(r<0);}
 static int surface_valid(const gh_effect_post_surface*s){
@@ -170,4 +172,93 @@ gh_effect_post_status gh_effect_postprocess_capture_scene(const gh_effect_trans_
  }
  *first_row_known=!first_y;
  return GH_EFFECT_POST_OK;
+}
+
+
+typedef struct {int32_t x,y;float t,alpha;} warp_sample_vertex;
+static int64_t warp_edge(warp_sample_vertex a,warp_sample_vertex b,int32_t x,int32_t y){
+ return (int64_t)(b.x-a.x)*(y-a.y)-(int64_t)(b.y-a.y)*(x-a.x);
+}
+static int warp_inclusive(warp_sample_vertex a,warp_sample_vertex b){
+ return b.y<a.y||(b.y==a.y&&b.x>a.x);
+}
+static float warp_interpolate(float a,float b,float c,float wb,float wc){
+ volatile float x=(b-a)*wb,y=(c-a)*wc,value=a+x;
+ value=value+y;
+ return value;
+}
+static gh_effect_post_status warp_known(const gh_effect_trans_packet*p,const gh_effect_post_sampler*state,
+ unsigned width,unsigned height,unsigned ox,unsigned oy,int first_known){
+ if(!p||!width||!height||width>2048||height>2048||ox>65535||oy>65535||
+    (first_known!=0&&first_known!=1))return GH_EFFECT_POST_ARGUMENT;
+ if(p->kind!=GH_EFFECT_PASS_SCENE_WARP||p->original_callee!=0x2f02b8||p->quad_count!=1||
+    p->quads[0].vertex_count!=6||p->prim!=0x5d||p->test!=0x5000c||
+    p->tex0!=UINT64_C(0x2000000620113c00)||!p->writes_texa||p->texa!=0x80)
+    return GH_EFFECT_POST_UNSUPPORTED;
+ int linear;
+ gh_effect_post_status status=sampler(state,&linear);
+ if(status)return status;
+ warp_sample_vertex vertices[6];
+ int safely_inside=1,all_alpha_zero=1;
+ for(unsigned i=0;i<6;i++){
+    const gh_effect_trans_vertex*v=p->quads[0].vertices+i;
+    if(v->q!=1||!isfinite(v->t)||fabsf(v->t)>16.0f)return GH_EFFECT_POST_UNSUPPORTED;
+    if(v->t<2.0f/256.0f||v->t>255.0f/256.0f)safely_inside=0;
+    if(v->rgba>>24)all_alpha_zero=0;
+    vertices[i]=(warp_sample_vertex){(int32_t)((uint32_t)v->x12_4&65535u)-(int32_t)ox,
+       (int32_t)((uint32_t)v->y12_4&65535u)-(int32_t)oy,v->t,(float)(v->rgba>>24)};
+ }
+ if(first_known||safely_inside)return GH_EFFECT_POST_OK;
+ const int zero_alpha_inert=p->alpha==UINT64_C(0x8000000044)&&p->frame_mask==0xff000000u&&
+    (p->zbuf>>32)==1;
+ if(zero_alpha_inert&&all_alpha_zero)return GH_EFFECT_POST_OK;
+ for(unsigned triangle=0;triangle<4;triangle++){
+    warp_sample_vertex a=vertices[0],b=vertices[triangle+1],c=vertices[triangle+2];
+    int64_t area=warp_edge(a,b,c.x,c.y);
+    if(!area)continue;
+    if(area<0){warp_sample_vertex temp=b;b=c;c=temp;area=-area;}
+    int32_t minx=a.x,maxx=a.x,miny=a.y,maxy=a.y;
+    const warp_sample_vertex points[]={b,c};
+    for(unsigned k=0;k<2;k++){
+       if(points[k].x<minx)minx=points[k].x;
+       if(points[k].x>maxx)maxx=points[k].x;
+       if(points[k].y<miny)miny=points[k].y;
+       if(points[k].y>maxy)maxy=points[k].y;
+    }
+    int32_t left=(int32_t)-floor_div(-minx,16),top=(int32_t)-floor_div(-miny,16);
+    int32_t right=(int32_t)floor_div(maxx,16),bottom=(int32_t)floor_div(maxy,16);
+    if(left<0)left=0;
+    if(top<0)top=0;
+    if(right>=(int32_t)width)right=(int32_t)width-1;
+    if(bottom>=(int32_t)height)bottom=(int32_t)height-1;
+    for(int32_t y=top;y<=bottom;y++)for(int32_t x=left;x<=right;x++){
+       int64_t e0=warp_edge(b,c,x*16,y*16),e1=warp_edge(c,a,x*16,y*16),e2=warp_edge(a,b,x*16,y*16);
+       if(e0<0||e1<0||e2<0||(!e0&&!warp_inclusive(b,c))||
+          (!e1&&!warp_inclusive(c,a))||(!e2&&!warp_inclusive(a,b)))continue;
+       volatile float wb=(float)e1/(float)area,wc=(float)e2/(float)area;
+       if(zero_alpha_inert&&(int32_t)warp_interpolate(a.alpha,b.alpha,c.alpha,wb,wc)==0)continue;
+       float t=warp_interpolate(a.t,b.t,c.t,wb,wc);
+       volatile float scaled=t*256.0f;
+       volatile float fixed=scaled*65536.0f;
+       int64_t v=(int32_t)fixed;
+       if(!linear){if((floor_div(v,65536)&255)==0)return GH_EFFECT_POST_BOUNDS;}
+       else {
+          v-=32768;
+          int64_t row=floor_div(v,65536);
+          unsigned fraction=(unsigned)(floor_div(v,4096)&15);
+          if((row&255)==0||(((row+1)&255)==0&&fraction))
+             return GH_EFFECT_POST_BOUNDS;
+       }
+    }
+ }
+ return GH_EFFECT_POST_OK;
+}
+
+gh_effect_post_status gh_effect_postprocess_warp_source_known(const gh_effect_trans_packet*p,
+ const gh_effect_post_sampler*state,uint32_t width,uint32_t height,uint32_t ox,uint32_t oy,int first_known){
+ fenv_t env;
+ if(feholdexcept(&env))return GH_EFFECT_POST_UNSUPPORTED;
+ if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_EFFECT_POST_UNSUPPORTED;}
+ gh_effect_post_status status=warp_known(p,state,width,height,ox,oy,first_known);
+ return fesetenv(&env)?GH_EFFECT_POST_UNSUPPORTED:status;
 }

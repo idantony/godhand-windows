@@ -1,4 +1,5 @@
 #include "game_effect_node.h"
+#include "game_esp14.h"
 #include "game_actor_matrix.h"
 #include "game_actor_two_bone.h"
 #include "game_scene_at_geometry.h"
@@ -15,8 +16,8 @@ static gh_effect_status parentless_world(uint8_t*p,size_t n,float*out,gh_static_
 typedef struct {uint8_t*p;size_t size;int32_t parent,first_child;uint32_t parent_serial;} native_node;
 static gh_effect_status node(gh_game_effects*e,int emitter,unsigned slot,uint32_t serial,native_node*out,uint32_t*f){
  if(!e||!out||!f||emitter<0||emitter>1)return GH_EFFECT_ARGUMENT;*f=0;
- if(emitter){gh_effect_emitter_view v;if(gh_effect_create_emitter_at(e,slot,&v)||v.serial!=serial)return bad(f,0x2b61b0,GH_EFFECT_ARGUMENT);if(v.actor||v.selector||v.model||v.part)return bad(f,0x2b61b0,GH_EFFECT_UNSUPPORTED);*out=(native_node){v.payload,v.payload_size,-1,v.first_esp_child,0};}
- else {gh_effect_esp_view v;if(gh_effect_create_esp_at(e,slot,&v)||v.serial!=serial)return bad(f,0x2b61b0,GH_EFFECT_ARGUMENT);if(v.actor||v.selector)return bad(f,0x2b61b0,GH_EFFECT_UNSUPPORTED);*out=(native_node){v.payload,v.payload_size,v.parent_emitter,-1,v.parent_serial};}
+ if(emitter){gh_effect_emitter_view v;if(gh_effect_create_emitter_at(e,slot,&v)||v.serial!=serial)return bad(f,0x2b61b0,GH_EFFECT_ARGUMENT);if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector))||v.model||v.part)return bad(f,0x2b61b0,GH_EFFECT_UNSUPPORTED);*out=(native_node){v.payload,v.payload_size,-1,v.first_esp_child,0};}
+ else {gh_effect_esp_view v;if(gh_effect_create_esp_at(e,slot,&v)||v.serial!=serial)return bad(f,0x2b61b0,GH_EFFECT_ARGUMENT);if((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector))return bad(f,0x2b61b0,GH_EFFECT_UNSUPPORTED);*out=(native_node){v.payload,v.payload_size,v.parent_emitter,-1,v.parent_serial};}
  if(w(out->p+4)||w(out->p+8)||w(out->p+0xc)||w(out->p+0x10))return bad(f,0x2b5e50,GH_EFFECT_UNSUPPORTED);return GH_EFFECT_OK;
 }
 gh_effect_status gh_effect_node_world_matrix_native(gh_game_effects*e,int emitter,unsigned slot,uint32_t serial,float*out,gh_static_transform_policy policy,uint32_t*f){

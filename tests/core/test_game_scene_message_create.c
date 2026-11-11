@@ -3,6 +3,8 @@
 #include "game_event_side_play.h"
 #include "game_scene_message_create.h"
 #include "game_message_step.h"
+#include "game_scene_message_draw.h"
+#include "font_texture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +27,41 @@ static uint8_t *load(gh_disc *disc, const char *path, size_t *bytes) {
     uint8_t *data = malloc(*bytes);
     CHECK(data && gh_disc_read(disc, index, 0, data, *bytes) == GH_DISC_OK);
     return data;
+}
+
+typedef struct {
+    gh_scene_message_glyph_pair pair;
+    unsigned calls;
+} glyph_capture;
+
+static gh_scene_ui_status capture_glyph(void *context, const gh_scene_message_glyph_pair *pair,
+    uint32_t *frontier)
+{
+    glyph_capture *capture = context;
+    capture->pair = *pair;
+    ++capture->calls;
+    *frontier = 0;
+    return GH_SCENE_UI_OK;
+}
+
+static unsigned covered(const gh_font_quad *q, const uint8_t *atlas)
+{
+    unsigned hits = 0;
+    for (unsigned y = 0; y < 448; ++y) {
+        const unsigned fy = 29184 + y * 16;
+        if (fy < q->y0 || fy >= q->y1) continue;
+        const uint32_t v = ((uint32_t)q->v0 << 12) +
+            (uint32_t)(((uint64_t)(q->v1 - q->v0) << 12) * (fy - q->y0) / (q->y1 - q->y0));
+        for (unsigned x = 0; x < 512; ++x) {
+            const unsigned fx = 28672 + x * 16;
+            if (fx < q->x0 || fx >= q->x1) continue;
+            const uint32_t u = ((uint32_t)q->u0 << 12) +
+                (uint32_t)(((uint64_t)(q->u1 - q->u0) << 12) * (fx - q->x0) / (q->x1 - q->x0));
+            const uint8_t alpha = atlas[4 * ((v >> 16) * 512 + (u >> 16)) + 3];
+            hits += ((alpha == 255 ? 128u : alpha / 2u) * (q->rgba >> 24) >> 7) > 1;
+        }
+    }
+    return hits;
 }
 
 int main(int argc, char **argv) {
@@ -112,6 +149,12 @@ int main(int argc, char **argv) {
     const uint16_t first = (uint16_t)(script[0] | (unsigned)script[1] << 8);
     gh_font_glyph glyph;
     CHECK(!gh_font_glyph_at(&fonts, first, &glyph));
+    gh_display_state display;
+    CHECK(!gh_display_state_from_elf(&display, elf, elf_bytes));
+    CHECK(!gh_display_static_initialize_002a48a8(&display, 1, 0xffff));
+    gh_id_view palette;
+    CHECK(!gh_id_text_palette_from_elf(elf, elf_bytes, &palette));
+    glyph_capture draw = {0};
 
     put_word((uint8_t *)&work + 0x5d8, 0x80000);
     CHECK(!gh_scene_message_update_002aefa8(&ui, &work, &frontier) && !frontier);
@@ -132,6 +175,32 @@ int main(int argc, char **argv) {
     CHECK(block->payload[0] == 2 && !block->payload[1] && block->payload[0x14 - 0xc] == 0x1a);
     CHECK(gh_scene_message_prepare_draw_002af028(&ui, &work, &frontier) == GH_SCENE_UI_UNSUPPORTED);
     CHECK(frontier == 0x2b1c80);
+    CHECK(gh_scene_message_render_002af028(&ui, &work, &fonts, &display, palette,
+        NULL, NULL, &frontier) == GH_SCENE_UI_UNSUPPORTED && frontier == 0x2a5930);
+    CHECK(!gh_scene_message_render_002af028(&ui, &work, &fonts, &display, palette,
+        capture_glyph, &draw, &frontier) && !frontier && draw.calls == 1);
+    CHECK(draw.pair.font == fonts.slots && draw.pair.bank == 6 && draw.pair.depth == 2 &&
+        draw.pair.font_mode == 0x21 && draw.pair.normal.code == first && draw.pair.shadow.code == first);
+    const gh_font_quad normal = draw.pair.normal.quad, shadow = draw.pair.shadow.quad;
+    uint32_t color;
+    memcpy(&color, palette.bytes + 80, sizeof(color));
+    CHECK(normal.x0 == 32729 && normal.x1 == 32806 && normal.y0 == 35184 && normal.y1 == 35747);
+    CHECK(normal.z == 65535 && normal.rgba == color && shadow.rgba == 0xff000000u);
+    CHECK(shadow.x0 == normal.x0 + 32 && shadow.x1 == normal.x1 + 32 &&
+        shadow.y0 == normal.y0 + 32 && shadow.y1 == normal.y1 + 32);
+    CHECK(normal.u0 == shadow.u0 && normal.u1 == shadow.u1 &&
+        normal.v0 == shadow.v0 && normal.v1 == shadow.v1);
+    uint8_t *atlas = malloc(512 * 256 * 4);
+    CHECK(atlas && !gh_font_atlas_bank_rgba(draw.pair.font, normal.palette_parity, atlas, 512 * 256 * 4));
+    const unsigned normal_hits = covered(&normal, atlas), shadow_hits = covered(&shadow, atlas);
+    int discarded = 0;
+    CHECK(!gh_scene_message_glyph_discarded(&draw.pair.normal, atlas, 512 * 256 * 4, &discarded) && discarded);
+    CHECK(!gh_scene_message_glyph_discarded(&draw.pair.shadow, atlas, 512 * 256 * 4, &discarded) && discarded);
+    memset(atlas, 255, 512 * 256 * 4);
+    CHECK(!gh_scene_message_glyph_discarded(&draw.pair.normal, atlas, 512 * 256 * 4, &discarded) && !discarded);
+    CHECK(gh_scene_message_glyph_discarded(&draw.pair.normal, atlas, 512 * 256 * 4 - 1, &discarded) == GH_SCENE_UI_BOUNDS);
+    free(atlas);
+    CHECK(!normal_hits && !shadow_hits);
 
     CHECK(!gh_scene_message_update_002aefa8(&ui, &work, &frontier) && !frontier);
     CHECK(block->payload[0] == 3 && !block->payload[1] && ui.sources[0].cursor_8c == 2);
@@ -164,14 +233,26 @@ int main(int argc, char **argv) {
     CHECK(rows[2].kind == 4 && rows[3].kind == 0 && rows[3].next_cut == 4);
     CHECK(!ui.sources[0].confirm_pending && ui.sources[0].cursor_8c == 4);
     CHECK(!gh_event_timing_abort(&timing));
-    memcpy(expected, block->payload, sizeof(expected));
-    CHECK(gh_scene_message_update_002aefa8(&ui, &work, &frontier) == GH_SCENE_UI_UNSUPPORTED);
-    CHECK(frontier == 0x2b3b70 && ui.active_head == 0 && !memcmp(block->payload, expected, sizeof(expected)));
+    CHECK(!gh_scene_message_update_002aefa8(&ui, &work, &frontier) && !frontier);
+    CHECK(ui.active_head == 0 && block->payload[0] == 6 && ui.sources[0].cursor_8c == 4);
+    CHECK(!gh_scene_message_render_002af028(&ui, &work, &fonts, &display, palette,
+        capture_glyph, &draw, &frontier) && !frontier && draw.calls == 2);
+    for (unsigned tick = 1; tick <= 6; ++tick) {
+        CHECK(!gh_scene_message_update_002aefa8(&ui, &work, &frontier) && !frontier);
+        CHECK(block->payload[0x10 - 0xc] == tick && !(block->payload[0x14 - 0xc] & 0x10));
+        CHECK(ui.active_head == (tick < 6 ? 0 : -1));
+        CHECK(!gh_scene_message_render_002af028(&ui, &work, &fonts, &display, palette,
+            capture_glyph, &draw, &frontier) && !frontier && draw.calls == 2);
+    }
+    CHECK(ui.free_head == 0 && !ui.sources[0].bound && !block->flags && ui.blocks[1].previous == 0);
     CHECK(!gh_event_message_init_00008100(&message, &prefix, &config, &ui, 0, UINT16_MAX,
         gh_scene_event_message_create_002aeb68, &work, &frontier, &relative));
-    CHECK(!frontier && ui.active_head == 0 && ui.generation_bd8 == 2);
+    CHECK(!frontier && ui.active_head == -1 && ui.generation_bd8 == 2);
 
     uint16_t id = 0x1234;
+    CHECK(!gh_scene_message_create_002aeb68(&ui, &work, 0x1000, &id, &frontier) && id == 3);
+    memcpy(expected, block->payload, sizeof(expected));
+    id = 0x1234;
     CHECK(gh_scene_message_create_002aeb68(&ui, &work, 0x1001, &id, &frontier) == GH_SCENE_UI_BOUNDS);
     CHECK(frontier == 0x2aead0 && id == 0x1234 && ui.active_head == 0 && ui.free_head == 1);
     CHECK(!memcmp(block->payload, expected, sizeof(expected)));
@@ -198,6 +279,7 @@ int main(int argc, char **argv) {
     CHECK(!gh_heap_used(heap) && !gh_heap_destroy(heap));
     gh_disc_close(disc);
     free(elf);
-    printf("PASS actual EV01 Message 1000 work2, English glyph width %d, A301 input hold and canonical timing row clear; full pool returns FFFF\n", glyph.width);
+    printf("PASS actual EV01 Message 1000 glyph and shadow packets (%u/%u alpha-covered CPU samples), A301 timing, 8001 six-tick recycle\n",
+        normal_hits, shadow_hits);
     return 0;
 }

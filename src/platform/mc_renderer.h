@@ -57,6 +57,9 @@ gh_id_error gh_mc_renderer_queue_fade(gh_mc_renderer *,const gh_fade_draw *,cons
  * discard (including Z), retained as ONE packet group, never NULL sentinel.
  * Positive alpha currently remains explicit15B880 frontier. */
 gh_id_error gh_mc_renderer_queue_cover(gh_mc_renderer *,const gh_child_cover_quad *,gh_ui_ot_tag *);
+/* Original EV01 glyph and shadow groups. Admit the current font mode when
+ * both groups provably discard all their samples. Publish two tags or none. */
+gh_id_error gh_mc_renderer_queue_message(gh_mc_renderer *,const gh_scene_message_glyph_pair *,gh_ui_ot_tag tags[2]);
 /* Plural original packet groups: numeric digits each get their own tag,
  * genuine NULL texture returns count0, font/ordinary ID returns count1.
  * Capacity/memory failures leave queue, tags and count unchanged. */

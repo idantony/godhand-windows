@@ -843,7 +843,10 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2c3818)return GH_SCENE_STEP_OK; /*actualJRRA/NOP*/
     else if(address==0x2af028){
-        gh_scene_ui_status e=gh_scene_message_prepare_draw_002af028(s.scene_ui,&h->work,frontier);
+        gh_id_view palette={0};
+        (void)gh_id_text_palette_from_elf(h->boot_reference,h->boot_reference_bytes,&palette);
+        gh_scene_ui_status e=gh_scene_message_render_002af028(s.scene_ui,&h->work,&h->font,&h->display,
+            palette,h->scene_ui.message,h->scene_ui.context,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2fb310){
         if(!h->effects_trans.identity||h->effects_trans.complete){
@@ -853,7 +856,8 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_effects_trans_bindings b={.storage={.effects=s.effects,.esp=s.scene_buffer_a,.esp_bytes=s.scene_buffer_a_size,
             .emitters=s.scene_buffer_b,.emitter_bytes=s.scene_buffer_b_size,.actor_match=gh_effect_create_actor_match,.context=s.effects},
             .work=&h->work,.globals=&h->effects_globals,.display=&h->display,.policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE,
-            .emit=h->effect_emit,.context=h->effect_context,.camera=camera,.init=&h->game_init,.textures=h->game_stage.textures};
+            .emit=h->effect_emit,.context=h->effect_context,.camera=camera,.init=&h->game_init,.textures=h->game_stage.textures,
+            .model_effect=s.model_effect};
         gh_effect_status e=gh_game_effects_trans_002fb310(&h->effects_trans,&b);
         if(e&&frontier)*frontier=h->effects_trans.frontier?h->effects_trans.frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -865,7 +869,8 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_effects_frame_bindings b={.storage={.effects=s.effects,.esp=s.scene_buffer_a,.esp_bytes=s.scene_buffer_a_size,
             .emitters=s.scene_buffer_b,.emitter_bytes=s.scene_buffer_b_size,.actor_match=gh_effect_create_actor_match,.context=s.effects},
             .work=&h->work,.init=&h->game_init,.current_player=&s.title_player->view,.globals=&h->effects_globals,
-            .profile=&h->scene_aux,.clock=scene_profile_clock,.clock_context=h,.atan_coeff=h->camera_envelope.atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE,.actors=s.scene_tables};
+            .profile=&h->scene_aux,.clock=scene_profile_clock,.clock_context=h,.atan_coeff=h->camera_envelope.atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE,.actors=s.scene_tables,
+            .model_effect=s.model_effect,.camera=camera,.display=&h->display};
         gh_effect_status e=gh_game_effects_frame_update_0030f228(&h->effects_frame,&b);
         if(e&&frontier)*frontier=h->effects_frame.frontier?h->effects_frame.frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;

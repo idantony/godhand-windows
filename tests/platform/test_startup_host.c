@@ -47,7 +47,7 @@ static void fade_publication_regression(const char *iso)
     gh_startup_host *host=NULL;gh_startup_snapshot before={0},after={0};
     gh_startup_continuation continuation={1,1,GH_SE_DSP_NATIVE_LINEAR_REFERENCE,NULL,NULL,NULL};
     fade_publication_fixture fixture={0};
-    gh_host_scene_ui_callbacks callbacks={&fixture,fade_scene_begin,fade_scene_draw,fade_scene_fan,fade_scene_cover};
+    gh_host_scene_ui_callbacks callbacks={&fixture,fade_scene_begin,fade_scene_draw,fade_scene_fan,fade_scene_cover,NULL};
     /* The original negative startup branch reaches actual R020 Init/Move
      * without a Movie codec. These are scheduling/fault fixtures only:
      * successful collectors do not claim GPU rendering or gameplay success.

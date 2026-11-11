@@ -8,7 +8,8 @@
 extern "C" {
 #endif
 typedef struct {uint32_t entry,parity;gh_actor_model *model;const gh_player_shadow *shadow;
- const uint8_t *first_node;int32_t depth;uint8_t far_mode;} gh_actor_trans_request;
+ const uint8_t *first_node;int32_t depth;uint8_t far_mode;
+ const gh_game_pl_camera *camera;} gh_actor_trans_request;
 typedef gh_actor_model_status (*gh_actor_trans_callee)(void *,const gh_actor_trans_request *,uint32_t *frontier);
 typedef struct {const gh_boot_work *work;const gh_game_pl_camera *camera;
  const gh_game_world_light *world_light;const uint8_t *depth_shift;

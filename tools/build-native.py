@@ -30,6 +30,8 @@ def main():
     parser.add_argument("--movie-codec", type=Path, help="Also run the muted Movie0 native codec/device check")
     parser.add_argument("--compiler", type=Path, default=PROJECT / ".tools" / "zig-x86_64-windows-0.17.1" / "zig.exe", help="Zig executable; permits reusing an installed toolchain")
     parser.add_argument("--scratch", type=Path, default=SCRATCH, help="External build/cache root")
+    parser.add_argument("--compiler-cache", type=Path, default=SCRATCH / "cache/zig-global",
+                        help="Shared Zig toolchain cache; each scratch rebuilds its project objects")
     args = parser.parse_args()
     wave_inputs = {"adx-reference": args.adx_reference_wave,
                    "event-adx-reference": args.event_adx_reference_wave}
@@ -38,6 +40,9 @@ def main():
     if args.focus and args.skip_tests:
         parser.error("--focus runs selected tests and cannot be combined with --skip-tests")
     compiler, scratch = args.compiler.resolve(), args.scratch.resolve()
+    compiler_cache = args.compiler_cache.resolve()
+    if compiler_cache == PROJECT or PROJECT in compiler_cache.parents:
+        parser.error("Compiler cache must stay outside the permanent project tree")
     try:
         scratch.relative_to(PROJECT)
     except ValueError:
@@ -48,21 +53,24 @@ def main():
     logs = scratch / "logs" / "native"
     (PROJECT / "analysis").mkdir(parents=True, exist_ok=True)
     card_scratch = scratch / "build" / "memory-card-tests" / "scratch"
-    for path in (output, logs, card_scratch, scratch / "cache" / "tmp", scratch / "cache" / "zig-global", scratch / "cache" / "zig-local"):
+    for path in (output, logs, card_scratch, scratch / "cache" / "tmp", compiler_cache, scratch / "cache" / "zig-local"):
         path.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.update({"TEMP": str(scratch / "cache" / "tmp"), "TMP": str(scratch / "cache" / "tmp"),
-                "ZIG_GLOBAL_CACHE_DIR": str(scratch / "cache" / "zig-global"),
+                "ZIG_GLOBAL_CACHE_DIR": str(compiler_cache),
                 "ZIG_LOCAL_CACHE_DIR": str(scratch / "cache" / "zig-local"), "PYTHONDONTWRITEBYTECODE": "1"})
     manifest = {"created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "compiler": str(compiler), "compiler_version": subprocess.check_output([str(compiler), "version"], text=True).strip(),
+                "compiler_cache": str(compiler_cache),
                 "target": "x86_64-windows-gnu", "status": "running", "steps": [],
                 "is_playable_game": False, "purpose": "Verify recovered game functions and native original-disc resource access"}
     report = logs / "focused-verification.json" if args.focus else PROJECT / "analysis" / "native-verification.json"
 
     report_lock = threading.Lock()
+    last_report = 0.0
 
     def run(label, command):
+        nonlocal last_report
         if len(command)>1 and command[0]==compiler and command[1] in ("cc", "c++") and "-c" not in command and "-fsyntax-only" not in command:
             command = command + ["-lwinmm"]
             response = write_response_file(output / (label + ".rsp"), command[2:])
@@ -83,7 +91,12 @@ def main():
             manifest["steps"].append(step)
             if result.returncode:
                 manifest["status"] = "failed"
-            report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            # Every step already has a durable log. Keep the live receipt
+            # current without rewriting its growing history for every worker.
+            now = time.monotonic()
+            if result.returncode or now - last_report >= 1:
+                report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                last_report = now
             print(label + ": " + ("PASS" if result.returncode == 0 else "FAIL"), flush=True)
         if result.returncode:
             print(result.stdout, flush=True)
@@ -163,6 +176,7 @@ def main():
                ("game_object_opacity", "src/core/game_object_opacity.c"),
                ("game_effects_frame", "src/core/game_effects_frame.c"),
                ("game_esp_create", "src/core/game_esp_create.c"),
+               ("game_esp14", "src/core/game_esp14.c"),
                ("game_effect_exp", "src/core/game_effect_exp.c"),
                ("game_effect_node", "src/core/game_effect_node.c"),
                ("game_esp_update", "src/core/game_esp_update.c"),
@@ -300,6 +314,7 @@ def main():
                ("game_event_side_play", "src/core/game_event_side_play.c"),
                ("game_event_se_playback", "src/core/game_event_se_playback.c"),
                ("game_scene_message_create", "src/core/game_scene_message_create.c"),
+               ("game_scene_message_draw", "src/core/game_scene_message_draw.c"),
                ("game_event_accessory_move", "src/core/game_event_accessory_move.c"),
                ("game_model_texture_scroll", "src/core/game_model_texture_scroll.c"),
                ("game_event_camera_track", "src/core/game_event_camera_track.c"),
@@ -561,6 +576,7 @@ def main():
         ("game-om-damage-frame", "tests/core/test_game_om_damage_frame.c", "iso"),
         ("game-object-opacity", "tests/core/test_game_object_opacity.c", "none"),
         ("game-effects-frame", "tests/core/test_game_effects_frame.c", "both"),
+        ("game-esp14", "tests/core/test_game_esp14.c", "iso"),
         ("game-effect-exp", "tests/core/test_game_effect_exp.c", "none"),
         ("game-effect-node", "tests/core/test_game_effect_node.c", "both"),
         ("game-esp-update", "tests/core/test_game_esp_update.c", "both"),
@@ -568,6 +584,7 @@ def main():
         ("game-effect-sprite", "tests/core/test_game_effect_sprite.c", "both"),
         ("game-effects-two-frames", "tests/core/test_game_effects_two_frames.c", "both"),
         ("effect-postprocess-reference", "tests/platform/test_effect_postprocess_reference.c", "iso"),
+        ("effect-warp-source-known", "tests/platform/test_effect_warp_source_known.c", "none"),
         ("static-mesh-signed-w", "tests/assets/test_static_mesh_signed_w.c", "iso"),
         ("game-esp-1a", "tests/core/test_game_esp_1a.c", "both"),
         ("game-actor-model-trans", "tests/core/test_game_actor_model_trans.c", "iso"),
@@ -712,6 +729,8 @@ def main():
         source_inputs.add(source)
         source_inputs.add(shared_headers.get(name, str(Path(source).with_suffix(".h")).replace("\\", "/")))
     initial_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}
+    report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    last_report = time.monotonic()
     def finish_build(status):
         manifest["status"] = status
         final_sources = {name: hashlib.sha256((PROJECT / name).read_bytes()).hexdigest() for name in sorted(source_inputs)}

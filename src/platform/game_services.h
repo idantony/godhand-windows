@@ -117,6 +117,7 @@ typedef struct {
  gh_game_objects *objects,*room_objects;
  gh_room_module *module;gh_sound_scene *sound_scene;gh_collision_pairs *collision_pairs;
  gh_game_effects *effects;gh_scene_filters *filters;
+ const struct gh_esp14_provider *model_effect;
  gh_game_world_light *world_light;gh_game_model_packets *model_packets;
  gh_game_player_child **work5f8; /*canonical typed child publication*/
  const gh_event_weapon_slot *event_weapon; /*canonical player+6A8 provenance*/

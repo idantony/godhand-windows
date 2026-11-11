@@ -31,7 +31,8 @@ typedef struct {
 } gh_actor_render_call;
 
 /* One original14A3E8, including recovered14EFA8 and14AC90 consumers. A failed
- * call retains all prefixes; next_call is allowed only after real completion.
+ * call retains all prefixes; next_call is allowed only after real completion
+ * and permits selecting the current camera for the new invocation.
  * Missing packet consumers return their precise frontier, never draw success. */
 gh_actor_model_status gh_actor_render_0014a3e8(gh_actor_render_call *,gh_actor_model *,
  const gh_actor_render_bindings *,uint32_t *frontier);

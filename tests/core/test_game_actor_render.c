@@ -36,6 +36,8 @@ int main(int argc,char **argv)
  C(gh_actor_render_0014a3e8(&call,&model,&b,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x31a600&&o.rays==8&&o.attempts==2&&!o.groups);
  gh_actor_render_call copied=call;C(gh_actor_render_0014a3e8(&copied,&model,&b,&pc)==GH_ACTOR_MODEL_BUSY);
  gh_actor_render_bindings foreign=b;foreign.depth_shift=NULL;C(gh_actor_render_0014a3e8(&call,&model,&foreign,&pc)==GH_ACTOR_MODEL_BUSY);
+ gh_game_pl_camera cut_camera=camera;gh_actor_render_bindings cut=b;cut.camera=&cut_camera;
+ C(gh_actor_render_0014a3e8(&call,&model,&cut,&pc)==GH_ACTOR_MODEL_BUSY&&call.bindings.camera==&camera);
  /* Preserve the strict numeric retry case using a genuinely unsupported
   * nonfinite input; the original VU supports an exact zero direction. */
  putf(light->scalar+0x161a0,NAN);
@@ -50,7 +52,12 @@ int main(int argc,char **argv)
   * gate resets the whole composition before the next invocation. */
  gh_actor_render_call gated={0};uint32_t gate=0x80000000u;memcpy((uint8_t*)&work+0x5e0,&gate,4);
  C(!gh_actor_render_0014a3e8(&gated,&model,&b,&pc)&&gated.trans.complete&&!pc);
+ C(gh_actor_render_0014a3e8(&gated,&model,&cut,&pc)==GH_ACTOR_MODEL_BUSY&&gated.bindings.camera==&camera);
  C(!gh_actor_render_next_call(&gated)&&!gated.trans.active&&!gated.shadow.active&&!gated.draw.active);
+ foreign.camera=&cut_camera;
+ C(gh_actor_render_0014a3e8(&gated,&model,&foreign,&pc)==GH_ACTOR_MODEL_BUSY&&gated.bindings.camera==&camera);
+ C(!gh_actor_render_0014a3e8(&gated,&model,&cut,&pc)&&gated.trans.complete&&!pc&&
+   gated.bindings.camera==&cut_camera&&gated.trans.bindings.camera==&cut_camera);
  C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));
  free(actors);free(light);free(data);free(elf);free(room);
  puts("PASS actualPL00 native trans/shadow/draw composition; rejected emit retry, one test-only OT group, no duplicate rays/fade, exact downstream frontiers/owner identity/new invocation; no GPU proof");return 0;

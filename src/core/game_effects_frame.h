@@ -12,7 +12,10 @@ extern "C" {
 #endif
 /* Fields absent from the existing canonical gh_game_effects owner; loaded
  * once from actual ELF. factor741DC0 is NOT754C48 or Main's game_rate. */
-typedef struct gh_effects_frame_globals {uint32_t factor_741dc0,region_mask_741db0,region_active_741db8,emitter_count_3c3bc0;uint8_t initialized;/* Original words: signedint32 offsets/binary32 weights. */uint32_t gaussian_offsets_61b540[32],gaussian_weights_61b5c0[32];} gh_effects_frame_globals;
+typedef struct gh_effects_frame_globals {uint32_t factor_741dc0,region_mask_741db0,region_active_741db8,emitter_count_3c3bc0;uint8_t initialized;/* Original words: signedint32 offsets/binary32 weights. */uint32_t gaussian_offsets_61b540[32],gaussian_weights_61b5c0[32]; uint32_t flare_position_61b660[3],flare_intensity_3c3bb4,flare_setup_61b674;
+ uint16_t flare_depth_61b672;
+ uint8_t flare_hold_3c3bb0,flare_active_61b670;
+} gh_effects_frame_globals;
 gh_effect_status gh_effects_frame_globals_from_elf(gh_effects_frame_globals *,const void *,size_t);
 /* Actual292F38 writes three distinct canonical fields. */
 gh_effect_status gh_effects_frame_set_speed_00292f38(gh_effects_frame_globals *,gh_game_init_state *,uint32_t *canonical_ratio_754c48,uint32_t value_bits);
@@ -20,7 +23,9 @@ typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;gh_g
  const gh_title_player_view *current_player;gh_effects_frame_globals *globals;
  gh_game_scene_aux *profile;gh_scene_aux_clock clock;void *clock_context;
  const float *atan_coeff;gh_static_transform_policy policy;
+ const gh_game_pl_camera *camera;const gh_display_state *display;
  gh_game_scene_tables *actors; /*borrow ONE scenequery owner; only1A needs it*/
+ const struct gh_esp14_provider *model_effect;
 } gh_effects_frame_bindings;
 typedef struct {gh_effects_frame_bindings b;const void *identity;uint32_t stage,frontier,emitter_count,esp_count;
  unsigned emitter_index,esp_index,pool_index,region_index,ssd_index;uint8_t bound,region_stage,ambient_pending;

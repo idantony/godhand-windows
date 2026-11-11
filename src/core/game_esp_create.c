@@ -1,4 +1,5 @@
 #include "game_esp_create.h"
+#include "game_esp14.h"
 #include "game_effects_frame.h"
 #include "game_effect_exp.h"
 #include "game_effect_node.h"
@@ -11,7 +12,7 @@ static unsigned h(const uint8_t*p){return p[0]|(unsigned)p[1]<<8;}
 static void put(void*p,uint32_t n){memcpy(p,&n,4);}
 static void half(void*p,uint16_t n){memcpy(p,&n,2);}
 static gh_effect_status fail(gh_esp_create_call*c,uint32_t f,gh_effect_status e){c->frontier=f;return e;}
-static int same(const gh_esp_create_bindings*a,const gh_esp_create_bindings*b){return a->storage.effects==b->storage.effects&&a->storage.esp==b->storage.esp&&a->storage.emitters==b->storage.emitters&&a->storage.esp_bytes==b->storage.esp_bytes&&a->storage.emitter_bytes==b->storage.emitter_bytes&&a->random==b->random&&a->work==b->work&&a->policy==b->policy&&a->globals==b->globals&&(a->actors==b->actors||(!a->actors&&b->actors))&&(a->atan_coeff==b->atan_coeff||(!a->atan_coeff&&b->atan_coeff));}
+static int same(const gh_esp_create_bindings*a,const gh_esp_create_bindings*b){return a->storage.effects==b->storage.effects&&a->storage.esp==b->storage.esp&&a->storage.emitters==b->storage.emitters&&a->storage.esp_bytes==b->storage.esp_bytes&&a->storage.emitter_bytes==b->storage.emitter_bytes&&a->random==b->random&&a->work==b->work&&a->policy==b->policy&&a->globals==b->globals&&a->model_effect==b->model_effect&&(a->actors==b->actors||(!a->actors&&b->actors))&&(a->atan_coeff==b->atan_coeff||(!a->atan_coeff&&b->atan_coeff));}
 gh_effect_status gh_esp_create_begin_00300e30(gh_esp_create_call*c,unsigned emitter,uint32_t serial){if(!c||emitter>=256||!serial||(c->active&&!c->complete))return GH_EFFECT_ARGUMENT;*c=(gh_esp_create_call){.identity=c,.emitter_slot=emitter,.emitter_serial=serial,.active=1};return GH_EFFECT_OK;}
 /* Actual3060B0 uses signed bank and unsigned byte item; <count, not<=.
  * Pointer fields remain removed guesttokens, while metadata borrows the exact
@@ -44,13 +45,14 @@ static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const uint8
 }
 static float random_range(uint8_t*p,float minimum,float maximum){float half=mul(add(maximum,-minimum),0.5f),midpoint=add(minimum,half);float product=mul(half,random_signed(p));return add(product,midpoint);}
 static gh_effect_status initial_transform(gh_esp_create_call*c,uint8_t*p,const uint8_t*r,const uint8_t*source){
- if(r[0x291]>1||r[0x292]>1)return fail(c,0x30187c,GH_EFFECT_UNSUPPORTED);int part=(int8_t)r[0xbe],override=(int8_t)source[0x1ec];if(override>=-3&&override!=-1)part=override;/* With source bit 23 set, screen-space rows keep their authored origin. */if(part==-4&&!(w(r+4)&0x800000u))return fail(c,0x301bf8,GH_EFFECT_UNSUPPORTED);if(w(r+4)&0x200000u)return fail(c,0x301c80,GH_EFFECT_UNSUPPORTED);
+ if(r[0x291]>1||r[0x292]>1)return fail(c,0x30187c,GH_EFFECT_UNSUPPORTED);int part=(int8_t)r[0xbe],override=(int8_t)source[0x1ec];if(override>=-3&&override!=-1)part=override;/* With source bit 23 set, screen-space rows keep their authored origin. */if(part==-4&&!(w(r+4)&0x800000u))return fail(c,0x301bf8,GH_EFFECT_UNSUPPORTED);
  for(unsigned offset=0x48;offset<=0x90;offset+=4)if(!isfinite(floating(r+offset)))return fail(c,0x30187c,GH_EFFECT_UNSUPPORTED);if(floating(source+0x1e0)!=1.0f)return fail(c,0x301cf4,GH_EFFECT_UNSUPPORTED);if(w(p+8)||w(p+0x10))return fail(c,0x2b6370,GH_EFFECT_UNSUPPORTED);
  uint8_t next[0x400];memcpy(next,p,sizeof(next));float angles[3],velocity[3],position[3];memcpy(angles,r+0x48,12);memcpy(velocity,r+0x54,12);memcpy(position,r+0x7c,12);uint32_t first=w(r);int mirrored=(source[0x1e8]&0x80u)!=0;
  if(!r[0x292]){float variation=random_range(next,floating(r+0x64),floating(r+0x68));for(unsigned axis=0;axis<3;axis++)if(first&(0x40u>>axis))angles[axis]=add(angles[axis],variation);}else {for(unsigned axis=0;axis<3;axis++)angles[axis]=add(angles[axis],mul(random_signed(next),floating(r+0x64+axis*4)));for(unsigned axis=0;axis<3;axis++)velocity[axis]=add(velocity[axis],mul(random_signed(next),floating(r+0x70+axis*4)));}
  if(mirrored){velocity[1]=-velocity[1];velocity[2]=-velocity[2];angles[1]=-angles[1];angles[2]=-angles[2];}
  if(!r[0x291]){for(unsigned axis=0;axis<3;axis++)if(first&(UINT32_C(0x80000000)>>axis))position[axis]=add(position[axis],random_range(next,floating(r+0x88),floating(r+0x8c)));}else for(unsigned axis=0;axis<3;axis++)position[axis]=add(position[axis],mul(random_signed(next),floating(r+0x88+axis*4)));
- if(mirrored){position[0]=-position[0];store_float(next+0x26c,-floating(next+0x26c));}for(unsigned axis=0;axis<3;axis++)if(!isfinite(angles[axis])||!isfinite(velocity[axis])||!isfinite(position[axis]))return fail(c,0x301d80,GH_EFFECT_UNSUPPORTED);
+ if(w(r+4)&0x200000u){uint32_t f=0;gh_effect_status status=gh_esp14_position_init_00301c20(next,(gh_effect_view){r,0x2f0},mirrored,position,&f);if(status)return fail(c,f?f:0x301c20,status);}
+ else if(mirrored){position[0]=-position[0];store_float(next+0x26c,-floating(next+0x26c));}for(unsigned axis=0;axis<3;axis++)if(!isfinite(angles[axis])||!isfinite(velocity[axis])||!isfinite(position[axis]))return fail(c,0x301d80,GH_EFFECT_UNSUPPORTED);
  memcpy(next+0x178,velocity,12);next[0x16]=0;put(next+0x90,w(next+0x90)&~1u);memcpy(next+0x30,angles,12);memcpy(next+0x40,position,12);memcpy(p,next,sizeof(next));return GH_EFFECT_OK;
 }
 static gh_effect_status initial_direction(gh_esp_create_call*c,uint8_t*p,const uint8_t*r,const uint8_t*source){
@@ -113,6 +115,27 @@ static gh_effect_status initialize_12(gh_esp_create_call*c,uint8_t*p,const uint8
  c->complete=1;
  return GH_EFFECT_OK;
 }
+static gh_effect_status initialize_13(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
+ if(w(p+0xf0)!=0x44ec68u||r[0x16c]!=0||r[0x170]!=12||w(p+0x114))
+    return fail(c,0x2f11f0,GH_EFFECT_UNSUPPORTED);
+ gh_effects_frame_globals*g=c->b.globals;
+ put(p+0x2b0,r[0x16c]);
+ put(p+0x2b4,r[0x170]);
+ g->flare_setup_61b674=w(r+0x174);
+ gh_effect_view est;
+ gh_effect_status status=gh_effect_est_at_00306030(c->b.storage.effects,r[0x16c],r[0x170]+1u,&est);
+ if(status||!est.bytes)return fail(c,0x306030,status?status:GH_EFFECT_UNSUPPORTED);
+ if(w(est.bytes)!=0x545345u)return fail(c,0x2f1258,GH_EFFECT_UNSUPPORTED);
+ status=gh_effect_create_esp_commit_13(c->b.storage.effects,c->slot,c->serial);
+ if(status)return fail(c,0x2f11f0,status);
+ g->flare_hold_3c3bb0=0;
+ g->flare_intensity_3c3bb4=0;
+ g->flare_active_61b670=0;
+ g->flare_setup_61b674=0;
+ c->complete=1;
+ c->stage=12;
+ return GH_EFFECT_OK;
+}
 static gh_effect_status initialize_1a(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
  uint32_t frontier=0;gh_effect_status status;
  if(c->stage==10){if(w(p+0xf0)!=0x44f270u)return fail(c,0x2f4be0,GH_EFFECT_UNSUPPORTED);status=gh_effect_node_detach_update_002fcb88(&c->detach,c->b.storage.effects,c->slot,c->serial,c->b.atan_coeff,c->b.policy,&frontier);if(status)return fail(c,frontier?frontier:0x2fcb88,status);if(!c->detach.complete)return fail(c,0x2fcb88,GH_EFFECT_ARGUMENT);c->stage=13;}
@@ -141,6 +164,31 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
  if(c->stage==7){status=initial_direction(c,p,r,source);if(status)return status;c->stage=8;}
  if(c->stage==8){status=initial_colour(c,p,r,source);if(status)return status;c->stage=9;}
  if(c->stage==9){status=finish_source(c,p,r);if(status)return status;c->stage=10;}
+ if(view.type==0&&c->stage==10){
+  if(w(p+0xf0)!=0x44fad0u||((w(p+0x11c)&0x01000000u)&&
+      !gh_esp14_nested_sprite_is_bound(view.record,view.actor,view.selector)))
+      return fail(c,0x2fbec8,GH_EFFECT_UNSUPPORTED);
+  status=gh_effect_create_esp_commit_base(b->storage.effects,c->slot,c->serial);
+  if(status)return fail(c,0x2fbec8,status);
+  c->complete=1;
+  c->stage=12;
+  return GH_EFFECT_OK;
+ }
+ if(view.type==0x14&&c->stage==10){
+  const gh_esp14_provider *provider=b->model_effect;
+  if(!provider||!provider->initialize)return fail(c,0x2f1d58,GH_EFFECT_UNSUPPORTED);
+  int original_return=0;
+  uint32_t frontier=0;
+  status=provider->initialize(provider->context,&view,c->slot,w(source+0x1e0),&original_return,&frontier);
+  if(status)return fail(c,frontier?frontier:0x2f1d58,status);
+  if(!original_return)return fail(c,0x2fbe50,GH_EFFECT_UNSUPPORTED);
+  status=gh_effect_create_esp_commit_14(b->storage.effects,c->slot,c->serial);
+  if(status)return fail(c,0x2f1d58,status);
+  c->stage=12;
+  c->complete=1;
+  return GH_EFFECT_OK;
+ }
+ if(view.type==0x13&&c->stage==10)return initialize_13(c,p,r);
  if(view.type==0x12&&c->stage==10)return initialize_12(c,p,r);
  if(view.type==0x1a&&c->stage>=10)return initialize_1a(c,p,r);
  if(c->stage==10){

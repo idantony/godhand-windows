@@ -4,7 +4,49 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
-## Current milestone: native R100 world layer beneath the opening fade
+## Native opening through the first camera cut
+
+The immutable source snapshot passes **316 C modules and 340 checks**, including
+muted real audio devices, movie decoding and both independent ADX sample
+comparisons. Both RNG suites pass against the same native DLL with 20,544 and
+20,534 exact comparisons.
+
+The matching native Windows New Game run reaches 632 ticks, completes the
+first EV01 camera cut and enters cut1/frame0. It presents 512 scene frames,
+including earlier title and room startup frames, and submits 134,036 world
+packets. Renderer, GPU, postprocess and window errors are zero. Final composites
+at scene408 and scene457 were visually inspected. The original fade reveals the
+street and sky, and the effect moves between the captured frames.
+
+Original model-backed effects use the room's existing model/registry owners,
+nested emitters and ordered sound/model cleanup. Framebuffer warp validates
+the texels consumed by covered, source-dependent fragments. The current camera
+reaches actor drawing and attached lighting. Shadow alignment uses its
+independent original Up vector.
+
+The next original frontier is Event actor Move `0x002B6930`, state4 in the
+second camera cut. Counters through that stop are player1, child141 and
+object9654, with 14 active emitters and 102 particles. Physical gameplay input,
+later Event cuts, combat, progression, transitions and save/load remain active
+work. Captures and resource buffers stay in private local evidence.
+
+固定源码副本通过 **316 个 C 模块和 340 项检查**，包含真实静音音频设备、片头解码及两组
+独立 ADX 逐样本对照。同一原生 DLL 的两组随机数验证分别完成 20544 和 20534 次精确比较。
+
+匹配的 Windows 原生“新游戏”运行达到 632 ticks，完成 EV01 第一个镜头，进入第二个
+镜头第 0 帧。共提交 512 个场景帧，包含之前的标题和房间启动帧，累计 134036 个世界包。
+渲染器、GPU、后处理及窗口错误均为 0。已检查场景帧 408 和 457 的最终合成画面，原版
+淡入揭示街道与天空，两次捕获之间可见特效位移。
+
+模型特效共用原房间的模型和注册表，保留嵌套发射器及声音、模型的有序销毁。
+画面扭曲按实际覆盖且依赖纹理的像素验证采样，当前活动相机接入绘制和光照，
+阴影仍读取其独立 Up 向量。
+
+下一原调用为第二个镜头中的剧情角色更新 `0x002B6930`，状态 4。截至该处累计完成
+玩家更新 1 次、附属模型更新 141 次和物件更新 9654 次，活动发射器 14 个、粒子 102 个。
+后续镜头、物理输入、战斗、完整流程、场景切换和存读档仍待完成，截图与游戏资源保持本地私有。
+
+## Previous native R100 world layer beneath the opening fade
 
 An immutable source copy passes **288 C modules / 318 checks**, with muted real
 audio, movie decoding, full independent ADX comparison and both same-DLL RNG

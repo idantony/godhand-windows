@@ -194,6 +194,23 @@ static gh_id_error draw_cover(void *opaque,const gh_child_cover_quad *quad,uint3
         catch(const std::bad_alloc&){return GH_ID_MEMORY;}}
     else if(frontier)*frontier=0x15b880;return error;
 }
+static gh_scene_ui_status draw_scene_message(void *opaque,const gh_scene_message_glyph_pair *pair,uint32_t *frontier)
+{
+    auto &app=*(NativeApp*)opaque;
+    if(!app.frame_building||!app.building_scene)return GH_SCENE_UI_ARGUMENT;
+    try{
+        app.groups.reserve(app.groups.size()+2);
+        gh_ui_ot_tag tags[2]={};
+        gh_id_error status=gh_mc_renderer_queue_message(app.renderer,pair,tags);
+        if(status){
+            *frontier=0x2a5930;
+            return status==GH_ID_MEMORY||status==GH_ID_CAPACITY?GH_SCENE_UI_BOUNDS:GH_SCENE_UI_UNSUPPORTED;
+        }
+        for(const auto &tag:tags)app.groups.push_back({tag.bank,(uint32_t)tag.depth,(uint64_t)tag.index});
+        *frontier=0;
+        return GH_SCENE_UI_OK;
+    }catch(const std::bad_alloc&){return GH_SCENE_UI_BOUNDS;}
+}
 static gh_id_error post_mc(void *,uint16_t message)
 {
     std::fprintf(stderr,"Unrecovered original ID postMessage %04X\n",message);
@@ -278,16 +295,31 @@ static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packe
         for(unsigned i=0;i<6;i++){
             const auto &v=packet.quads[0].vertices[i];
             if(v.q!=1||v.z!=0xfff0||v.u12_4||v.v12_4)return GH_ID_UNSUPPORTED;
-            // Q is one, so every interpolated T lies within the fan's
-            // vertex range. These bounds leave room for linear neighbors.
-            if(!post.capture_first_row_known&&!(v.t>=2.0f/256&&v.t<=255.0f/256)){
-                app.effect_post_error=GH_EFFECT_POST_BOUNDS;
-                return GH_ID_UNSUPPORTED;
-            }
             vertices[i].stq[0]=v.s;vertices[i].stq[1]=v.t;vertices[i].stq[2]=v.q;
             vertices[i].xyz_fixed4[0]=v.x12_4;vertices[i].xyz_fixed4[1]=v.y12_4;
             vertices[i].xyz_fixed4[2]=(int32_t)(v.z<<4);
             for(unsigned channel=0;channel<4;channel++)vertices[i].rgba[channel]=(v.rgba>>(channel*8))&255;
+        }
+        const gh_effect_post_sampler source_sampler={sampler.tex1,sampler.clamp,1,
+            GH_EFFECT_SAMPLE_NATIVE_SEPARABLE_4BIT};
+        app.effect_post_error=gh_effect_postprocess_warp_source_known(&packet,&source_sampler,
+            512,448,x,y,post.capture_first_row_known);
+        if(app.effect_post_error!=GH_EFFECT_POST_OK){
+#ifdef GH_NATIVE_STARTUP_QA
+                std::fprintf(stderr,"QA_WARP_BOUNDS {\"scene_serial\":%llu,\"slot\":%u,\"serial\":%u,\"tex1\":\"%016llX\",\"clamp\":\"%016llX\",\"alpha\":\"%016llX\",\"zbuf\":\"%016llX\",\"vertices\":[",
+                    (unsigned long long)app.snapshot.scene_frame_serial,packet.slot,packet.serial,
+                    (unsigned long long)sampler.tex1,(unsigned long long)sampler.clamp,
+                    (unsigned long long)packet.alpha,(unsigned long long)packet.zbuf);
+                for(unsigned j=0;j<6;j++){
+                    const auto &point=packet.quads[0].vertices[j];uint32_t bits[3];
+                    const float stq[]={point.s,point.t,point.q};
+                    std::memcpy(bits,stq,sizeof(bits));
+                    std::fprintf(stderr,"%s{\"xy\":[%d,%d],\"stq_bits\":[\"%08X\",\"%08X\",\"%08X\"],\"rgba\":\"%08X\"}",
+                        j?",":"",point.x12_4,point.y12_4,bits[0],bits[1],bits[2],point.rgba);
+                }
+                std::fprintf(stderr,"]}\n");
+#endif
+            return GH_ID_UNSUPPORTED;
         }
         gh_model_draw_state state={};
         state.test=packet.test;state.alpha=packet.alpha;state.tex1=sampler.tex1;state.clamp=sampler.clamp;
@@ -515,12 +547,34 @@ static void usage()
 {
     std::fprintf(stderr,"usage: godhand-windows --iso ISO --profile DIRECTORY [--ffmpeg EXE] [--show|--hidden] [--muted] [--prefix] [--max-ticks N]\n");
 }
+#ifdef GH_NATIVE_STARTUP_QA
+static constexpr unsigned qa_max_capture_count=120;
+
+static std::string qa_capture_path(const char *base,unsigned captured,uint64_t serial)
+{
+    std::string path(base);
+    if(!captured)return path;
+    const std::string suffix=".scene-"+std::to_string(serial)+".rgba";
+    constexpr size_t extension_size=5;
+    if(path.size()>=extension_size&&path.compare(path.size()-extension_size,extension_size,".rgba")==0)
+        path.resize(path.size()-extension_size);
+    return path+suffix;
+}
+
+static bool qa_write_capture(const std::string &path,const std::vector<unsigned char> &pixels)
+{
+    FILE *file=std::fopen(path.c_str(),"wbx");
+    if(!file)return false;
+    bool complete=std::fwrite(pixels.data(),1,pixels.size(),file)==pixels.size();
+    return std::fclose(file)==0&&complete;
+}
+#endif
 int main(int argc,char **argv)
 {
     const char *iso=nullptr,*profile=nullptr,*ffmpeg=nullptr;
     bool show=false,muted=false,prefix=false;uint64_t max_ticks=0;
 #ifdef GH_NATIVE_STARTUP_QA
-    bool qa_confirm=false,qa_new_game=false,qa_captured=false;unsigned qa_choice_step=0;gh_native_input qa_input={};
+    bool qa_confirm=false,qa_new_game=false;unsigned qa_choice_step=0,qa_captured=0,qa_capture_count=1;gh_native_input qa_input={};
     const char *qa_capture=nullptr;uint64_t qa_capture_frame=1;uint32_t qa_title_trace=UINT32_MAX;
 #endif
     for(int i=1;i<argc;++i){
@@ -530,6 +584,12 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-new-game")){qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-capture")&&i+1<argc)qa_capture=argv[++i];
         else if(!std::strcmp(argv[i],"--qa-capture-frame")&&i+1<argc)qa_capture_frame=std::strtoull(argv[++i],nullptr,10);
+        else if(!std::strcmp(argv[i],"--qa-capture-count")&&i+1<argc){
+            char *end=nullptr;
+            const auto value=std::strtoull(argv[++i],&end,10);
+            if(!value||value>qa_max_capture_count||!end||*end){usage();return 2;}
+            qa_capture_count=static_cast<unsigned>(value);
+        }
 #endif
         else if(!std::strcmp(argv[i],"--muted"))muted=true;
         else if(!std::strcmp(argv[i],"--prefix"))prefix=true;
@@ -586,7 +646,7 @@ int main(int argc,char **argv)
         if(host_error!=GH_HOST_OK)break;
         host_error=gh_startup_host_set_fade_consumer(app.host,draw_fade,&app);
         if(host_error!=GH_HOST_OK)break;
-        gh_host_scene_ui_callbacks scene_callbacks={&app,begin_scene,draw_scene,draw_fan,draw_cover};
+        gh_host_scene_ui_callbacks scene_callbacks={&app,begin_scene,draw_scene,draw_fan,draw_cover,draw_scene_message};
         host_error=gh_startup_host_set_scene_ui_consumers(app.host,&scene_callbacks);
         if(host_error!=GH_HOST_OK)break;
         host_error=gh_startup_host_set_world_consumer(app.host,queue_world,&app);
@@ -654,17 +714,18 @@ int main(int argc,char **argv)
                 gh_id_error error=prepare_ui_display(app,true);
                 if(error!=GH_ID_OK){std::fprintf(stderr,"Native scene OT preparation failed: %u\n",(unsigned)error);break;}
 #ifdef GH_NATIVE_STARTUP_QA
-                if(qa_capture&&!qa_captured&&app.snapshot.scene_frame_serial>=qa_capture_frame){
-                    FILE *capture=std::fopen(qa_capture,"wbx");
-                    if(!capture||std::fwrite(app.queued_pixels.data(),1,app.queued_pixels.size(),capture)!=app.queued_pixels.size()){
-                        if(capture)std::fclose(capture);std::fprintf(stderr,"QA scene capture failed\n");break;}
-                    if(std::fclose(capture))break;qa_captured=true;
-                    if(!app.world_pixels.empty()){
-                        std::string world_path=std::string(qa_capture)+".world.rgba";FILE *world=std::fopen(world_path.c_str(),"wbx");
-                        if(!world||std::fwrite(app.world_pixels.data(),1,app.world_pixels.size(),world)!=app.world_pixels.size()){
-                            if(world)std::fclose(world);std::fprintf(stderr,"QA pre-UI world capture failed\n");break;}
-                        if(std::fclose(world))break;
+                if(qa_capture&&qa_captured<qa_capture_count&&app.snapshot.scene_frame_serial>=qa_capture_frame){
+                    if(qa_capture_count>1&&app.world_pixels.empty()){
+                        std::fprintf(stderr,"QA capture range requires the matching pre-UI world frame\n");break;
                     }
+                    const std::string path=qa_capture_path(qa_capture,qa_captured,app.snapshot.scene_frame_serial);
+                    if(!qa_write_capture(path,app.queued_pixels)){
+                        std::fprintf(stderr,"QA scene capture failed\n");break;
+                    }
+                    if(!app.world_pixels.empty()&&!qa_write_capture(path+".world.rgba",app.world_pixels)){
+                        std::fprintf(stderr,"QA pre-UI world capture failed\n");break;
+                    }
+                    ++qa_captured;
                     std::fprintf(stderr,"QA_WORLD_CAPTURE {\"scene_serial\":%llu,\"world_bytes\":%llu,\"fade_visible\":%u,\"fade_rgba\":\"%08X\",\"fade_alpha\":\"%016llX\"}\n",
                         (unsigned long long)app.snapshot.scene_frame_serial,(unsigned long long)app.world_pixels.size(),app.frame_fade_seen?1u:0u,app.frame_fade.rgba,(unsigned long long)app.frame_fade.alpha);
                     std::fprintf(stderr,"QA scene capture: frame%llu, 512x448 rawRGBA\n",(unsigned long long)app.snapshot.scene_frame_serial);
