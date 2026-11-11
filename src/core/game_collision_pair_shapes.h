@@ -28,6 +28,8 @@ gh_pair_shape_status gh_collision_pair_shape_position(const gh_collision_pair_sh
 gh_pair_shape_status gh_collision_pair_shape_mode_pointer(const gh_collision_pair_shape *,uint32_t **);
 /* 2BB258 -> 2BB2D8 for a local offset on a native pair collider. */
 gh_pair_shape_status gh_collision_pair_shape_offset_002bb258(const gh_collision_pair_shape *,const float offset[3],uint32_t *frontier);
+/* Original box VT+3C sets full size and recomputes its bounding radius. */
+gh_pair_shape_status gh_collision_pair_box_size_002baaa8(const gh_collision_pair_shape *,const float size[3],uint32_t *frontier);
 /* Nativefailed-construction/shutdown cleanup, not originalruntime destructor.
  * Refuses a live canonicalobject_links targetborrow; unlinknodefirst. */
 gh_pair_shape_status gh_collision_pair_shape_abort(gh_collision_pair_shape *,uint32_t *frontier);
@@ -57,6 +59,10 @@ gh_pair_shape_status gh_collision_pairs_step_002b9d58(gh_collision_pairs *,gh_st
 gh_pair_shape_status gh_collision_pairs_sweep_002ba250(gh_collision_pairs *,uint32_t *frontier);
 
 gh_pair_shape_status gh_collision_pair_shapes_release_native(gh_collision_pairs *);
+struct gh_actor_model;
+/* Host-only retirement of matrix borrows from a model about to be destroyed.
+ * Keeps exact matrix bytes and pair/HitArea row lifetime through phase5. */
+gh_pair_shape_status gh_collision_pair_shapes_retire_model_native(gh_collision_pairs *,const struct gh_actor_model *);
 #ifdef __cplusplus
 }
 #endif

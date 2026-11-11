@@ -37,13 +37,29 @@ static gh_game_status load_fixed(gh_game_assets *s,uint32_t object,unsigned slot
   return error(s,GH_GAME_DISC,0x200b88,GH_DVD_NOT_FOUND);
  bytes=(e.size+2047)&~UINT64_C(2047);
  if(!s->objects[slot].pointer || bytes>s->object_sizes[slot])return error(s,GH_GAME_BOUNDS,0x200b88,0);
- s->object_file_sizes[slot]=(size_t)e.size;
  if(gh_disc_read_blocks(s->dvd->disc,index,0,s->objects[slot].pointer,(size_t)(bytes>>11))!=GH_DISC_OK)
   return error(s,GH_GAME_DISC,0x200b88,GH_DVD_IO);
+ s->object_file_sizes[slot]=(size_t)e.size;
  if(!*job){++s->dvd->id_counter;if(!s->dvd->id_counter)s->dvd->id_counter=1;*job=s->dvd->id_counter;}
  return GH_GAME_OK;
 }
 #define TRY(expr) do{gh_game_status e=(expr);if(e)return e;}while(0)
+gh_game_status gh_game_assets_reload_player_0030d8e0(gh_game_assets *s,uint8_t costume)
+{
+ /* The boot and case3 dispatch tables choose the same player file. */
+ static const uint16_t models[]={0x100,0x102,0x105,0x10f,0x107,0x110,0x10e,0x111};
+ static const uint16_t motions[]={0x101,0x101,0x106,0x106,0x108,0x108,0x112,0x112};
+ if(!s||!s->dvd||!s->dvd->disc||!s->threads)return GH_GAME_ARGUMENT;
+ s->error=GH_GAME_OK;s->failed_entry=0;s->detail=0;
+ unsigned index=costume<8?costume:0;
+ uint32_t job=0;
+ TRY(load_fixed(s,models[index],0,&job));
+ TRY(wait_job(s,job));
+ /* The motion read reuses the model's original job token. */
+ TRY(load_fixed(s,motions[index],1,&job));
+ return wait_job(s,job);
+}
+
 gh_game_status gh_game_assets_0030d5c8(gh_game_assets *s,uint8_t costume){
  /* Original records at default pointer3C3CC4->4505D8, terminatingFFFF.
   * These are recovered logical object IDs/destination slots, not file bytes. */
@@ -53,7 +69,6 @@ gh_game_status gh_game_assets_0030d5c8(gh_game_assets *s,uint8_t costume){
  0x3e1,0x3de,0x3e2,0x3e3,0x23f};
  static const uint8_t slots[]={26,27,28,29,30,31,32,34,35,33,36,37,38,39,40,41,2,4,23,24,
  3,10,11,25,12,13,14,16,17,18,19,20,21,22,9,5,6,7,8,15,42};
- static const uint16_t player[]={0x100,0x102,0x105,0x10f,0x107,0x110,0x10e,0x111};
  uint32_t job=0,flags;char path[12];
  if(!s || !s->work || !s->dvd || !s->dvd->disc || !s->heap || !s->threads)return GH_GAME_ARGUMENT;
  s->error=GH_GAME_OK;s->failed_entry=0;s->detail=0;
@@ -77,20 +92,13 @@ gh_game_status gh_game_assets_0030d5c8(gh_game_assets *s,uint8_t costume){
   TRY(wait_job(s,job));
  }
  if(!(s->work->flags&0x10000)){
-  uint32_t object=player[costume<8?costume:0],motion=0x101;
   for(unsigned i=0;i<2;i++){
    size_t size=i?0x19800:0x1e6800;gh_mem_error e;
    if(s->objects[i].pointer)return error(s,GH_GAME_MEMORY,0x30ee08,GH_MEM_BUSY);
    e=gh_heap_allocate(s->heap,size,0x40,&s->objects[i]);
    if(e)return error(s,GH_GAME_MEMORY,0x30ee08,(int)e);s->object_sizes[i]=size;
   }
-  if(object==0x105 || object==0x10f)motion=0x106;
-  else if(object==0x107 || object==0x110)motion=0x108;
-  else if(object==0x109)motion=0x10a;
-  else if(object==0x10e || object==0x111)motion=0x112;
-  /*30D8E0 first read gets fresh job id; second reuses that token. */
-  job=0;TRY(load_fixed(s,object,0,&job));TRY(wait_job(s,job));
-  TRY(load_fixed(s,motion,1,&job));TRY(wait_job(s,job));
+  TRY(gh_game_assets_reload_player_0030d8e0(s,costume));
  }
  s->work->flags=(s->work->flags|0x10400u)&~0x4000u;return GH_GAME_OK;
 }

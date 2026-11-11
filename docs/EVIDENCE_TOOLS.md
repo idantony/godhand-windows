@@ -15,19 +15,37 @@ finished port or execute guest instructions in the production runtime.
 - `tools/freeze-source.py` records immutable authored source and checked worker
   bundles. Build reports fingerprint the exact inputs; staged source can come
   from that verified copy while other workers continue editing.
+  Worker receipts with absolute paths use their `relative` names and must
+  supply each `supersedes` fingerprint or explicitly declare a new file.
 - `tools/rebase-source-overlay.py` moves a pinned text overlay to a newer frozen
   source snapshot. It verifies both receipts and prerequisites, merges disjoint
-  edits, and writes a fresh bundle to project scratch. Overlapping edits fail
+  edits, and writes a fresh bundle to project scratch. Absolute worker receipts
+  also check their relative source and predecessor paths. Overlapping edits fail
   before the new bundle is published.
 - `tools/record-startup-frontier.py` verifies a completed Windows QA process
   against its source and executable receipts, records the observed original
   stop or native rendering error, and fingerprints its logs and optional raw
   capture. Its output records an unfinished observation.
+  Use `--title-load` for a title Load Game QA cohort. It verifies the isolated
+  profile path and records the card and UI phases, slot mask and presents.
+  `tools/prepare-title-load-qa.py` creates a fresh synthetic slot3 with a valid
+  original timestamp and checksum in that scratch profile. Pass
+  `--build-scratch` to both the launcher and the recorder when a new execution
+  cohort reuses a verified executable from an earlier scratch. The source
+  snapshot, compiled executable and runner still have matching fingerprints.
+  `inspect-title-graphics.exe ISO --texture 1 49` reads a language texture's
+  TIM2 dimensions, palette format and TEX0 even before the renderer admits it.
+  When attached audio fails at the stopping original address, the proof
+  records its bank, program, part, flags and delay.
+  The QA launcher rejects a mismatch with the snapshot's launcher before it
+  reserves outputs, since the execution proof checks those exact bytes.
   `--capture-series` verifies each logged 512×448 world/composite pair against
   its process hash and counts nonblack RGB pixels independently of alpha.
   Compare both surfaces and the logged Fade color when diagnosing a black frame.
   Builds with capture presentation tracking identify which prepared frames
   were presented by the window before the execution stopped.
+  `--require-presented-player-damage` checks an original player Take record
+  and the same target's HP decrease on successive visible presented frames.
   The QA `QA_SCENARIO_TASK` marker identifies a failed nested task slot and
   Scenario substage when the host reports an original script frontier.
   `GH_ACTOR_FRONTIER` ties the original draw stop to a separate actor handle,
@@ -93,6 +111,14 @@ no audio device. Registry bank 1 in this report is local to the audit.
 
 声音检查工具可用 `--ses se/em00.ses 0 1 2` 核对指定音效表、样本偏移、ADSR 和解码
 帧数。报告的 bank 1 是检查工具的临时编号，游戏运行时由原版音效表管理器分配编号。
+
+`tools/export-startup-capture.py --proof RECEIPT --output IMAGE.png` converts
+the latest nonblack, presented composite to RGB PNG after checking its recorded
+capture hash. `--scene` selects a specific presented frame. Use `--layer world`
+for the pre-UI surface and label that image accordingly when sharing it.
+
+截图导出默认取最后一个已显示的非黑合成帧，并核对原始像素的哈希。指定 `--scene`
+可导出某一已显示帧。`--layer world` 输出叠加 UI 和遮罩之前的场景层。
 
 `tools/record-native-milestone.py` consolidates matching private evidence. It
 checks source, artifact and report hashes, the executed Windows path, two RNG

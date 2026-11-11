@@ -26,6 +26,11 @@ static int tim2_hud8(const gh_tim2_picture *picture)
  return picture->tex0==GH_ID_TIM2_128X64_PSMT8_TEX0&&picture->width==128&&
         picture->height==64&&picture->image_type==5&&picture->clut_type==3&&picture->colors==256;
 }
+static int tim2_number4(const gh_tim2_picture *picture)
+{
+ return picture->tex0==GH_ID_TIM2_128X128_PSMT4_TEX0&&picture->width==128&&
+        picture->height==128&&picture->image_type==4&&picture->clut_type==3&&picture->colors==16;
+}
 gh_id_error gh_id_texture_open_view(const gh_id_view *source,gh_id_texture *out){
  if(!source||!source->bytes||!out)return GH_ID_ARGUMENT;
  gh_id_texture t={.source=*source};
@@ -38,14 +43,14 @@ gh_id_error gh_id_texture_open_view(const gh_id_view *source,gh_id_texture *out)
   int cursor=picture.width==32&&picture.height==32&&((picture.tex0>>30)&15)==5;
   int indexed4=(loading||cursor)&&picture.image_type==4&&picture.clut_type==3&&picture.colors==16&&
                 ((picture.tex0>>20)&63)==20&&((picture.tex0>>26)&15)==5&&!((picture.tex0>>35)&3);
-  if(!indexed4&&!tim2_hud8(&picture))return GH_ID_UNSUPPORTED;
+  if(!indexed4&&!tim2_hud8(&picture)&&!tim2_number4(&picture))return GH_ID_UNSUPPORTED;
   t.width=picture.width;t.height=picture.height;t.tex0=picture.tex0;*out=t;return GH_ID_OK;
  }
  if(t.source.size<48||u32(t.source.bytes)&0x80000000U)return GH_ID_UNSUPPORTED;
  t.tex0=u64(t.source.bytes+32);
  {unsigned psm=(unsigned)((t.tex0>>20)&63),power=(unsigned)((t.tex0>>30)&15);
   unsigned tw=(unsigned)((t.tex0>>26)&15);if(((t.tex0>>51)&31)!=0)return GH_ID_UNSUPPORTED;
-  if(psm==19){if(t.tex0==UINT64_C(0x20000001e1310000)){t.width=256;t.height=128;*out=t;return GH_ID_OK;}if(t.tex0==GH_ID_RADAR_TEX0){t.width=128;t.height=256;*out=t;return GH_ID_OK;}if(tw!=9||(power!=8&&power!=9))return GH_ID_UNSUPPORTED;}
+  if(psm==19){if(t.tex0==GH_ID_PAD_ICON_TEX0){t.width=128;t.height=128;*out=t;return GH_ID_OK;}if(t.tex0==UINT64_C(0x20000001e1310000)){t.width=256;t.height=128;*out=t;return GH_ID_OK;}if(t.tex0==GH_ID_RADAR_TEX0){t.width=128;t.height=256;*out=t;return GH_ID_OK;}if(tw!=9||(power!=8&&power!=9))return GH_ID_UNSUPPORTED;}
   else if(psm==20){if(tw!=9||power!=9||((t.tex0>>56)&31))return GH_ID_UNSUPPORTED;}
   else return GH_ID_UNSUPPORTED;
   t.width=512;t.height=(uint16_t)(1U<<power);
@@ -75,18 +80,22 @@ gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity
   if(p.width!=t->width||p.height!=t->height||t->tex0!=p.tex0)return GH_ID_UNSUPPORTED;
   if(tim2_hud8(&p))e=gh_tim2_rgba8(&p,rgba,capacity);
   else{
-   if(t->width!=32||(t->height!=32&&(t->height!=16||t->tex0!=UINT64_C(0x115408000))))return GH_ID_UNSUPPORTED;
+   if(!tim2_number4(&p)&&(t->width!=32||
+      (t->height!=32&&(t->height!=16||t->tex0!=UINT64_C(0x115408000)))))return GH_ID_UNSUPPORTED;
    e=gh_tim2_rgba4(&p,rgba,capacity);
   }
   return e==GH_TIM2_OK?GH_ID_OK:e==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
  }
  int level=t->width==256&&t->height==128&&t->tex0==UINT64_C(0x20000001e1310000);
+ int pad_icon=t->width==128&&t->height==128&&t->tex0==GH_ID_PAD_ICON_TEX0;
  int radar=t->width==128&&t->height==256&&t->tex0==GH_ID_RADAR_TEX0;
- if(t->source.size<48||(!level&&!radar&&(t->width!=512||(t->height!=256&&t->height!=512))))return GH_ID_UNSUPPORTED;
+ if(t->source.size<48||(!level&&!radar&&!pad_icon&&(t->width!=512||(t->height!=256&&t->height!=512))))return GH_ID_UNSUPPORTED;
  psm=(unsigned)((t->tex0>>20)&63);if(psm!=19&&(psm!=20||t->height!=512||((t->tex0>>51)&63)||((t->tex0>>56)&31)))return GH_ID_UNSUPPORTED;
  memset(&slot,0,sizeof(slot));slot.bound=1;slot.mst=t->source.bytes;slot.mst_size=t->source.size;
  for(i=0;i<2;i++){slot.table_offset[i]=u32(slot.mst+8+i*4);slot.table_count[i]=u16(slot.mst+16+i*2);}
+ if(pad_icon&&(slot.table_count[0]!=1||slot.table_count[1]!=1))return GH_ID_UNSUPPORTED;
  if(gh_font_transfer_at(&slot,0,0,&image)||gh_font_transfer_at(&slot,1,0,&clut))return GH_ID_UNSUPPORTED;
+ if(pad_icon&&(image.psm||clut.psm||clut.buffer_width!=1))return GH_ID_UNSUPPORTED;
  if(image.width!=64||image.height!=((unsigned)t->width*t->height)/(psm==20?512u:256u)||image.buffer_width!=1||image.destination_base||clut.width!=16||clut.height!=16||clut.destination_base)return GH_ID_UNSUPPORTED;
  for(i=0;i<256;i++)if(clut.pixels[i*4+3]>128)return GH_ID_UNSUPPORTED;
  words=(unsigned)image.pixel_bytes/4;inverse=malloc((size_t)words*sizeof(*inverse));if(!inverse)return GH_ID_MEMORY;

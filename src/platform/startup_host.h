@@ -76,10 +76,12 @@ typedef struct gh_startup_snapshot {
     uint64_t mc_ui_epoch,mc_frame_serial;
     int mc_ui_live,mc_frame_ready;
     uint32_t mc_phase,mc_subphase,mc_present_mask;
+    uint8_t mc_load_mode,mc_load_phase;
     int32_t mc_error;
     int mc_done,normal_continuation;
     const gh_boot_work *work; /* borrowed read-only, exact input fields */
     const gh_sound_control *sound_control;
+    gh_se_attached_failure attached_voice_failure;
     const gh_movie_pool *movie_pool;
     gh_video_status movie_video;
     const gh_screen_fade *fade;

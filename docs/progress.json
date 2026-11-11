@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-11T11:22:27.390129+00:00",
-  "stage": "native-windows-R100-first-player-hit",
+  "verified_utc": "2026-11-11T12:50:17.283909+00:00",
+  "stage": "native-windows-R100-title-load-and-first-player-hit",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -26,7 +26,11 @@
     }
   },
   "original_world_layer_observed_before_UI": true,
-  "world_layer_observation": null,
+  "world_layer_observation": {
+    "scope": "R100 after title Load",
+    "frame_serial": 1634,
+    "nonblack_rgb_pixels": 229336
+  },
   "original_title_UI_scene_observed_in_native_port": true,
   "source_verification": "immutable authored source copy",
   "strategy": "Recover readable original logic and implement native platform dependencies",
@@ -94,13 +98,13 @@
       "next_entry_available": true,
       "current_frontier": {
         "module": "main ELF",
-        "address": "00198CE0",
-        "operation": "Original unresolved consumer"
+        "address": "0020B394",
+        "operation": "Enemy scenery-contact response"
       },
       "alternate_original_branch": {
         "GameMain_case0_and_parallel_asset_loader_tested": true,
         "full_native_services_tested": true,
-        "next_unavailable_entry": "0x00198CE0"
+        "next_unavailable_entry": "0x0020B394"
       },
       "earlier_boot_and_complete_main_loop_run": false
     },
@@ -129,8 +133,9 @@
       "scope": "Disc-change countdown and modal input conditions; draw dependencies remain mandatory"
     },
     "memory_card": {
-      "scope": "Original67-entry visible UI, absent/empty-profile Control, native input mapping, real SFX, normal exit and same-slot Movie tail restart",
-      "full_Main_UI_or_save_load_complete": false
+      "scope": "Original boot card UI plus selected-record title Load, native file reads, restore, fade and R100 handoff",
+      "full_Main_UI_or_save_load_complete": false,
+      "title_load_r100_presented": true
     },
     "id_base": {
       "scope": "Bounded table lookup, typed640-entry/100-job pool, actual67-entry MC initialization/link/reset and packed-message environment",
@@ -168,32 +173,26 @@
     }
   },
   "native_windows_execution": {
-    "scope": "Original R100 first presented player hit, bounded unfinished native Windows source port",
+    "scope": "Separate New Game replay with first presented player hit",
     "hidden": true,
     "muted": true,
     "synthetic_input_fixture": true,
-    "actual_user_input_observed": false,
-    "ticks": 1784,
-    "original_MC_frames_presented": 6,
-    "Movie0_frames_presented": 90,
-    "video_EOF_and_audio_done": true,
+    "ticks": 1810,
     "original_GameMain_state": 4,
     "current_room": "0100",
-    "next_room": "0100",
-    "assets_loaded": true,
-    "original_title_scene_frames_presented": 1643,
-    "bounded_execution_running": false,
-    "frontier": "00198CE0",
+    "scene_frames_presented": 1669,
+    "frontier": "0020B394",
     "frontier_module": "main ELF",
-    "original_world_packets_submitted": 1320495,
-    "player_updates_completed": 50,
-    "child_updates_completed": 1273,
-    "object_updates_completed": 85721,
-    "emitter_slots_active": 4,
-    "particle_slots_active": 36,
-    "scene_update_stage": 31,
-    "last_move_entry": "00208BE0",
-    "full_game_scene_or_gameplay_observed": false
+    "original_world_packets_submitted": 1372727,
+    "presented_player_damage": {
+      "enemy_stamp": 19,
+      "hit_kind": 7,
+      "hit_power": 3,
+      "hp_before": 74,
+      "hp_after": 71,
+      "contact_scene_serial": 1638,
+      "damage_scene_serial": 1638
+    }
   },
   "tests": {
     "native_build": "passed",
@@ -236,6 +235,7 @@
       "id_path",
       "mc_error",
       "mc_file_load",
+      "mc_file_save",
       "game_cockpit",
       "game_objects",
       "game_prepare",
@@ -406,6 +406,9 @@
       "game_room_arena",
       "static_world_queue",
       "game_om_factory",
+      "game_om300_retire",
+      "game_room_death",
+      "game_room_death_dispatch",
       "game_player_factory",
       "game_actor_scroll_links",
       "game_ray_static",
@@ -494,6 +497,7 @@
       "game_enemy_base_init",
       "game_enemy_behavior",
       "game_enemy_ems",
+      "game_enemy_retire",
       "game_enemy_entry",
       "game_enemy_entry_tail",
       "game_enemy_factory",
@@ -585,24 +589,24 @@
       "test-startup-host",
       "test-font-texture",
       "test-game-start",
-      "test-memory-card",
       "test-mc-id",
       "test-font-draw",
       "test-game-gate",
       "test-id-base",
       "test-packed-message",
       "test-game-init",
-      "test-mc-task",
       "test-id-jobs",
       "test-id-texture",
       "test-mc-control",
       "test-game-stage",
       "test-game-children",
-      "test-id-text",
       "test-nested-tasks",
       "test-id-path",
       "test-mc-error",
+      "test-mc-task",
       "test-mc-file-load",
+      "test-memory-card",
+      "test-mc-file-save",
       "test-game-cockpit",
       "test-game-objects",
       "test-game-prepare",
@@ -744,6 +748,7 @@
       "test-game-room-module",
       "test-game-effects",
       "test-game-scene-filters",
+      "test-bgm-title-output-mode",
       "test-title-texture",
       "test-adx-mono",
       "test-se-adx-sequence",
@@ -890,6 +895,7 @@
       "test-game-objects-update",
       "test-sound-spatial-step",
       "test-game-system-menu",
+      "test-game-room-death-dispatch",
       "test-game-scene-meshes",
       "test-static-mesh",
       "test-tm3",
@@ -910,6 +916,7 @@
       "test-id-entry-reset",
       "test-id-layout-rotation",
       "test-id-animation",
+      "test-id-text",
       "test-id-number",
       "test-id-alignment",
       "test-r100"
@@ -919,19 +926,110 @@
       "calls_compared": 20544,
       "comparison": "state word and return float bits, exact",
       "hardware_capture": false
-    }
+    },
+    "skipped_checks": [
+      {
+        "name": "test-game-event-create",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-game-services",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-mc-control-flow",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-se-voice",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-se-stop",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-se-bank2",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-video-player",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-bgm-requests",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-bgm-automatic",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-se-voice-stop-bank",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-adx",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-adx-compact",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-adx-stream",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-game-scene-exit",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-scene-exit-cleanup",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-game-object-sound",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-sound-scene-exit",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      },
+      {
+        "name": "test-r020-title",
+        "reason": "Explicit hardware/codec opt-in not supplied"
+      }
+    ]
   },
   "remaining": [
-    "Advance original combat, object retirement and R100 progression beyond the first hit",
-    "Earlier subsystem initialization and full main-loop integration",
-    "Continuous dynamic animation and actor behavior",
-    "Native rendering, audio, input and save adapters",
-    "Full game progression and timing validation"
+    "Advance original combat, enemy retirement and R100 progression",
+    "Complete in-game save and additional room transitions",
+    "Recover remaining animation, rendering, audio and input behavior",
+    "Verify full game progression and timing"
   ],
   "progress_policy": "Upstream PS2 matching coverage is not native port coverage; no synthetic completion percentage",
   "sources": {
     "upstream": "https://github.com/LucasPicoli/god-hand-decomp",
     "upstream_commit": "eaae18d0dfab1f9a0df276ae5ca1581ad326faf3",
     "method": "https://opengoal.dev/docs/developing/decompiling/getting_started/"
+  },
+  "title_load_r100_observation": {
+    "profile": "isolated synthetic original-format slot 3",
+    "checksum_and_state_restore": true,
+    "player_model_and_motion_reloaded": true,
+    "room": "0100",
+    "main_state": 4,
+    "frame_serial": 1634,
+    "nonblack_world_pixels": 229336,
+    "nonblack_composite_pixels": 229333,
+    "ticks": 1826,
+    "scene_frames_presented": 1501,
+    "world_packets_submitted": 1200273,
+    "renderer_error": 0,
+    "world_gpu_error": 0,
+    "effect_post_error": 0,
+    "window_error": 0,
+    "next_original_call": "002147D0"
   }
 }

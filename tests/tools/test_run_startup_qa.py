@@ -96,6 +96,49 @@ class StartupRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(frontier.proof.ProofError, "SHA256 mismatch"):
             frontier.validate(self.snapshot, self.scratch, expected_frontier="00142060")
 
+    def test_title_load_frontier_pins_its_own_run_scope_and_card_progress(self):
+        (self.scratch / "profile-load").mkdir()
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, title_load=True)
+        qa = self.qa(playable_game_verified=False, exit_code=1, frontier="00000000",
+                     renderer_error=8, renderer_frontier="002B0028", mc_frames_presented=59,
+                     mc_phase=3, mc_present_mask="00000008")
+        with patch.object(tool.subprocess, "run", self.fake_run(qa)), self.assertRaises(tool.proof.ProofError):
+            tool.run(prepared)
+        runner = self.snapshot / "tools/run-startup-qa.py"
+        runner.parent.mkdir()
+        runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+        options = {"expected_native_error": "renderer_error:8"}
+        with self.assertRaisesRegex(frontier.proof.ProofError, "unexpected process executable or QA flags"):
+            frontier.validate(self.snapshot, self.scratch, **options)
+        result, _ = frontier.validate(self.snapshot, self.scratch, title_load=True, **options)
+        self.assertEqual(result["classification"], "native-renderer-error")
+        self.assertEqual(result["observation"]["renderer_frontier"], "002B0028")
+        self.assertEqual(result["observation"]["mc_frames_presented"], 59)
+        self.assertEqual(result["observation"]["mc_present_mask"], "00000008")
+
+    def test_replay_reuses_the_exact_executable_with_fresh_outputs(self):
+        replay = self.root / "replay"
+        prepared = tool.prepare(self.snapshot, replay, self.iso, self.ffmpeg, build_scratch=self.scratch)
+        self.assertFalse(replay.exists())
+        self.assertEqual(prepared["command"][0], str(self.exe))
+        qa = self.qa(playable_game_verified=False, frontier_module="main ELF")
+        with patch.object(tool.subprocess, "run", self.fake_run(qa)):
+            tool.run(prepared)
+        runner = self.snapshot / "tools/run-startup-qa.py"
+        runner.parent.mkdir()
+        runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+        options = {"expected_frontier": "00142060"}
+        with self.assertRaisesRegex(frontier.proof.ProofError, "executable belongs to another scratch"):
+            frontier.validate(self.snapshot, replay, **options)
+        result, _ = frontier.validate(self.snapshot, replay, build_scratch=self.scratch, **options)
+        self.assertEqual(result["classification"], "original-frontier")
+        receipt = replay / "startup-process.json"
+        process = json.loads(receipt.read_text(encoding="utf-8"))
+        process["build_scratch"] = str(replay)
+        self.write(receipt, process)
+        with self.assertRaisesRegex(frontier.proof.ProofError, "process build scratch differs"):
+            frontier.validate(self.snapshot, replay, build_scratch=self.scratch, **options)
+
     def test_square_presentation_requires_an_advancing_attack_sample(self):
         command = ["probe-native-startup.exe", "--qa-control", "square"]
         status = "QA_CONTROL_STATUS mode=square saw_event=1 pressed=1 motion_presented=1"
@@ -227,6 +270,29 @@ class StartupRunnerTests(unittest.TestCase):
         with self.assertRaises(tool.proof.ProofError):
             tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, control_probe="other")
         self.assertNotIn("--qa-control", self.prepare()["command"])
+
+    def test_modified_launcher_is_rejected_before_outputs_are_reserved(self):
+        runner = self.snapshot / "tools/run-startup-qa.py"
+        runner.parent.mkdir()
+        runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+        tool.require_frozen_runner(self.snapshot)
+        runner.write_bytes(b"older launcher")
+        with self.assertRaisesRegex(tool.proof.ProofError, "differs from the frozen snapshot"):
+            tool.require_frozen_runner(self.snapshot)
+        self.assertFalse((self.scratch / "startup-run.lock").exists())
+
+    def test_title_load_uses_only_the_local_scratch_profile(self):
+        args = (self.snapshot, self.scratch, self.iso, self.ffmpeg)
+        with self.assertRaisesRegex(tool.proof.ProofError, "profile-load"):
+            tool.prepare(*args, title_load=True)
+        profile = self.scratch / "profile-load"
+        profile.mkdir()
+        command = tool.prepare(*args, title_load=True)["command"]
+        self.assertIn("--qa-load", command)
+        self.assertNotIn("--qa-new-game", command)
+        self.assertEqual(command[command.index("--profile") + 1], str(profile.resolve()))
+        with self.assertRaisesRegex(tool.proof.ProofError, "requires NewGame"):
+            tool.prepare(*args, title_load=True, control_probe="approach-square")
 
     def test_modified_source_rejected_before_launch(self):
         self.source.write_bytes(b"changed")

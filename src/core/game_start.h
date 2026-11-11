@@ -21,6 +21,8 @@ typedef struct gh_game_assets {
  * Native errors stop without setting original completion flags. Partial owned
  * allocations remain accessible; cancel tasks/jobs before release. */
 gh_game_status gh_game_assets_0030d5c8(gh_game_assets *,uint8_t costume);
+/* Reload into the original fixed model/motion buffers from a native fiber. */
+gh_game_status gh_game_assets_reload_player_0030d8e0(gh_game_assets *,uint8_t costume);
 /* Release native allocations only, never pending queue jobs. */
 gh_game_status gh_game_assets_release(gh_game_assets *);
 /* Exact307918 filename subset with host bounds; 7 actual prefix strings. */

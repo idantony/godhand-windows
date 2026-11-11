@@ -19,6 +19,8 @@ typedef struct gh_mc_boot_checks {
  * This is NOT the full Initialize/Main entry: idsavecore/cIDBase setup is a
  * separate unresolved prerequisite. No full boot success is returned here. */
 gh_mc_boot_error gh_mc_boot_checks_create(gh_mc_boot_checks *,gh_heap *);
+/* Clears the already-owned 20 original slot records and their scan indexes. */
+void gh_mc_boot_reset_slot_records(gh_mc_boot_checks *);
 gh_mc_boot_error gh_mc_boot_checks_release(gh_mc_boot_checks *,gh_heap *);
 /* SlotCheck/fileCheck portion of a Control visit, against real native card operations.
  * phase0/1 recovered; phase2 fileLoad and phase3 error UI explicitly unsupported.

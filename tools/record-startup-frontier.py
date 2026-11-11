@@ -181,19 +181,22 @@ def presented_player_damage(control, captures):
 
 def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=None,
              expected_native_error=None, process_sha=None, stdout_sha=None, stderr_sha=None,
-             capture_name=None, capture_sha=None, capture_series=False):
+             capture_name=None, capture_sha=None, capture_series=False, title_load=False, build_scratch=None):
     snapshot, scratch, project = (Path(p).resolve() for p in (snapshot_arg, scratch_arg, project))
+    build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
+    proof.require(proof.under(scratch, proof.SCRATCH_ROOT), "run scratch must be below project G scratch")
     stop = proof.expected_stop(expected_frontier)
     error = native_error(expected_native_error)
     proof.require((stop is None) != (error is None), "provide exactly one expected stop or native error")
     proof.require(capture_name is not None or capture_sha is None, "capture SHA256 needs a capture name")
-    inputs, executable, exe_sha, source_fact, build_fact = proof.startup_build_inputs(snapshot, scratch, project)
+    inputs, executable, exe_sha, source_fact, build_fact = proof.startup_build_inputs(snapshot, build_scratch, project)
 
     process_path = scratch / "startup-process.json"
     proof.require(process_path.resolve().parent == scratch, "process receipt escapes scratch")
     if process_sha is not None:
         inputs.checked(process_path, process_sha)
     process, process_fact = inputs.report(process_path)
+    proof.require(process.get("build_scratch", str(scratch)) == str(build_scratch), "process build scratch differs")
     proof.require("launch_error" not in process and process.get("scope") == "actual QA execution; unfinished source port",
                   "process did not record an actual unfinished startup QA run")
     proof.require(process.get("source_snapshot") == source_fact and process.get("windows_build") == build_fact,
@@ -205,10 +208,13 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
     command = process.get("command")
     proof.require(isinstance(command, list) and command and all(isinstance(x, str) for x in command),
                   "invalid process command")
-    proof.require(Path(command[0]).resolve() == executable and
-                  all(command.count(flag) == 1 for flag in ("--hidden", "--muted", "--qa-new-game")),
+    qa_flag = "--qa-load" if title_load else "--qa-new-game"
+    other_flag = "--qa-new-game" if title_load else "--qa-load"
+    proof.require(Path(command[0]).resolve() == executable and other_flag not in command and
+                  all(command.count(flag) == 1 for flag in ("--hidden", "--muted", qa_flag)),
                   "unexpected process executable or QA flags")
-    proof.require(Path(argument(command, "--profile")).resolve() == scratch / "profile-absent",
+    profile = "profile-load" if title_load else "profile-absent"
+    proof.require(Path(argument(command, "--profile")).resolve() == scratch / profile,
                   "process profile belongs to another run")
     capture = Path(argument(command, "--qa-capture")).resolve()
     proof.require(capture == scratch / "first-scene-candidate.rgba", "unexpected process capture location")
@@ -262,6 +268,9 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
               "renderer_frontier", "world_gpu_error", "world_frontier", "world_vu_pc",
               "effect_post_error", "window_error", "exit_code", "world_packets_submitted",
               "player_updates_completed", "om_updates_completed", "last_move_handle", "last_move_entry")
+    if title_load:
+        fields += ("mc_load_mode", "mc_load_phase", "mc_phase", "mc_subphase", "mc_present_mask",
+                   "mc_error", "mc_frames_presented", "mc_frame_serial")
     observation = {key: qa[key] for key in fields if key in qa}
     trace = Path(stderr["path"]).read_text(encoding="utf-8", errors="replace").splitlines()
     control = control_observation(command, trace)
@@ -273,6 +282,12 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
                       placement["handle"] == qa.get("last_move_handle"),
                       "enemy placement does not match the last actor")
         observation["enemy_placement"] = placement
+    voice_failure = trace_record(trace, "QA_ATTACHED_VOICE_FAILURE ")
+    if voice_failure is not None:
+        proof.require(proof.address(voice_failure.get("pc")) == proof.address(qa.get("frontier")) and
+                      all(type(voice_failure.get(field)) is int for field in ("bank", "program", "part", "delay", "status")),
+                      "attached voice diagnostic differs from the recorded original frontier")
+        observation["attached_voice_failure"] = voice_failure
     task = trace_record(trace, "QA_SCENARIO_TASK ")
     if task is not None:
         proof.require(type(task.get("slot")) is int and 0 <= task["slot"] < 16 and
@@ -311,6 +326,7 @@ def main():
     parser.add_argument("--project", type=Path, default=PROJECT, help="original source project named by the snapshot")
     parser.add_argument("--snapshot", type=Path, required=True)
     parser.add_argument("--scratch", type=Path, required=True)
+    parser.add_argument("--build-scratch", type=Path, help="verify the exact build reused by this run")
     parser.add_argument("--output", type=Path, required=True)
     expected = parser.add_mutually_exclusive_group(required=True)
     expected.add_argument("--expected-frontier")
@@ -320,6 +336,7 @@ def main():
     parser.add_argument("--stderr-sha256")
     parser.add_argument("--capture", help="optional matching raw frame basename")
     parser.add_argument("--capture-sha256")
+    parser.add_argument("--title-load", action="store_true", help="verify the isolated title Load Game cohort")
     parser.add_argument("--capture-series", action="store_true",
                         help="verify captured world/final pairs and count nonblack RGB pixels")
     parser.add_argument("--require-presented-player-damage", action="store_true",
@@ -335,7 +352,8 @@ def main():
                                    process_sha=args.process_sha256, stdout_sha=args.stdout_sha256,
                                    stderr_sha=args.stderr_sha256, capture_name=args.capture,
                                    capture_sha=args.capture_sha256,
-                                   capture_series=args.capture_series or args.require_presented_player_damage)
+                                   capture_series=args.capture_series or args.require_presented_player_damage,
+                                   title_load=args.title_load, build_scratch=args.build_scratch)
         proof.require(not args.require_presented_player_damage or "presented_player_damage" in receipt["observation"],
                       "no presented player damage with an authenticated contact and HP change")
         inputs.recheck()

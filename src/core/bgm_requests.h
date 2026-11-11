@@ -12,6 +12,8 @@ extern "C" {
 #endif
 typedef struct gh_bgm_requests gh_bgm_requests;
 struct gh_event_audio_prefetch_request;
+struct gh_se_voice_engine;
+struct gh_movie_pool;
 typedef enum {GH_BGM_OK,GH_BGM_ARGUMENT,GH_BGM_MEMORY,GH_BGM_NOT_READY,
  GH_BGM_BOUNDS,GH_BGM_DISC,GH_BGM_BUSY,GH_BGM_UNSUPPORTED,GH_BGM_NATIVE} gh_bgm_status;
 typedef enum {GH_BGM_GAIN_NATIVE_DB_REFERENCE=1} gh_bgm_gain_policy;
@@ -90,6 +92,14 @@ int gh_bgm_requests_scene_event(const gh_bgm_requests *,int32_t *);
  * tick, after original constructor zero-gain/fade writes have completed. */
 typedef struct {int32_t current128;uint32_t delay134,countdown138;const gh_game_children *children;const gh_game_init_state *init;} gh_bgm_automatic_state;
 int gh_bgm_requests_automatic_state(const gh_bgm_requests *,gh_bgm_automatic_state *);
+/* 375700 stereo mode on the idle ADX pool. Caller must establish absence
+ * of separate active external SE and movie ADX players before invoking this. */
+gh_bgm_status gh_bgm_requests_restore_idle_output_mode_00375700(gh_bgm_requests *,uint32_t mode);
+/* Selected R020 load can reapply the existing stereo pans of event 0.
+ * Both borrowed owners are required to check for other live ADX users. */
+gh_bgm_status gh_bgm_requests_restore_title_output_mode_00375700(
+ gh_bgm_requests *,uint32_t mode,const struct gh_se_voice_engine *,
+ const struct gh_movie_pool *);
 unsigned gh_bgm_requests_pending(const gh_bgm_requests *);
 unsigned gh_bgm_requests_active(const gh_bgm_requests *);
 uint32_t gh_bgm_requests_frontier(const gh_bgm_requests *);

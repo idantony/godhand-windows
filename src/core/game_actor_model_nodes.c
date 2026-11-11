@@ -87,3 +87,103 @@ gh_actor_model_status gh_actor_model_aux_bind_constructor_empty_001495a0(gh_acto
  for(unsigned i=0;i<4;i++)if(w(s->root.bytes+0x28c+i*4)){if(p->auxiliary_constructor_bound)p->auxiliary_absent_mask=0;return GH_ACTOR_MODEL_UNSUPPORTED;}
  p->auxiliary_owner=s;p->auxiliary_absent_mask=15;p->auxiliary_constructor_bound=1;return GH_ACTOR_MODEL_OK;
 }
+
+
+static gh_actor_model_status retirement_error(uint32_t *frontier,uint32_t entry)
+{
+ if(frontier)*frontier=entry;
+ return GH_ACTOR_MODEL_BUSY;
+}
+
+gh_actor_model_status gh_actor_model_retire_001496c0(gh_actor_model *model,
+ gh_actor_model_retirement *state,uint32_t *frontier)
+{
+ if(frontier)*frontier=0;
+ if(!model||!state||(state->owner&&state->owner!=model))return GH_ACTOR_MODEL_ARGUMENT;
+ if(state->stage==4)return GH_ACTOR_MODEL_OK;
+ if(model->native_identity!=model||!model->root.bytes||(model->root.original_vtable214!=0x41d220&&model->root.original_vtable214!=0x41b6a0&&model->root.original_vtable214!=0x422f90&&model->root.original_vtable214!=0x423230&&model->root.original_vtable214!=0x423338&&
+     model->root.original_vtable214!=0x423400&&model->root.original_vtable214!=0x423608&&
+     model->root.original_vtable214!=0x4238d8&&model->root.original_vtable214!=0x423c70&&
+     model->root.original_vtable214!=0x423e48&&model->root.original_vtable214!=0x424c30&&
+     model->root.original_vtable214!=0x424e18&&model->root.original_vtable214!=0x424f28&&
+     model->root.original_vtable214!=0x425000&&
+     model->root.original_vtable214!=0x4479c8&&
+     model->root.original_vtable214!=0x448ca0&&
+     model->root.original_vtable214!=0x4267f8&&
+     model->root.original_vtable214!=0x426e78&&
+     model->root.original_vtable214!=0x427690&&
+     model->root.original_vtable214!=0x428090&&
+     model->root.original_vtable214!=0x4237e8&&
+     model->root.original_vtable214!=0x4296f0)||
+    model->external_owner||model->external_parts||model->external_borrowers||model->sound_borrowers)
+  return retirement_error(frontier,0x1496c0);
+ struct gh_actor_model_nodes *nodes=model->nodes;
+ if(!state->stage){
+  if(!model->ready||!nodes||nodes->allocated!=nodes->complete||
+     nodes->complete!=model->root.bytes[0x2b1]||
+     !nodes->allocated||nodes->entries[0].handle!=model->first_node_handle||
+     model->parts_allocated!=model->part_count)return retirement_error(frontier,0x1496c0);
+  for(unsigned i=0;i<model->part_count;++i)
+   if(!model->parts[i].bytes||w(model->parts[i].bytes+0x214)!=0x41eca0)
+    return retirement_error(frontier,0x1505a8);
+  state->owner=model;
+  model->ready=0;
+  put(model->root.bytes,0x214,0x41ea90);
+  state->stage=1;
+ }
+ if(state->stage==1){
+  if(nodes->object_allocation.pointer&&gh_heap_release(model->packet_heap,nodes->object_allocation))
+   return retirement_error(frontier,0x2a9680);
+  nodes->object_allocation=(gh_r207_allocation){0};
+  nodes->object.ready=0;
+  state->stage=2;
+ }
+ if(state->stage==2){
+  gh_room_block_pool *pool=&model->pools->blocks[1];
+  while(state->node<nodes->allocated){
+   actor_node *node=&nodes->entries[state->node];
+   if(!state->node_started){
+    --model->root.bytes[0x2b1];
+    ++pool->remaining1c;
+    state->node_started=1;
+   }
+   if(gh_actor_packets_release(&node->packet))return retirement_error(frontier,0x1483c8);
+   if(gh_room_block_put_002a9800(pool,node->handle))return retirement_error(frontier,0x2a9800);
+   if(!state->node){model->first_node_handle=0;model->first_node=NULL;}
+   ++state->node;
+   state->node_started=0;
+  }
+  free(nodes->entries);
+  free(nodes);
+  model->nodes=NULL;
+  put(model->root.bytes,0x25c,0);
+  memset(model->root.bytes+0x260,0,24);
+  state->stage=3;
+ }
+ gh_room_block_pool *pool=&model->pools->blocks[0];
+ while(state->part<model->parts_allocated){
+  gh_actor_part *part=&model->parts[state->part];
+  if(!state->part_started){
+   ++pool->remaining1c;
+   /* Part VT41ECA0 +C is 150048; mode2 retains its storage until pool put. */
+   put(part->bytes,0x214,0x41eca0);
+   state->part_started=1;
+  }
+  if(gh_room_block_put_002a9800(pool,part->handle))return retirement_error(frontier,0x2a9800);
+  ++state->part;
+  state->part_started=0;
+ }
+ put(model->root.bytes,0x144,0);
+ put(model->root.bytes,0x214,0x41eca0);
+ *model=(gh_actor_model){0};
+ state->stage=4;
+ return GH_ACTOR_MODEL_OK;
+}
+
+gh_actor_model_status gh_actor_model_retire_pl00_001496c0(gh_actor_model *model,
+ gh_actor_model_retirement *state,uint32_t *frontier)
+{
+ if(!model||!state||(state->stage!=4&&model->root.original_vtable214!=0x41d220))
+  return GH_ACTOR_MODEL_ARGUMENT;
+ return gh_actor_model_retire_001496c0(model,state,frontier);
+}

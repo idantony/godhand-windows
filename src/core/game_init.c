@@ -103,6 +103,19 @@ gh_init_status gh_game_object_pool_reset_001fdea8(gh_game_init_state*s){
  gh_hitarea_detach_after_pool_reset(s);return GH_INIT_OK;
 }
 
+gh_init_status gh_game_heat_reset_002a9908(gh_game_init_state *s,const gh_boot_work *work,
+ gh_core_save_view save)
+{
+ if(!s||!work||!save_valid(save))return GH_INIT_ARGUMENT;
+ /* Heat reset precedes CoreSave gameInit and therefore reads persistent
+  * tension upgrades, with the original cheat-side effect. All conversions
+  * here are exact small integers and the resulting current/max ratio is0. */
+ if(work->flags598&0x08000000u)save.bytes[0x155]=5;
+ {float maximum=(float)((uint32_t)save.bytes[0x155]*30+120);uint32_t bits;memcpy(&bits,&maximum,4);
+  w32(s->heat,0x14,0);w32(s->heat,0,bits);w32(s->heat,4,0);w32(s->heat,8,0);w32(s->heat,12,0x42f00000);}
+ return GH_INIT_OK;
+}
+
 gh_init_status gh_game_init_002a5b18(gh_game_init_state *s,gh_boot_work *work,
  uint8_t *started,float *rate,gh_core_save_view save){
  gh_init_status e;
@@ -111,12 +124,7 @@ gh_init_status gh_game_init_002a5b18(gh_game_init_state *s,gh_boot_work *work,
  if(s->camera.mode!=1 && s->camera.mode!=16){s->camera.previous_mode=s->camera.mode;s->camera.previous=s->active_camera;s->active_camera=&s->camera;s->camera.mode=1;}
  *started=1;e=gh_game_enemy_reset_00290230(s);if(e)return e;
  e=gh_game_object_pool_reset_001fdea8(s);if(e)return e;
- /* Heat reset precedes CoreSave gameInit and therefore reads persistent
-  * tension upgrades, with the original cheat-side effect. All conversions
-  * here are exact small integers and the resulting current/max ratio is0. */
- if(work->flags598&0x08000000u)save.bytes[0x155]=5;
- {float maximum=(float)((uint32_t)save.bytes[0x155]*30+120);uint32_t bits;memcpy(&bits,&maximum,4);
-  w32(s->heat,0x14,0);w32(s->heat,0,bits);w32(s->heat,4,0);w32(s->heat,8,0);w32(s->heat,12,0x42f00000);}
+ e=gh_game_heat_reset_002a9908(s,work,save);if(e)return e;
  w32(s->input,0,0);w32(s->input,8,0);w16(s->input,12,0);w16(s->input,14,0);w16(s->input,16,0);w16(s->input,18,0);
  e=gh_core_save_game_init(save,work);if(e)return e;
  s->navigation_height_bits=0x3f000000;s->navigation_height_initialized=1;

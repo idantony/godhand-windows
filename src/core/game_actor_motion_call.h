@@ -18,6 +18,10 @@ typedef struct {gh_actor_motion *current;gh_actor_motion_bindings next;
 gh_actor_motion_status gh_actor_motion_call_open_parameters_002a8578(gh_actor_motion_call *,gh_actor_motion *,const gh_actor_motion_bindings *,size_t motion_offset,size_t raw_a2_candidate_offset,uint32_t start_frame_bits,uint32_t blend_frames,uint16_t flags,int release_previous_sequence);
 gh_actor_motion_status gh_actor_motion_call_open_002a8578(gh_actor_motion_call *,gh_actor_motion *current,const gh_actor_motion_bindings *,size_t motion_offset,size_t raw_a2_candidate_offset,uint16_t flags);
 gh_actor_motion_status gh_actor_motion_call_step_002a8578(gh_actor_motion_call *);
+/* Run original effect release without binding a replacement motion. */
+gh_actor_motion_status gh_actor_motion_call_open_release_002a84a8(gh_actor_motion_call *,
+ gh_actor_motion *,gh_motion_effect_consumer,void *);
+gh_actor_motion_status gh_actor_motion_call_release_step_002a84a8(gh_actor_motion_call *);
 #ifdef __cplusplus
 }
 #endif

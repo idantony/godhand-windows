@@ -1,5 +1,8 @@
+#include "se_voice.h"
 #include "bgm_requests.h"
 #include "game_event_audio.h"
+#include "game_movie_pool.h"
+#include "se_voice.h"
 #include "../rooms/r100_counter_task.h"
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +37,55 @@ gh_bgm_status gh_bgm_requests_create(gh_audio_registry*r,gh_sound_control*c,gh_d
 unsigned gh_bgm_requests_pending(const gh_bgm_requests*s){unsigned n=0;if(own(s))for(unsigned i=0;i<16;i++)n+=s->requests[i].occupied&&!s->requests[i].linked;return n;}
 unsigned gh_bgm_requests_active(const gh_bgm_requests*s){unsigned n=0;if(own(s))for(unsigned i=0;i<16;i++)n+=s->requests[i].linked!=0;return n;}
 uint32_t gh_bgm_requests_frontier(const gh_bgm_requests*s){return s?s->frontier:0;}
+gh_bgm_status gh_bgm_requests_restore_idle_output_mode_00375700(gh_bgm_requests *s,
+                                                               uint32_t mode)
+{
+ if(!own(s))return GH_BGM_ARGUMENT;
+ if(gh_bgm_requests_pending(s)||gh_bgm_requests_active(s))
+  return fail(s,0x32ba30,GH_BGM_UNSUPPORTED);
+ /* The supported Windows output is stereo. 32BA30 sets the ADX pan
+  * override to 0 for mode 1 and its empty player loop has no channel writes. */
+ if(mode!=1)return fail(s,0x375700,GH_BGM_UNSUPPORTED);
+ s->control->output_mode=1;
+ s->frontier=0;
+ return GH_BGM_OK;
+}
+static int title_stereo_stream(const request *q)
+{
+ return q->occupied&&q->linked&&q->source_loaded&&q->player&&
+        !q->event_prefetch_decoder&&!q->start_pending&&
+        u32(q->scalar+0x8c)==0x80&&u32(q->scalar+0x90)==0&&
+        u32(q->scalar+0x94)==5&&u32(q->scalar+0xa0)==0&&
+        u32(q->scalar+0xb0)==1&&q->row[10]==1&&q->row[0x10]==0&&
+        q->member==0&&q->rate==48000&&q->adx_channels==2&&
+        q->adx_version==4&&q->adx_flags==8&&q->transport.prepared&&
+        q->transport.started&&!q->transport.paused&&!q->transport.complete;
+}
+gh_bgm_status gh_bgm_requests_restore_title_output_mode_00375700(
+ gh_bgm_requests *s,uint32_t mode,const gh_se_voice_engine *voices,
+ const gh_movie_pool *movies)
+{
+ if(!own(s)||!voices||!movies)return GH_BGM_ARGUMENT;
+ if(!gh_se_voice_uses_registry(voices,s->registry))return GH_BGM_ARGUMENT;
+ if(gh_se_voice_external_adx_nodes(voices)||gh_bgm_requests_pending(s))
+  return fail(s,0x32ba30,GH_BGM_UNSUPPORTED);
+ for(unsigned i=0;i<3;i++){
+  gh_movie_track_view track;
+  if(gh_movie_pool_track_at(movies,i,&track)!=GH_MOVIE_OK)
+   return GH_BGM_ARGUMENT;
+  if(track.native_player)return fail(s,0x32ba30,GH_BGM_UNSUPPORTED);
+ }
+ unsigned active=gh_bgm_requests_active(s);
+ if(!active)return gh_bgm_requests_restore_idle_output_mode_00375700(s,mode);
+ if(active!=1||s->head<0||mode!=1||s->control->output_mode!=1||
+    !title_stereo_stream(&s->requests[s->head]))
+  return fail(s,0x32ba30,GH_BGM_UNSUPPORTED);
+ /* 32BA30 retains override=0 and reapplies the saved channel and master
+  * pans. This stereo transport already preserves that routing. */
+ s->control->output_mode=1;
+ s->frontier=0;
+ return GH_BGM_OK;
+}
 gh_bgm_status gh_bgm_event_set_prefix_002d15a8(gh_bgm_requests*s,uint32_t event,int16_t arg3,int16_t arg4){
  request*q=NULL;gh_sound_span table,row;uint64_t off,size;size_t fi;gh_disc_entry de;gh_audio_status ae;
  if(!own(s))return GH_BGM_ARGUMENT;

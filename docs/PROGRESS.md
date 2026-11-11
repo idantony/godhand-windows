@@ -4,6 +4,30 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Title Load restores and presents R100 on Windows
+
+A hidden, muted Windows run restores slot 3 from a synthetic profile encoded
+in the original save format. It completes the card read and checksum, exits
+the title Load task, reloads the original player model and motions, and
+presents R100 with Gene and the HUD at scene frame 1,634. The run reaches
+tick 1,826 and 1,501 scene presents with 1,200,273 world packets. Renderer,
+GPU, postprocess and window error counters are all zero. The next original
+enemy Move is `0x002147D0`.
+
+A separate New Game run reuses the same executable and presents the original
+3-point player hit again. It reaches tick 1,810 and 1,669 scene presents.
+The next original enemy scenery reaction is `0x0020B394`. The frozen
+source builds 370 C modules and passes 351 native checks.
+
+隐藏、静音的 Windows 实跑从原版格式的合成测试卡恢复 3 号档。原生版完成读档校验和标题
+读档任务退出，重载原角色模型及动作，在第 1634 个场景帧呈现 Gene、R100 房间和 HUD。
+运行到 tick 1826，共呈现 1501 个场景帧并提交 1200273 个世界绘制包。渲染器、GPU、后处理
+及窗口错误均为 0。下一处原版敌人 Move 是 `0x002147D0`。
+
+同一可执行文件的新游戏复跑再次呈现原版出拳及 3 点伤害，运行到 tick 1810 和 1669 个
+场景呈现。下一处原版场景碰撞反应是 `0x0020B394`。冻结源码编译 370 个 C 模块，
+通过 351 项原生检查。
+
 ## First presented player hit in R100
 
 A hidden, muted Windows run uses synthetic gamepad input to approach an

@@ -25,7 +25,7 @@ typedef struct {
  gh_adx_key key;
  int16_t decibels[128];
 } sequence_audio;
-struct gh_se_voice_engine {const gh_audio_registry *registry;gh_audio_output *output;gh_se_mix mix;struct voice voices[64];int channels[51],head;uint32_t serial,frontier;const void *origin_seh;size_t origin_seh_size;uint8_t origin_scene_bound;struct {uint32_t handle;int16_t ticks;} stops[48];unsigned stop_count;gh_se_pitch_reference pitch;sequence_audio sequence;};
+struct gh_se_voice_engine {const gh_audio_registry *registry;gh_audio_output *output;gh_se_mix mix;struct voice voices[64];int channels[51],head;uint32_t serial,frontier;const void *origin_seh;size_t origin_seh_size;uint8_t origin_scene_bound;struct {uint32_t handle;int16_t ticks;} stops[48];unsigned stop_count;gh_se_pitch_reference pitch;sequence_audio sequence;gh_se_attached_failure attached_failure;};
 static unsigned h(const uint8_t *p){return (unsigned)p[0]|(unsigned)p[1]<<8;}
 static uint32_t w(const uint8_t *p){return (uint32_t)h(p)|(uint32_t)h(p+2)<<16;}
 static float sound_float(uint32_t bits){float value;memcpy(&value,&bits,4);return value;}
@@ -155,6 +155,29 @@ static int enemy_state71_sequence_profile(const struct voice *v,int16_t bank,int
  return !sample||(w(sample)==offset&&w(sample+4)==11025&&w(sample+8)==0x5fcb80ff&&!w(sample+12));
 }
 
+/* Actual dep0203 selector 15 uses EM03 programs 4/6 and their MT variants. */
+static int em03_attack_sequence_profile(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ const int16_t request=v->requested_program;
+ if(!v->source_owner||bank<1||bank==2||bank==3||(request!=4&&request!=6)||
+    program<request||program>request+1||h(p)!=(unsigned)bank||h(p+2)!=(unsigned)program)
+  return 0;
+ if(v->model){
+  const gh_title_player_view *root=&v->model->root;
+  if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
+     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=0x203)return 0;
+ }else if(!v->combat_profile)return 0;
+ const unsigned variants=program==request?0x10185u:0x10085u;
+ if(h(p+4)!=(unsigned)(program-1)||w(p+6)!=0x0250022au||h(p+0xe)!=0x20||
+    w(p+0x10)!=0x007d007d||w(p+0x14)!=0x005a0040||w(p+0x18)!=0x00c8ff38u||
+    w(p+0x1c)!=0x00060000u||w(p+0x20)!=variants||w(p+0x24)!=0x400||
+    w(p+0x28)!=0xffff||w(p+0x2c))return 0;
+ static const uint32_t offsets[]={0x4a20,0x5280,0x5b60,0x7700};
+ return !sample||(w(sample)==offsets[program-4]&&w(sample+4)==11025&&
+    w(sample+8)==0x5fcb80ffu&&!w(sample+12));
+}
+
 /* Actual EM00 selector6B cues. Logical bank1 is already resolved by
  * the live dependency-bank owner. Both exact rows use the existing 5FCB
  * one-shot reference and the same original age/mix/pitch pipeline. */
@@ -231,6 +254,60 @@ static int core_em00_selector6b_profile(const struct voice *v,int16_t bank,int16
      w(sample+8)==0x5fc080ff&&!w(sample+12));
 }
 
+/* The late EM03 selector15 CORE cues use the same spatial owner as
+ * their local-bank voices, with separately authenticated sample rows. */
+static int core_em03_attack_profile(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ if(!v->source_owner||bank||v->requested_program!=program||
+    (program!=0x85&&program!=0x87&&program!=0xa0)||h(p)||h(p+2)!=(unsigned)program)
+  return 0;
+ if(v->model){
+  const gh_title_player_view *root=&v->model->root;
+  if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
+     h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=0x203)return 0;
+ }else if(!v->combat_profile)return 0;
+ const int aged=program==0xa0,second=program==0x87;
+ const unsigned slot=aged?98u:second?90u:88u;
+ const uint32_t gain=aged?0x00780078u:second?0x005a005au:0x00460046u;
+ if(h(p+4)!=slot||w(p+6)!=(aged?0x025a020bu:0x0246020bu)||
+    h(p+0xe)!=0x20||w(p+0x10)!=gain||w(p+0x14)!=0x005a0040u||
+    w(p+0x18)!=(second?0x00800080u:0x0080ff80u)||w(p+0x1c)!=(aged?0x60000u:0)||
+    w(p+0x20)!=(aged?0x30005u:4u)||w(p+0x24)!=(aged?0x300u:0x301u)||
+    w(p+0x28)!=0xffffu||w(p+0x2c))return 0;
+ const uint32_t offset=aged?0x6f7d0u:second?0xa1ed0u:0xa2f60u;
+ return !sample||(w(sample)==offset&&w(sample+4)==16000&&
+    w(sample+8)==0x5fc080ffu&&!w(sample+12));
+}
+
+static int player_fall_voice_model(const struct voice *v)
+{
+ return v->source_owner&&v->model&&v->model->root.bytes&&v->model->root.size>=0x300&&
+    v->model->root.original_vtable214==0x41d220&&h(v->model->root.bytes+0x2fe)==0x100;
+}
+
+static int player_fall_grunt_profile(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ if(!player_fall_voice_model(v)||v->requested_bank||v->requested_program!=0xd7||
+    bank!=3||program<15||program>17||h(p+4)!=(unsigned)(program-1)||w(p+6)!=0x0055000fu||
+    h(p+0xe)!=0x21||w(p+0x10)!=0x007f007fu||w(p+0x14)!=0x005a0040u||
+    w(p+0x18)||w(p+0x1c)!=0x00ff0000u||w(p+0x20)!=(program==15?0x205u:5u)||
+    w(p+0x24)||w(p+0x28)!=0xffffu||w(p+0x2c))return 0;
+ static const uint32_t offsets[]={0xf4f0,0x103b0,0x11900};
+ return w(sample)==offsets[program-15]&&w(sample+4)==11025&&
+    w(sample+8)==0x5fcb80ffu&&!w(sample+12);
+}
+
+static int player_fall_impact_profile(const struct voice *v,const uint8_t *p)
+{
+ return player_fall_voice_model(v)&&!v->requested_bank&&v->requested_program==0x123&&
+    !v->info.bank&&v->info.program==0x123&&h(p+4)==149&&w(p+6)==0x00640100u&&
+    h(p+0xe)==0x23&&w(p+0x10)==0x00780078u&&w(p+0x14)==0x005a0040u&&
+    w(p+0x18)==0x0080ff80u&&w(p+0x1c)==0x00ff0000u&&w(p+0x20)==0x00060005u&&
+    !w(p+0x24)&&w(p+0x28)==0xffffu&&!w(p+0x2c);
+}
+
 static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,int16_t program,const uint8_t*p,struct voice*candidate,uint16_t selected_pitch){
  gh_audio_pcm_release(&candidate->pcm);
  unsigned slot=h(p+4),rate,level;gh_sound_span descriptor,tail;gh_voice_status result;
@@ -238,14 +315,28 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  if(descriptor.size!=16)return unsupported(s,0x35fc);
  uint16_t adsr1=(uint16_t)h(descriptor.data+8),adsr2=(uint16_t)h(descriptor.data+10);
  int square_voice=candidate->source_owner&&bank==3&&program>=1&&program<=3&&adsr2==0x5fcb;
+ int hurt_voice=adsr2==0x5fcb&&candidate->source_owner&&bank==3&&(program==7||program==8)&&
+    candidate->requested_bank==0&&candidate->requested_program==program+200&&
+    candidate->model&&candidate->model->root.size>=0x300&&
+    candidate->model->root.original_vtable214==0x41d220&&
+    h(candidate->model->root.bytes+0x2fe)==0x100&&h(p+4)==(unsigned)program&&
+    w(p+6)==0x0055000f&&h(p+0xe)==0x21&&w(p+0x10)==0x007f007f&&
+    w(p+0x14)==0x005a0040&&!w(p+0x18)&&w(p+0x1c)==0x00ff0000&&
+    w(p+0x20)==5&&!w(p+0x24)&&
+    w(descriptor.data)==(program==7?54128u:57568u)&&w(descriptor.data+4)==11025;
+ int fall_grunt=adsr2==0x5fcb&&player_fall_grunt_profile(candidate,bank,program,p,descriptor.data);
+ if(player_fall_impact_profile(candidate,p)&&(w(descriptor.data)!=0x35460||
+    w(descriptor.data+4)!=18000||w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))
+  return unsupported(s,0x35fc);
  int impact_voice=adsr2==0x5fcb&&em0a_impact_profile(candidate,bank,program,p)&&
                   w(descriptor.data)==(program==0x2a?0u:0x2b80u)&&w(descriptor.data+4)==16000;
  int reaction_voice=adsr2==0x5fcb&&enemy_reaction_profile(candidate,bank,program,p,descriptor.data);
  int sequence_voice=adsr2==0x5fcb&&enemy_state71_sequence_profile(candidate,bank,program,p,descriptor.data);
  int selector6b_voice=adsr2==0x5fcb&&em00_selector6b_profile(candidate,bank,program,p,descriptor.data);
+ int attack_voice=adsr2==0x5fcb&&em03_attack_sequence_profile(candidate,bank,program,p,descriptor.data);
  int timed_voice=adsr2==0x5fcb&&em0a_timed_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==0x5be0&&w(descriptor.data+4)==16000;
- if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!square_voice&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!selector6b_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
+ if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!square_voice&&!hurt_voice&&!fall_grunt&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!selector6b_voice&&!attack_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
  static const uint32_t ema2_impact_offsets[]={0x553c0,0x56490,0x54300};
  int ema2_voice=adsr2==0x5fc0&&core_ema2_impact_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==ema2_impact_offsets[program-0x96]&&w(descriptor.data+4)==22050;
@@ -255,8 +346,11 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  const int selector6b_core=core_em00_selector6b_profile(candidate,bank,program,p,NULL);
  if(selector6b_core&&!core_em00_selector6b_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
- if(impact_voice||reaction_voice||ema2_voice||timed_voice||footstep||sequence_voice||
-    selector6b_voice||selector6b_core)candidate->combat_profile=1;
+ const int attack_core=core_em03_attack_profile(candidate,bank,program,p,NULL);
+ if(attack_core&&!core_em03_attack_profile(candidate,bank,program,p,descriptor.data))
+  return unsupported(s,0x35fc);
+ if(impact_voice||reaction_voice||ema2_voice||timed_voice||footstep||sequence_voice||attack_core||
+    selector6b_voice||selector6b_core||attack_voice)candidate->combat_profile=1;
  rate=w(descriptor.data+4);if(rate<1000 || rate>48000)return unsupported(s,0x38e4);
  candidate->info.pitch_q12=selected_pitch?selected_pitch:(uint16_t)((uint64_t)rate*4096/48000);
  result=gh_audio_decode_ps_adpcm(tail.data,tail.size,&candidate->pcm);if(result){s->frontier=0x35fc;return result;}
@@ -383,9 +477,10 @@ gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *s,int16_t bank,in
 {
  uint8_t p[48];gh_voice_status result;unsigned i;struct voice candidate={0};
  if(!s || !handle)return GH_VOICE_ARGUMENT;*handle=0;s->frontier=0;
- int title=bank==2&&(program==0||(program>=10&&program<=12));
+ int title=bank==2&&(program==0||(program>=10&&program<=12)||program==15);
  const int sequence=bank==2&&(program==0x32||program==0x33)&&s->sequence.disc;
- if((!title&&!sequence&&(bank || (program!=0x2d && program!=0x15e && program!=0x160 && program!=0x161))) || arg3!=-1 || arg4!=-1 || flags || delay)return unsupported(s,0x2cb8a0);
+ const int empty_load=bank==0&&program==0x122;
+ if((!title&&!sequence&&!empty_load&&(bank || (program!=0x2d && program!=0x15e && program!=0x160 && program!=0x161))) || arg3!=-1 || arg4!=-1 || flags || delay)return unsupported(s,0x2cb8a0);
  if(s->mix.system_flags&0x08000040)return unsupported(s,0x2ce588);
  if(gh_audio_get_program(s->registry,bank,program,0,p)!=GH_AUDIO_OK)return unsupported(s,0x374cb8);
  /* Exact audited subsets; +21 controls random variants, +22 duplicate age
@@ -397,11 +492,22 @@ gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *s,int16_t bank,in
   if(!s->origin_scene_bound||s->origin_seh||s->origin_seh_size)return unsupported(s,0x2cae10);
   if(program==0){if(p[6]!=10||p[7]!=4||p[8]!=120||p[9]||h(p+0xe)!=0x20||h(p+0x10)!=90||w(p+0x20)!=0x30000||w(p+0x24)!=0x300||h(p+0x1e))return unsupported(s,0x2cdff0);}
   else if(p[6]!=20||p[7]!=4||p[8]!=122||p[9]||h(p+0xe)!=0x23||h(p+0x10)!=120||w(p+0x20)||w(p+0x24)||h(p+0x1e)!=255)return unsupported(s,0x2cdff0);
+  if(program==15&&h(p+4)!=4)return unsupported(s,0x2cdff0);
+ }else if(empty_load){
+  if(!s->origin_scene_bound||s->origin_seh||s->origin_seh_size)return unsupported(s,0x2cae10);
+  if(h(p+4)!=148||w(p+6)!=0x00640100||w(p+0xa)||h(p+0xe)!=0x23||
+     w(p+0x10)!=0x00780078||w(p+0x18)!=0x0080ff80||w(p+0x20)!=0x00060005)
+   return unsupported(s,0x2cdff0);
+  gh_sound_span descriptor,tail;
+  if(gh_audio_sample_at(s->registry,bank,148,&descriptor,&tail)!=GH_AUDIO_OK||
+     descriptor.size!=16||w(descriptor.data)!=0x176d0||w(descriptor.data+4)!=20000||
+     w(descriptor.data+8)!=0x5fc080ff||w(descriptor.data+12))
+   return unsupported(s,0x35fc);
  }else if(program==0x2d){
   if(p[6]!=15||p[7]!=1||p[8]!=104||p[9]!=2||h(p+0xe)!=0x21||w(p+0x20)!=0x00030005||h(p+0x10)!=90)return unsupported(s,0x2cdff0);
   if(!s->origin_scene_bound||s->origin_seh||s->origin_seh_size)return unsupported(s,0x2cae10);
  }else if(p[6]||p[7]!=4||p[8]!=120||p[9]||h(p+0xe)!=0x23||w(p+0x20))return unsupported(s,0x2cdff0);
- if(!sequence&&(h(p+0x10)!=h(p+0x12)||h(p+0x14)!=64||h(p+0x16)!=90||w(p+0x18)||h(p+0x1c)||h(p+0x28)!=65535||h(p+0x2a)||w(p+0x2c)))return unsupported(s,0x2cdff0);
+ if(!sequence&&(h(p+0x10)!=h(p+0x12)||h(p+0x14)!=64||h(p+0x16)!=90||(!empty_load&&w(p+0x18))||h(p+0x1c)||h(p+0x28)!=65535||h(p+0x2a)||w(p+0x2c)))return unsupported(s,0x2cdff0);
  if(!title&&!sequence&&(h(p+0x1e)!=255||w(p+0x24)))return unsupported(s,0x2cdff0);
  /* Actual2CBF78 compares bank AND program; duplicate-age suppression for
   * equal-origin zero-delay is shared by logo and room confirmation0. */
@@ -414,6 +520,10 @@ gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *s,int16_t bank,in
    .sample_slot=h(p+0x28),.rate=48000,.pitch_q12=4096,.pending=1,.channel=NONE,.stop_current=0x7f00};
  }else{
   result=prepare_pcm(s,bank,program,p,&candidate);if(result)return result;
+  if(empty_load){
+   memcpy(candidate.descriptor,p,sizeof(candidate.descriptor));
+   candidate.info.pitch_q12=0;
+  }
  }
  if(!++s->serial)++s->serial;candidate.info.original_handle=s->serial;candidate.next=s->head;candidate.used=1;candidate.priority=p[8];candidate.group_first=p[6];candidate.group_count=p[7]+1;candidate.replace_equal=(p[0xe]&0x20)!=0;s->voices[i]=candidate;s->head=(int)i;*handle=s->serial;return GH_VOICE_OK;
 }
@@ -462,8 +572,11 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
   if(!enemy_reaction_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_state71_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !em03_attack_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !core_em03_attack_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_em00_selector6b_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em0a_timed_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)&&
+     !player_fall_impact_profile(candidate,candidate->descriptor)&&
      !core_enemy_footstep_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL))
    return unsupported(s,0x2cbf78);
  }
@@ -520,7 +633,32 @@ static gh_voice_status attached_request_body(gh_se_voice_engine*s,const void*own
  if(v->setup_stage==6){if(!++s->serial)++s->serial;v->info.original_handle=s->serial;v->request_key=NULL;v->setup_stage=0;v->random=NULL;v->random_context=NULL;v->used=1;v->next=s->head;s->head=(int)index;*handle=v->info.original_handle;}
  return GH_VOICE_OK;
 }
-gh_voice_status gh_se_voice_request_attached(gh_se_voice_engine*s,const void*owner,const void*key,gh_actor_model*model,int32_t part,int16_t bank,int16_t program,uint32_t flags,int32_t delay,gh_se_attached_probe probe,void*probe_context,gh_se_attached_random random,void*random_context,uint32_t*handle){if(!s||!handle)return GH_VOICE_ARGUMENT;*handle=0;s->frontier=0;fenv_t env;if(feholdexcept(&env))return GH_VOICE_PLATFORM;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_VOICE_PLATFORM;}gh_voice_status e=attached_request_body(s,owner,key,model,part,bank,program,flags,delay,probe,probe_context,random,random_context,handle);if(fesetenv(&env))return GH_VOICE_PLATFORM;return e;}
+gh_voice_status gh_se_voice_request_attached(gh_se_voice_engine *s,const void *owner,
+ const void *key,gh_actor_model *model,int32_t part,int16_t bank,int16_t program,
+ uint32_t flags,int32_t delay,gh_se_attached_probe probe,void *probe_context,
+ gh_se_attached_random random,void *random_context,uint32_t *handle)
+{
+ if(!s||!handle)return GH_VOICE_ARGUMENT;
+ *handle=0;
+ s->frontier=0;
+ fenv_t env;
+ if(feholdexcept(&env))return GH_VOICE_PLATFORM;
+ if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_VOICE_PLATFORM;}
+ gh_voice_status status=attached_request_body(s,owner,key,model,part,bank,program,
+     flags,delay,probe,probe_context,random,random_context,handle);
+ if(fesetenv(&env))return GH_VOICE_PLATFORM;
+ if(status&&s->frontier)
+  s->attached_failure=(gh_se_attached_failure){
+      .frontier=s->frontier,.flags=flags,.part_index=part,.delay=delay,
+      .bank=bank,.program=program,.status=status
+  };
+ return status;
+}
+
+void gh_se_voice_last_attached_failure(const gh_se_voice_engine *s,gh_se_attached_failure *out)
+{
+ if(out)*out=s?s->attached_failure:(gh_se_attached_failure){0};
+}
 static int r100_spatial_profile(const struct voice *v)
 {
  return v->source_owner&&v->info.position_mode==2&&v->info.bank==2&&v->info.program==10&&
@@ -888,7 +1026,7 @@ static gh_voice_status voice_update_body(gh_se_voice_engine *s)
     replaced=s->channels[channel];
     if(!v->external_adx){drop(s,replaced,1);replaced=-1;}
    }
-   if(v->source_owner&&(h(v->descriptor+0x18)||h(v->descriptor+0x1a)||v->spatial_slow)&&v->pitch_setup<2){
+   if((h(v->descriptor+0x18)||h(v->descriptor+0x1a)||v->spatial_slow)&&v->pitch_setup<2){
     if(!s->pitch.loaded)return unsupported(s,0x37d760);
     if(!v->pitch_setup){
      int16_t low,high;
@@ -964,13 +1102,20 @@ gh_voice_status gh_se_voice_pcm_view(const gh_se_voice_engine *s,uint32_t handle
  if(!s || !handle || !samples || !frames)return GH_VOICE_ARGUMENT;
  for(unsigned i=0;i<64;++i)if(s->voices[i].used && s->voices[i].info.original_handle==handle){
   if(!s->voices[i].info.pending)return GH_VOICE_BOUNDS;
-  if(s->voices[i].source_owner&&!s->voices[i].info.pitch_q12)return GH_VOICE_UNSUPPORTED;
+  if(!s->voices[i].info.pitch_q12)return GH_VOICE_UNSUPPORTED;
   if(s->voices[i].external_adx&&!s->voices[i].pcm.samples)return GH_VOICE_BOUNDS;
   *samples=s->voices[i].pcm.samples;*frames=s->voices[i].pcm.frames;return GH_VOICE_OK;
  }
  return GH_VOICE_BOUNDS;
 }
 
+unsigned gh_se_voice_external_adx_nodes(const gh_se_voice_engine *s)
+{
+ unsigned count=0;
+ if(s)for(unsigned i=0;i<64;i++)
+  count+=s->voices[i].used&&s->voices[i].external_adx;
+ return count;
+}
 unsigned gh_se_voice_active_nodes(const gh_se_voice_engine*s){unsigned n=0;if(s)for(unsigned i=0;i<64;i++)n+=s->voices[i].used==1;return n;}
 gh_voice_status gh_se_voice_request_stop_00375050(gh_se_voice_engine*s,uint32_t handle,int16_t ticks,int*accepted){
  if(!s||!handle||!accepted)return GH_VOICE_ARGUMENT;*accepted=0;s->frontier=0;

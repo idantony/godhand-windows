@@ -34,6 +34,18 @@ gh_actor_model_status gh_actor_model_set_all_node_tints(gh_actor_model *, const 
 gh_actor_model_status gh_actor_model_build_nodes(gh_actor_model *,gh_static_transform_policy,int *);
 gh_actor_model_status gh_actor_model_release_nodes(gh_actor_model *);
 gh_actor_model_status gh_actor_model_packet_at(const gh_actor_model *,unsigned,const gh_actor_node_packets **);
+typedef struct {
+ gh_actor_model *owner;
+ size_t node;
+ unsigned part;
+ uint8_t stage,node_started,part_started;
+} gh_actor_model_retirement;
+/* Ordered 1496C0 for complete PL00, PL01, and admitted R100 OM models. Original object packet, each node,
+ * then each part, all on the existing owners. Holds position on a failed free. */
+gh_actor_model_status gh_actor_model_retire_pl00_001496c0(gh_actor_model *,
+ gh_actor_model_retirement *,uint32_t *frontier);
+gh_actor_model_status gh_actor_model_retire_001496c0(gh_actor_model *,
+ gh_actor_model_retirement *,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

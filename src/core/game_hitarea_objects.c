@@ -33,3 +33,17 @@ gh_hitarea_status gh_hitarea_object_release_empty_001fe278(gh_hitarea_object*v,u
  if(!v->fallback&&s->hitarea_native){s->hitarea_native->actors[v->index]=NULL;s->hitarea_native->last_hit_actors[v->index]=NULL;v->serial=++s->hitarea_native->serials[v->index];}return GH_HITAREA_OK;
 }
 void gh_hitarea_detach_after_pool_reset(gh_game_init_state*s){if(!s)return;if(s->hitarea_native&&s->hitarea_native->owner!=s)return;free(s->hitarea_native);s->hitarea_native=NULL;s->hitarea_generation++;}
+
+
+gh_hitarea_status gh_hitarea_forget_actor_native(gh_game_init_state *state,const gh_title_player_view *actor)
+{
+ if(!state||!actor||!actor->bytes)return GH_HITAREA_ARGUMENT;
+ struct gh_hitarea_native *native=state->hitarea_native;
+ if(!native)return GH_HITAREA_OK;
+ if(native->owner!=state)return GH_HITAREA_ARGUMENT;
+ for(unsigned i=0;i<416;++i){
+  if(native->actors[i]==actor)native->actors[i]=NULL;
+  if(native->last_hit_actors[i]==actor)native->last_hit_actors[i]=NULL;
+ }
+ return GH_HITAREA_OK;
+}

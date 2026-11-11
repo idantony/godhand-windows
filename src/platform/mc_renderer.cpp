@@ -20,7 +20,7 @@ struct QueuedID {
     uint32_t entry_index,consumer;
     uint16_t z=0;bool z_known=false;
 };
-enum class CommandKind {ID,FAN,FADE,NUMBER,COVER,MESSAGE,RADAR};
+enum class CommandKind {ID,FAN,FADE,NUMBER,COVER,MESSAGE,RADAR,TITLE_TEXT,PAD_ICON};
 struct QueuedMessage {
     gh_id_text_glyph glyph={};
     std::shared_ptr<const std::vector<uint8_t>> atlas;
@@ -30,6 +30,7 @@ struct QueuedCommand {
     QueuedID id={};gh_cockpit_fan fan={};gh_fade_draw fade={};gh_ui_fade_context fade_context={};gh_id_texture_quad number={};gh_child_cover_quad cover={};
     QueuedMessage message;
     gh_id_texture_quad radar={};
+    std::vector<gh_id_text_glyph> title_glyphs;
 };
 struct gh_mc_renderer {
     gh_ui_text_renderer *text=nullptr;
@@ -77,12 +78,13 @@ static gh_id_error render_sprite(gh_mc_renderer *r,const gh_id_texture_quad &qua
     *gpu=gh_ui_sprite_batch_with_depth(r->sprite,&state,&item,1,r->frame.data(),r->next.data(),r->next.size(),depth);
     return *gpu==GH_UI_OK?GH_ID_OK:GH_ID_UNSUPPORTED;
 }
-static gh_id_error render_number(gh_mc_renderer*r,const gh_id_texture_quad&q,gh_ui_error*gpu,
- const gh_ui_depth_write *depth)
+static gh_id_error render_indexed_quad(gh_mc_renderer*r,const gh_id_texture_quad&q,gh_ui_error*gpu,
+ const gh_ui_depth_write *depth,bool pad_icon=false)
 {
     if(!r->polygon)*gpu=gh_ui_polygon_create(512,448,&r->polygon);gh_ui_polygon_item p={};
     for(const auto&t:r->number_textures)if(t.source==q.texture.source.bytes){p.texture=t.handle;break;}
-    if(*gpu==GH_UI_OK&&!p.texture){std::vector<unsigned char>rgba(128*128*4);gh_id_error e=gh_id_number_texture_rgba(&q.texture,rgba.data(),rgba.size());if(e)return e;
+    if(*gpu==GH_UI_OK&&!p.texture){std::vector<unsigned char>rgba(128*128*4);gh_id_error e=pad_icon?gh_id_texture_rgba(&q.texture,rgba.data(),rgba.size()):
+            gh_id_number_texture_rgba(&q.texture,rgba.data(),rgba.size());if(e)return e;
         *gpu=gh_ui_polygon_upload_number128(r->polygon,&q.texture,rgba.data(),rgba.size(),&p.texture);if(*gpu==GH_UI_OK)r->number_textures.push_back({q.texture.source.bytes,p.texture});}
     if(*gpu==GH_UI_OK&&(q.x0==q.x1||q.y0==q.y1)){r->next=r->frame;return GH_ID_OK;} /* genuine zero-area raster */
     if(*gpu==GH_UI_OK){auto&v=p.polygon;v.texture=q.texture;v.color=q.color;v.color_mode=q.color_mode;v.font_mode=q.font_mode;v.clip=q.clip;v.alignment=0;
@@ -176,6 +178,27 @@ extern "C" void gh_mc_renderer_begin(gh_mc_renderer *r)
     for(size_t i=3;i<r->frame.size();i+=4)r->frame[i]=128;
     r->status={};r->begun=true;r->queued.clear();r->queue_failed=false;
 }
+static gh_id_error render_font_group(gh_mc_renderer *r,const gh_font_state *fonts,
+    const gh_id_text_glyph *glyphs,size_t count,gh_ui_error *gpu)
+{
+    const auto &font=fonts->slots[0];
+    if(r->text&&(r->font_mst!=font.mst||r->font_msa!=font.msa))gh_mc_renderer_reset_resources(r);
+    if(!r->text){
+        *gpu=gh_ui_text_create(&font,512,448,&r->text);
+        if(*gpu==GH_UI_OK){r->font_mst=font.mst;r->font_msa=font.msa;}
+    }
+    if(*gpu==GH_UI_OK){
+        gh_ui_gs_state state={};
+        state.alpha=UINT64_C(0x8000000044);state.test=0x3001d;
+        state.tex0=UINT64_C(0x2000000625420000);state.prim=0x156;
+        state.colclamp=state.prmodecont=1;
+        *gpu=gh_ui_text_batch(r->text,&state,28672,29184,glyphs,count,
+            r->frame.data(),r->next.data(),r->next.size());
+        if(*gpu==GH_UI_OK)r->status.glyphs+=count;
+    }
+    return *gpu==GH_UI_OK?GH_ID_OK:GH_ID_UNSUPPORTED;
+}
+
 static gh_id_error draw_view(gh_mc_renderer *r,const gh_id_render_view *s,const gh_id_draw_job *job,const gh_ui_depth_write *depth)
 {
     if(!r||!r->begun||!s||!job||!job->entry||!s->base||!s->manager)return GH_ID_ARGUMENT;
@@ -191,20 +214,15 @@ static gh_id_error draw_view(gh_mc_renderer *r,const gh_id_render_view *s,const 
             error=gh_id_text_prepare(s->base,job->entry,s->menu,s->messages,s->font,&context,r->glyphs.data(),r->glyphs.size(),&result);
             r->status.opcode=result.opcode;r->status.frontier=result.frontier_address;
             if(error==GH_ID_OK){
-                const auto &font=s->font->slots[0];
-                if(r->text&&(r->font_mst!=font.mst||r->font_msa!=font.msa))gh_mc_renderer_reset_resources(r);
-                if(!r->text){gpu=gh_ui_text_create(&font,512,448,&r->text);if(gpu==GH_UI_OK){r->font_mst=font.mst;r->font_msa=font.msa;}}
-                if(gpu==GH_UI_OK){
-                    gh_ui_gs_state state={};state.alpha=UINT64_C(0x8000000044);state.test=0x3001d;
-                    state.tex0=UINT64_C(0x2000000625420000);state.prim=0x156;state.colclamp=state.prmodecont=1;
-                    gpu=gh_ui_text_batch(r->text,&state,28672,29184,r->glyphs.data(),result.glyph_count,r->frame.data(),r->next.data(),r->next.size());
-                    if(gpu==GH_UI_OK)r->status.glyphs+=result.glyph_count;
-                }
+                if(result.icon_count){
+                    error=GH_ID_UNSUPPORTED;
+                    r->status.frontier=0x2b1300; /* requires plural OT groups */
+                }else error=render_font_group(r,s->font,r->glyphs.data(),result.glyph_count,&gpu);
             }
         }else if(job->entry->kind==1){
             gh_id_texture_quad q[10];size_t n=0;error=gh_id_number_prepare(s->manager,s->base,job->entry,q,10,&n,&r->status.frontier);
             if(error==GH_ID_OK&&n!=1){error=GH_ID_UNSUPPORTED;r->status.frontier=0x2c70a8;}
-            if(error==GH_ID_OK)error=render_number(r,q[0],&gpu,depth);
+            if(error==GH_ID_OK)error=render_indexed_quad(r,q[0],&gpu,depth);
         }else if(job->entry->kind==0){
             gh_id_texture_quad quad={};
             error=gh_id_texture_quad_prepare(s->manager,s->base,job->entry,&quad);
@@ -269,11 +287,61 @@ extern "C" gh_id_error gh_mc_renderer_queue_fan(gh_mc_renderer*r,const gh_cockpi
     try {QueuedCommand c;c.kind=CommandKind::FAN;c.fan=*fan;r->queued.push_back(c);*tag={6,5,r->queued.size()-1};return GH_ID_OK;}
     catch(const std::bad_alloc&){return GH_ID_MEMORY;}
 }
+static gh_id_error queue_title_prompt(gh_mc_renderer *r,const gh_id_render_view *view,
+    const gh_id_draw_job *job,gh_ui_ot_tag *tags,size_t capacity,size_t *count)
+{
+    if(!view->font||!view->menu||!view->messages)return GH_ID_ARGUMENT;
+    gh_id_text_result result={};
+    const gh_id_text_context context={r->language,512,448,1824,{r->palette.data(),r->palette.size(),0}};
+    gh_id_error status=gh_id_text_prepare(view->base,job->entry,view->menu,view->messages,view->font,
+        &context,r->glyphs.data(),r->glyphs.size(),&result);
+    if(status){r->status.opcode=result.opcode;r->status.frontier=result.frontier_address;return status;}
+    const bool has_font=result.glyph_count>result.icon_count;
+    const size_t group_count=result.icon_count+(has_font?1u:0u);
+    if(group_count>capacity||group_count>8192-r->queued.size())return GH_ID_CAPACITY;
+    if(group_count&&!tags)return GH_ID_ARGUMENT;
+    try {
+        std::vector<QueuedCommand> groups;
+        groups.reserve(group_count);
+        if(has_font){
+            QueuedCommand text;
+            text.kind=CommandKind::TITLE_TEXT;
+            text.id={*view,*view->base,*job->entry,job->entry_index,job->consumer_address};
+            text.title_glyphs.reserve(result.glyph_count-result.icon_count);
+            for(size_t i=0;i<result.glyph_count;++i)
+                if(!r->glyphs[i].icon_extent)text.title_glyphs.push_back(r->glyphs[i]);
+            groups.push_back(std::move(text));
+        }
+        for(size_t i=0;i<result.glyph_count;++i){
+            if(!r->glyphs[i].icon_extent)continue;
+            QueuedCommand icon;
+            icon.kind=CommandKind::PAD_ICON;
+            status=gh_id_text_icon_quad(view->manager,&r->glyphs[i],&icon.number);
+            if(status){r->status.frontier=0x2b1300;return status;}
+            icon.id={*view,*view->base,*job->entry,job->entry_index,job->consumer_address};
+            icon.id.z=65535;icon.id.z_known=true;
+            groups.push_back(std::move(icon));
+        }
+        const size_t first=r->queued.size();
+        r->queued.reserve(first+groups.size());
+        for(size_t i=0;i<groups.size();++i){
+            const int32_t depth=groups[i].kind==CommandKind::PAD_ICON?5:2;
+            r->queued.push_back(std::move(groups[i]));
+            tags[i]={6,depth,first+i};
+        }
+        *count=groups.size();
+        return GH_ID_OK;
+    }catch(const std::bad_alloc&){return GH_ID_MEMORY;}
+}
+
 extern "C" gh_id_error gh_mc_renderer_queue_view_groups(gh_mc_renderer*r,const gh_id_render_view*view,const gh_id_draw_job*job,gh_ui_ot_tag*tags,size_t capacity,size_t*count)
 {
     if(!r||!r->begun||!view||!view->base||!view->manager||!job||!job->entry||!count)return GH_ID_ARGUMENT;
     if(r->flushing||r->queue_failed||r->status.jobs)return GH_ID_BUSY;
     if(null_texture(view,job->entry)){*count=0;return GH_ID_OK;}
+    if(job->entry->kind==2&&view->base->resource_number==11&&
+       (job->entry->message==0x20a4||job->entry->message==0x20a5))
+        return queue_title_prompt(r,view,job,tags,capacity,count);
     if(job->entry->kind!=1){if(!capacity)return GH_ID_CAPACITY;if(!tags)return GH_ID_ARGUMENT;gh_ui_ot_tag tag;gh_id_error e=gh_mc_renderer_queue_view(r,view,job,&tag);if(e)return e;tags[0]=tag;*count=1;return GH_ID_OK;}
     gh_id_texture_quad digits[10];size_t n=0;gh_id_error e=gh_id_number_prepare(view->manager,view->base,job->entry,digits,10,&n,&r->status.frontier);if(e)return e;
     if(n>capacity||n>8192-r->queued.size())return GH_ID_CAPACITY;if(n&&!tags)return GH_ID_ARGUMENT;
@@ -428,7 +496,7 @@ static gh_id_error draw_fade(gh_mc_renderer*r,const gh_fade_draw&draw,const gh_u
 static bool tracks_depth(const QueuedCommand &command)
 {
     return command.kind==CommandKind::COVER || command.kind==CommandKind::MESSAGE ||
-        command.kind==CommandKind::RADAR || command.kind==CommandKind::FAN ||
+        command.kind==CommandKind::RADAR || command.kind==CommandKind::FAN || command.kind==CommandKind::PAD_ICON ||
         ((command.kind==CommandKind::ID || command.kind==CommandKind::NUMBER) && command.id.z_known);
 }
 
@@ -501,9 +569,19 @@ static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t cou
                 bool known_terminal=depth_known&&i+1==count;
                 error=draw_fade(r,command.fade,command.fade_context,known_terminal?depth_samples.data():nullptr,known_terminal?depth_samples.size():0);
             }
+            else if(command.kind==CommandKind::TITLE_TEXT||command.kind==CommandKind::PAD_ICON){
+                const bool icon=command.kind==CommandKind::PAD_ICON;
+                gh_ui_error gpu=GH_UI_OK;
+                gh_ui_depth_write plane={depth_samples.data(),depth_samples.size(),65535};
+                error=icon?render_indexed_quad(r,command.number,&gpu,depth_known?&plane:nullptr,true):
+                    render_font_group(r,command.id.view.font,command.title_glyphs.data(),command.title_glyphs.size(),&gpu);
+                r->status.consumer=0x2ab0b8;r->status.opcode=0;r->status.gpu_error=(unsigned)gpu;
+                r->status.id_error=error;r->status.frontier=error?(icon?0x2b1300:0x2a53a8):0;
+                if(error==GH_ID_OK){r->frame.swap(r->next);++r->status.jobs;}
+            }
             else if(command.kind==CommandKind::NUMBER){gh_ui_error gpu=GH_UI_OK;r->status.consumer=0x2aaff0;r->status.frontier=0;r->status.opcode=0;
                 gh_ui_depth_write plane={depth_samples.data(),depth_samples.size(),command.id.z};
-                error=render_number(r,command.number,&gpu,depth_known&&command.id.z_known?&plane:nullptr);r->status.id_error=error;r->status.gpu_error=(unsigned)gpu;
+                error=render_indexed_quad(r,command.number,&gpu,depth_known&&command.id.z_known?&plane:nullptr);r->status.id_error=error;r->status.gpu_error=(unsigned)gpu;
                 if(error==GH_ID_OK){r->frame.swap(r->next);++r->status.jobs;}else r->status.frontier=0x2c6d48;}
             else if(command.kind==CommandKind::COVER){r->status.consumer=0x160d50;r->status.frontier=0;r->status.opcode=0;r->status.id_error=GH_ID_OK;r->status.gpu_error=0;++r->status.jobs;error=GH_ID_OK;} /* alpha test KEEP discards color AND Z */
             else if(command.kind==CommandKind::MESSAGE){

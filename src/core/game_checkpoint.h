@@ -17,6 +17,8 @@ typedef enum {GH_CHECKPOINT_OK,GH_CHECKPOINT_SKIPPED,GH_CHECKPOINT_ARGUMENT,
 /* Original direct full0 checkpoint with NULL position and rotation overrides.
  * The scene-entry suppression flags belong to 2BF8F8, not to this call. */
 gh_checkpoint_status gh_game_checkpoint_002c05b0(gh_game_checkpoint *,const gh_checkpoint_bindings *);
+gh_checkpoint_status gh_game_checkpoint_full_002c05b0(gh_game_checkpoint *,
+ const gh_checkpoint_bindings *,const uint8_t door_backup[24],uint32_t output_mode);
 /* Actual2BF8F8 gate->2C05B0(full0,posNULL,rotNULL), including1F9B88snapshot
  * subset/31C350 and14A0+9C30+20 copy into canonicalstage.work_area.
  * Unknownplayer54A returns precise1F9BEC AFTER originalCoreSaveprefixwrites;

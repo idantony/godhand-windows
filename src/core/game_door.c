@@ -80,10 +80,20 @@ static gh_door_status begin(gh_game_door*s,const gh_game_door_bindings*b){
  }
  s->begin_stage=0;s->frontier=0;return GH_DOOR_OK;
 }
-gh_door_status gh_game_door_request_001ffeb8(gh_game_door*s,const gh_game_door_bindings*b,uint16_t room,const float position[3],float yaw,uint8_t kind,uint32_t flags,uint8_t force){
+gh_door_status gh_game_door_request_001fff30(gh_game_door*s,const gh_game_door_bindings*b,
+ uint16_t room,const uint32_t position[3],uint32_t yaw,uint8_t kind,uint32_t flags,uint8_t force){
  if(!s||!s->initialized||!b||!b->work||!position)return GH_DOOR_ARGUMENT;
- uint16_t target=room==b->work->room?UINT16_MAX:room;memcpy(&s->target_room,&target,2);memcpy(s->position_bits,position,12);memcpy(&s->yaw_bits,&yaw,4);s->point=0xff;s->kind=kind;s->flags=flags;s->force3a=force;
+ memcpy(&s->target_room,&room,2);
+ memcpy(s->position_bits,position,12);
+ s->yaw_bits=yaw;s->point=0xff;s->kind=kind;s->flags=flags;s->force3a=force;
  return begin(s,b);
+}
+gh_door_status gh_game_door_request_001ffeb8(gh_game_door*s,const gh_game_door_bindings*b,uint16_t room,const float position[3],float yaw,uint8_t kind,uint32_t flags,uint8_t force){
+ if(!b||!b->work||!position)return GH_DOOR_ARGUMENT;
+ uint32_t xyz[3],yaw_bits;
+ memcpy(xyz,position,sizeof(xyz));memcpy(&yaw_bits,&yaw,4);
+ uint16_t target=room==b->work->room?UINT16_MAX:room;
+ return gh_game_door_request_001fff30(s,b,target,xyz,yaw_bits,kind,flags,force);
 }
 static int reset_clock_room(uint16_t room){return room==0x100||room==0x200||room==0x300||room==0x400||room==0x500||room==0x600||room==0x700||room==0x802||room==0x806;}
 gh_door_status gh_game_door_step_001ffe10(gh_game_door*s,const gh_game_door_bindings*b){

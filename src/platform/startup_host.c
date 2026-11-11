@@ -69,6 +69,7 @@
 #include "../core/game_effects_trans.h"
 #include "../core/mc_control_flow.h"
 #include "../core/mc_exit.h"
+#include "../core/game_loaded_room.h"
 #include "../core/movie_task.h"
 #include "game_services.h"
 #include <stdio.h>
@@ -124,6 +125,10 @@ struct gh_startup_host {
     gh_stage_case1 game_stage;
     gh_game_children *game_children;
     gh_mc_control_state mc_control;
+    gh_mc_load_scan mc_load_scan;
+    gh_mc_title_load mc_title_load;
+    gh_scene_loaded_room loaded_room;
+    gh_mc_load_menu_memory mc_load_menu;
     gh_mc_draw_consumer mc_draw;
     gh_object_static_emit world_emit;void *world_context;
     gh_shadow_emit shadow_emit;void *shadow_context;gh_shadow_templates shadow_templates;
@@ -242,6 +247,15 @@ static gh_game_door_bindings scene_door_bindings(gh_startup_host *h,const gh_gam
         .prepare=s->prepare,.player=s->title_player,.scene_step=s->step,.fade=&h->fade,.display=&h->display};
     return b;
 }
+static gh_checkpoint_bindings scene_checkpoint_bindings(gh_startup_host *h,
+    const gh_game_services_scene_view *s)
+{
+    return (gh_checkpoint_bindings){
+        .work=&h->work,.save=s->root->save,.prepare=s->prepare,.init=&h->game_init,
+        .player=&s->title_player->view,.destination=h->game_stage.work_area,
+        .destination_size=sizeof(h->game_stage.work_area)
+    };
+}
 static gh_r020_status scene_begin_room_jump(void *context,const gh_r020_room_jump_request *request,uint32_t *frontier)
 {
     gh_startup_host *h=context;gh_game_services_scene_view s;
@@ -252,6 +266,14 @@ static gh_r020_status scene_begin_room_jump(void *context,const gh_r020_room_jum
     if(e&&frontier)*frontier=s.door->frontier;
     return e?(e==GH_DOOR_UNSUPPORTED?GH_R020_UNSUPPORTED:GH_R020_ARGUMENT):GH_R020_OK;
 }
+static gh_r020_status scene_open_load(void *context,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    if(frontier)*frontier=0;
+    if(!h)return GH_R020_ARGUMENT;
+    return gh_scene_cursor_open_load_002bf268(&h->scene_aux,&h->work)?GH_R020_ARGUMENT:GH_R020_OK;
+}
+static gh_scene_aux_status scene_start_title_load(void *context);
 static gh_r020_status scene_title_draw(void *context,const gh_id_base *base,const gh_id_draw_job *job,uint32_t *frontier)
 {
     gh_startup_host *h=context;
@@ -347,6 +369,13 @@ static gh_object_step_status trans_actor_invoke(void *context,const gh_object_tr
     gh_startup_host*h=context;
     gh_game_actor_render_provider provider=actor_render_provider(h);
     gh_game_services_status e=gh_game_services_trans_actor(h->services,r,work,&provider,frontier);
+    return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
+}
+static gh_object_step_status trans_actor_erase(void *context,const gh_object_trans_request *r,
+    const void *owner,int *handled,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    gh_game_services_status e=gh_game_services_trans_erase(h->services,r,owner,handled,frontier);
     return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
 }
 static gh_scene_post_status visibility_actor_view(void *context,uint32_t handle,gh_title_player_view*out,uint32_t*frontier)
@@ -950,6 +979,12 @@ static gh_object_status event_release_sound_slot(void *context,int32_t slot,uint
     gh_object_sound_binding sound={&h->sound_control,h->voices};
     return gh_sound_object_slot_release_002cb340(&sound,slot,frontier);
 }
+static gh_game_event_status event_release_regular_enemies(void *context,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    gh_game_services_status e=gh_game_services_release_enemies_002908c0(h->services,frontier);
+    return !e?GH_EVENT_OK:e==GH_SERVICES_FRONTIER?GH_EVENT_UNSUPPORTED:GH_EVENT_CALLEE;
+}
 static int event_clear_stage(void *context,gh_game_event*event,int*done)
 {
     gh_startup_host*h=context;gh_game_services_scene_view s;
@@ -957,7 +992,8 @@ static int event_clear_stage(void *context,gh_game_event*event,int*done)
     gh_player_abort_bindings abort={.player=s.title_player,.sound=&h->sound_control};
     gh_event_clear_bindings b={.event=event,.config=&h->event_config,.init=&h->game_init,
         .pools=s.pools,.room_objects=s.room_objects,.player_abort=&abort,.object_view=event_object_view,.context=h,
-        .player_clear_0012c418=event_player_clear,.release_sound_slot=event_release_sound_slot};
+        .player_clear_0012c418=event_player_clear,.release_sound_slot=event_release_sound_slot,
+        .release_regular_enemies_002908c0=event_release_regular_enemies};
     gh_game_event_status e=gh_event_clear_00296818(&h->event_clear,&b,done);
     if(e)event->frontier=h->event_clear.frontier?h->event_clear.frontier:0x296818;
     return (int)e;
@@ -1002,7 +1038,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x30f650){
         if(!h->object_step.trans_live.invoke){
-            gh_object_trans_bindings b={.invoke=trans_actor_invoke,.context=h,.scene_at=s.scene_at};
+            gh_object_trans_bindings b={.invoke=trans_actor_invoke,.context=h,.scene_at=s.scene_at,.erase=trans_actor_erase};
             gh_object_step_status e=gh_game_object_step_bind_trans(&h->object_step,&b);
             if(e){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
         }
@@ -1089,8 +1125,18 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     }else if(address==0x160b90){
         gh_child_status e=gh_game_children_draw_00160b90(h->game_children,&h->work,&h->draw_env,scene_menu_cover,h,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
-    }else if(address==0x2bf2d0)aux=gh_scene_cursor_step_002bf2d0(&h->scene_aux,&h->work,s.prepare->fields);
-    else if(address==0x30f228){
+    }else if(address==0x2bf2d0){
+        aux=gh_scene_cursor_step_002bf2d0(&h->scene_aux,&h->work,scene_start_title_load,h);
+        if(h->loaded_room.stage||(aux==GH_AUX_UNSUPPORTED&&h->scene_aux.frontier==0x2bf568)){
+            const gh_game_door_bindings door=scene_door_bindings(h,&s);
+            const gh_checkpoint_bindings checkpoint=scene_checkpoint_bindings(h,&s);
+            const gh_scene_loaded_room_bindings bindings={
+                .door_bindings=&door,.door=s.door,.checkpoint=s.checkpoint,
+                .checkpoint_bindings=&checkpoint,.bgm=h->bgm,.sound=&h->sound_control
+            };
+            aux=gh_scene_cursor_loaded_room_002bf568(&h->scene_aux,&h->loaded_room,&bindings);
+        }
+    }else if(address==0x30f228){
         gh_effects_frame_bindings b = effects_frame_bindings(h, &s);
         gh_effect_status e=gh_game_effects_frame_update_0030f228(&h->effects_frame,&b);
         if(e&&frontier)*frontier=h->effects_frame.frontier?h->effects_frame.frontier:address;
@@ -1375,7 +1421,7 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.event=&h->event;
         b.display=&h->display;
         b.title_callbacks=(gh_r020_move_callbacks){.context=h,.draw_entry=scene_title_draw,.logo_se=scene_logo_se,
-            .program_se=scene_program_se,.begin_room_jump=scene_begin_room_jump};
+            .program_se=scene_program_se,.begin_room_jump=scene_begin_room_jump,.open_load=scene_open_load};
         b.title_reference_profile=&h->title_reference;
         b.factory_serial=h->factory_serial_ready?&h->factory_serial:0;
         b.boot_elf=h->boot_reference;b.boot_elf_bytes=h->boot_reference_bytes;
@@ -1577,7 +1623,10 @@ static int sound_dispatch(void *context,const gh_mc_sound_request *request)
     if(!h->voices)return GH_VOICE_UNSUPPORTED;
     e=gh_se_voice_request_origin(h->voices,(int16_t)request->bank,(int16_t)request->sound_id,
         request->parameter3,request->parameter4,request->parameter5,request->parameter6,&handle);
-    return e?(int)e:handle?0:(int)GH_VOICE_CAPACITY;
+    if(e)fprintf(stderr,"Native memory-card sound bank%d program%03X failed (%d at %08X)\n",
+        request->bank,(unsigned)request->sound_id,(int)e,gh_se_voice_frontier(h->voices));
+    /* Original UI callers ignore a zero handle after duplicate/pool checks. */
+    return (int)e;
 }
 static gh_id_error begin_mc_frame(gh_startup_host *h)
 {
@@ -1651,6 +1700,116 @@ static void mc_entry(void *context,int32_t argument)
         (void)failure(h,GH_HOST_ASSET,(int)e);h->phase=GH_HOST_FAILED;
     }
 }
+static gh_mc_load_status mc_title_output_mode(void *context,uint32_t mode,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    if(gh_bgm_requests_restore_title_output_mode_00375700(h->bgm,mode,h->voices,h->movies)==GH_BGM_OK)
+        return GH_MC_LOAD_RESTORED;
+    const uint32_t audio_frontier=gh_bgm_requests_frontier(h->bgm);
+    *frontier=audio_frontier?audio_frontier:0x375700;
+    return GH_MC_LOAD_UNSUPPORTED;
+}
+static int mc_title_load_control(gh_startup_host *h)
+{
+    gh_mc_boot_checks *checks=&h->mc.checks;
+    if(checks->phase<=2){
+        uint32_t frontier=0;
+        gh_mc_boot_error status=gh_mc_control_scan_title_00001590(&h->mc_control,&h->mc_load_scan,
+            &h->mc,&h->mc_bindings,&h->mc_load_menu,&frontier);
+        if(!status)return 1;
+        mc_frontier(h,frontier?frontier:0x1590,status);
+        return 0;
+    }
+    if(checks->phase==3&&!checks->subphase){
+        gh_id_error status=gh_mc_control_init_title_list_00007f30(&h->mc_control,&h->mc_load_scan,&h->mc,&h->mc_bindings);
+        if(!status)return 1;
+        mc_frontier(h,h->mc_control.first_unported?h->mc_control.first_unported:0x7f30,status);
+        return 0;
+    }
+    gh_game_services_scene_view s;
+    gh_game_services_status service=gh_game_services_get_scene_view(h->services,&s);
+    if(service){mc_frontier(h,0x1590,service);return 0;}
+    const gh_checkpoint_bindings checkpoint=scene_checkpoint_bindings(h,&s);
+    const gh_mc_title_load_providers providers={
+        .checkpoint=s.checkpoint,.checkpoint_bindings=&checkpoint,.door=s.door,
+        .output_mode=mc_title_output_mode,.audio_context=h,.sound=sound_dispatch,.sound_context=h
+    };
+    uint32_t frontier=0;
+    gh_mc_load_status status=gh_mc_control_title_select_00001590(&h->mc_title_load,&h->mc_control,
+        &h->mc_load_scan,&h->mc,&h->mc_bindings,&h->mc_load_menu,&providers,&frontier);
+    if(status==GH_MC_LOAD_PENDING||status==GH_MC_LOAD_RESTORED||status==GH_MC_LOAD_CANCELED)return 1;
+    if(frontier==0x2cb8a0){
+        const uint32_t audio_frontier=gh_se_voice_frontier(h->voices);
+        if(audio_frontier)frontier=audio_frontier;
+    }
+    mc_frontier(h,frontier?frontier:0x1590,status);
+    return 0;
+}
+
+static void mc_title_load_entry(void *context,int32_t argument)
+{
+    gh_startup_host *h=context;
+    (void)argument;
+    gh_mc_task_status status=gh_mc_task_prepare_title_load_002ae838(&h->mc,&h->mc_bindings);
+    if(status){mc_frontier(h,h->mc.frontier_offset?h->mc.frontier_offset:0x2ae838,status);return;}
+    for(;;){
+        gh_screen_fade_context fade={h->display.screen_width,h->display.gs_y_origin,0,0};
+        memcpy(&fade.frame_shift,(const uint8_t*)&h->work+0x564,4);
+        memcpy(&fade.input_mask_5e0,(const uint8_t*)&h->work+0x5e0,4);
+        const int had_ui=h->mc.ui_initialized;
+        if(h->mc.checks.done){
+            status=gh_mc_title_exit_step_00001458(&h->mc_exit,&h->mc_title_load,
+                &h->mc,&h->mc_bindings,&h->fade,&fade);
+            if(status==GH_MC_TASK_OK){
+                h->mc_frame_ready=h->mc_frame_pending=0;
+                return;
+            }
+            if(status!=GH_MC_TASK_LOAD_FRAME){
+                mc_frontier(h,h->mc_exit.frontier_address?h->mc_exit.frontier_address:0x1458,status);
+                return;
+            }
+            if(had_ui&&!h->mc.ui_initialized){
+                h->mc_frame_ready=h->mc_frame_pending=0;
+                ++h->mc_ui_epoch;
+            }
+        }else{
+            status=gh_mc_task_title_load_step_000012b0(&h->mc,&h->mc_bindings,&h->fade,&fade);
+        }
+        if(status==GH_MC_TASK_CONTROL_FRONTIER){
+            if(!mc_title_load_control(h))return;
+        }else if(status!=GH_MC_TASK_LOAD_FRAME){
+            mc_frontier(h,h->mc.frontier_offset?h->mc.frontier_offset:0x12b0,status);return;
+        }
+        if(h->mc.ui_initialized){
+            if(!had_ui)++h->mc_ui_epoch;
+            gh_id_error frame=mc_sleep_frame(h);
+            if(frame){mc_frontier(h,h->mc_control.first_unported?h->mc_control.first_unported:0x8aa8,frame);return;}
+        }else{
+            status=gh_mc_task_title_load_sleep_00008aa8(&h->mc,&h->mc_bindings);
+            if(status){mc_frontier(h,0x8aa8,status);return;}
+        }
+    }
+}
+
+static gh_scene_aux_status scene_start_title_load(void *context)
+{
+    gh_startup_host *h=context;
+    if(!h||!h->mc_exit.body_finished||h->mc.stage!=5||h->mc.module.pointer||
+       h->mc.checks.icon_work.pointer||h->mc.id_resource.allocation.pointer)
+        return GH_AUX_UNSUPPORTED;
+    int32_t slot;
+    gh_mc_task_status status=gh_mc_task_start_title_load_002ae7f0(&h->mc_bindings,mc_title_load_entry,h,&slot);
+    if(status)return GH_AUX_UNSUPPORTED;
+    h->mc=(gh_mc_task_state){0};
+    h->mc_control=(gh_mc_control_state){0};
+    h->mc_load_scan=(gh_mc_load_scan){0};
+    h->mc_title_load=(gh_mc_title_load){0};
+    h->mc_exit=(gh_mc_exit_state){0};
+    h->mc_frame_ready=h->mc_frame_pending=0;
+    h->mc_slot=slot;
+    return GH_AUX_OK;
+}
+
 static gh_movie_status movie_provider(void *context,gh_movie_pool *pool,unsigned slot,
     void *native,gh_movie_pool_operation operation,uint32_t *frontier)
 {
@@ -1746,7 +1905,8 @@ gh_host_error gh_startup_host_create_with_profile(const char *iso,const char *pr
     if(!out)return GH_HOST_ARGUMENT;
     *out=0;if(!iso || !profile || !capacity || (uint32_t)language>=7u)return GH_HOST_ARGUMENT;
     h=calloc(1,sizeof(*h));if(!h)return GH_HOST_MEMORY;
-    h->mc_slot=-1;h->iso_path=copy_string(iso);if(!h->iso_path)goto failed;
+    h->mc_slot=-1;h->mc_load_menu=(gh_mc_load_menu_memory){-1,-1};
+    h->iso_path=copy_string(iso);if(!h->iso_path)goto failed;
     h->task.failed_operation=GH_START_OP_COUNT;
     if(gh_disc_open(iso,&h->disc)!=GH_DISC_OK) {e=GH_HOST_DISC;goto failed;}
     if(gh_system_menu_from_disc(&h->system_menu,h->disc)!=GH_SYSTEM_MENU_OK){e=GH_HOST_ASSET;goto failed;}
@@ -2036,9 +2196,11 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->mc_ui_epoch=h->mc_ui_epoch;out->mc_frame_serial=h->mc_frame_serial;
     out->mc_ui_live=h->mc.ui_initialized!=0;out->mc_frame_ready=h->mc_frame_ready;
     out->mc_phase=h->mc.checks.phase;out->mc_subphase=h->mc.checks.subphase;out->mc_done=h->mc.checks.done;
+    out->mc_load_mode=h->mc.load_mode;out->mc_load_phase=h->mc.load_phase;
     out->mc_present_mask=h->mc.checks.present_mask;out->mc_error=h->mc.checks.error;
     out->normal_continuation=h->continuation.enabled;out->work=&h->work;
     out->sound_control=h->sound_control.initialized?&h->sound_control:0;
+    gh_se_voice_last_attached_failure(h->voices,&out->attached_voice_failure);
     out->movie_pool=h->movies;out->movie_video=h->movie_video;
     out->fade=&h->fade;out->fade_draw_serial=h->fade_draw_serial;
     out->bgm=h->bgm;
@@ -2223,6 +2385,12 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
         if(i==GH_DVD_JOB_COUNT)break;
         if(!gh_dvd_cancel(&h->dvd,h->dvd.jobs[i].id))return GH_HOST_DISC;
     }
+    /* A title Load panel takes its ID run above the title's own run. */
+    h->mc_bindings.id_runtime=h->id_runtime;
+    if(h->mc.load_mode&&h->mc.stage!=5&&gh_mc_control_title_abort_io(&h->mc_title_load,h->card)!=GH_MC_OK)
+        return GH_HOST_ASSET;
+    if(h->mc.stage && h->mc.stage!=5 && gh_mc_task_abort(&h->mc,&h->mc_bindings)!=GH_MC_TASK_OK)
+        return GH_HOST_ASSET;
     /* Scenario/Cockpit hold the canonical runtime/assets and nested backend.
      * Cancel their parent first, then release these owners before root backend. */
     gh_scene_visibility_destroy(h->visibility);h->visibility=NULL;
@@ -2244,9 +2412,6 @@ gh_host_error gh_startup_host_destroy(gh_startup_host *h)
     if(gh_event_audio_channel1_shutdown(&h->event_audio)!=GH_EVENT_OK)return GH_HOST_AUDIO;
     if(h->enemy_banks){if(gh_enemy_se_banks_destroy(h->enemy_banks)!=GH_ENEMY_SE_OK)return GH_HOST_AUDIO;h->enemy_banks=0;}
     if(gh_sound_scene_release_loading(&h->sound_scene,&h->dvd,h->heap)!=GH_SOUND_SCENE_OK)return GH_HOST_AUDIO;
-    h->mc_bindings.id_runtime=h->id_runtime;
-    if(h->mc.stage && h->mc.stage!=5 && gh_mc_task_abort(&h->mc,&h->mc_bindings)!=GH_MC_TASK_OK)
-        return GH_HOST_ASSET;
     if(h->id_runtime){if(gh_id_runtime_destroy(h->id_runtime)!=GH_ID_OK)return GH_HOST_ASSET;h->id_runtime=0;}
     for(i=0;i<h->bundle_count;++i)
         (void)gh_heap_release(h->heap,h->bundles[i].allocation);

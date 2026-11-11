@@ -781,15 +781,17 @@ int main(int argc,char **argv)
     const char *iso=nullptr,*profile=nullptr,*ffmpeg=nullptr;
     bool show=false,muted=false,prefix=false;uint64_t max_ticks=0;
 #ifdef GH_NATIVE_STARTUP_QA
-    bool qa_confirm=false,qa_new_game=false;unsigned qa_choice_step=0,qa_captured=0,qa_capture_count=1;gh_native_input qa_input={};
+    bool qa_confirm=false,qa_new_game=false,qa_load=false;unsigned qa_choice_step=0,qa_captured=0,qa_capture_count=1;gh_native_input qa_input={};
     QAControlProbe qa_control;
-    const char *qa_capture=nullptr;uint64_t qa_capture_frame=1,qa_last_capture_scene=0;uint32_t qa_title_trace=UINT32_MAX;
+    const char *qa_capture=nullptr;uint64_t qa_capture_frame=1,qa_last_capture_scene=0;
+    uint32_t qa_title_trace=UINT32_MAX,qa_load_trace=UINT32_MAX;
 #endif
     for(int i=1;i<argc;++i){
         if(!std::strcmp(argv[i],"--show"))show=true;
         else if(!std::strcmp(argv[i],"--hidden"))show=false;
 #ifdef GH_NATIVE_STARTUP_QA
         else if(!std::strcmp(argv[i],"--qa-new-game")){qa_new_game=true;qa_confirm=true;}
+        else if(!std::strcmp(argv[i],"--qa-load")){qa_load=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-control")&&i+1<argc){
             qa_control.mode=argv[++i];
             if(std::strcmp(qa_control.mode,"walk")&&std::strcmp(qa_control.mode,"run")&&!qa_control.attacks()){
@@ -821,6 +823,7 @@ int main(int argc,char **argv)
     if(!iso||!profile){usage();return 2;}
 #ifdef GH_NATIVE_STARTUP_QA
     if(qa_confirm&&(!muted||show||!max_ticks)){std::fprintf(stderr,"Synthetic input QA requires --muted --hidden and --max-ticks.\n");return 2;}
+    if(qa_load&&(qa_new_game||prefix)){std::fprintf(stderr,"QA load requires the full title flow and a separate profile.\n");return 2;}
     if(qa_control.mode&&(!qa_new_game||prefix)){std::fprintf(stderr,"QA control requires the full --qa-new-game path.\n");return 2;}
 #endif
     bool synthetic_input=false;
@@ -911,15 +914,22 @@ int main(int argc,char **argv)
 #ifdef GH_NATIVE_STARTUP_QA
             if(qa_confirm){
                 unsigned key=0;
-                if(app.snapshot.mc_phase==3&&app.snapshot.mc_subphase==1)key='Z';
+                if(app.snapshot.mc_load_mode){
+                    const bool choosing=app.snapshot.mc_phase==3||app.snapshot.mc_phase==4;
+                    const bool ready=app.snapshot.mc_subphase==1||app.snapshot.mc_subphase==2;
+                    if(qa_load&&choosing&&ready&&app.snapshot.mc_present_mask&&app.snapshot.ticks%6==0)key='Z';
+                }else if(app.snapshot.mc_phase==3&&app.snapshot.mc_subphase==1)key='Z';
                 else if(app.snapshot.mc_phase==3&&app.snapshot.mc_subphase==2){
                     if(qa_choice_step==0){key=39;++qa_choice_step;}
                     else if(qa_choice_step==1){key='Z';++qa_choice_step;}
                 }else qa_choice_step=0;
-                if(qa_new_game&&app.snapshot.title_live){
+                if((qa_new_game||qa_load)&&app.snapshot.title_live){
                     if(app.snapshot.title_mode==1&&app.snapshot.ticks%30==0)key='Z';
                     else if(app.snapshot.title_mode==3&&app.snapshot.title_phase>=1&&app.snapshot.title_phase<=3
-                        &&app.snapshot.title_subphase==1&&(app.snapshot.title_phase==1||app.snapshot.title_timer>=5)&&app.snapshot.ticks%6==0)key='Z';
+                        &&app.snapshot.title_subphase==1&&(app.snapshot.title_phase==1||app.snapshot.title_timer>=5)&&app.snapshot.ticks%6==0){
+                        if(!qa_load||app.snapshot.title_phase==1||app.snapshot.title_game_selection==1)key='Z';
+                        else if(app.snapshot.title_phase==2&&app.snapshot.title_game_selection==0)key=39;
+                    }
                 }
                 gh_native_input_key(&qa_input,'Z',key=='Z');gh_native_input_key(&qa_input,39,key==39);
                 const gh_native_gamepad_sample pad=qa_control.sample(app.snapshot);
@@ -931,6 +941,16 @@ int main(int argc,char **argv)
             host_error=gh_startup_host_snapshot(app.host,&app.snapshot);if(host_error!=GH_HOST_OK)break;
 #ifdef GH_NATIVE_STARTUP_QA
             qa_control.observe(app.snapshot,input);
+            if(qa_load&&app.snapshot.mc_load_mode){
+                const uint32_t trace=(uint32_t)app.snapshot.mc_load_phase<<16|
+                    app.snapshot.mc_phase<<8|app.snapshot.mc_subphase;
+                if(trace!=qa_load_trace){
+                    std::fprintf(stderr,"QA Title Load tick%llu mode-phase%u control%u/%u slots%08X done%d\n",
+                        (unsigned long long)app.snapshot.ticks,(unsigned)app.snapshot.mc_load_phase,
+                        app.snapshot.mc_phase,app.snapshot.mc_subphase,app.snapshot.mc_present_mask,app.snapshot.mc_done);
+                    qa_load_trace=trace;
+                }
+            }
             if(app.snapshot.title_live){uint32_t trace=(uint32_t)app.snapshot.title_mode<<16|(uint32_t)app.snapshot.title_phase<<8|app.snapshot.title_subphase;
                 if(trace!=qa_title_trace){std::fprintf(stderr,"QA Title tick%llu move%llu mode%u phase%u sub%u timer%u selection%u level%u\n",
                     (unsigned long long)app.snapshot.ticks,(unsigned long long)app.snapshot.title_move_serial,
@@ -986,7 +1006,8 @@ int main(int argc,char **argv)
         "\"frontier_module\":\"%s\",\"frontier\":\"%08X\","
         "\"mc_frames_presented\":%llu,\"mc_frame_serial\":%llu,\"mc_ui_live\":%s,\"mc_ui_epoch\":%llu,"
         "\"movie_frames_presented\":%llu,\"movie_eof\":%s,\"movie_audio_done\":%s,\"movie_complete\":%s,"
-        "\"mc_phase\":%u,\"mc_subphase\":%u,\"mc_error\":%d,\"mc_present_mask\":\"%08X\",\"game_state\":%u,\"assets_loaded\":%s,\"room\":\"%04X\",\"next_room\":\"%04X\","
+        "\"mc_phase\":%u,\"mc_subphase\":%u,\"mc_error\":%d,\"mc_present_mask\":\"%08X\",\"mc_load_mode\":%u,\"mc_load_phase\":%u,"
+        "\"game_state\":%u,\"assets_loaded\":%s,\"room\":\"%04X\",\"next_room\":\"%04X\","
         "\"work_flags584\":\"%08X\",\"work_flags588\":\"%08X\",\"system_flags5d8\":\"%08X\","
         "\"work_flags58c\":\"%08X\",\"work_flags594\":\"%08X\",\"work_flags598\":\"%08X\",\"work_flags5e0\":\"%08X\",\"work_flags5e4\":\"%08X\","
         "\"scene_frames_presented\":%llu,\"scene_frame_serial\":%llu,"
@@ -1005,7 +1026,8 @@ int main(int argc,char **argv)
         app.snapshot.mc_ui_live?"true":"false",(unsigned long long)app.snapshot.mc_ui_epoch,
         (unsigned long long)app.presented_movie,app.snapshot.movie_video.video_eof?"true":"false",
         app.snapshot.movie_video.audio_done?"true":"false",app.snapshot.movie_video.complete?"true":"false",
-        app.snapshot.mc_phase,app.snapshot.mc_subphase,app.snapshot.mc_error,app.snapshot.mc_present_mask,(unsigned)app.snapshot.game_state,
+        app.snapshot.mc_phase,app.snapshot.mc_subphase,app.snapshot.mc_error,app.snapshot.mc_present_mask,
+        (unsigned)app.snapshot.mc_load_mode,(unsigned)app.snapshot.mc_load_phase,(unsigned)app.snapshot.game_state,
         app.snapshot.game_assets_loaded?"true":"false",app.snapshot.current_room,app.snapshot.next_room,app.snapshot.flags,work_flags588,system_flags5d8,
         work_flags58c,work_flags594,work_flags598,work_flags5e0,work_flags5e4,
         (unsigned long long)app.presented_scene,(unsigned long long)app.snapshot.scene_frame_serial,(unsigned)renderer.id_error,renderer.frontier,
@@ -1027,6 +1049,12 @@ int main(int argc,char **argv)
     if(qa_control.mode)
         std::fprintf(stderr,"QA_CONTROL_STATUS mode=%s saw_event=%u pressed=%u motion_presented=%u\n",
             qa_control.mode,(unsigned)qa_control.saw_event,(unsigned)qa_control.pressed,(unsigned)qa_control.reported_motion);
+    const auto &voice_failure=app.snapshot.attached_voice_failure;
+    if(qa_confirm&&voice_failure.frontier&&voice_failure.frontier==app.snapshot.unavailable_entry)
+        std::fprintf(stderr,"QA_ATTACHED_VOICE_FAILURE {\"pc\":\"%08X\",\"bank\":%d,\"program\":%d,\"part\":%d,"
+            "\"flags\":\"%08X\",\"delay\":%d,\"status\":%d}\n",
+            voice_failure.frontier,voice_failure.bank,voice_failure.program,voice_failure.part_index,
+            voice_failure.flags,voice_failure.delay,(int)voice_failure.status);
     if(qa_new_game&&app.snapshot.fade){
         const auto &d=app.snapshot;const auto &fade=*d.fade;uint32_t shift=0;
         if(d.work)std::memcpy(&shift,(const uint8_t*)d.work+0x564,4);

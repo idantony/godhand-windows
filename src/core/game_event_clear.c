@@ -21,7 +21,12 @@ static gh_game_event_status enemies(gh_event_clear_state*s,const gh_event_clear_
  if(!b->init||!b->pools)return GH_EVENT_ARGUMENT;
  /* Original manager500 is a positive linked actor list, not all64 slots.
   * Native nonempty ownership requires290770, never a blanket reset. */
- if(rd(b->init->enemies+0x500)||b->init->enemy_top)return fail(&s->frontier,0x290770);
+ if(rd(b->init->enemies+0x500)||b->init->enemy_top){
+  if(!b->release_regular_enemies_002908c0)return fail(&s->frontier,0x290770);
+  gh_game_event_status e=b->release_regular_enemies_002908c0(b->context,&s->frontier);
+  if(e)return e;
+  if(rd(b->init->enemies+0x500)||b->init->enemy_top)return fail(&s->frontier,0x290770);
+ }
  const gh_room_vector*v;if(gh_room_registry_view(b->pools,0x754c58,&v)!=GH_POOL_OK)return fail(&s->frontier,0x2908c0);
  while(s->index<v->count){uint32_t handle=rd((const uint8_t*)v->allocation.pointer+s->index*4);gh_title_player_view p={0};
   if(!b->object_view)return fail(&s->frontier,0x2908c0);gh_game_event_status e=b->object_view(b->context,handle,&p,&s->frontier);if(e)return e;

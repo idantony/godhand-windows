@@ -1,4 +1,4 @@
-#include "game_door.h"
+#include "game_loaded_room.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +9,82 @@ static uint64_t q(const uint8_t*p){return (uint64_t)w(p)|((uint64_t)w(p+4)<<32);
 static void put64(uint8_t*p,uint64_t n){put(p,(uint32_t)n);put(p+4,(uint32_t)(n>>32));}
 static void finish_fade(gh_screen_fade*f,const gh_display_state*d){gh_screen_fade_context c={d->screen_width,d->gs_y_origin,0,0};gh_fade_draw draw;for(unsigned i=0;i<1000&&!(f->state&4);i++)CHECK(!gh_screen_fade_step_00307388(f,&c,&draw));CHECK(f->state&4);}
 static void expected_input(uint8_t*p){const uint64_t mask=UINT64_C(0xf00807ff00000);put64(p+64,q(p+64)&mask);put64(p+56,q(p+56)&mask);put64(p,q(p+24)&mask);put64(p+40,q(p+40)&mask);put64(p+48,q(p+48)&mask);memset(p+0x68,0x80,4);memset(p+0x6c,0,16);}
+
+static void loaded_room_fixture(gh_disc *disc,const gh_display_state *display)
+{
+    gh_boot_work work={.room=0x20,.flags=0x46};
+    uint8_t *raw=(uint8_t*)&work;
+    gh_heap *heap;
+    CHECK(!gh_heap_create(32*1024*1024,&heap));
+    gh_game_title_player player={0};
+    const gh_title_memory_profile profile={.policy=GH_TITLE_MEMORY_ZERO_REFERENCE};
+    CHECK(!gh_game_title_player_create_reference_0031c4e0(&player,heap,&work,&profile));
+    const uint32_t xyz[]={0x41480000,0xc0e80000,0x42f60000};
+    memcpy(player.view.alias_f0,xyz,sizeof(xyz));
+    put(player.view.bytes+0x104,0xbf400000);
+    player.view.bytes[0x54a]=60;
+
+    gh_game_door door={0};
+    CHECK(!gh_game_door_from_disc(&door,disc));
+    gh_game_loop loop={.work=&work,.game_state={4}};
+    gh_menu_state menu={0};
+    gh_game_scene_ui messages={.root=&menu,.ready=1,.active_head=-1};
+    gh_task_manager scenario_manager={0};
+    uint8_t scenario_fields[0x114]={0};
+    static gh_game_prepare prepare;
+    static gh_game_init_state init;
+    static uint8_t core[GH_CORE_SAVE_BYTES],payload[GH_CHECKPOINT_BYTES];
+    gh_game_checkpoint checkpoint={0};
+    gh_screen_fade fade={.state=11,.count=0};
+    gh_display_state local_display=*display;
+    gh_game_door_bindings door_bindings={.work=&work,.loop=&loop,
+        .scenario={scenario_fields,sizeof(scenario_fields),&scenario_manager},
+        .messages=&messages,.prepare=&prepare,.player=&player,.fade=&fade,.display=&local_display};
+    const gh_checkpoint_bindings checkpoint_bindings={.work=&work,.save={core,sizeof(core)},
+        .prepare=&prepare,.init=&init,.player=&player.view,.destination=payload,.destination_size=sizeof(payload)};
+    gh_audio_registry *registry;
+    gh_sound_control sound={0};
+    gh_bgm_requests *bgm;
+    CHECK(!gh_audio_registry_create(&registry)&&!gh_audio_startup_load(registry,disc));
+    CHECK(!gh_sound_control_from_startup(&sound,disc,registry)&&!gh_bgm_requests_create(registry,&sound,disc,heap,&bgm));
+    const gh_scene_loaded_room_bindings bindings={&door_bindings,&door,&checkpoint,&checkpoint_bindings,bgm,&sound};
+
+    put(raw+0x5e8,0x40000020);
+    put(raw+0x5e4,0x4000);
+    put(raw+0x5b4,0x0100);
+    init.world_time=444;prepare.global_0061a994=555;prepare.fields[0x1660]=0x77;
+    put(init.heat,0x43480000);put(init.heat+4,0x42f00000);
+    put(payload+0x10,0x1234);payload[0x1f]=2;put(payload+0xb90,0xfacecafe);
+    put(payload+0x170,1);put(payload+0x174,1);put(payload+0x178,3);
+    gh_game_scene_aux aux={.load_flags_saved=1};
+    aux.save_load[0]=5;aux.save_load[0xa]=3;aux.save_load[0xc]=1;
+    put(aux.save_load+0x70,0x100);
+    put(aux.save_load+0x74,0x60000000);put(aux.save_load+0x78,0x12345678);
+    gh_scene_loaded_room state={0};
+    CHECK(!gh_scene_cursor_loaded_room_002bf568(&aux,&state,&bindings)&&aux.save_load[0]==5);
+    fade.state=15;
+    CHECK(!gh_scene_cursor_loaded_room_002bf568(&aux,&state,&bindings));
+    CHECK(!state.stage&&!aux.save_load[0]&&!aux.save_load[0xa]&&aux.save_load[0xc]==1);
+    CHECK(w(raw+0x5e8)==0x20&&w(raw+0x5dc)==0x12345678&&!(w(raw+0x5e4)&0x4000));
+    CHECK((w(raw+0x5e0)&0x100)&&(w(raw+0x5d8)&0x60000000)==0x60000000);
+    CHECK((sound.flags_ac&0x200000)&&(sound.flags_b0&0x200000));
+    CHECK(door.target_room==0x100&&door.kind==1&&door.force3a==1&&door.flags==0x80000000&&door.point==255);
+    CHECK(!memcmp(door.position_bits,xyz,12)&&door.yaw_bits==0xbf400000&&fade.state==15);
+    CHECK(w(core+0xc)==0x100&&w(core+0x10)==0x1234&&core[0x1f]==2&&w(core+0xb8c)==1);
+    CHECK(w(core+0xb90)==0xfacecafe&&w(core+0x170)==1&&w(core+0x174)==1&&w(core+0x178)==3);
+    CHECK(w(core+0x84)==60&&!init.world_time&&prepare.global_0061a994==555&&payload[0x14a0]==0x77);
+    CHECK(checkpoint.tail.heat==0x42f00000&&checkpoint.tail.heat_max==0x43480000);
+    CHECK(w(init.heat)==0x42f00000&&!w(init.heat+4));
+    CHECK(loop.game_state[0]==4&&scenario_manager.flags==1);
+    CHECK(!gh_game_door_step_001ffe10(&door,&door_bindings)&&loop.game_state[0]==5&&work.room==0x20);
+    CHECK(w(raw+0x5b4)==0x100&&raw[0x5b8]==1&&raw[0x5ba]==255&&!memcmp(raw+0x5c0,xyz,12));
+    CHECK(!prepare.global_0061a994&&fade.state==15);
+    gh_bgm_requests_destroy(bgm);
+    gh_audio_registry_destroy(registry);
+    CHECK(!gh_game_title_player_release(&player)&&!gh_heap_destroy(heap));
+    puts("PASS loaded R100 cursor handoff, special checkpoint reset, and canonical Door Main5");
+}
+
 int main(int argc,char**argv){
  gh_disc*disc;CHECK(argc==2&&!gh_disc_open(argv[1],&disc));size_t n=(size_t)gh_disc_boot_elf_size(disc);uint8_t*elf=malloc(n);CHECK(elf&&!gh_disc_read_boot_elf(disc,0,elf,n));
  gh_game_door owner={0},from_memory={0};CHECK(!gh_game_door_from_disc(&owner,disc)&&!gh_game_door_from_elf(&from_memory,elf,n));
@@ -65,5 +141,6 @@ int main(int argc,char**argv){
  CHECK(gh_game_door_request_001ffeb8(&owner,&b,0x100,position,yaw,1,0,1)==GH_DOOR_BOUNDS&&owner.frontier==0x2aecd0&&!memcmp(payload,messages.blocks[2].payload,sizeof(payload))&&!(w(raw+0x5e4)&0x2000000));
  messages.blocks[2].next=-1;CHECK(!gh_game_door_request_001ffeb8(&owner,&b,0x100,position,yaw,1,0,1));
  memset(&work,0,sizeof(work));work.room=0x20;work.flags=0x100;owner.step_stage=0;b.messages=NULL;CHECK(!gh_game_door_request_001ffeb8(&owner,&b,0x100,position,yaw,1,0,1)&&!(work.flags&0x100));
+ loaded_room_fixture(disc,&display);
  free(prepare);free(elf);gh_disc_close(disc);puts("PASS realELF DoorBSS/only-wait-reset/input-width/MenuKill-state/ONE-Scenario-flags/Fade-readiness/nextroom-Main5/clock+4/frontiers");return 0;
 }

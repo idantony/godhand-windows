@@ -32,6 +32,8 @@ typedef gh_player_frame_status (*gh_player_frame_motion_step)(void *,const gh_pl
 typedef gh_player_frame_status (*gh_player_frame_door_probe)(void *,const gh_title_player_view *,uint32_t *frontier);
 struct gh_player_frame_bindings;
 typedef gh_player_frame_status (*gh_player_square_frame_consumer)(void *,const struct gh_player_frame_bindings *,uint32_t *);
+typedef gh_player_frame_status (*gh_player_damage_positioned_effect)(void *,const uint32_t position[3],uint32_t *);
+typedef gh_player_frame_status (*gh_player_damage_callee)(void *,const struct gh_player_frame_bindings *,uint32_t *);
 typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_work *work;gh_game_init_state *init;gh_game_pl_camera *camera;
  gh_core_save_view save;gh_scene_scenario_view scenario;const gh_effect_release_bindings *effects;
  const gh_title_player_view *current_player;const void *elf;size_t elf_bytes;gh_camera_numeric_policy numeric_policy;gh_player_frame_effect_create effect_create;void *effect_context;
@@ -52,13 +54,18 @@ typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_wo
  gh_player_opacity_globals *opacity_globals;const gh_title_player_view *aux_68c;uint8_t auxiliary_68c_binding_known;
  gh_player_tail_target_slot *target_644;uint8_t *cockpit_flags_1ca0;
  gh_player_square_frame_consumer square_attack;void *square_context;
+ gh_motion_sound_consumer damage_sound;void *damage_sound_context;
+ gh_player_damage_positioned_effect damage_effect;
+ gh_player_damage_callee damage_abort,damage_camera_exit;
+ void *damage_context;
+ uint8_t (*damage_vibration_rows)[16];
 } gh_player_frame_bindings;
 /* Native continuation only; all actual mutable fields live in borrowed owners.
  * Each source-prefix stage commits once. Error retry requires same bindings;
  * Legacy149EB8 errors latch until a fresh runtime to avoid prefix replay.
  * no input snapshot copy or shadow controller. Early original gates returnOK
  * without mutation. Complete ordinary frame will reset cursor for next call. */
-typedef struct {gh_player_frame_bindings b;uint32_t stage,frontier;uint8_t bound,effect_pending;float previous_left,previous_right;int16_t left_x,left_y,right_x,right_y;uint8_t heat_stage,heat_ready;gh_player_frame_effect_request pending_effect;uint8_t damage_stage,damage_region_hit,give_index,give_phase;int32_t pending_damage;uint16_t pending_damage_kind;uint32_t state_entry;uint8_t idle_phase;size_t idle_motion_word,idle_sequence_word;gh_player_motion_request pending_motion;int motion_ended;uint8_t motion_step_complete,idle_end_prefix_done,idle_end_needs_random,input_started,post_take_index;int input_result;gh_game_player_post_state post_state;float previous_world_position[3];gh_collision_solid_frame solid_frame;
+typedef struct {gh_player_frame_bindings b;uint32_t stage,frontier;uint8_t bound,effect_pending;float previous_left,previous_right;int16_t left_x,left_y,right_x,right_y;uint8_t heat_stage,heat_ready;gh_player_frame_effect_request pending_effect;uint8_t damage_stage,damage_region_hit,give_index,give_phase;int32_t pending_damage;uint16_t pending_damage_kind;gh_motion_sound_request damage_sound_request;uint32_t damage_position[3];uint16_t hurt_sound_program;uint8_t hurt_phase;uint32_t state_entry;uint8_t idle_phase;size_t idle_motion_word,idle_sequence_word;gh_player_motion_request pending_motion;int motion_ended;uint8_t motion_step_complete,idle_end_prefix_done,idle_end_needs_random,input_started,post_take_index;int input_result;gh_game_player_post_state post_state;float previous_world_position[3];gh_collision_solid_frame solid_frame;
  gh_player_terrain_call wall_call,floor_call;gh_terrain_sphere_call sphere_call;
  gh_scene_ray_report wall_report,floor_report;float terrain_position[3],terrain_normal[3],floor_height;
  gh_player_ground_pose_call ground_pose;gh_motion_solve pose_solve;uint8_t model_failure_latched;gh_player_frame_status model_failure_status;uint32_t sequence_effect_index;

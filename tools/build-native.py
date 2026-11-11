@@ -123,6 +123,7 @@ def main():
                ("game_stage", "src/core/game_stage.c"), ("game_children", "src/core/game_children.c"),
                ("id_text", "src/core/id_text.c"), ("id_path", "src/core/id_path.c"),
                ("mc_error", "src/core/mc_error.c"), ("mc_file_load", "src/core/mc_file_load.c"),
+               ("mc_file_save", "src/core/mc_file_save.c"),
                ("game_cockpit", "src/core/game_cockpit.c"), ("game_objects", "src/core/game_objects.c"),
                ("game_prepare", "src/core/game_prepare.c"), ("game_room_state", "src/core/game_room_state.c"),
                ("game_room_pack", "src/core/game_room_pack.c"), ("game_room_pools", "src/core/game_room_pools.c"),
@@ -271,6 +272,9 @@ def main():
                ("game_room_arena", "src/core/game_room_arena.c"),
                ("static_world_queue", "src/platform/static_world_queue.c"),
                ("game_om_factory", "src/core/game_om_factory.c"),
+               ("game_om300_retire", "src/core/game_om300_retire.c"),
+               ("game_room_death", "src/core/game_room_death.c"),
+               ("game_room_death_dispatch", "src/core/game_room_death_dispatch.c"),
                ("game_player_factory", "src/core/game_player_factory.c"),
                ("game_actor_scroll_links", "src/core/game_actor_scroll_links.c"),
                ("game_ray_static", "src/core/game_ray_static.c"),
@@ -359,6 +363,7 @@ def main():
                ("game_enemy_base_init", "src/core/game_enemy_base_init.c"),
                ("game_enemy_behavior", "src/core/game_enemy_behavior.c"),
                ("game_enemy_ems", "src/core/game_enemy_ems.c"),
+               ("game_enemy_retire", "src/core/game_enemy_retire.c"),
                ("game_enemy_entry", "src/core/game_enemy_entry.c"),
                ("game_enemy_entry_tail", "src/core/game_enemy_entry_tail.c"),
                ("game_enemy_factory", "src/core/game_enemy_factory.c"),
@@ -429,7 +434,10 @@ def main():
         ("nested-tasks", "tests/platform/test_nested_tasks.c", "none"),
         ("id-path", "tests/core/test_id_path.c", "iso"),
         ("mc-error", "tests/core/test_mc_error.c", "iso"),
+        ("mc-task", "tests/core/test_mc_task.c", "iso"),
         ("mc-file-load", "tests/core/test_mc_file_load.c", "none"),
+        ("memory-card", "tests/platform/test_memory_card.c", "scratch-iso"),
+        ("mc-file-save", "tests/platform/test_mc_file_save.c", "scratch"),
         ("game-cockpit", "tests/core/test_game_cockpit.c", "both"),
         ("game-objects", "tests/core/test_game_objects.c", "both"),
         ("game-prepare", "tests/core/test_game_prepare.c", "none"),
@@ -579,6 +587,7 @@ def main():
         ("game-effects", "tests/core/test_game_effects.c", "iso"),
         ("game-scene-filters", "tests/core/test_game_scene_filters.c", "iso"),
         ("bgm-requests", "tests/core/test_bgm_requests.c", "iso"),
+        ("bgm-title-output-mode", "tests/core/test_bgm_title_output_mode.c", "iso"),
         ("bgm-automatic", "tests/core/test_bgm_automatic.c", "iso"),
         ("se-voice-stop-bank", "tests/core/test_se_voice_stop_bank.c", "iso"),
         ("title-texture", "tests/core/test_title_texture.c", "iso"),
@@ -731,6 +740,7 @@ def main():
         ("sound-spatial-step", "tests/core/test_sound_spatial_step.c", "iso"),
         ("game-system-menu", "tests/core/test_game_system_menu.c", "iso"),
         ("game-scene-exit", "tests/core/test_game_scene_exit.c", "iso"),
+        ("game-room-death-dispatch", "tests/core/test_game_room_death_dispatch.c", "both"),
         ("scene-exit-cleanup", "tests/core/test_scene_exit_cleanup.c", "iso"),
         ("game-scene-meshes", "tests/core/test_game_scene_meshes.c", "iso"),
         ("static-mesh", "tests/assets/test_static_mesh.c", "iso"),
@@ -754,6 +764,7 @@ def main():
         ("id-entry-reset", "tests/core/test_id_entry_reset.c", "iso"),
         ("id-layout-rotation", "tests/core/test_id_layout_rotation.c", "iso"),
         ("id-animation", "tests/core/test_id_animation.c", "iso"),
+        ("id-text", "tests/core/test_id_text.c", "iso"),
         ("id-number", "tests/core/test_id_number.c", "iso"),
         ("id-alignment", "tests/core/test_id_alignment.c", "iso"),
         ("r020-title", "tests/rooms/test_r020_title.c", "iso"),
@@ -784,12 +795,11 @@ def main():
                      "tests/core/test_font_state.c", "tests/core/test_menu_state.c",
                      "tests/platform/test_audio_startup.c", "tests/platform/test_startup_host.c", "tools/run-startup.c",
                      "tests/assets/test_font_texture.c", "tools/font-texture-qa.c", "tests/core/test_game_start.c",
-                     "tests/platform/test_memory_card.c", "tests/core/test_mc_boot_id.c",
+                     "tests/core/test_mc_boot_id.c",
                      "tests/core/test_font_draw.c", "tests/core/test_game_gate.c",
                      "tests/core/test_id_base.c", "tests/core/test_packed_message.c", "tests/core/test_game_init.c",
-                     "tests/core/test_mc_task.c", "tests/core/test_id_jobs.c", "tests/core/test_id_texture.c",
-                     "tests/core/test_mc_control.c", "tests/core/test_game_stage.c", "tests/core/test_game_children.c",
-                     "tests/core/test_id_text.c"}
+                     "tests/core/test_id_jobs.c", "tests/core/test_id_texture.c",
+                     "tests/core/test_mc_control.c", "tests/core/test_game_stage.c", "tests/core/test_game_children.c"}
     shared_headers = {"game_scene_dynamic_quad": "src/core/game_scene_dynamic_geometry.h","game_cloth_geometry": "src/core/game_cloth_templates.h","game_room_arena": "src/core/game_room_pools.h","game_object_static": "src/core/game_object_step.h","id_jobs_texture": "src/core/id_jobs.h", "id_jobs_primitive": "src/core/id_jobs.h",
                       "game_enemy_placements": "src/core/game_scene_placements.h", "game_enemy_weapon_init": "src/core/game_enemy_weapon.h",
                       "game_scene_meshes_finish": "src/core/game_scene_meshes.h",
@@ -835,6 +845,8 @@ def main():
         if name in recording_transport_tests:
             test_objects = [recording_voice_object if module == "se_voice" else obj
                             for module, obj in objects.items()]
+        if name == "bgm-title-output-mode":
+            test_objects.remove(objects["adx_stream"])  # Fixture supplies the recording endpoint.
         run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms", "-Isrc/assets"]
             + test_objects + [source, "-o", extra_test_path(name)])
 
@@ -853,6 +865,10 @@ def main():
             arguments.append(PROJECT / "reference" / "SLUS_215.03")
         if inputs == "movie":
             arguments.append(args.movie_codec.resolve())
+        if inputs in ("scratch", "scratch-iso"):
+            arguments.append(card_scratch)
+        if inputs == "scratch-iso":
+            arguments.append(baseline["source_iso"]["path"])
         if inputs in wave_inputs:
             arguments.append(wave_inputs[inputs].resolve())
         if name in ("enemy-se-banks", "game-object-sounds", "game-enemy-resources", "game-event-audio") and args.hardware_audio:
@@ -917,7 +933,6 @@ def main():
     run("compile-font-texture-tests", common + font_objects + ["tests/assets/test_font_texture.c", "-o", output / "test_font_texture.exe"])
     run("compile-font-qa-cli", common + font_objects + ["tools/font-texture-qa.c", "-o", output / "font-texture-qa.exe"])
     run("compile-game-start-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_start", "dvd_jobs", "memory", "disc", "tasks", "task_threads")] + ["tests/core/test_game_start.c", "-o", output / "test_game_start.exe"])
-    run("compile-memory-card-tests", common + [objects[name] for name in ("memory_card", "mc_boot", "mc_file_load", "memory", "tasks", "task_threads")] + ["tests/platform/test_memory_card.c", "-o", output / "test_memory_card.exe"])
     run("compile-mc-id-tests", common + ["-Isrc/core"] + [objects[name] for name in ("mc_boot_id", "menu_state", "core_bundle", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_mc_boot_id.c", "-o", output / "test_mc_boot_id.exe"])
     run("compile-font-draw-tests", common + [objects["font_draw"], objects["font_state"], objects["core_bundle"], objects["disc"], "tests/core/test_font_draw.c", "-o", output / "test_font_draw.exe"])
     run("compile-game-gate-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_gate", "game_start", "dvd_jobs", "memory", "tasks", "task_threads", "disc")] + ["tests/core/test_game_gate.c", "-o", output / "test_game_gate.exe"])
@@ -926,14 +941,12 @@ def main():
     # Object-pool shutdown now owns real shape/list destruction too; use the
     # coherent core closure instead of maintaining a second partial link list.
     run("compile-game-init-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_game_init.c", "-o", output / "test_game_init.exe"])
-    run("compile-mc-task-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_task.c", "-o", output / "test_mc_task.exe"])
     id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "id_animation", "id_layout_rotation", "menu_state", "font_state", "font_texture", "core_bundle", "disc", "tim2")]
     run("compile-id-jobs-tests", common + id_objects + ["tests/core/test_id_jobs.c", "-o", output / "test_id_jobs.exe"])
     run("compile-id-texture-tests", common + id_objects + ["tests/core/test_id_texture.c", "-o", output / "test_id_texture.exe"])
     run("compile-mc-control-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_control.c", "-o", output / "test_mc_control.exe"])
     run("compile-game-stage-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_game_stage.c", "-o", output / "test_game_stage.exe"])
     run("compile-game-children-tests", common + ["-Isrc/core"] + [objects[name] for name in ("game_children", "game_render_steps", "id_base", "id_path", "core_bundle")] + ["tests/core/test_game_children.c", "-o", output / "test_game_children.exe"])
-    run("compile-id-text-tests", common + [objects["id_text"], objects["font_draw"], objects["packed_message"]] + id_objects + ["tests/core/test_id_text.c", "-o", output / "test_id_text.exe"])
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as workers:
         list(workers.map(compile_extra_test, extra_tests))
     run("compile-core-dll", common + ["-shared", "-Wl,--export-all-symbols"] + list(objects.values()) + ["-o", output / "godhand_core.dll"])
@@ -961,20 +974,17 @@ def main():
         run("test-startup-host", [output / "test_startup_host.exe", baseline["source_iso"]["path"]] + (["--hardware-audio"] if args.hardware_audio else []))
         run("test-font-texture", [output / "test_font_texture.exe", baseline["source_iso"]["path"]])
         run("test-game-start", [output / "test_game_start.exe", baseline["source_iso"]["path"], PROJECT / "reference" / "SLUS_215.03"])
-        run("test-memory-card", [output / "test_memory_card.exe", card_scratch])
         run("test-mc-id", [output / "test_mc_boot_id.exe", baseline["source_iso"]["path"]])
         run("test-font-draw", [output / "test_font_draw.exe", baseline["source_iso"]["path"]])
         run("test-game-gate", [output / "test_game_gate.exe", baseline["source_iso"]["path"]])
         run("test-id-base", [output / "test_id_base.exe", baseline["source_iso"]["path"]])
         run("test-packed-message", [output / "test_packed_message.exe", baseline["source_iso"]["path"]])
         run("test-game-init", [output / "test_game_init.exe"])
-        run("test-mc-task", [output / "test_mc_task.exe", baseline["source_iso"]["path"]])
         run("test-id-jobs", [output / "test_id_jobs.exe", baseline["source_iso"]["path"]])
         run("test-id-texture", [output / "test_id_texture.exe", baseline["source_iso"]["path"]])
         run("test-mc-control", [output / "test_mc_control.exe", baseline["source_iso"]["path"]])
         run("test-game-stage", [output / "test_game_stage.exe", baseline["source_iso"]["path"]])
         run("test-game-children", [output / "test_game_children.exe", PROJECT / "reference" / "SLUS_215.03"])
-        run("test-id-text", [output / "test_id_text.exe", baseline["source_iso"]["path"]])
         for test in extra_tests:
             label = "test-" + test[0]
             command = extra_test_command(test, baseline)

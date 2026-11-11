@@ -179,6 +179,9 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
 /* Actual nonstatic Trans descriptor on the SAME registered model. Draw
  * continuations live with that model; unsupported alternate/destructor bodies
  * retain their exact original entry. The provider borrows Root's one OT. */
+gh_game_services_status gh_game_services_trans_erase(gh_game_services *,
+    const gh_object_trans_request *,const void *owner,int *handled,uint32_t *);
+gh_game_services_status gh_game_services_release_enemies_002908c0(gh_game_services *,uint32_t *);
 gh_game_services_status gh_game_services_trans_actor(gh_game_services *,const gh_object_trans_request *,
  const gh_boot_work *,const gh_game_actor_render_provider *,uint32_t *frontier);
 /* Borrow the same player and object resolver used by ordinary target selection. */

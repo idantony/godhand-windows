@@ -43,6 +43,9 @@ gh_effect_status gh_effect_create_om324_break_begin_001bfd28(gh_effect_create_ca
  * actor NULL, unit scale, zero Euler, selector and mode -1. */
 gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_call *,
  const uint32_t world_xyz[3]);
+/* Original 109928 part4 impact, bank0/index3, unit scale and zero Euler. */
+gh_effect_status gh_effect_create_player_impact_begin_00306838(gh_effect_create_call *,
+ const uint32_t world_xyz[3]);
 /* 2FA158's explicit configuration and camera cut -> bank 6 index. The
  * 2FA240 row actor is distinct from the original NULL selector argument. */
 gh_effect_status gh_effect_create_event_cut_begin_002fa158(gh_effect_create_call *,uint32_t cut);

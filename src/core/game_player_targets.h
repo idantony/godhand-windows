@@ -25,6 +25,10 @@ gh_player_target_status gh_player_target_angle_002da038(const void *elf,size_t,c
  * then the same room object registry, with original segmented visibility. */
 gh_player_target_status gh_player_enemy_target_00291010(const gh_player_target_bindings *,
  const gh_game_init_state *,float range,float cone,gh_player_target *,uint32_t *frontier);
+/* Mode0/options0 from the original enemy caller's point and yaw. */
+gh_player_target_status gh_enemy_target_from_00291010(const gh_player_target_bindings *,
+ const gh_game_init_state *,const float origin[3],float yaw,float range,float cone,
+ const gh_title_player_view *exclude,gh_player_target *,uint32_t *);
 /* Same mode0 with the original excluded actor, borrowed by follow camera. */
 gh_player_target_status gh_player_enemy_target_excluding_00291010(const gh_player_target_bindings *,
  const gh_game_init_state *,float range,float cone,const gh_title_player_view *exclude,

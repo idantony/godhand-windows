@@ -1,3 +1,5 @@
+#include "game_effect_create.h"
+#include "game_enemy_retire.h"
 #include "game_enemy_ems.h"
 #include "game_enemy_row2.h"
 #include <math.h>
@@ -773,4 +775,271 @@ gh_actor_motion_status gh_enemy_ems_release_native(gh_enemy_ems **slot,uint32_t 
     free(owner);
     *slot=NULL;
     return GH_ACTOR_MOTION_OK;
+}
+
+static void retire_put_word(uint8_t *bytes,uint32_t value)
+{
+    memcpy(bytes,&value,4);
+}
+
+static ems_entry *retire_find(gh_enemy_ems *owner,uint32_t handle)
+{
+    for(unsigned i=0;i<EMS_ROWS;i++)
+        if(owner->entries[i].entered&&owner->entries[i].handle==handle)return &owner->entries[i];
+    return NULL;
+}
+
+static gh_enemy_entry *retire_entry(ems_entry *entry)
+{
+    return entry->enemy202?&entry->enemy202->entry:entry->enemy2a2?&entry->enemy2a2->entry:NULL;
+}
+
+static gh_actor_motion_status retire_stop(uint32_t *frontier,uint32_t pc)
+{
+    *frontier=pc;
+    return GH_ACTOR_MOTION_UNSUPPORTED;
+}
+
+static int slot_index(const gh_game_init_state *manager,const void *slot)
+{
+    if(!slot)return -1;
+    for(unsigned i=0;i<64;i++)if(slot==manager->enemies+i*20)return (int)i;
+    return -2;
+}
+
+static int unlink_slot(gh_game_init_state *manager,gh_enemy_entry *actor,int commit)
+{
+    const unsigned slot=(unsigned)actor->slot;
+    if(slot>=64||manager->enemy_actors[slot]!=&actor->object||
+       manager->enemies[slot*20+16]!=1)return 0;
+    int at=slot_index(manager,manager->enemy_top);
+    const int last=slot_index(manager,manager->enemy_last);
+    if(at<0||last<0)return 0;
+    uint64_t visited=0;
+    int previous=-1;
+    unsigned count=0,same_kind=0;
+    const uint32_t kind=object_word(manager->enemies+slot*20+12);
+    while(at>=0){
+        unsigned i=(unsigned)at;
+        if(i>=64||(visited&(UINT64_C(1)<<i))||!manager->enemy_actors[i]||
+           manager->enemies[20*i+16]!=1||
+           manager->enemy_prev[i]!=(previous<0?UINT8_MAX:(unsigned)previous))
+            return 0;
+        visited|=UINT64_C(1)<<i;
+        if(object_word(manager->enemies+20*i+12)==kind)++same_kind;
+        ++count;
+        previous=at;
+        at=manager->enemy_next[i]==UINT8_MAX?-1:manager->enemy_next[i];
+    }
+    const uint32_t kind_count=object_word(manager->enemies+0x50c);
+    if(previous!=last||!(visited&(UINT64_C(1)<<slot))||
+       count!=object_word(manager->enemies+0x508)||!same_kind||!kind_count)
+        return 0;
+    if(!commit)return 1;
+    const unsigned prev=manager->enemy_prev[slot],next=manager->enemy_next[slot];
+    if(prev==UINT8_MAX)manager->enemy_top=next==UINT8_MAX?NULL:manager->enemies+20*next;
+    else manager->enemy_next[prev]=(uint8_t)next;
+    if(next==UINT8_MAX)manager->enemy_last=prev==UINT8_MAX?NULL:manager->enemies+20*prev;
+    else manager->enemy_prev[next]=(uint8_t)prev;
+    uint8_t *raw=manager->enemies+20*slot;
+    retire_put_word(raw+4,0);
+    retire_put_word(raw+12,UINT32_MAX);
+    retire_put_word(raw+8,0);
+    raw[16]=0;
+    retire_put_word(raw,0);
+    manager->enemy_actors[slot]=NULL;
+    manager->enemy_prev[slot]=manager->enemy_next[slot]=UINT8_MAX;
+    if(same_kind==1)retire_put_word(manager->enemies+0x50c,kind_count-1);
+    retire_put_word(manager->enemies+0x508,count-1);
+    actor->published=0;
+    return 1;
+}
+
+gh_actor_motion_status gh_enemy_ems_remove_00290770(gh_enemy_ems *owner,gh_enemy_manager_remove *call,
+    uint32_t handle,gh_se_voice_engine *voices,int *original,uint32_t *frontier)
+{
+    if(!original||!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *original=0;*frontier=0;
+    if(!owner||!call||!handle||!voices||owner->running||owner->closing||
+       (call->stage&&(call->owner!=owner||call->handle!=handle)))return GH_ACTOR_MOTION_ARGUMENT;
+    if(call->stage==2){*original=call->original_return;return GH_ACTOR_MOTION_OK;}
+    ems_entry *entry=retire_find(owner,handle);
+    gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
+    if(!actor||!actor->published){
+        call->owner=owner;call->handle=handle;call->stage=2;
+        return GH_ACTOR_MOTION_OK;
+    }
+    if(!actor_registered(owner,entry)||!actor->object.view.bytes||actor->object.view.size<0x642)
+        return retire_stop(frontier,0x290770);
+    gh_game_init_state *manager=actor->b.init;
+    if(!manager||!unlink_slot(manager,actor,0))return retire_stop(frontier,0x290988);
+    if(!call->stage){
+        const uint8_t *bytes=actor->object.view.bytes;
+        const unsigned kind=bytes[0x2fe]|(unsigned)bytes[0x2ff]<<8;
+        if(kind!=0x202&&kind!=0x2a2)return retire_stop(frontier,0x2956f0);
+        /* 2956F0 only stores surviving 220/223 actors. */
+        unsigned stamp=bytes[0x640]|(unsigned)bytes[0x641]<<8;
+        if(stamp<64){
+            if(!owner->room||owner->page!=owner->room->active||!valid_page(owner->room))
+                return retire_stop(frontier,0x2bef60);
+            for(unsigned i=0;i<owner->page[8];i++){
+                uint8_t *row=owner->room->active+EMS_ROWS_OFFSET+i*EMS_ROW_BYTES;
+                if(row[0x13]!=stamp)continue;
+                int16_t hp;
+                memcpy(&hp,bytes+0x54a,2);
+                if(hp<1)hp=1;
+                memcpy(row+0x16,&hp,2);
+                break;
+            }
+        }
+        call->owner=owner;call->handle=handle;call->stage=1;
+    }
+    gh_actor_motion_status status=gh_enemy_death_mark_00312708(&call->mark,owner,handle,voices,frontier);
+    if(status)return status;
+    if(!unlink_slot(manager,actor,1))return retire_stop(frontier,0x290988);
+    call->stage=2;call->original_return=1;*original=1;
+    return GH_ACTOR_MOTION_OK;
+}
+
+static gh_actor_motion_status retire_resource(gh_enemy_entry *actor,const gh_enemy_retire_bindings *b,
+    uint32_t *frontier)
+{
+    gh_game_objects *holder=actor->b.room_objects;
+    const uint32_t kind=actor->request.object_kind;
+    uint8_t *reference=&actor->room_reference;
+    int ready=0;
+    gh_object_status e=gh_game_objects_check_ready_001ff238(holder,kind,&actor->b.resources,&ready,frontier);
+    if(e&&e!=GH_OBJECT_MISSING)return retire_stop(frontier,*frontier?*frontier:0x1fe9b8);
+    if(!ready){
+        holder=actor->b.global_objects;reference=&actor->global_reference;
+        e=gh_game_objects_check_ready_001ff238(holder,kind,&actor->b.resources,&ready,frontier);
+        if(e&&e!=GH_OBJECT_MISSING)return retire_stop(frontier,*frontier?*frontier:0x1fe9b8);
+    }
+    if(!ready)return retire_stop(frontier,0x1fe9b8);
+    if(!*reference||actor->preload_reference||(&actor->room_reference!=reference&&actor->room_reference)||
+       (&actor->global_reference!=reference&&actor->global_reference))
+        return retire_stop(frontier,0x1fed78);
+    if(gh_game_objects_release_event_001fed78(holder,kind,actor->resource.bytes,
+       b->release_sound_slot,b->sound_context,frontier))return retire_stop(frontier,*frontier?*frontier:0x1fed78);
+    *reference=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
+static int same_retire_bindings(const gh_enemy_retire_bindings *a,const gh_enemy_retire_bindings *b)
+{
+    return a->effects==b->effects&&a->dynamic==b->dynamic&&a->release_effect==b->release_effect&&
+        a->effect_context==b->effect_context&&a->release_sound_slot==b->release_sound_slot&&
+        a->sound_context==b->sound_context;
+}
+
+static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_retirement *call,
+    uint32_t handle,const gh_title_player_view *detached,const gh_enemy_retire_bindings *b,uint32_t *frontier)
+{
+    if(!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0;
+    if(!owner||!call||!b||!b->effects||!b->dynamic||!handle||owner->running||owner->closing||
+       (call->stage&&(call->owner!=owner||call->handle!=handle||!same_retire_bindings(&call->bindings,b))))
+        return GH_ACTOR_MOTION_ARGUMENT;
+    if(call->stage==7)return GH_ACTOR_MOTION_OK;
+    ems_entry *entry=retire_find(owner,handle);
+    gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
+    if(!actor||actor->published||!actor_registered(owner,entry))return retire_stop(frontier,0x290770);
+    if(detached&&call->stage<6&&
+       (detached->bytes!=actor->object.view.bytes||detached->size!=actor->object.view.size))
+        return GH_ACTOR_MOTION_ARGUMENT;
+    gh_room_pools *pools=actor->b.pools;
+    gh_actor_model *model=entry->enemy202?&entry->enemy202->entry.initialize.model.model:
+        &entry->enemy2a2->init.prefix.model.model;
+    if(!call->stage){
+        const gh_room_vector *primary,*secondary;
+        if(!actor->object.view.bytes||actor->object.view.size<0x300||
+           (object_word(actor->object.view.bytes+0x250)&0xa0000000u)!=0xa0000000u||
+           !model->ready||model->root.bytes!=actor->object.view.bytes||
+           gh_room_registry_view(pools,0x754c30,&primary)||gh_room_registry_view(pools,0x754c58,&secondary)||
+           !b->dynamic->bound||b->dynamic->tables!=owner->bindings->actor.actors)
+            return GH_ACTOR_MOTION_ARGUMENT;
+        if(model->external_owner||model->external_parts||model->external_borrowers||model->sound_borrowers)
+            return retire_stop(frontier,0x1496c0);
+        int borrowed;
+        if(gh_effect_create_actor_has_live_refs(b->effects,&actor->object.view,&borrowed)||borrowed)
+            return retire_stop(frontier,0x305b90);
+        unsigned primary_matches=0,secondary_matches=0,at=0;
+        for(unsigned i=0;i<primary->count;i++)
+            primary_matches+=object_word((uint8_t *)primary->allocation.pointer+4*i)==handle;
+        for(unsigned i=0;i<secondary->count;i++){
+            if(object_word((uint8_t *)secondary->allocation.pointer+4*i)!=handle)continue;
+            ++secondary_matches;at=i;
+        }
+        if(primary_matches!=1||secondary_matches!=(unsigned)!detached)
+            return retire_stop(frontier,0x312db8);
+        if(!detached){
+            uint8_t *bytes=secondary->allocation.pointer;
+            memmove(bytes+4*at,bytes+4*(at+1),4*(size_t)(secondary->count-at-1));
+            --pools->vectors[3].count;
+        }
+        call->owner=owner;call->handle=handle;call->bindings=*b;call->stage=1;
+    }
+    if(call->stage==1){
+        gh_actor_motion_status status=gh_enemy_destroy_prefix_mode3(&call->destructor,owner,handle,
+            b->release_effect,b->effect_context,frontier);
+        if(status!=GH_ACTOR_MOTION_UNSUPPORTED||*frontier!=0x1fe9b8||call->destructor.stage!=6)
+            return status?status:retire_stop(frontier,0x14e5d0);
+        call->stage=2;
+    }
+    if(call->stage==2){
+        gh_actor_motion_status status=retire_resource(actor,b,frontier);
+        if(status)return status;
+        call->stage=3;
+    }
+    if(call->stage==3){
+        if(gh_collision_pair_shapes_retire_model_native(owner->bindings->actor.shapes.pairs,model)||
+           gh_hitarea_forget_actor_native(actor->b.init,&actor->object.view))
+            return retire_stop(frontier,0x1496c0);
+        gh_scene_dynamic_forget_sphere_actor(b->dynamic,&actor->object.view);
+        call->stage=4;
+    }
+    if(call->stage==4){
+        gh_actor_model_status status=gh_actor_model_retire_001496c0(model,&call->model,frontier);
+        if(status)return *frontier?model_error(status):retire_stop(frontier,0x1496c0);
+        call->stage=5;
+    }
+    if(call->stage==5){
+        if(gh_game_title_player_release(&actor->object))return retire_stop(frontier,0x30f5a0);
+        call->stage=6;
+    }
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy_ems_destroy_detached_mode3(gh_enemy_ems *owner,
+    gh_enemy_full_retirement *call,uint32_t handle,const gh_title_player_view *actor,
+    const gh_enemy_retire_bindings *bindings,uint32_t *frontier)
+{
+    if(!actor||!actor->bytes)return GH_ACTOR_MOTION_ARGUMENT;
+    return retire_mode3(owner,call,handle,actor,bindings,frontier);
+}
+
+gh_actor_motion_status gh_enemy_ems_finish_detached_mode3(gh_enemy_ems *owner,
+    gh_enemy_full_retirement *call,uint32_t handle,const void *registry_owner,uint32_t *frontier)
+{
+    if(!frontier||!owner||!call||call->stage!=6||call->owner!=owner||call->handle!=handle)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    ems_entry *entry=retire_find(owner,handle);
+    gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
+    if(!actor||actor->published||!registry_owner||entry->registry_owner!=registry_owner||
+       gh_room_object_unregister(actor->b.pools,handle,registry_owner))
+        return retire_stop(frontier,0x30f7d0);
+    free(entry->enemy202);
+    free(entry->enemy2a2);
+    *entry=(ems_entry){0};
+    call->stage=7;
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy_ems_retire_0030f8b0(gh_enemy_ems *owner,gh_enemy_full_retirement *call,
+    uint32_t handle,const gh_enemy_retire_bindings *bindings,uint32_t *frontier)
+{
+    gh_actor_motion_status status=retire_mode3(owner,call,handle,NULL,bindings,frontier);
+    if(status||call->stage==7)return status;
+    ems_entry *entry=retire_find(owner,handle);
+    return gh_enemy_ems_finish_detached_mode3(owner,call,handle,entry?entry->registry_owner:NULL,frontier);
 }

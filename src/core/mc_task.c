@@ -61,14 +61,25 @@ static gh_id_error add_y(gh_mc_task_state *s,const gh_mc_task_bindings *b,int id
     sum=old+delta;if(sum>16777216 || sum< -16777216)return GH_ID_UNSUPPORTED;
     e->pos_y=(float)sum;return GH_ID_OK;
 }
-static gh_id_error disp_init_boot(gh_mc_task_state *s,const gh_mc_task_bindings *b)
+static gh_id_error disp_init(gh_mc_task_state *s,const gh_mc_task_bindings *b,int mode)
 {
     gh_id_entry *e;gh_id_error error;int i;
 #define ID_CALL(expr) do{error=(expr);if(error)return error;}while(0)
+    if(mode==1){ID_CALL(display(s,b,0xa,0));ID_CALL(display(s,b,0xb,1));}
     ID_CALL(display(s,b,0xc,1));
     for(i=0;i<3;++i) {ID_CALL(number(s,b,0x14+i,i));ID_CALL(display(s,b,0x10+i,0));ID_CALL(display(s,b,0x60+i,0));}
     ID_CALL(display(s,b,0xd,1));ID_CALL(display(s,b,5,0));
     ID_CALL(gh_id_base_restart_anim(&s->id_base,0,0));
+    if(mode==1){
+        static const unsigned ids[]={2,3,4,9};
+        static const uint16_t messages[]={0x20a4,0x20a5,0x20a4,0x20a5};
+        for(i=0;i<4;++i)ID_CALL(display(s,b,ids[i],1));
+        for(i=0;i<4;++i){
+            ID_CALL(get(s,b,ids[i],&e));e->message=messages[i];
+            ID_CALL(display(s,b,ids[i],1));
+        }
+        return GH_ID_OK;
+    }
     ID_CALL(display(s,b,0xc,0));ID_CALL(display(s,b,0xd,0));ID_CALL(display(s,b,0xe,0));
     ID_CALL(display(s,b,0xa,0));ID_CALL(display(s,b,0xb,0));
     ID_CALL(get(s,b,0x40,&e));e->scale_x=1.0f;e->scale_y=1.4f;
@@ -78,13 +89,14 @@ static gh_id_error disp_init_boot(gh_mc_task_state *s,const gh_mc_task_bindings 
 #undef ID_CALL
     return GH_ID_OK;
 }
-gh_mc_task_status gh_mc_task_prepare_002ae8a8(gh_mc_task_state *s,const gh_mc_task_bindings *b)
+static gh_mc_task_status load_module(gh_mc_task_state *s,const gh_mc_task_bindings *b)
 {
-    gh_disc_entry entry;size_t index;gh_mc_task_status version;int original_return;
-    if(!s || !bindings_valid(b))return GH_MC_TASK_ARGUMENT;
-    if(s->stage || s->module.pointer || s->checks.icon_work.pointer)return GH_MC_TASK_BUSY;
-    s->stage=1;put_work_word(b->work,0x5e8,work_word(b->work,0x5e8)|UINT32_C(0x80000000));
-    if(work_word(b->work,0x590)&0x400)return frontier(s,GH_MC_TASK_UNSUPPORTED,0x2ae4a8,"debug host0 module path");
+    gh_disc_entry entry;
+    size_t index;
+    gh_mc_task_status version;
+    s->stage=1;
+    if(work_word(b->work,0x590)&0x400)
+        return frontier(s,GH_MC_TASK_UNSUPPORTED,0x2ae4a8,"debug host0 module path");
     /* Original logical dll/Release/McPort.rel resolves to this sole actual FST
      * payload on the audited disc. Exact SHA256 prevents other versions running
      * a mismatched native reconstruction. No unknown binary imports are called. */
@@ -101,14 +113,21 @@ gh_mc_task_status gh_mc_task_prepare_002ae8a8(gh_mc_task_state *s,const gh_mc_ta
     /* Required McPort service was truly created by native card backend. This
      * source module does not pretend SIF initialization returned success. */
     s->module_loaded=1;s->stage=2;
+    return GH_MC_TASK_OK;
+}
+
+static void initialize_system(gh_mc_task_state *s,const gh_mc_task_bindings *b)
+{
     s->flags=0;s->zero_bc=0;s->zero_c0=0;s->zero_c8=0;s->zero_cc=0;s->zero_d0=0;
     s->system_phase_dc=b->work->phase569;s->progress_e0=0;s->progress_e4=0;
     b->work->flags|=0x4000;s->mc_sys_initialized=1;
     if(*b->game_suspend_word==0){*b->game_suspend_word=1;s->flags|=0x08000000;}
-    s->flags|=UINT32_C(0x81000000); /* cMcSys.Initialize + cMcBoot.Initialize */
-    if(gh_mc_boot_checks_create(&s->checks,b->subscreen_heap)!=GH_MC_BOOT_OK)
-        return frontier(s,GH_MC_TASK_MEMORY_ERROR,0x180,"McBoot workInit icon allocation");
-    s->stage=3;
+    s->flags|=UINT32_C(0x80000000); /* cMcSys.Initialize */
+}
+
+static gh_mc_task_status load_display(gh_mc_task_state *s,const gh_mc_task_bindings *b,int mode)
+{
+    int original_return;
     if(gh_mc_boot_load_id_resource(&s->id_resource,b->dvd,b->subscreen_heap,b->threads,
         b->id_manager,-1,(int8_t)b->work->language)!=GH_MC_BOOT_OK)
         return frontier(s,GH_MC_TASK_ID_ERROR,0x82f0,"SetIdData idsavecore resource");
@@ -119,10 +138,97 @@ gh_mc_task_status gh_mc_task_prepare_002ae8a8(gh_mc_task_state *s,const gh_mc_ta
         b->work->language,0xb,1,&original_return);
     if(s->id_error!=GH_ID_OK || original_return!=1)return frontier(s,GH_MC_TASK_ID_ERROR,0x2a9f30,"packed message initialize");
     s->flags|=UINT32_C(0x40000000);
-    s->id_error=disp_init_boot(s,b);
-    if(s->id_error!=GH_ID_OK)return frontier(s,GH_MC_TASK_ID_ERROR,0x8468,"DispInit boot UI fields");
+    s->id_error=disp_init(s,b,mode);
+    if(s->id_error!=GH_ID_OK)return frontier(s,GH_MC_TASK_ID_ERROR,0x8468,"DispInit UI fields");
+    s->ui_initialized=1;
+    return GH_MC_TASK_OK;
+}
+
+gh_mc_task_status gh_mc_task_prepare_002ae8a8(gh_mc_task_state *s,const gh_mc_task_bindings *b)
+{
+    if(!s||!bindings_valid(b))return GH_MC_TASK_ARGUMENT;
+    if(s->stage||s->module.pointer||s->checks.icon_work.pointer)return GH_MC_TASK_BUSY;
+    put_work_word(b->work,0x5e8,work_word(b->work,0x5e8)|UINT32_C(0x80000000));
+    gh_mc_task_status status=load_module(s,b);
+    if(status)return status;
+    initialize_system(s,b);
+    s->flags|=UINT32_C(0x01000000); /* cMcBoot.Initialize */
+    if(gh_mc_boot_checks_create(&s->checks,b->subscreen_heap)!=GH_MC_BOOT_OK)
+        return frontier(s,GH_MC_TASK_MEMORY_ERROR,0x180,"McBoot workInit icon allocation");
+    s->stage=3;
+    status=load_display(s,b,2);
+    if(status)return status;
     s->checks.frame=0;s->checks.phase=0;s->checks.subphase=0;s->ui_initialized=1;s->stage=4;
     return frontier(s,GH_MC_TASK_CONTROL_FRONTIER,0x2e8,"cMcBoot Control");
+}
+
+gh_mc_task_status gh_mc_task_start_title_load_002ae7f0(const gh_mc_task_bindings *b,
+    gh_native_task_entry entry,void *context,int32_t *slot)
+{
+    if(!b||!b->work||!b->threads||!entry||!slot)return GH_MC_TASK_ARGUMENT;
+    put_work_word(b->work,0x5e8,work_word(b->work,0x5e8)|UINT32_C(0x80000000));
+    gh_thread_status result=gh_task_threads_start(b->threads,2,entry,context,0,slot);
+    if(result!=GH_THREAD_OK)return GH_MC_TASK_PLATFORM_ERROR;
+    return *slot==2?GH_MC_TASK_OK:GH_MC_TASK_BUSY;
+}
+
+gh_mc_task_status gh_mc_task_prepare_title_load_002ae838(gh_mc_task_state *s,const gh_mc_task_bindings *b)
+{
+    if(!s||!bindings_valid(b)||!(work_word(b->work,0x5e8)&UINT32_C(0x80000000)))
+        return GH_MC_TASK_ARGUMENT;
+    if(s->stage||s->module.pointer||s->checks.icon_work.pointer)return GH_MC_TASK_BUSY;
+    gh_mc_task_status status=load_module(s,b);
+    if(status)return status;
+    /* SNR2 StopSet@8A98 is JR RA/NOP, then Main@12B0. */
+    if(gh_memory_card_begin(b->card)!=GH_MC_OK)
+        return frontier(s,GH_MC_TASK_PLATFORM_ERROR,0x71e8,"McLoad card service initialization");
+    initialize_system(s,b);
+    s->flags|=UINT32_C(0x00400000);
+    if(gh_mc_boot_checks_create(&s->checks,b->subscreen_heap)!=GH_MC_BOOT_OK)
+        return frontier(s,GH_MC_TASK_MEMORY_ERROR,0x1150,"McLoad icon allocation");
+    s->checks.mode=1;
+    if(gh_heap_allocate(b->subscreen_heap,0xb400,128,&s->load_payload)!=GH_MEM_OK)
+        return frontier(s,GH_MC_TASK_MEMORY_ERROR,0x1150,"McLoad payload allocation");
+    s->load_mode=1;
+    s->stage=3;
+    return GH_MC_TASK_OK;
+}
+
+gh_mc_task_status gh_mc_task_title_load_step_000012b0(gh_mc_task_state *s,const gh_mc_task_bindings *b,
+    gh_screen_fade *fade,const gh_screen_fade_context *context)
+{
+    if(!s||!bindings_valid(b)||!fade||!context||!s->load_mode||s->stage<3||
+       !(work_word(b->work,0x5e8)&UINT32_C(0x80000000)))return GH_MC_TASK_ARGUMENT;
+    if(s->load_phase==0){
+        if(gh_screen_fade_start_00307208(fade,context,0,10,0,0,0xff000000,10))
+            return frontier(s,GH_MC_TASK_UNSUPPORTED,0x307208,"McLoad fade to black");
+        s->load_phase=1;
+        return GH_MC_TASK_LOAD_FRAME;
+    }
+    uint8_t fade_state=gh_screen_fade_status_00307718(fade);
+    if(fade_state&&!(fade_state&4))return GH_MC_TASK_LOAD_FRAME;
+    if(s->load_phase==1){
+        /* REL8A88 is JR RA/NOP. Display mode 1 has its own prompt bindings. */
+        if(!s->ui_initialized){
+            gh_mc_task_status status=load_display(s,b,1);
+            if(status)return status;
+        }
+        if(gh_screen_fade_start_00307208(fade,context,0,10,0,0xff000000,0,10))
+            return frontier(s,GH_MC_TASK_UNSUPPORTED,0x307208,"McLoad fade from black");
+        s->load_phase=2;
+        s->stage=4;
+        return GH_MC_TASK_LOAD_FRAME;
+    }
+    return frontier(s,GH_MC_TASK_CONTROL_FRONTIER,0x1590,"cMcLoad Control");
+}
+
+gh_mc_task_status gh_mc_task_title_load_sleep_00008aa8(const gh_mc_task_state *s,const gh_mc_task_bindings *b)
+{
+    if(!s||!b||!b->work||!b->threads||!s->load_mode||s->ui_initialized)
+        return GH_MC_TASK_ARGUMENT;
+    if(!(work_word(b->work,0x5e8)&UINT32_C(0x80000000)))return GH_MC_TASK_OK;
+    if(s->flags&UINT32_C(0x50000000))return GH_MC_TASK_UNSUPPORTED;
+    return gh_task_threads_sleep(b->threads,1)==GH_THREAD_OK?GH_MC_TASK_OK:GH_MC_TASK_PLATFORM_ERROR;
 }
 gh_mc_task_status gh_mc_task_abort(gh_mc_task_state *s,const gh_mc_task_bindings *b)
 {
@@ -133,6 +239,8 @@ gh_mc_task_status gh_mc_task_abort(gh_mc_task_state *s,const gh_mc_task_bindings
     if(s->id_base.entries && gh_id_base_release_002aa078(b->id_runtime,&s->id_base,&original,&reclaimed)!=GH_ID_OK)return GH_MC_TASK_ID_ERROR;
     if(gh_mc_boot_release_id_resource(&s->id_resource,b->subscreen_heap,b->id_manager)!=GH_MC_BOOT_OK)return GH_MC_TASK_MEMORY_ERROR;
     if(gh_mc_boot_checks_release(&s->checks,b->subscreen_heap)!=GH_MC_BOOT_OK)return GH_MC_TASK_MEMORY_ERROR;
+    if(s->load_payload.pointer && gh_heap_release(b->subscreen_heap,s->load_payload)!=GH_MEM_OK)return GH_MC_TASK_MEMORY_ERROR;
+    memset(&s->load_payload,0,sizeof(s->load_payload));
     if(s->module.pointer && gh_heap_release(b->module_heap,s->module)!=GH_MEM_OK)return GH_MC_TASK_MEMORY_ERROR;
     memset(&s->module,0,sizeof(s->module));s->module_loaded=0;s->ui_initialized=0;
     if(s->mc_sys_initialized){if(s->flags&0x08000000)*b->game_suspend_word=0;b->work->flags&=~UINT32_C(0x4000);}

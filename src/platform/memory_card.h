@@ -9,6 +9,7 @@ typedef enum gh_mc_error {GH_MC_OK,GH_MC_ARGUMENT,GH_MC_BUSY,GH_MC_IO,GH_MC_MEMO
 typedef struct gh_mc_result {
     int32_t result; /* original command result: GetInfo0, SearchFile1/0 */
     int32_t card_type,free_clusters,formatted;
+    uint64_t file_bytes; /* size of a positively matched icon.sys */
 } gh_mc_result;
 /* Native replacement for the card commands used during mcport boot checks.
  * The explicit UTF-8 profile directory stands for slot0 storage.
@@ -22,15 +23,22 @@ void gh_memory_card_close(gh_memory_card *);
  * Pending real filesystemcommand returnsBUSY withoutcanceling/mutating it.
  * Idle End isidempotent; furtherrequests/poll returnENDED. Caller stillowns
  * objectandmustcloseit. No guestRPC/thread/semaphore success isfabricated. */
+gh_mc_error gh_memory_card_begin(gh_memory_card *);
 gh_mc_error gh_memory_card_end(gh_memory_card *);
 gh_mc_error gh_memory_card_request_info(gh_memory_card *);
 /* USA original folder base, slot0..19, icon.sys. No caller path interpolation. */
 gh_mc_error gh_memory_card_request_icon(gh_memory_card *,uint32_t save_slot);
-enum {GH_MC_SAVE_HEADER_BYTES=0x400, GH_MC_SAVE_NOT_FOUND=-4};
+gh_mc_error gh_memory_card_request_slot_directory(gh_memory_card *,uint32_t save_slot);
+enum {GH_MC_SAVE_HEADER_BYTES=0x400, GH_MC_SAVE_RECORD_BYTES=0xb400, GH_MC_SAVE_NOT_FOUND=-4};
 /* One original slot file, whose basename matches its directory. The read
  * buffer remains borrowed until the queued command completes. */
 gh_mc_error gh_memory_card_request_save_open(gh_memory_card *,uint32_t save_slot);
 gh_mc_error gh_memory_card_request_save_header(gh_memory_card *,uint8_t out[GH_MC_SAVE_HEADER_BYTES]);
+gh_mc_error gh_memory_card_request_save_record(gh_memory_card *,uint8_t out[GH_MC_SAVE_RECORD_BYTES]);
+/* Original 0x202 write/create path. Writes from offset zero and preserves
+ * bytes beyond the fixed record. The queued write borrows the input. */
+gh_mc_error gh_memory_card_request_save_write_open(gh_memory_card *,uint32_t save_slot);
+gh_mc_error gh_memory_card_request_save_write(gh_memory_card *,const uint8_t record[GH_MC_SAVE_RECORD_BYTES]);
 gh_mc_error gh_memory_card_request_save_close(gh_memory_card *);
 /* pending command executes real filesystem query here; completed=1 reports
  * completed result. With no queued command completed=0. Overlap is BUSY. */

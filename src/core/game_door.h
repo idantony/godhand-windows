@@ -38,6 +38,9 @@ gh_door_status gh_game_door_reset_001ffe08(gh_game_door*);
  * transition flag makes1FFF80 return early, as in the original. */
 gh_door_status gh_game_door_request_001ffeb8(gh_game_door*,const gh_game_door_bindings*,
  uint16_t room,const float position[3],float yaw,uint8_t kind,uint32_t flags,uint8_t force);
+/* Direct original 1FFF30 uses the supplied destination room verbatim. */
+gh_door_status gh_game_door_request_001fff30(gh_game_door *,const gh_game_door_bindings *,
+ uint16_t room,const uint32_t position_bits[3],uint32_t yaw_bits,uint8_t kind,uint32_t flags,uint8_t force);
 /* Original per-frame1FFE10: wait decrement, Fade readiness,2000F8. No hidden
  * Fade stepping, no forced frame waits, and no room asset loading shortcut.
  * R020 kind1/force1 changes canonical Main state to5 and Work's next-room data;

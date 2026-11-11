@@ -7,7 +7,8 @@ import ast
 from pathlib import Path
 import re
 
-MODE_ARGC = {"none": 1, "iso": 2, "elf": 2, "both": 3, "movie": 3, "adx-reference": 3, "event-adx-reference": 3}
+MODE_ARGC = {"none": 1, "iso": 2, "elf": 2, "both": 3, "movie": 3, "adx-reference": 3,
+             "event-adx-reference": 3, "scratch": 2, "scratch-iso": 3}
 _NON_CODE = re.compile(r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
 _MAIN = re.compile(r"\bint\s+main\s*\(\s*int\s+argc\b[^)]*\)\s*\{")
 _ASSERT = re.compile(r"\b(?:C|CHECK|REQUIRE|ASSERT|assert)\s*\(\s*argc\s*==\s*([0-9]+)\b")

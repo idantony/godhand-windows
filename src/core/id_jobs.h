@@ -36,9 +36,12 @@ typedef struct {gh_id_view source;uint16_t width,height;uint64_t tex0;} gh_id_te
 #define GH_ID_RADAR_TEX0 UINT64_C(0x200000021d308000)
 /* Original language TBL1 items 12/13. */
 #define GH_ID_TIM2_128X64_PSMT8_TEX0 UINT64_C(0x19d308000)
+/* Language TBL1 item49 used by the original memory-card list separators. */
+#define GH_ID_TIM2_128X128_PSMT4_TEX0 UINT64_C(0x1dd408000)
 /* Actual2ACDC8 TBL1 lookup, one-based. Restricted original T32/PSMT8 views,
  * actual512x512T32/PSMT4titlelogo and256x128T32/PSMT8TitleLevel,
  * andverifiedlanguage32x32indexed4TIM2 confirmationcursor. */
+#define GH_ID_PAD_ICON_TEX0 UINT64_C(0x20000001dd308000)
 gh_id_error gh_id_texture_open(const gh_id_state *,uint32_t slot,uint32_t one_based,gh_id_texture *);
 /* Same verified texture profiles from a source already resolved by the owner. */
 gh_id_error gh_id_texture_open_view(const gh_id_view *,gh_id_texture *);

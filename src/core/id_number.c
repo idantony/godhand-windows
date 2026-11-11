@@ -20,7 +20,7 @@ static gh_id_error lookup(const gh_id_state*m,unsigned slot,unsigned n,gh_id_tex
 }
 static gh_id_error picture(const gh_id_texture*t,gh_tim2_picture*p){
  gh_tim2_error e=gh_tim2_first(t->source.bytes,t->source.size,p);if(e)return e==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
- if(p->width!=128||p->height!=128||p->image_type!=4||p->clut_type!=3||p->colors!=16||p->tex0!=UINT64_C(0x1dd408000))return GH_ID_UNSUPPORTED;
+ if(p->width!=128||p->height!=128||p->image_type!=4||p->clut_type!=3||p->colors!=16||p->tex0!=GH_ID_TIM2_128X128_PSMT4_TEX0)return GH_ID_UNSUPPORTED;
  for(unsigned i=0;i<16;i++)if(p->clut[(size_t)i*4+3]>128)return GH_ID_UNSUPPORTED;return GH_ID_OK;
 }
 static uint64_t wide(const uint8_t*p){return (uint64_t)word(p)|(uint64_t)word(p+4)<<32;}

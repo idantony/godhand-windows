@@ -9,18 +9,17 @@ and assets, and replace platform dependencies with native Windows implementation
 This follows OpenGOAL's source recovery/platform adaptation method. God Hand was
 not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
-**Early development.** The original R100 opening plays all ten camera cuts
-from the user's ISO and returns to the room. In a hidden, muted Windows run,
-synthetic gamepad input moves Gene within roughly one unit of an original
-enemy and starts the original Square attack. The fully visible room includes
-successive attack frames. Gene's punch applies 3 damage to that enemy, whose
-HP falls from 74 to 71 in presented scene frame 1,638. The run reaches 1,784
-ticks and presents 1,643 scene frames, including title and room startup.
-It submits 1,320,495 world packets with zero renderer, GPU, postprocess and
-window errors.
+**Early development.** A hidden, muted Windows run selects an original-format
+test save from the title menu, verifies and restores it, then presents the
+original R100 room and HUD. Scene frame 1,634 shows Gene in the loaded room.
+The run reaches tick 1,826 with 1,200,273 world packets and zero renderer, GPU,
+postprocess or window errors.
 
-The next original call reached is `0x00198CE0`. Continued combat, room
-transitions and full save/load still need end-to-end verification.
+A separate New Game run of the same executable plays the ten original opening
+cuts and accepts synthetic gamepad input. Gene's original Square attack applies
+3 damage in presented frame 1,638, taking the target from HP 74 to 71.
+The run reaches tick 1,810 and 1,669 scene presents. Continued combat,
+in-game saving and later room transitions remain under development.
 
 ### Verified progress
 
@@ -51,7 +50,7 @@ transitions and full save/load still need end-to-end verification.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters. Subsequent opening frames create original
   event effects, update their lifetimes and render sprites and framebuffer warp.
-- The latest frozen source builds 365 C modules and passes 348 native checks.
+- The latest frozen source builds 370 C modules and passes 351 native checks.
   Eighteen checks that need extra tools or devices were skipped in this run.
   Earlier Windows verification exercised muted hardware audio, movie decoding
   and the full independent ADX comparison.
@@ -107,7 +106,8 @@ python -B .\tools\build-windows.py --target native
 
 The native profile directory represents card slot0. A missing directory takes
 the original no-card path. Startup reads the original per-save header files
-and validates their version. Full save restore and writing remain unfinished.
+and validates their version. Title Load restores the verified R100 test profile.
+In-game save creation and the full progression remain under development.
 Keyboard defaults are Z=Cross, X=Circle, arrows, Enter=Start and
 Escape=Triangle; original ELF tables determine logical confirm/cancel.
 The window stays hidden unless `--show` is supplied. `--muted` silences only
@@ -155,14 +155,13 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 平台依赖。采用 OpenGOAL 的源码恢复与平台移植方法；本作不是 GOAL 程序，不能直接
 使用 Jak 专用反编译器。
 
-**仍处于早期开发。** 已从用户 ISO 播完 R100 开场十个镜头并回到房间。隐藏、静音的
-Windows 测试通过合成手柄输入让 Gene 接近原版敌人至约一个游戏距离单位，再按方块
-触发原版攻击。房间淡入后，窗口连续呈现出拳动画，第 1638 个场景帧记录了命中和敌人 HP
-从 74 降到 71。运行到 1784 ticks，呈现 1643 个场景帧，包含标题和房间启动帧。
-累计提交 1320495 个世界绘制包，
-渲染器、GPU、后处理和窗口错误均为 0。
+**仍处于早期开发。** 隐藏、静音的 Windows 实跑从标题菜单选中原版格式的测试存档，
+校验并恢复数据后进入 R100，呈现原版房间和 HUD。第 1634 个场景帧可见 Gene 站在读档后的房间内。
+运行至 tick 1826，共提交 1200273 个世界绘制包，渲染器、GPU、后处理和窗口错误均为 0。
 
-运行随后到达原版调用 `0x00198CE0`。后续战斗、房间切换和完整存读档仍待端到端验证。
+同一可执行文件的新游戏复跑播完原版开场十个镜头，并接受合成手柄输入。
+Gene 的原版方块攻击在第 1638 帧造成 3 点伤害，敌人 HP 从 74 降至 71。
+运行至 tick 1810，共呈现 1669 个场景帧。后续战斗、游戏内保存及后续房间切换仍在开发。
 
 ### 已验证的进展
 
@@ -171,7 +170,7 @@ Windows 测试通过合成手柄输入让 Gene 接近原版敌人至约一个游
 - Windows fiber 实现原串行任务、嵌套 Scenario 调度和同槽位尾重启；DVD 队列读取
   真实 ISO，保留排序、扇区补齐和原等待逻辑。
 - 存储卡提示文字、窗口和原 TIM2 光标已实际绘制。无卡和空目录分支执行原 Control、
-  按键映射、有限真实音效及正常资源释放；完整存档读写尚未实现。
+  按键映射、有限真实音效和正常资源释放。原版格式的测试存档可从标题菜单恢复并进入 R100。
 - 开场使用原版九个角色、动作、模型粒子、嵌套发射器和共享绘制队列。第九个镜头
   附近的最终合成帧可见原版角色和街道，开场相机和角色由恢复的清理流程退出。
 - 存储卡 ADPCM 音效通过真实 XAudio2 处理；片头通过原生 FFmpeg 进程及 Windows
@@ -183,7 +182,7 @@ Windows 测试通过合成手柄输入让 Gene 接近原版敌人至约一个游
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始 FX 调用 0x30F228 创建 4 个环境发射器。
   后续片头帧创建原剧情特效，更新其生命周期，并绘制精灵和画面扭曲。
-- 最新冻结源码编译 365 个 C 模块，通过 348 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
+- 最新冻结源码编译 370 个 C 模块，通过 351 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
   受限 GPU 像素与独立 CPU 方程一致。绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
@@ -196,7 +195,7 @@ FFmpeg 路径。公共仓库不含游戏程序/资源、BIOS、私有 SDK、工�
 Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音频设备。
 
 窗口默认隐藏，`--show` 才显示；`--muted` 仅静音本程序，不改系统音量。原生存档
-目录不存在时走原版无卡分支。启动可读取各存档头并校验原版版本。完整恢复和写入仍在开发。
+目录不存在时走原版无卡分支。标题读档已验证恢复 R100 测试档。游戏内存档和完整流程仍在开发。
 默认键位为 Z=Cross、X=Circle、
 方向键、Enter=Start、Escape=Triangle；确认/取消仍由原版 ELF 映射表决定。
 

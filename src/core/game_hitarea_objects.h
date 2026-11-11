@@ -24,6 +24,9 @@ gh_hitarea_status gh_hitarea_object_set_mode_001fd988(const gh_hitarea_object *,
 /* Host metadata only, invoked AFTER originalpool reset/release actually
  * succeeded. Does not release originaldamage nodes or change rawoccupancy. */
 void gh_hitarea_detach_after_pool_reset(gh_game_init_state *);
+/* Host-only retirement of identity pointers. Leaves the original phase5
+ * rows, links, occupancy and hit data to 1FDFA8. */
+gh_hitarea_status gh_hitarea_forget_actor_native(gh_game_init_state *,const gh_title_player_view *);
 #ifdef __cplusplus
 }
 #endif

@@ -60,6 +60,14 @@ gh_voice_status gh_se_voice_detach_actor_002ce488(gh_se_voice_engine *,struct gh
  * reservations/voices, balancesborrow, stopsrealdevice sourceifissued. */
 gh_voice_status gh_se_voice_abort_attached_owner(gh_se_voice_engine *,const void *owner);
 unsigned gh_se_voice_attached_reservations(const gh_se_voice_engine *);
+typedef struct {
+ uint32_t frontier,flags;
+ int32_t part_index,delay;
+ int16_t bank,program;
+ gh_voice_status status;
+} gh_se_attached_failure;
+/* Most recent attached request with a known original boundary. */
+void gh_se_voice_last_attached_failure(const gh_se_voice_engine *,gh_se_attached_failure *);
 /* Original active-list (newest first), descriptor-selected channel groups0..4 and15..16, priority/oldest
  * replacement semantics for audited MC/logo records. Starts real
  * XAudio2 voices. Call from original sound update boundary once per frame. */
@@ -82,6 +90,7 @@ unsigned gh_se_voice_bank_nodes(const gh_se_voice_engine *,int16_t bank);
 gh_voice_status gh_se_voice_scene_exit_begin(gh_se_voice_engine *);
 int gh_se_voice_uses_registry(const gh_se_voice_engine *,const gh_audio_registry *);
 unsigned gh_se_voice_active_nodes(const gh_se_voice_engine *);
+unsigned gh_se_voice_external_adx_nodes(const gh_se_voice_engine *);
 uint32_t gh_se_voice_frontier(const gh_se_voice_engine *);
 /* Frontier addresses below100000 refer to user snddrv.irx; larger addresses
  * refer to boot ELF. No guest address is invoked as a host function pointer. */

@@ -13,7 +13,8 @@ typedef gh_game_event_status (*gh_event_clear_consumer)(void *,uint32_t *frontie
 typedef struct {gh_game_event *event;const gh_game_event_config *config;gh_game_init_state *init;
  gh_room_pools *pools;gh_game_objects *room_objects; /* original 005864E0 */const gh_player_abort_bindings *player_abort;
  gh_event_object_view object_view;gh_event_clear_consumer player_clear_0012c418,camera_reset_0013b9b8_then_00138d40,special_remove_00312708;
- gh_object_slot_release release_sound_slot;void *context;} gh_event_clear_bindings;
+ gh_object_slot_release release_sound_slot;void *context;
+ gh_event_clear_consumer release_regular_enemies_002908c0;} gh_event_clear_bindings;
 typedef struct {gh_game_player_abort abort;uint8_t *player;uint32_t stage,frontier;} gh_event_player_clear;
 /* Genuine12C418 prefix: conditional124F60, actual126770, 2F4..7 byte clears.
  * Stops at animation2A8578; does not claim an initialized pose was sampled. */

@@ -53,7 +53,15 @@ gh_object_step_status gh_object_live_trans_one_0030f650(gh_game_object_step*s,co
   gh_object_trans_request*r=&s->trans_live_request;if(!s->trans_live.invoke)return stop(f,r->original_entry,GH_OBJSTEP_UNSUPPORTED);uint32_t pc=0;e=s->trans_live.invoke(s->trans_live.context,r,work,&pc);if(e)return stop(f,pc?pc:r->original_entry,e);s->trans_live_phase=5;
  }
  if(s->trans_live_phase==5&&s->trans_live_request.kind==GH_OBJECT_TRANS_DESTROY){
-  if(gh_room_object_unregister((gh_room_pools*)pools,handle,s->trans_live_owner)!=GH_POOL_OK)return stop(f,0x30f7d0,GH_OBJSTEP_POOLS);*erased=1;
+  int handled=0;
+  if(s->trans_live.erase){
+   uint32_t pc=0;
+   e=s->trans_live.erase(s->trans_live.context,&s->trans_live_request,s->trans_live_owner,&handled,&pc);
+   if(e)return stop(f,pc?pc:0x30f7d0,e);
+  }
+  if(!handled&&gh_room_object_unregister((gh_room_pools*)pools,handle,s->trans_live_owner)!=GH_POOL_OK)
+   return stop(f,0x30f7d0,GH_OBJSTEP_POOLS);
+  *erased=1;
  }
 done:s->trans_live_phase=0;s->trans_live_handle=0;s->trans_live_owner=NULL;memset(&s->trans_live_request,0,sizeof(s->trans_live_request));return GH_OBJSTEP_OK;
 }

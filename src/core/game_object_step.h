@@ -40,8 +40,12 @@ typedef struct {gh_object_trans_kind kind;uint32_t handle,original_entry,origina
  int16_t this_delta;gh_title_player_view actor;} gh_object_trans_request;
 typedef gh_object_step_status (*gh_object_trans_invoke)(void *,const gh_object_trans_request *,const gh_boot_work *,uint32_t *);
 typedef gh_object_step_status (*gh_object_trans_layer)(void *,const gh_scene_at_manager *,uint8_t,int *visible,uint32_t *);
+/* Optional canonical unregister for actor owners which must outlive the
+ * registry binding. An unhandled request falls through to generic erase. */
+typedef gh_object_step_status (*gh_object_trans_erase)(void *,const gh_object_trans_request *,
+ const void *registry_owner,int *handled,uint32_t *);
 typedef struct {gh_object_trans_invoke invoke;gh_object_trans_layer layer;void *context;
- const gh_scene_at_manager *scene_at;} gh_object_trans_bindings;
+ const gh_scene_at_manager *scene_at;gh_object_trans_erase erase;} gh_object_trans_bindings;
 
 typedef struct {gh_game_init_state *init;uint32_t ratio10_bits,profile_752cf8;uint8_t constructed;
  gh_object_static_bindings static_objects;uint32_t moved_objects_5caffc;

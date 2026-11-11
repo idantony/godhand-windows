@@ -104,14 +104,9 @@ static gh_player_target_status consider_focus(const gh_player_target_bindings *b
 }
 
 static gh_player_target_status enemy_focus(const gh_player_target_bindings *b,
- const gh_game_init_state *init,float range,float cone,int fallback,const gh_title_player_view *exclude,
- gh_player_target *selected,uint32_t *f)
+ const gh_game_init_state *init,const float origin[3],float heading,float range,float cone,
+ int fallback,const gh_title_player_view *exclude,gh_player_target *selected,uint32_t *f)
 {
- float origin[3];
- if(!point(b->player,origin))return fail(f,0x2db6b0,GH_PLAYER_TARGET_ARGUMENT);
- const float heading=number(w(b->player->bytes+0x104));
- if(!isfinite(heading))return fail(f,0x2da038,GH_PLAYER_TARGET_NUMERIC);
-
  unsigned cursor=UINT8_MAX;
  if(init->enemy_top){
   for(unsigned i=0;i<64;i++)if(init->enemy_top==init->enemies+i*20){cursor=i;break;}
@@ -191,15 +186,17 @@ static gh_player_target_status enemy_focus(const gh_player_target_bindings *b,
  return GH_PLAYER_TARGET_OK;
 }
 
-static gh_player_target_status focus(const gh_player_target_bindings *b,
- const gh_game_init_state *init,float range,float cone,int fallback,const gh_title_player_view *exclude,
- gh_player_target *out,uint32_t *f)
+static gh_player_target_status focus_from(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,const float origin[3],float heading,float range,float cone,
+ int fallback,const gh_title_player_view *exclude,gh_player_target *out,uint32_t *f)
 {
  if(f)*f=0;
- if(!b||!init||!out||!b->player||b->player->size<0x108||!b->pools)
+ if(!b||!init||!out||!origin||!b->pools||(exclude&&!exclude->bytes))
   return fail(f,0x291010,GH_PLAYER_TARGET_ARGUMENT);
  if(!isfinite(range)||range<0||!isfinite(cone)||cone<0)
   return fail(f,0x291010,GH_PLAYER_TARGET_NUMERIC);
+ if(!isfinite(heading))return fail(f,0x2da038,GH_PLAYER_TARGET_NUMERIC);
+ for(unsigned i=0;i<3;i++)if(!isfinite(origin[i]))return fail(f,0x1f7eb0,GH_PLAYER_TARGET_NUMERIC);
  fenv_t env;
  if(feholdexcept(&env))return fail(f,0x291010,GH_PLAYER_TARGET_NUMERIC);
  if(fesetround(FE_TOWARDZERO)){
@@ -207,10 +204,27 @@ static gh_player_target_status focus(const gh_player_target_bindings *b,
   return fail(f,0x291010,GH_PLAYER_TARGET_NUMERIC);
  }
  gh_player_target selected={0};
- gh_player_target_status result=enemy_focus(b,init,range,cone,fallback,exclude,&selected,f);
+ gh_player_target_status result=enemy_focus(b,init,origin,heading,range,cone,fallback,exclude,&selected,f);
  if(fesetenv(&env))return fail(f,0x291010,GH_PLAYER_TARGET_NUMERIC);
  if(!result)*out=selected;
  return result;
+}
+
+static gh_player_target_status focus(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,float range,float cone,int fallback,const gh_title_player_view *exclude,
+ gh_player_target *out,uint32_t *f)
+{
+ if(!b||!b->player||b->player->size<0x108)return fail(f,0x291010,GH_PLAYER_TARGET_ARGUMENT);
+ float origin[3];
+ if(!point(b->player,origin))return fail(f,0x2db6b0,GH_PLAYER_TARGET_ARGUMENT);
+ return focus_from(b,init,origin,number(w(b->player->bytes+0x104)),range,cone,fallback,exclude,out,f);
+}
+
+gh_player_target_status gh_enemy_target_from_00291010(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,const float origin[3],float yaw,float range,float cone,
+ const gh_title_player_view *exclude,gh_player_target *out,uint32_t *f)
+{
+ return focus_from(b,init,origin,yaw,range,cone,0,exclude,out,f);
 }
 
 gh_player_target_status gh_player_enemy_target_00291010(const gh_player_target_bindings *b,

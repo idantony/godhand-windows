@@ -30,6 +30,9 @@ static void compare(gh_disc *d,const char *path,gh_r207_allocation a,size_t capa
 }
 static gh_game_assets assets;static int returned;static gh_game_status result;
 static void loader(void *ctx,int32_t costume){(void)ctx;result=gh_game_assets_0030d5c8(&assets,(uint8_t)costume);returned=1;}
+static void reload_player(void *ctx,int32_t costume){
+ (void)ctx;result=gh_game_assets_reload_player_0030d8e0(&assets,(uint8_t)costume);returned=1;
+}
 static gh_game_loop loop;static unsigned calls;static gh_game_status loop_result;
 static int pre(void *ctx,gh_game_loop *s){(void)ctx;(void)s;calls++;return 0;}
 static int initialize(void *ctx,gh_game_loop *s){(void)ctx;calls++;s->work->flags&=~0x80000000u;return 0;}
@@ -60,6 +63,20 @@ int main(int argc,char **argv){
  CHECK(le(table+41*8)==65535);
  compare(disc,"pl/pl00.dat",assets.objects[0],assets.object_sizes[0]);
  compare(disc,"pl/pl01.dat",assets.objects[1],assets.object_sizes[1]);
+ void *model=assets.objects[0].pointer,*motion=assets.objects[1].pointer;
+ const uint32_t token=dvd.id_counter;
+ const size_t used=gh_heap_used(heap);
+ returned=0;
+ CHECK(gh_task_threads_start(threads,2,reload_player,0,2,&slot)==GH_THREAD_OK);
+ for(ticks=0;ticks<8&&!returned;++ticks){
+  CHECK(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK);
+  CHECK(gh_dvd_pump(&dvd)==GH_DVD_OK);
+ }
+ CHECK(returned&&result==GH_GAME_OK&&ticks==3&&dvd.id_counter==token+1);
+ CHECK(assets.objects[0].pointer==model&&assets.objects[1].pointer==motion&&gh_heap_used(heap)==used);
+ CHECK(work.flags==0x12400);
+ compare(disc,"pl/pl05.dat",assets.objects[0],assets.object_sizes[0]);
+ compare(disc,"pl/pl06.dat",assets.objects[1],assets.object_sizes[1]);
  CHECK(gh_game_assets_release(&assets)==GH_GAME_OK && gh_heap_used(heap)==0);
  /* Original flags skip previously loaded groups; no read/allocation invented. */
  work.flags=0x40000|0x2000|0x400|0x10000;returned=0;

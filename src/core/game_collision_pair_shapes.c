@@ -1,11 +1,12 @@
 #include "game_collision_pair_shapes.h"
+#include "game_actor_model.h"
 #include "game_collision_pair_queries.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
 #include <float.h>
-typedef struct {gh_collision_shape_inputs inputs;const uint8_t *position,*matrix;uint32_t serial,next,hit_indices[20],hit_serials[20];uint8_t bound;} shape_row;
+typedef struct {gh_collision_shape_inputs inputs;const uint8_t *position,*matrix;uint32_t serial,next,hit_indices[20],hit_serials[20];uint8_t bound;uint8_t retired_matrix[64];} shape_row;
 struct gh_collision_pair_shapes {gh_collision_pairs *owner;shape_row rows[GH_COLLISION_CAPACITY];uint32_t first;};
 static uint32_t w(const uint8_t*p){uint32_t v;memcpy(&v,p,4);return v;}
 static void ww(uint8_t*p,uint32_t v){memcpy(p,&v,4);}
@@ -91,6 +92,34 @@ gh_pair_shape_status gh_collision_pair_shape_offset_002bb258(
         row->matrix = row->inputs.matrix;
         row->position = row->inputs.matrix + 0x30;
     }
+    return GH_PAIR_SHAPE_OK;
+}
+
+gh_pair_shape_status gh_collision_pair_box_size_002baaa8(
+    const gh_collision_pair_shape *shape, const float size[3], uint32_t *frontier)
+{
+    if(frontier)*frontier=0;
+    if(!frontier||!valid(shape)||!size||w(shape->record+0xe0)!=4)
+        return GH_PAIR_SHAPE_ARGUMENT;
+    for(unsigned i=0;i<3;++i){
+        if(!isfinite(size[i]))return fail(frontier,0x2baaa8,GH_PAIR_SHAPE_UNSUPPORTED);
+    }
+    fenv_t env;
+    if(feholdexcept(&env))return fail(frontier,0x2bab30,GH_PAIR_SHAPE_UNSUPPORTED);
+    if(fesetround(FE_TONEAREST)){
+        (void)fesetenv(&env);
+        return fail(frontier,0x2bab30,GH_PAIR_SHAPE_UNSUPPORTED);
+    }
+    volatile float x=size[0]*.5f,y=size[1]*.5f,z=size[2]*.5f;
+    volatile float xx=x*x,yy=y*y,zz=z*z,xy=xx+yy,squared=xy+zz;
+    const float radius=sqrtf(squared);
+    if(fesetenv(&env)||!isfinite(radius))
+        return fail(frontier,0x2bab30,GH_PAIR_SHAPE_UNSUPPORTED);
+    uint8_t *geometry=shape->record+0xe0;
+    shape_row *row=&shape->manager->native_shapes->rows[shape->index];
+    memcpy(row->inputs.size_xyz,size,12);
+    memcpy(geometry+0x110,size,12);
+    ww(geometry+0xe4,bits(radius));
     return GH_PAIR_SHAPE_OK;
 }
 
@@ -196,5 +225,46 @@ gh_pair_shape_status gh_collision_pair_shape_sort_hits_001fc810(const gh_collisi
   uint32_t t=r->hit_indices[i];r->hit_indices[i]=r->hit_indices[j];r->hit_indices[j]=t;t=r->hit_serials[i];r->hit_serials[i]=r->hit_serials[j];r->hit_serials[j]=t;
   t=w(v->record+0x88+i*4);ww(v->record+0x88+i*4,w(v->record+0x88+j*4));ww(v->record+0x88+j*4,t);
  }}}
+ return GH_PAIR_SHAPE_OK;
+}
+
+static int matrix_in_span(const uint8_t *matrix,const uint8_t *base,size_t bytes)
+{
+ if(!matrix||!base)return 0;
+ uintptr_t m=(uintptr_t)matrix,b=(uintptr_t)base;
+ if(m<b||m-b>=bytes)return 0;
+ return bytes-(m-b)>=64?1:-1;
+}
+
+static int model_matrix(const gh_actor_model *model,const uint8_t *matrix)
+{
+ int result=matrix_in_span(matrix,model->root.bytes,model->root.size);
+ for(unsigned i=0;!result&&i<model->parts_allocated;++i)
+  result=matrix_in_span(matrix,model->parts[i].bytes,0x220);
+ return result;
+}
+
+gh_pair_shape_status gh_collision_pair_shapes_retire_model_native(gh_collision_pairs *manager,
+ const gh_actor_model *model)
+{
+ if(!manager||!manager->constructed||manager->count>GH_COLLISION_CAPACITY||!model||
+    model->native_identity!=model||!model->root.bytes||model->parts_allocated>255)
+  return GH_PAIR_SHAPE_ARGUMENT;
+ struct gh_collision_pair_shapes *shapes=manager->native_shapes;
+ if(!shapes)return GH_PAIR_SHAPE_OK;
+ if(shapes->owner!=manager)return GH_PAIR_SHAPE_ARGUMENT;
+ for(unsigned i=0;i<manager->count;++i){
+  const shape_row *row=&shapes->rows[i];
+  if(row->bound&&model_matrix(model,row->inputs.matrix)<0)return GH_PAIR_SHAPE_ARGUMENT;
+ }
+ for(unsigned i=0;i<manager->count;++i){
+  shape_row *row=&shapes->rows[i];
+  const uint8_t *source=row->inputs.matrix;
+  if(!row->bound||model_matrix(model,source)!=1)continue;
+  memcpy(row->retired_matrix,source,64);
+  row->inputs.matrix=row->retired_matrix;
+  if(row->matrix==source)row->matrix=row->retired_matrix;
+  if(row->position==source+0x30)row->position=row->retired_matrix+0x30;
+ }
  return GH_PAIR_SHAPE_OK;
 }

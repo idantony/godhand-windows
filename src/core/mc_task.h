@@ -4,13 +4,15 @@
 #include "id_base.h"
 #include "packed_message.h"
 #include "boot.h"
+#include "screen_fade.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef enum gh_mc_task_status {
     GH_MC_TASK_OK,GH_MC_TASK_CONTROL_FRONTIER,GH_MC_TASK_ARGUMENT,GH_MC_TASK_BUSY,
     GH_MC_TASK_DISC_ERROR,GH_MC_TASK_MODULE_VERSION,GH_MC_TASK_PLATFORM_ERROR,
-    GH_MC_TASK_MEMORY_ERROR,GH_MC_TASK_ID_ERROR,GH_MC_TASK_UNSUPPORTED
+    GH_MC_TASK_MEMORY_ERROR,GH_MC_TASK_ID_ERROR,GH_MC_TASK_UNSUPPORTED,
+    GH_MC_TASK_LOAD_FRAME
 } gh_mc_task_status;
 typedef struct gh_mc_task_bindings {
     gh_dvd_jobs *dvd;
@@ -31,6 +33,8 @@ typedef struct gh_mc_task_state {
     uint32_t zero_bc,zero_c0,zero_c8,zero_cc,zero_d0,progress_e0,progress_e4;
     uint8_t system_phase_dc,module_loaded,mc_sys_initialized,ui_initialized;
     gh_mc_boot_checks checks;
+    gh_r207_allocation load_payload; /* original cMcLoad+F8, B400/128 */
+    uint8_t load_mode,load_phase; /* modeMain state is original +100 */
     gh_mc_id_resource id_resource;
     gh_id_base id_base;
     gh_id_error id_error;
@@ -46,6 +50,18 @@ typedef struct gh_mc_task_state {
  * Explicitly supports current USA resource version only; debug host0 path fails.
  * Zero-initialize state before first call; this preparation is one-shot. */
 gh_mc_task_status gh_mc_task_prepare_002ae8a8(gh_mc_task_state *,const gh_mc_task_bindings *);
+/* Title 2C0A08→2AE7F0 selects task slot 2. The task body itself receives
+ * no selector argument, and uses the normal McPort module path. */
+gh_mc_task_status gh_mc_task_start_title_load_002ae7f0(const gh_mc_task_bindings *,
+    gh_native_task_entry,void *context,int32_t *slot);
+gh_mc_task_status gh_mc_task_prepare_title_load_002ae838(gh_mc_task_state *,const gh_mc_task_bindings *);
+/* REL12B0 phase0/fade wait/phase1 load display/phase2 fade wait. A FRAME
+ * result requires original Sleep(1). Caller drives the canonical Fade. */
+gh_mc_task_status gh_mc_task_title_load_step_000012b0(gh_mc_task_state *,const gh_mc_task_bindings *,
+    gh_screen_fade *,const gh_screen_fade_context *);
+/* REL8AA8 before any ID family exists. After DispInit use the existing real
+ * gh_mc_control_sleep_frame with the title draw consumers. */
+gh_mc_task_status gh_mc_task_title_load_sleep_00008aa8(const gh_mc_task_state *,const gh_mc_task_bindings *);
 /* Explicit abort/window-close cleanup of live partial state, not a fabricated
  * normal MC exit or tail-restart. Cancels pending reads, releases real owners,
  * and restores only globals owned by this MC prefix. */

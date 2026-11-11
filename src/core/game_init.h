@@ -27,6 +27,11 @@ typedef struct gh_game_damage_link {
  struct gh_game_damage_link *next;uint32_t *target_mask;
 } gh_game_damage_link;
 struct gh_hitarea_native;
+/* The original 00568240 scalar reset preserves +04 and the bytes after +13. */
+typedef struct {
+ uint32_t flags00, preserved04, count08;
+ uint16_t values0c[4];
+} gh_game_cheat_state;
 typedef struct gh_game_init_state {
  uint32_t world_time;
  gh_game_camera camera,*active_camera;
@@ -43,10 +48,14 @@ typedef struct gh_game_init_state {
  uint8_t navigation_height_initialized;
  /* Main cold reset 2A7308 clears the Game Over continue count 5CAC94. */
  uint32_t continue_count;
+ /* Original world-active byte saved by 1F9DD0 and restored by 1F9E00. */
+ uint8_t world_active_005e85f8;
+ gh_game_cheat_state cheat_00568240;
 } gh_game_init_state;
 /* Host storage initialization, not the earlier complete PS2 boot. Existing
  * save data must separately be system-initialized or loaded by its owner. */
 void gh_game_init_state_initialize(gh_game_init_state *);
+gh_init_status gh_game_heat_reset_002a9908(gh_game_init_state *,const gh_boot_work *,gh_core_save_view);
 /* Actual1FDEA8, also reached by later1FDF88. Same canonical actorpool/links
  * andrecordbanks ascase0, without enemy/Heat/RNG resets. Clears eachdamage
  * head BEFORE mode4, so priorlinks are dropped withouttraversal/free. */

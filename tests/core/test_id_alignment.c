@@ -1,4 +1,5 @@
 #include "id_jobs.h"
+#include "id_number.h"
 #include "disc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,5 +22,20 @@ int main(int argc,char**argv){gh_disc*d;C(argc==2&&!gh_disc_open(argv[1],&d));si
  }
  gh_id_texture_quad before=q;e.b89=5;C(gh_id_texture_quad_prepare(m,&base,&e,&q)==GH_ID_UNSUPPORTED&&!memcmp(&q,&before,sizeof(q)));
  e.b89=1;e.draw_rotation=1;C(gh_id_texture_quad_prepare(m,&base,&e,&q)==GH_ID_UNSUPPORTED&&!memcmp(&q,&before,sizeof(q)));
- free(m);free(data);gh_disc_close(d);puts("PASS actualT4 loading texture / all5 zero-angle alignments / offscreen coordinates / strict unsupported branches");return 0;
+ /* Windows title Load resource11 source43 uses the ordinary sprite
+  * consumer for a separator cut from language texture item49. */
+ e.b8b=48;e.b89=4;e.draw_rotation=0;e.draw_x=201;e.draw_y=207;e.f68=6;e.f6c=16;
+ const float uv[4]={.844024241f,.561014116f,.908749223f,.694609463f};
+ memcpy(e.f70,uv,sizeof(uv));
+ C(!gh_id_texture_quad_prepare(m,&base,&e,&q));
+ C(q.x0==196&&q.y0==192&&q.x1==202&&q.y1==208);
+ C(q.u0==uv[0]&&q.v0==uv[1]&&q.u1==uv[2]&&q.v1==uv[3]);
+ C(q.texture.width==128&&q.texture.height==128&&q.texture.tex0==GH_ID_TIM2_128X128_PSMT4_TEX0);
+ gh_id_texture digits;
+ uint8_t *sprite=malloc(128*128*4),*reference=malloc(128*128*4);
+ C(sprite&&reference&&!gh_id_number_texture_open(m,1,49,&digits));
+ C(!gh_id_texture_rgba(&q.texture,sprite,128*128*4)&&
+   !gh_id_number_texture_rgba(&digits,reference,128*128*4)&&!memcmp(sprite,reference,128*128*4));
+ free(reference);free(sprite);
+ free(m);free(data);gh_disc_close(d);puts("PASS actual loading and save list textures, five zero-angle alignments and original UVs");return 0;
 }

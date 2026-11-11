@@ -24,10 +24,9 @@ static gh_actor_motion_status invoke(gh_actor_motion_call*s,int32_t kind,uint32_
  if(!s->next.effect)return fail(s,0x306200,GH_ACTOR_MOTION_UNSUPPORTED);
  gh_actor_motion_status e=s->next.effect(s->next.context,&m->b.model->root,s->pending_kind,s->pending_mode,&s->frontier);if(e){if(!s->frontier)s->frontier=0x306200;return e;}s->pending=0;return GH_ACTOR_MOTION_OK;
 }
-gh_actor_motion_status gh_actor_motion_call_step_002a8578(gh_actor_motion_call*s){
- if(!s||!s->active||!s->current)return GH_ACTOR_MOTION_ARGUMENT;if(s->complete)return GH_ACTOR_MOTION_OK;s->frontier=0;gh_actor_motion*m=s->current;
- if(!m->b.model||!m->b.model->root.bytes||m->b.model->root.size<0x578)return GH_ACTOR_MOTION_ARGUMENT;uint8_t*p=m->b.model->root.bytes;
- if(!s->stage&&!s->release_previous)s->stage=2;
+static gh_actor_motion_status release_effects(gh_actor_motion_call *s,gh_actor_motion *m,
+ uint8_t *p)
+{
  if(!s->stage){
   if(m->sequence_valid){size_t base=m->sequence_offset;if(!span(m->b.resource_bytes,base,0x18))return fail(s,0x2a84a8,GH_ACTOR_MOTION_BOUNDS);const uint8_t*seq=m->b.resource+base;
    if(memcmp(seq,"SEQ\0",4))return fail(s,0x2a84a8,GH_ACTOR_MOTION_BOUNDS);unsigned count=half(seq+0x16),offset=half(seq+0x14);size_t table=base+offset;
@@ -40,6 +39,42 @@ gh_actor_motion_status gh_actor_motion_call_step_002a8578(gh_actor_motion_call*s
  if(s->stage==1){unsigned raw=half(p+0x570);int32_t kind=raw<32768?(int32_t)raw:(int32_t)raw-65536;
   if(kind!=-1||s->pending){gh_actor_motion_status e=invoke(s,kind,rd(p+0x574));if(e)return e;}p[0x570]=p[0x571]=255;wr(p+0x574,2);s->stage=2;
  }
+ return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_actor_motion_call_open_release_002a84a8(gh_actor_motion_call *s,
+ gh_actor_motion *m,gh_motion_effect_consumer effect,void *context)
+{
+ if(!s||!m||!m->b.model||!m->b.model->root.bytes||m->b.model->root.size<0x578)
+  return GH_ACTOR_MOTION_ARGUMENT;
+ if((s->active&&!s->complete)||!m->bound||!m->complete||m->step_stage||m->sequence_stage)
+  return GH_ACTOR_MOTION_BUSY;
+ *s=(gh_actor_motion_call){.current=m,.next={.effect=effect,.context=context},
+     .motion_offset=SIZE_MAX,.active=1,.release_previous=1};
+ return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_actor_motion_call_release_step_002a84a8(gh_actor_motion_call *s)
+{
+ if(!s||!s->active||s->motion_offset!=SIZE_MAX||!s->current)
+  return GH_ACTOR_MOTION_ARGUMENT;
+ if(s->complete)return GH_ACTOR_MOTION_OK;
+ s->frontier=0;
+ gh_actor_motion *m=s->current;
+ if(!m->b.model||!m->b.model->root.bytes||m->b.model->root.size<0x578)
+  return GH_ACTOR_MOTION_ARGUMENT;
+ gh_actor_motion_status status=release_effects(s,m,m->b.model->root.bytes);
+ if(!status)s->complete=1;
+ return status;
+}
+
+gh_actor_motion_status gh_actor_motion_call_step_002a8578(gh_actor_motion_call*s){
+ if(!s||!s->active||!s->current)return GH_ACTOR_MOTION_ARGUMENT;if(s->complete)return GH_ACTOR_MOTION_OK;s->frontier=0;gh_actor_motion*m=s->current;
+ if(!m->b.model||!m->b.model->root.bytes||m->b.model->root.size<0x578)return GH_ACTOR_MOTION_ARGUMENT;uint8_t*p=m->b.model->root.bytes;
+ if(!s->stage&&!s->release_previous)s->stage=2;
+ if(s->motion_offset==SIZE_MAX)return GH_ACTOR_MOTION_ARGUMENT;
+ gh_actor_motion_status release_status=release_effects(s,m,p);
+ if(release_status)return release_status;
  if(s->stage==2){
   /* ONLY after genuine2A84A8 completed, prepare the SAME owner for157568.
    * stage1 skips the alreadycompleted570 release in constructor-onlybegin;

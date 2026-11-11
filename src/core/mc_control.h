@@ -1,6 +1,7 @@
 #ifndef GODHAND_CORE_MC_CONTROL_H
 #define GODHAND_CORE_MC_CONTROL_H
 #include "mc_task.h"
+#include "mc_file_load.h"
 #include "id_jobs.h"
 #ifdef __cplusplus
 extern "C" {
@@ -19,6 +20,12 @@ gh_mc_boot_error gh_mc_control_finish_delay(gh_mc_control_state *,gh_mc_task_sta
 /* Actual SetDisp72C8 restricted bootmode2 stage, without Controlframecount.
  * ExposedforcompleteControl dispatch; othermodesuseverifiedconsumers. */
 gh_id_error gh_mc_control_set_boot_display_000072c8(gh_mc_control_state *,gh_mc_task_state *,const gh_mc_task_bindings *);
+/* Title-only scan Control and actual first list layout. After list init,
+ * resume 20B0 at its original subphase1 card command (REL3850). */
+gh_mc_boot_error gh_mc_control_scan_title_00001590(gh_mc_control_state *,gh_mc_load_scan *,
+    gh_mc_task_state *,const gh_mc_task_bindings *,gh_mc_load_menu_memory *,uint32_t *frontier);
+gh_id_error gh_mc_control_init_title_list_00007f30(gh_mc_control_state *,const gh_mc_load_scan *,
+    gh_mc_task_state *,const gh_mc_task_bindings *);
 /* Must perform the real original draw consumer represented by this job.
  * Unknown consumers return UNSUPPORTED; no successful empty draw adapter.
  * consumer_address is diagnostic only, never called as a host function ptr. */

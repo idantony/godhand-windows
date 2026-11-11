@@ -3,7 +3,7 @@
  * This is a source slice, not a complete replacement for cMcBoot Main/UI. */
 #include "mc_boot.h"
 #include <string.h>
-static void reset_icons(gh_mc_boot_checks *s)
+void gh_mc_boot_reset_slot_records(gh_mc_boot_checks *s)
 {
     unsigned i;int32_t none=-1;
     memset(s->icon_work.pointer,0,0x5000);
@@ -15,7 +15,7 @@ gh_mc_boot_error gh_mc_boot_checks_create(gh_mc_boot_checks *s,gh_heap *heap)
     if(!s || !heap)return GH_MC_BOOT_ARGUMENT;
     memset(s,0,sizeof(*s));s->error=-1;
     if(gh_heap_allocate(heap,0x5000,0x40,&s->icon_work)!=GH_MEM_OK) {s->done=1;return GH_MC_BOOT_MEMORY;}
-    reset_icons(s);return GH_MC_BOOT_OK;
+    gh_mc_boot_reset_slot_records(s);return GH_MC_BOOT_OK;
 }
 gh_mc_boot_error gh_mc_boot_checks_release(gh_mc_boot_checks *s,gh_heap *heap)
 {
@@ -35,7 +35,7 @@ gh_mc_boot_error gh_mc_boot_check_control(gh_mc_boot_checks *s,gh_memory_card *c
     if(s->done)return GH_MC_BOOT_OK;
     if(s->phase==0) {
         if(s->subphase==0) {
-            s->mode=2;reset_icons(s);*flags&=~UINT32_C(4);
+            s->mode=2;gh_mc_boot_reset_slot_records(s);*flags&=~UINT32_C(4);
             s->has_min_free_space=0;s->retry=0;
         }
         if(s->subphase==0 || s->subphase==1) {

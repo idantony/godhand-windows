@@ -16,6 +16,9 @@ typedef struct gh_player_idle_input {gh_player_idle_input_bindings b;const gh_pl
 gh_player_frame_status gh_player_idle_input_begin(gh_player_idle_input *);
 gh_player_frame_status gh_game_player_idle_cleanup_0012bfb8(gh_player_idle_input *);
 gh_player_frame_status gh_game_player_idle_input_00123938(gh_player_idle_input *,const gh_player_idle_input_bindings *,int *original_return);
+/* Original mode1's SEQ bit10 window shares 123ACC's neutral target queries. */
+gh_player_frame_status gh_game_player_reaction_input_active_00123acc(
+ gh_player_idle_input *,const gh_player_idle_input_bindings *,int *original_return);
 #ifdef __cplusplus
 }
 #endif

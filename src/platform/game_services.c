@@ -1,3 +1,5 @@
+#include "../core/game_om300_retire.h"
+#include "../core/game_object_sound.h"
 #include "../core/game_player_square_frame.h"
 #include "../core/game_player_attack_hitarea.h"
 #include "game_services.h"
@@ -37,6 +39,7 @@
 #include "../core/game_om3eb.h"
 #include "../core/game_enemy_resources.h"
 #include "../core/game_enemy_ems.h"
+#include "../core/game_enemy_retire.h"
 #include "../core/game_event_player_reset.h"
 #include "../core/game_scenario_end_soft_event.h"
 #include "../core/game_event_accessory_move.h"
@@ -72,6 +75,7 @@ struct gh_game_services {
  uint8_t scenario_scalar[0x114]; /*canonical5FEB00scalarspan;managerhasitsowntypedowner*/
  gh_room_state room_state;gh_room_pack room_pack;gh_room_pools pools;gh_game_pl_camera camera;
  gh_room_module module;gh_collision_pairs collision_pairs;unsigned case3_stage;int sound_load_started;
+ uint8_t case3_reloaded_player;
  gh_game_effects effects;gh_scene_filters filters;
  gh_game_world_light world_light;gh_game_model_packets model_packets;
  gh_game_collision_solids collision_solids;gh_game_scene_tables scene_tables;gh_game_title_player title_player;
@@ -95,6 +99,12 @@ struct gh_game_services {
  gh_event_player_reset event_player_reset;gh_event_clear_bindings event_player_prefix;
  gh_player_abort_bindings event_player_abort;gh_event_weapon_slot player_weapon;
  gh_om_factory om_factory;
+ gh_om300_full_retirement om_retirement;gh_object_sound_binding om_retire_sound;
+ gh_enemy_manager_remove enemy_removal;
+ gh_enemy_full_retirement enemy_retirement;
+ gh_object_sound_binding enemy_retire_sound;
+ const uint8_t *retiring_enemy_actor;
+ unsigned retiring_enemy_row;
  gh_om_frame_state *om_frames;size_t om_frames_capacity;
  gh_actor_render_call player_render,child_render,*om_renders;size_t om_renders_capacity;
  gh_om_initializer_bindings om_initializer;
@@ -126,6 +136,7 @@ struct gh_game_services {
  gh_game_player_frame player_frame;gh_effect_release_bindings player_frame_effects;
  gh_player_idle_input player_idle_input;gh_player_idle_input_bindings player_idle_bindings;
  gh_effect_create_call player_effect_create;
+ uint8_t player_damage_vibration[32][16];
  gh_effect_create_call om_break_effect;
  const gh_actor_model *om_break_effect_owner;
  gh_player_door_probe player_door;gh_player_door_bindings player_door_bindings;gh_bundle player_door_room;
@@ -1027,7 +1038,7 @@ gh_game_services_status gh_game_services_state2(gh_game_services*s){
  if(e)return fail(s,GH_SERVICES_ASSET,0x2a5d40,e);
  /* Native continuation cursor belongs to one original case3 invocation.
   * The canonical services/owners persist when state2 prepares another room. */
- s->case3_stage=0;s->frontier_module_code=0;
+ s->case3_stage=0;s->case3_reloaded_player=0;s->frontier_module_code=0;
  s->frontier=0;s->detail=0;s->status=GH_SERVICES_OK;return GH_SERVICES_OK;
 }
 gh_game_services_status gh_game_services_state3(gh_game_services*s){
@@ -1050,8 +1061,17 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
   uint32_t f=0;gh_game_services_status loading=s->b.start_loading_menu(s->b.loading_context,&f);
   if(loading)return fail(s,loading,f?f:0x2b65b0,0);}
  flags=work->flags;
- if(s->b.save.bytes[0xae]!=s->b.save.bytes[0xaf]||(u32(raw+0x588)&0x800000)||(flags&0x40))
-  return fail(s,GH_SERVICES_FRONTIER,0x30d8e0,0);
+ if(!s->case3_reloaded_player&&
+    (s->b.save.bytes[0xae]!=s->b.save.bytes[0xaf]||(u32(raw+0x588)&0x800000)||(flags&0x40))){
+  const uint8_t costume=gh_core_save_costume(s->b.save);
+  gh_game_assets *assets=s->b.assets;
+  gh_game_status loaded=gh_game_assets_reload_player_0030d8e0(assets,costume);
+  if(loaded)return fail(s,loaded==GH_GAME_THREAD?GH_SERVICES_THREAD:GH_SERVICES_ASSET,
+    assets->failed_entry?assets->failed_entry:0x30d8e0,loaded);
+  /* 001FC100 records the selected costume only after both reads. */
+  s->b.save.bytes[0xae]=s->b.save.bytes[0xaf]=costume;
+  s->case3_reloaded_player=1;
+ }
  w32(raw+0x5f8,0);w32(raw+0x5f4,0);
  /*2D9BC8 is actualjrra;nop. No emptyreplacementcallback. */
  re=gh_scenario_reset_002c32f0(&s->prepare,work,&s->scenario,s->scenario_threads,&s->room_state,&frontier);
@@ -1582,6 +1602,33 @@ static gh_player_frame_status player_square_attack(void *context,
  }
  return status;
 }
+static gh_player_frame_status player_damage_positioned_effect(void *context,const uint32_t position[3],uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ gh_effect_create_call *call=&s->player_effect_create;
+ gh_effect_status status;
+ if(!call->active||call->complete){
+  status=gh_effect_create_player_impact_begin_00306838(call,position);
+  if(status)return GH_PLAYER_FRAME_ARGUMENT;
+ }else if(call->request.bank||call->request.index!=3||!call->configuration_positioned||
+    memcmp(call->configuration_positioned_position,position,12))return GH_PLAYER_FRAME_BUSY;
+ const gh_effect_create_bindings bindings={.storage=player_effect_storage(s),.work=s->b.work,
+    .random=&s->b.init->random,.atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL};
+ status=gh_game_effect_create_00306528(call,&bindings);
+ *frontier=call->frontier;
+ if(status)return status==GH_EFFECT_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+ return call->complete?GH_PLAYER_FRAME_OK:GH_PLAYER_FRAME_ARGUMENT;
+}
+
+static gh_player_frame_status player_damage_abort(void *context,const gh_player_frame_bindings *bindings,
+    uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(bindings->player!=&s->title_player)return GH_PLAYER_FRAME_ARGUMENT;
+ gh_soft_event_status status=room_soft_player_abort(s,frontier);
+ return !status?GH_PLAYER_FRAME_OK:status==GH_SOFT_EVENT_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+}
+
 static gh_player_frame_status player_frame_effect_create(void*p,const gh_player_frame_effect_request*r,uint32_t*f){
  gh_game_services*s=p;if(!r||!r->actor||!f)return GH_PLAYER_FRAME_ARGUMENT;*f=0;
  if(r->actor->bytes!=s->title_player.view.bytes||r->argument3){*f=0x306528;return GH_PLAYER_FRAME_UNSUPPORTED;}
@@ -1846,7 +1893,10 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
    .opacity_globals=s->b.player_opacity_globals,
    .aux_68c=s->player_tail.active_child&&s->player_tail.child_original_return?&s->player_child.object.view:NULL,.auxiliary_68c_binding_known=1,
    .target_644=&s->player_target_644,.cockpit_flags_1ca0=gh_game_cockpit_auxiliary_flags_1ca0(s->cockpit),
-   .square_attack=player_square_attack,.square_context=s};
+   .square_attack=player_square_attack,.square_context=s,
+   .damage_sound=s->player_sound.bound?gh_actor_attached_sound_motion:NULL,.damage_sound_context=&s->player_sound,
+   .damage_effect=player_damage_positioned_effect,.damage_abort=player_damage_abort,
+   .damage_camera_exit=player_square_camera_exit,.damage_context=s,.damage_vibration_rows=s->player_damage_vibration};
  if(!s->player_frame.bound)s->player_idle_bindings=(gh_player_idle_input_bindings){.frame=b,
   .targets=gh_game_services_scene_targets(s),.action_buttons=&s->action_buttons};
  gh_player_frame_status e=gh_game_player_frame_00108ab0(&s->player_frame,&b);*f=s->player_frame.frontier;
@@ -1880,9 +1930,129 @@ static void trace_render_frontier(const char *model_kind,const gh_object_trans_r
  fprintf(stderr,"GH_ACTOR_FRONTIER {\"model_kind\":\"%s\",\"actor_kind\":\"%04X\",\"part_count\":%u,\"node_count\":%llu,\"handle\":%u,\"entry\":\"%08X\",\"frontier\":\"%08X\",\"trans_phase\":%u,\"draw_phase\":%u,\"node_index\":%llu,\"node_known\":%d,\"mesh_index\":%llu,\"root250\":\"%08X\",\"root254\":\"%08X\",\"node380\":\"%08X\",\"node410\":\"%08X\",\"root_tint_bits\":[\"%08X\",\"%08X\",\"%08X\",\"%08X\"],\"node_tint_bits\":[\"%08X\",\"%08X\",\"%08X\",\"%08X\"]}\n",
  model_kind,kind,(unsigned)m->part_count,(unsigned long long)m->script.mesh_count,q->handle,q->original_entry,frontier,c->trans.phase,c->draw.phase,(unsigned long long)c->draw.node_index,known,(unsigned long long)mesh,root_flags[0],root_flags[1],node_flags,node_tail,rt[0],rt[1],rt[2],rt[3],nt[0],nt[1],nt[2],nt[3]);
 }
+static gh_game_services_status destroy_om324(gh_game_services *s,
+ const gh_object_trans_request *request,uint32_t *frontier)
+{
+ void *registered=NULL;
+ if(gh_room_object_lookup(&s->pools,request->handle,GH_ROOM_OBJECT_OM,&s->om_factory,&registered)){
+  *frontier=0x198ce0;return GH_SERVICES_ASSET;
+ }
+ size_t index=0;
+ while(index<s->om_factory.count&&registered!=s->om_factory.objects+index)++index;
+ if(index>=s->om_factory.count||index>=s->om_factory.capacity){*frontier=0x198ce0;return GH_SERVICES_ASSET;}
+ gh_om_object *object=registered;
+ if(object->source.type!=0x324||object->view.bytes!=request->actor.bytes){
+  *frontier=0x198ce0;return GH_SERVICES_ASSET;
+ }
+ if(!s->om_retirement.stage){
+  int borrowed;
+  if(gh_effect_create_actor_has_live_refs(&s->effects,&object->view,&borrowed)||borrowed){
+   *frontier=0x305b90;return GH_SERVICES_FRONTIER;
+  }
+ }
+ s->om_retire_sound=(gh_object_sound_binding){s->b.sound_control,s->b.voices};
+ const gh_om300_retire_bindings bindings={.factory=&s->om_factory,.tables=&s->scene_tables,
+  .scroll=&s->r100.collision,.solids=&s->collision_solids,
+  .release_sound_slot=gh_sound_object_slot_release_002cb340,.sound_context=&s->om_retire_sound};
+ gh_room_pool_status status=gh_om324_destroy_detached_00198ce0(&s->om_retirement,
+  &bindings,request->handle,&request->actor);
+ if(status){
+  *frontier=s->om_retirement.frontier?s->om_retirement.frontier:0x198ce0;
+  return status==GH_POOL_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+ }
+ if(s->om_frames&&index<s->om_frames_capacity)s->om_frames[index]=(gh_om_frame_state){0};
+ if(s->om_renders&&index<s->om_renders_capacity)s->om_renders[index]=(gh_actor_render_call){0};
+ s->om_retirement=(gh_om300_full_retirement){0};
+ return GH_SERVICES_OK;
+}
+
+static int enemy_destroy_descriptor(const gh_object_trans_request *q)
+{
+ return q->kind==GH_OBJECT_TRANS_DESTROY&&q->argument==3&&!q->this_delta&&
+  ((q->original_entry==0x202058&&q->original_vtable==0x4479c8)||
+   (q->original_entry==0x284a90&&q->original_vtable==0x448ca0));
+}
+static gh_actor_motion_status retiring_enemy_effect(void *context,const gh_title_player_view *actor,
+ int32_t kind,uint32_t mode,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(!actor||!actor->bytes||actor->bytes!=s->retiring_enemy_actor)return GH_ACTOR_MOTION_ARGUMENT;
+ return release_actor_motion_effect(s,actor,kind,mode,frontier);
+}
+static gh_game_services_status enemy_retire_status(gh_actor_motion_status status,uint32_t pc,uint32_t *frontier)
+{
+ if(!status)return GH_SERVICES_OK;
+ if(!*frontier)*frontier=pc;
+ return status==GH_ACTOR_MOTION_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+}
+static gh_game_services_status destroy_ems_enemy(gh_game_services *s,const gh_object_trans_request *q,
+ uint32_t *frontier)
+{
+ gh_enemy_ems_live live;
+ if(gh_enemy_ems_live_at(s->enemies,q->handle,&live)||!live.actor||live.held_weapon||
+    live.physical_row>=64||live.actor->view.bytes!=q->actor.bytes){
+  *frontier=q->original_entry;
+  return GH_SERVICES_FRONTIER;
+ }
+ if(s->retiring_enemy_actor&&s->retiring_enemy_actor!=q->actor.bytes)return GH_SERVICES_ARGUMENT;
+ s->retiring_enemy_actor=q->actor.bytes;
+ s->retiring_enemy_row=live.physical_row;
+ s->enemy_retire_sound=(gh_object_sound_binding){s->b.sound_control,s->b.voices};
+ const gh_enemy_retire_bindings b={.effects=&s->effects,.dynamic=&s->dynamic_objects,
+  .release_effect=retiring_enemy_effect,.effect_context=s,
+  .release_sound_slot=gh_sound_object_slot_release_002cb340,.sound_context=&s->enemy_retire_sound};
+ gh_actor_motion_status status=gh_enemy_ems_destroy_detached_mode3(s->enemies,&s->enemy_retirement,
+  q->handle,&q->actor,&b,frontier);
+ return enemy_retire_status(status,q->original_entry,frontier);
+}
+gh_game_services_status gh_game_services_trans_erase(gh_game_services *s,const gh_object_trans_request *q,
+ const void *owner,int *handled,uint32_t *frontier)
+{
+ if(!s||!q||!handled||!frontier)return GH_SERVICES_ARGUMENT;
+ *handled=0;*frontier=0;
+ if(!enemy_destroy_descriptor(q))return GH_SERVICES_OK;
+ if(s->enemy_retirement.handle!=q->handle||s->retiring_enemy_actor!=q->actor.bytes||
+    s->retiring_enemy_row>=64)return GH_SERVICES_ARGUMENT;
+ gh_actor_motion_status status=gh_enemy_ems_finish_detached_mode3(s->enemies,&s->enemy_retirement,
+  q->handle,owner,frontier);
+ if(status)return enemy_retire_status(status,0x30f7d0,frontier);
+ if(s->enemy_renders)s->enemy_renders[2*s->retiring_enemy_row]=(gh_actor_render_call){0};
+ s->enemy_retirement=(gh_enemy_full_retirement){0};
+ s->retiring_enemy_actor=NULL;
+ *handled=1;
+ return GH_SERVICES_OK;
+}
+gh_game_services_status gh_game_services_release_enemies_002908c0(gh_game_services *s,uint32_t *frontier)
+{
+ if(!s||!frontier)return GH_SERVICES_ARGUMENT;
+ *frontier=0;
+ gh_game_init_state *manager=s->b.init;
+ while(manager->enemy_top){
+  unsigned slot=0;
+  while(slot<64&&manager->enemy_top!=manager->enemies+20*slot)++slot;
+  uint32_t handle=0;
+  if(slot==64||!manager->enemy_actors[slot]||
+     gh_enemy_ems_handle_for_actor(s->enemies,manager->enemy_actors[slot],&handle)||!handle){
+   *frontier=0x290770;
+   return GH_SERVICES_FRONTIER;
+  }
+  int removed=0;
+  gh_actor_motion_status status=gh_enemy_ems_remove_00290770(s->enemies,&s->enemy_removal,
+   handle,s->b.voices,&removed,frontier);
+  if(status)return enemy_retire_status(status,0x290770,frontier);
+  if(!removed){*frontier=0x290770;return GH_SERVICES_FRONTIER;}
+  s->enemy_removal=(gh_enemy_manager_remove){0};
+ }
+ return GH_SERVICES_OK;
+}
+
 gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh_object_trans_request*q,
  const gh_boot_work*work,const gh_game_actor_render_provider*provider,uint32_t*f){
  if(f)*f=0;if(!s||!q||!provider||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
+ if(q->kind==GH_OBJECT_TRANS_DESTROY&&q->original_entry==0x198ce0&&
+    q->argument==3&&!q->this_delta&&q->original_vtable==0x425000)
+  return destroy_om324(s,q,f);
+ if(enemy_destroy_descriptor(q))return destroy_ems_enemy(s,q,f);
  gh_services_esp14_slot *effect_actor=model_effect_actor(s,q->handle);
  if(q->kind==GH_OBJECT_TRANS_DESTROY&&q->original_entry==0x2b8908&&
     q->argument==3&&!q->this_delta&&effect_actor){
@@ -2071,6 +2241,6 @@ gh_game_services_status gh_game_services_get_scene_view(gh_game_services*s,gh_ga
 }
 gh_game_services_status gh_game_services_begin_next_room(gh_game_services*s){
  if(!s||(s->b.loop->game_state[0]!=2&&s->b.loop->game_state[0]!=3))return GH_SERVICES_ARGUMENT;
- s->case3_stage=0;s->frontier_module_code=0;s->frontier=0;s->detail=0;s->status=GH_SERVICES_OK;return GH_SERVICES_OK;
+ s->case3_stage=0;s->case3_reloaded_player=0;s->frontier_module_code=0;s->frontier=0;s->detail=0;s->status=GH_SERVICES_OK;return GH_SERVICES_OK;
 }
 uint64_t gh_game_services_ui_resource_epoch(const gh_game_services*s){return s?s->ui_resource_epoch:0;}

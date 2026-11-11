@@ -79,6 +79,12 @@ gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_c
  return positioned_begin(call,0x58,0x10,world_xyz,0);
 }
 
+gh_effect_status gh_effect_create_player_impact_begin_00306838(gh_effect_create_call *call,
+ const uint32_t world_xyz[3])
+{
+ return positioned_begin(call,0,3,world_xyz,0);
+}
+
 static gh_effect_status lookup_est(const gh_game_effects *owner,uint32_t bank,uint32_t index,
  gh_effect_view *result)
 {
