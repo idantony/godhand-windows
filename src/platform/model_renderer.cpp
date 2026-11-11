@@ -24,7 +24,7 @@ struct gh_model_renderer{
  std::vector<std::unique_ptr<Material>> materials;
  std::unique_ptr<Material> scene_capture;
  std::vector<uint8_t> scene_capture_pixels;
- Material display_texel;
+ Material display_texel={};
  uint32_t display_texel_rgba=0;
 };
 #define GPU(call) do{HRESULT model_gpu_hr=(call);if(FAILED(model_gpu_hr)){std::fprintf(stderr,"model GPU failure %d %08lx\n",__LINE__,(unsigned long)model_gpu_hr);return GH_MODEL_GPU_FAILURE;}}while(0)

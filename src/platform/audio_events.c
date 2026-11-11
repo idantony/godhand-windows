@@ -34,6 +34,7 @@ void gh_audio_pcm_release(gh_adpcm_pcm *p){if(p){free(p->samples);memset(p,0,siz
 typedef HRESULT (WINAPI *create_engine)(IXAudio2 **,UINT32,XAUDIO2_PROCESSOR);
 typedef HRESULT (WINAPI *com_init)(LPVOID,DWORD);
 typedef void (WINAPI *com_end)(void);
+#define GH_AUDIO_SOURCE_MAX_RATIO 8.0f
 typedef struct output_voice {IXAudio2SourceVoice *source;int16_t *samples;uint32_t id;} output_voice;
 struct gh_audio_output {HMODULE dll,ole;IXAudio2 *engine;IXAudio2MasteringVoice *master;com_end uninit;int owns_com;uint32_t next;output_voice voices[64];};
 void gh_audio_output_destroy(gh_audio_output *s)
@@ -75,7 +76,7 @@ static gh_voice_status play(gh_audio_output *s,const gh_adpcm_pcm *p,uint32_t ra
  for(i=0;i<64 && s->voices[i].source;++i){}if(i==64)return GH_VOICE_CAPACITY;v=s->voices+i;
  v->samples=malloc(p->frames*2);if(!v->samples)return GH_VOICE_MEMORY;memcpy(v->samples,p->samples,p->frames*2);
  format.wFormatTag=WAVE_FORMAT_PCM;format.nChannels=1;format.nSamplesPerSec=rate;format.nAvgBytesPerSec=rate*2;format.nBlockAlign=2;format.wBitsPerSample=16;
- hr=IXAudio2_CreateSourceVoice(s->engine,&v->source,&format,0,4,0,0,0);
+ hr=IXAudio2_CreateSourceVoice(s->engine,&v->source,&format,0,GH_AUDIO_SOURCE_MAX_RATIO,0,0,0);
  if(SUCCEEDED(hr))hr=IXAudio2SourceVoice_SetFrequencyRatio(v->source,ratio,0);
  if(SUCCEEDED(hr))hr=IXAudio2SourceVoice_SetOutputMatrix(v->source,(IXAudio2Voice *)s->master,1,2,matrix,0);
  buffer.Flags=XAUDIO2_END_OF_STREAM;buffer.AudioBytes=(UINT32)(p->frames*2);buffer.pAudioData=(const BYTE *)v->samples;
@@ -111,6 +112,17 @@ gh_voice_status gh_audio_output_stop(gh_audio_output *s,uint32_t id)
 gh_voice_status gh_audio_output_voice_gain(gh_audio_output*s,uint32_t id,float left,float right){
  if(!s||!id||!(left>=0&&left<=1&&right>=0&&right<=1))return GH_VOICE_ARGUMENT;
  for(unsigned i=0;i<64;i++)if(s->voices[i].id==id){float values[2]={left,right};return SUCCEEDED(IXAudio2SourceVoice_SetOutputMatrix(s->voices[i].source,(IXAudio2Voice*)s->master,1,2,values,0))?GH_VOICE_OK:GH_VOICE_PLATFORM;}return GH_VOICE_BOUNDS;
+}
+gh_voice_status gh_audio_output_voice_pitch_ratio(gh_audio_output *s,uint32_t id,
+ uint16_t target,uint16_t submitted)
+{
+ if(!s||!id||!target||target>0x3fff||!submitted||submitted>0x3fff)return GH_VOICE_ARGUMENT;
+ float ratio=(float)target/(float)submitted;
+ if(ratio<XAUDIO2_MIN_FREQ_RATIO||ratio>GH_AUDIO_SOURCE_MAX_RATIO)return GH_VOICE_UNSUPPORTED;
+ for(unsigned i=0;i<64;++i)if(s->voices[i].id==id)
+  return SUCCEEDED(IXAudio2SourceVoice_SetFrequencyRatio(s->voices[i].source,ratio,0))?
+         GH_VOICE_OK:GH_VOICE_PLATFORM;
+ return GH_VOICE_BOUNDS;
 }
 gh_voice_status gh_audio_output_voice_gain_query(gh_audio_output*s,uint32_t id,float*left,float*right){
  if(!s||!id||!left||!right)return GH_VOICE_ARGUMENT;

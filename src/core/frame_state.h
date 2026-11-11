@@ -12,6 +12,8 @@ typedef enum {GH_FRAME_CHOP_REFERENCE=1} gh_frame_numeric_policy;
 typedef struct {uint32_t auxiliary_word;gh_rng_state lcg;gh_frame_numeric_policy policy;} gh_frame_random;
 /* Actual31CEB8 writes two scalar seeds and seeds the shared MT. Calling this
  * does not establish that earlier boot or all pre-task constructors ran. */
+/* Actual Rnd uses the auxiliary 747B10 word and returns its low byte. */
+gh_frame_error gh_frame_random_byte_0031cef8(gh_frame_random *,uint8_t *);
 gh_frame_error gh_frame_seed_0031ceb8(gh_frame_random *,gh_game_mt *,gh_frame_numeric_policy);
 /* Actual finite32-bit domain, explicit pinned EE-chop reference. Pure integer
  * bit encoding, independent of host FEnv. Not a hardware FPU capture. */

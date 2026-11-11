@@ -1,0 +1,400 @@
+#include "game_enemy_damage.h"
+#include "game_camera.h"
+#include "frame_state.h"
+#include "game_hitarea_frame.h"
+#include <fenv.h>
+#include <math.h>
+#include <string.h>
+
+static uint16_t half(const uint8_t *p) {
+    return (uint16_t)(p[0] | (uint16_t)p[1] << 8);
+}
+
+static uint32_t word(const uint8_t *p) {
+    uint32_t value;
+    memcpy(&value, p, sizeof(value));
+    return value;
+}
+
+static gh_actor_motion_status stop(uint32_t *frontier, uint32_t entry) {
+    *frontier = entry;
+    return GH_ACTOR_MOTION_UNSUPPORTED;
+}
+
+gh_actor_motion_status gh_enemy202_damage_0028fb88(
+    gh_enemy_actor *enemy, const gh_title_player_view *player, int32_t power, uint32_t *frontier) {
+    if (!frontier) return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier = 0;
+    if (!enemy || !player || !player->bytes || player->size < 0x600)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    gh_title_player_view *view = &enemy->entry.object.view;
+    if (!view->bytes || view->size < 0x623 || view->original_vtable214 != 0x4479c8 ||
+        word(view->bytes + 0x214) != view->original_vtable214 ||
+        half(view->bytes + 0x2fe) != 0x202 || !enemy->hitareas.created[0])
+        return stop(frontier, 0x20a5dc);
+    const gh_hitarea_object *body = &enemy->hitareas.units[0];
+    gh_title_player_view *owner;
+    const gh_title_player_view *source;
+    if (body->fallback || body->group != 2 || body->size < 0x64 ||
+        body->state != enemy->entry.b.init || gh_hitarea_object_actor(body, &owner) ||
+        owner != view || gh_hitarea_object_last_hit_actor(body, &source) ||
+        source != player || half(player->bytes + 0x2fe) != 0x100 ||
+        !(word(body->bytes + 0x60) & 1) || half(body->bytes + 0x46) != 7)
+        return stop(frontier, 0x20a5dc);
+
+    uint8_t *actor = view->bytes;
+    const uint32_t kind = word(actor + 0x564);
+    if (kind == 0x21f || kind == 0x23b) return stop(frontier, 0x28fd38);
+    fenv_t saved;
+    if (feholdexcept(&saved)) return stop(frontier, 0x28fcf8);
+    if (fesetround(FE_TOWARDZERO)) {
+        (void)fesetenv(&saved);
+        return stop(frontier, 0x28fcf8);
+    }
+    volatile float multiplier = word(player->bytes + 0x5fc) ? 1.5f : 1.0f;
+    if (body->state->heat[0x10]) {
+        if (actor[0x622] == 1) multiplier = multiplier * 1.5f;
+        else multiplier = multiplier + multiplier;
+    }
+    volatile float input = (float)power;
+    volatile float product = input * multiplier;
+    volatile float rounded = product + 0.5f;
+    if (fesetenv(&saved) || rounded < -2147483648.0f || rounded >= 2147483648.0f)
+        return stop(frontier, 0x28fd14);
+    int32_t damage = (int32_t)rounded;
+    if (damage > 32000) damage = 32000;
+    uint16_t hp = (uint16_t)((uint32_t)half(actor + 0x54a) - (uint32_t)damage);
+    if (!hp || hp >= 0x8000) hp = 0;
+    memcpy(actor + 0x54a, &hp, sizeof(hp));
+    return GH_ACTOR_MOTION_OK;
+}
+
+
+static float number(const uint8_t *p) {
+    float value;
+    memcpy(&value, p, sizeof(value));
+    return value;
+}
+
+static void put(uint8_t *p, uint32_t value) {
+    memcpy(p, &value, sizeof(value));
+}
+
+static void put_half(uint8_t *p, uint16_t value) {
+    memcpy(p, &value, sizeof(value));
+}
+
+static gh_actor_motion_status first_punch_heat(gh_enemy_actor *enemy, uint32_t *frontier) {
+    const gh_enemy_entry_bindings *b = &enemy->entry.b;
+    gh_core_save_view save = b->save;
+    uint8_t *heat = b->init->heat;
+    if (!save.bytes || save.size < 0x20 || !b->work || (uint16_t)b->work->room != 0x100)
+        return stop(frontier, 0x2a9978);
+    if (heat[0x10]) return GH_ACTOR_MOTION_OK;
+
+    const float maximum = number(heat), current = number(heat + 4), peak = number(heat + 8);
+    if (!isfinite(maximum) || !isfinite(current) || !isfinite(peak))
+        return stop(frontier, 0x2a9978);
+    fenv_t saved;
+    if (feholdexcept(&saved)) return stop(frontier, 0x2a9978);
+    if (fesetround(FE_TOWARDZERO)) {
+        (void)fesetenv(&saved);
+        return stop(frontier, 0x2a9978);
+    }
+    const float amount = !(word(save.bytes + 0x14) & 0x4000000u) && !save.bytes[0x1f] ? 1.0f : 0.8f;
+    volatile float sum = current + amount;
+    const float next = maximum < sum ? maximum : sum;
+    volatile float delta = next - current;
+    volatile float next_peak_sum = peak + delta;
+    const float next_peak = maximum < next_peak_sum ? maximum : next_peak_sum;
+    volatile float ratio = maximum != 0 ? next / maximum : 0;
+    if (fesetenv(&saved) || !isfinite(ratio)) return stop(frontier, 0x2a9c98);
+    memcpy(heat + 4, &next, 4);
+    memcpy(heat + 8, &next_peak, 4);
+    put(heat + 0x14, ratio < 0.5f ? 0u : ratio <= 0.75f ? 1u : 2u);
+    return GH_ACTOR_MOTION_OK;
+}
+
+static gh_actor_motion_status first_punch_wall(gh_enemy_actor *enemy, uint32_t *frontier) {
+    if (!enemy->b.actors) return stop(frontier, 0x131e10);
+    const uint8_t *p = enemy->entry.object.view.bytes;
+    gh_scene_ray_report wall = {0};
+    gh_scene_ray_request ray = {.mask = 1, .report_limit = 1, .segmented = 1,
+        .native_reports = &wall};
+    fenv_t saved;
+    if (feholdexcept(&saved)) return stop(frontier, 0x30a2b0);
+    if (fesetround(FE_TOWARDZERO)) {
+        (void)fesetenv(&saved);
+        return stop(frontier, 0x30a2b0);
+    }
+    for (unsigned i = 0; i < 3; ++i) {
+        volatile float y = number(p + 0x90 + 4*i) * 0.5f;
+        volatile float z = number(p + 0xa0 + 4*i) * -0.8f;
+        const float translation = number(p + 0xb0 + 4*i);
+        volatile float yz = y + z;
+        ray.from[i] = y + translation;
+        ray.to[i] = yz + translation;
+    }
+    ray.from[3] = ray.to[3] = 1;
+    if (fesetenv(&saved)) return stop(frontier, 0x30a2b0);
+    int hit;
+    if (gh_scene_ray_query_00131e10(enemy->b.actors, &ray, &hit, frontier))
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    if (hit) {
+        if (!wall.attributes || wall.attribute_bytes < 8) return stop(frontier, 0x24bf20);
+        if (word(wall.attributes + 4) & 0x120u) return stop(frontier, 0x1f8180);
+    }
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy202_hit_0020a178(
+    gh_enemy202_hit_call *call, gh_enemy_actor *enemy, const gh_title_player_view *player,
+    unsigned rank, uint32_t *frontier) {
+    if (!frontier) return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier = 0;
+    if (!call || !enemy || !enemy->entry.b.init || !player || !player->bytes || player->size < 0x600)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    uint8_t *p = enemy->entry.object.view.bytes;
+    const gh_hitarea_object *body = &enemy->hitareas.units[0];
+    if (!p || enemy->entry.object.view.size < 0x1944 || !enemy->hitareas.created[0])
+        return stop(frontier, 0x20a178);
+    const gh_title_player_view *source;
+    gh_title_player_view *owner;
+    if (body->fallback || body->group != 2 || body->size < 0x64 ||
+        body->state != enemy->entry.b.init || gh_hitarea_object_actor(body, &owner) ||
+        owner != &enemy->entry.object.view || gh_hitarea_object_last_hit_actor(body, &source) ||
+        source != player || half(player->bytes + 0x2fe) != 0x100 ||
+        !(word(body->bytes + 0x60) & 1) || half(body->bytes + 0x46) != 7)
+        return stop(frontier, 0x20a178);
+
+    if (call->phase == 0) {
+        const float drain = number(p + 0x770), cooldown = number(p + 0x54c);
+        const float block = number(p + 0x1740), armor = number(p + 0x1734);
+        const uint16_t hp = half(p + 0x54a);
+        uint16_t flags = half(p + 0x3ac);
+        if (word(p + 0x564) != 0x20a || !hp || hp >= 0x8000 ||
+            !isfinite(drain) || drain > 0 || !isfinite(cooldown) || cooldown > 0 ||
+            !isfinite(block) || !isfinite(armor))
+            return stop(frontier, 0x20a178);
+        if (half(p + 0x17ca)) flags &= (uint16_t)~0x100u;
+        if ((word(p + 0x16d0) & 0x40000u) || block > 0 || armor > 0) {
+            flags |= 0x100;
+            put(p + 0x16d4, word(p + 0x16d4) | 0x8000u);
+        }
+        put_half(p + 0x3ac, flags);
+        put_half(p + 0x17ca, 10);
+        call->phase = 1;
+    }
+    if (call->phase == 1) {
+        gh_actor_motion_status status = first_punch_heat(enemy, frontier);
+        if (status) return status;
+        call->phase = 2;
+    }
+    if (call->phase == 2) {
+        if (half(p + 0x3ac) & 0x100u) return stop(frontier, 0x20a4e8);
+        put(p + 0x17ac, half(p + 0x54a));
+        int32_t power;
+        memcpy(&power, body->bytes + 0x4c, 4);
+        gh_actor_motion_status status = gh_enemy202_damage_0028fb88(enemy, player, power, frontier);
+        if (status) return status;
+        put(p + 0x17a4, word(p + 0x17a4) + (uint32_t)power);
+        put(p + 0x17a8, word(p + 0x17a8) + (uint32_t)power);
+        put(p + 0x17b4, (uint32_t)power);
+        put(p + 0x1940, 0xbd4ccccd);
+        put(p + 0x17c4, 1);
+        put_half(p + 0x17c8, 0x2a);
+        put(p + 0x54c, 0x40400000);
+        put(p + 0x16dc, 0); /* 26EE40(actor, 0, 0) */
+        call->phase = 3;
+    }
+    if (call->phase == 3) {
+        const uint16_t flags = half(p + 0x3ac);
+        const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
+        if (p[0x17bd] == 1 && rank >= 3) return stop(frontier, 0x26ecd0);
+        if (!rank || p[0x17bd] != 1 || !half(p + 0x54a) || (flags & 0x2cu) ||
+            (behavior & 0x802020u) || (status & 0x80040u) || (p[0x2f4] == 1 && p[0x2f5] == 0x16))
+            return stop(frontier, 0x20a7e0);
+        if (p[0x17bc] || p[0x17ba] || p[0x17b9] || p[0x17bb] != 1)
+            return stop(frontier, 0x20cac8);
+        /* 20D138 returns 0. The three other probes reject effect 7 for
+         * this 20A behavior. 20D140's first threshold draw still occurs. */
+        const float block = number(p + 0x1740);
+        if (!isfinite(block)) return stop(frontier, 0x20d140);
+        if (!word(player->bytes + 0x5fc) && block <= 0 &&
+            !body->state->heat[0x10] && !(number(p + 0x17cc) > 0)) {
+            uint32_t random;
+            if (gh_game_mt_next_0030f348(&body->state->random, &random))
+                return stop(frontier, 0x31cfe0);
+            unsigned threshold = (random & 3) + (rank == 5 ? 2u : rank >= 3 ? 3u : rank == 2 ? 4u : 5u);
+            if (p[0x17c1]) threshold -= 2;
+            p[0x17bf]++;
+            if (p[0x17bf] > 100) p[0x17bf] = 100;
+            if (p[0x17bf] >= threshold) {
+                call->phase = 6;
+                return stop(frontier, 0x20d2a0);
+            }
+        }
+        call->phase = 4;
+    }
+    if (call->phase == 6) return stop(frontier, 0x20d2a0);
+    if (call->phase == 4) {
+        gh_actor_motion_status status = first_punch_wall(enemy, frontier);
+        if (status) return status;
+        p[0x2f4] = 1;
+        p[0x2f5] = number(p + 0x17cc) > 0 ? 1 : 0;
+        p[0x2f6] = p[0x2f7] = 0;
+        call->reacted = 1;
+        call->phase = 5;
+    }
+    return GH_ACTOR_MOTION_OK;
+}
+
+
+static unsigned save_rank_for(int score, const uint8_t *thresholds) {
+    unsigned bracket = 0;
+    while (bracket < 5 && (int32_t)word(thresholds + bracket * 4) <= score) bracket++;
+    return bracket < 3 ? bracket + 1 : 5;
+}
+
+gh_actor_motion_status gh_enemy202_hit_rank_001fa280(
+    gh_enemy_actor *enemy, const uint8_t *thresholds, uint32_t *frontier) {
+    if (!frontier) return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier = 0;
+    if (!enemy || !thresholds || !enemy->entry.b.work || !enemy->entry.b.init)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    const gh_enemy_entry_bindings *b = &enemy->entry.b;
+    gh_core_save_view save = b->save;
+    if (!save.bytes) return GH_ACTOR_MOTION_OK;
+    if (save.size < 0x20) return stop(frontier, 0x1fa280);
+    if ((word((const uint8_t *)b->work + 0x5e4) & 0x400000u) || save.bytes[0x1f] == 2)
+        return GH_ACTOR_MOTION_OK;
+    if (word(save.bytes + 0x14) & 0x4000000u)
+        return stop(frontier, 0x1fa2ec); /* 568240's cheat-path input owner. */
+
+    const int old = (int16_t)half(save.bytes + 0x1c);
+    const unsigned old_rank = save_rank_for(old, thresholds);
+    static const float gain[] = {1.5f, 1.2f, 1.0f, 0.7f, 0.5f};
+    fenv_t saved;
+    if (feholdexcept(&saved)) return stop(frontier, 0x1fa3fc);
+    if (fesetround(FE_TOWARDZERO)) {
+        (void)fesetenv(&saved);
+        return stop(frontier, 0x1fa3fc);
+    }
+    volatile float multiplier = gain[old_rank-1];
+    if ((uint16_t)b->init->continue_count > 1) multiplier = multiplier * 0.8f;
+    volatile float gain_points = multiplier * 4.0f;
+    if (fesetenv(&saved)) return stop(frontier, 0x1fa3fc);
+
+    int score = (int16_t)(uint16_t)(old + (int)gain_points);
+    if (score < 0) score = 0;
+    int32_t maximum = (int32_t)word(thresholds + (save.bytes[0x1f] == 0 ? 4 : 16));
+    if (maximum < 1 || maximum > INT16_MAX) return stop(frontier, 0x1fa4bc);
+    if (score >= maximum) score = maximum - 1;
+    unsigned rank = save_rank_for(score, thresholds);
+    if (rank + 1 < old_rank) rank = old_rank - 1;
+    if (rank == 4) rank = 3;
+    if (old_rank < rank) save.bytes[0x1e] = 1;
+    if (rank < old_rank && save.bytes[0x1e]) {
+        save.bytes[0x1e]--;
+        score = (int16_t)half(thresholds + (rank - 1) * 4);
+    }
+    put_half(save.bytes + 0x1c, (uint16_t)score);
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint32_t *frontier) {
+    if (!frontier) return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier = 0;
+    if (!enemy || !enemy->entry.object.view.bytes || enemy->entry.object.view.size < 0x17d0)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    uint8_t *p = enemy->entry.object.view.bytes;
+    const float timer = number(p + 0x17cc);
+    if (!isfinite(timer) || word(p + 0x564) != 0x20a || (half(p + 0x3ac) & 0x100u))
+        return stop(frontier, 0x208f34);
+    if (timer <= 0) {
+        const int32_t sum = (int32_t)(word(p + 0x5b4) + 10u);
+        put(p + 0x5b4, sum < 0 ? 0u : sum > 100000 ? 100000u : (uint32_t)sum);
+        put(p + 0x5b8, 0x42b40000);
+    }
+    return GH_ACTOR_MOTION_OK;
+}
+
+
+gh_actor_motion_status gh_enemy202_impact_00271810(
+    gh_enemy202_hit_call *call, gh_enemy_actor *enemy, const gh_title_player_view *player,
+    uint32_t *frontier) {
+    if (!frontier) return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier = 0;
+    if (!call || !enemy || !player || !player->bytes || player->size < 0x600 ||
+        !enemy->entry.b.init || !enemy->entry.object.view.bytes)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    if (call->phase == 10) return GH_ACTOR_MOTION_OK;
+    if (call->phase != 9) return stop(frontier, 0x271810);
+    gh_title_player_view *actor = &enemy->entry.object.view;
+    const gh_hitarea_object *body = &enemy->hitareas.units[0];
+    const uint8_t *p = actor->bytes;
+    gh_game_init_state *init = enemy->entry.b.init;
+    gh_core_save_view save = enemy->entry.b.save;
+    if (actor->size < 0x1944 || !actor->alias_f0 || word(p + 0x564) != 0x20a ||
+        (half(p + 0x3ac) & 0x100u) || init->heat[0x10] || word(player->bytes + 0x5fc) ||
+        (int32_t)word(init->enemies + 0x514) > 0 || !save.bytes || save.size < 0xaf)
+        return stop(frontier, 0x271810);
+    const unsigned costume = gh_core_save_costume(save);
+    if (costume == 1 || costume == 3 || costume == 5 || costume == 7)
+        return stop(frontier, 0x271e58);
+    const uintptr_t base = (uintptr_t)p, origin = (uintptr_t)actor->alias_f0;
+    if (origin < base || origin - base > actor->size - 16)
+        return stop(frontier, 0x271518);
+
+    const float x = number(actor->alias_f0), z = number(actor->alias_f0 + 8);
+    const float hit_x = number(body->bytes + 0x20), hit_y = number(body->bytes + 0x24);
+    const float hit_z = number(body->bytes + 0x28);
+    if (!isfinite(x) || !isfinite(z) || !isfinite(hit_x) || !isfinite(hit_y) || !isfinite(hit_z))
+        return stop(frontier, 0x271518);
+    fenv_t saved;
+    if (feholdexcept(&saved)) return stop(frontier, 0x271518);
+    if (fesetround(FE_TOWARDZERO)) {
+        (void)fesetenv(&saved);
+        return stop(frontier, 0x271518);
+    }
+    volatile float dx = hit_x - x, dz = hit_z - z;
+    float angle, angles[3] = {0}, rotation[16];
+    if (gh_game_angle_001f8180(dx, dz, &angle, GH_CAMERA_NATIVE_BINARY32_REFERENCE, frontier)) {
+        (void)fesetenv(&saved);
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    angles[1] = angle;
+    if (gh_actor_matrix_rotation_00147728(angles, 0, rotation, GH_STATIC_BINARY32_REFERENCE, frontier)) {
+        (void)fesetenv(&saved);
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    uint32_t noise[3];
+    for (unsigned i = 0; i < 3; ++i) {
+        if (gh_game_mt_next_0030f348(&init->random, &noise[i])) {
+            (void)fesetenv(&saved);
+            return stop(frontier, 0x31d020);
+        }
+        noise[i] = gh_frame_jitter_bits_0031d020_word(noise[i]);
+    }
+    volatile float local_x = number((const uint8_t *)noise) * 0.2f;
+    volatile float local_y = number((const uint8_t *)(noise + 1)) * 0.2f;
+    volatile float jitter_z = number((const uint8_t *)(noise + 2)) * 0.1f;
+    volatile float local_z = 0.4f + jitter_z;
+    float world[3];
+    for (unsigned i = 0; i < 3; ++i) {
+        volatile float a = rotation[i] * local_x;
+        volatile float b = rotation[4+i] * local_y;
+        volatile float c = rotation[8+i] * local_z;
+        volatile float ab = a + b;
+        world[i] = ab + c;
+    }
+    volatile float out_x = x + world[0], out_z = z + world[2];
+    if (fesetenv(&saved) || !isfinite(out_x) || !isfinite(out_z))
+        return stop(frontier, 0x30a2b0);
+    call->impact = (gh_enemy202_impact_request){
+        .position = {out_x, hit_y, out_z, 1.0f},
+        .bank = 0x58, .index = 0x10, .scale = 1.0f, .mode = -1,
+    };
+    call->phase = 10;
+    return GH_ACTOR_MOTION_OK;
+}

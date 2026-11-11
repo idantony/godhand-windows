@@ -1,4 +1,5 @@
 #include "game_scene_step.h"
+#include "game_enemy_manager.h"
 #include "game_action_button_set.h"
 #include "game_scene_dynamic_geometry.h"
 #include "game_camera.h"
@@ -82,16 +83,28 @@ static gh_scene_step_status enemies(gh_game_scene_step*s,const gh_game_scene_ste
   if(e[0x540])e[0x540]--;if(e[0x541])e[0x541]--;uint16_t n=h(e+0x542);if(n)p16(e+0x542,(uint16_t)(n-1));s->enemy_stage=2;
  }
  if(s->enemy_stage==2){static const unsigned pointers[]={0x500,0x560,0x564,0x568,0x56c,0x570,0x574,0x578,0x57c,0x580,0x584,0x588,0x58c,0x590,0x594,0x5ac,0x5b0};
-  for(unsigned i=0;i<sizeof(pointers)/sizeof(*pointers);i++)if(w(e+pointers[i]))return fail(s,0x290250,GH_SCENE_STEP_UNSUPPORTED,(int)pointers[i]);if(b->init->enemy_top||b->init->enemy_last)return fail(s,0x290250,GH_SCENE_STEP_UNSUPPORTED,0);for(unsigned i=0;i<16;i++)if(b->init->enemy_kept[i])return fail(s,0x290250,GH_SCENE_STEP_UNSUPPORTED,(int)i);
+  for(unsigned i=0;i<sizeof(pointers)/sizeof(*pointers);i++)if(w(e+pointers[i]))return fail(s,0x290250,GH_SCENE_STEP_UNSUPPORTED,(int)pointers[i]);for(unsigned i=0;i<16;i++)if(b->init->enemy_kept[i])return fail(s,0x290250,GH_SCENE_STEP_UNSUPPORTED,(int)i);
   e[0x5a0]=e[0x5a1]=e[0x5a2]=0;
   /* Actual125F38 immediately returns onplayer+165C==0. Constructor leaves
    * thisfieldunwritten, so only anexplicitprovided/zero-reference player may
    * establish the value; never read arbitrary hostallocation asguestpointer. */
   gh_game_title_player*p=b->title_player;if(!p||!p->ready)return fail(s,0x2db6b0,GH_SCENE_STEP_UNSUPPORTED,0);if(p->view.initial_memory==GH_TITLE_MEMORY_UNSPECIFIED||p->view.size<0x1660||w(p->view.bytes+0x165c))return fail(s,0x125f38,GH_SCENE_STEP_UNSUPPORTED,0);
+  if((b->init->enemy_top||b->init->enemy_last)&&!b->binary32_reference)
+   return fail(s,0x290250,GH_SCENE_STEP_UNSUPPORTED,0);
+  int special;
+  gh_init_status rate_status=gh_enemy_manager_step_rates_00290250(b->init,b->work->canonical_rate574,&special);
+  if(rate_status)return fail(s,0x290250,GH_SCENE_STEP_CALLEE,rate_status);
+  const unsigned room=raw[0x5b0];
+  s->enemy_special_music=(uint8_t)(special&&!(room>=0x40&&room<0x46)&&!(room>=0x4c&&room<0x50));
   p32(e+0x548,0x3f800000);s->enemy_stage=3;
  }
  if(!b->save.bytes||b->save.size<GH_CORE_SAVE_BYTES)return fail(s,0x291d48,GH_SCENE_STEP_ARGUMENT,0);
- uint32_t flags=w(b->save.bytes+0x14);if((int32_t)flags<0||e[0x518])return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);if(!(flags&0x40000000)&&(w(raw+0x5e4)&0x20000000))e[0x518]=0;
+ const uint32_t flags=w(b->save.bytes+0x14);
+ /* Only original effect/BGM transition branches need further consumers. */
+ if(flags&0x80000000u){if(!e[0x518])return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);}
+ else if(flags&0x40000000u){if(e[0x518])return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);}
+ else if(w(raw+0x5e4)&0x20000000u)e[0x518]=0;
+ else if((e[0x518]!=0)!=(s->enemy_special_music!=0))return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);
  s->enemy_stage=0;return GH_SCENE_STEP_OK;
 }
 static gh_scene_step_status object_pool(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){

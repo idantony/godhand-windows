@@ -1,3 +1,5 @@
+#include "../core/game_player_square_frame.h"
+#include "../core/game_player_attack_hitarea.h"
 #include "game_services.h"
 #include "../core/game_cockpit.h"
 #include "../core/game_objects.h"
@@ -28,6 +30,7 @@
 #include "../core/game_effect_release.h"
 #include "../rooms/r100_roof_task.h"
 #include "../rooms/r100_counter_task.h"
+#include "../rooms/r100_live_tasks.h"
 #include "../rooms/r100_init_tail.h"
 #include "../core/game_cockpit_tutorial.h"
 #include "../core/game_player_abort.h"
@@ -83,7 +86,7 @@ struct gh_game_services {
  gh_scene_meshes meshes;
  gh_r100_init r100;
  gh_r100_roof_task r100_roof;
- gh_r100_scripts r100_scripts;gh_r100_counter_task r100_counter;
+ gh_r100_scripts r100_scripts;gh_r100_counter_task r100_counter;gh_r100_live_tasks r100_live;
  gh_soft_event_end r100_soft_end;
  gh_r100_init_tail r100_tail;gh_r100_init_tail_bindings r100_tail_bindings;
  gh_cockpit_tutorial tutorial;gh_object_resource_load tutorial_load;
@@ -114,14 +117,21 @@ struct gh_game_services {
  gh_player_child_attachment player_attachment;
  gh_player_child_tail child_tail;gh_game_player_child *work5f8;
  gh_game_player_spawn player_spawn;
+ gh_player_square_frame player_square;
+ gh_player_square_frame_bindings player_square_bindings;
+ gh_player_target player_square_target;
+ uint8_t player_square_camera_pose_done;
  gh_actor_motion player_motion;
  gh_actor_motion_call player_motion_call;
  gh_game_player_frame player_frame;gh_effect_release_bindings player_frame_effects;
  gh_player_idle_input player_idle_input;gh_player_idle_input_bindings player_idle_bindings;
  gh_effect_create_call player_effect_create;
+ gh_effect_create_call om_break_effect;
+ const gh_actor_model *om_break_effect_owner;
  gh_player_door_probe player_door;gh_player_door_bindings player_door_bindings;gh_bundle player_door_room;
  gh_child_wind_update child_update;
- gh_actor_attached_sound player_sound,enemy_sound;gh_player_tail_target_slot player_target_644;
+ gh_actor_attached_sound player_sound,enemy_sound,om_sound;gh_player_tail_target_slot player_target_644;
+ gh_motion_sound_request ema2_near_sound;
  gh_game_update_diagnostic update_diagnostic;
  gh_motion_solve player_motion_solve;
  uint64_t ui_resource_epoch;
@@ -296,7 +306,8 @@ static gh_esp14_bindings model_effect_bindings(gh_services_esp14_slot *slot)
  gh_game_services *s=slot->services;
  return (gh_esp14_bindings){
   .model={.pools=&s->pools,.work=s->b.work,.factory_serial=s->b.factory_serial,
-   .packet_heap=s->b.assets->heap,.fog_rgb=s->world_light.scalar+4,.policy=GH_STATIC_BINARY32_REFERENCE},
+   .packet_heap=s->b.assets->heap,.fog_rgb=s->world_light.scalar+4,
+   .policy=GH_STATIC_BINARY32_REFERENCE,.canonical_rate=s->b.rate},
   .effects=&s->effects,.atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL,
   .nested_create=create_model_emitter,.context=slot
  };
@@ -500,14 +511,39 @@ static gh_player_init_status actor_sound_prepare(gh_game_services*s,gh_actor_att
  if(!s->b.voices)return GH_PLAYER_INIT_OK; /*unbound legacy fixture stays strict on real sound*/
  gh_actor_attached_sound_bindings b={s->b.voices,s->b.sound_control,s->b.sound_scene,s->b.work,&s->b.init->random};
  gh_voice_status e=gh_actor_attached_sound_bind(sound,&b);
+ if(!e)e=gh_actor_attached_sound_bind_scene_tables(sound,&s->scene_tables);
  if(e){if(frontier)*frontier=sound->frontier?sound->frontier:0x2cba48;return GH_PLAYER_INIT_CALLEE;}return GH_PLAYER_INIT_OK;
 }
+
+static gh_actor_motion_status enemy_ema2_near_sound(void *context,const gh_game_title_player *target,
+ uint32_t *frontier) {
+ gh_game_services *s=context;
+ if(!s||!target||!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+ *frontier=0x2cba48;
+ if(!s->enemy_sound.bound)return GH_ACTOR_MOTION_UNSUPPORTED;
+ gh_motion_sound_request *request=&s->ema2_near_sound;
+ if(request->actor&&request->actor!=&target->view)return GH_ACTOR_MOTION_BUSY;
+ if(!request->actor){
+  uint32_t handle;
+  gh_enemy_ems_live live;
+  if(gh_enemy_ems_handle_for_actor(s->enemies,target,&handle)||!handle||
+     gh_enemy_ems_live_at(s->enemies,handle,&live)||live.actor!=target||!live.model)
+   return GH_ACTOR_MOTION_UNSUPPORTED;
+  *request=(gh_motion_sound_request){.model=live.model,.actor=&target->view,.bank=0,.program=0x96};
+ }
+ uint32_t handle;
+ gh_actor_motion_status status=gh_actor_attached_sound_motion(&s->enemy_sound,request,&handle,frontier);
+ if(!status)*request=(gh_motion_sound_request){0};
+ return status;
+}
+
 static gh_player_init_status player_motion_initialize(void*p,const gh_player_motion_request*r,uint32_t*frontier){
  gh_game_services*s=p;if(!player_motion_request_matches(s,r))return GH_PLAYER_INIT_ARGUMENT;
  gh_player_init_status sound_ready=actor_sound_prepare(s,&s->player_sound,frontier);if(sound_ready)return sound_ready;
  gh_actor_motion_bindings b={.model=r->model,.resource=r->resource,.resource_bytes=r->resource_bytes,.work=r->work,
    .effect=player_motion_effect,.context=s,.ik_globals=s->b.motion_ik_globals,.save=s->b.save,.save_binding_known=1,
-   .sound=s->player_sound.bound?gh_actor_attached_sound_motion:NULL,.sound_context=s->player_sound.bound?&s->player_sound:NULL};
+   .sound=s->player_sound.bound?gh_actor_attached_sound_motion:NULL,.sound_context=s->player_sound.bound?&s->player_sound:NULL,
+   .sequence_random=s->b.frame_random};
   gh_actor_motion_status e;gh_actor_motion_call *call=&s->player_motion_call;
   if(call->active&&!call->complete){
    /* Retry the same original invocation after a late native frontier. */
@@ -634,6 +670,15 @@ static gh_r100_script_status room_r100_enemy_escape(void*p,const void*identity,c
  }
  return GH_R100_SCRIPT_OK;
 }
+static gh_r100_init_status room_r100_collision(void *context,const char *name,int enabled,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ uint32_t changed;
+ gh_scene_table_status status=gh_collision_scroll_set_enabled_001332d0(
+     &s->scene_tables,&s->r100.collision,name,enabled,&changed);
+ *frontier=status?0x1331b8:0;
+ return status?GH_R100_INIT_CALLEE:GH_R100_INIT_OK;
+}
 static gh_r100_script_status room_r100_checkpoint(void *context,uint32_t *frontier)
 {
  gh_game_services *s=context;
@@ -643,6 +688,31 @@ static gh_r100_script_status room_r100_checkpoint(void *context,uint32_t *fronti
  *frontier=s->checkpoint.frontier;
  return !status?GH_R100_SCRIPT_OK:
   status==GH_CHECKPOINT_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE;
+}
+static gh_r100_script_status room_r100_door(void *context,const void *identity,
+ unsigned operation,int arg0,int arg1,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(!frontier)return GH_R100_SCRIPT_ARGUMENT;
+ *frontier=operation==0?0x1bd178:operation==1?0x1bd3f0:0x1bcfb0;
+ if(!identity)return GH_R100_SCRIPT_ARGUMENT;
+ for(size_t i=0;i<s->om_factory.count;i++){
+  gh_om_object *o=&s->om_factory.objects[i];
+  if(o->view.bytes!=identity)continue;
+  if((o->source.type!=0x300&&o->source.type!=0x354)||!o->registered||
+     !o->initialization||o->initialization->geometry_state.object!=o)
+   return GH_R100_SCRIPT_UNSUPPORTED;
+  gh_title_player_view view;
+  if(gh_om_factory_object_view(&s->om_factory,o->handle,&view)||view.bytes!=identity)
+   return GH_R100_SCRIPT_CALLEE;
+  gh_scene_placement_status e;
+  if(operation==0&&!arg1)e=gh_om_door_set_lock_001bd178(&o->initialization->geometry_state,arg0);
+  else if(operation==1&&!arg0&&!arg1)e=gh_om_door_release_collision_001bd3f0(&o->initialization->geometry_state);
+  else return GH_R100_SCRIPT_UNSUPPORTED;
+  if(!e){*frontier=0;return GH_R100_SCRIPT_OK;}
+  return e==GH_PLACE_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE;
+ }
+ return GH_R100_SCRIPT_UNSUPPORTED;
 }
 static gh_r100_script_status room_r100_scripts_bind(gh_game_services*s){
  if(s->r100_scripts.bound)return GH_R100_SCRIPT_OK;
@@ -654,6 +724,7 @@ static gh_r100_script_status room_r100_scripts_bind(gh_game_services*s){
    .fade=s->b.fade,.display=s->b.display,.elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes},
   .register_other=room_r100_register_other,.object_view=room_r100_om_view,
   .get_enemy=room_r100_enemy,.set_escape=room_r100_enemy_escape,
+  .collision=room_r100_collision,.door=room_r100_door,
   .end_soft_002c3c10=room_r100_end_soft,.checkpoint_002c05b0=room_r100_checkpoint,.context=s};
  return gh_r100_scripts_bind(&s->r100_scripts,&b);
 }
@@ -683,6 +754,12 @@ static gh_r100_init_status room_r100_task_exec(void*p,uint32_t entry,int32_t arg
    e=gh_r100_counter_bind(&s->r100_counter,&b);}
   if(!e)e=gh_r100_counter_register_000010f8(&s->r100_counter,argument,&slot);
   if(!s->r100_counter.frontier_relative)f=s->r100_counter.frontier;
+ }else if(gh_r100_live_entry(entry)){
+  const gh_r100_live_bindings bindings={.scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario},
+   .threads=s->scenario_threads,.room_init=&s->r100,.room=&s->room_state,.at=&s->scene_at,
+   .init=s->b.init,.work=s->b.work,.player=&s->title_player.view,
+   .enemies=&s->enemies,.checkpoint=room_r100_checkpoint,.context=s};
+  e=gh_r100_live_register(&s->r100_live,&bindings,entry,argument,&f);
  }else return GH_R100_INIT_UNSUPPORTED;
  if(e){if(frontier)*frontier=f;return e==GH_R100_SCRIPT_UNSUPPORTED?GH_R100_INIT_UNSUPPORTED:GH_R100_INIT_CALLEE;}
  return GH_R100_INIT_OK;
@@ -1128,6 +1205,7 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
    * models. It neither acknowledges original Kill nor clears live masks. */
   {gh_voice_status e=gh_actor_attached_sound_abort(&s->player_sound);if(e)return fail(s,GH_SERVICES_ASSET,s->player_sound.frontier?s->player_sound.frontier:0x2cba48,e);}
   {gh_voice_status e=gh_actor_attached_sound_abort(&s->enemy_sound);if(e)return fail(s,GH_SERVICES_ASSET,s->enemy_sound.frontier?s->enemy_sound.frontier:0x2cba48,e);}
+  {gh_voice_status e=gh_actor_attached_sound_abort(&s->om_sound);if(e)return fail(s,GH_SERVICES_ASSET,s->om_sound.frontier?s->om_sound.frontier:0x2cba48,e);}
   gh_effect_create_forget_on_owner_destroy(&s->effects);
   for(size_t i=0;i<s->esp14_limit;i++){
    gh_services_esp14_slot *slot=s->esp14_slots[i];
@@ -1327,6 +1405,60 @@ static gh_player_target_bindings scene_target_bindings(gh_game_services *s){
  return (gh_player_target_bindings){.pools=&s->pools,.actors=&s->scene_tables,.player=&s->title_player.view,
   .resolve=player_target_view,.context=s,.elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes};
 }
+static gh_player_frame_status player_square_hit_area(void *context,const gh_title_player_view *player,
+ gh_hitarea_object give[5],uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(player!=&s->title_player.view||give!=s->player_tail.give_objects)return GH_PLAYER_FRAME_ARGUMENT;
+ gh_hitarea_status status=gh_player_attack_hitarea_0010a438(player,give,frontier);
+ return !status?GH_PLAYER_FRAME_OK:status==GH_HITAREA_UNSUPPORTED?
+        GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+}
+static gh_player_frame_status player_square_camera_exit(void *context,
+ const gh_player_frame_bindings *b,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(b->player!=&s->title_player||b->init!=s->b.init)return GH_PLAYER_FRAME_ARGUMENT;
+ gh_game_event_status status;
+ if(!s->player_square_camera_pose_done){
+  status=room_soft_end_camera_pose(s,frontier);
+  if(status)return status==GH_EVENT_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+  s->player_square_camera_pose_done=1;
+ }
+ status=room_soft_end_camera_switch(s,frontier);
+ if(status)return status==GH_EVENT_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+ s->player_square_camera_pose_done=0;
+ return GH_PLAYER_FRAME_OK;
+}
+static gh_player_frame_status player_square_attack(void *context,
+ const gh_player_frame_bindings *b,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(!s||!b||!frontier||b!=&s->player_frame.b||b->player!=&s->title_player||
+    b->model!=&s->player_model||b->idle_input_bindings!=&s->player_idle_bindings)
+  return GH_PLAYER_FRAME_ARGUMENT;
+ *frontier=0;
+ if(!s->player_square.bindings){
+  const gh_player_target_bindings *targets=&s->player_idle_bindings.targets;
+  const uint32_t handle=u32(b->player->view.bytes+0x640);
+  gh_player_target target={.handle=handle};
+  if(handle){
+   gh_player_target_status status=player_target_view(s,handle,&target.view,frontier);
+   if(status)return status==GH_PLAYER_TARGET_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+  }
+  s->player_square_target=target;
+  s->player_square_bindings=(gh_player_square_frame_bindings){.frame=b,.target_bindings=targets,
+   .target_640=&s->player_square_target,.hit_area_0010a438=player_square_hit_area,
+   .camera_exit_00124f60=player_square_camera_exit,.context=s};
+ }
+ gh_player_frame_status status=gh_game_player_square_frame_0010d3a8(&s->player_square,&s->player_square_bindings);
+ *frontier=s->player_square.frontier;
+ if(!status){
+  status=gh_player_square_frame_reset(&s->player_square);
+  s->player_square_target=(gh_player_target){0};
+ }
+ return status;
+}
 static gh_player_frame_status player_frame_effect_create(void*p,const gh_player_frame_effect_request*r,uint32_t*f){
  gh_game_services*s=p;if(!r||!r->actor||!f)return GH_PLAYER_FRAME_ARGUMENT;*f=0;
  if(r->actor->bytes!=s->title_player.view.bytes||r->argument3){*f=0x306528;return GH_PLAYER_FRAME_UNSUPPORTED;}
@@ -1398,6 +1530,50 @@ static gh_game_event_status event_move_tail(void *context,gh_event_actor_factory
  if(!s->event_actor_extra||!s->event_actor_extra->bindings.creation)return GH_EVENT_ARGUMENT;
  gh_event_components *components=s->event_actor_extra->bindings.creation->bindings.components;
  return gh_event_actor_bust_002b6a40(actor,components,frontier);
+}
+
+static gh_object_step_status om_break_effect(void *context,const gh_actor_model *model,
+ const uint32_t position[3],uint32_t yaw_bits,uint32_t *frontier) {
+ gh_game_services *s=context;
+ gh_effect_create_call *call=&s->om_break_effect;
+ *frontier=0x306528;
+ if(!s->b.camera_envelope)return GH_OBJSTEP_UNSUPPORTED;
+ if(!call->active||call->complete) {
+  if(gh_effect_create_om324_break_begin_001bfd28(call,position,yaw_bits))
+   return GH_OBJSTEP_CALLEE;
+  s->om_break_effect_owner=model;
+ } else if(s->om_break_effect_owner!=model) return GH_OBJSTEP_ARGUMENT;
+ const gh_effect_create_bindings bindings={.storage=player_effect_storage(s),
+  .work=s->b.work,.random=&s->b.init->random,.atan_coeff=s->b.camera_envelope->atan_coeff};
+ gh_effect_status status=gh_game_effect_create_00306528(call,&bindings);
+ if(call->frontier)*frontier=call->frontier;
+ if(status)return status==GH_EFFECT_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
+ if(!call->complete)return GH_OBJSTEP_CALLEE;
+ s->om_break_effect_owner=NULL;
+ *frontier=0;
+ return GH_OBJSTEP_OK;
+}
+
+static gh_actor_motion_status om_break_sound(void *context,const gh_motion_sound_request *request,
+ uint32_t *handle,uint32_t *frontier) {
+ gh_game_services *s=context;
+ if(actor_sound_prepare(s,&s->om_sound,frontier))return GH_ACTOR_MOTION_CALLEE;
+ if(!s->om_sound.bound){*frontier=0x2cba48;return GH_ACTOR_MOTION_UNSUPPORTED;}
+ return gh_actor_attached_sound_motion(&s->om_sound,request,handle,frontier);
+}
+
+static gh_object_step_status om_break_collision(void *context,uint64_t key,uint32_t *frontier) {
+ gh_game_services *s=context;
+ uint32_t changed;
+ gh_scene_table_status status=gh_collision_scroll_set_key_enabled_001331b8(
+     &s->scene_tables,&s->r100.collision,key,0,&changed);
+ *frontier=status?0x1331b8:0;
+ return status?GH_OBJSTEP_CALLEE:GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status om_remove_sound(void *context,gh_actor_model *model,uint32_t *frontier) {
+ gh_effect_status status=detach_model_effect_sound(context,model,frontier);
+ return status?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_OK;
 }
 
 gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services*s,uint32_t handle,
@@ -1477,6 +1653,13 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   if(!e&&!move->stage&&s->title_player.view.size>=0x69c&&!u32(s->title_player.view.bytes+0x698))
    e=gh_enemy202_move_bind_player_aux_698(move,NULL);
   if(!e)e=gh_enemy202_move_bind_opacity(move,&s->enemy_opacity);
+  if(!e)e=gh_enemy202_move_bind_near_sound(move,enemy_ema2_near_sound,s);
+  if(!e)e=gh_enemy202_move_bind_room_state(move,&s->room_state);
+  if(!e&&s->b.camera_envelope){
+   const gh_effect_create_bindings impact={.storage=player_effect_storage(s),
+    .work=s->b.work,.random=&s->b.init->random,.atan_coeff=s->b.camera_envelope->atan_coeff};
+   e=gh_enemy202_move_bind_impact(move,&impact);
+  }
   if(!e)e=gh_enemy202_move_00208be0(move,enemy.enemy202,&s->title_player.view,s->b.boot_elf,s->b.boot_elf_bytes);
   if(e){*f=move->frontier?move->frontier:entry;return e==GH_ACTOR_MOTION_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;}
   return move->original_returned?GH_SERVICES_OK:GH_SERVICES_ASSET;
@@ -1503,7 +1686,9 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   gh_object_opacity_environment environment={s->b.init,&s->camera,&s->title_player.view,1};
   gh_object_step_status environment_status=gh_om_frame_bind_environment(state,&environment);
   if(environment_status){*f=state->frontier?state->frontier:entry;return GH_SERVICES_ASSET;}
-  gh_om_frame_runtime runtime={s->b.init,s->b.rate,&s->collision_solids};
+  gh_om_frame_runtime runtime={.init=s->b.init,.canonical_rate=s->b.rate,
+   .solids=&s->collision_solids,.context=s,.break_effect=om_break_effect,
+   .break_sound=om_break_sound,.break_collision=om_break_collision,.remove_sound=om_remove_sound};
   gh_object_step_status runtime_status=gh_om_frame_bind_runtime(state,&runtime);
   if(runtime_status){*f=state->frontier?state->frontier:entry;return GH_SERVICES_ASSET;}
   if(state->complete){gh_object_step_status e=gh_om_frame_next_call(state);if(e){*f=state->frontier?state->frontier:entry;return GH_SERVICES_ASSET;}}
@@ -1535,9 +1720,10 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
    .ground_globals=s->b.player_ground_globals,.ik_globals=s->b.motion_ik_globals,.atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL,
    .opacity_globals=s->b.player_opacity_globals,
    .aux_68c=s->player_tail.active_child&&s->player_tail.child_original_return?&s->player_child.object.view:NULL,.auxiliary_68c_binding_known=1,
-   .target_644=&s->player_target_644,.cockpit_flags_1ca0=gh_game_cockpit_auxiliary_flags_1ca0(s->cockpit)};
+   .target_644=&s->player_target_644,.cockpit_flags_1ca0=gh_game_cockpit_auxiliary_flags_1ca0(s->cockpit),
+   .square_attack=player_square_attack,.square_context=s};
  if(!s->player_frame.bound)s->player_idle_bindings=(gh_player_idle_input_bindings){.frame=b,
-  .targets=scene_target_bindings(s)};
+  .targets=scene_target_bindings(s),.action_buttons=&s->action_buttons};
  gh_player_frame_status e=gh_game_player_frame_00108ab0(&s->player_frame,&b);*f=s->player_frame.frontier;
  if(!e&&s->player_frame.stage==31&&!s->player_frame.bound)s->update_diagnostic.player_updates_completed++;
  return !e?GH_SERVICES_OK:e==GH_PLAYER_FRAME_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
@@ -1659,7 +1845,15 @@ gh_scene_step_status gh_game_services_task_status(gh_game_services*s,uint32_t*fr
   *frontier=s->r100_counter.frontier?s->r100_counter.frontier:0x2c5168;s->frontier=*frontier;
   s->frontier_module_code=s->r100_counter.frontier_relative?2:0;
   return s->r100_counter.status==GH_R100_SCRIPT_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE;
- }return GH_SCENE_STEP_OK;
+ }
+ for(unsigned i=0;i<sizeof(s->r100_live.tasks)/sizeof(s->r100_live.tasks[0]);i++){
+  const gh_r100_live_task *task=&s->r100_live.tasks[i];
+  if(!task->registered||task->status==GH_R100_SCRIPT_OK)continue;
+  *frontier=task->frontier?task->frontier:task->entry;s->frontier=*frontier;
+  s->frontier_module_code=task->frontier_relative?2:0;
+  return task->status==GH_R100_SCRIPT_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE;
+ }
+ return GH_SCENE_STEP_OK;
 }
 gh_game_event_status gh_game_services_event_return_0031c7e0(gh_game_services *s,
  const gh_game_event *event,uint32_t *frontier){
@@ -1708,6 +1902,8 @@ gh_game_event_status gh_game_services_event_player_clear(gh_game_services*s,cons
 gh_game_services_status gh_game_services_update_diagnostic(const gh_game_services*s,gh_game_update_diagnostic*out){
  if(!s||!out)return GH_SERVICES_ARGUMENT;*out=s->update_diagnostic;
  out->player_stage=s->player_frame.stage;out->player_frontier=s->player_frame.frontier;
+ out->player_handle=s->player_factory.complete?s->player_factory.handle:0;
+ out->player_state_entry=s->player_frame.state_entry;
  out->child_stage=s->child_update.original.stage;out->child_frontier=s->child_update.original.frontier;
  out->child_forces_complete=s->child_update.original.forces.complete;out->child_angles_complete=s->child_update.original.angles.complete;
  out->child_distances_complete=s->child_update.original.distances.complete;out->child_finish_complete=s->child_update.original.finish.complete;

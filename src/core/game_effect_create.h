@@ -16,12 +16,16 @@ typedef gh_effect_status (*gh_effect_event_actor_resolve)(void *,uint16_t kind,u
  const gh_title_player_view **,const gh_actor_model **,uint32_t *frontier);
 typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;
  gh_game_mt *random;const gh_actor_model *model;
- gh_effect_event_actor_resolve event_actor;void *event_actor_context;} gh_effect_create_bindings;
+ gh_effect_event_actor_resolve event_actor;void *event_actor_context;
+ const float *atan_coeff;} gh_effect_create_bindings;
 typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_request request;
  gh_effect_view est;uint32_t stage,row,count,slot,serial,frontier,config_flags;gh_game_mt *random_identity;int original_return;
  const gh_title_player_view *event_row_actor;const gh_actor_model *event_row_model;
  uint8_t active,complete,configuration_305e88,configuration_2fa158,configuration_nested_group;
- uint32_t configuration_nested_scale,configuration_nested_flags;} gh_effect_create_call;
+ uint32_t configuration_nested_scale,configuration_nested_flags;
+ const float *configuration_positioned_atan_coeff;
+ uint32_t configuration_positioned_position[3],configuration_positioned_yaw;
+ uint8_t configuration_positioned;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
 /* Only the known non-NULL305E88 configuration (unit scales/VF0 vectors,
@@ -31,6 +35,14 @@ gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_
 gh_effect_status gh_effect_create_nested_begin_002f1d3c(gh_effect_create_call *,
  const gh_effect_create_request *,uint8_t group,uint32_t scale,uint32_t flags);
 gh_effect_status gh_effect_create_ambient_begin_00305e88(gh_effect_create_call *,uint32_t index);
+/* Original OM324 break, 1BFD28 -> 306528 with bank0/index1C, no actor.
+ * Caller supplies the 84 virtual world position and 1F8180 yaw as binary32. */
+gh_effect_status gh_effect_create_om324_break_begin_001bfd28(gh_effect_create_call *,
+ const uint32_t world_xyz[3],uint32_t yaw_bits);
+/* Original ordinary enemy impact 271810 -> 306838, bank58/index10,
+ * actor NULL, unit scale, zero Euler, selector and mode -1. */
+gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_call *,
+ const uint32_t world_xyz[3]);
 /* 2FA158's explicit configuration and camera cut -> bank 6 index. The
  * 2FA240 row actor is distinct from the original NULL selector argument. */
 gh_effect_status gh_effect_create_event_cut_begin_002fa158(gh_effect_create_call *,uint32_t cut);

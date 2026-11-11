@@ -24,13 +24,23 @@ static int placement_dead(const gh_room_state *room,int16_t stamp)
     return 1;
 }
 
-gh_r100_script_status gh_r100_count_alive_00001028(const gh_game_init_state *init,
-    const gh_room_state *room,uint32_t *alive,int *has614)
+gh_r100_script_status gh_r100_enemy_dead_0028fb38(const gh_room_state *room,
+    const gh_game_title_player *actor,int *dead)
+{
+    if(!room||!room->active||!actor||!actor->view.bytes||!dead)return GH_R100_SCRIPT_ARGUMENT;
+    if(room->size<12||room->active[8]>64||12+(size_t)room->active[8]*24>room->size||actor->view.size<0x642)
+        return GH_R100_SCRIPT_BOUNDS;
+    *dead=placement_dead(room,(int16_t)half(actor->view.bytes+0x640));
+    return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status scan_alive(const gh_game_init_state *init,
+    const gh_room_state *room,uint32_t *alive,int *has614,const gh_game_title_player **first)
 {
     if(!init||!room||!room->active||!alive||!has614)return GH_R100_SCRIPT_ARGUMENT;
     if(!init->enemy_top){
         if(rd(init->enemies+0x500))return GH_R100_SCRIPT_UNSUPPORTED;
-        *alive=0;*has614=0;
+        *alive=0;*has614=0;if(first)*first=NULL;
         return GH_R100_SCRIPT_OK;
     }
     if(room->size<12||room->active[8]>64||12+(size_t)room->active[8]*24>room->size)
@@ -42,6 +52,7 @@ gh_r100_script_status gh_r100_count_alive_00001028(const gh_game_init_state *ini
     uint64_t visited=0;
     uint32_t count=0;
     int flag=0;
+    const gh_game_title_player *flagged=NULL;
     while(index!=UINT8_MAX){
         if(index>=64||(visited&(UINT64_C(1)<<index)))return GH_R100_SCRIPT_UNSUPPORTED;
         visited|=UINT64_C(1)<<index;
@@ -56,10 +67,24 @@ gh_r100_script_status gh_r100_count_alive_00001028(const gh_game_init_state *ini
         if(actor->view.size<0x642)return GH_R100_SCRIPT_BOUNDS;
         if(placement_dead(room,(int16_t)half(p+0x640)))continue;
         ++count;
-        if(p[0x614]==1)flag=1;
+        if(p[0x614]==1){flagged=actor;flag=1;if(first)break;}
     }
-    *alive=count;*has614=flag;
+    *alive=count;*has614=flag;if(first)*first=flagged;
     return GH_R100_SCRIPT_OK;
+}
+
+gh_r100_script_status gh_r100_count_alive_00001028(const gh_game_init_state *init,
+    const gh_room_state *room,uint32_t *alive,int *has614)
+{
+    return scan_alive(init,room,alive,has614,NULL);
+}
+
+gh_r100_script_status gh_r100_first_flagged_00002cb0(const gh_game_init_state *init,
+    const gh_room_state *room,const gh_game_title_player **actor)
+{
+    if(!actor)return GH_R100_SCRIPT_ARGUMENT;
+    uint32_t count;int flag;
+    return scan_alive(init,room,&count,&flag,actor);
 }
 
 static gh_r100_script_status count(gh_r100_counter_task*s,uint32_t*out,int*has614){

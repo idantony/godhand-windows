@@ -20,7 +20,7 @@ struct QueuedID {
     uint32_t entry_index,consumer;
     uint16_t z=0;bool z_known=false;
 };
-enum class CommandKind {ID,FAN,FADE,NUMBER,COVER,MESSAGE};
+enum class CommandKind {ID,FAN,FADE,NUMBER,COVER,MESSAGE,RADAR};
 struct QueuedMessage {
     gh_id_text_glyph glyph={};
     std::shared_ptr<const std::vector<uint8_t>> atlas;
@@ -29,6 +29,7 @@ struct QueuedCommand {
     CommandKind kind=CommandKind::ID;
     QueuedID id={};gh_cockpit_fan fan={};gh_fade_draw fade={};gh_ui_fade_context fade_context={};gh_id_texture_quad number={};gh_child_cover_quad cover={};
     QueuedMessage message;
+    gh_id_texture_quad radar={};
 };
 struct gh_mc_renderer {
     gh_ui_text_renderer *text=nullptr;
@@ -54,6 +55,28 @@ struct gh_mc_renderer {
 };
 static bool null_texture(const gh_id_render_view*s,const gh_id_entry*e)
 {return e->kind==0&&!e->texture.bytes&&(e->b8a==33||(e->b8a<32&&!s->manager->pair[e->b8a].texture_data.bytes));}
+static gh_id_error render_sprite(gh_mc_renderer *r,const gh_id_texture_quad &quad,
+    gh_ui_error *gpu,const gh_ui_depth_write *depth)
+{
+    if(!r->sprite)*gpu=gh_ui_sprite_create(512,448,&r->sprite);
+    if(*gpu!=GH_UI_OK)return GH_ID_UNSUPPORTED;
+
+    gh_ui_sprite_item item={};
+    item.quad=quad;
+    for(const auto &texture:r->textures)
+        if(texture.source==quad.texture.source.bytes){item.texture=texture.handle;break;}
+    if(!item.texture){
+        std::vector<unsigned char> rgba((size_t)quad.texture.width*quad.texture.height*4);
+        gh_id_error error=gh_id_texture_rgba(&quad.texture,rgba.data(),rgba.size());
+        if(error)return error;
+        *gpu=gh_ui_sprite_upload(r->sprite,&quad.texture,rgba.data(),rgba.size(),&item.texture);
+        if(*gpu!=GH_UI_OK)return GH_ID_UNSUPPORTED;
+        r->textures.push_back({quad.texture.source.bytes,item.texture});
+    }
+    const gh_ui_sprite_state state={UINT64_C(0x8000000044),0x3001d,0x54,0x60,0,1,1,0,0,0};
+    *gpu=gh_ui_sprite_batch_with_depth(r->sprite,&state,&item,1,r->frame.data(),r->next.data(),r->next.size(),depth);
+    return *gpu==GH_UI_OK?GH_ID_OK:GH_ID_UNSUPPORTED;
+}
 static gh_id_error render_number(gh_mc_renderer*r,const gh_id_texture_quad&q,gh_ui_error*gpu)
 {
     if(!r->polygon)*gpu=gh_ui_polygon_create(512,448,&r->polygon);gh_ui_polygon_item p={};
@@ -181,23 +204,10 @@ static gh_id_error draw_view(gh_mc_renderer *r,const gh_id_render_view *s,const 
             if(error==GH_ID_OK&&n!=1){error=GH_ID_UNSUPPORTED;r->status.frontier=0x2c70a8;}
             if(error==GH_ID_OK)error=render_number(r,q[0],&gpu);
         }else if(job->entry->kind==0){
-            gh_ui_sprite_item item={};error=gh_id_texture_quad_prepare(s->manager,s->base,job->entry,&item.quad);
-            if(error==GH_ID_OK){
-                if(!r->sprite)gpu=gh_ui_sprite_create(512,448,&r->sprite);
-                bool found=false;
-                for(const auto &t:r->textures)if(t.source==item.quad.texture.source.bytes){item.texture=t.handle;found=true;break;}
-                if(gpu==GH_UI_OK&&!found){
-                    std::vector<unsigned char> rgba((size_t)item.quad.texture.width*item.quad.texture.height*4);
-                    error=gh_id_texture_rgba(&item.quad.texture,rgba.data(),rgba.size());
-                    if(error==GH_ID_OK){gpu=gh_ui_sprite_upload(r->sprite,&item.quad.texture,rgba.data(),rgba.size(),&item.texture);
-                        if(gpu==GH_UI_OK)r->textures.push_back({item.quad.texture.source.bytes,item.texture});}
-                }
-                if(error==GH_ID_OK&&gpu==GH_UI_OK){
-                    gh_ui_sprite_state state={};state.alpha=UINT64_C(0x8000000044);state.test=0x3001d;
-                    state.prim=0x54;state.tex1=0x60;state.colclamp=state.prmodecont=1;
-                    gpu=gh_ui_sprite_batch_with_depth(r->sprite,&state,&item,1,r->frame.data(),r->next.data(),r->next.size(),depth);
-                }
-            }else if(error==GH_ID_UNSUPPORTED&&r->reference_polygons){
+            gh_id_texture_quad quad={};
+            error=gh_id_texture_quad_prepare(s->manager,s->base,job->entry,&quad);
+            if(error==GH_ID_OK)error=render_sprite(r,quad,&gpu,depth);
+            else if(error==GH_ID_UNSUPPORTED&&r->reference_polygons){
                 gh_ui_polygon_item polygon={};
                 error=gh_id_texture_polygon_prepare(s->manager,s->base,job->entry,&polygon.polygon);
                 if(error==GH_ID_OK){
@@ -282,6 +292,40 @@ extern "C" gh_id_error gh_mc_renderer_queue_view_groups_at_z(gh_mc_renderer *r,c
         auto &id=r->queued[tags[0].index].id;id.z=z;id.z_known=true;
     }
     return error;
+}
+extern "C" gh_id_error gh_mc_renderer_queue_radar(gh_mc_renderer *r,
+    const gh_cockpit_radar_quad *quad,gh_ui_ot_tag *tag)
+{
+    if(!r||!r->begun||!quad||!tag)return GH_ID_ARGUMENT;
+    if(r->flushing||r->queue_failed||r->status.jobs)return GH_ID_BUSY;
+    if(r->queued.size()>=8192)return GH_ID_CAPACITY;
+
+    gh_id_texture_quad sprite={};
+    gh_id_error error=gh_id_texture_open_view(&quad->texture,&sprite.texture);
+    if(error)return error;
+    if(sprite.texture.tex0!=GH_ID_RADAR_TEX0)return GH_ID_UNSUPPORTED;
+    for(unsigned i=0;i<4;++i){
+        const float xy=quad->xy[i],uv=quad->uv[i];
+        if(!std::isfinite(xy)||xy<-512||xy>1024||!std::isfinite(uv)||uv<0||uv>1)
+            return GH_ID_UNSUPPORTED;
+    }
+    // 15BCF0 mode1 adds the live XYOFFSET after VFTOI4. Sprite parameters
+    // use the resulting screen-relative 12.4 coordinates and separable ST.
+    if((int)(quad->xy[0]*16)>=(int)(quad->xy[2]*16)||
+       (int)(quad->xy[1]*16)>=(int)(quad->xy[3]*16))return GH_ID_UNSUPPORTED;
+    sprite.x0=quad->xy[0];sprite.y0=quad->xy[1];
+    sprite.x1=quad->xy[2];sprite.y1=quad->xy[3];
+    sprite.u0=quad->uv[0];sprite.v0=quad->uv[1];
+    sprite.u1=quad->uv[2];sprite.v1=quad->uv[3];
+    sprite.color=quad->rgba;sprite.color_mode=6;sprite.font_mode=5;
+    try {
+        QueuedCommand command;
+        command.kind=CommandKind::RADAR;
+        command.radar=sprite;
+        r->queued.push_back(command);
+        *tag={6,5,r->queued.size()-1};
+        return GH_ID_OK;
+    }catch(const std::bad_alloc&){return GH_ID_MEMORY;}
 }
 extern "C" gh_id_error gh_mc_renderer_queue_fade(gh_mc_renderer*r,const gh_fade_draw*draw,const gh_ui_fade_context*context,gh_ui_ot_tag*tag)
 {
@@ -371,6 +415,7 @@ static gh_id_error draw_fade(gh_mc_renderer*r,const gh_fade_draw&draw,const gh_u
 static bool tracks_depth(const QueuedCommand &command)
 {
     return command.kind==CommandKind::COVER || command.kind==CommandKind::MESSAGE ||
+        command.kind==CommandKind::RADAR ||
         (command.kind==CommandKind::ID && command.id.z_known);
 }
 
@@ -454,6 +499,17 @@ static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t cou
                 }
                 if(error==GH_ID_OK){++r->status.glyphs;++r->status.jobs;}
                 r->status.id_error=error;
+            }
+            else if(command.kind==CommandKind::RADAR){
+                gh_ui_error gpu=GH_UI_OK;
+                gh_ui_depth_write plane={depth_samples.data(),depth_samples.size(),0};
+                error=render_sprite(r,command.radar,&gpu,depth_known?&plane:nullptr);
+                r->status.consumer=0x15bcf0;
+                r->status.frontier=error?0x15bcf0:0;
+                r->status.opcode=0;
+                r->status.id_error=error;
+                r->status.gpu_error=(unsigned)gpu;
+                if(!error){r->frame.swap(r->next);++r->status.jobs;}
             }
             else {auto view=command.id.view;view.base=&command.id.base;
                 gh_id_draw_job job={command.id.entry_index,&command.id.entry,command.id.consumer};

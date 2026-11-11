@@ -146,6 +146,100 @@ static gh_actor_model_status observe_light(void *opaque,const gh_actor_trans_req
     return GH_ACTOR_MODEL_UNSUPPORTED;
 }
 
+typedef struct {
+    gh_esp14_bindings bindings;
+    gh_esp14_instance debris[2];
+} break_debris;
+
+static gh_effect_status initialize_debris(void *opaque,const gh_effect_esp_view *view,
+    unsigned slot,uint32_t parameter,int *original,uint32_t *frontier)
+{
+    break_debris *debris=opaque;
+    CHECK(slot<2 && view->record.bytes[0x12e]==3 && view->record.bytes[0x18e]==1);
+    return gh_esp14_initialize_002f1d58(&debris->debris[slot],&debris->bindings,
+        view,slot,parameter,original,frontier);
+}
+
+static gh_effect_status move_debris(void *opaque,const gh_effect_esp_view *view,
+    unsigned slot,int active,uint32_t *frontier)
+{
+    break_debris *debris=opaque;
+    CHECK(slot<2);
+    return gh_esp14_move_after_base_002f2250(&debris->debris[slot],&debris->bindings,
+        view,active,frontier);
+}
+
+static void test_om324_motion(const void *core,size_t core_size,const gh_bundle *room,
+    gh_room_pools *pools,gh_heap *heap,const float *atan_coeff,gh_effects_frame_globals globals)
+{
+    gh_game_effects *effects=calloc(1,sizeof(*effects));
+    uint8_t *esp=calloc(1,0x100180),*emitters=calloc(1,0x26060);
+    gh_game_init_state *init=calloc(1,sizeof(*init));
+    CHECK(effects && esp && emitters && init);
+    CHECK(!gh_game_effects_initialize_00305a68(effects,esp,0x100180,emitters,0x26060,
+        core,core_size,room));
+    gh_game_init_state_initialize(init);
+    gh_game_mt_seed_0030f2b0(&init->random,123);
+    gh_boot_work work={0};
+    uint32_t flags=0x20000000,frontier=0,fog=0,clock=0;
+    uint8_t serial=0;
+    const float rate=1;
+    memcpy((uint8_t *)&work+0x5e4,&flags,4); /* isolate the requested emitters */
+    memcpy((uint8_t *)&work+0x574,&rate,4);
+    globals.factor_741dc0=0x3f800000;
+    const gh_effect_release_bindings storage={.effects=effects,.esp=esp,.esp_bytes=0x100180,
+        .emitters=emitters,.emitter_bytes=0x26060};
+    const gh_effect_create_bindings creator={.storage=storage,.work=&work,
+        .random=&init->random,.atan_coeff=atan_coeff};
+    const uint32_t position[]={0x421a0000,0x40e80000,0xc2b60000};
+    gh_effect_create_call create={0};
+    CHECK(!gh_effect_create_om324_break_begin_001bfd28(&create,position,0x3f400000));
+    CHECK(!gh_game_effect_create_00306528(&create,&creator)&&create.count==3);
+    break_debris debris={.bindings={.model={.pools=pools,.work=&work,.factory_serial=&serial,
+        .packet_heap=heap,.fog_rgb=&fog,.policy=GH_STATIC_BINARY32_REFERENCE,.canonical_rate=&rate},
+        .effects=effects,.atan_coeff=atan_coeff}};
+    const gh_esp14_provider provider={.context=&debris,.initialize=initialize_debris,.move=move_debris};
+    gh_game_scene_aux profile={0};
+    gh_effects_frame_bindings bindings={.storage=storage,.work=&work,.init=init,.globals=&globals,
+        .profile=&profile,.clock=clock_tick,.clock_context=&clock,.atan_coeff=atan_coeff,
+        .policy=GH_STATIC_BINARY32_REFERENCE,.model_effect=&provider};
+    gh_game_effects_frame frame={0};
+    uint32_t first_rotations[2][255][3]={0};
+    unsigned animated=0;
+    for(unsigned tick=1;tick<=20;tick++){
+        if(tick>1){
+            for(unsigned slot=0;slot<2;slot++){
+                CHECK(!gh_esp14_model_move_002b8850(&debris.debris[slot].child,&work,
+                    GH_STATIC_BINARY32_REFERENCE,&frontier));
+            }
+        }
+        CHECK(!gh_game_effects_frame_update_0030f228(&frame,&bindings));
+        for(unsigned slot=0;slot<2;slot++){
+            const gh_esp14_instance *instance=&debris.debris[slot];
+            const gh_esp14_model *child=&instance->child;
+            float time=(float)(tick<20?tick:19);
+            uint32_t time_bits;
+            memcpy(&time_bits,&time,4);
+            CHECK(instance->complete && child->motion.complete && child->motion_offset==0x20);
+            CHECK(child->motion_source.bytes==(const uint8_t *)core+0x1b7c70 &&
+                child->motion_source.size==0x7c0 && child->motion.motion.frames==20 &&
+                child->motion.motion.count==61 && !(child->motion.motion.flags&1));
+            CHECK(word(child->object.view.bytes+0x430)==time_bits &&
+                child->object.view.bytes[0x436]==(tick==20));
+            for(unsigned part=0;part<child->model.part_count;part++){
+                const uint8_t *rotation=child->model.parts[part].bytes+0x100;
+                if(tick==1)memcpy(first_rotations[slot][part],rotation,12);
+                else if(memcmp(first_rotations[slot][part],rotation,12))animated|=1u<<slot;
+            }
+        }
+    }
+    CHECK(animated==3);
+    for(unsigned slot=0;slot<2;slot++)CHECK(!gh_esp14_model_dispose(&debris.debris[slot].child));
+    gh_effect_create_forget_on_owner_destroy(effects);
+    free(init);free(emitters);free(esp);free(effects);
+    puts("PASS R100 OM324 two EFM3 model motions, 20 original FX ticks and final-frame clamp");
+}
+
 int main(int argc,char **argv) {
     CHECK(argc==2);
     gh_disc *disc;
@@ -199,7 +293,8 @@ int main(int argc,char **argv) {
     gh_boot_work work={0};
     uint8_t serial=0x34;
     uint32_t fog=0;
-    const gh_esp14_model_bindings bindings={&pools,&work,&serial,heap,&fog,GH_STATIC_BINARY32_REFERENCE};
+    const gh_esp14_model_bindings bindings={.pools=&pools,.work=&work,.factory_serial=&serial,
+        .packet_heap=heap,.fog_rgb=&fog,.policy=GH_STATIC_BINARY32_REFERENCE};
     gh_esp14_model child={0};
     CHECK(!gh_esp14_model_create_0030fa98(&child,&bindings,&found,&frontier)&&found&&!frontier);
     CHECK(child.object.view.size==0x4e0&&child.object.view.original_vtable214==0x44b840);
@@ -453,6 +548,7 @@ int main(int argc,char **argv) {
     gh_game_objects_destroy(global_objects);
     gh_game_objects_destroy(room_objects);
     gh_effect_create_forget_on_owner_destroy(effects);
+    test_om324_motion(core,cs,&room_bundle,&pools,heap,atan_coeff,globals);
     free(elf);
     CHECK(!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));
     free(emitters);free(esp);free(effects);free(event);free(room);free(core);

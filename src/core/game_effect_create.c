@@ -1,4 +1,6 @@
 #include "game_effect_create.h"
+#include "game_actor_matrix.h"
+#include "game_actor_two_bone.h"
 #include "game_esp14.h"
 #include "game_effects_frame.h"
 #include <stdlib.h>
@@ -44,6 +46,37 @@ gh_effect_status gh_effect_create_event_cut_begin_002fa158(gh_effect_create_call
  gh_effect_status status=gh_effect_create_begin(call,&request);
  if(!status)call->configuration_2fa158=1;
  return status;
+}
+
+static gh_effect_status positioned_begin(gh_effect_create_call *call,uint32_t bank,uint32_t index,
+ const uint32_t world_xyz[3],uint32_t yaw_bits)
+{
+ if(!call||!world_xyz)return GH_EFFECT_ARGUMENT;
+ for(unsigned i=0;i<3;++i)
+  if((world_xyz[i]&0x7f800000u)==0x7f800000u)return GH_EFFECT_UNSUPPORTED;
+ if((yaw_bits&0x7f800000u)==0x7f800000u)return GH_EFFECT_UNSUPPORTED;
+
+ uint32_t position[3];
+ memcpy(position,world_xyz,sizeof(position));
+ const gh_effect_create_request request={.bank=bank,.index=index,.mode=-1,.selector=-1};
+ gh_effect_status status=gh_effect_create_begin(call,&request);
+ if(status)return status;
+ memcpy(call->configuration_positioned_position,position,sizeof(position));
+ call->configuration_positioned_yaw=yaw_bits;
+ call->configuration_positioned=1;
+ return GH_EFFECT_OK;
+}
+
+gh_effect_status gh_effect_create_om324_break_begin_001bfd28(gh_effect_create_call *call,
+ const uint32_t world_xyz[3],uint32_t yaw_bits)
+{
+ return positioned_begin(call,0,0x1c,world_xyz,yaw_bits);
+}
+
+gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_call *call,
+ const uint32_t world_xyz[3])
+{
+ return positioned_begin(call,0x58,0x10,world_xyz,0);
 }
 
 static gh_effect_status lookup_est(const gh_game_effects *owner,uint32_t bank,uint32_t index,
@@ -155,6 +188,36 @@ static gh_effect_status initialize_prefix(gh_effect_create_call*c,const gh_effec
  ww(p+0x118,c->config_flags&~8u);/*303EFC/303F00 copies distinct config+48 verbatim.*/ww(p+0x1e8,c->config_flags);if(c->configuration_nested_group)p[0x214]=c->configuration_nested_group;
  if(!r[0x28e]){if(!b->random)return fail(c,0x31cfe0,GH_EFFECT_UNSUPPORTED);if(c->random_identity&&c->random_identity!=b->random)return GH_EFFECT_ARGUMENT;c->random_identity=b->random;uint32_t seed;if(gh_game_mt_next_0030f348(b->random,&seed))return fail(c,0x31cfe0,GH_EFFECT_ARGUMENT);ww(p+0x220,seed);}else ww(p+0x220,r[0x28e]);c->stage=3;return GH_EFFECT_OK;
 }
+static gh_effect_status initialize_positioned_transform(gh_effect_create_call *call,
+ const gh_effect_create_bindings *bindings,uint8_t *payload)
+{
+ if(!bindings->atan_coeff)return fail(call,0x147c88,GH_EFFECT_UNSUPPORTED);
+ if(call->configuration_positioned_atan_coeff&&call->configuration_positioned_atan_coeff!=bindings->atan_coeff)
+  return fail(call,0x147c88,GH_EFFECT_ARGUMENT);
+ float config_euler[3]={0},euler[3],rotation[16],translation[16],local[16],world[16];
+ memcpy(config_euler+1,&call->configuration_positioned_yaw,4);
+ identity((uint8_t *)translation);
+ memcpy(translation+12,call->configuration_positioned_position,12);
+ identity((uint8_t *)world);
+
+ uint32_t frontier=0;
+ const gh_static_transform_policy policy=GH_STATIC_BINARY32_REFERENCE;
+ /* 3040AC reads the original zero-rotation/zero-position cNode basis.
+  * 3040EC forms config T*R, and 3040FC postmultiplies that basis. */
+ if(gh_actor_matrix_rotation_00147728(config_euler,0,rotation,policy,&frontier)||
+    gh_actor_matrix_product_00147548(translation,rotation,local,policy,&frontier)||
+    gh_actor_matrix_product_00147548(world,local,world,policy,&frontier)||
+    gh_actor_matrix_extract_euler_00147c88(world,bindings->atan_coeff,euler,policy,&frontier))
+  return fail(call,frontier?frontier:0x147c88,GH_EFFECT_UNSUPPORTED);
+
+ call->configuration_positioned_atan_coeff=bindings->atan_coeff;
+ memcpy(payload+0x1b0,config_euler,12);
+ memcpy(payload+0x1c0,call->configuration_positioned_position,12);
+ memcpy(payload+0x30,euler,12);
+ memcpy(payload+0x40,world+12,12);
+ return GH_EFFECT_OK;
+}
+
 static gh_effect_status initialize_record(gh_effect_create_call*c,const gh_effect_create_bindings*b,const uint8_t*r){
  emitter_metadata*m=&c->owner->native->slots[c->slot];uint8_t*p=b->storage.emitters+(size_t)c->slot*0x260;
  /* Exact observed zero-vector domain of30A370: VDIV1/0 saturates finiteQ;
@@ -177,7 +240,14 @@ static gh_effect_status initialize_record(gh_effect_create_call*c,const gh_effec
    *147C88 mode0 zero-angle earlyleaves return(+0,-0,+0),147C60 XYZzero.
    * General unattached transforms remain explicit, not a bindpose fallback. */
   for(unsigned k=0;k<3;k++)if(w(p+0x30+4*k)!=0||w(p+0x40+4*k)!=0)return fail(c,0x2b61b0,GH_EFFECT_UNSUPPORTED);
-  identity(p+0x50);identity(p+0xb0);ww(p+0x30,0);ww(p+0x34,0x80000000u);ww(p+0x38,0);memset(p+0x40,0,12);p[0x16]=0;ww(p+0x90,0);
+  identity(p+0x50);identity(p+0xb0);p[0x16]=0;ww(p+0x90,0);
+  if(c->configuration_positioned){
+   if(part!=-1)return fail(c,0x303a30,GH_EFFECT_UNSUPPORTED);
+   gh_effect_status status=initialize_positioned_transform(c,b,p);
+   if(status)return status;
+  }else{
+   ww(p+0x30,0);ww(p+0x34,0x80000000u);ww(p+0x38,0);memset(p+0x40,0,12);
+  }
  }
  half(p+0x186,(uint16_t)((uint16_t)(r[0xc0]|(unsigned)r[0xc1]<<8)+p[0x1ed]));uint16_t duration=(uint16_t)(r[0xc2]|(unsigned)r[0xc3]<<8);if(duration&&duration<0x8000)duration=(uint16_t)(duration+p[0x1ed]);half(p+0x188,duration);
  if((w(r+4)&0x48000)&&m->actor){if(m->actor->size<0x2f6)return fail(c,0x303a30,GH_EFFECT_BOUNDS);p[0x226]=m->actor->bytes[0x2f4];p[0x227]=m->actor->bytes[0x2f5];}

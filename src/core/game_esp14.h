@@ -2,6 +2,7 @@
 #define GH_GAME_ESP14_H
 
 #include "game_actor_model.h"
+#include "game_actor_motion.h"
 #include "game_effect_node.h"
 #include "game_objects.h"
 
@@ -18,6 +19,7 @@ typedef struct {
     gh_heap *packet_heap;
     const void *fog_rgb;
     gh_static_transform_policy policy;
+    const float *canonical_rate;
 } gh_esp14_model_bindings;
 
 /* Stable owner of the kind500 child. Register and resolve this same object
@@ -27,7 +29,12 @@ typedef struct {
     gh_actor_model model;
     gh_room_pools *pools;
     uint32_t handle;
-    uint8_t virtual_initialized, model_destroyed;
+    gh_actor_motion motion;
+    gh_effect_view motion_source;
+    size_t motion_offset;
+    gh_boot_work *motion_work;
+    const float *motion_rate;
+    uint8_t virtual_initialized, model_destroyed, motion_step_applied;
 } gh_esp14_model;
 
 typedef struct {

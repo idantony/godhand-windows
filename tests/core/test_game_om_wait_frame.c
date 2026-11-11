@@ -17,21 +17,133 @@ static uint32_t w(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}
 static void put(uint8_t*p,uint32_t n){memcpy(p,&n,4);}
 static uint32_t move_entry(unsigned kind){switch(kind){case 0x307:return 0x1895d8;case 0x30a:return 0x18c370;case 0x310:return 0x18f488;case 0x33f:return 0x19f378;case 0x309:return 0x18b568;case 0x30e:return 0x18ee38;case 0x324:return 0x198f48;case 0x354:return 0x1a82d8;default:return 0;}}
 static uint32_t next_entry(unsigned kind){switch(kind){case 0x307:return 0x1897b8;case 0x30a:return 0x18c520;case 0x310:return 0x18f618;case 0x33f:return 0x19f528;case 0x309:return 0x18b718;case 0x30e:case 0x324:return 0x1bfce0;case 0x354:return 0x1bc6e8;default:return 0;}}
+typedef struct {
+ gh_actor_model *model;
+ const gh_title_player_view *actor;
+ unsigned effects, sounds, collision, removed;
+ int allow_sound;
+} break_fixture;
+
+static gh_object_step_status break_effect(void *context,const gh_actor_model *model,
+ const uint32_t position[3],uint32_t yaw,uint32_t *frontier) {
+ break_fixture *x=context;
+ C(model==x->model&&!memcmp(position,x->actor->alias_f0,12)&&!yaw&&!x->sounds);
+ x->effects++;
+ *frontier=0;
+ return GH_OBJSTEP_OK;
+}
+
+static gh_actor_motion_status break_sound(void *context,const gh_motion_sound_request *r,
+ uint32_t *handle,uint32_t *frontier) {
+ break_fixture *x=context;
+ C(r->model==x->model&&r->actor==x->actor&&r->bank==2&&r->program==10);
+ C(!r->part&&!r->other_actor&&!r->argument7&&!r->argument8&&x->effects==1&&!x->collision);
+ x->sounds++;
+ if(!x->allow_sound){*frontier=0x2cdd18;return GH_ACTOR_MOTION_UNSUPPORTED;}
+ *handle=0;
+ *frontier=0;
+ return GH_ACTOR_MOTION_OK;
+}
+
+static gh_object_step_status break_collision(void *context,uint64_t key,uint32_t *frontier) {
+ break_fixture *x=context;
+ const uint8_t *p=x->actor->bytes;
+ C(key==((uint64_t)w(p+0x544)<<32|w(p+0x540)));
+ C(x->sounds==3&&(w(p+0x250)&0x10000u));
+ x->collision++;
+ *frontier=0;
+ return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status remove_sound(void *context,gh_actor_model *model,uint32_t *frontier) {
+ break_fixture *x=context;
+ C(model==x->model&&x->collision==1);
+ x->removed++;
+ *frontier=0;
+ return GH_OBJSTEP_OK;
+}
+
+static unsigned break_timer(const uint8_t *p) {return p[0x604]|(unsigned)p[0x605]<<8;}
+
+static int check_break(gh_om_frame_state *s,const gh_om_factory *f,const gh_object_move_request *q,
+ gh_om_init_state *c,gh_boot_work *work,gh_game_init_state *init) {
+ uint8_t *p=c->object->view.bytes;
+ if(w(p+0x560)!=0xffff&&w(p+0x560)!=0x9c3)return 0;
+ uint8_t *broken_slot=NULL;
+ uint8_t old_broken_slot[16];
+ if(w(p+0x538)||w(p+0x53c)){
+  for(unsigned index=0;index<256;index++){
+   uint8_t *slot=f->bindings.room_state->active+0x610+16*index;
+   if(!w(slot)&&!w(slot+4)){broken_slot=slot;break;}
+  }
+  C(broken_slot);
+  memcpy(old_broken_slot,broken_slot,sizeof(old_broken_slot));
+ }
+ const uint8_t *record;
+ gh_collision_pair_shape shape;
+ C(c->hitarea_created&&!gh_hitarea_node_at(&c->hitarea,0,&record,&shape)&&(w(shape.record)&2));
+ C(p[0x2f4]==2&&p[0x2f5]==0&&!w(p+0x5c0)&&!w(p+0x5c8));
+ break_fixture fixture={.model=&c->model,.actor=&c->object->view};
+ const float rate=1;
+ gh_om_frame_runtime runtime={.init=init,.canonical_rate=&rate,.solids=c->bindings->solids,
+  .context=&fixture,.break_effect=break_effect,.break_sound=break_sound,
+  .break_collision=break_collision,.remove_sound=remove_sound};
+ C(!gh_om_frame_bind_runtime(s,&runtime)&&!gh_om_frame_next_call(s));
+ uint32_t pc=0;
+ for(unsigned attempt=0;attempt<2;attempt++){
+  C(gh_om_frame_move(s,f,q,work,GH_STATIC_BINARY32_REFERENCE,&pc)==GH_OBJSTEP_UNSUPPORTED);
+  C(pc==0x2cdd18&&s->special_phase==1&&fixture.effects==1&&fixture.sounds==attempt+1);
+  C(!p[0x2f5]&&!fixture.collision&&(w(shape.record)&2));
+  C(!broken_slot||(!w(broken_slot)&&!w(broken_slot+4)));
+ }
+ fixture.allow_sound=1;
+ C(!gh_om_frame_move(s,f,q,work,GH_STATIC_BINARY32_REFERENCE,&pc)&&s->complete);
+ const gh_actor_node_packets *node;
+ C(!gh_actor_model_packet_at(&c->model,0,&node)&&(w(node->node+0x380)&0x2001u)==0x2001u);
+ C(p[0x2f5]==1&&break_timer(p)==29&&fixture.collision==1&&!(w(shape.record)&2));
+ C(!broken_slot||(!memcmp(broken_slot,p+0x538,8)&&broken_slot[8]==1));
+ C((w(p+0x5b0)&0x13u)==0x13u);
+ for(unsigned tick=0;tick<29;tick++){
+  C(!gh_om_frame_next_call(s)&&!gh_om_frame_move(s,f,q,work,GH_STATIC_BINARY32_REFERENCE,&pc));
+ }
+ C(p[0x2f5]==2&&break_timer(p)==15&&!fixture.removed);
+ for(unsigned tick=0;tick<15;tick++){
+  C(!gh_om_frame_next_call(s)&&!gh_om_frame_move(s,f,q,work,GH_STATIC_BINARY32_REFERENCE,&pc));
+ }
+ C(p[0x2f5]==3&&!break_timer(p)&&!w(p+0x24c)&&!fixture.removed);
+ C(!gh_om_frame_next_call(s)&&!gh_om_frame_move(s,f,q,work,GH_STATIC_BINARY32_REFERENCE,&pc));
+ C(p[0x2f4]==3&&!p[0x2f5]&&!fixture.removed);
+ C(!gh_om_frame_next_call(s)&&!gh_om_frame_move(s,f,q,work,GH_STATIC_BINARY32_REFERENCE,&pc));
+ C(fixture.removed==1&&(w(p+0x250)&0x80000002u)==0x80000002u);
+ if(broken_slot)memcpy(broken_slot,old_broken_slot,sizeof(old_broken_slot));
+ return 1;
+}
+
 static void fragment_frames(gh_om_factory*f,gh_boot_work*work,gh_game_init_state*init,const gh_title_player_view*player){
- gh_game_pl_camera camera={0};C(!gh_game_camera_construct_pl_00139bc8(&camera,&init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));init->active_camera=&init->camera;float eye[3]={0,0,0},pp[3]={8,0,0};memcpy(camera.fields+0x210,eye,12);memcpy(player->alias_f0,pp,12);gh_object_opacity_environment env={init,&camera,player,1};unsigned visited=0;
+ gh_game_pl_camera camera={0};C(!gh_game_camera_construct_pl_00139bc8(&camera,&init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));init->active_camera=&init->camera;float eye[3]={0,0,0},pp[3]={8,0,0};memcpy(camera.fields+0x210,eye,12);memcpy(player->alias_f0,pp,12);gh_object_opacity_environment env={init,&camera,player,1};unsigned visited=0,broken=0;
  for(size_t i=0;i<f->count;i++){gh_om_object*o=f->objects+i;if(!move_entry(o->source.type))continue;visited++;uint32_t entry=move_entry(o->source.type);gh_object_move_request q={.handle=o->handle,.original_entry=entry,.actor=o->view};gh_om_frame_state state={0};uint8_t*p=o->view.bytes;uint32_t next_state=next_entry(o->source.type);uint32_t frontier;int rounding=fegetround(),flags=fetestexcept(FE_ALL_EXCEPT);
   if(o->source.type==0x307||o->source.type==0x30e||o->source.type==0x324||o->source.type==0x354){C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&state.complete&&!state.opacity_complete);C(!gh_om_frame_next_call(&state));}
   else{C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==0x2db6b0&&state.phase==4);C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==0x2db6b0);}
   C(!gh_om_frame_bind_environment(&state,&env)&&!gh_om_frame_bind_environment(&state,&env));
   gh_object_step_status e=gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier);if(e)fprintf(stderr,"fragment%zu kind%X status%d frontier%08X phase%u\n",i,o->source.type,e,frontier,state.phase);C(!e&&state.complete&&state.opacity_complete==(o->source.type!=0x307&&o->source.type!=0x30e&&o->source.type!=0x324&&o->source.type!=0x354)&&!frontier&&fegetround()==rounding&&fetestexcept(FE_ALL_EXCEPT)==flags);C(!memcmp(p+0x490,o->view.alias_f0,12)&&!memcmp(p+0x5d0,p+0x100,12));
-  C(!gh_om_frame_next_call(&state));p[0x2f4]=1;C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==next_state&&state.phase==2);C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==next_state);p[0x2f4]=0;C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));
-  gh_om_init_state*c=o->source.type==0x354?o->initialization:o->source.type==0x307?&((gh_om307_state*)o->initialization)->common:o->source.type==0x310?&((gh_om310_state*)o->initialization)->base.common:&((gh_om303_state*)o->initialization)->common;if(c->hitarea_created){C(!gh_om_frame_next_call(&state));uint32_t old=w(c->hitarea.bytes+0x60);put(c->hitarea.bytes+0x60,old|1);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&state.complete&&state.hit_index>=1&&w(p+0x54c)==0x40400000);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));put(c->hitarea.bytes+0x60,old);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));p[0x2f4]=0;
+  C(!gh_om_frame_next_call(&state));p[0x2f4]=1;
+  if(o->source.type==0x30e||o->source.type==0x324){
+   C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&state.complete&&p[0x2f4]==1);
+   C(!gh_om_frame_next_call(&state));
+  }else{
+   C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==next_state&&state.phase==2);
+   C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==next_state);
+  }
+  p[0x2f4]=0;C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));
+  gh_om_init_state*c=o->source.type==0x354?o->initialization:o->source.type==0x307?&((gh_om307_state*)o->initialization)->common:o->source.type==0x310?&((gh_om310_state*)o->initialization)->base.common:&((gh_om303_state*)o->initialization)->common;if(c->hitarea_created){C(!gh_om_frame_next_call(&state));uint32_t old=w(c->hitarea.bytes+0x60);put(c->hitarea.bytes+0x60,old|1);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&state.complete&&state.hit_index>=1&&w(p+0x54c)==0x40400000);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));put(c->hitarea.bytes+0x60,old);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));
+  if(o->source.type==0x324)broken+=(unsigned)check_break(&state,f,&q,c,work,init);
+  p[0x2f4]=0;
 }
   if(o->source.type==0x307){gh_om307_state*d=(gh_om307_state*)o->initialization;C(!gh_om_frame_next_call(&state));uint32_t second=w(d->box_b2.bytes+0x60);put(d->box_b2.bytes+0x60,second|1);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&state.complete&&state.hit_index>=1&&w(p+0x54c)==0x40400000);put(d->box_b2.bytes+0x60,second);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));p[0x2f4]=0;}
   else if(o->source.type!=0x30e&&o->source.type!=0x324&&o->source.type!=0x354){C(!gh_om_frame_next_call(&state));uint32_t old5b0=w(p+0x5b0);put(p+0x5b0,old5b0|4);C(gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&frontier==0x1c7e30&&state.phase==1);put(p+0x5b0,old5b0);C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));}
 
  }
- C(visited==39);init->active_camera=NULL;
+ C(visited==39&&broken);init->active_camera=NULL;
 }
 int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t en=(size_t)gh_disc_boot_elf_size(d);uint8_t*elf=malloc(en);C(elf&&!gh_disc_read_boot_elf(d,0,elf,en));size_t rn,fn,f3n,f4n,f5n,f7n,fan,fen,f10n,f20n,f22n,f23n,f24n,f3fn,f46n,f54n,f5dn,f9n;uint8_t*raw=load(d,"st1/r100.dat",&rn),*file=load(d,"om/om00.dat",&fn);uint8_t*file3=load(d,"om/om03.dat",&f3n);uint8_t*file4=load(d,"om/om04.dat",&f4n);uint8_t*file5=load(d,"om/om05.dat",&f5n);uint8_t*file7=load(d,"om/om07.dat",&f7n);uint8_t*filea=load(d,"om/om0a.dat",&fan);uint8_t*filee=load(d,"om/om0e.dat",&fen);uint8_t*file10=load(d,"om/om10.dat",&f10n);uint8_t*file20=load(d,"om/om20.dat",&f20n);uint8_t*file22=load(d,"om/om22.dat",&f22n);uint8_t*file23=load(d,"om/om23.dat",&f23n);uint8_t*file24=load(d,"om/om24.dat",&f24n);uint8_t*file3f=load(d,"om/om3f.dat",&f3fn);uint8_t*file46=load(d,"om/om46.dat",&f46n);uint8_t*file54=load(d,"om/om54.dat",&f54n);uint8_t*file5d=load(d,"om/om5d.dat",&f5dn);uint8_t*file9=load(d,"om/om09.dat",&f9n);gh_bundle room;gh_bundle_entry oms;C(!gh_bundle_open(raw,rn,&room)&&!gh_bundle_find(&room,"OMS",0,&oms));gh_om_scene_placements placement={0};int original;C(gh_om_scene_bind_001c3cb8(&placement,&oms,&original)==GH_PLACE_UNSUPPORTED);gh_om_placement_record first;C(!gh_om_scene_record_at(&placement,0,&first)&&first.type==0x300&&first.bytes[0x2d]==0);gh_game_prepare prepare={0};uint8_t state=0;C(!gh_game_prepare_002a5d40(&prepare,(gh_core_save_view){0},0x100,&state));gh_room_state room_state;C(!gh_room_state_select_002bebc8(&prepare,0x100,0,&room_state));gh_heap*heap;gh_room_pools pools={0};C(!gh_heap_create(16*1024*1024,&heap)&&!gh_game_room_pools_initialize_002a5d80(&pools,&room,heap));size_t baseline=gh_heap_used(heap);gh_stage_slots gs={0},rs={0};gh_game_objects*global,*local;C(!gh_game_objects_create(&gs,0,&global)&&!gh_game_objects_create(&rs,1,&local)&&!gh_stage_slots_reset(&gs,NULL)&&!gh_stage_slots_reset(&rs,NULL));int added;C(!gh_game_objects_add_pinned_001fece0(global,0x300,file,fn,&added)&&!gh_game_objects_set_file_extent(global,0x300,file,fn));C(!gh_game_objects_add_pinned_001fece0(global,0x303,file3,f3n,&added)&&!gh_game_objects_set_file_extent(global,0x303,file3,f3n));C(!gh_game_objects_add_pinned_001fece0(global,0x304,file4,f4n,&added)&&!gh_game_objects_set_file_extent(global,0x304,file4,f4n));C(!gh_game_objects_add_pinned_001fece0(global,0x305,file5,f5n,&added)&&!gh_game_objects_set_file_extent(global,0x305,file5,f5n));C(!gh_game_objects_add_pinned_001fece0(global,0x307,file7,f7n,&added)&&!gh_game_objects_set_file_extent(global,0x307,file7,f7n));C(!gh_game_objects_add_pinned_001fece0(global,0x30a,filea,fan,&added)&&!gh_game_objects_set_file_extent(global,0x30a,filea,fan));C(!gh_game_objects_add_pinned_001fece0(global,0x30e,filee,fen,&added)&&!gh_game_objects_set_file_extent(global,0x30e,filee,fen));C(!gh_game_objects_add_pinned_001fece0(global,0x310,file10,f10n,&added)&&!gh_game_objects_set_file_extent(global,0x310,file10,f10n));C(!gh_game_objects_add_pinned_001fece0(global,0x320,file20,f20n,&added)&&!gh_game_objects_set_file_extent(global,0x320,file20,f20n));C(!gh_game_objects_add_pinned_001fece0(global,0x322,file22,f22n,&added)&&!gh_game_objects_set_file_extent(global,0x322,file22,f22n));C(!gh_game_objects_add_pinned_001fece0(global,0x323,file23,f23n,&added)&&!gh_game_objects_set_file_extent(global,0x323,file23,f23n));C(!gh_game_objects_add_pinned_001fece0(global,0x324,file24,f24n,&added)&&!gh_game_objects_set_file_extent(global,0x324,file24,f24n));C(!gh_game_objects_add_pinned_001fece0(global,0x33f,file3f,f3fn,&added)&&!gh_game_objects_set_file_extent(global,0x33f,file3f,f3fn));C(!gh_game_objects_add_pinned_001fece0(global,0x346,file46,f46n,&added)&&!gh_game_objects_set_file_extent(global,0x346,file46,f46n));C(!gh_game_objects_add_pinned_001fece0(global,0x354,file54,f54n,&added)&&!gh_game_objects_set_file_extent(global,0x354,file54,f54n));C(!gh_game_objects_add_pinned_001fece0(global,0x35d,file5d,f5dn,&added)&&!gh_game_objects_set_file_extent(global,0x35d,file5d,f5dn));C(!gh_game_objects_add_pinned_001fece0(global,0x309,file9,f9n,&added)&&!gh_game_objects_set_file_extent(global,0x309,file9,f9n));gh_boot_work work={0};uint8_t serial=0;uint32_t fog=0x123456;gh_om_initializer_bindings init={.work=&work,.packet_heap=heap,.fog_rgb=&fog};gh_om_factory_bindings b={.pools=&pools,.work=&work,.room_state=&room_state,.objects=global,.room_objects=local,.factory_serial=&serial,.initializer=&init};const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};gh_game_math_globals math={0};C(!gh_game_math_globals_from_elf(&math,elf,(size_t)en)&&!gh_game_math_static_initialize_003079c8(&math,&work,1,0xffff));gh_collision_pairs pairs={0};C(!gh_collision_pairs_construct_002b8ae0(&pairs,heap)&&!gh_collision_pairs_initialize_002b8b50(&pairs));baseline=gh_heap_used(heap);gh_game_init_state*hitstate=malloc(sizeof(*hitstate));C(hitstate);gh_game_init_state_initialize(hitstate);uint32_t frontier;C(!gh_hitarea_objects_construct_001fde00(hitstate,&frontier)&&!gh_game_object_pool_reset_001fdea8(hitstate));gh_hitarea_shape_bindings shapes={&pairs,&math,GH_STATIC_BINARY32_REFERENCE};uint8_t foreign_raw[GH_TITLE_PLAYER_BYTES]={0};gh_title_player_view foreign_actor;C(!gh_title_player_construct_00107e40(foreign_raw,sizeof(foreign_raw),&foreign_actor));gh_hitarea_object foreign_unit;int nonnull;C(!gh_hitarea_object_create_001fe218(hitstate,&foreign_actor,0,&foreign_unit,&nonnull,&frontier)&&nonnull);uint32_t zero[3]={0};int index;C(!gh_hitarea_add_sphere_001fdaf0(&foreign_unit,&shapes,foreign_raw+0x80,zero,0x3e800000,&index,&frontier)&&index==0);const uint8_t*foreign_node;gh_collision_pair_shape foreign_shape;C(!gh_hitarea_node_at(&foreign_unit,0,&foreign_node,&foreign_shape));gh_game_collision_solids solids={0};gh_game_collision_solids_reset_00134690(&solids);gh_collision_solid_unit*foreign_solid;gh_collision_native_sphere*foreign_solid_sphere;C(!gh_collision_solid_create_unit_001346f8(&solids,heap,&foreign_actor,5,0x3e4ccccd,&foreign_solid,&frontier)&&!gh_collision_solid_create_sphere_00134880(&solids,&foreign_actor,foreign_raw+0x80,zero,0x3f000000,&foreign_solid_sphere,&frontier));baseline=gh_heap_used(heap);gh_game_scene_tables tables={0};C(!gh_scene_actors_0012e670(&tables,&room));gh_scene_dynamic_owner dynamic={0};C(!gh_scene_dynamic_bind(&dynamic,&tables,heap));gh_om_door_shared shared={0};C(!gh_om_door_shared_from_elf(&shared,elf,(size_t)en));
 

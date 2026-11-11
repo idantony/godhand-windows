@@ -6,6 +6,12 @@ static gh_voice_status fail(gh_actor_attached_sound*s,uint32_t pc,gh_voice_statu
 static gh_voice_status random_word(void*opaque,uint32_t*out,uint32_t*f){gh_actor_attached_sound*s=opaque;if(!s||!s->bound||!s->b.random||gh_game_mt_next_0030f348(s->b.random,out))return s?fail(s,0x31cfe0,GH_VOICE_ARGUMENT,f):GH_VOICE_ARGUMENT;return GH_VOICE_OK;}
 static gh_voice_status probe(void*opaque,const float*position,int check_seh,gh_se_attached_environment*out,uint32_t*f){gh_actor_attached_sound*s=opaque;if(!s||!s->bound||!out||!position)return GH_VOICE_ARGUMENT;gh_sound_control*c=s->b.control;gh_sound_scene*scene=s->b.scene;if(!c->initialized||!scene->startup_bound||scene->control!=c||!gh_se_voice_uses_registry(s->b.voices,scene->registry))return fail(s,0x2cdd18,GH_VOICE_ARGUMENT,f);/* Actualboot375630 scalarprofile; future settings require realwriter. */static const uint32_t gains[6]={0x42fe0000,0x42fe0000,0x42fe0000,0x42b40000,0x42fe0000,0x42b40000};for(unsigned i=0;i<6;i++)if(c->gain_bits[i]!=gains[i])return fail(s,0x375630,GH_VOICE_UNSUPPORTED,f);const uint8_t*work=(const uint8_t*)s->b.work;gh_se_attached_environment env={.system_flags_5e4=w(work+0x5e4),.game_flags_5d8=w(work+0x5d8),.gain64_bits=scene->ratios60[1],.se_level_q8=0x5a00,.output_mode=c->output_mode};uint32_t debug=w(work+0x58c);memcpy(&env.debug58c,&debug,4);
  if(check_seh&&!(env.system_flags_5e4&0x08000000u)){gh_bundle_entry*entry=&scene->seh;if(entry->bytes){if(entry->size<0x10)return fail(s,0x2cae10,GH_VOICE_BOUNDS,f);if(w(entry->bytes+4)!=0x3f8ccccdu){*entry=(gh_bundle_entry){0};}else{unsigned count=entry->bytes[8];env.reverb=entry->bytes[9]!=0;if(count){if(entry->size<0x20||count>(entry->size-0x20)/0x38)return fail(s,0x2cae10,GH_VOICE_BOUNDS,f);for(unsigned n=count;n;n--){const uint8_t*r=entry->bytes+0x20+(n-1)*0x38;if(!w(r+0x34))return fail(s,0x2c0a98,GH_VOICE_UNSUPPORTED,f);}}}}else if(entry->size)return fail(s,0x2cae10,GH_VOICE_BOUNDS,f);}
+ memcpy(env.listener_position_c0,c->listener_position_c0,sizeof(env.listener_position_c0));
+ memcpy(env.listener_matrix_d0,c->listener_matrix_d0,sizeof(env.listener_matrix_d0));
+ env.listener_mode110=c->listener_mode110;
+ env.sound_flags_ac=&c->flags_ac;
+ env.sound_flags_b0=&c->flags_b0;
+ env.scene_tables=s->scene_tables;
  *out=env;return GH_VOICE_OK;}
 gh_voice_status gh_actor_attached_sound_bind(gh_actor_attached_sound*s,const gh_actor_attached_sound_bindings*b){if(!s||!b||!b->voices||!b->control||!b->scene||!b->work||!b->random||!b->control->initialized||!b->scene->startup_bound||b->scene->control!=b->control||!gh_se_voice_uses_registry(b->voices,b->scene->registry))return GH_VOICE_ARGUMENT;if(s->bound)return s->b.voices==b->voices&&s->b.control==b->control&&s->b.scene==b->scene&&s->b.work==b->work&&s->b.random==b->random?GH_VOICE_OK:GH_VOICE_ARGUMENT;s->b=*b;s->bound=1;s->frontier=0;return GH_VOICE_OK;}
 gh_actor_motion_status gh_actor_attached_sound_motion(void*opaque,const gh_motion_sound_request*r,uint32_t*handle,uint32_t*f){gh_actor_attached_sound*s=opaque;if(f)*f=0;if(handle)*handle=0;if(!s||!s->bound||!r||!handle||!f||!r->model||!r->actor||r->actor->bytes!=r->model->root.bytes||r->actor->size!=r->model->root.size||r->actor->alias_f0!=r->model->root.alias_f0||r->actor->size<0x300||r->other_actor)return GH_ACTOR_MOTION_ARGUMENT;s->frontier=0;int16_t bank=r->bank;
@@ -19,4 +25,12 @@ gh_actor_motion_status gh_actor_attached_sound_motion(void*opaque,const gh_motio
     if(actual_bank==-1)return GH_ACTOR_MOTION_OK;
     bank=(int16_t)actual_bank;
  }else if(bank==1){*f=s->frontier=0x2cb3a8;return GH_ACTOR_MOTION_UNSUPPORTED;}int32_t part=-1;if(r->part){unsigned i;for(i=0;i<r->model->part_count;i++)if(r->part==r->model->parts+i){part=(int32_t)i;break;}if(i==r->model->part_count)return GH_ACTOR_MOTION_ARGUMENT;}int32_t delay;memcpy(&delay,&r->argument8,4);gh_voice_status e=gh_se_voice_request_attached(s->b.voices,s,r,r->model,part,bank,r->program,r->argument7,delay,probe,s,random_word,s,handle);s->detail=(int)e;s->frontier=gh_se_voice_frontier(s->b.voices);if(e){*f=s->frontier?s->frontier:0x2cba48;return e==GH_VOICE_UNSUPPORTED?GH_ACTOR_MOTION_UNSUPPORTED:e==GH_VOICE_ARGUMENT||e==GH_VOICE_BOUNDS?GH_ACTOR_MOTION_ARGUMENT:GH_ACTOR_MOTION_CALLEE;}return GH_ACTOR_MOTION_OK;}
-gh_voice_status gh_actor_attached_sound_abort(gh_actor_attached_sound*s){if(!s)return GH_VOICE_ARGUMENT;if(!s->bound)return GH_VOICE_OK;gh_voice_status e=gh_se_voice_abort_attached_owner(s->b.voices,s);if(e){s->frontier=gh_se_voice_frontier(s->b.voices);return e;}s->bound=0;s->frontier=0;return GH_VOICE_OK;}
+gh_voice_status gh_actor_attached_sound_abort(gh_actor_attached_sound*s){if(!s)return GH_VOICE_ARGUMENT;if(!s->bound)return GH_VOICE_OK;gh_voice_status e=gh_se_voice_abort_attached_owner(s->b.voices,s);if(e){s->frontier=gh_se_voice_frontier(s->b.voices);return e;}s->bound=0;s->frontier=0;s->scene_tables=NULL;return GH_VOICE_OK;}
+
+gh_voice_status gh_actor_attached_sound_bind_scene_tables(gh_actor_attached_sound *s,
+ struct gh_game_scene_tables *tables)
+{
+ if(!s||!s->bound||!tables||(s->scene_tables&&s->scene_tables!=tables))return GH_VOICE_ARGUMENT;
+ s->scene_tables=tables;
+ return GH_VOICE_OK;
+}

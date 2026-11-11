@@ -1,3 +1,4 @@
+#include "r100_live_tasks.h"
 #include "game_effect_release.h"
 #include "game_enemy_other_move.h"
 #include "game_enemy_ems.h"
@@ -199,6 +200,11 @@ int main(int argc,char **argv)
         second_live.move202&&second_live.move202!=first_live.move202&&second_live.physical_row==2);
     CHECK(!gh_enemy_ems_live_at(owner,word((uint8_t*)v->allocation.pointer+4*4),&heavy_live)&&
         heavy_live.actor==init->enemy_actors[4]&&heavy_live.model&&heavy_live.shadow&&!heavy_live.move202);
+    uint32_t reverse=0;
+    CHECK(!gh_enemy_ems_handle_for_actor(owner,heavy_live.actor,&reverse)&&
+        reverse==word((uint8_t*)v->allocation.pointer+4*4));
+    gh_game_title_player copy=*heavy_live.actor;
+    CHECK(!gh_enemy_ems_handle_for_actor(owner,&copy,&reverse)&&!reverse);
     const unsigned appearance5_rows[]={6,7,8};
     const uint32_t appearance5_flags[]={0x48800000,0x04000000,0x04000000};
     gh_object_view model_source;
@@ -351,6 +357,80 @@ int main(int argc,char **argv)
         gh_game_title_player *object=i==11?weapon_live.actor:init->enemy_actors[i];
         CHECK(word(object->view.bytes+0x250)==flags250[i]&&word(object->view.bytes+0x5a0)==flags5a0[i]);
     }
+    /* Actual REL2490 with native Scenario fiber and the same eleven-actor EMS owner. */
+    gh_scene_at_manager at={0};
+    CHECK(!gh_scene_at_initialize_units_002c0f90(&at,&room_bundle,heap,0x100,1));
+    gh_at_native_unit trigger={0},destinations[2]={{0}},unit;
+    CHECK(!gh_scene_at_first_unit_002c30c0(&at,&unit));
+    while(unit.bytes){
+        uint16_t id;memcpy(&id,unit.bytes+0x36,2);
+        if(id==3)trigger=unit;
+        if(id==5||id==6)destinations[id-5]=unit;
+        CHECK(!gh_scene_at_next_unit_002c30c8(&at,unit,&unit));
+    }
+    CHECK(trigger.bytes&&destinations[0].bytes&&destinations[1].bytes);
+    uint32_t saved_count=4,flag=0x80000000u;
+    memcpy(room.active+0x1610,&saved_count,4);
+    flag|=word(trigger.bytes+0x50);
+    memcpy(trigger.bytes+0x50,&flag,4);
+    gh_r100_init room_runtime={0};
+    CHECK(!gh_heap_allocate(heap,12,16,&room_runtime.work));
+    room_runtime.heap=heap;
+    uint32_t baseline_count=7;
+    memcpy(room_runtime.work.pointer,&baseline_count,4);
+    gh_task_record32 records[16]={0};
+    for(unsigned i=0;i<16;i++)records[i].thread_id=-1;
+    gh_task_manager task_manager={.records=records,.count=16,.capacity=16,.current_index=-1};
+    gh_task_threads *scenario_threads;
+    CHECK(!gh_task_threads_create(&task_manager,&scenario_threads));
+    uint8_t scenario_bytes[0x114]={0};
+    gh_r100_live_tasks tasks={0};
+    const gh_r100_live_bindings live_b={.scenario={scenario_bytes,sizeof(scenario_bytes),&task_manager},
+        .threads=scenario_threads,.room_init=&room_runtime,.room=&room,.at=&at,
+        .init=init,.work=&work,.player=target,.enemies=&owner};
+    CHECK(!gh_r100_live_register(&tasks,&live_b,0x2490,-1,&frontier));
+    for(unsigned i=0;i<2;i++)CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(tasks.tasks[2].entered&&!tasks.tasks[2].finished&&!tasks.tasks[2].frontier);
+    CHECK(word(room_runtime.work.pointer)==7&&serial==11);
+    uint16_t prior_saved_hp=1;
+    memcpy(room.active+12+26*24+22,&prior_saved_hp,2);
+    saved_count=5;
+    memcpy(room.active+0x1610,&saved_count,4);
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    if(tasks.tasks[2].status)fprintf(stderr,"AT3 status%d pc%08x stage%u\n",tasks.tasks[2].status,tasks.tasks[2].frontier,tasks.tasks[2].at3_stage);
+    CHECK(tasks.tasks[2].finished&&tasks.tasks[2].at3_stage==4&&!tasks.tasks[2].frontier&&serial==13);
+    CHECK(word(room_runtime.work.pointer)==9&&word(room.active+0x1610)==5);
+    for(unsigned i=0;i<2;i++){
+        const uint8_t *record=room.active+12+24*(26+i);
+        CHECK(record[0x13]==31+i&&word(record+8)==0x04000000u&&!record[0x14]);
+        gh_game_title_player *spawned;
+        CHECK(!gh_enemy_manager_get_00290868(init,(uint8_t)(31+i),&spawned)&&spawned);
+        const uint8_t *raw=spawned->view.bytes;
+        int16_t hp;memcpy(&hp,raw+0x54a,2);
+        CHECK(hp>1); /* Single-SetEm does not restore RoomSave HP. */
+        CHECK(word(raw+0x16d0)&0x20000000u);
+        CHECK(word(raw+0x16c0)==0x497423feu&&!word(raw+0x16c4));
+        CHECK(!(word(raw+0x250)&0x8000u)&&!(word(raw+0x5a0)&8u));
+        const uint8_t *shape=destinations[i].bytes+4;
+        CHECK((destinations[i].bytes[0x34]&1u)&&(shape[1]==1||shape[1]==2));
+        float y,actual;
+        memcpy(&y,shape+4,4);memcpy(&actual,raw+0x16b4,4);
+        CHECK(fabs((double)actual-((double)y+0.4))<0.00001);
+        for(unsigned axis=0;axis<2;axis++){
+            double expected=0;
+            for(unsigned vertex=0;vertex<(shape[1]==1?4u:1u);vertex++){
+                float value;memcpy(&value,shape+0x10+axis*4+vertex*8,4);expected+=value;
+            }
+            if(shape[1]==1)expected/=4;
+            memcpy(&actual,raw+0x16b0+axis*8,4);
+            CHECK(fabs((double)actual-expected)<0.00002);
+        }
+        gh_enemy_ems_set_call duplicate={0};gh_game_title_player *none=spawned;
+        CHECK(!gh_enemy_ems_set_002952d0(owner,&duplicate,(uint8_t)(31+i),&none,&frontier)&&!none);
+    }
+    CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK&&word(room_runtime.work.pointer)==9);
+    CHECK(!gh_task_threads_destroy(scenario_threads)&&!gh_r100_init_release(&room_runtime));
+    CHECK(!gh_scene_at_units_release(&at));
     CHECK(!gh_enemy_ems_release_native(&owner,&frontier)&&!owner&&!frontier);
     CHECK(!init->enemy_top&&!init->enemy_last&&gh_collision_solid_units_empty(&solids)&&!gh_collision_pair_shapes_have_live(&pairs));
     CHECK(gh_heap_used(heap)==baseline&&!fesetround(FE_TONEAREST));
@@ -364,6 +444,6 @@ int main(int argc,char **argv)
     CHECK(!gh_game_world_light_release_presets(&light)&&!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));
     gh_disc_close(disc);
     free(weapon_data);free(aux);free(heavy);free(init);free(id);free(elf);free(language_data);free(model_data);free(room_data);
-    puts("PASS actual R100 stop gate and all eleven original EMS actors and row13's real attached weapon, lookup, retry, two full 2A2 and held363 Moves and scoped release");
+    puts("PASS actual R100 eleven EMS actors, attached weapon, retry, full 2A2/held363 Moves and REL2490 AT3 SetEm31/32, Goto, unsuspend, duplicate gates and scoped release");
     return 0;
 }

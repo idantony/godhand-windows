@@ -30,7 +30,9 @@ typedef gh_player_frame_status (*gh_player_frame_effect_create)(void *,const gh_
 typedef gh_player_frame_status (*gh_player_frame_motion_step)(void *,const gh_player_motion_request *,int *original_ended,uint32_t *frontier);
 /* Both real12BFB8 Door probes must complete before its caller flag write. */
 typedef gh_player_frame_status (*gh_player_frame_door_probe)(void *,const gh_title_player_view *,uint32_t *frontier);
-typedef struct {gh_game_title_player *player;gh_boot_work *work;gh_game_init_state *init;gh_game_pl_camera *camera;
+struct gh_player_frame_bindings;
+typedef gh_player_frame_status (*gh_player_square_frame_consumer)(void *,const struct gh_player_frame_bindings *,uint32_t *);
+typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_work *work;gh_game_init_state *init;gh_game_pl_camera *camera;
  gh_core_save_view save;gh_scene_scenario_view scenario;const gh_effect_release_bindings *effects;
  const gh_title_player_view *current_player;const void *elf;size_t elf_bytes;gh_camera_numeric_policy numeric_policy;gh_player_frame_effect_create effect_create;void *effect_context;
  gh_scene_at_manager *scene_at;const gh_hitarea_object *take_object;gh_hitarea_object *give_objects;gh_game_collision_solids *solids;
@@ -49,6 +51,7 @@ typedef struct {gh_game_title_player *player;gh_boot_work *work;gh_game_init_sta
  gh_player_ground_globals *ground_globals;const struct gh_motion_ik_globals *ik_globals;const float *atan_coeff;
  gh_player_opacity_globals *opacity_globals;const gh_title_player_view *aux_68c;uint8_t auxiliary_68c_binding_known;
  gh_player_tail_target_slot *target_644;uint8_t *cockpit_flags_1ca0;
+ gh_player_square_frame_consumer square_attack;void *square_context;
 } gh_player_frame_bindings;
 /* Native continuation only; all actual mutable fields live in borrowed owners.
  * Each source-prefix stage commits once. Error retry requires same bindings;
@@ -62,6 +65,7 @@ typedef struct {gh_player_frame_bindings b;uint32_t stage,frontier;uint8_t bound
  gh_player_opacity_call opacity_call;gh_game_player_frame_tail tail;gh_actor_finish_model_call finish_model;
  gh_player_walk_call walk;
  gh_player_run_call run;
+ uint8_t enemy_focus_fallback,enemy_focus_previous;
 } gh_game_player_frame;
 gh_player_frame_status gh_game_player_frame_00108ab0(gh_game_player_frame *,const gh_player_frame_bindings *);
 /* Actual126820 +five-entry button history leaves1268B0/1268F0. */

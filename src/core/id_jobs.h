@@ -32,10 +32,16 @@ gh_id_error gh_id_jobs_calc_entry_reference(gh_id_base *,gh_id_entry *,
 gh_id_error gh_id_jobs_collect_visible(gh_id_base *,gh_id_draw_job *,size_t capacity,
  size_t *count,gh_id_frontier *);
 typedef struct {gh_id_view source;uint16_t width,height;uint64_t tex0;} gh_id_texture;
+/* Original Radar+94, resource1/TBL1 item0x36, T32 PSMT8 128x256. */
+#define GH_ID_RADAR_TEX0 UINT64_C(0x200000021d308000)
+/* Original language TBL1 items 12/13. */
+#define GH_ID_TIM2_128X64_PSMT8_TEX0 UINT64_C(0x19d308000)
 /* Actual2ACDC8 TBL1 lookup, one-based. Restricted original T32/PSMT8 views,
  * actual512x512T32/PSMT4titlelogo and256x128T32/PSMT8TitleLevel,
  * andverifiedlanguage32x32indexed4TIM2 confirmationcursor. */
 gh_id_error gh_id_texture_open(const gh_id_state *,uint32_t slot,uint32_t one_based,gh_id_texture *);
+/* Same verified texture profiles from a source already resolved by the owner. */
+gh_id_error gh_id_texture_open_view(const gh_id_view *,gh_id_texture *);
 gh_id_error gh_id_texture_rgba(const gh_id_texture *,void *rgba,size_t capacity);
 typedef struct {gh_id_texture texture;float x0,y0,x1,y1,u0,v0,u1,v1;
  uint32_t color;uint8_t color_mode;int16_t font_mode;uint16_t clip;} gh_id_texture_quad;

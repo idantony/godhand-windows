@@ -1,6 +1,7 @@
 /* Independent byte reader; layout evidence from MIT god-hand-decomp
  * include/godhand/tim2.h and src/cod/0015e0a0.c. No bitfield ABI copied. */
 #include "tim2.h"
+#include "gs_indexed_layout.h"
 #include <string.h>
 gh_tim2_error gh_tim2_rgba4(const gh_tim2_picture *p,void *rgba,size_t capacity){
  unsigned char *out=rgba;size_t n,i;
@@ -17,6 +18,26 @@ gh_tim2_error gh_tim2_rgba4(const gh_tim2_picture *p,void *rgba,size_t capacity)
   const unsigned char *c=p->clut+index*4;
   out[i*4]=c[0];out[i*4+1]=c[1];out[i*4+2]=c[2];
   out[i*4+3]=c[3]>=128?255:(unsigned char)(c[3]*2);
+ }
+ return GH_TIM2_OK;
+}
+gh_tim2_error gh_tim2_rgba8(const gh_tim2_picture *picture,void *rgba,size_t capacity)
+{
+ unsigned char *out=rgba;
+ if(!picture||!rgba||!picture->image||!picture->clut)return GH_TIM2_ARGUMENT;
+ uint64_t tex0=picture->tex0;
+ if(!picture->width||!picture->height||picture->image_type!=5||picture->clut_type!=3||
+    picture->colors!=256||((tex0>>20)&63)!=19||((tex0>>51)&0x3ff))return GH_TIM2_UNSUPPORTED;
+ size_t count=(size_t)picture->width*picture->height;
+ if(picture->image_size!=count||picture->clut_size!=1024||
+    count>SIZE_MAX/4||capacity<count*4)return GH_TIM2_BOUNDS;
+ for(unsigned i=0;i<256;++i)
+  if(picture->clut[i*4+3]>128)return GH_TIM2_UNSUPPORTED;
+ for(size_t i=0;i<count;++i){
+  unsigned index=gh_gs_csm1_palette256(picture->image[i]);
+  const unsigned char *color=picture->clut+index*4;
+  memcpy(out+i*4,color,3);
+  out[i*4+3]=color[3]==128?255:(unsigned char)(color[3]*2);
  }
  return GH_TIM2_OK;
 }

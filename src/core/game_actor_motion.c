@@ -77,23 +77,78 @@ static gh_actor_motion_status capture_blend(gh_actor_motion*s)
  m->blend_globals=s->b.ik_globals;
  return GH_ACTOR_MOTION_OK;
 }
+int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_bits,
+ uint32_t blend_frames,uint16_t flags){
+ if(!b||!b->model||!b->model->root.bytes||b->model->root.size<0x5ac)return 0;
+ const uint8_t *p=b->model->root.bytes;
+ if(half(p+0x2fe)!=0x202)return 0;
+ const uint32_t dependency=rd(p+0x564);
+ if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a)return 0;
+ if(!p[0x2f4]&&p[0x2f5]==0x71&&!p[0x2f6]&&blend_frames==10&&!flags)
+  return start_bits==0x41a00000u||start_bits==0x42700000u;
+ return dependency==0x20a&&p[0x2f4]==1&&!p[0x2f5]&&p[0x2f6]==2&&
+    blend_frames==2&&flags==0x40u&&(!start_bits||start_bits==0x41200000u);
+}
+
+/* Actual 157568 seeds the root tracks at start - motion speed before the
+ * first step. Flag 40 copies only the previous translation, in 157B98. */
+static gh_actor_motion_status seed_seek_root(gh_actor_motion *s,uint8_t *p){
+ float start;
+ memcpy(&start,&s->start_frame_bits,4);
+ const float speed=scalar(p+0x444);
+ if(speed>start)return GH_ACTOR_MOTION_OK;
+ fenv_t env;
+ if(feholdexcept(&env))return fail(s,0x157568,0x430);
+ if(fesetround(FE_TOWARDZERO)){(void)fesetenv(&env);return fail(s,0x157568,0x430);}
+ volatile float time=start-speed;
+ if(fesetenv(&env))return fail(s,0x157568,0x430);
+ float root[9]={0,0,0,0,0,0,1,1,1};
+ for(unsigned i=0;i<s->motion.count;i++){
+  gh_motion_track track;
+  if(gh_motion_track_at(&s->motion,i,&track))return GH_ACTOR_MOTION_BOUNDS;
+  if(track.part==0x7f)break;
+  if(track.part!=0xff||track.channel>8)continue;
+  uint32_t pc=0;
+  gh_motion_cache cache;
+  float value;
+  if(gh_motion_sample_reference(&s->motion,i,time,&value,&cache,&pc))
+   return fail(s,pc?pc:0x159ad0,i);
+  if(track.channel<3){
+   if((track.method==1||track.method==3||track.method==5)&&track.keys<=1)value=0;
+   else s->caches[i]=cache;
+  }
+  root[track.channel]=value;
+ }
+ memcpy(p+0x310,root,12);
+ if(s->flags&0x40u)memcpy(p+0x320,root,12);
+ memcpy(p+0x340,root+3,12);
+ memcpy(p+0x370,root+6,12);
+ return GH_ACTOR_MOTION_OK;
+}
+
 static gh_actor_motion_status begin_motion(gh_actor_motion*s,const gh_actor_motion_bindings*b,size_t motion,size_t sequence,uint32_t start_frame_bits,uint32_t blend_frames,uint16_t flags,int direct_initial){
- if(!s||!b||!b->model||!b->model->parts_ready||!b->model->root.bytes||b->model->root.size<0x5ac||b->model->part_count>255||!b->resource||!b->work)return GH_ACTOR_MOTION_ARGUMENT;
+ if(!s||!b||!b->model||!b->model->parts_ready||!b->model->root.bytes||b->model->part_count>255||!b->resource||!b->work)return GH_ACTOR_MOTION_ARGUMENT;
+ /* The direct NULL-sequence path is also used by the original 0x4E0
+  * kind500 model. Its direct init and step only access fields up to 448. */
+ size_t required=direct_initial&&sequence==SIZE_MAX&&!b->ik_globals?0x44c:0x5ac;
+ if(b->model->root.size<required)return GH_ACTOR_MOTION_ARGUMENT;
  uint8_t*p=b->model->root.bytes;
- if(flags||start_frame_bits)return fail(s,0x157568,flags?flags:start_frame_bits);
+ const int seek=gh_actor_motion_seek_start(b,start_frame_bits,blend_frames,flags);
+ if((flags&~0x40u)||(start_frame_bits&&!seek)||(flags&&!blend_frames))return fail(s,0x157568,flags?flags:start_frame_bits);
  if(blend_frames&&b->model->native_identity!=b->model)return GH_ACTOR_MOTION_ARGUMENT;
  if(blend_frames&&(!b->ik_globals||!b->ik_globals->initialized||(b->model->blend_globals&&b->model->blend_globals!=b->ik_globals)))return fail(s,0x156d70,0);
  if(s->bound&&(s->b.model!=b->model||s->b.resource!=b->resource||s->b.work!=b->work||s->motion.offset!=motion||s->sequence_offset!=sequence||s->flags!=flags||s->start_frame_bits!=start_frame_bits||s->blend_frames!=blend_frames))return GH_ACTOR_MOTION_BUSY;
  if(s->bound&&s->b.ik_globals&&b->ik_globals!=s->b.ik_globals)return GH_ACTOR_MOTION_BUSY;
  s->frontier=0;s->detail=0;
  if(!s->bound){
-  if(flags)return fail(s,0x157568,flags);
   if(!direct_initial){
    if(rd(p+0x428)||rd(p+0x42c))return fail(s,0x2a84a8,0x42c);
    if(!isfinite(scalar(p+0x5a8))||scalar(p+0x5a8)<=0)return fail(s,0x157568,0x5a8);
   }
   if(!isfinite(scalar(p+0x34c)))return fail(s,0x157568,direct_initial?0x34c:0x5a8);
   gh_motion_view view;if(gh_motion_open_mtb3(b->resource,b->resource_bytes,motion,&view))return GH_ACTOR_MOTION_BOUNDS;
+  float start;memcpy(&start,&start_frame_bits,4);
+  if(start_frame_bits&&start>(float)(view.frames-1))return fail(s,0x157568,0x430);
   if(sequence!=SIZE_MAX&&!span(b->resource_bytes,sequence,4))return GH_ACTOR_MOTION_BOUNDS;
   int sequence_valid=sequence!=SIZE_MAX&&!memcmp(b->resource+sequence,"SEQ\0",4);
   if(sequence_valid&&!span(b->resource_bytes,sequence,0x18))return GH_ACTOR_MOTION_BOUNDS;
@@ -113,8 +168,8 @@ static gh_actor_motion_status begin_motion(gh_actor_motion*s,const gh_actor_moti
    * Native42C identity is sequence_valid, rawzero is merelya pointertoken. */
   if(blend_frames){gh_actor_motion_status e=capture_blend(s);if(e)return e;}
   wr(p+0x428,0); /* Native owner carries the original motion pointer. */
-  wr(p+0x430,0);
-  p[0x434]=p[0x435]=0;
+  wr(p+0x430,start_frame_bits);
+  p[0x434]=(uint8_t)flags;p[0x435]=0;
   wr(p+0x440,0x3f800000);
   wr(p+0x444,direct_initial?0x3f800000:rd(p+0x5a8));
   float duration=0;
@@ -130,7 +185,15 @@ static gh_actor_motion_status begin_motion(gh_actor_motion*s,const gh_actor_moti
    if(track.part==0x7f)break;float value;uint32_t f=0;gh_motion_status e=gh_motion_sample_reference(&s->motion,i,0,&value,&s->caches[i],&f);
    if(e)return fail(s,f?f:0x1595f8,i);
    if((track.method==1||track.method==3||track.method==5)&&track.keys<=1){s->caches[i].method=0;s->caches[i].first_value=0;}
-  }s->stage=4;
+   /* 157B98 seeds previous translation from the initial root sample. */
+   if(!seek&&(flags&0x40u)&&track.part==0xff&&track.channel<3){
+    if((track.method==1||track.method==3||track.method==5)&&track.keys<=1)value=0;
+    memcpy(p+0x310+track.channel*4,&value,4);
+    memcpy(p+0x320+track.channel*4,&value,4);
+   }
+  }
+  if(seek){gh_actor_motion_status status=seed_seek_root(s,p);if(status)return status;}
+  s->stage=4;
  }
  if(s->stage==4){wr(p+0x448,0x3f800000);wr(p+0x250,rd(p+0x250)&~0x20u);
   for(unsigned i=0;i<b->model->part_count;i++){uint8_t*q=b->model->parts[i].bytes;wr(q+0x158,0);wr(q+0x154,rd(q+0x154)&0xffb01ff7u);}s->stage=5;}

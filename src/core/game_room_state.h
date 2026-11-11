@@ -15,6 +15,9 @@ gh_room_status gh_room_record_at(unsigned,gh_room_record *);
  * transient bank. Writes canonical game_prepare.fields, never a shadow copy.
  * Original pointerword becomes an owner-local native handle; active is typed. */
 gh_room_status gh_room_state_select_002bebc8(gh_game_prepare *,int16_t room,uint32_t work_flags,gh_room_state *);
+/* Mark a destroyed object in the selected room's existing 256-slot table.
+ * The original leaves a full table unchanged and allows duplicate keys. */
+gh_room_status gh_room_state_mark_object_broken_002becb0(const gh_room_state *,uint64_t key);
 /* Actual2C32F0: real killAll, clear16attrs, Work+5E4 bit40000000 clear,
  * select table record and roomstate. Caller supplies originalScenario manager
  * storage >=16records; this API does not invent its earlierboot allocation.

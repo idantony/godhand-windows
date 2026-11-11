@@ -27,7 +27,7 @@ typedef struct {
 } gh_scene_ray_state;
 struct gh_scene_actor_scroll_state;
 struct gh_scene_dynamic_owner;
-typedef struct {gh_scene_table_view environment,scroll_texture;
+typedef struct gh_game_scene_tables {gh_scene_table_view environment,scroll_texture;
  uint32_t scroll_pairs[32][2],scroll_words[32],scroll_link_words[32];
  gh_bundle_entry akt,akg;gh_scene_actor_link actor_links[8];
  uint32_t actor_vec30[3],actor_vec40[3],actor_vec50[3],actor_count60,actor_count64,actor_count68;

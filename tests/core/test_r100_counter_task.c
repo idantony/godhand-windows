@@ -1,4 +1,5 @@
 #include "r100_counter_task.h"
+#include "r100_live_tasks.h"
 #include "game_scene_placements.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,7 +52,31 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK&&!live.frontier);
  C(rd(owner.work.pointer)==9&&rd(active.active+0x1610)==8&&((uint8_t*)owner.work.pointer)[5]==0);
  C(!gh_task_threads_cancel(threads,slot));
+ gh_heap *at_heap;C(!gh_heap_create(1<<20,&at_heap));
+ gh_scene_at_manager at={0};C(!gh_scene_at_initialize_units_002c0f90(&at,&bundle,at_heap,0x100,1));
+ gh_r100_live_tasks watchers={0};
+ gh_r100_live_bindings watch_b={.scenario=scenario,.threads=threads,.room_init=&owner,.room=&active,
+  .at=&at,.init=&init,.work=&work,.player=&actors[0].view};
+ const uint32_t rels[]={0x2920,0x2650,0x2490,0x2288,0x2198,0x15b0,0x2d68,0x1bd0};
+ uint32_t frontier;
+ for(unsigned i=0;i<8;i++)
+  C(gh_r100_live_entry(rels[i])&&!gh_r100_live_register(&watchers,&watch_b,rels[i],-1,&frontier)&&!frontier);
+ for(unsigned frame=0;frame<3;frame++)C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK);
+ for(unsigned i=0;i<8;i++)C(watchers.tasks[i].entered&&!watchers.tasks[i].frontier);
+ C(watchers.tasks[5].finished&&watchers.tasks[6].finished);
+ gh_at_native_unit unit;C(!gh_scene_at_first_unit_002c30c0(&at,&unit));
+ while(unit.bytes){
+  uint16_t id;memcpy(&id,unit.bytes+0x36,2);
+  if(id==3)break;
+  C(!gh_scene_at_next_unit_002c30c8(&at,unit,&unit));
+ }
+ C(unit.bytes);wr(unit.bytes+0x50,rd(unit.bytes+0x50)|0x80000000u);
+ C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK);
+ C(watchers.tasks[2].status==GH_R100_SCRIPT_UNSUPPORTED&&watchers.tasks[2].frontier==0x2952d0);
+ C(rd(active.active+0x1610)==8);
+ for(unsigned i=0;i<8;i++)C(!gh_task_threads_cancel(threads,watchers.tasks[i].slot));
+ C(!gh_scene_at_units_release(&at)&&!gh_heap_destroy(at_heap));
  init.enemy_next[3]=0;
  C(gh_r100_count_alive_00001028(&init,&active,&alive,&flagged)==GH_R100_SCRIPT_UNSUPPORTED&&alive==1&&!flagged);
  free(prepare);free(room_data);
- C(!gh_task_threads_destroy(threads)&&!gh_heap_release(heap,owner.work)&&!gh_heap_destroy(heap));puts("PASS actualR100REL identity +nativeScenario10F8 firstSleep/emptycanonicalEM count +same12B roomwork/RoomSave1610 loop, preservesunknownbytes, real EMS live/dead/missing/FF/stamp and heavy exclusion; inconsistent typed head strict1028");return 0;}
+ C(!gh_task_threads_destroy(threads)&&!gh_heap_release(heap,owner.work)&&!gh_heap_destroy(heap));puts("PASS actualR100REL identity +nativeScenario10F8 firstSleep/emptycanonicalEM count +same12B roomwork/RoomSave1610 loop, preservesunknownbytes, real EMS live/dead/missing/FF/stamp and heavy exclusion; inconsistent typed head strict1028; all eight real first-wave watcher registrations and AT3 positive SetEm frontier");return 0;}

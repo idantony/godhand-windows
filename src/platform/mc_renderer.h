@@ -52,6 +52,8 @@ gh_id_error gh_mc_renderer_queue_view(gh_mc_renderer *,const gh_id_render_view *
  * borrows its immutable texture bytes until same-frame flush. Fade copies its
  * complete scalar/context data. Only visible Fade draws emit a packet group. */
 gh_id_error gh_mc_renderer_queue_fan(gh_mc_renderer *,const gh_cockpit_fan *,gh_ui_ot_tag *);
+/* Direct Radar 144368 -> 15BCF0 mode1 group, TEST3001D, Z0. */
+gh_id_error gh_mc_renderer_queue_radar(gh_mc_renderer *,const gh_cockpit_radar_quad *,gh_ui_ot_tag *);
 gh_id_error gh_mc_renderer_queue_fade(gh_mc_renderer *,const gh_fade_draw *,const gh_ui_fade_context *,gh_ui_ot_tag *);
 /* Actual160D50 cover packet, TEST3001D. Alpha0/1 is a genuine GREATER1
  * discard (including Z), retained as ONE packet group, never NULL sentinel.

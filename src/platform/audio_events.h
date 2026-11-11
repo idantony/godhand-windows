@@ -31,6 +31,10 @@ gh_voice_status gh_audio_output_active(gh_audio_output *,uint32_t voice,int *act
 /* Absolute native per-source output matrix; does not touch master mute.
  * Original integer gain computation stays in core, transport accepts0..1. */
 gh_voice_status gh_audio_output_voice_gain(gh_audio_output *,uint32_t voice,float left,float right);
+/* Absolute pitch relative to the ratio already baked into the submitted PCM.
+ * Preserves the same source and sample cursor during live SE parameter writes. */
+gh_voice_status gh_audio_output_voice_pitch_ratio(gh_audio_output *,uint32_t voice,
+ uint16_t target_q12,uint16_t submitted_q12);
 gh_voice_status gh_audio_output_voice_gain_query(gh_audio_output *,uint32_t voice,float *left,float *right);
 gh_voice_status gh_audio_output_stop(gh_audio_output *,uint32_t voice);
 void gh_audio_output_reap(gh_audio_output *);

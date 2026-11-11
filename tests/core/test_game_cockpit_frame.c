@@ -6,8 +6,9 @@
 #include <fenv.h>
 #include "../../src/assets/tim2.h"
 #define C(x) do{if(!(x)){fprintf(stderr,"FAIL%d %s\n",__LINE__,#x);exit(1);}}while(0)
-typedef struct {gh_id_draw_job jobs[512];size_t count;int calls;int ids[8];gh_cockpit_fan fan;unsigned fan_count;} queue;
-static gh_id_error enqueue(void*p,gh_id_base*b,uint32_t*f){queue*q=p;gh_id_frontier frontier={0};size_t n=0;if(q->calls>=8)return GH_ID_CAPACITY;
+typedef struct {gh_id_draw_job jobs[512];size_t count;int calls;int ids[12];gh_cockpit_fan fan;unsigned fan_count;int fail_id,fail_once;} queue;
+static gh_id_error enqueue(void*p,gh_id_base*b,uint32_t*f){queue*q=p;gh_id_frontier frontier={0};size_t n=0;if(q->calls>=12)return GH_ID_CAPACITY;
+ if(q->fail_once&&b->id==q->fail_id){q->fail_once=0;*f=0x2aac28;return GH_ID_CAPACITY;}
  gh_id_error e=gh_id_jobs_collect_visible(b,q->jobs+q->count,512-q->count,&n,&frontier);if(e){*f=frontier.address;return e;}q->count+=n;q->ids[q->calls++]=b->id;return GH_ID_OK;
 }
 static gh_id_error enqueue_fan(void*p,const gh_cockpit_fan*fan,uint32_t*f){queue*q=p;(void)f;if(q->fan_count)return GH_ID_CAPACITY;q->fan=*fan;q->fan_count++;return GH_ID_OK;}
@@ -31,6 +32,12 @@ int main(int argc,char**argv){
  cb.fan=enqueue_fan;C(!gh_game_cockpit_trans_001410a8(s,&work,&cb)&&q.fan_count==1&&q.fan.ready);
  static const int sequence[]={13,15,1,0,12,10,19};C(q.calls==7);for(unsigned k=0;k<7;k++)C(q.ids[k]==sequence[k]);jobs=q.count;
  C(fegetround()==FE_DOWNWARD&&fesetround(FE_TONEAREST)==0);
+ gh_id_base *rank;
+ C(!gh_game_cockpit_base(s,0x1910,&rank)&&rank->id==31);
+ ((uint8_t*)&work)[0x5b1]=1;
+ q=(queue){.fail_id=rank->id,.fail_once=1};
+ C(gh_game_cockpit_trans_001410a8(s,&work,&cb)==GH_ID_CAPACITY&&q.calls==6);
+ C(!gh_game_cockpit_trans_001410a8(s,&work,&cb)&&q.calls==8&&q.ids[6]==rank->id&&q.ids[7]==19);
  C(!gh_game_cockpit_destroy(s));gh_id_runtime_destroy(r);free(m);free(l);
  printf("PASS real language39runs/roomreset R020140E58 singleID17Move; all11widget drawbranches realqueue %zu jobs +33vertexfan; missingbindings frontiers, no replay/FEnv\n",jobs);return 0;
 }

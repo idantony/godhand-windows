@@ -33,7 +33,7 @@ gh_r100_script_status gh_r100_script_setup_00000bc0(gh_r100_scripts*s){
   else if(k==12){if(flags&0x40000000){if(!s->b.collision)return fail(s,0x1332d0,0,GH_R100_SCRIPT_UNSUPPORTED);uint32_t f=0;gh_r100_init_status r=s->b.collision(s->b.context,"H03_gt",0,&f);if(r)return fail(s,f?f:0x1332d0,0,GH_R100_SCRIPT_CALLEE);}}
   else if(k==13||k==15){e=find_gate(s,k==13?"gate00":"gate01",&s->gates[k==13?0:1]);if(e)return e;}
   else if(k==14||k==16){unsigned i=k==14?0:1;if(s->gates[i].bytes){if(!s->b.door)return fail(s,0xbc0,1,GH_R100_SCRIPT_UNSUPPORTED);uint32_t f=0;
-   if(!s->gate_stage){if(flags&0x40000000){e=s->b.door(s->b.context,s->gates[i].identity,2,0,1,&f);if(e)return fail(s,f?f:0xbc0,f?0:1,e);}s->gate_stage=1;}
+   if(!s->gate_stage){if(flags&0x40000000){e=s->b.door(s->b.context,s->gates[i].identity,2,(int)i,1,&f);if(e)return fail(s,f?f:0xbc0,f?0:1,e);}s->gate_stage=1;}
    if(s->gate_stage==1){e=s->b.door(s->b.context,s->gates[i].identity,0,1,0,&f);if(e)return fail(s,f?f:0xbc0,f?0:1,e);s->gate_stage=2;}
    if(s->gate_stage==2){e=s->b.door(s->b.context,s->gates[i].identity,1,0,0,&f);if(e)return fail(s,f?f:0xbc0,f?0:1,e);s->gate_stage=3;}
   }s->gate_stage=0;}  s->setup_stage++;

@@ -34,6 +34,7 @@ typedef struct {
  uint32_t profile_752cf0,profile_752cfc,profile_752d44,word_5caff4;
  uint32_t stage,frontier,collision_cursor,scenario_task_cursor;int detail;uint64_t completed_frames;
  uint8_t scenario_stage,scenario_before_stage,death_callback_pending,enemy_stage,scenario_status_pending;
+ uint8_t enemy_special_music;
  gh_collision_pair_frame collision_frame;
  gh_hitarea_frame hitarea_frame; /*pause scalar belongs to SAME init.object_pool+ACD0*/
  gh_scene_at_age at_frame_age;

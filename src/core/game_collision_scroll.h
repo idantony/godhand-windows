@@ -10,6 +10,8 @@ extern "C" {
 typedef struct {gh_game_scene_tables *tables;gh_scene_table_view original;
  uint8_t *owned;const void *source_akg;size_t bytes;} gh_collision_scroll_mutation;
 gh_scene_table_status gh_collision_scroll_set_enabled_001332d0(gh_game_scene_tables *,gh_collision_scroll_mutation *,const char *name,int enabled,uint32_t *changed);
+gh_scene_table_status gh_collision_scroll_set_key_enabled_001331b8(gh_game_scene_tables *,
+ gh_collision_scroll_mutation *,uint64_t key,int enabled,uint32_t *changed);
 gh_scene_table_status gh_collision_scroll_mutation_release(gh_collision_scroll_mutation *);
 #ifdef __cplusplus
 }

@@ -11,6 +11,10 @@ ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("startup_runner", ROOT / "tools/run-startup-qa.py")
 tool = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tool)
+frontier_spec = importlib.util.spec_from_file_location("startup_frontier", ROOT / "tools/record-startup-frontier.py")
+frontier = importlib.util.module_from_spec(frontier_spec)
+frontier_spec.loader.exec_module(frontier)
+
 
 
 class StartupRunnerTests(unittest.TestCase):
@@ -53,12 +57,49 @@ class StartupRunnerTests(unittest.TestCase):
         data.update(changes)
         return data
 
-    def fake_run(self, data):
+    def fake_run(self, data, trace=b"test-only synthetic launch\n"):
         def launch(command, stdout, stderr):
             stdout.write(json.dumps(data).encode("utf-8"))
-            stderr.write(b"test-only synthetic launch\n")
+            stderr.write(trace)
             return subprocess.CompletedProcess(command, data["exit_code"])
         return launch
+
+    def test_frontier_record_uses_runner_output_fingerprints(self):
+        prepared = self.prepare()
+        qa = self.qa(playable_game_verified=False, frontier_module="main ELF",
+                     last_move_handle=248, player_updates_completed=2)
+        placement = {"handle": 248, "stamp": 8, "appearance": 5}
+        trace = ("QA_ENEMY_PLACEMENT " + json.dumps(placement) + "\n").encode("utf-8")
+        with patch.object(tool.subprocess, "run", self.fake_run(qa, trace)):
+            tool.run(prepared)
+        runner = self.snapshot / "tools/run-startup-qa.py"
+        runner.parent.mkdir()
+        runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+        result, _ = frontier.validate(self.snapshot, self.scratch, expected_frontier="00142060")
+        self.assertEqual(result["classification"], "original-frontier")
+        self.assertFalse(result["verification_success"])
+        self.assertFalse(result["playable_game_verified"])
+        self.assertEqual(result["observation"]["enemy_placement"], placement)
+        self.assertEqual(result["observation"]["player_updates_completed"], 2)
+        (self.scratch / "startup-newgame.stderr.log").write_bytes(b"post-launch modification")
+        with self.assertRaisesRegex(frontier.proof.ProofError, "SHA256 mismatch"):
+            frontier.validate(self.snapshot, self.scratch, expected_frontier="00142060")
+
+    def test_renderer_error_has_distinct_classification_and_no_success(self):
+        prepared = self.prepare()
+        qa = self.qa(playable_game_verified=False, frontier_module="main ELF", world_gpu_error=2)
+        with patch.object(tool.subprocess, "run", self.fake_run(qa)), self.assertRaises(tool.proof.ProofError):
+            tool.run(prepared)
+        runner = self.snapshot / "tools/run-startup-qa.py"
+        runner.parent.mkdir()
+        runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+        result, _ = frontier.validate(self.snapshot, self.scratch, expected_native_error="world_gpu_error:2")
+        self.assertEqual(result["classification"], "native-renderer-error")
+        self.assertFalse(result["verification_success"])
+        with self.assertRaisesRegex(frontier.proof.ProofError, "no native renderer errors"):
+            frontier.validate(self.snapshot, self.scratch, expected_frontier="00142060")
+        with self.assertRaisesRegex(frontier.proof.ProofError, "unexpected native error"):
+            frontier.validate(self.snapshot, self.scratch, expected_native_error="world_gpu_error:3")
 
     def test_exact_command_always_hides_mutes_and_uses_absent_profile(self):
         command = self.prepare()["command"]
@@ -93,6 +134,17 @@ class StartupRunnerTests(unittest.TestCase):
             with self.subTest(capture=capture, count=count), self.assertRaises(tool.proof.ProofError):
                 tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, 500, capture, count)
         self.assertFalse((self.scratch / "startup-run.lock").exists())
+
+    def test_control_probe_requires_a_named_action_and_preserves_qa_flags(self):
+        for action in ("walk", "run", "square"):
+            with self.subTest(action=action):
+                command = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                                       control_probe=action)["command"]
+                self.assertEqual(command[-2:], ["--qa-control", action])
+                self.assertTrue(all(flag in command for flag in ("--hidden", "--muted", "--qa-new-game")))
+        with self.assertRaises(tool.proof.ProofError):
+            tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, control_probe="other")
+        self.assertNotIn("--qa-control", self.prepare()["command"])
 
     def test_modified_source_rejected_before_launch(self):
         self.source.write_bytes(b"changed")

@@ -15,7 +15,7 @@
 #include "../core/screen_fade.h"
 #include "../core/bgm_requests.h"
 #include "../core/display_state.h"
-#include "../core/cockpit_fan.h"
+#include "../core/game_cockpit.h"
 #include "../core/game_children.h"
 #include "../core/game_object_step.h"
 #include "../core/game_actor_shadow_draw.h"
@@ -35,6 +35,7 @@ typedef struct {
  gh_id_error (*fan)(void *,const gh_cockpit_fan *,uint32_t *frontier);
  gh_id_error (*cover)(void *,const gh_child_cover_quad *,uint32_t *frontier);
  gh_scene_message_emit message;
+ gh_id_error (*radar)(void *,const gh_cockpit_radar_quad *,uint32_t *frontier);
 } gh_host_scene_ui_callbacks;
 typedef struct gh_startup_continuation {
     int enabled;
@@ -94,11 +95,17 @@ typedef struct gh_startup_snapshot {
     uint32_t scene_stage,hitarea_phase,hitarea_slot,hitarea_node;
     uint64_t player_updates_completed,child_updates_completed,om_updates_completed;
     uint32_t last_move_handle,last_move_entry,player_update_stage,child_update_stage;
+    uint32_t player_handle,player_state_entry,player_update_frontier;
+    float player_world_position[3];
+    uint8_t player_pose_ready,player_state[4],player_square_buffer;
     uint32_t child_update_frontier,child_forces_complete,child_angles_complete,child_distances_complete,child_finish_complete;
     uint32_t emitter_active,esp_active,emitter_samples;
     uint32_t emitter_slots[4],emitter_banks[4],emitter_kinds[4],emitter_flags[4],emitter_known[4],emitter_types[4];
     uint32_t current_actor_ready,current_actor_kind,current_actor_flags,current_actor_state;
     uint32_t current_actor_5b0,current_actor_5b4,current_actor_5b8,current_actor_hp548,current_actor_hp54a,current_actor_54c,current_actor_5c0[3];
+    uint32_t current_enemy_placement_ready,current_enemy_stamp,current_enemy_dependency,current_enemy_appearance;
+    uint32_t current_enemy_spawn_flags,current_enemy_phase,current_enemy_variant,current_enemy_serial;
+    uint32_t current_enemy_distance_bits,current_enemy_route_bits;
     uint32_t current_b_samples,current_b_index[4],current_b_group[4],current_b_generation[4],current_b_serial[4];
     uint32_t current_b_source_present[4],current_b_source_known[4],current_b_source_kind[4],current_b_words[4][28];
     uint32_t hitarea_shape_index,hitarea_shape_flags,hitarea_shape_kind;

@@ -8,7 +8,9 @@ extern "C" {
 /* One adapter, borrows SAME cSnd/controller/scene/voicepool/work/MT. No second
  * voicepool, sample registry or RNG. Keep thisowner untilvoicesEOS/abort. */
 typedef struct {gh_se_voice_engine *voices;gh_sound_control *control;gh_sound_scene *scene;const gh_boot_work *work;gh_game_mt *random;} gh_actor_attached_sound_bindings;
-typedef struct {gh_actor_attached_sound_bindings b;uint32_t frontier;int detail;uint8_t bound;} gh_actor_attached_sound;
+typedef struct {gh_actor_attached_sound_bindings b;uint32_t frontier;int detail;uint8_t bound;struct gh_game_scene_tables *scene_tables;} gh_actor_attached_sound;
+/* Borrow the same room actor/scroll table owner until abort. */
+gh_voice_status gh_actor_attached_sound_bind_scene_tables(gh_actor_attached_sound *,struct gh_game_scene_tables *);
 gh_voice_status gh_actor_attached_sound_bind(gh_actor_attached_sound *,const gh_actor_attached_sound_bindings *);
 /* Directrealprovider for motion.bindings.sound. Completes EEvoice construction
  * andownedPCM pendingqueue, actualoutput startsat ordinarySEupdate. */

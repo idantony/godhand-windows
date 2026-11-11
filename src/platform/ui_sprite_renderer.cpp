@@ -76,11 +76,13 @@ extern "C" gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *r,const gh_id_
  if(!r||!t||!rgba||!handle||GetCurrentThreadId()!=r->thread)return GH_UI_ARGUMENT;
  // T32 template may have TCC0. Actual15BE44..15BE54 forces TCC1 before draw.
  bool level=t->width==256&&t->height==128&&t->tex0==UINT64_C(0x20000001e1310000);
- bool t32=(t->width==512&&(t->height==256||t->height==512)&&((t->tex0>>20)&63)==19)||level;
+ bool radar=t->width==128&&t->height==256&&t->tex0==GH_ID_RADAR_TEX0;
+ bool t32=(t->width==512&&(t->height==256||t->height==512)&&((t->tex0>>20)&63)==19)||level||radar;
  bool logo=t->width==512&&t->height==512&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==9&&((t->tex0>>30)&15)==9&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  bool cursor=t->width==32&&t->height==32&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==5&&((t->tex0>>30)&15)==5&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  bool loading=t->width==32&&t->height==16&&t->tex0==UINT64_C(0x115408000);
- if((!t32&&!cursor&&!logo&&!loading)||bytes!=(size_t)t->width*t->height*4||((t->tex0>>35)&3)!=0)return GH_UI_UNSUPPORTED;
+ bool hud8=t->width==128&&t->height==64&&t->tex0==GH_ID_TIM2_128X64_PSMT8_TEX0;
+ if((!t32&&!cursor&&!logo&&!loading&&!hud8)||bytes!=(size_t)t->width*t->height*4||((t->tex0>>35)&3)!=0)return GH_UI_UNSUPPORTED;
  std::vector<unsigned char> raw;try{raw.assign(rgba,rgba+bytes);}catch(const std::bad_alloc&){return GH_UI_MEMORY;}
  for(size_t i=3;i<bytes;i+=4){if((raw[i]&1)&&raw[i]!=255)return GH_UI_UNSUPPORTED;raw[i]=raw[i]==255?128:(unsigned char)(raw[i]/2);}
  std::unique_ptr<SpriteTexture> texture(new(std::nothrow)SpriteTexture);if(!texture)return GH_UI_MEMORY;texture->width=t->width;texture->height=t->height;

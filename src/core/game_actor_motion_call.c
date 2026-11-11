@@ -11,10 +11,12 @@ gh_actor_motion_status gh_actor_motion_call_open_parameters_002a8578(gh_actor_mo
  if((s->active&&!s->complete)||!current->bound||!current->complete||current->step_stage||current->sequence_stage)return GH_ACTOR_MOTION_BUSY;
  if(current->b.model!=b->model||current->b.work!=b->work)return GH_ACTOR_MOTION_ARGUMENT;
  if(release_previous!=0&&release_previous!=1)return GH_ACTOR_MOTION_ARGUMENT;
- if(flags||start_frame_bits)return fail(s,0x157568,GH_ACTOR_MOTION_UNSUPPORTED);
+ if((flags&~0x40u)||(start_frame_bits&&!gh_actor_motion_seek_start(b,start_frame_bits,blend_frames,flags))||(flags&&!blend_frames))return fail(s,0x157568,GH_ACTOR_MOTION_UNSUPPORTED);
  if(blend_frames&&b->model->native_identity!=b->model)return GH_ACTOR_MOTION_ARGUMENT;
  if(blend_frames&&(!b->ik_globals||!b->ik_globals->initialized||b->ik_globals!=current->b.ik_globals||(b->model->blend_globals&&b->model->blend_globals!=b->ik_globals)))return fail(s,0x156d70,GH_ACTOR_MOTION_UNSUPPORTED);
  gh_motion_view view;if(gh_motion_open_mtb3(b->resource,b->resource_bytes,motion,&view)|| (candidate!=SIZE_MAX&&!span(b->resource_bytes,candidate,4)))return GH_ACTOR_MOTION_BOUNDS;
+ float start;memcpy(&start,&start_frame_bits,4);
+ if(start_frame_bits&&start>(float)(view.frames-1))return fail(s,0x157568,GH_ACTOR_MOTION_UNSUPPORTED);
  *s=(gh_actor_motion_call){.current=current,.next=*b,.motion_offset=motion,.candidate_offset=candidate,.flags=flags,.active=1,.start_frame_bits=start_frame_bits,.blend_frames=blend_frames,.release_previous=(uint8_t)release_previous};return GH_ACTOR_MOTION_OK;
 }
 static gh_actor_motion_status invoke(gh_actor_motion_call*s,int32_t kind,uint32_t mode){

@@ -55,7 +55,7 @@ gh_id_error gh_game_cockpit_tutorial_finish_00147028(gh_game_cockpit *);
  * Requires Main/consumers cancelled, exactly as other source-view releases. */
 gh_id_error gh_game_cockpit_tutorial_detach(gh_game_cockpit *);
 typedef gh_id_error (*gh_cockpit_resolve_actor)(void *,uint32_t handle,gh_title_player_view *,uint32_t *frontier);
-typedef struct {const gh_game_init_state *init;const gh_title_player_view *player;
+typedef struct {gh_game_init_state *init;const gh_title_player_view *player;
  const gh_room_pools *pools;const gh_game_pl_camera *camera;
  gh_cockpit_resolve_actor resolve_handle;void *context;uint8_t player_known;} gh_cockpit_gameplay_bindings;
 /* SAME original GetPlayer/actor registry sources, no copied HP/profile.
@@ -65,21 +65,25 @@ gh_id_error gh_game_cockpit_bind_gameplay(gh_game_cockpit *,const gh_cockpit_gam
  * as room reset, not EE/VU bit identity. Successful IDTrans callback must queue/execute real
  * entries, never acknowledge unknown consumers. Pointer stays owned here. */
 typedef struct {
+ gh_id_view texture;
+ float xy[4],uv[4];
+ uint32_t rgba;
+} gh_cockpit_radar_quad;
+typedef struct {
  void *context;
  gh_id_error (*trans)(void *,gh_id_base *,uint32_t *frontier);
  gh_id_error (*set_draw_order)(void *,uint32_t bank,uint32_t depth,uint32_t *frontier);
  gh_id_post_message post;void *post_context;
  gh_core_save_view save;
  gh_id_error (*fan)(void *,const gh_cockpit_fan *,uint32_t *frontier);
+ gh_id_error (*radar)(void *,const gh_cockpit_radar_quad *,uint32_t *frontier);
 } gh_cockpit_frame_callbacks;
 /* Loads original radar curves and mutable globals3BD6EC..F4/466440..447
  * from file-backed or zero-filled PT_LOAD. These persist across room reset. */
 gh_id_error gh_game_cockpit_bind_frame_elf(gh_game_cockpit *,const void *,size_t);
-/* Actual142060 finite binary32 reference subset: zero currentHeat/mode,
- * stable level0..2, life changes use real reset/damage-marker/shake branches;
- * no depleted upgrade/active level-change animation.
- * Original Save.maximum update and four IDMove calls are real; changed or
- * active Heat/level branches remain strict, no SFX/HeatReady ack is invented. */
+/* Actual142060 finite binary32 reference for live Heat ratios, smoothing,
+ * release alpha and the canonical readiness store. Stable level0..2.
+ * Depleted upgrades, level changes and nonempty HUD SFX remain strict. */
 gh_id_error gh_game_cockpit_heat_move_00142060(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);
 gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);
 gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit *,const gh_boot_work *,const gh_cockpit_frame_callbacks *);

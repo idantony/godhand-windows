@@ -5,19 +5,34 @@
 #include "game_object_opacity.h"
 #include "game_om_damage.h"
 #include "game_collision_solid_step.h"
+#include "game_actor_motion.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 /* SAME factory actor companion, no second registry/model. Persistent634
  * replaces original door's actor pointer; reset only the invocation cursor
  * between completed calls, not this borrowed identity. */
-typedef struct {gh_game_init_state *init;const float *canonical_rate;gh_game_collision_solids *solids;} gh_om_frame_runtime;
+typedef gh_object_step_status (*gh_om_break_effect)(void *, const gh_actor_model *,
+ const uint32_t world_xyz[3], uint32_t yaw_bits, uint32_t *frontier);
+typedef gh_object_step_status (*gh_om_break_collision)(void *, uint64_t key, uint32_t *frontier);
+typedef gh_object_step_status (*gh_om_remove_sound)(void *, gh_actor_model *, uint32_t *frontier);
+typedef struct {
+ gh_game_init_state *init;
+ const float *canonical_rate;
+ gh_game_collision_solids *solids;
+ void *context;
+ gh_om_break_effect break_effect;
+ gh_motion_sound_consumer break_sound;
+ gh_om_break_collision break_collision;
+ gh_om_remove_sound remove_sound;
+} gh_om_frame_runtime;
 typedef struct {const gh_om_factory *factory;gh_om_object *object;
  const gh_title_player_view *contact634;uint32_t handle,entry,frontier;
  unsigned node_index;uint8_t phase,complete,bound;
  gh_object_opacity_environment environment;uint8_t environment_bound,opacity_complete;
  gh_om_damage_call damage_calls[2];unsigned hit_index;
  gh_om_frame_runtime runtime;gh_collision_solid_frame solid_frame;float runtime_rate;
+ gh_motion_sound_request break_sound;
  uint8_t runtime_bound,special_phase;} gh_om_frame_state;
 gh_object_step_status gh_om_frame_move(gh_om_frame_state *,const gh_om_factory *,const gh_object_move_request *,const gh_boot_work *,gh_static_transform_policy,uint32_t *frontier);
 /* Borrow same canonical init/PlCamera/Work5F4 publisher for original2A87E8. */

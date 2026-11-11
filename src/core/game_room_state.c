@@ -125,6 +125,20 @@ gh_room_status gh_room_state_select_002bebc8(gh_game_prepare *p,int16_t room,uin
  w32(p->fields,out->native_handle);w32(p->fields+0x1658,(uint16_t)r->save_slot);
  if(r->save_slot==0&&!(flags&0x4000000))memset(out->active,0,0x1650);return GH_ROOM_OK;
 }
+gh_room_status gh_room_state_mark_object_broken_002becb0(const gh_room_state *room,uint64_t key) {
+ if(!key)return GH_ROOM_OK;
+ if(!room||!room->active)return GH_ROOM_ARGUMENT;
+ if(room->size<0x1610)return GH_ROOM_BOUNDS;
+ for(unsigned index=0;index<256;index++){
+  uint8_t *record=room->active+0x610+(size_t)index*16;
+  if(u32(record)||u32(record+4))continue;
+  w32(record,(uint32_t)key);
+  w32(record+4,(uint32_t)(key>>32));
+  record[8]=1;
+  break;
+ }
+ return GH_ROOM_OK;
+}
 gh_room_status gh_scenario_reset_002c32f0(gh_game_prepare *p,gh_boot_work *work,gh_task_manager *tasks,
  gh_task_threads *threads,gh_room_state *out,uint32_t *frontier){
  if(frontier)*frontier=0;

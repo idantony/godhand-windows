@@ -57,6 +57,7 @@
 #include "../core/game_cloth_runtime.h"
 #include "../core/game_actor_render.h"
 #include "../core/game_object_step.h"
+#include "../core/frame_state.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -98,6 +99,7 @@ typedef struct {
  gh_player_ground_globals *player_ground_globals; /*RootONE original.data3BD470*/
  gh_player_opacity_globals *player_opacity_globals;gh_se_voice_engine *voices; /*borrow RootONE owners*/
  const gh_actor_light_globals *actor_light_globals; /*RootONE3BD870/890, no permodel reset*/
+ gh_frame_random *frame_random; /*same auxiliary 747B10 owner as the frame driver*/
 } gh_game_services_bindings;
 typedef struct {
  uint32_t frontier;int detail;uint8_t state;unsigned scenario_active;
@@ -144,6 +146,7 @@ gh_game_event_status gh_game_services_bind_event_actor_extra(gh_game_services *,
 /* Read-only native execution diagnostics; counters are not game state. */
 typedef struct {uint64_t player_updates_completed,child_updates_completed,om_updates_completed;
  uint32_t last_move_handle,last_move_entry,player_stage,player_frontier,child_stage,child_frontier;
+ uint32_t player_handle,player_state_entry;
  uint32_t child_forces_complete,child_angles_complete,child_distances_complete,child_finish_complete;
  uint32_t emitter_active,esp_active,emitter_samples;
  uint32_t emitter_slots[4],emitter_banks[4],emitter_kinds[4],emitter_flags[4],emitter_known[4],emitter_types[4];

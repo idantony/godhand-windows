@@ -29,6 +29,14 @@ gh_frame_error gh_frame_seed_0031ceb8(gh_frame_random *random,gh_game_mt *mt,gh_
     random->auxiliary_word=0x3124;random->lcg.word=0x66b;random->policy=policy;
     gh_game_mt_seed_0030f2b0(mt,UINT32_C(0xd8a9523d));return GH_FRAME_OK;
 }
+gh_frame_error gh_frame_random_byte_0031cef8(gh_frame_random *random,uint8_t *out)
+{
+    if(!random||!out||random->policy!=GH_FRAME_CHOP_REFERENCE)return GH_FRAME_ARGUMENT;
+    uint32_t product=(random->auxiliary_word&0xffffu)*5u;
+    random->auxiliary_word=((product&0xffu)<<8)|((product>>8)&0xffu);
+    *out=(uint8_t)random->auxiliary_word;
+    return GH_FRAME_OK;
+}
 uint32_t gh_frame_unit_bits_0030f518_word(uint32_t value)
 {return encode_chop(value>>1,96);}
 uint32_t gh_frame_jitter_bits_0031d020_word(uint32_t value)

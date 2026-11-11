@@ -160,6 +160,12 @@ def main():
                ("game_player_frame", "src/core/game_player_frame.c"),
                ("game_player_targets", "src/core/game_player_targets.c"),
                ("game_player_idle_input", "src/core/game_player_idle_input.c"),
+               ("game_player_idle_target", "src/core/game_player_idle_target.c"),
+               ("game_player_square_input", "src/core/game_player_square_input.c"),
+               ("game_player_attack_recent", "src/core/game_player_attack_recent.c"),
+               ("game_player_square_attack", "src/core/game_player_square_attack.c"),
+               ("game_player_square_frame", "src/core/game_player_square_frame.c"),
+               ("game_player_attack_hitarea", "src/core/game_player_attack_hitarea.c"),
                ("game_player_walk", "src/core/game_player_walk.c"),
                ("game_pad_analog", "src/core/game_pad_analog.c"),
                ("game_player_run", "src/core/game_player_run.c"),
@@ -333,6 +339,7 @@ def main():
                ("r100_scripts", "src/rooms/r100_scripts.c"),
                ("r100_roof_task", "src/rooms/r100_roof_task.c"),
                ("r100_counter_task", "src/rooms/r100_counter_task.c"),
+               ("r100_live_tasks", "src/rooms/r100_live_tasks.c"),
                ("r100_init_tail", "src/rooms/r100_init_tail.c"),
                ("game_cockpit_tutorial", "src/core/game_cockpit_tutorial.c"),
                ("game_player_abort", "src/core/game_player_abort.c"),
@@ -359,9 +366,11 @@ def main():
                ("game_enemy_hp", "src/core/game_enemy_hp.c"),
                ("game_enemy_initialize", "src/core/game_enemy_initialize.c"),
                ("game_enemy_manager", "src/core/game_enemy_manager.c"),
+               ("game_enemy_near", "src/core/game_enemy_near.c"),
                ("game_enemy_model", "src/core/game_enemy_model.c"),
                ("game_enemy_motion", "src/core/game_enemy_motion.c"),
                ("game_enemy_move", "src/core/game_enemy_move.c"),
+               ("game_enemy_damage", "src/core/game_enemy_damage.c"),
                ("game_enemy_other_move", "src/core/game_enemy_other_move.c"),
                ("game_enemy_node_cache", "src/core/game_enemy_node_cache.c"),
                ("game_enemy_pose", "src/core/game_enemy_pose.c"),
@@ -544,6 +553,8 @@ def main():
         ("game-services-enemy-gate", "tests/platform/test_game_services_enemy_gate.c", "iso"),
         ("game-enemy-actor", "tests/core/test_game_enemy_actor.c", "iso"),
         ("game-enemy-ems", "tests/core/test_game_enemy_ems.c", "iso"),
+        ("game-enemy-near", "tests/core/test_game_enemy_near.c", "iso"),
+        ("game-enemy-first-damage", "tests/core/test_game_enemy_first_damage.c", "iso"),
         ("game-enemy-weapon", "tests/core/test_game_enemy_weapon.c", "iso"),
         ("game-enemy-2a2-init", "tests/core/test_game_enemy_2a2_init.c", "iso"),
         ("game-enemy-row2-actor", "tests/core/test_game_enemy_row2_actor.c", "iso"),
@@ -611,6 +622,11 @@ def main():
         ("game-player-frame", "tests/core/test_game_player_frame.c", "elf"),
         ("game-player-targets", "tests/core/test_game_player_targets.c", "both"),
         ("game-player-idle-input", "tests/core/test_game_player_idle_input.c", "iso"),
+        ("game-player-idle-target", "tests/core/test_game_player_idle_target.c", "iso"),
+        ("game-player-square-input", "tests/core/test_game_player_square_input.c", "iso"),
+        ("game-player-square-attack", "tests/core/test_game_player_square_attack.c", "iso"),
+        ("game-player-square-frame", "tests/core/test_game_player_square_frame.c", "iso"),
+        ("game-player-attack-hitarea", "tests/core/test_game_player_attack_hitarea.c", "both"),
         ("game-player-walk", "tests/core/test_game_player_walk.c", "iso"),
         ("game-player-run", "tests/core/test_game_player_run.c", "iso"),
         ("game-player-post-state", "tests/core/test_game_player_post_state.c", "none"),
@@ -671,6 +687,11 @@ def main():
         ("game-cloth-wind", "tests/core/test_game_cloth_wind.c", "both"),
         ("game-player-child-wind-update", "tests/core/test_game_player_child_wind_update.c", "both"),
         ("game-actor-attached-sound", "tests/core/test_game_actor_attached_sound.c", "iso"),
+        ("game-om324-attached-pending", "tests/core/test_game_om324_attached_pending.c", "both"),
+        ("game-om324-started-pitch", "tests/core/test_game_om324_started_pitch.c", "both"),
+        ("game-enemy-started-pitch", "tests/core/test_game_enemy_started_pitch.c", "iso"),
+        ("game-ema2-impact-sound", "tests/core/test_game_ema2_impact_sound.c", "iso"),
+        ("game-enemy-state71-sound", "tests/core/test_game_enemy_state71_sound.c", "iso"),
         ("se-pitch", "tests/assets/test_se_pitch.c", "iso"),
         ("game-actor-attached-pitch", "tests/core/test_game_actor_attached_pitch.c", "iso"),
         ("game-terrain-sphere", "tests/core/test_game_terrain_sphere.c", "iso"),
@@ -737,6 +758,11 @@ def main():
     if missing_focus:
         parser.error("Unknown manifest test: " + ", ".join(sorted(missing_focus)))
     focused = [by_name[name] for name in dict.fromkeys(args.focus)]
+    recording_transport_tests = {
+        "game-om324-started-pitch", "game-enemy-started-pitch", "game-ema2-impact-sound",
+        "game-enemy-state71-sound",
+    }
+    recording_voice_object = output / "se_voice_recording_transport.o"
     try:
         manifest["test_contracts"] = check_contracts(PROJECT, extra_tests)
     except TestContractError as error:
@@ -799,8 +825,12 @@ def main():
 
     def compile_extra_test(test):
         name, source, _ = test
+        test_objects = list(objects.values())
+        if name in recording_transport_tests:
+            test_objects = [recording_voice_object if module == "se_voice" else obj
+                            for module, obj in objects.items()]
         run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms", "-Isrc/assets"]
-            + list(objects.values()) + [source, "-o", extra_test_path(name)])
+            + test_objects + [source, "-o", extra_test_path(name)])
 
     def extra_test_command(test, baseline):
         name, _, inputs = test
@@ -842,6 +872,14 @@ def main():
         return name, target
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as workers:
         objects = dict(workers.map(compile_module, modules))
+        if any(case[0] in recording_transport_tests for case in (focused or extra_tests)):
+            # Windows COFF links the recording transport by renaming only the
+            # calls in this test object. The ordinary voice object stays intact.
+            functions = ("play", "active", "stop", "voice_gain", "voice_pitch_ratio")
+            symbols = ["-Dgh_audio_output_" + name + "=__wrap_gh_audio_output_" + name
+                       for name in functions]
+            run("compile-se-voice-recording-transport", common + symbols
+                + ["-c", "src/core/se_voice.c", "-o", recording_voice_object])
         if focused:
             list(workers.map(compile_extra_test, focused))
     if focused:

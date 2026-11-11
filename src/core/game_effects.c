@@ -21,8 +21,21 @@ static gh_effect_status emd(gh_game_effects*s,unsigned id,gh_bundle_entry e){
  if(e.size<16||u32(e.bytes)!=0x444d45||id>=1250)return fail(s,0x306af0,0,GH_EFFECT_BOUNDS);
  if(s->emd_tables[id].bytes)return GH_EFFECT_OK; /* originalreturns0, callerignores */
  uint32_t n=u32(e.bytes+4);if(n>64||n>(e.size-16)/4)return fail(s,0x306a48,0,GH_EFFECT_BOUNDS);
+ const size_t table_end=16+(size_t)n*4;
+ for(unsigned i=0;i<n;i++){
+  uint32_t off=u32(e.bytes+16+4*i);
+  if(off&&(off<table_end||off>=e.size))return fail(s,0x306a48,0,GH_EFFECT_BOUNDS);
+ }
  s->emd_tables[id]=(gh_effect_view){e.bytes,e.size};
- for(unsigned i=0;i<n;i++){uint32_t off=u32(e.bytes+16+4*i);if(!off)continue;if(off>=e.size)return fail(s,0x306a48,0,GH_EFFECT_BOUNDS);s->emitter_entries[i]=(gh_effect_view){e.bytes+off,e.size-off};}
+ for(unsigned i=0;i<n;i++){
+  uint32_t off=u32(e.bytes+16+4*i);if(!off)continue;
+  size_t end=e.size;
+  for(unsigned j=0;j<n;j++){
+   uint32_t next=u32(e.bytes+16+4*j);
+   if(next>off&&next<end)end=next;
+  }
+  s->emitter_entries[i]=(gh_effect_view){e.bytes+off,end-off};
+ }
  return GH_EFFECT_OK;
 }
 static gh_effect_status reg(gh_game_effects*s,unsigned id,const gh_bundle*b){

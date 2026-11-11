@@ -11,7 +11,11 @@ typedef struct gh_se_voice_engine gh_se_voice_engine;
 gh_voice_status gh_se_voice_bind_pitch_reference(gh_se_voice_engine *,gh_disc *);
 gh_voice_status gh_se_voice_pitch_state(const gh_se_voice_engine *,uint16_t *state);
 struct gh_actor_model;
-typedef struct {uint32_t system_flags_5e4,game_flags_5d8,gain64_bits;int32_t debug58c;uint16_t se_level_q8;uint8_t output_mode,reverb;} gh_se_attached_environment;
+struct gh_game_scene_tables;
+typedef struct {uint32_t system_flags_5e4,game_flags_5d8,gain64_bits;int32_t debug58c;uint16_t se_level_q8;uint8_t output_mode,reverb;
+ uint32_t listener_position_c0[4],listener_matrix_d0[16];int32_t listener_mode110;
+ uint32_t *sound_flags_ac,*sound_flags_b0;
+ struct gh_game_scene_tables *scene_tables;} gh_se_attached_environment;
 typedef gh_voice_status (*gh_se_attached_probe)(void *,const float position[4],int check_seh,gh_se_attached_environment *,uint32_t *frontier);
 typedef gh_voice_status (*gh_se_attached_random)(void *,uint32_t *word,uint32_t *frontier);
 typedef enum gh_se_dsp_policy {GH_SE_DSP_NATIVE_LINEAR_REFERENCE=1} gh_se_dsp_policy;
@@ -20,7 +24,8 @@ typedef struct gh_se_mix {uint16_t se_level_q8;uint8_t output_mode;uint32_t syst
  * SFX90/127 of master127. Does not claim the original global frame/RPC calls. */
 gh_voice_status gh_se_mix_boot_defaults_002c9e78(gh_se_mix *,uint32_t system_flags,gh_se_dsp_policy);
 typedef struct gh_se_voice_info {uint32_t original_handle,native_voice,sample_slot,frames,rate;uint16_t pitch_q12,adsr1,adsr2,level_q14;int16_t program,bank;uint8_t pending,channel;int16_t stop_current,stop_step;uint16_t stop_count;uint8_t stopping,retiring;
- const struct gh_actor_model *attached_model;int32_t attached_part;float source_position[4];uint8_t attached,position_mode;} gh_se_voice_info;
+ const struct gh_actor_model *attached_model;int32_t attached_part;float source_position[4];uint8_t attached,position_mode;
+ uint16_t distance,azimuth,pan,left_q14,right_q14;} gh_se_voice_info;
 /* Narrow real origin MC event path: core bank0 programs2D/15E/160/161 and R020 bank2 programs0/10/11/12, original
  * default args(-1,-1,0,0), stereo/mono and explicit original SFX master level.
  * Caller supplies real registry/device; no emulated device or empty command

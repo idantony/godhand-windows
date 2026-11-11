@@ -14,12 +14,28 @@ static float number(uint32_t n){float f;memcpy(&f,&n,4);return f;}
 static void sf(void*p,float f){memcpy(p,&f,4);}
 static float sub(float a,float b){volatile float f=a-b;return f;}
 static gh_player_frame_status fail(gh_game_player_frame*s,uint32_t pc,gh_player_frame_status e){s->frontier=pc;return e;}
+static gh_player_frame_status enemy_focus(gh_game_player_frame *s,float range,float cone,gh_player_target *out)
+{
+ const gh_player_frame_bindings *b=&s->b;
+ if(!b->idle_input_bindings){
+  if(b->init->enemy_top||w(b->init->enemies+0x500))return fail(s,0x291010,GH_PLAYER_FRAME_UNSUPPORTED);
+  *out=(gh_player_target){0};
+  return GH_PLAYER_FRAME_OK;
+ }
+ const gh_player_target_bindings *targets=&b->idle_input_bindings->targets;
+ if(targets->player!=&b->player->view)return fail(s,0x291010,GH_PLAYER_FRAME_ARGUMENT);
+ uint32_t pc=0;
+ gh_player_target_status status=gh_player_enemy_target_00291010(targets,b->init,range,cone,out,&pc);
+ if(!status)return GH_PLAYER_FRAME_OK;
+ return fail(s,pc?pc:0x291010,status==GH_PLAYER_TARGET_NUMERIC?GH_PLAYER_FRAME_NUMERIC:
+  status==GH_PLAYER_TARGET_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE);
+}
 static void decrement_byte(uint8_t*p){if(*p)*p=(uint8_t)(*p-1u);}
 static void decrement_half(uint8_t*p){uint16_t n;memcpy(&n,p,2);if(n){n=(uint16_t)(n-1u);memcpy(p,&n,2);}}
 static void history_clear(uint8_t*p){memset(p+0x1644,0,20);}
 static void history_push(uint8_t*p,uint32_t value){for(unsigned i=0;i<5;i++)if(!w(p+0x1644+i*4)){put(p+0x1644+i*4,value);put(p+0x1658,15);return;}}
 gh_player_frame_status gh_game_player_button_history_00126820(gh_title_player_view*v,const gh_boot_work*work){if(!v||!v->bytes||v->size<0x165c||!work)return GH_PLAYER_FRAME_ARGUMENT;uint8_t*p=v->bytes;uint32_t pressed=w((const uint8_t*)work+8);if(!(pressed&0x90)){uint32_t n=w(p+0x1658);if(!n)history_clear(p);else put(p+0x1658,n-1);}else if(pressed&0x10){history_clear(p);history_push(p,2);}else history_push(p,1);return GH_PLAYER_FRAME_OK;}
-static int same(const gh_player_frame_bindings*a,const gh_player_frame_bindings*b){return a->player==b->player&&a->work==b->work&&a->init==b->init&&a->camera==b->camera&&a->save.bytes==b->save.bytes&&a->save.size==b->save.size&&a->scenario.bytes==b->scenario.bytes&&a->scenario.size==b->scenario.size&&a->effects==b->effects&&a->current_player==b->current_player&&a->elf==b->elf&&a->elf_bytes==b->elf_bytes&&a->numeric_policy==b->numeric_policy&&a->effect_create==b->effect_create&&a->effect_context==b->effect_context&&a->scene_at==b->scene_at&&a->take_object==b->take_object&&a->give_objects==b->give_objects&&a->solids==b->solids&&a->take_binding_known==b->take_binding_known&&a->give_binding_known==b->give_binding_known&&a->give_present_mask==b->give_present_mask&&a->model==b->model&&a->resource==b->resource&&a->resource_bytes==b->resource_bytes&&a->rate==b->rate&&a->initialize_motion==b->initialize_motion&&a->advance_motion==b->advance_motion&&a->motion_context==b->motion_context&&a->aux_698==b->aux_698&&a->aux_6a0==b->aux_6a0&&a->auxiliary_bindings_known==b->auxiliary_bindings_known&&a->idle_input==b->idle_input&&a->idle_input_bindings==b->idle_input_bindings&&a->node_cache==b->node_cache&&a->door_probe==b->door_probe&&a->door_context==b->door_context&&a->actors==b->actors&&a->ground_globals==b->ground_globals&&a->ik_globals==b->ik_globals&&a->atan_coeff==b->atan_coeff&&a->opacity_globals==b->opacity_globals&&a->aux_68c==b->aux_68c&&a->auxiliary_68c_binding_known==b->auxiliary_68c_binding_known&&a->target_644==b->target_644&&a->cockpit_flags_1ca0==b->cockpit_flags_1ca0;}
+static int same(const gh_player_frame_bindings*a,const gh_player_frame_bindings*b){return a->player==b->player&&a->work==b->work&&a->init==b->init&&a->camera==b->camera&&a->save.bytes==b->save.bytes&&a->save.size==b->save.size&&a->scenario.bytes==b->scenario.bytes&&a->scenario.size==b->scenario.size&&a->effects==b->effects&&a->current_player==b->current_player&&a->elf==b->elf&&a->elf_bytes==b->elf_bytes&&a->numeric_policy==b->numeric_policy&&a->effect_create==b->effect_create&&a->effect_context==b->effect_context&&a->scene_at==b->scene_at&&a->take_object==b->take_object&&a->give_objects==b->give_objects&&a->solids==b->solids&&a->take_binding_known==b->take_binding_known&&a->give_binding_known==b->give_binding_known&&a->give_present_mask==b->give_present_mask&&a->model==b->model&&a->resource==b->resource&&a->resource_bytes==b->resource_bytes&&a->rate==b->rate&&a->initialize_motion==b->initialize_motion&&a->advance_motion==b->advance_motion&&a->motion_context==b->motion_context&&a->aux_698==b->aux_698&&a->aux_6a0==b->aux_6a0&&a->auxiliary_bindings_known==b->auxiliary_bindings_known&&a->idle_input==b->idle_input&&a->idle_input_bindings==b->idle_input_bindings&&a->node_cache==b->node_cache&&a->door_probe==b->door_probe&&a->door_context==b->door_context&&a->actors==b->actors&&a->ground_globals==b->ground_globals&&a->ik_globals==b->ik_globals&&a->atan_coeff==b->atan_coeff&&a->opacity_globals==b->opacity_globals&&a->aux_68c==b->aux_68c&&a->auxiliary_68c_binding_known==b->auxiliary_68c_binding_known&&a->target_644==b->target_644&&a->cockpit_flags_1ca0==b->cockpit_flags_1ca0&&a->square_attack==b->square_attack&&a->square_context==b->square_context;}
 static int elf_word(const gh_player_frame_bindings*b,uint32_t address,uint32_t*out){const uint8_t*p=b->elf;size_t n=b->elf_bytes;if(!p||n<52||memcmp(p,"\177ELF\1\1\1",7))return 0;uint32_t ph=w(p+28);uint16_t size,count;memcpy(&size,p+42,2);memcpy(&count,p+44,2);if(size!=32||count>128||ph>n||(size_t)count*32>n-ph)return 0;for(unsigned i=0;i<count;i++){const uint8_t*q=p+ph+i*32;uint32_t base=w(q+8),off=w(q+4),files=w(q+16);if(w(q)!=1||address<base||(uint64_t)address+4>(uint64_t)base+files)continue;uint64_t o=(uint64_t)off+address-base;if(o>n||4>n-o)return 0;*out=w(p+(size_t)o);return 1;}return 0;}
 static unsigned half(const uint8_t*p){return p[0]|(unsigned)p[1]<<8;}
 static void sh(uint8_t*p,uint16_t n){memcpy(p,&n,2);}
@@ -52,7 +68,14 @@ static gh_player_frame_status idle_frame(gh_game_player_frame*s){const gh_player
  if(s->idle_phase==3){if(!(w((const uint8_t*)b->work+0x5d8)&0x2000000)&&w(p+0x5d8)!=4&&p[0x61f]){uint32_t speed;if(!b->ground_globals||!b->ground_globals->tuning_loaded)return fail(s,0x10c120,GH_PLAYER_FRAME_UNSUPPORTED);memcpy(&speed,&b->ground_globals->idle_turn_speed,4);float absolute=number(w(p+0x608)),heading=number(w(p+0x104)),maximum=b->ground_globals->idle_turn_cap;if(!isfinite(absolute)||!isfinite(heading)||!isfinite(maximum))return fail(s,0x10c120,GH_PLAYER_FRAME_NUMERIC);float delta=sub(absolute,number(0x3f060a92));if(delta<0)delta=0;volatile float product=delta*.2f;float turn=product;if(maximum<turn)turn=maximum;if(number(w(p+0x604))<0)turn=-turn;volatile float sum=heading+turn;float wrapped;if(gh_id_angle_reference_001f7d48(sum,&wrapped))return fail(s,0x1f7d48,GH_PLAYER_FRAME_UNSUPPORTED);put(p+0x15f0,speed);if((int8_t)p[0x648]>10)p[0x648]=10;sf(p+0x104,wrapped);}s->idle_phase=4;}
  if(s->idle_phase==4){if(!s->motion_step_complete){if(!b->advance_motion||!b->rate)return fail(s,0x157c18,GH_PLAYER_FRAME_UNSUPPORTED);if(!s->pending_motion.player)s->pending_motion=(gh_player_motion_request){.player=b->player,.model=b->model,.work=b->work,.resource=b->resource,.resource_bytes=b->resource_bytes,.rate=b->rate};gh_player_frame_status e=b->advance_motion(b->motion_context,&s->pending_motion,&s->motion_ended,&pc);if(e)return fail(s,pc?pc:0x157c18,e);s->motion_step_complete=1;}if(s->motion_ended&&!s->idle_end_prefix_done){uint32_t n=w(p+0x15b4);if(n)put(p+0x15b4,n-1);if(p[0x2f7]==2){p[0x2f6]=0;p[0x2f7]=1;}else if(p[0x2f7]<3)s->idle_end_needs_random=1;s->idle_end_prefix_done=1;}if(s->idle_end_needs_random){uint32_t random;gh_player_frame_status e=idle_random(s,&random);if(e)return e;int32_t remaining;uint32_t bits=w(p+0x15b4);memcpy(&remaining,&bits,4);if(!(random&3)&&remaining<1){p[0x2f7]=2;p[0x2f6]=0;}s->idle_end_needs_random=0;}s->idle_phase=5;} if(s->idle_phase==5){if(!(w((const uint8_t*)b->work+0x5e4)&0x20000000)){float in[4],out[4];memcpy(in,p+0x100,16);for(unsigned i=0;i<3;i++){float delta=number(w(p+0x360+i*4));if(!isfinite(in[i])||!isfinite(delta))return fail(s,0x14f9f0,GH_PLAYER_FRAME_NUMERIC);volatile float sum=in[i]+delta;in[i]=sum;}if(gh_actor_euler_adjust_001f7da0(in,out,GH_STATIC_BINARY32_REFERENCE,&pc))return fail(s,pc?pc:0x1f7da0,GH_PLAYER_FRAME_UNSUPPORTED);memcpy(p+0x100,out,12);}s->idle_phase=6;}
  if(s->idle_phase==6){if(!(w((const uint8_t*)b->work+0x5e4)&0x20000000)){if(!b->player->view.alias_f0)return fail(s,0x14f928,GH_PLAYER_FRAME_ARGUMENT);float local[3],angles[3],matrix[16],world[4],next[3];for(unsigned i=0;i<3;i++){float delta=number(w(p+0x330+i*4)),scale=number(w(p+0x110+i*4));if(!isfinite(delta)||!isfinite(scale))return fail(s,0x14f928,GH_PLAYER_FRAME_NUMERIC);volatile float product=delta*scale;local[i]=product;}memcpy(angles,p+0x100,12);if(gh_actor_matrix_rotation_00147728(angles,0,matrix,GH_STATIC_BINARY32_REFERENCE,&pc))return fail(s,pc?pc:0x147728,GH_PLAYER_FRAME_UNSUPPORTED);if(gh_scene_at_apply_world_001508d8(matrix,local,world))return fail(s,0x150830,GH_PLAYER_FRAME_NUMERIC);for(unsigned i=0;i<3;i++){volatile float sum=number(w(b->player->view.alias_f0+i*4))+world[i];next[i]=sum;if(!isfinite(next[i]))return fail(s,0x14f928,GH_PLAYER_FRAME_NUMERIC);}memcpy(b->player->view.alias_f0,next,12);}s->idle_phase=7;}
- if(s->idle_phase==7){if(b->init->enemy_top||w(b->init->enemies+0x500))return fail(s,0x291010,GH_PLAYER_FRAME_UNSUPPORTED);put(p+0x15b0,90);s->idle_phase=8;}
+ if(s->idle_phase==7){
+  gh_player_target target;
+  gh_player_frame_status e=enemy_focus(s,3,number(0x40490fdb),&target);
+  if(e)return e;
+  uint32_t timer=w(p+0x15b0);
+  put(p+0x15b0,target.handle?(timer?timer-1:0):90);
+  s->idle_phase=8;
+ }
  if(s->idle_phase==8){if(!p[0x61f])p[0x1600]=2;s->idle_phase=9;}
  if(s->idle_phase==9){if(!b->idle_input||!b->idle_input_bindings)return fail(s,0x123938,GH_PLAYER_FRAME_UNSUPPORTED);const gh_player_frame_bindings*q=&b->idle_input_bindings->frame;if(q->player!=b->player||q->init!=b->init||q->work!=b->work||q->current_player!=b->current_player)return fail(s,0x123938,GH_PLAYER_FRAME_ARGUMENT);if(!s->input_started){gh_player_frame_status e=gh_player_idle_input_begin(b->idle_input);if(e)return fail(s,0x123938,e);s->input_started=1;}gh_player_frame_status e=gh_game_player_idle_input_00123938(b->idle_input,b->idle_input_bindings,&s->input_result);if(e)return fail(s,b->idle_input->frontier?b->idle_input->frontier:0x123938,e);s->idle_phase=10;}
  if(s->idle_phase==10){if(!s->input_result){gh_player_frame_status e=gh_game_player_idle_cleanup_0012bfb8(b->idle_input);if(e)return fail(s,b->idle_input->frontier?b->idle_input->frontier:0x12bfb8,e);}s->idle_phase=11;}
@@ -66,7 +89,25 @@ static gh_player_frame_status idle_frame(gh_game_player_frame*s){const gh_player
  if(s->stage==4){if(!b->camera||!b->camera->constructed||b->init->active_camera!=b->camera->identity)return fail(s,0x108f04,GH_PLAYER_FRAME_UNSUPPORTED);float x=sub(number(w(b->camera->fields+0x200)),number(w(b->camera->fields+0x210))),z=sub(number(w(b->camera->fields+0x208)),number(w(b->camera->fields+0x218)));if(gh_game_angle_001f8180(x,z,&angle,b->numeric_policy,&pc))return fail(s,pc?pc:0x1f8180,GH_PLAYER_FRAME_UNSUPPORTED);sf(p+0x15f8,angle);s->stage=5;}
  if(s->stage==5){if(p[0x61f]){volatile float sum=number(w(p+0x15f8))+number(w(p+0x604));float wrapped;if(gh_id_angle_reference_001f7d48(sum,&wrapped))return fail(s,0x1f7d48,GH_PLAYER_FRAME_UNSUPPORTED);sf(p+0x15fc,wrapped);}/*2E0D60→2E0B78→2E0AD8 returns1 unconditionally: both diagnosticprints truly skipped. */decrement_byte(p+0x648);decrement_byte(p+0x1600);decrement_byte(p+0x1601);decrement_byte(p+0x1602);decrement_half(p+0x1616);decrement_half(p+0x1618);decrement_byte(p+0x1603);s->stage=6;}
  if(s->stage==6){/*124C30(self,0): actual expired target clears only648/640. */if((int8_t)p[0x648]<1){p[0x648]=0;put(p+0x640,0);}else if(w(p+0x640))return fail(s,0x124c30,GH_PLAYER_FRAME_UNSUPPORTED);s->stage=7;}
- if(s->stage==7){/*291010 on the real empty canonical enemy-list returnsNULL. */if(b->init->enemy_top||w(b->init->enemies+0x500))return fail(s,0x291010,GH_PLAYER_FRAME_UNSUPPORTED);put(p+0x690,0);s->stage=8;}
+ if(s->stage==7){
+  gh_player_target target;
+  if(!s->enemy_focus_fallback){
+   s->enemy_focus_previous=(uint8_t)(w(p+0x690)!=0);
+   gh_player_frame_status e=enemy_focus(s,s->enemy_focus_previous?26:24,
+    number(s->enemy_focus_previous?0x3f1c61aa:0x3f060a92),&target);
+   if(e)return e;
+   /* Canonical handle stands in for the original actor pointer word. */
+   put(p+0x690,target.handle);
+   s->enemy_focus_fallback=(uint8_t)(!target.handle);
+  }
+  if(s->enemy_focus_fallback){
+   gh_player_frame_status e=enemy_focus(s,s->enemy_focus_previous?10:8,number(0x40490fdb),&target);
+   if(e)return e;
+   put(p+0x690,target.handle);
+   s->enemy_focus_fallback=0;
+  }
+  s->stage=8;
+ }
  if(s->stage==8){uint32_t scalar;if(!elf_word(b,w(p+0x5d8)==4?0x3bd46c:0x3bd468,&scalar))return fail(s,0x109280,GH_PLAYER_FRAME_ARGUMENT);put(p+0x15f0,scalar);s->stage=9;}
  if(s->stage==9){gh_player_frame_status e=heat_frame(s);if(e)return e;s->stage=10;}
  if(s->stage==10){gh_player_frame_status e=damage_frame(s);if(e)return e;put(p+0x15f4,w(p+0x15f4)&0xfe000076u);s->stage=11;}
@@ -76,6 +117,12 @@ static gh_player_frame_status idle_frame(gh_game_player_frame*s){const gh_player
  if(s->stage==14&&s->state_entry==0x10b6b0){if(p[0x2f5]>0x46)p[0x2f5]=0;uint32_t method,descriptor;if(!elf_word(b,0x3bd0f0+(uint32_t)p[0x2f5]*8,&descriptor)||!elf_word(b,0x3bd0f4+(uint32_t)p[0x2f5]*8,&method))return fail(s,0x10b6b0,GH_PLAYER_FRAME_ARGUMENT);if((int16_t)(descriptor>>16)>=0||(int16_t)descriptor)return fail(s,0x10b6b0,GH_PLAYER_FRAME_UNSUPPORTED);s->state_entry=method;s->stage=15;}
  if(s->stage==15&&s->state_entry==0x10be18){gh_player_frame_status e=idle_frame(s);if(e)return e;s->stage=16;}
  if(s->stage==15&&s->state_entry==0x10c300){gh_player_frame_status e=gh_game_player_walk_0010c300(&s->walk,b);if(e)return fail(s,s->walk.frontier?s->walk.frontier:0x10c300,e);s->stage=16;}
+ if(s->stage==15&&s->state_entry==0x10d3a8){
+  if(!b->square_attack)return fail(s,0x10d3a8,GH_PLAYER_FRAME_UNSUPPORTED);
+  gh_player_frame_status e=b->square_attack(b->square_context,b,&pc);
+  if(e)return fail(s,pc?pc:0x10d3a8,e);
+  s->stage=16;
+ }
  if(s->stage==15&&s->state_entry==0x10c5a8){gh_player_frame_status e=gh_game_player_run_0010c5a8(&s->run,b);if(e)return fail(s,s->run.frontier?s->run.frontier:0x10c5a8,e);s->stage=16;}
  if(s->stage==16){gh_player_post_status e=gh_player_state_effect_0012bb38(&s->post_state,&b->player->view,b->effects);if(e)return fail(s,s->post_state.frontier?s->post_state.frontier:0x12bb38,e==GH_PLAYER_POST_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE);s->stage=17;}
  if(s->stage==17){gh_player_post_status e=gh_player_mesh_visibility_001236e8(&s->post_state,b->node_cache,b->save);if(e)return fail(s,s->post_state.frontier?s->post_state.frontier:0x1236e8,e==GH_PLAYER_POST_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE);s->stage=18;}

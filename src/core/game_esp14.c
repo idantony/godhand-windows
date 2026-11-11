@@ -1,4 +1,5 @@
 #include "game_esp14.h"
+#include "game_actor_motion_step.h"
 #include "game_actor_model_nodes.h"
 #include "game_actor_two_bone.h"
 #include "id_layout_rotation.h"
@@ -232,6 +233,55 @@ static void put_half(uint8_t *p, unsigned n) {
     p[1] = (uint8_t)(n >> 8);
 }
 
+/* 306CC8 -> 306A08 uses a zero-based EMM table row. The caller's
+ * stored 2B8 is one-based; zero means the static kind500 model. */
+static gh_effect_status select_model_motion(gh_esp14_model *child,
+    const gh_esp14_model_bindings *bindings,const gh_esp14_resources *resources,
+    uint32_t selection,uint32_t *frontier)
+{
+    *frontier=0x306cc8;
+    const gh_effect_view source=resources->motions;
+    if(!source.bytes||source.size<16||word(source.bytes)!=0x004d4d45u)
+        return GH_EFFECT_BOUNDS;
+    const uint32_t count=word(source.bytes+4);
+    if(count>(source.size-16)/4)return GH_EFFECT_BOUNDS;
+    if(selection>count)return GH_EFFECT_OK;
+    const uint32_t offset=word(source.bytes+16+4*(size_t)(selection-1));
+    if(!offset)return GH_EFFECT_OK;
+    gh_motion_view motion;
+    if(offset<16+(size_t)count*4||gh_motion_open_mtb3(source.bytes,source.size,offset,&motion))
+        return GH_EFFECT_BOUNDS;
+    if(!bindings->canonical_rate)return GH_EFFECT_ARGUMENT;
+    child->motion_source=source;
+    child->motion_offset=offset;
+    child->motion_work=bindings->work;
+    child->motion_rate=bindings->canonical_rate;
+    return GH_EFFECT_OK;
+}
+
+static gh_effect_status move_model_motion(gh_esp14_model *child,const gh_boot_work *work,
+    gh_static_transform_policy policy,uint32_t *frontier)
+{
+    if(child->motion_work!=work||!child->motion_rate)return GH_EFFECT_ARGUMENT;
+    const gh_actor_motion_bindings bindings={.model=&child->model,.resource=child->motion_source.bytes,
+        .resource_bytes=child->motion_source.size,.work=child->motion_work};
+    if(!child->motion.complete){
+        gh_actor_motion_status status=gh_actor_motion_begin_initial_00157568(&child->motion,
+            &bindings,child->motion_offset,SIZE_MAX);
+        if(status){
+            *frontier=child->motion.frontier?child->motion.frontier:0x157568;
+            return GH_EFFECT_UNSUPPORTED;
+        }
+    }
+    int ended;
+    if(gh_actor_motion_step_00157c18(&child->motion,*child->motion_rate,policy,&ended,frontier)){
+        if(!*frontier)*frontier=0x157c18;
+        return GH_EFFECT_UNSUPPORTED;
+    }
+    child->motion_step_applied=1;
+    return GH_EFFECT_OK;
+}
+
 gh_effect_status gh_esp14_model_move_002b8850(gh_esp14_model *child,
     const gh_boot_work *work, gh_static_transform_policy policy, uint32_t *frontier) {
     if (!frontier) return GH_EFFECT_ARGUMENT;
@@ -240,9 +290,15 @@ gh_effect_status gh_esp14_model_move_002b8850(gh_esp14_model *child,
         return GH_EFFECT_ARGUMENT;
     const uint8_t *p = child->object.view.bytes;
     if (!(word((const uint8_t *)work + 0x5d8) & 0x10000000u)) {
-        if (word(p + 0x4d0) && !p[0x4d4]) {
-            *frontier = 0x1582a0;
-            return GH_EFFECT_UNSUPPORTED;
+        if (!p[0x4d4]) {
+            if (word(p + 0x4d0)) {
+                *frontier=0x1582a0;
+                return GH_EFFECT_UNSUPPORTED;
+            }
+            if (child->motion_source.bytes&&!child->motion_step_applied) {
+                gh_effect_status status=move_model_motion(child,work,policy,frontier);
+                if(status)return status;
+            }
         }
         if (word(p + 0x2f8) & 1u) {
             *frontier = 0x150128;
@@ -252,6 +308,7 @@ gh_effect_status gh_esp14_model_move_002b8850(gh_esp14_model *child,
             *frontier = child->model.frontier ? child->model.frontier : 0x149eb8;
             return GH_EFFECT_UNSUPPORTED;
         }
+        child->motion_step_applied=0;
     }
     *frontier = 0;
     return GH_EFFECT_OK;
@@ -417,9 +474,10 @@ gh_effect_status gh_esp14_initialize_002f1d58(gh_esp14_instance *s,
     if (s->stage == 5) {
         status = configure_model_packets(&s->child, p, frontier);
         if (status) return status;
-        if (word(p + 0x2b8)) {
-            *frontier = 0x306cc8;
-            return GH_EFFECT_UNSUPPORTED;
+        uint32_t motion=word(p+0x2b8);
+        if(motion){
+            status=select_model_motion(&s->child,&b->model,&s->resources,motion,frontier);
+            if(status)return status;
         }
         if (word(p + 0x2ec) != 0x3f800000 || word(p + 0x2f0) != 0x3f800000 ||
             (word(p + 0x2f4) & 0x7fffffffu) || (word(p + 0x2f8) & 0x7fffffffu)) {

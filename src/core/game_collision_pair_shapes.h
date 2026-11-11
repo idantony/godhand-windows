@@ -26,6 +26,8 @@ int gh_collision_pair_shapes_have_live(const gh_collision_pairs *);
 gh_pair_shape_status gh_collision_pair_shape_source_matrix(const gh_collision_pair_shape *,const uint8_t **);
 gh_pair_shape_status gh_collision_pair_shape_position(const gh_collision_pair_shape *,const uint8_t **);
 gh_pair_shape_status gh_collision_pair_shape_mode_pointer(const gh_collision_pair_shape *,uint32_t **);
+/* 2BB258 -> 2BB2D8 for a local offset on a native pair collider. */
+gh_pair_shape_status gh_collision_pair_shape_offset_002bb258(const gh_collision_pair_shape *,const float offset[3],uint32_t *frontier);
 /* Nativefailed-construction/shutdown cleanup, not originalruntime destructor.
  * Refuses a live canonicalobject_links targetborrow; unlinknodefirst. */
 gh_pair_shape_status gh_collision_pair_shape_abort(gh_collision_pair_shape *,uint32_t *frontier);

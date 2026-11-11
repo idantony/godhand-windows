@@ -83,16 +83,6 @@ static gh_actor_motion_status mode1_candidate(gh_enemy_other_move *s,
     return GH_ACTOR_MOTION_OK;
 }
 
-static int om_class_001b7a78(unsigned id,uint32_t item)
-{
-    if(item==0x9c3)return 0;
-    if(item!=0xffff)return 1;
-    return (id>=0x301&&id<=0x302)||(id>=0x309&&id<=0x30c)||id==0x325||
-        (id>=0x32a&&id<=0x32c)||(id>=0x32e&&id<=0x32f)||id==0x332||id==0x33d||
-        (id>=0x33f&&id<=0x345)||(id>=0x347&&id<=0x348)||(id>=0x400&&id<=0x402)||
-        (id>=0x410&&id<=0x411)||(id>=0x418&&id<=0x41a)||id==0x41f||id==0x42e;
-}
-
 static gh_actor_motion_status mode1_lookup_00291010(gh_enemy_other_move *s,
     const gh_enemy2a2_virtual_init *owner,int *found)
 {
@@ -125,10 +115,10 @@ static gh_actor_motion_status mode1_lookup_00291010(gh_enemy_other_move *s,
             return stop(s,0x29117c,GH_ACTOR_MOTION_UNSUPPORTED);
         if((int16_t)half(p+0x54a)<1&&!(half(p+0x3ac)&4u))continue;
         unsigned dep=word(p+0x564);
-        if(dep==0x264||dep==0x265||dep==0x26a)return stop(s,0x275978,GH_ACTOR_MOTION_UNSUPPORTED);
         float target[3];
-        if(!point(view,target))return stop(s,0x275978,GH_ACTOR_MOTION_BOUNDS);
-        memcpy(p+0x1680,target,12);
+        gh_player_target_status point_status=gh_enemy_target_position_00275978(view,target);
+        if(point_status)return stop(s,0x275978,point_status==GH_PLAYER_TARGET_UNSUPPORTED?
+            GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_BOUNDS);
         int accepted;
         int special_height=p[0x2f4]==1||(p[0x2f4]==2&&p[0x2f5]!=2);
         float range=dep==0x260?196:100;
@@ -151,9 +141,7 @@ static gh_actor_motion_status mode1_lookup_00291010(gh_enemy_other_move *s,
         if((word(p+0x250)&0x80008000u)||id<0x300||id>=0x500)continue;
         if(view.size<0x5bc)return stop(s,0x1b79e0,GH_ACTOR_MOTION_BOUNDS);
         uint32_t object_flags=word(p+0x5b0),target_flags=word(p+0x5b8);
-        if((object_flags&6u)||(target_flags&0x2000u)||!(target_flags&0x1000u))continue;
-        int tagged=om_class_001b7a78(id,word(p+0x560));
-        if((!tagged||(id>=0x3da&&id<=0x3dd)||id==0x3ea)&&!(target_flags&0x100u))continue;
+        if((object_flags&4u)||!(target_flags&0x1000u)||!gh_player_target_object_eligible_001b79e0(&view))continue;
         if(view.original_vtable214!=0x42aa98)return stop(s,0x2915ac,GH_ACTOR_MOTION_UNSUPPORTED);
         float target[3];
         if(!point(&view,target))return stop(s,0x2a9458,GH_ACTOR_MOTION_BOUNDS);

@@ -20,6 +20,9 @@ gh_tim2_error gh_tim2_first(const void *bytes,size_t size,gh_tim2_picture *out);
  * colors, CSM1/CSA0. GS alpha 0..128 maps to host 0..255 by min(2*a,255).
  * This is texture sampling preview, not final game blend/shader output. */
 gh_tim2_error gh_tim2_rgba4(const gh_tim2_picture *,void *rgba,size_t capacity);
+/* Linear PSMT8 upload with the physical 16x16 RGBA32 CSM1 palette.
+ * Alpha uses the same GS 0..128 to host 0..255 convention as indexed4. */
+gh_tim2_error gh_tim2_rgba8(const gh_tim2_picture *,void *rgba,size_t capacity);
 #ifdef __cplusplus
 }
 #endif

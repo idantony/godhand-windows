@@ -1,4 +1,5 @@
 #include "game_event_actor_bust.h"
+#include "actor_world_queue.h"
 #include <fenv.h>
 #include <math.h>
 #include "game_event_actor_create.h"
@@ -167,6 +168,86 @@ static void check_event_hand_variants(gh_event_actor_factory *actor, const uint8
     event_move_shadow_probe shadow = {.actor = actor, .calls = 1};
     CHECK(gh_game_event_simple_move_002b6930(&move, actor, shared, probe_event_move_shadow,
           &shadow, &frontier) == GH_EVENT_OK && !frontier && !move.stage);
+}
+
+static void check_event_display_base_texture(gh_event_actor_factory *actor, const uint8_t *elf,
+                                             size_t elf_bytes) {
+    gh_actor_model *model = &actor->model;
+    CHECK(actor->kind == 0x631 && actor->object.view.bytes[0x2f4] == 4 &&
+          model->part_count == 30 && model->script.mesh_count == 4);
+    const gh_actor_node_packets *packet;
+    gh_model_mesh mesh;
+    CHECK(!gh_actor_model_packet_at(model, 0, &packet) && packet->stream_count == 5);
+    CHECK(!gh_model_mesh_at(&model->script, 0, &mesh) && !memcmp(mesh.name, "body", 5));
+    static const uint8_t slots[] = {1, 255, 3, 4, 2};
+    for (unsigned stream = 0; stream < sizeof(slots); ++stream)
+        CHECK(packet->streams[stream].input.material == slots[stream]);
+    const gh_skinned_mesh_stream *ff = &packet->streams[1].input;
+    CHECK(ff->header_offset == 0x1ec0 && ff->vertices == 14);
+    for (unsigned vertex = 0; vertex < ff->vertices; ++vertex)
+        CHECK(!word(ff->bytes + ff->uv_offset + vertex * 4));
+    /* Patched ELF PT_LOAD zero fill covers the original 747BB8 + FF*B0. */
+    CHECK(elf_bytes > 0x54 && word(elf + 0x1c) == 0x34 && word(elf + 0x34) == 1);
+    uint32_t load_address = word(elf + 0x3c);
+    CHECK((uint64_t)load_address + word(elf + 0x44) <= 0x752b08 &&
+          (uint64_t)load_address + word(elf + 0x48) >= 0x752b10);
+    gh_stage_textures *textures;
+    CHECK(!gh_stage_textures_create(&textures));
+    gh_actor_materials materials = {0};
+    uint32_t frontier = 0;
+    CHECK(!gh_actor_materials_0014b4d0(model, 0, textures, &materials, &frontier));
+    CHECK(!frontier && materials.ready && materials.count == sizeof(slots));
+    for (unsigned stream = 0; stream < sizeof(slots); ++stream) {
+        const gh_actor_stream_material *material = &materials.streams[stream];
+        CHECK(material->source_member == slots[stream] && material->selected_member == slots[stream]);
+        if (stream == 1) {
+            CHECK(material->samples_display_base0 && !material->written &&
+                  !material->material && !material->tex0);
+        } else {
+            CHECK(!material->samples_display_base0 && material->written &&
+                  material->material && (material->tex0 & (UINT64_C(1) << 34)));
+        }
+    }
+    CHECK(!gh_actor_model_update_hierarchy_00149eb8(model, GH_STATIC_BINARY32_REFERENCE));
+    /* Same model's owned palette plus a numeric camera/light fixture. */
+    gh_game_pl_camera camera = {.constructed = 1};
+    for (unsigned i = 0; i < 4; ++i) {
+        put_word(camera.fields + i * 20, i == 0 ? 0xbf800000 : 0x3f800000);
+        put_word(camera.fields + 0xc0 + i * 20, i == 3 ? 0x3f800000 : 0x3a83126f);
+    }
+    CHECK(!gh_actor_palette_0014c7e8(model, &camera, GH_STATIC_BINARY32_REFERENCE, &frontier));
+    gh_actor_draw_command command = {.kind = GH_ACTOR_DRAW_GEOMETRY, .model = model,
+        .node_index = 0, .parity = materials.parity, .bank = 2, .depth = 10,
+        .selected_program = 2, .packet = packet, .materials = materials, .packet_group = 1};
+    CHECK(!gh_actor_model_program2_inputs(model, 0, &command.inputs, &frontier));
+    gh_actor_world_queue *queue;
+    CHECK(!gh_actor_world_queue_create(&queue));
+    size_t index = SIZE_MAX;
+    gh_static_transform_frontier render_frontier;
+    CHECK(!gh_actor_world_queue_append(queue, &command, &index, &render_frontier) && index == 0);
+    gh_actor_world_group group;
+    CHECK(!gh_actor_world_queue_group_at(queue, 0, &group));
+    CHECK(group.packets == packet->batch_count);
+    unsigned sampled = 0;
+    for (size_t i = 0; i < group.packets; ++i) {
+        gh_actor_world_packet batch;
+        CHECK(!gh_actor_world_queue_packet_at(queue, 0, i, &batch));
+        if (batch.stream == 1) {
+            CHECK(batch.samples_display_base0 && !batch.material && !batch.tex0 &&
+                  batch.primitive == 0x7c && batch.vertex_count == 14 && batch.triangles == 8);
+            ++sampled;
+        } else {
+            CHECK(!batch.samples_display_base0 && batch.material);
+        }
+    }
+    CHECK(sampled == 1);
+    command.materials.streams[1].samples_display_base0 = 0;
+    index = SIZE_MAX;
+    CHECK(gh_actor_world_queue_append(queue, &command, &index, &render_frontier) ==
+          GH_ACTOR_WORLD_UNSUPPORTED && render_frontier.ee_entry == 0x151368 &&
+          index == SIZE_MAX && gh_actor_world_queue_count(queue) == 1);
+    gh_actor_world_queue_destroy(queue);
+    gh_stage_textures_destroy(textures);
 }
 
 static gh_effect_status lookup_el00(void *context,uint16_t kind,uint8_t code,
@@ -983,8 +1064,10 @@ int main(int argc, char **argv) {
                 for (unsigned axis = 0; axis < 3; ++axis)
                     CHECK(word(angles + axis * 4) == expected[axis]);
             }
-            if (scene_cut == 8 && !frame)
+            if (scene_cut == 8 && !frame) {
                 check_event_hand_variants(&rows[6], elf, elf_bytes, &shared);
+                check_event_display_base_texture(&rows[7], elf, elf_bytes);
+            }
             if(scene_cut==2&&frame==13)
                 check_event_ground_particles(disc,elf,elf_bytes,&room_bundle,&prefix,&rows[0]);
             if(scene_cut==3&&frame==0)

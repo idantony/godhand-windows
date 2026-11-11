@@ -278,6 +278,12 @@ static gh_id_error scene_cockpit_fan(void *context,const gh_cockpit_fan *fan,uin
     if(!h->scene_ui.fan){if(frontier)*frontier=0x15c410;return GH_ID_UNSUPPORTED;}
     return h->scene_ui.fan(h->scene_ui.context,fan,frontier);
 }
+static gh_id_error scene_cockpit_radar(void *context,const gh_cockpit_radar_quad *quad,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    if(!h->scene_ui.radar){if(frontier)*frontier=0x15bcf0;return GH_ID_UNSUPPORTED;}
+    return h->scene_ui.radar(h->scene_ui.context,quad,frontier);
+}
 static gh_child_status scene_menu_cover(void *context,const gh_child_cover_quad *quad,int *emitted,uint32_t *frontier)
 {
     gh_startup_host *h=context;*emitted=0;
@@ -1043,7 +1049,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_id_error bound=gh_game_cockpit_bind_gameplay(s.cockpit,&gameplay);
         if(bound){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
         gh_cockpit_frame_callbacks callbacks={.context=h,.trans=scene_cockpit_trans,.set_draw_order=scene_cockpit_order,
-            .save={h->save_bytes,sizeof(h->save_bytes)},.fan=scene_cockpit_fan};
+            .save={h->save_bytes,sizeof(h->save_bytes)},.fan=scene_cockpit_fan,.radar=scene_cockpit_radar};
         gh_id_error e=address==0x140e58?gh_game_cockpit_move_00140e58(s.cockpit,&h->work,&callbacks):gh_game_cockpit_trans_001410a8(s.cockpit,&h->work,&callbacks);
         if(e&&frontier)*frontier=gh_game_cockpit_frontier(s.cockpit);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -1367,6 +1373,7 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.camera_envelope=&h->camera_envelope;
         b.player_shared_vector=&h->player_shared_vector;
         b.actor_light_globals=&h->actor_light_globals;
+        b.frame_random=&h->frame_random;
         b.math_globals=&h->math_globals;b.player_ground_globals=&h->player_ground_globals;b.player_opacity_globals=&h->player_opacity_globals;b.voices=h->voices;
         b.door_shared=&h->door_shared;
         b.player_node_names=&h->player_node_names;b.motion_ik_globals=&h->motion_ik_globals;
@@ -1933,7 +1940,12 @@ gh_host_phase gh_startup_host_tick(gh_startup_host *h)
     }
     if(h->phase==GH_HOST_RUNNING && h->voices){
         gh_voice_status audio=gh_sound_control_flush_se_002ca5d8(&h->sound_control,h->voices);
-        if(audio){failure(h,GH_HOST_AUDIO,audio);h->phase=GH_HOST_FAILED;}
+        if(audio==GH_VOICE_UNSUPPORTED){
+            uint32_t frontier=gh_se_voice_frontier(h->voices);
+            entry_frontier(h,frontier?frontier:0x2ca5d8,
+                frontier&&frontier<0x100000?"snddrv.irx":NULL,audio);
+            h->phase=GH_HOST_FRONTIER;
+        }else if(audio){failure(h,GH_HOST_AUDIO,audio);h->phase=GH_HOST_FAILED;}
     }
     if(h->phase==GH_HOST_RUNNING && h->enemy_banks){
         /* Actual2CA558 visits52 bank loads after the original voice updates. */
@@ -2030,6 +2042,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     if(h->services){gh_game_update_diagnostic d={0};if(!gh_game_services_update_diagnostic(h->services,&d)){
         out->player_updates_completed=d.player_updates_completed;out->child_updates_completed=d.child_updates_completed;out->om_updates_completed=d.om_updates_completed;
         out->last_move_handle=d.last_move_handle;out->last_move_entry=d.last_move_entry;out->player_update_stage=d.player_stage;out->child_update_stage=d.child_stage;
+        out->player_handle=d.player_handle;out->player_state_entry=d.player_state_entry;out->player_update_frontier=d.player_frontier;
         out->child_update_frontier=d.child_frontier;out->child_forces_complete=d.child_forces_complete;out->child_angles_complete=d.child_angles_complete;
         out->child_distances_complete=d.child_distances_complete;out->child_finish_complete=d.child_finish_complete;
         out->emitter_active=d.emitter_active;out->esp_active=d.esp_active;out->emitter_samples=d.emitter_samples;
@@ -2041,6 +2054,14 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
         if(!gh_game_services_get_scene_view(h->services,&scene)){
             const gh_hitarea_frame*c=&scene.step->hitarea_frame;
             out->scene_stage=scene.step->stage;out->hitarea_phase=c->phase;out->hitarea_slot=c->slot;out->hitarea_node=c->node;
+            const gh_title_player_view *player=&scene.title_player->view;
+            if(out->player_handle&&scene.title_player->ready&&player->bytes&&player->size>=0x622&&
+               player->alias_f0==player->bytes+0xb0){
+                out->player_pose_ready=1;
+                memcpy(out->player_world_position,player->alias_f0,sizeof(out->player_world_position));
+                memcpy(out->player_state,player->bytes+0x2f4,sizeof(out->player_state));
+                out->player_square_buffer=player->bytes[0x621];
+            }
             const struct gh_hitarea_native*n=h->game_init.hitarea_native;
             gh_title_player_view current={0};
             if(n&&n->owner==&h->game_init&&!gh_game_services_actor_view(h->services,out->last_move_handle,&current)&&current.bytes&&current.size>=0x5cc){
@@ -2049,6 +2070,18 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
                 memcpy(&out->current_actor_5b0,p+0x5b0,4);memcpy(&out->current_actor_5b4,p+0x5b4,4);memcpy(&out->current_actor_5b8,p+0x5b8,4);
                 out->current_actor_hp548=(uint32_t)p[0x548]|(uint32_t)p[0x549]<<8;out->current_actor_hp54a=(uint32_t)p[0x54a]|(uint32_t)p[0x54b]<<8;
                 memcpy(&out->current_actor_54c,p+0x54c,4);memcpy(out->current_actor_5c0,p+0x5c0,12);
+                if(out->last_move_entry==0x208be0&&current.size>=0x17d4){
+                    out->current_enemy_placement_ready=1;
+                    out->current_enemy_stamp=p[0x640];
+                    out->current_enemy_appearance=p[0x1650];
+                    out->current_enemy_phase=p[0x2f6];
+                    out->current_enemy_variant=p[0x2f7];
+                    memcpy(&out->current_enemy_dependency,p+0x564,4);
+                    memcpy(&out->current_enemy_spawn_flags,p+0x1644,4);
+                    memcpy(&out->current_enemy_serial,p+0x17d0,4);
+                    memcpy(&out->current_enemy_distance_bits,p+0x618,4);
+                    memcpy(&out->current_enemy_route_bits,p+0x510,4);
+                }
                 for(unsigned j=0;j<672&&out->current_b_samples<4;j++){
                     const gh_native_hitarea_node*t=&n->nodes[j];unsigned index=t->object.index;
                     if(!t->associated||t->object.state!=&h->game_init||t->object.generation!=h->game_init.hitarea_generation||index<160||index>=416||

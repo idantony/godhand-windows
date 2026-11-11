@@ -11,5 +11,24 @@ int main(int argc,char**argv){gh_disc*d;size_t i;gh_disc_entry e;C(argc==2&&!gh_
  for(unsigned n=0;n<680;n++){uint32_t old=w(before.bytes+n*20+16),now=w(tables.actor_links[4].view.bytes+n*20+16);C(now==(n>=385&&n<397?old|2u:old));}
  C(!gh_collision_scroll_set_enabled_001332d0(&tables,&m,"H03_Jfl3",0,&changed)&&changed==12);for(unsigned n=397;n<409;n++)C(w(tables.actor_links[4].view.bytes+n*20+16)&2);
  C(!gh_collision_scroll_set_enabled_001332d0(&tables,&m,"H03_Jfl2",1,&changed)&&changed==12);for(unsigned n=385;n<397;n++)C(!(w(tables.actor_links[4].view.bytes+n*20+16)&2));
+ /* BC0's post-event H03_gt collision operation uses this same live view. */
+ const gh_scene_table_view names=tables.actor_links[0].view;
+ unsigned start=0,count=0,matches=0;
+ for(size_t n=0;n<names.size/20;n++){
+  const uint8_t *record=names.bytes+n*20;
+  if(memcmp(record+12,"H03_gt",7))continue;
+  start=record[8]|(unsigned)record[9]<<8;
+  count=record[10]|(unsigned)record[11]<<8;
+  matches++;
+ }
+ C(matches==1&&count&&start+count<=680);
+ printf("R100 H03_gt starts at triangle %u and spans %u\n",start,count);
+ uint8_t *owner=m.owned;
+ C(!gh_collision_scroll_set_enabled_001332d0(&tables,&m,"H03_gt",0,&changed)&&changed==count&&m.owned==owner);
+ for(unsigned n=0;n<680;n++){
+  uint32_t old=w(before.bytes+n*20+16),now=w(m.owned+n*20+16);
+  C(now==(n>=start&&n<start+count?old|2u:n>=397&&n<409?old|2u:old));
+ }
+ C(!gh_collision_scroll_set_enabled_001332d0(&tables,&m,"H03_gt",1,&changed)&&changed==count&&m.owned==owner);
  C(!memcmp(p,original,(size_t)e.size)&&!gh_collision_scroll_mutation_release(&m)&&tables.actor_links[4].view.bytes==before.bytes);
  C(!gh_collision_scroll_set_enabled_001332d0(&tables,&m,"H03_Jfl2",0,&changed)&&!gh_scene_actors_reset_0012e800(&tables)&&!gh_collision_scroll_mutation_release(&m)&&!tables.actor_links[4].view.bytes);free(original);free(p);gh_disc_close(d);puts("PASS realR100168namedgroups/680triangles exacttwo12triangle toggles, sharedcanonicalview notshadow, immutableasset and safe nativeborrow release/reset");return 0;}

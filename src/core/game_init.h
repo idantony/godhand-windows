@@ -41,6 +41,8 @@ typedef struct gh_game_init_state {
  struct gh_hitarea_native *hitarea_native;uint32_t hitarea_generation;uint8_t hitarea_cold_constructed;
  uint32_t navigation_height_bits;
  uint8_t navigation_height_initialized;
+ /* Main cold reset 2A7308 clears the Game Over continue count 5CAC94. */
+ uint32_t continue_count;
 } gh_game_init_state;
 /* Host storage initialization, not the earlier complete PS2 boot. Existing
  * save data must separately be system-initialized or loaded by its owner. */

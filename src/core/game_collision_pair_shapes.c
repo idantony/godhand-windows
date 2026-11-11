@@ -47,6 +47,53 @@ int gh_collision_pair_shapes_have_live(const gh_collision_pairs*m){if(!m||!m->co
 gh_pair_shape_status gh_collision_pair_shape_source_matrix(const gh_collision_pair_shape*v,const uint8_t**out){if(!out||!valid(v))return GH_PAIR_SHAPE_ARGUMENT;*out=v->manager->native_shapes->rows[v->index].inputs.matrix;return GH_PAIR_SHAPE_OK;}
 gh_pair_shape_status gh_collision_pair_shape_position(const gh_collision_pair_shape*v,const uint8_t**out){if(!out||!valid(v))return GH_PAIR_SHAPE_ARGUMENT;*out=v->manager->native_shapes->rows[v->index].position;return GH_PAIR_SHAPE_OK;}
 gh_pair_shape_status gh_collision_pair_shape_mode_pointer(const gh_collision_pair_shape*v,uint32_t**out){if(!out||!valid(v))return GH_PAIR_SHAPE_ARGUMENT;*out=(uint32_t*)(void*)(v->record+0x10);return GH_PAIR_SHAPE_OK;}
+gh_pair_shape_status gh_collision_pair_shape_offset_002bb258(
+    const gh_collision_pair_shape *shape, const float offset[3], uint32_t *frontier) {
+    if (frontier) *frontier = 0;
+    if (!frontier || !valid(shape) || !offset) return GH_PAIR_SHAPE_ARGUMENT;
+    shape_row *row = &shape->manager->native_shapes->rows[shape->index];
+    uint8_t *geometry = shape->record + 0xe0;
+    float rotation[3], local[16];
+    memcpy(rotation, geometry + 0x60, sizeof(rotation));
+    for (unsigned i = 0; i < 3; ++i) {
+        if (!isfinite(offset[i]))
+            return fail(frontier, 0x2bb2d8, GH_PAIR_SHAPE_UNSUPPORTED);
+    }
+    if (gh_actor_matrix_rotation_00147728(rotation, 0, local, row->inputs.policy, frontier))
+        return GH_PAIR_SHAPE_UNSUPPORTED;
+    fenv_t saved;
+    if (feholdexcept(&saved))
+        return fail(frontier, 0x2bb2d8, GH_PAIR_SHAPE_UNSUPPORTED);
+    if (fesetround(FE_TONEAREST)) {
+        (void)fesetenv(&saved);
+        return fail(frontier, 0x2bb2d8, GH_PAIR_SHAPE_UNSUPPORTED);
+    }
+    volatile float ox = offset[0] * offset[0], oy = offset[1] * offset[1];
+    volatile float oz = offset[2] * offset[2], oxy = ox + oy, offset_squared = oxy + oz;
+    volatile float rx = rotation[0] * rotation[0], ry = rotation[1] * rotation[1];
+    volatile float rz = rotation[2] * rotation[2], rxy = rx + ry, rotation_squared = rxy + rz;
+    if (fesetenv(&saved) || !isfinite(offset_squared) ||
+        (offset_squared > 0 && offset_squared < FLT_MIN) ||
+        (rotation_squared > 0 && rotation_squared < FLT_MIN))
+        return fail(frontier, 0x2bb2d8, GH_PAIR_SHAPE_UNSUPPORTED);
+
+    memcpy(local + 12, offset, 12);
+    memcpy(geometry + 0x50, offset, 12);
+    memcpy(row->inputs.offset_xyz, offset, 12);
+    memcpy(geometry + 0x10, local, 64);
+    if (offset_squared != 0 || rotation_squared != 0) {
+        geometry[4] |= 1;
+        const unsigned attached = geometry[4] & 2;
+        row->matrix = geometry + (attached ? 0x80 : 0x10);
+        row->position = geometry + (attached ? 0xb0 : 0x40);
+    } else {
+        geometry[4] &= 0xfe;
+        row->matrix = row->inputs.matrix;
+        row->position = row->inputs.matrix + 0x30;
+    }
+    return GH_PAIR_SHAPE_OK;
+}
+
 gh_pair_shape_status gh_collision_pair_shape_abort(gh_collision_pair_shape*v,uint32_t*f){if(f)*f=0;if(!valid(v))return GH_PAIR_SHAPE_ARGUMENT;if(borrowed(v))return fail(f,0x1fd580,GH_PAIR_SHAPE_BUSY);struct gh_collision_pair_shapes*r=v->manager->native_shapes;uint32_t*link=&r->first;size_t guard=0;while(*link&&*link!=v->index+1){if(*link>v->manager->count||++guard>v->manager->count)return fail(f,0x2bae98,GH_PAIR_SHAPE_UNSUPPORTED);link=&r->rows[*link-1].next;}if(*link)*link=r->rows[v->index].next;r->rows[v->index].bound=0;ww(v->record,0);*v=(gh_collision_pair_shape){0};return GH_PAIR_SHAPE_OK;}
 gh_pair_shape_status gh_collision_pair_shapes_release_native(gh_collision_pairs*m){if(!m)return GH_PAIR_SHAPE_ARGUMENT;if(!m->native_shapes)return GH_PAIR_SHAPE_OK;if(m->native_shapes->owner!=m||m->count>GH_COLLISION_CAPACITY)return GH_PAIR_SHAPE_ARGUMENT;for(unsigned i=0;i<m->count;i++)if(m->native_shapes->rows[i].bound){gh_collision_pair_shape v={m,(uint8_t*)m->records.pointer+(size_t)i*GH_COLLISION_RECORD_BYTES,i,m->native_shapes->rows[i].serial};if(borrowed(&v))return GH_PAIR_SHAPE_BUSY;}free(m->native_shapes);m->native_shapes=NULL;return GH_PAIR_SHAPE_OK;}
 

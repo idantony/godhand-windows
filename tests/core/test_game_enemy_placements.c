@@ -1,4 +1,6 @@
 #include "game_scene_placements.h"
+#include "game_enemy_factory.h"
+#include "game_enemy_request.h"
 #include "disc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +15,62 @@ static uint8_t*load(gh_disc*d,const char*name,size_t*n){size_t i;gh_disc_entry e
  * then C mathematical integer truncation. FEnv isolation belongs to oracle. */
 static uint16_t oracle(uint32_t bits,int angle){float a,b;uint32_t factor=angle?0x42652ee0:0x41a00000;memcpy(&a,&bits,4);memcpy(&b,&factor,4);fenv_t saved;C(!feholdexcept(&saved));double exact=(double)a*(double)b;volatile int64_t integer=(int64_t)exact;uint16_t result=(uint16_t)(uint64_t)integer;C(!fesetenv(&saved));return result;}
 static void expected_table(uint8_t*out,const gh_bundle_entry*ems){memset(out,0,0x600);uint32_t count=w(ems->bytes+4);for(unsigned i=0;i<count;i++){const uint8_t*src=ems->bytes+12+(size_t)i*64;uint8_t*dst=out+(size_t)i*24;const unsigned offsets[]={0,4,8,0x14};for(unsigned k=0;k<4;k++){uint16_t value=oracle(w(src+offsets[k]),k==3);memcpy(dst+k*2,&value,2);}memcpy(dst+8,src+0x20,8);memcpy(dst+0x10,src+0x28,4);}}
+
+static void test_clear_set_flags(gh_room_state *room,const gh_bundle_entry *ems)
+{
+    memset(room->active,0,room->size);
+    gh_boot_work work={.room=0x100};
+    uint8_t stop=1;
+    gh_em_scene_placements placements={.stop_flag=&stop};
+    int original;
+    C(!gh_em_scene_load_native_00294b98(&placements,room,ems,&work,0,
+        GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,&original)&&original);
+
+    gh_enemy_request request;
+    uint32_t frontier;
+    int spawn;
+    int16_t vitality;
+    C(!gh_enemy_request_from_room_00294ca0(room,6,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,
+        &request,&spawn,&vitality,&frontier));
+    C(spawn&&request.object_kind==0x202&&request.appearance==5&&request.entry_number==8&&
+        request.flags==0x48800000);
+    _Alignas(16) uint8_t actor[GH_EM202_BYTES]={0};
+    gh_title_player_view view;
+    C(!gh_enemy202_construct_00201fa0(actor,sizeof(actor),&view));
+    memcpy(actor+0x640,&(uint16_t){request.entry_number},2);
+    put(actor+0x1644,request.flags);
+    uint8_t expected[0x1650];
+    C(room->size<=sizeof(expected));
+    memcpy(expected,room->active,room->size);
+    C(!gh_enemy_clear_set_flags_002736f8(&view,room,&frontier)&&!frontier&&
+        w(actor+0x1644)==request.flags&&!memcmp(room->active,expected,room->size));
+
+    /* A repeat stamp later in the same page does not receive the write. */
+    room->active[12+7*24+0x13]=request.entry_number;
+    memcpy(expected,room->active,room->size);
+    put(expected+12+6*24+8,request.flags|4u);
+    put(actor+0x1644,request.flags|0x10008004u);
+    C(!gh_enemy_clear_set_flags_002736f8(&view,room,&frontier)&&!frontier&&
+        w(actor+0x1644)==(request.flags|4u)&&!memcmp(room->active,expected,room->size));
+    C(!gh_enemy_clear_set_flags_002736f8(&view,room,&frontier)&&
+        !memcmp(room->active,expected,room->size));
+
+    memcpy(actor+0x640,&(uint16_t){0x108},2);
+    put(actor+0x1644,0x10008001);
+    C(!gh_enemy_clear_set_flags_002736f8(&view,room,&frontier)&&w(actor+0x1644)==1&&
+        !memcmp(room->active,expected,room->size));
+    memcpy(actor+0x640,&(uint16_t){0xff},2);
+    put(actor+0x1644,0x10008002);
+    C(!gh_enemy_clear_set_flags_002736f8(&view,NULL,&frontier)&&w(actor+0x1644)==2);
+
+    memcpy(actor+0x640,&(uint16_t){request.entry_number},2);
+    put(actor+0x1644,0x10008003);
+    const gh_room_state short_page={.active=room->active,.size=12+29*24};
+    C(gh_enemy_clear_set_flags_002736f8(&view,&short_page,&frontier)==GH_ACTOR_MOTION_BOUNDS&&
+        frontier==0x295498&&w(actor+0x1644)==0x10008003&&!memcmp(room->active,expected,room->size));
+    puts("PASS actual R100 appearance5 stamp8 persistence, first match, full stamp width and missing-entry cases");
+}
+
 int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t n,n20;uint8_t*raw=load(d,"st1/r100.dat",&n),*raw20=load(d,"st0/r020.dat",&n20),*immutable=malloc(n);C(immutable);memcpy(immutable,raw,n);gh_bundle bundle,b20;gh_bundle_entry ems,empty;C(!gh_bundle_open(raw,n,&bundle)&&!gh_bundle_find(&bundle,"EMS",0,&ems)&&!gh_bundle_open(raw20,n20,&b20)&&!gh_bundle_find(&b20,"EMS",0,&empty)&&w(ems.bytes)==0x534d45&&w(ems.bytes+4)==30&&!w(empty.bytes+4));
  gh_game_prepare prepare={0};uint8_t game_state=0;C(!gh_game_prepare_002a5d40(&prepare,(gh_core_save_view){0},0x100,&game_state));gh_room_state room;C(!gh_room_state_select_002bebc8(&prepare,0x100,0,&room)&&room.size>=0x60c);gh_boot_work work={0};uint8_t stop=0;gh_em_scene_placements state={.stop_flag=&stop};const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};uint8_t before[0x1650],expected[0x600],outside[sizeof(prepare.fields)];C(room.size<=sizeof(before));
  for(unsigned mode=0;mode<4;mode++){C(!fesetround(modes[mode])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));work.flags=0;stop=0;memset(room.active,0xa5,room.size);put(room.active,0x12345678);memcpy(before,room.active,room.size);memcpy(outside,prepare.fields,sizeof(outside));state.file=(gh_bundle_entry){0};state.source_entries=(gh_bundle_entry){0};state.room04=77;memset(state.scratch10,0x5a,48);int original=9;expected_table(expected,&ems);
@@ -26,6 +84,7 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  for(unsigned gate=0;gate<3;gate++){memset(room.active,0xa5,room.size);put(room.active,0);state.room04=88;memset(state.scratch10,0x6b,48);work.flags=gate==1?0x1000000:0;stop=1;C(!gh_em_scene_bind_native_00294c68(&state,&room,&ems,&work,(uint8_t)(gate==2),GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,&original)&&original==1&&!stop&&room.active[8]==30);C((gate?(state.room04==88&&state.scratch10[47]==0x6b):(state.room04==0xffff&&!state.scratch10[47])));}
  work.flags=0;memset(room.active,0xa5,room.size);put(room.active,0);memcpy(before,room.active,room.size);state.room04=99;memset(state.scratch10,0x4c,48);stop=1;C(!gh_em_scene_bind_native_00294c68(&state,&room,&empty,&work,0,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,&original)&&!original&&stop==1&&!state.file.bytes&&w(room.active)==0x80000000&&!room.active[8]&&state.room04==99&&state.scratch10[47]==0x4c);C(!memcmp(room.active+0xc,before+0xc,0x600));
  C(fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO&&!memcmp(raw,immutable,n));}
+ test_clear_set_flags(&room,&ems);
  /* Synthetic format edge fixtures, explicitly not additional original room data. */
  uint8_t synthetic[12+65*64];memset(synthetic,0,sizeof(synthetic));put(synthetic,0x534d45);put(synthetic+4,64);for(unsigned i=0;i<64;i++){uint8_t*p=synthetic+12+i*64;put(p,i&1?0xc5000000:0x45000000);put(p+0x14,0x3f800000);put(p+0x20,0x7fc01234);put(p+0x24,0xff812345);p[0x28]=(uint8_t)i;p[0x29]=0x80;p[0x2a]=0xfe;p[0x2b]=0xff;}
  gh_bundle_entry fixture={.bytes=synthetic,.size=sizeof(synthetic)},records={.bytes=synthetic+12,.size=sizeof(synthetic)-12};uint32_t frontier;int original;for(unsigned mode=0;mode<4;mode++){C(!fesetround(modes[mode])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));memset(room.active,0x93,room.size);put(room.active,0);stop=1;C(!gh_em_scene_bind_native_00294c68(&state,&room,&fixture,&work,0,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,&original)&&original==1&&room.active[8]==64&&!stop);for(unsigned i=0;i<64;i++){uint8_t*p=room.active+0xc+i*24;uint16_t position;memcpy(&position,p,2);C(position==(i&1?0x6000u:0xa000u)&&p[6]==57&&!p[7]&&w(p+8)==0x7fc01234&&w(p+12)==0xff812345&&p[16]==i&&p[17]==0x80&&p[18]==0xfe&&p[19]==0xff&&!w(p+20));}

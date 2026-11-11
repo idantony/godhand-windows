@@ -127,6 +127,123 @@ static void hit_transition(gh_om_frame_state*s,unsigned index,const gh_hitarea_o
  else if(kind!=0x310){unsigned hp=half(p+0x54a);dead=hp>=0x8000||hp==0;}
  if(dead){state=2;put(p+0x5b0,word(p+0x5b0)|1u);}p[0x2f4]=(uint8_t)state;p[0x2f5]=p[0x2f6]=p[0x2f7]=0;
 }
+
+/* Both 30E and 324 use the same original state table at 004297B8.
+ * Separate resumable steps retain the order of the effect, sound and cleanup. */
+static gh_object_step_status plain_break(gh_om_frame_state *s, const gh_boot_work *w,
+ gh_static_transform_policy policy, uint32_t *f) {
+ gh_om_object *o = s->object;
+ gh_om_init_state *c = common(s);
+ uint8_t *p = o->view.bytes;
+ if (o->view.size < 0x606 || !c) return fail(s, 0x1bfd28, f, GH_OBJSTEP_ARGUMENT);
+ if (policy != GH_STATIC_BINARY32_REFERENCE) return fail(s, 0x1bfd28, f, GH_OBJSTEP_UNSUPPORTED);
+ uint32_t pc = 0;
+ if (p[0x2f5] == 0) {
+  if (!s->special_phase) {
+   if (!s->runtime_bound || !s->runtime.break_effect || !o->view.alias_f0)
+    return fail(s, 0x306528, f, GH_OBJSTEP_UNSUPPORTED);
+   float yaw;
+   if (gh_game_angle_001f8180(number(p + 0x5c0), number(p + 0x5c8), &yaw,
+       GH_CAMERA_NATIVE_BINARY32_REFERENCE, &pc))
+    return fail(s, pc ? pc : 0x1f8180, f, GH_OBJSTEP_UNSUPPORTED);
+   uint32_t position[3], yaw_bits;
+   memcpy(position, o->view.alias_f0, sizeof(position));
+   memcpy(&yaw_bits, &yaw, sizeof(yaw_bits));
+   gh_object_step_status status = s->runtime.break_effect(s->runtime.context,
+       &c->model, position, yaw_bits, &pc);
+   if (status) return fail(s, pc ? pc : 0x306528, f, status);
+   s->special_phase = 1;
+  }
+  if (s->special_phase == 1) {
+   if (!s->runtime.break_sound) return fail(s, 0x2cba48, f, GH_OBJSTEP_UNSUPPORTED);
+   s->break_sound = (gh_motion_sound_request){.model=&c->model, .actor=&o->view,
+     .bank=2, .program=10};
+   uint32_t handle = 0;
+   gh_actor_motion_status status = s->runtime.break_sound(s->runtime.context,
+       &s->break_sound, &handle, &pc);
+   if (status) return fail(s, pc ? pc : 0x2cba48, f,
+       status == GH_ACTOR_MOTION_UNSUPPORTED ? GH_OBJSTEP_UNSUPPORTED : GH_OBJSTEP_CALLEE);
+   s->special_phase = 2;
+  }
+  if (s->special_phase == 2) {
+   if (word(p + 0x600)) return fail(s, 0x1fd668, f, GH_OBJSTEP_UNSUPPORTED);
+   if (c->hitarea_created && gh_hitarea_object_set_active_001fd668(&c->hitarea, 0, &pc))
+    return fail(s, pc ? pc : 0x1fd668, f, GH_OBJSTEP_CALLEE);
+   s->special_phase = 3;
+  }
+  if (s->special_phase == 3) {
+   if (gh_actor_model_node_mask_flags(&c->model, 0, 0x380, UINT32_MAX, 0x2001u))
+    return fail(s, 0x14b6f8, f, GH_OBJSTEP_CALLEE);
+   put(p + 0x250, word(p + 0x250) | 0x10000u);
+   if (!(word(p + 0x5b8) & 0x200u) && !(word((const uint8_t *)w + 0x5e4) & 0x1000000u))
+    put(p + 0x5b8, word(p + 0x5b8) & ~0x40u);
+   s->special_phase = 4;
+  }
+  if (s->special_phase == 4) {
+   uint64_t key = (uint64_t)word(p + 0x53c) << 32 | word(p + 0x538);
+   if (gh_room_state_mark_object_broken_002becb0(s->factory->bindings.room_state, key))
+    return fail(s, 0x2becb0, f, GH_OBJSTEP_CALLEE);
+   s->special_phase = 5;
+  }
+  if (s->special_phase == 5) {
+   uint64_t key = (uint64_t)word(p + 0x544) << 32 | word(p + 0x540);
+   if (!s->runtime.break_collision) return fail(s, 0x1331b8, f, GH_OBJSTEP_UNSUPPORTED);
+   gh_object_step_status status = s->runtime.break_collision(s->runtime.context, key, &pc);
+   if (status) return fail(s, pc ? pc : 0x1331b8, f, status);
+   s->special_phase = 6;
+  }
+  if (s->special_phase == 6) {
+   if (gh_collision_solid_release_unit_001347e8(s->runtime.solids, &o->view, &pc))
+    return fail(s, pc ? pc : 0x1347e8, f, GH_OBJSTEP_CALLEE);
+   const uint32_t flags = word(p + 0x5b0), item = word(p + 0x560);
+   s->special_phase = (flags & 0x12u) || item == 0xffffu || item == 0x9c3u ? 8 : 7;
+   put(p + 0x5b0, flags | 0x10u);
+  }
+  if (s->special_phase == 7) return fail(s, 0x2923e8, f, GH_OBJSTEP_UNSUPPORTED);
+  put(p + 0x5b0, (word(p + 0x5b0) & ~8u) | 2u);
+  p[0x2f5] = 1;
+  p[0x2f6] = p[0x2f7] = 0;
+  sh(p + 0x604, 30);
+ }
+
+ switch (p[0x2f5]) {
+  case 1:
+  case 2: {
+   uint16_t next = (uint16_t)(half(p + 0x604) - 1u);
+   int remaining = next < 0x8000u ? (int)next : (int)next - 0x10000;
+   sh(p + 0x604, next);
+   if (p[0x2f5] == 2) {
+    volatile float opacity = (float)remaining / 15.0f;
+    float value = opacity;
+    memcpy(p + 0x24c, &value, sizeof(value));
+   }
+   if (remaining > 0) return GH_OBJSTEP_OK;
+   if (p[0x2f5] == 1) sh(p + 0x604, 15);
+   p[0x2f5]++;
+   p[0x2f6] = p[0x2f7] = 0;
+   break;
+  }
+  case 3:
+   p[0x2f4] = 3;
+   p[0x2f5] = p[0x2f6] = p[0x2f7] = 0;
+   break;
+ }
+ return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status plain_remove(gh_om_frame_state *s, uint32_t *f) {
+ uint8_t *flags = s->object->view.bytes + 0x250;
+ if (word(flags) & 0x80000000u) return GH_OBJSTEP_OK;
+ if (!s->runtime_bound || !s->runtime.remove_sound)
+  return fail(s, 0x2cbe18, f, GH_OBJSTEP_UNSUPPORTED);
+ uint32_t pc = 0;
+ gh_object_step_status status = s->runtime.remove_sound(s->runtime.context, &common(s)->model, &pc);
+ if (status) return fail(s, pc ? pc : 0x2cbe18, f, status);
+ /* This vtable slot (+4C) is the empty base 0014E928 on both classes. */
+ put(flags, word(flags) | 0x80000002u);
+ return GH_OBJSTEP_OK;
+}
+
 static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_static_transform_policy policy,uint32_t*f){
  uint8_t*p=s->object->view.bytes;gh_om_init_state*c=common(s);
  if(!s->phase){if(word((const uint8_t*)w+0x5d8)&0x20000000u){s->complete=1;return GH_OBJSTEP_OK;}put(p+0x5b4,0);s->phase=1;}
@@ -150,6 +267,12 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
    if (status) return fail(s, pc ? pc : entry, f, status);
    /* Damage belongs to the state-0 handler. Even a state-1 countdown
     * that clears 2F4 does not dispatch another state in this call. */
+   s->phase = 4;
+  } else if (plain(s->object) && p[0x2f4] && p[0x2f4] <= 3) {
+   gh_object_step_status status = GH_OBJSTEP_OK;
+   if (p[0x2f4] == 2) status = plain_break(s, w, policy, f);
+   else if (p[0x2f4] == 3) status = plain_remove(s, f);
+   if (status) return status;
    s->phase = 4;
   } else if (fragments(s->object) && p[0x2f4]) {
    unsigned index = p[0x2f4];
@@ -186,7 +309,12 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
   if(changed){if(gh_actor_model_update_hierarchy_00149eb8(&c->model,policy))return fail(s,c->model.frontier?c->model.frontier:0x149eb8,f,GH_OBJSTEP_CALLEE);put(p+0x5b8,word(p+0x5b8)&~0x10u);}s->phase=7;
  }
  if(s->phase==7){if(!s->object->view.alias_f0)return fail(s,0x1b7880,f,GH_OBJSTEP_ARGUMENT);memmove(p+0x490,s->object->view.alias_f0,12);memmove(p+0x5d0,p+0x100,12);s->phase=8;}
- if(number(s->object->view.alias_f0+4)<-1000)return fail(s,0x1b79b0,f,GH_OBJSTEP_UNSUPPORTED);s->complete=1;return GH_OBJSTEP_OK;
+ if (number(s->object->view.alias_f0+4)<-1000) {
+  if (!plain(s->object)) return fail(s,0x1b79b0,f,GH_OBJSTEP_UNSUPPORTED);
+  gh_object_step_status status = plain_remove(s, f);
+  if (status) return status;
+ }
+ s->complete=1;return GH_OBJSTEP_OK;
 }
 gh_object_step_status gh_om_frame_move(gh_om_frame_state*s,const gh_om_factory*f,const gh_object_move_request*q,const gh_boot_work*w,gh_static_transform_policy policy,uint32_t*pc){
  if(pc)*pc=0;gh_object_step_status e=bind(s,f,q,w,pc);if(e)return e;s->frontier=0;if(s->complete)return GH_OBJSTEP_OK;fenv_t env;if(feholdexcept(&env))return fail(s,s->entry,pc,GH_OBJSTEP_CALLEE);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(s,s->entry,pc,GH_OBJSTEP_CALLEE);}e=body(s,w,policy,pc);if(fesetenv(&env))return fail(s,s->entry,pc,GH_OBJSTEP_CALLEE);return e;
@@ -221,6 +349,12 @@ gh_object_step_status gh_om_factory_model_at(const gh_om_factory*f,uint32_t hand
 
 gh_object_step_status gh_om_frame_bind_runtime(gh_om_frame_state*s,const gh_om_frame_runtime*b){
  if(!s||!b||!b->init||!b->canonical_rate||!b->solids)return GH_OBJSTEP_ARGUMENT;
- if(s->runtime_bound)return s->runtime.init==b->init&&s->runtime.canonical_rate==b->canonical_rate&&s->runtime.solids==b->solids?GH_OBJSTEP_OK:GH_OBJSTEP_ARGUMENT;
+ if(s->runtime_bound){
+  const gh_om_frame_runtime *old=&s->runtime;
+  return old->init==b->init&&old->canonical_rate==b->canonical_rate&&old->solids==b->solids&&
+   old->context==b->context&&old->break_effect==b->break_effect&&old->break_sound==b->break_sound&&
+   old->break_collision==b->break_collision&&old->remove_sound==b->remove_sound?
+   GH_OBJSTEP_OK:GH_OBJSTEP_ARGUMENT;
+ }
  s->runtime=*b;s->runtime_bound=1;return GH_OBJSTEP_OK;
 }

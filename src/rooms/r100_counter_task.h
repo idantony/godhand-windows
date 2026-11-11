@@ -15,6 +15,10 @@ typedef struct {gh_r100_counter_bindings b;uint32_t stage,frontier;gh_r100_scrip
  * original manager list and reports whether one has byte 614 equal to 1. */
 gh_r100_script_status gh_r100_count_alive_00001028(const gh_game_init_state *,
     const gh_room_state *,uint32_t *alive,int *has614);
+gh_r100_script_status gh_r100_enemy_dead_0028fb38(const gh_room_state *,
+    const gh_game_title_player *,int *dead);
+gh_r100_script_status gh_r100_first_flagged_00002cb0(const gh_game_init_state *,
+    const gh_room_state *,const gh_game_title_player **);
 gh_r100_script_status gh_r100_counter_bind(gh_r100_counter_task *,const gh_r100_counter_bindings *);
 /* ActualREL10F8, originalScenario slot/callback andrealSleep1. Borrows SAME
  *12-byte R100allocation; DOESNOT allocate anotherroomwork orsavebank.

@@ -34,3 +34,303 @@ static gh_player_target_status enter_query(const gh_player_target_bindings*b,int
 gh_player_target_status gh_player_pickup_target_0012a610(const gh_player_target_bindings*b,gh_player_target*out,uint32_t*f){return enter_query(b,0,out,f);}
 gh_player_target_status gh_player_interact_target_0012b328(const gh_player_target_bindings*b,gh_player_target*out,uint32_t*f){return enter_query(b,1,out,f);}
 gh_player_target_status gh_player_small_object_gate_00129cc8(const gh_player_target_bindings*b,uint32_t*f){gh_player_target unused;return enter_query(b,2,&unused,f);}
+
+gh_player_target_status gh_enemy_target_position_00275978(const gh_title_player_view *view,float out[3])
+{
+ if(!view||!out||view->original_vtable214!=0x4479c8||view->size<0x168c)
+  return GH_PLAYER_TARGET_UNSUPPORTED;
+ if(!point(view,out))return GH_PLAYER_TARGET_ARGUMENT;
+ if(view->bytes+0x1680!=view->alias_f0)memcpy(view->bytes+0x1680,out,12);
+ unsigned kind=w(view->bytes+0x564);
+ if(kind==0x264||kind==0x265||kind==0x26a)return GH_PLAYER_TARGET_UNSUPPORTED;
+ return GH_PLAYER_TARGET_OK;
+}
+
+static int om_class_001b7a78(unsigned id,uint32_t item)
+{
+ if(item==0x9c3)return 0;
+ if(item!=0xffff)return 1;
+ return (id>=0x301&&id<=0x302)||(id>=0x309&&id<=0x30c)||id==0x325||
+  (id>=0x32a&&id<=0x32c)||(id>=0x32e&&id<=0x32f)||id==0x332||id==0x33d||
+  (id>=0x33f&&id<=0x345)||(id>=0x347&&id<=0x348)||(id>=0x400&&id<=0x402)||
+  (id>=0x410&&id<=0x411)||(id>=0x418&&id<=0x41a)||id==0x41f||id==0x42e;
+}
+
+int gh_player_target_object_eligible_001b79e0(const gh_title_player_view *view)
+{
+ if(!view||!view->bytes||view->size<0x5bc)return 0;
+ const uint8_t *p=view->bytes;
+ const uint32_t flags=w(p+0x5b8);
+ if((w(p+0x5b0)&2u)||(flags&0x2000u))return 0;
+ const unsigned kind=half(p+0x2fe);
+ return (flags&0x100u)||(om_class_001b7a78(kind,w(p+0x560))&&
+  !(kind>=0x3da&&kind<=0x3dd)&&kind!=0x3ea);
+}
+
+static gh_player_target_status consider_focus(const gh_player_target_bindings *b,
+ const float origin[3],const float candidate[3],float heading,float range,float max_height,
+ float cone_scale,int check_visibility,float *cone,int *accepted,uint32_t *f)
+{
+ *accepted=0;
+ const float x=sub(origin[0],candidate[0]),z=sub(origin[2],candidate[2]);
+ const float squared=add(mul(x,x),mul(z,z));
+ const float height=fabsf(sub(origin[1],candidate[1]));
+ if(!isfinite(squared)||!isfinite(height))return fail(f,0x1f7eb0,GH_PLAYER_TARGET_NUMERIC);
+ if(squared>mul(range,range)||height>max_height)return GH_PLAYER_TARGET_OK;
+
+ float turn;
+ gh_player_target_status status=gh_player_target_angle_002da038(b->elf,b->elf_bytes,
+  origin,candidate,heading,number(0x40490fdb),&turn,f);
+ if(status)return status;
+ turn=fabsf(turn);
+ if(turn>mul(*cone,cone_scale))return GH_PLAYER_TARGET_OK;
+
+ if(check_visibility){
+  if(!b->actors)return fail(f,0x131e10,GH_PLAYER_TARGET_ARGUMENT);
+  gh_scene_ray_request ray={.mask=7,.flags=0x13c,.segmented=1};
+  memcpy(ray.from,origin,12);
+  memcpy(ray.to,candidate,12);
+  ray.from[1]=add(ray.from[1],1);
+  ray.to[1]=add(ray.to[1],1);
+  ray.from[3]=ray.to[3]=1;
+  int hit;
+  gh_scene_ray_status result=gh_scene_ray_query_00131e10(b->actors,&ray,&hit,f);
+  if(result)return result==GH_RAY_UNSUPPORTED?GH_PLAYER_TARGET_UNSUPPORTED:GH_PLAYER_TARGET_CALLEE;
+  if(hit)return GH_PLAYER_TARGET_OK;
+ }
+ *cone=turn;
+ *accepted=1;
+ return GH_PLAYER_TARGET_OK;
+}
+
+static gh_player_target_status enemy_focus(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,float range,float cone,int fallback,gh_player_target *selected,uint32_t *f)
+{
+ float origin[3];
+ if(!point(b->player,origin))return fail(f,0x2db6b0,GH_PLAYER_TARGET_ARGUMENT);
+ const float heading=number(w(b->player->bytes+0x104));
+ if(!isfinite(heading))return fail(f,0x2da038,GH_PLAYER_TARGET_NUMERIC);
+
+ unsigned cursor=UINT8_MAX;
+ if(init->enemy_top){
+  for(unsigned i=0;i<64;i++)if(init->enemy_top==init->enemies+i*20){cursor=i;break;}
+  if(cursor==UINT8_MAX)return fail(f,0x2910c0,GH_PLAYER_TARGET_ARGUMENT);
+ }else if(w(init->enemies+0x500))return fail(f,0x2910c0,GH_PLAYER_TARGET_ARGUMENT);
+ uint64_t visited=0;
+ const gh_game_title_player *selected_enemy=NULL;
+ while(cursor!=UINT8_MAX){
+  if(cursor>=64||(visited&(UINT64_C(1)<<cursor)))return fail(f,0x291100,GH_PLAYER_TARGET_ARGUMENT);
+  visited|=UINT64_C(1)<<cursor;
+  const gh_game_title_player *actor=init->enemy_actors[cursor];
+  if(!actor||!actor->view.bytes||actor->view.size<0x618||init->enemies[cursor*20+16]!=1)
+   return fail(f,0x291100,GH_PLAYER_TARGET_ARGUMENT);
+  cursor=init->enemy_next[cursor];
+  const gh_title_player_view *view=&actor->view;
+  const uint8_t *p=view->bytes;
+  const unsigned kind=half(p+0x2fe);
+  if(kind<0x200||kind>=0x280||(!fallback&&p[0x617]))continue;
+  if(view->original_vtable214!=0x4479c8)return fail(f,0x29117c,GH_PLAYER_TARGET_UNSUPPORTED);
+  if(!fallback&&(int16_t)half(p+0x54a)<1&&!(half(p+0x3ac)&4u))continue;
+
+  float candidate[3];
+  gh_player_target_status status=gh_enemy_target_position_00275978(view,candidate);
+  if(status)return fail(f,0x275978,status);
+  const int ignores_height=p[0x2f4]==1||(p[0x2f4]==2&&p[0x2f5]!=2);
+  const unsigned dependency=w(p+0x564);
+  const int extended=dependency==0x260||dependency==0x264||dependency==0x265||dependency==0x26a;
+  int accepted;
+  status=consider_focus(b,origin,candidate,heading,add(range,dependency==0x26a?8:extended?4:0),
+   ignores_height?INFINITY:1.5f,1,!extended,&cone,&accepted,f);
+  if(status)return status;
+  if(accepted)selected_enemy=actor;
+ }
+
+ const gh_room_vector *registry;
+ if(gh_room_registry_view(b->pools,0x754c58,&registry)||registry->count>registry->capacity||
+    (registry->count&&!registry->allocation.pointer))return fail(f,0x291510,GH_PLAYER_TARGET_ARGUMENT);
+ if(registry->count&&!b->resolve)return fail(f,0x291510,GH_PLAYER_TARGET_UNSUPPORTED);
+ for(uint32_t i=0;i<registry->count;i++){
+  const uint32_t handle=w((const uint8_t*)registry->allocation.pointer+i*4);
+  gh_title_player_view view={0};
+  gh_player_target_status status=b->resolve(b->context,handle,&view,f);
+  if(status)return status;
+  if(!view.bytes||view.size<0x300)return fail(f,0x291518,GH_PLAYER_TARGET_ARGUMENT);
+  const uint8_t *p=view.bytes;
+  const unsigned kind=half(p+0x2fe);
+  if((w(p+0x250)&0x80008000u)||kind<0x300||kind>=0x500)continue;
+  if(view.size<0x5bc)return fail(f,0x1b79e0,GH_PLAYER_TARGET_ARGUMENT);
+  const uint32_t flags=w(p+0x5b8);
+  if((!fallback&&!(flags&0x1000u))||(w(p+0x5b0)&4u)||!gh_player_target_object_eligible_001b79e0(&view))continue;
+
+  const uint8_t *method=elf_span(b->elf,b->elf_bytes,view.original_vtable214+0x68,8);
+  const uint8_t *position=elf_span(b->elf,b->elf_bytes,view.original_vtable214+0x80,8);
+  if(!method||half(method)||w(method+4)!=0x2a93a8||!position||half(position)||w(position+4)!=0x2a9458)
+   return fail(f,0x2915ac,GH_PLAYER_TARGET_UNSUPPORTED);
+  float candidate[3];
+  if(!point(&view,candidate))return fail(f,0x2a9458,GH_PLAYER_TARGET_ARGUMENT);
+  const int wide=(flags&0x400u)!=0;
+  int accepted;
+  status=consider_focus(b,origin,candidate,heading,wide?add(range,range):range,
+   wide?1.5f:1,wide?1.25f:1,!(flags&0x80u),&cone,&accepted,f);
+  if(status)return status;
+  if(accepted){*selected=(gh_player_target){handle,view};selected_enemy=NULL;}
+ }
+ if(selected_enemy){
+  for(size_t i=0;i<b->pools->object_slots;i++){
+   const gh_room_object_binding *binding=b->pools->objects+i;
+   if(binding->object==selected_enemy){
+    *selected=(gh_player_target){binding->handle,selected_enemy->view};
+    return GH_PLAYER_TARGET_OK;
+   }
+  }
+  return fail(f,0x2917a0,GH_PLAYER_TARGET_ARGUMENT);
+ }
+ return GH_PLAYER_TARGET_OK;
+}
+
+static gh_player_target_status focus(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,float range,float cone,int fallback,gh_player_target *out,uint32_t *f)
+{
+ if(f)*f=0;
+ if(!b||!init||!out||!b->player||b->player->size<0x108||!b->pools)
+  return fail(f,0x291010,GH_PLAYER_TARGET_ARGUMENT);
+ if(!isfinite(range)||range<0||!isfinite(cone)||cone<0)
+  return fail(f,0x291010,GH_PLAYER_TARGET_NUMERIC);
+ fenv_t env;
+ if(feholdexcept(&env))return fail(f,0x291010,GH_PLAYER_TARGET_NUMERIC);
+ if(fesetround(FE_TOWARDZERO)){
+  (void)fesetenv(&env);
+  return fail(f,0x291010,GH_PLAYER_TARGET_NUMERIC);
+ }
+ gh_player_target selected={0};
+ gh_player_target_status result=enemy_focus(b,init,range,cone,fallback,&selected,f);
+ if(fesetenv(&env))return fail(f,0x291010,GH_PLAYER_TARGET_NUMERIC);
+ if(!result)*out=selected;
+ return result;
+}
+
+gh_player_target_status gh_player_enemy_target_00291010(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,float range,float cone,gh_player_target *out,uint32_t *f)
+{
+ return focus(b,init,range,cone,0,out,f);
+}
+
+static void attack_target_clear(const gh_title_player_view *player,gh_player_target *current)
+{
+ const uint32_t zero=0;
+ player->bytes[0x648]=0;
+ memcpy(player->bytes+0x640,&zero,4);
+ *current=(gh_player_target){0};
+}
+
+static gh_player_target_status keep_attack_target(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,gh_player_target *current,uint32_t *f)
+{
+ const gh_title_player_view *player=b->player;
+ if((int8_t)player->bytes[0x648]<1){
+  attack_target_clear(player,current);
+  return GH_PLAYER_TARGET_OK;
+ }
+ if(!current->handle)
+  return w(player->bytes+0x640)?fail(f,0x124c30,GH_PLAYER_TARGET_UNSUPPORTED):GH_PLAYER_TARGET_OK;
+
+ gh_title_player_view *target=&current->view;
+ if(!target->bytes||target->size<0x300||w(player->bytes+0x640)!=current->handle)
+  return fail(f,0x124c30,GH_PLAYER_TARGET_ARGUMENT);
+ unsigned kind=half(target->bytes+0x2fe);
+ if(kind>=0x200&&kind<0x300){
+  int member=0;
+  unsigned cursor=UINT8_MAX;
+  if(init->enemy_top){
+   for(unsigned i=0;i<64;i++)if(init->enemy_top==init->enemies+i*20){cursor=i;break;}
+   if(cursor==UINT8_MAX)return fail(f,0x2909b8,GH_PLAYER_TARGET_ARGUMENT);
+  }
+  uint64_t visited=0;
+  while(cursor!=UINT8_MAX){
+   if(cursor>=64||(visited&(UINT64_C(1)<<cursor)))return fail(f,0x2909b8,GH_PLAYER_TARGET_ARGUMENT);
+   visited|=UINT64_C(1)<<cursor;
+   const gh_game_title_player *entry=init->enemy_actors[cursor];
+   if(entry&&entry->view.bytes==target->bytes&&init->enemies[cursor*20+16]==1){member=1;break;}
+   cursor=init->enemy_next[cursor];
+  }
+  if(!member){attack_target_clear(player,current);return GH_PLAYER_TARGET_OK;}
+  if(target->size<0x618)return fail(f,0x124c30,GH_PLAYER_TARGET_ARGUMENT);
+  if(target->bytes[0x617]){attack_target_clear(player,current);return GH_PLAYER_TARGET_OK;}
+  if((int16_t)half(target->bytes+0x54a)<1){
+   if(target->original_vtable214!=0x4479c8)return fail(f,0x124ca8,GH_PLAYER_TARGET_UNSUPPORTED);
+   if(!(half(target->bytes+0x3ac)&4)){
+    attack_target_clear(player,current);
+    return GH_PLAYER_TARGET_OK;
+   }
+  }
+ }
+ if(kind>=0x300&&kind<0x500&&
+    ((w(target->bytes+0x250)&0x80008000u)||!gh_player_target_object_eligible_001b79e0(target))){
+  attack_target_clear(player,current);
+  return GH_PLAYER_TARGET_OK;
+ }
+
+ float origin[3],position[3];
+ if(!point(player,origin))return fail(f,0x124d34,GH_PLAYER_TARGET_ARGUMENT);
+ if(target->original_vtable214==0x4479c8){
+  gh_player_target_status status=gh_enemy_target_position_00275978(target,position);
+  if(status)return fail(f,0x275978,status);
+ }else{
+  const uint8_t *method=elf_span(b->elf,b->elf_bytes,target->original_vtable214+0x68,8);
+  const uint8_t *data=elf_span(b->elf,b->elf_bytes,target->original_vtable214+0x80,8);
+  if(!method||half(method)||w(method+4)!=0x2a93a8||!data||half(data)||w(data+4)!=0x2a9458)
+   return fail(f,0x124d60,GH_PLAYER_TARGET_UNSUPPORTED);
+  if(!point(target,position))return fail(f,0x2a9458,GH_PLAYER_TARGET_ARGUMENT);
+ }
+ float x=sub(origin[0],position[0]),z=sub(origin[2],position[2]);
+ float squared=add(mul(x,x),mul(z,z));
+ if(!isfinite(squared))return fail(f,0x1f7eb0,GH_PLAYER_TARGET_NUMERIC);
+ if(squared>.25f){
+  float yaw;
+  gh_player_target_status status=gh_player_target_angle_002da038(b->elf,b->elf_bytes,
+   origin,position,number(w(player->bytes+0x104)),number(0x40490fdb),&yaw,f);
+  if(status)return status;
+  if(fabsf(yaw)>number(0x3fc90fdb)){
+   attack_target_clear(player,current);
+   return GH_PLAYER_TARGET_OK;
+  }
+ }
+ if(squared>36)attack_target_clear(player,current);
+ return GH_PLAYER_TARGET_OK;
+}
+
+gh_player_target_status gh_player_attack_target_00124540(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,gh_player_target *current,uint32_t *f)
+{
+ if(f)*f=0;
+ if(!b||!init||!current||!b->player||!b->player->bytes||b->player->size<0x649)
+  return fail(f,0x124540,GH_PLAYER_TARGET_ARGUMENT);
+ fenv_t environment;
+ if(feholdexcept(&environment))return fail(f,0x124540,GH_PLAYER_TARGET_NUMERIC);
+ if(fesetround(FE_TOWARDZERO)){
+  (void)fesetenv(&environment);
+  return fail(f,0x124540,GH_PLAYER_TARGET_NUMERIC);
+ }
+ gh_player_target_status status=keep_attack_target(b,init,current,f);
+ if(fesetenv(&environment))return fail(f,0x124540,GH_PLAYER_TARGET_NUMERIC);
+ if(status)return status;
+ if(!current->handle){
+  static const struct attack_probe {float range;uint32_t cone;int fallback;} ordinary[]={
+   {2,0x3fc90fdb,0},{4,0x3f060a92,0},{6,0x3f060a92,0},{4,0x4016cbe4,0},
+   {3,0x3f860a92,1}};
+  static const struct attack_probe special[]={
+   {2,0x3f060a92,1},{4,0x3f060a92,1},{4,0x40490fdb,1}};
+  const int alternate=w(b->player->bytes+0x5d8)==4;
+  const struct attack_probe *probes=alternate?special:ordinary;
+  const size_t count=alternate?sizeof(special)/sizeof(*special):sizeof(ordinary)/sizeof(*ordinary);
+  for(size_t i=0;i<count&&!current->handle;i++){
+   status=focus(b,init,probes[i].range,number(probes[i].cone),probes[i].fallback,current,f);
+   if(status)return status;
+  }
+ }
+ if(current->handle){
+  memcpy(b->player->bytes+0x640,&current->handle,4);
+  b->player->bytes[0x648]=20;
+ }
+ return GH_PLAYER_TARGET_OK;
+}

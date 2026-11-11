@@ -15,6 +15,9 @@ typedef struct {struct gh_scene_dynamic_box *box;gh_om_object *object;gh_scene_d
 /* Actual1BD228: size610+.1XYZ, centeredleft/halfheight offset,zeroEuler,
  * sixcanonicalattrs then real12EAD8/12D970. Original644 istypedbox above. */
 gh_scene_placement_status gh_om_door_geometry_001bd228(gh_om_door_geometry *,gh_om_object *,gh_scene_dynamic_owner *,const gh_om_door_shared *,gh_static_transform_policy);
+/* Original gate setters for an initialized canonical door. */
+gh_scene_placement_status gh_om_door_set_lock_001bd178(gh_om_door_geometry *,int on);
+gh_scene_placement_status gh_om_door_release_collision_001bd3f0(gh_om_door_geometry *);
 gh_scene_placement_status gh_om_door_geometry_abort(gh_om_door_geometry *);
 #ifdef __cplusplus
 }

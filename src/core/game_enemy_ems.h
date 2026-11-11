@@ -24,8 +24,21 @@ typedef struct {
 gh_scene_placement_status gh_enemy_ems_spawn_00294ca0(gh_enemy_ems **,
     gh_em_resource_prefix *, const gh_room_state *, const gh_enemy_ems_bindings *,
     uint32_t *frontier, int *detail);
+typedef struct {
+    const gh_enemy_ems *owner;
+    const uint8_t *page;
+    gh_enemy_request request;
+    uint8_t stage,index,stamp;
+} gh_enemy_ems_set_call;
+/* Original 2952D0 dynamic spawn through the same canonical EMS owner.
+ * One zero-initialized cursor per invocation, retained across suspension. */
+gh_scene_placement_status gh_enemy_ems_set_002952d0(gh_enemy_ems *,gh_enemy_ems_set_call *,
+    uint8_t stamp,gh_game_title_player **original,uint32_t *frontier);
 /* Resolve a completed actor only while the same canonical registry still owns it. */
 gh_game_title_player *gh_enemy_ems_lookup(const gh_enemy_ems *, uint32_t handle);
+/* Reverse lookup of a canonical entered enemy. A missing actor yields zero. */
+gh_scene_placement_status gh_enemy_ems_handle_for_actor(const gh_enemy_ems *,
+    const gh_game_title_player *,uint32_t *handle);
 typedef struct {
     gh_game_title_player *actor;
     gh_actor_model *model;
@@ -50,6 +63,9 @@ gh_actor_motion_status gh_enemy_manager_get_00290868(const gh_game_init_state *,
     uint8_t entry_number, gh_game_title_player **);
 gh_actor_motion_status gh_enemy2a2_set_escape_position_00289038(gh_game_title_player *,
     const float position[4]);
+/* R100 AT3's original cEmWrap calls, on the same registered live actor. */
+gh_actor_motion_status gh_enemy_ems_start_goto_at3(const gh_enemy_ems *,uint8_t stamp,
+    const float destination[3],uint32_t *frontier);
 /* EndSoftEvent argument zero through the canonical enemy manager list. */
 gh_actor_motion_status gh_enemy_ems_unsuspend_002948e8(const gh_enemy_ems *,
     const gh_game_init_state *, uint32_t *frontier);

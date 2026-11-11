@@ -38,7 +38,8 @@ static int is_r100_appearance0_profile(const gh_enemy_request *request)
     return request && request->object_kind==0x202 && !request->appearance &&
         request->flags==0x04000000u && !request->dependency_flags &&
         ((request->entry_number==19 && request->dependency_kind==0x203) ||
-         (request->entry_number==20 && request->dependency_kind==0x200));
+         ((request->entry_number==20||request->entry_number==31) && request->dependency_kind==0x200) ||
+         (request->entry_number==32 && request->dependency_kind==0x202));
 }
 
 int gh_enemy202_is_r100_supported_profile(const gh_enemy_request *request)
@@ -145,6 +146,6 @@ gh_actor_model_status gh_enemy202_appearance0_select_0020393c(
         return GH_ACTOR_MODEL_UNSUPPORTED;
     /* Dependency 203 uses 42D4C0[1] -> 203700; dependency 200 takes
      * the underflow branch 2036EC. 20393C keeps those candidate pairs. */
-    size_t directory=request->dependency_kind==0x203?0x648:0x98;
+    size_t directory=request->dependency_kind==0x200?0x98:0x648;
     return select_initial_motion(resource,directory,1,0,out);
 }
