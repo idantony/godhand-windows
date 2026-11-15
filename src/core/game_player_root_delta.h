@@ -13,6 +13,7 @@ typedef enum {GH_PLAYER_DELTA_OK,GH_PLAYER_DELTA_ARGUMENT,GH_PLAYER_DELTA_NUMERI
 gh_player_delta_status gh_player_root_rotation_scaled_0014f9f0(const gh_title_player_view *,const gh_boot_work *,float scale,gh_static_transform_policy,uint32_t *frontier);
 gh_player_delta_status gh_player_root_rotation_0014f9f0(const gh_title_player_view *,const gh_boot_work *,gh_static_transform_policy,uint32_t *frontier);
 gh_player_delta_status gh_player_root_translation_0014f928(const gh_title_player_view *,const gh_boot_work *,gh_static_transform_policy,uint32_t *frontier);
+gh_player_delta_status gh_player_root_translation_scaled_0014f928(const gh_title_player_view *,const gh_boot_work *,float scale,gh_static_transform_policy,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

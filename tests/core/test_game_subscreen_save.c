@@ -1,4 +1,5 @@
 #include "game_subscreen_save.h"
+#include "game_cockpit.h"
 #include "game_door.h"
 #include "game_scene_exit.h"
 #include "id_jobs.h"
@@ -191,6 +192,34 @@ int main(int argc,char **argv)
     C((word((uint8_t*)&work+0x5e8)&0x40000000)&&word((uint8_t*)&work+0x5e4)==0x0a000000);
     TICK();
     C(state[0x50]==12&&state[0x52]==1&&audio.count==3);
+    C(gh_game_children_save_map_quit_0015ff10(children,&b,&frontier)==GH_CHILD_OK);
+    gh_game_mt mt={.index=625};
+    gh_game_cockpit *cockpit;
+    const uint8_t heat[0x18]={0};
+    C(gh_id_runtime_set_path_policy(runtime,GH_ID_PATH_REFERENCE_NEAREST)==GH_ID_OK);
+    C(gh_game_cockpit_create(runtime,manager,&mt,&cockpit)==GH_ID_OK);
+    C(gh_game_cockpit_initialize_00140c88(cockpit,save)==GH_ID_OK);
+    b.cockpit=cockpit;b.heat=heat;
+    work.room=0x20;work.flags=0x40;fade=(gh_screen_fade){0};cursor=(gh_game_scene_aux){0};
+    set(&work,0x5e4,0);set(&work,0x5e8,0);
+    C(gh_game_children_save_map_open_00160020(children,&b,&started,&frontier)==GH_CHILD_OK&&started);
+    for(unsigned frame=0;frame<30&&state[0x50]!=5;++frame)TICK();
+    C(state[0x50]==5&&gh_game_children_save_map_view(children,&view)==GH_CHILD_OK&&view.selected==1);
+    gh_id_entry *save_label;
+    C(gh_id_base_get_work_002aa410(runtime,view.base,27,&save_label,NULL)==GH_ID_OK&&(save_label->flags&0x08000000));
+    set(&work,0x1b0,0x01000000);TICK();
+    C(gh_game_children_save_map_view(children,&view)==GH_CHILD_OK&&view.selected==3);
+    set(&work,0x1b0,0x02000000);TICK();
+    C(gh_game_children_save_map_view(children,&view)==GH_CHILD_OK&&view.selected==1);
+    set(&work,0x1b0,0);set(&work,0x1a0,0x10000000);TICK();
+    C(state[0x50]==8&&gh_game_children_save_map_view(children,&view)==GH_CHILD_OK&&view.target==0x101);
+    set(&work,0x1a0,0);
+    for(unsigned frame=0;frame<25&&view.active;++frame){
+        TICK();
+        C(gh_game_children_save_map_view(children,&view)==GH_CHILD_OK);
+    }
+    C(!view.active&&!manager->pair[7].bound&&view.target==0x101);
+    C(gh_game_cockpit_destroy(cockpit)==GH_ID_OK);
 #undef TICK
     C(gh_task_threads_destroy(threads)==GH_THREAD_OK);
     gh_game_children_destroy(children);

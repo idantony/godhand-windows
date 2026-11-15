@@ -147,7 +147,8 @@ gh_actor_motion_status gh_enemy_timers_with_weapon_00205ae4(gh_enemy_timers*s,
   if(items){
    uint16_t kind=0;
    if(e->request.object_kind==0x202){
-    if(items==1&&e->request.dependency_kind==0x203&&e->request.entry_number==2&&e->request.appearance==0)
+    if(items==1&&e->request.dependency_kind==0x203&&e->request.appearance==0&&
+       (e->request.entry_number==2||(e->b.work->room==0x101&&e->request.entry_number==13)))
      kind=0x361;
     else if(items==2&&e->request.dependency_kind==0x202&&e->request.entry_number==16&&e->request.appearance==0)
      kind=0x362;

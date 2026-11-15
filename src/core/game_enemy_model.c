@@ -65,9 +65,10 @@ gh_actor_model_status gh_enemy_model_initialize_00208268(gh_enemy_model*s,const 
  if(!s||!root||!root->bytes||root->size<0x1650||!resource||!work||!pools||!heap||!fog||!original)return GH_ACTOR_MODEL_ARGUMENT;
  *original=0;s->frontier=0;
  uint32_t dependency=word(root->bytes,0x564);
- const int exchange=work->room==0x105&&half(root->bytes,0x2fe)==0x202&&
-  word(root->bytes,0x1648)==0x200&&word(root->bytes,0x164c)==1&&
-  root->bytes[0x1650]==0&&root->bytes[0x1651]==2;
+ const int r105_exchange=work->room==0x105&&root->bytes[0x1650]==0&&root->bytes[0x1651]==2;
+ const int r101_exchange=work->room==0x101&&root->bytes[0x1650]==4&&root->bytes[0x1651]==9;
+ const int exchange=(r105_exchange||r101_exchange)&&half(root->bytes,0x2fe)==0x202&&
+  word(root->bytes,0x1648)==0x200&&word(root->bytes,0x164c)==1;
  if(exchange&&s->stage&&dependency==0x227)dependency=0x200;
  unsigned occurrence;
  const unsigned kind=half(root->bytes,0x2fe);

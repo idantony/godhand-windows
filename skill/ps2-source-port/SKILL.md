@@ -149,6 +149,14 @@ number against an indexed disc entry and log its header and fingerprint. Use
 that report to distinguish an unsupported texture profile from a failure
 in geometry preparation or sampling.
 
+When preserving a successful controller route for repeated verification,
+record raw buttons and axes before the original mapping step. Key playback
+to an original gameplay counter, such as completed player updates, after
+its original scene or event condition. Wall-clock ticks and frame serials
+can drift across decoder and device runs. Reuse the same tape on the
+packet-only and device replay paths, and compare their original state
+transitions before chasing presentation differences.
+
 Use CPU packet replays for rapid source iteration. Before calling a scene
 visually verified, capture it from a separate native device run. A bounded run
 can prove forward progress when the configured and observed tick limits agree,

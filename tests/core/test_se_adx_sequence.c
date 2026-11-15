@@ -1,6 +1,7 @@
 #include "se_voice.h"
 #include "sound_control.h"
 #include "adx.h"
+#include "game_actor_model.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -280,6 +281,39 @@ static void check_gate_clip(gh_se_voice_engine *voices,gh_audio_registry *regist
     CHECK(recorded->channels==test->channels&&recorded->frames==frames&&recorded->hash==expected);
 }
 
+static gh_voice_status grab_probe(void *context,const float position[4],int update,
+    gh_se_attached_environment *environment,uint32_t *frontier)
+{
+    (void)context;
+    (void)position;
+    (void)update;
+    *environment=(gh_se_attached_environment){.output_mode=1};
+    *frontier=0;
+    return GH_VOICE_OK;
+}
+
+static void check_paired_player_grab(gh_audio_registry *registry,gh_disc *disc,
+    const gh_sound_control *control,const void *elf,size_t elf_bytes,uint16_t room)
+{
+    gh_se_voice_engine *voices=new_engine(registry,disc,control,elf,elf_bytes);
+    gh_boot_work work={.room=(int16_t)room};
+    uint8_t raw[0x5ac]={0};
+    memcpy(raw+0x2f4,&(const uint16_t){0x0a01},2);
+    memcpy(raw+0x2fe,&(const uint16_t){0x100},2);
+    gh_actor_model model={.bound=1,.parts_ready=1,.work=&work,
+        .root={.bytes=raw,.size=sizeof(raw),.alias_f0=raw+0xb0,.original_vtable214=0x41d220}};
+    model.native_identity=&model;
+    uint32_t handle=0, duplicate=99;
+    CHECK(!gh_se_voice_request_attached(voices,&model,&handle,&model,-1,0,7,0,0,
+                                      grab_probe,NULL,NULL,NULL,&handle)&&handle);
+    const gh_se_voice_info info=voice_info(voices,handle);
+    CHECK(info.pending&&info.sample_slot==20&&info.rate==48000&&model.sound_borrowers==1);
+    CHECK(!gh_se_voice_request_attached(voices,&model,&duplicate,&model,-1,0,7,0,0,
+                                      grab_probe,NULL,NULL,NULL,&duplicate)&&!duplicate&&model.sound_borrowers==1);
+    gh_se_voice_destroy(voices);
+    CHECK(!model.sound_borrowers);
+}
+
 int main(int argc,char **argv)
 {
     CHECK(argc==2);
@@ -318,6 +352,8 @@ int main(int argc,char **argv)
         check_gate_clip(voices,registry,disc,elf,elf_bytes,&gate_clips[i]);
         gh_se_voice_destroy(voices);
     }
+    check_paired_player_grab(registry,disc,&control,elf,elf_bytes,0x100);
+    check_paired_player_grab(registry,disc,&control,elf,elf_bytes,0x105);
     free(elf);
     gh_audio_registry_destroy(registry);
     gh_disc_close(disc);

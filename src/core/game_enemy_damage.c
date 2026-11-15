@@ -229,7 +229,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
         uint32_t behavior = word(p + 0x16d0);
         uint16_t flags = half(p + 0x3ac);
         if (!isfinite(drain) || !isfinite(cooldown) || !isfinite(block) || !isfinite(armor) ||
-            (drain > 0 && hp > 0) || (power && hp>0 && (uint32_t)hp<=power))
+            (drain > 0 && hp > 0))
             return stop(frontier, 0x20a178);
         if (cooldown > 0) return GH_ACTOR_MOTION_OK;
         call->effect = 0x2e;
@@ -250,7 +250,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
         }
         put(p + 0x17ac, (uint32_t)hp);
         /* Both non-player sources use 28FB88's unscaled environment hit. */
-        put_half(p + 0x54a, (uint16_t)((uint32_t)hp-power));
+        put_half(p + 0x54a, (uint16_t)((uint32_t)hp>power?(uint32_t)hp-power:0));
         put(p + 0x17a4, word(p + 0x17a4)+power);
         put(p + 0x17a8, word(p + 0x17a8)+power);
         put(p + 0x17b4, power);
@@ -279,6 +279,17 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
         if ((status & 0x80040u) || (behavior & 0x806020u) ||
             (flags & 0x2cu) || early_reaction)
             return stop(frontier, 0x20b394);
+
+        /* 4316D4 maps effect 2E at zero HP to original 20BB80.
+         * The ground bit chooses the ordinary death selector. */
+        if(power&&!half(p+0x54a)){
+            p[0x2f4]=2;
+            p[0x2f5]=(flags&8u)?1:0;
+            p[0x2f6]=p[0x2f7]=0;
+            call->reacted=1;
+            call->phase=5;
+            return GH_ACTOR_MOTION_OK;
+        }
 
         /* 20D138 returns zero. For 2E, 20CAC8 can still draw once
          * on +17BC == 1 before rejecting. The other probes reject
@@ -408,11 +419,26 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         if (status) return status;
         call->phase = 2;
     }
-    if (call->phase == 2) {
-        if (half(p + 0x3ac) & 0x100u) return stop(frontier, 0x20a4e8);
+    enum { amplified_power_ready = 16 };
+    if (call->phase == 2 && (half(p + 0x3ac) & 0x100u)) {
+        if (!triangle || !r100_stamp20(enemy, p) || p[0x2f4] || p[0x2f5] != 0x15 ||
+            p[0x2f7] || !rank)
+            return stop(frontier, 0x20a4e8);
+        /* 20A4CC adds a separate Heat gain before switching on the hit kind. */
+        gh_actor_motion_status status = gain_heat_002a9978(enemy, rank == 5 ? 1.0f : 4.0f, frontier);
+        if (status) return status;
+        call->phase = amplified_power_ready;
+    }
+    if (call->phase == 2 || call->phase == amplified_power_ready) {
         put(p + 0x17ac, half(p + 0x54a));
+        uint32_t power_bits = word(body->bytes + 0x4c);
+        if (call->phase == amplified_power_ready) {
+            /* Effect 12 is below the 20A550 table range and takes its default. */
+            power_bits <<= 1;
+            put(p + 0x16d0, word(p + 0x16d0) & ~0x800000u);
+        }
         int32_t power;
-        memcpy(&power, body->bytes + 0x4c, 4);
+        memcpy(&power, &power_bits, sizeof(power));
         gh_actor_motion_status status = gh_enemy202_damage_0028fb88(enemy, player, power, frontier);
         if (status) return status;
         put(p + 0x17a4, word(p + 0x17a4) + (uint32_t)power);
@@ -447,7 +473,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         /* 20BB58 is the dead-HP effect switch. Ordinary stamp19 effect7
          * reaches it with no special reaction, block, or alternate motion. */
         if (opening_pair && !half(p + 0x54a) && rank && (triangle||rank < 3) && p[0x17bd] == 1 &&
-            !(flags & 0x12cu) && !(behavior & 0x806020u) &&
+            !(flags & 0x2cu) && !(behavior & 0x806020u) &&
             !(status & 0x180040u) && !(p[0x2f4] == 1 && p[0x2f5] == 0x16)) {
             p[0x2f4] = triangle ? 1 : 2;
             p[0x2f5] = triangle ? 7 : 0;
@@ -598,8 +624,9 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
     const int triangle = body->bytes && body->size >= 0x48 &&
         opening_triangle(enemy, p, half(body->bytes + 0x46));
+    const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) && !triangle) ||
-        (half(p + 0x3ac) & 0x100u))
+        (amplified && !(triangle && r100_stamp20(enemy, p))))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
     if (triangle) {
@@ -608,6 +635,8 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
             return stop(frontier, 0x31cfe0);
         increment = 15u << (random & 1u);
     }
+    /* 208F58 triples the selected stun increment for the same hit marker. */
+    if (amplified) increment *= 3;
     if (timer <= 0) {
         const int32_t sum = (int32_t)(word(p + 0x5b4) + increment);
         put(p + 0x5b4, sum < 0 ? 0u : sum > 100000 ? 100000u : (uint32_t)sum);
@@ -647,10 +676,16 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         if (init->heat[0x10] || word(player->bytes+0x5fc))
             return stop(frontier, 0x271df4);
     }
+    const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
+    if (amplified && (call->effect != 0x12 || !r100_stamp20(enemy, p) || paired_counter))
+        return stop(frontier, 0x271cf8);
+    if (amplified && ((word((const uint8_t *)enemy->entry.b.work + 0x590) & 0x800u) ||
+                      (word(p + 0x16d4) & 0x8000u)))
+        return stop(frontier, 0x271d7c);
     if ((call->effect == 0x2e ? !scenery_reaction_dependency(dependency) :
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
             !(call->effect == 0x12 && r100_stamp8(enemy, p))) ||
-        (half(p + 0x3ac) & 0x100u) || init->heat[0x10] || word(player->bytes + 0x5fc) ||
+        init->heat[0x10] || word(player->bytes + 0x5fc) ||
         (!paired_counter && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);
     const unsigned costume = paired_counter ? 0 : gh_core_save_costume(save);
@@ -707,9 +742,12 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         return stop(frontier, 0x30a2b0);
     call->impact = (gh_enemy202_impact_request){
         .position = {out_x, hit_y, out_z, 1.0f},
-        .bank = paired_counter ? 0 : 0x58, .index = paired_counter ? 0xc : 0x10,
+        .bank = paired_counter ? 0 : 0x58,
+        .index = paired_counter ? 0xc : amplified ? 0x12 : 0x10,
         .scale = 1.0f, .mode = -1,
     };
+    /* 292F08 tests the original actor byte before the unbound effect. */
+    if (amplified && p[0x538]) call->impact.index = 0;
     call->phase = 10;
     return GH_ACTOR_MOTION_OK;
 }

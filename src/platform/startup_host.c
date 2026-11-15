@@ -280,6 +280,18 @@ static gh_id_error scene_game_over_sound(void *context,unsigned program,uint32_t
 {
  return scene_program_se(context,0,program,frontier)==GH_R020_OK?GH_ID_OK:GH_ID_UNSUPPORTED;
 }
+static gh_id_error scene_cockpit_rank_sound(void *context,unsigned program,uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    gh_game_services_scene_view scene;
+    uint32_t handle=0;
+    if(!h->voices||gh_game_services_get_scene_view(h->services,&scene))return GH_ID_ARGUMENT;
+    gh_voice_status status=gh_se_voice_bind_origin_seh(h->voices,scene.sound_scene->seh.bytes,scene.sound_scene->seh.size);
+    if(!status)status=gh_se_voice_request_rank_origin(h->voices,program,&h->game_init.random,&handle);
+    if(!status)return GH_ID_OK;
+    *frontier=gh_se_voice_frontier(h->voices);
+    return GH_ID_UNSUPPORTED;
+}
 static gh_r020_status scene_logo_se(void *context,uint32_t *frontier)
 {return scene_program_se(context,0,0x2d,frontier);}
 static gh_screen_fade_context host_fade_context(const gh_startup_host *h)
@@ -298,7 +310,8 @@ static gh_save_map_bindings scene_save_map_bindings(gh_startup_host *h,const gh_
     return (gh_save_map_bindings){.work=&h->work,.player=s->title_player,.cursor=&h->scene_aux,
         .save=s->root->save,.dvd=&h->dvd,.subscreen_heap=h->heap,.manager=h->id_global,
         .id_runtime=h->id_runtime,.font=&h->font,.packed=s->root->packed,.language=s->root->language,
-        .fade=&h->fade,.fade_context=host_fade_context(h),.sound=scene_save_map_sound,.sound_context=h};
+        .fade=&h->fade,.fade_context=host_fade_context(h),.sound=scene_save_map_sound,.sound_context=h,
+        .cockpit=s->cockpit,.heat=h->game_init.heat};
 }
 static gh_door_status scene_save_map_scenario_end(void *context,uint32_t address,uint32_t *frontier)
 {
@@ -1241,7 +1254,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
             .save={h->save_bytes,sizeof(h->save_bytes)},.fan=scene_cockpit_fan,.radar=scene_cockpit_radar,
             .scenario_mode14=s.scenario_bytes_size>0x14?s.scenario_bytes+0x14:NULL,
             .game_over_sound=scene_game_over_sound,.game_over_fade=scene_game_over_fade,
-            .game_over_retry=scene_game_over_retry};
+            .game_over_retry=scene_game_over_retry,.rank_sound=scene_cockpit_rank_sound};
         gh_id_error e=address==0x140e58?gh_game_cockpit_move_00140e58(s.cockpit,&h->work,&callbacks):gh_game_cockpit_trans_001410a8(s.cockpit,&h->work,&callbacks);
         if(e&&frontier)*frontier=gh_game_cockpit_frontier(s.cockpit);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -2328,6 +2341,24 @@ gh_host_error gh_startup_host_qa_r003_title_handoff(gh_startup_host *h)
     memset(work+0x5c0,0,12);
     memset(work+0x5d0,0,4);
     return GH_HOST_OK;
+}
+
+gh_qa_game_over_state gh_startup_host_qa_game_over_state(const gh_startup_host *h)
+{
+    gh_qa_game_over_state result={0};
+    if(!h||!on_owner(h))return result;
+    result.continue_count=h->game_init.continue_count;
+    if(h->phase!=GH_HOST_RUNNING||h->game_loop.game_state[0]!=4||!(h->work.flags&8u))
+        return result;
+    gh_game_services_scene_view scene;
+    if(gh_game_services_get_scene_view(h->services,&scene))return result;
+    size_t size=0;
+    const uint8_t *fields=gh_game_cockpit_fields(scene.cockpit,&size);
+    /* 1410A8 enters 13D7B0 when the panel is active and phase92 is one.
+     * The authored default at 90 selects Retry. */
+    result.retry_ready=fields&&size>0x23bc&&fields[0x23bc]==1&&
+        fields[0x92]==1&&fields[0x93]==0&&fields[0x90]==1;
+    return result;
 }
 #endif
 gh_host_error gh_startup_host_set_fade_consumer(gh_startup_host *h,gh_host_fade_consumer consumer,void *context)

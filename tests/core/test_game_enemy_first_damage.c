@@ -1719,6 +1719,26 @@ static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *ene
     const gh_title_player_view *source;
     CHECK(!gh_hitarea_object_last_hit_actor(body,&source)&&source==&player->view&&
           body->bytes[0x46]==0x12&&word(body->bytes+0x4c)==12);
+    if(mode==5){
+        /* Actual Windows stamp20 Take, HP24, selector 15, effect12 power12. */
+        uint8_t saved_actor[0x1944], saved_heat[sizeof(b->entry.init->heat)];
+        memcpy(saved_actor,e,sizeof(saved_actor));
+        memcpy(saved_heat,b->entry.init->heat,sizeof(saved_heat));
+        memcpy(e+0x54a,&(uint16_t){24},2);
+        memcpy(e+0x3ac,&(uint16_t){0x900},2);
+        memcpy(e+0x17ca,&(uint16_t){0},2);
+        memcpy(e+0x2f4,&(uint32_t){0x1500},4);
+        memcpy(e+0x16d0,&(uint32_t){0x04200002},4);
+        memcpy(e+0x16d4,&(uint32_t){0x08000400},4);
+        gh_enemy202_hit_call amplified={0};
+        CHECK(!gh_enemy202_hit_0020a178(&amplified,enemy,&player->view,1,&pc)&&!pc&&
+            amplified.reacted&&word(e+0x17ac)==24&&word(e+0x17b4)==24&&
+            !(word(e+0x548)>>16)&&word(e+0x2f4)==0x701&&word(b->entry.init->heat+4)==0x40c00000);
+        CHECK(!gh_enemy202_hit_0020a178(&amplified,enemy,&player->view,1,&pc)&&
+            word(e+0x17b4)==24&&word(b->entry.init->heat+4)==0x40c00000);
+        memcpy(e,saved_actor,sizeof(saved_actor));
+        memcpy(b->entry.init->heat,saved_heat,sizeof(saved_heat));
+    }
     const int active_fx=mode==14||mode==15;
     if(active_fx)mode-=10;
     const int lethal=mode==4||mode==5;

@@ -50,6 +50,39 @@ class StartupRunnerTests(unittest.TestCase):
     def prepare(self):
         return tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg)
 
+    def test_game_over_retry_preflight_supports_both_routes_and_fresh_captures(self):
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                                r003_controlled=True, game_over_retry=True)
+        self.assertIn("--qa-r003-controlled", prepared["command"])
+        self.assertIn("--qa-game-over-retry", prepared["command"])
+        r100 = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                            control_probe="repeat-triangle-pair-continue", game_over_retry=True)
+        self.assertIn("repeat-triangle-pair-continue", r100["command"])
+        self.assertIn("--qa-game-over-retry", r100["command"])
+        with self.assertRaisesRegex(tool.proof.ProofError, "requires New Game"):
+            tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                         title_load=True, game_over_retry=True)
+        (self.scratch / "first-scene-candidate.retry.rgba").touch()
+        with self.assertRaisesRegex(tool.proof.ProofError, "outputs already exist"):
+            tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, game_over_retry=True)
+
+    def test_game_over_retry_proof_requires_distinct_render_epoch_and_matching_captures(self):
+        capture = self.scratch / "first-scene-candidate.rgba"
+        for suffix in (".game-over.rgba", ".retry.rgba"):
+            capture.with_suffix(suffix).write_bytes(bytes(512 * 448 * 4))
+        status = dict(room=261, menu_scene=90, menu_epoch=2, press_tick=100, confirm_edge=1,
+                      continue_tick=101, continues_before=0, continues_after=1, handoff_tick=130,
+                      first_reloaded_scene=110, reloaded_scene=120, reloaded_epoch=3, player_hp=100)
+        log = ("QA_GAME_OVER_CAPTURE menu scene=90 room=0105\n"
+               "QA_GAME_OVER_CAPTURE retry scene=120 room=0105\n"
+               "QA_GAME_OVER_STATUS ")
+        self.assertEqual(tool.game_over_observations(log + json.dumps(status), capture, 0), status)
+        with self.assertRaisesRegex(tool.proof.ProofError, "new presentation"):
+            tool.game_over_observations(log + json.dumps(dict(status, reloaded_epoch=2)), capture, 0)
+        with self.assertRaisesRegex(tool.proof.ProofError, "retry capture"):
+            tool.game_over_observations(log.replace("retry scene=120", "retry scene=119") +
+                                        json.dumps(status), capture, 0)
+
     def test_frozen_launcher_uses_its_original_project(self):
         with patch.object(tool, "PROJECT", self.snapshot):
             prepared = self.prepare()
@@ -222,6 +255,20 @@ class StartupRunnerTests(unittest.TestCase):
         self.assertFalse(result["playable_game_verified"])
         with self.assertRaisesRegex(frontier.proof.ProofError, "tick limit differs"):
             frontier.validate(self.snapshot, self.scratch, expected_tick_limit=490)
+
+    def test_r100_pad_tape_proof_requires_death_flags_and_actual_frames(self):
+        capture = self.scratch / "first-scene-candidate.rgba"
+        for suffix in (".battle-won.rgba", ".battle-won.rgba.world.rgba"):
+            Path(str(capture) + suffix).write_bytes(bytes(512 * 448 * 4))
+        qa = self.qa(exit_code=0, room="0100", game_state=4, scene_frames_presented=78)
+        status = dict(sampled_moves=101, victory_scene=78, stamp19_scene=71, stamp20_scene=78,
+                      stamp19_handle=19, stamp20_handle=20, death_mask=3,
+                      scenario_flags=0x01000000, player_hp=1)
+        trace = "QA_R100_PAD_TAPE "
+        self.assertEqual(tool.pad_tape_observations(trace + json.dumps(status), capture, qa), status)
+        for bad in (dict(death_mask=1), dict(scenario_flags=0), dict(victory_scene=79), dict(stamp20_handle=19)):
+            with self.subTest(bad=bad), self.assertRaisesRegex(tool.proof.ProofError, "lacks original deaths"):
+                tool.pad_tape_observations(trace + json.dumps({**status, **bad}), capture, qa)
 
     def test_title_load_frontier_pins_its_own_run_scope_and_card_progress(self):
         (self.scratch / "profile-load").mkdir()

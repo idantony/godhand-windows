@@ -24,6 +24,8 @@ gh_id_error gh_game_cockpit_initialize_00140c88(gh_game_cockpit *,gh_core_save_v
 gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit *,gh_core_save_view,const gh_boot_work *,const uint8_t heat[0x18]);
 /* Actual141628 roomQuit only, preservingglobal405 IDruns/SystemMenu. Six
  * concrete widget methods; dynamic2220 release still needs its real owner. */
+/* Original standalone Heat bar Init invoked by the loaded-game map. */
+gh_id_error gh_game_cockpit_load_map_heat_001434a8(gh_game_cockpit *,gh_core_save_view,const uint8_t heat[0x18]);
 gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit *,gh_core_save_view,const uint8_t heat[0x18]);
 gh_id_error gh_game_cockpit_destroy(gh_game_cockpit *);
 gh_id_error gh_game_cockpit_base(gh_game_cockpit *,uint32_t original_offset,gh_id_base **);
@@ -84,6 +86,7 @@ typedef struct {
  gh_id_error (*game_over_sound)(void *,unsigned,uint32_t *frontier);
  gh_id_error (*game_over_fade)(void *,uint32_t *frontier);
  gh_id_error (*game_over_retry)(void *,uint32_t *frontier);
+ gh_id_error (*rank_sound)(void *,unsigned program,uint32_t *frontier);
 } gh_cockpit_frame_callbacks;
 /* Loads original radar curves and mutable globals3BD6EC..F4/466440..447
  * from file-backed or zero-filled PT_LOAD. These persist across room reset. */

@@ -10,6 +10,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+struct gh_game_cockpit;
 typedef gh_child_status (*gh_save_map_sound)(void *,uint16_t program,uint32_t *frontier);
 typedef struct {
     gh_boot_work *work;
@@ -28,6 +29,8 @@ typedef struct {
     uint16_t map_room,target_room;
     gh_save_map_sound sound;
     void *sound_context;
+    struct gh_game_cockpit *cockpit;
+    const uint8_t *heat;
 } gh_save_map_bindings;
 typedef struct {
     gh_id_base *base;

@@ -216,6 +216,9 @@ gh_host_error gh_startup_host_set_input(gh_startup_host *,const gh_native_input_
 #ifdef GH_NATIVE_STARTUP_QA
 /* Isolate R003 presentation by replacing the pending title room handoff. */
 gh_host_error gh_startup_host_qa_r003_title_handoff(gh_startup_host *);
+typedef struct {uint32_t continue_count;int retry_ready;} gh_qa_game_over_state;
+/* Read the original cockpit choice and continue counter on the owner thread. */
+gh_qa_game_over_state gh_startup_host_qa_game_over_state(const gh_startup_host *);
 #endif
 /* Advances selected tasks, then the actual DVD queue in original relative
  * order. A tick is a scheduler visit, not a timed/video frame. Audio startup

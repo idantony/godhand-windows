@@ -53,6 +53,47 @@ int main(int argc,char **argv)
     uint8_t *model_data=load(disc,"em/em02.dat",&model_size);
     uint8_t *language_data=load(disc,"etc/core_usa.bin",&language_size);
     CHECK(room_data&&model_data&&language_data);
+    /* Actual R101 row 0 uses the original dependency-203 appearance-1 pair. */
+    size_t r101_bytes;
+    uint8_t *r101=load(disc,"st1/r101.dat",&r101_bytes);
+    gh_bundle r101_bundle;
+    gh_bundle_entry r101_ems;
+    CHECK(r101&&!gh_bundle_open(r101,r101_bytes,&r101_bundle)&&!gh_bundle_find(&r101_bundle,"EMS",0,&r101_ems));
+    CHECK(word(r101_ems.bytes+4)==35);
+    gh_bundle_entry r101_records=r101_ems;
+    r101_records.bytes+=12;r101_records.size-=12;
+    uint8_t r101_save[0x60c]={0};
+    gh_room_state r101_page={.active=r101_save,.size=sizeof(r101_save)};
+    uint32_t r101_frontier;
+    CHECK(!gh_em_room_table_write_002bede8(&r101_page,35,&r101_records,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,&r101_frontier));
+    gh_enemy_request r101_req;
+    int r101_spawn;int16_t r101_hp;
+    CHECK(!gh_enemy_request_from_room_00294ca0(&r101_page,0,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,
+        &r101_req,&r101_spawn,&r101_hp,&r101_frontier)&&r101_spawn);
+    CHECK(r101_req.entry_number==0&&r101_req.appearance==1&&r101_req.dependency_kind==0x203);
+    CHECK(gh_enemy202_is_room_supported_profile(&r101_req,0x101)&&!gh_enemy202_is_room_supported_profile(&r101_req,0x100));
+    const gh_object_view r101_model={.bytes=model_data,.size=model_size,.file_extent=model_size,.file_extent_known=1,.kind=0x202};
+    gh_enemy_initial_motion_selection r101_motion;
+    CHECK(!gh_enemy202_appearance1_select_00203a9c(&r101_req,&r101_model,&r101_motion));
+    CHECK(r101_motion.motion_offset==word(model_data+0x3fc)&&r101_motion.sequence_offset==word(model_data+0x400)&&
+        r101_motion.substate==1&&r101_motion.phase_detail==2);
+    static const unsigned expected_rows[]={0,2,4,7,8,9};
+    static const unsigned expected_stamps[]={0,5,9,12,13,15};
+    unsigned eligible=0;
+    for(unsigned row=0;row<35;++row){
+        CHECK(!gh_enemy_request_from_room_00294ca0(&r101_page,row,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,
+            &r101_req,&r101_spawn,&r101_hp,&r101_frontier));
+        if(!r101_spawn)continue;
+        CHECK(eligible<sizeof(expected_rows)/sizeof(*expected_rows)&&row==expected_rows[eligible]&&
+            r101_req.entry_number==expected_stamps[eligible++]&&gh_enemy202_is_room_supported_profile(&r101_req,0x101));
+        if(r101_req.appearance==4){
+            CHECK(!gh_enemy202_appearance4_select_00203a18(&r101_req,&r101_model,&r101_motion));
+            CHECK(r101_motion.motion_offset==word(model_data+0x40c)&&r101_motion.sequence_offset==word(model_data+0x410)&&
+                r101_motion.substate==1&&r101_motion.phase_detail==1);
+        }
+    }
+    CHECK(eligible==sizeof(expected_rows)/sizeof(*expected_rows));
+    free(r101);
     gh_bundle room_bundle,language;
     gh_bundle_entry ems,idd;
     CHECK(!gh_bundle_open(room_data,room_size,&room_bundle)&&!gh_bundle_find(&room_bundle,"EMS",0,&ems));

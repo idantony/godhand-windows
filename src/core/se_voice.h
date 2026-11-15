@@ -2,6 +2,7 @@
 #define GODHAND_CORE_SE_VOICE_H
 #include "../platform/audio_startup.h"
 #include "../platform/audio_events.h"
+#include "game_init.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -10,6 +11,9 @@ typedef struct gh_se_voice_engine gh_se_voice_engine;
  * Reads user's libsd through SAME disc, no executable module loading. */
 gh_voice_status gh_se_voice_bind_pitch_reference(gh_se_voice_engine *,gh_disc *);
 gh_voice_status gh_se_voice_pitch_state(const gh_se_voice_engine *,uint16_t *state);
+/* Origin rank change sounds 0:35/38 use the canonical EE random stream. */
+gh_voice_status gh_se_voice_request_rank_origin(gh_se_voice_engine *,unsigned program,gh_game_mt *,uint32_t *handle);
+
 struct gh_actor_model;
 struct gh_game_scene_tables;
 struct gh_sound_control;

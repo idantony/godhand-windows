@@ -9,7 +9,9 @@ gh_actor_motion_status gh_enemy_finalize_00207d40(gh_enemy_finalize*s,gh_enemy_h
  gh_enemy_entry*e=hitareas->behavior->timers->nodes->solids->shadow->pose->motion->hp->tail->entry;uint8_t*p=e->object.view.bytes;
  const int devil=e->request.object_kind==0x220&&e->request.dependency_kind==0x220&&
      e->b.work->room==0x100&&e->request.flags==0x400000&&e->request.entry_number==0xff;
- const int exchange=e->b.work->room==0x105&&word(p,0x564)==0x227&&
+ const int supported_exchange_room=e->b.work->room==0x105||
+    (e->b.work->room==0x101&&e->request.entry_number==9&&e->request.appearance==4);
+ const int exchange=supported_exchange_room&&word(p,0x564)==0x227&&
     gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)&&e->request.dependency_flags==1;
  if((!exchange&&word(p,0x564)!=e->request.dependency_kind)||!e->published||!e->object.view.alias_f0||
     (!devil&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&

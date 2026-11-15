@@ -111,7 +111,17 @@ static void test_om324_break(const void *core,size_t core_size,const gh_bundle *
    C(memcmp(prior,child.payload+0x260,sizeof(prior)));
   }
  }
- puts("PASS actual CORE0:C paired counter four emitter/particle rows, radial In/Move and authentic resource identity");
+ gh_effect_create_call amplified={0};
+ C(!gh_effect_create_enemy_amplified_impact_begin_00306838(&amplified,position));
+ C(!gh_game_effect_create_00306528(&amplified,&b)&&amplified.complete&&amplified.row==4);
+ C(!gh_effect_est_at_00306030(effects,0x58,0x12,&est)&&w(est.bytes+4)==4);
+ const uint8_t amplified_particles[]={7,0x18,0,0};
+ for(unsigned i=0;i<4;i++){
+  C(!gh_effect_create_emitter_at(effects,7+i,&view)&&view.initialized&&
+    view.record.bytes==est.bytes+16+i*0x2f0&&view.record.bytes[0x133]==amplified_particles[i]&&
+    !view.actor&&!view.selector&&!memcmp(view.payload+0x40,position,12));
+ }
+ puts("PASS actual CORE0:C counter and CORE58:12 amplified hit source rows");
  gh_effect_create_forget_on_owner_destroy(effects);
  free(effects);free(esp);free(emit);
 }

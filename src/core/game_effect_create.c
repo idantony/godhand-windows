@@ -129,6 +129,12 @@ gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_c
  return positioned_begin(call,0x58,0x10,world_xyz,0);
 }
 
+gh_effect_status gh_effect_create_enemy_amplified_impact_begin_00306838(gh_effect_create_call *call,
+ const uint32_t world_xyz[3])
+{
+ return positioned_begin(call,0x58,0x12,world_xyz,0);
+}
+
 gh_effect_status gh_effect_create_enemy_counter_impact_begin_00306838(gh_effect_create_call *call,
  const uint32_t world_xyz[3])
 {
@@ -173,7 +179,7 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
                       (request->index==0x42&&!request->mode))){
   if(!actor->bytes||actor->size<0x300||actor->original_vtable214!=0x41d220||
      (w(actor->bytes+0x2fc)>>16)!=0x100)return GH_EFFECT_UNSUPPORTED;
- }else if(request->bank==0x58&&request->index==0x27&&!request->mode){
+ }else if(request->bank==0x58&&(request->index==0x27||request->index==0x59)&&!request->mode){
   if(!actor->bytes||actor->size<0x644||actor->original_vtable214!=0x4479c8||
      (w(actor->bytes+0x2fc)>>16)!=0x202||w(actor->bytes+0x564)!=0x200||
      (w(actor->bytes+0x640)&0xffffu)!=20||actor->bytes[0x2f4]!=1||actor->bytes[0x2f5]!=0x1d)
@@ -245,6 +251,18 @@ static gh_effect_status storage(gh_effect_create_call*c,const gh_effect_create_b
  if(e->native&&(e->native->owner!=e||e->native->esp!=s->esp||e->native->emitters!=s->emitters))return GH_EFFECT_ARGUMENT;
  return GH_EFFECT_OK;
 }
+/* Actual ten emitter rows of CORE58:59, from the long escape reaction clip. */
+static int escape_effect_row_59(const uint8_t *row,unsigned i)
+{
+ static const uint8_t parts[]={2,2,0,0,2,0,0,0,0,0};
+ static const uint8_t kind[]={7,7,0x1a,0x1a,7,0x14,0x14,0x14,0x1a,0};
+ static const uint8_t item[]={0,0,0,7,0,4,5,5,132,0};
+ static const uint32_t flags[]={0x00802000,0x00800000,0x00c00000,0x00c00000,
+  0x00800000,0x00800000,0x00802000,0x00802000,0x00c00000,0x00c00000};
+ return i<10&&!row[0x128]&&!row[0x136]&&row[0xbe]==parts[i]&&row[0x133]==kind[i]&&
+    row[0x12e]==item[i]&&w(row+4)==flags[i];
+}
+
 static int player_dodge_effect_row(uint32_t index,const uint8_t *row)
 {
  if(row[0x128]||row[0x136])return 0;
@@ -304,6 +322,11 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
       w(row+4)!=row_flags[i])return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   }
  }
+ if(c->request.bank==0x58&&c->request.index==0x59&&c->configuration_nested_scale){
+  if(c->count!=10)return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<c->count;i++)
+   if(!escape_effect_row_59(entry.bytes+16+i*0x2f0,i))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+ }
  if(c->request.bank==0x58&&c->request.index==0x27&&c->configuration_nested_scale){
   if(c->count!=4)return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<4;i++){
@@ -338,6 +361,16 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
    const uint8_t *row=entry.bytes+16+i*0x2f0;
    if(row[0xbe]!=(i<2?2:0)||row[0x128]||row[0x133]!=(i<2?7:0x1a)||
       row[0x136]||w(row+4)!=flags[i])return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  }
+ }
+ if(c->configuration_positioned&&c->request.bank==0x58&&c->request.index==0x12){
+  static const uint8_t particles[]={7,0x18,0,0},textures[]={0,0,1,7};
+  if(c->count!=sizeof(particles))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<sizeof(particles);++i){
+   const uint8_t *row=entry.bytes+16+i*0x2f0;
+   if(row[0xbe]!=0xff||row[0x128]||row[0x133]!=particles[i]||row[0x136]||
+      row[0x12e]!=textures[i]||w(row+4)!=0x00800000u)
+    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   }
  }
  if(c->configuration_positioned&&c->request.bank==0&&c->request.index==0xc){
@@ -515,10 +548,15 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
     actor->original_vtable214==0x4479c8&&(w(actor->bytes+0x2fc)>>16)==0x202&&
     w(actor->bytes+0x564)==0x200&&(w(actor->bytes+0x640)&0xffffu)==20&&
     view->model&&view->model->root.bytes==actor->bytes&&view->record.size==0x2f0&&
-    record&&view->payload_size==0x260&&payload&&w(payload+0x18c)==0x00270058u&&
+    record&&view->payload_size==0x260&&payload&&
+    (w(payload+0x18c)==0x00270058u||w(payload+0x18c)==0x00590058u)&&
     !w(payload+0x110)&&!record[0x128]&&!record[0x136]){
   const unsigned part=record[0xbe];
   if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
+  if(w(payload+0x18c)==0x00590058u){
+   for(unsigned i=0;i<10;i++)if(escape_effect_row_59(record,i))return 1;
+   return 0;
+  }
   return (part==2&&record[0x133]==7&&w(record+4)==0x00800000u)||
          (part==0&&record[0x133]==0x1a&&w(record+4)==0x00c00000u);
  }
@@ -757,7 +795,7 @@ static int sprite_binding(gh_effect_view row,const gh_title_player_view *actor,
 static int authenticated_esp(const gh_game_effects *e,const gh_effect_esp_view *v,int player_attachment)
 {
  if(!e||!e->native||e->native->owner!=e||!v||!v->payload||
-    (v->type!=0&&v->type!=9&&v->type!=0x1a&&!(player_attachment&&(v->type==7||v->type==0x12))))return 0;
+    (v->type!=0&&v->type!=9&&v->type!=0x1a&&!(player_attachment&&(v->type==7||v->type==0x12||v->type==0x14))))return 0;
  /* At allocation the source emitter and immutable EST row were authenticated.
   * Retain this fact independently of emitter lifetime/slot reuse. */
  const uintptr_t base=(uintptr_t)e->native->esp, current=(uintptr_t)v->payload;
@@ -894,7 +932,7 @@ int gh_effect_esp_type7_record_bound(const gh_game_effects *e,const gh_effect_es
     return 0;
  const uint32_t tag=w(v->payload+0x23a);
  if(tag==0x003f0058u)return gh_effect_devil_esp_is_bound(e,v);
- if(tag==0x00420000u||tag==0x00270058u||tag==0x00170000u)return gh_effect_player_attachment_esp_is_bound(e,v);
+ if(tag==0x00420000u||tag==0x00270058u||tag==0x00590058u||tag==0x00170000u)return gh_effect_player_attachment_esp_is_bound(e,v);
  if(tag==0x00130006u){
   if(!gh_effect_event_part_is_bound(v->record,v->actor,v->selector))return 0;
  }else if(v->actor||v->selector)return 0;
@@ -931,7 +969,7 @@ gh_effect_status gh_effect_create_esp_commit_14(gh_game_effects *e,unsigned slot
  gh_effect_status status=gh_effect_create_esp_at(e,slot,&view);
  if(status||view.serial!=serial||view.type!=0x14||view.initialized||
     w(view.payload+0xf0)!=GH_ESP14_VTABLE||!view.globals||!view.globals->initialized||
-    view.actor||view.selector)return GH_EFFECT_ARGUMENT;
+    ((view.actor||view.selector)&&!gh_effect_player_attachment_esp_is_bound(e,&view)))return GH_EFFECT_ARGUMENT;
  e->native->esps[slot].initialized=1;
  return GH_EFFECT_OK;
 }
@@ -1322,7 +1360,8 @@ gh_effect_status gh_effect_create_esp_check_hidden_14(gh_game_effects *e,unsigne
  unsigned off=(slot>>5)*4;
  uint32_t mask=UINT32_C(0x80000000)>>(slot&31);
  if(!(w(e->native->esp+0x100100+off)&mask))return GH_EFFECT_ARGUMENT;
- if(v.actor||v.selector||v.parent_emitter!=-1||v.previous!=-1||v.next!=-1||
+ if(((v.actor||v.selector)&&!gh_effect_player_attachment_esp_is_bound(e,&v))||
+    v.parent_emitter!=-1||v.previous!=-1||v.next!=-1||
     w(v.payload+4)||w(v.payload+8)||w(v.payload+0xc)||w(v.payload+0x10)||
     w(v.payload+0xf0)!=GH_ESP14_VTABLE)return GH_EFFECT_UNSUPPORTED;
  return GH_EFFECT_OK;

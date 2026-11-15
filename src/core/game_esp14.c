@@ -382,7 +382,8 @@ gh_effect_status gh_esp14_initialize_002f1d58(gh_esp14_instance *s,
     *frontier = 0x2f1d58;
     *original = 0;
     if (!s || !b || !b->effects || !v || v->type != 0x14 || v->payload_size != 0x400 ||
-        !v->record.bytes || v->record.size < 0x2f0 || !v->serial || v->actor || v->selector)
+        !v->record.bytes || v->record.size < 0x2f0 || !v->serial ||
+        ((v->actor || v->selector) && !gh_effect_player_attachment_esp_is_bound(b->effects,v)))
         return GH_EFFECT_ARGUMENT;
     gh_effect_esp_view canonical;
     if (gh_effect_create_esp_at(b->effects, slot, &canonical) ||

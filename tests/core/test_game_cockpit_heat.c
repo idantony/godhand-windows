@@ -10,6 +10,36 @@ static uint32_t word(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}
 static void put(uint8_t*p,uint32_t n){memcpy(p,&n,4);}
 static gh_id_entry*entry(gh_game_cockpit*s,unsigned field){gh_id_entry*e;C(!gh_game_cockpit_entry_at(s,0x460+field,&e));return e;}
 static uint8_t*va_file(uint8_t*e,size_t n,uint32_t va){uint32_t off=word(e+28);unsigned stride=e[42]|(unsigned)e[43]<<8,count=e[44]|(unsigned)e[45]<<8;for(unsigned i=0;i<count;i++){uint8_t*p=e+off+(size_t)i*stride;uint32_t v=word(p+8),f=word(p+16),o=word(p+4);if(word(p)==1&&va>=v&&(uint64_t)va+4<=(uint64_t)v+f){C(o<=n&&f<=n-o);return e+o+va-v;}}return NULL;}
+typedef struct { unsigned calls,program; } rank_cue;
+static gh_id_error record_rank(void *context,unsigned program,uint32_t *frontier)
+{
+ rank_cue *cue=context;
+ cue->calls++;
+ cue->program=program;
+ *frontier=0;
+ return GH_ID_OK;
+}
+static void check_rank_change(gh_game_cockpit *s,gh_boot_work *work,gh_cockpit_frame_callbacks *callbacks,
+ uint8_t *save_bytes,const uint8_t *fields,unsigned score,unsigned level,unsigned program,unsigned banner)
+{
+ rank_cue cue={0};
+ callbacks->context=&cue;
+ callbacks->rank_sound=record_rank;
+ save_bytes[0x1c]=(uint8_t)score;
+ save_bytes[0x1d]=(uint8_t)(score>>8);
+ int showed=0;
+ for(unsigned frame=0;frame<64;frame++){
+  gh_id_error status=gh_game_cockpit_heat_move_00142060(s,work,callbacks);
+  if(status)fprintf(stderr,"rank frame %u error %u frontier %08x\n",frame,status,gh_game_cockpit_frontier(s));
+  C(!status);
+  if(cue.calls)C(cue.calls==1&&cue.program==program);
+  if(!(entry(s,banner)->flags&0x08000000u)&&cue.calls){showed=1;break;}
+ }
+ C(showed&&cue.calls==1&&fields[0x460+0x17c]==level&&entry(s,0x1f8)->seed==level+1);
+ callbacks->context=NULL;
+ callbacks->rank_sound=NULL;
+}
+
 int main(int argc,char**argv){
  C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t i;gh_disc_entry de;C(!gh_disc_find(d,"etc/core_usa.bin",&i)&&!gh_disc_entry_at(d,i,&de));size_t ln=(size_t)de.size;uint8_t*language=malloc(ln);C(language&&!gh_disc_read(d,i,0,language,ln));size_t en=(size_t)gh_disc_boot_elf_size(d);uint8_t*elf=malloc(en),*original=malloc(en);C(elf&&original&&!gh_disc_read_boot_elf(d,0,elf,en));memcpy(original,elf,en);gh_disc_close(d);
  gh_bundle bundle;gh_bundle_entry idd;C(!gh_bundle_open(language,ln,&bundle)&&!gh_id_find_language_data(&bundle,&idd));uint8_t*asset_copy=malloc(ln);C(asset_copy);memcpy(asset_copy,language,ln);
@@ -105,7 +135,12 @@ int main(int argc,char**argv){
   C(!word(fields+0x460+0x264)&&!word(fields+0x460+0x268));
   C(fegetround()==modes[mode]&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));
   C(!gh_game_cockpit_heat_move_00142060(s,&work,&callbacks));
-  C(fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);C(!fesetround(FE_TONEAREST));C(!gh_game_cockpit_destroy(s)&&!gh_id_runtime_destroy(r));free(init);free(m);memcpy(elf,original,en);
+  C(fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);C(!fesetround(FE_TONEAREST));
+  if(mode==0){
+   check_rank_change(s,&work,&callbacks,save_bytes,fields,1008,1,0x35,0x204);
+   check_rank_change(s,&work,&callbacks,save_bytes,fields,992,0,0x38,0x200);
+  }
+  C(!gh_game_cockpit_destroy(s)&&!gh_id_runtime_destroy(r));free(init);free(m);memcpy(elf,original,en);
  }
- C(!memcmp(language,asset_copy,ln));free(asset_copy);free(original);free(elf);free(language);puts("PASS actualUSA405ID Heat142060 stablelife1/zeroHeat real warnings/pulse/slots/4IDMove/SaveMaximum; fourFEnv/damage-heal resets+shake/positive Heat smoothing, readiness, release alpha and room reset; assets unchanged");return 0;
+ C(!memcmp(language,asset_copy,ln));free(asset_copy);free(original);free(elf);free(language);puts("PASS actualUSA405ID Heat142060 stablelife1/zeroHeat real warnings/pulse/slots/4IDMove/SaveMaximum; fourFEnv/damage-heal resets+shake/positive Heat smoothing, readiness, release alpha, room reset and rank1 transition in both directions; assets unchanged");return 0;
 }

@@ -2,6 +2,8 @@
  * frontiers; reaching one never means the game has finished or is playable. */
 #include "platform/startup_host.h"
 #ifdef GH_NATIVE_STARTUP_QA
+#include "platform/startup_qa_game_over.h"
+#include "platform/startup_qa_r100_pad_tape.h"
 #include "platform/startup_qa_repeat_square.h"
 #include "platform/startup_qa_title.h"
 #endif
@@ -773,6 +775,9 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
 static void usage()
 {
     std::fprintf(stderr,"usage: godhand-windows --iso ISO --profile DIRECTORY [--ffmpeg EXE] [--show|--hidden] [--muted] [--prefix] [--max-ticks N]\n");
+#ifdef GH_NATIVE_STARTUP_QA
+    std::fprintf(stderr,"       --qa-game-over-retry --qa-capture FILE [--qa-r003-controlled]\n");
+#endif
 }
 #ifdef GH_NATIVE_STARTUP_QA
 static constexpr unsigned qa_max_capture_count=120;
@@ -929,6 +934,9 @@ int main(int argc,char **argv)
     QAStartupTitleProbe qa_title;
     QAControlProbe qa_control;
     QARepeatSquareProbe qa_repeat_square;
+    QAGameOverRetryProbe qa_retry;
+    QAR100PadTape qa_pad_tape;
+    const char *qa_pad_tape_path=nullptr;
     const char *qa_capture=nullptr;uint64_t qa_capture_frame=1,qa_last_capture_scene=0;
     uint32_t qa_title_trace=UINT32_MAX,qa_load_trace=UINT32_MAX;
 #endif
@@ -939,6 +947,8 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-new-game")){qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-load")){qa_load=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-r003-controlled")){qa_r003=true;qa_new_game=true;qa_confirm=true;}
+        else if(!std::strcmp(argv[i],"--qa-pad-tape")&&i+1<argc){qa_pad_tape_path=argv[++i];qa_new_game=qa_confirm=true;}
+        else if(!std::strcmp(argv[i],"--qa-game-over-retry")){qa_retry.enabled=true;qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-control")&&i+1<argc){
             const char *mode=argv[++i];
             qa_repeat_square.continue_after_pair=!std::strcmp(mode,"repeat-triangle-pair-continue");
@@ -978,6 +988,14 @@ int main(int argc,char **argv)
     if(qa_load&&(qa_new_game||prefix)){std::fprintf(stderr,"QA load requires the full title flow and a separate profile.\n");return 2;}
     if(qa_r003&&(prefix||qa_control.mode||qa_repeat_square.enabled)){
         std::fprintf(stderr,"Controlled R003 QA requires a standalone title handoff.\n");return 2;
+    }
+    if(qa_pad_tape_path&&(qa_r003||qa_retry.enabled||prefix||!qa_capture||
+                        qa_control.mode||qa_repeat_square.enabled||!qa_pad_tape.load(qa_pad_tape_path))){
+        std::fprintf(stderr,"Pad tape QA requires a valid tape and standalone New Game capture.\n");
+        return 2;
+    }
+    if(qa_retry.enabled&&(prefix||!qa_capture)){
+        std::fprintf(stderr,"Game Over retry QA requires --qa-capture and the full New Game flow.\n");return 2;
     }
     if((qa_control.mode||qa_repeat_square.enabled)&&(!qa_new_game||prefix)){
         std::fprintf(stderr,"QA control requires the full --qa-new-game path.\n");return 2;
@@ -1061,6 +1079,22 @@ int main(int argc,char **argv)
                 if(app.pending_scene)++app.presented_scene;else ++app.presented_mc;
 #ifdef GH_NATIVE_STARTUP_QA
                 if(app.pending_scene){
+                    if(qa_retry.enabled){
+                        const auto capture=qa_retry.presented(app.snapshot,gh_startup_host_qa_game_over_state(app.host),
+                            !app.frame_fade_seen||!(app.frame_fade.rgba>>24));
+                        if(capture!=QAGameOverRetryProbe::Capture::none){
+                            const bool reloaded=capture==QAGameOverRetryProbe::Capture::reloaded;
+                            std::string path(qa_capture);
+                            if(path.size()>=5&&path.compare(path.size()-5,5,".rgba")==0)path.resize(path.size()-5);
+                            path+=reloaded?".retry.rgba":".game-over.rgba";
+                            if(!qa_write_capture(path,app.queued_pixels)){
+                                std::fprintf(stderr,"Game Over QA capture failed.\n");break;
+                            }
+                            std::fprintf(stderr,"QA_GAME_OVER_CAPTURE %s scene=%llu room=%04X\n",
+                                reloaded?"retry":"menu",(unsigned long long)app.prepared_scene_serial,
+                                (unsigned)app.snapshot.current_room);
+                        }
+                    }
                     if(qa_r003_handoff&&app.snapshot.current_room==3&&app.snapshot.game_state==4){
                         qa_r003_last=app.prepared_scene_serial;
                         if(!qa_r003_first)qa_r003_first=qa_r003_last;
@@ -1072,7 +1106,7 @@ int main(int argc,char **argv)
                                 (unsigned long long)qa_r003_last);
                         }
                     }
-                    if(qa_r003_last&&app.snapshot.current_room==0x105&&app.snapshot.game_state==4){
+                    if(qa_r003_last&&!qa_retry.handoff_tick&&app.snapshot.current_room==0x105&&app.snapshot.game_state==4){
                         qa_r105_last=app.prepared_scene_serial;
                         if(!qa_r105_first){
                             qa_r105_first=qa_r105_last;
@@ -1085,7 +1119,16 @@ int main(int argc,char **argv)
                     qa_repeat_square.presented(app.prepared_scene_serial);
                     if(app.prepared_scene_serial>=qa_capture_frame&&app.prepared_scene_serial<=qa_last_capture_scene)
                         std::fprintf(stderr,"QA_CAPTURE_PRESENTED %llu\n",(unsigned long long)app.prepared_scene_serial);
-                    if(qa_repeat_square.complete()){result=0;break;}
+                    if(qa_pad_tape.presented(app.snapshot,app.prepared_scene_serial)){
+                        const std::string victory=std::string(qa_capture)+".battle-won.rgba";
+                        if(!qa_write_capture(victory,app.queued_pixels)||
+                           !qa_write_capture(victory+".world.rgba",app.world_pixels)){
+                            std::fprintf(stderr,"R100 victory QA capture failed.\n");break;
+                        }
+                        result=0;
+                        break;
+                    }
+                    if((!qa_retry.enabled&&qa_repeat_square.complete())||qa_retry.reloaded_scene){result=0;break;}
                 }
 #endif
                 app.display_pending=false;
@@ -1093,9 +1136,16 @@ int main(int argc,char **argv)
 #ifdef GH_NATIVE_STARTUP_QA
             if(qa_confirm){
                 qa_title.sample(app.snapshot,qa_input,qa_new_game,qa_load);
-                const gh_native_gamepad_sample pad=qa_repeat_square.enabled?qa_repeat_square.sample(app.snapshot):
-                    qa_control.sample(app.snapshot);
+                const bool retry_confirm=qa_retry.enabled&&
+                    qa_retry.wants_confirm(app.snapshot,gh_startup_host_qa_game_over_state(app.host));
+                if(retry_confirm)gh_native_input_key(&qa_input,'Z',1);
+                const bool retry_owns_input=qa_retry.enabled&&(qa_retry.menu_scene||app.snapshot.player_state[0]==2);
+                gh_native_gamepad_sample pad={};
+                if(qa_pad_tape.enabled)pad=qa_pad_tape.sample(app.snapshot);
+                else if(!retry_owns_input)
+                    pad=qa_repeat_square.enabled?qa_repeat_square.sample(app.snapshot):qa_control.sample(app.snapshot);
                 if(!gh_native_input_tick_device(&qa_input,app.snapshot.work,&pad,&input))break;
+                if(retry_confirm)qa_retry.record_confirm(app.snapshot.ticks,input);
             }
 #endif
             host_error=gh_startup_host_set_input(app.host,&input);if(host_error!=GH_HOST_OK)break;
@@ -1110,6 +1160,8 @@ int main(int argc,char **argv)
             }
             qa_control.observe(app.snapshot,input);
             qa_repeat_square.observe(app.snapshot,input);
+            if(qa_retry.enabled&&qa_retry.confirm_edge)
+                qa_retry.observe(app.snapshot,gh_startup_host_qa_game_over_state(app.host));
             if(qa_load&&app.snapshot.mc_load_mode){
                 const uint32_t trace=(uint32_t)app.snapshot.mc_load_phase<<16|
                     app.snapshot.mc_phase<<8|app.snapshot.mc_subphase;
@@ -1134,7 +1186,7 @@ int main(int argc,char **argv)
                 gh_id_error error=prepare_ui_display(app,true);
                 if(error!=GH_ID_OK){std::fprintf(stderr,"Native scene OT preparation failed: %u\n",(unsigned)error);break;}
 #ifdef GH_NATIVE_STARTUP_QA
-                const bool controlled_scene=qa_r003_handoff&&app.snapshot.game_state==4&&
+                const bool controlled_scene=qa_r003_handoff&&!qa_retry.handoff_tick&&app.snapshot.game_state==4&&
                     (app.snapshot.current_room==3||(qa_r003_last&&app.snapshot.current_room==0x105));
                 if(qa_capture&&qa_captured<qa_capture_count&&app.snapshot.scene_frame_serial>=qa_capture_frame&&
                    (!qa_r003||controlled_scene)){
@@ -1219,6 +1271,18 @@ int main(int argc,char **argv)
         app.snapshot.hitarea_hit_distance_bits[0],app.snapshot.hitarea_hit_distance_bits[1],app.snapshot.hitarea_hit_distance_bits[2],app.snapshot.hitarea_hit_distance_bits[3]);
 #ifdef GH_NATIVE_STARTUP_QA
     qa_repeat_square.report();
+    qa_pad_tape.report();
+    if(qa_retry.enabled)
+        std::fprintf(stderr,"QA_GAME_OVER_STATUS {\"room\":%u,\"menu_scene\":%llu,\"menu_epoch\":%llu,"
+            "\"press_tick\":%llu,\"confirm_edge\":%u,\"continue_tick\":%llu,\"continues_before\":%u,"
+            "\"continues_after\":%u,\"handoff_tick\":%llu,\"first_reloaded_scene\":%llu,"
+            "\"reloaded_scene\":%llu,\"reloaded_epoch\":%llu,\"player_hp\":%u}\n",
+            (unsigned)qa_retry.room,(unsigned long long)qa_retry.menu_scene,(unsigned long long)qa_retry.menu_epoch,
+            (unsigned long long)qa_retry.press_tick,(unsigned)qa_retry.confirm_edge,
+            (unsigned long long)qa_retry.continue_tick,qa_retry.continues_before,qa_retry.continues_after,
+            (unsigned long long)qa_retry.handoff_tick,(unsigned long long)qa_retry.first_reloaded_scene,
+            (unsigned long long)qa_retry.reloaded_scene,(unsigned long long)qa_retry.reloaded_epoch,
+            (unsigned)qa_retry.player_hp);
     if(qa_r003){
         std::fprintf(stderr,"QA_R003_STATUS {\"handoff_tick\":%llu,\"first_scene\":%llu,\"last_scene\":%llu,"
             "\"frames\":%llu,\"last_ev02_cut\":%d}\n",(unsigned long long)qa_r003_handoff,

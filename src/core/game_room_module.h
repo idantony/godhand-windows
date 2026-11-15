@@ -16,7 +16,7 @@ typedef struct {
  gh_scene_hook hook4,hook8,hook12;
  uint32_t init_offset,move_offset,end_offset,frontier;int detail;
 } gh_room_module;
-/* Actual2BE708/2BE838/2BE560 load/wait portion, pinned R003/R020/R100/R105 profiles.
+/* Actual2BE708/2BE838/2BE560 load/wait portion, pinned R003/R020/R100/R101/R105 profiles.
  * Release aliases DebugOptimize via actual1FF858/1FFA68 FST directory policy;
  * the canonical physical path below is not a generic basename fallback.
  * R100 PreInit+4 and each profile's +8/+C remain UNRESOLVED until native

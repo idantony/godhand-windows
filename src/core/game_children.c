@@ -1,5 +1,6 @@
 /* Native readable recovery of1612C8/15FD98 and their9vtable-derivedmethods.
  * Exactmapping and unchangedbytes:game-children-evidence.json. */
+#include "game_cockpit.h"
 #include "game_subscreen_save.h"
 #include "id_jobs.h"
 #include <stdlib.h>
@@ -284,7 +285,8 @@ static gh_child_status save_map_init(gh_game_children *s,const gh_save_map_bindi
     }
     gh_child_status status=save_map_resource(s,b,ready,frontier);
     if(status||!*ready)return status;
-    if((p[0x64]!=2&&p[0x64]!=3)||(b->work->flags&0x40)||!b->save.bytes||b->save.size<0xa8)
+    const int from_load=(b->work->flags&0x40)!=0;
+    if((p[0x64]!=2&&p[0x64]!=3)||!b->save.bytes||b->save.size<0xa8)
         return child_stop(frontier,0x1627d8,GH_CHILD_UNSUPPORTED);
     gh_id_entry **entries=s->save_map_entries;
     const uint32_t unlock=r32(b->save.bytes+0xa4);
@@ -298,6 +300,9 @@ static gh_child_status save_map_init(gh_game_children *s,const gh_save_map_bindi
     }
     static const float positions[9][2]={{254,289},{102,266},{167,195},{134,92},
         {235,126},{320,190},{320,88},{408,88},{455,47}};
+    w16(p,0x130,(uint16_t)from_load);
+    if(from_load&&gh_game_cockpit_load_map_heat_001434a8(b->cockpit,b->save,b->heat)!=GH_ID_OK)
+        return child_stop(frontier,0x1434a8,GH_CHILD_UNSUPPORTED);
     const unsigned chapter=s->save_map_room>>8;
     unsigned message=chapter?chapter*16+0x2013+(s->save_map_room&255):0x20a3;
     if(message>0x20a3)message=0x20a3;
@@ -306,7 +311,6 @@ static gh_child_status save_map_init(gh_game_children *s,const gh_save_map_bindi
     memcpy(p+0x12c,&entries[0]->pos_y,4);
     s->save_map_message=(uint16_t)message;
     entries[25]->message=entries[26]->message=0x2022;
-    w16(p,0x130,0);
     w32(p,0x60,3);
     s->save_map_inited=1;
     return GH_CHILD_OK;
@@ -337,6 +341,7 @@ static gh_child_status save_map_update(gh_game_children *s,const gh_save_map_bin
         e[0]->pos_x=255;
         e[0]->pos_y=283;
     }
+    if(b->work->flags&0x40)save_map_show(e[27],0);
     gh_id_frontier id_frontier={0};
     if(gh_id_jobs_move_reference_rotation(save_map_base(s),NULL,NULL,&id_frontier)!=GH_ID_OK)
         return child_stop(frontier,id_frontier.address?id_frontier.address:0x2aaa40,GH_CHILD_UNSUPPORTED);
@@ -364,8 +369,9 @@ static gh_child_status save_map_input(gh_game_children *s,const gh_save_map_bind
         if((status=save_map_sound(b,0x15f,frontier)))return status;
         ++selection;
     }
-    if(selection<0)selection=3;
-    else if(selection>3)selection=0;
+    const int first_selection=(b->work->flags&0x40)?1:0;
+    if(selection<first_selection)selection=3;
+    else if(selection>3)selection=first_selection;
     w16(p,0x130,(uint16_t)selection);
     if(!(r32(w+0x1a0)&0x10000000u))return GH_CHILD_OK;
     if(selection==1&&b->work->room==0x21)
@@ -426,7 +432,7 @@ gh_child_status gh_game_children_save_map_move_001601d8(gh_game_children *s,
     if(!s->save_map_active)return child_stop(frontier,0x1601d8,GH_CHILD_UNSUPPORTED);
     if(r32(p+0x48)==3&&p[0x788])return GH_CHILD_OK;
     if((r32(p+0x48)!=3&&state!=12&&state!=13&&state!=21)||
-       (p[0xedc]&0x7f)!=0x11||(b->work->flags&0x40))
+       (p[0xedc]&0x7f)!=0x11)
         return child_stop(frontier,0x1601d8,GH_CHILD_UNSUPPORTED);
     gh_child_status status;
     uint8_t fade=gh_screen_fade_status_00307718(b->fade);

@@ -584,10 +584,24 @@ gh_bgm_status gh_bgm_event_stop_002d1800(gh_bgm_requests*s,int preserve_mode5){
  if(!own(s)||(preserve_mode5!=0&&preserve_mode5!=1))return GH_BGM_ARGUMENT;
  s->control->flags_b0&=~0x10000000u;s->control->flags_ac&=~0x10000000u;
  fenv_t saved;if(fegetenv(&saved)||fesetround(FE_TONEAREST))return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);
- gh_bgm_status e=GH_BGM_OK;for(int i=s->head;i>=0;i=s->requests[i].next){request*q=&s->requests[i];
-  if(u32(q->scalar+0x94)==5){if(!preserve_mode5)fade(q,0,0);}
-  else if(!(u32(q->scalar+0x94)==4 && u32(q->scalar+0x8c)==0x81 && !(u32(q->scalar+0x98)&0x1000))) {e=fail(s,0x2d1854,GH_BGM_UNSUPPORTED);break;}}
- if(fesetenv(&saved))return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);if(!e)s->frontier=0;return e;
+ gh_bgm_status e=GH_BGM_OK;
+ for(int i=s->head;i>=0;i=s->requests[i].next){
+  request *q=&s->requests[i];
+  const uint32_t flags=u32(q->scalar+0x98);
+  if(u32(q->scalar+0x94)==5){
+   if(preserve_mode5)continue;
+   const float frames=(flags&4u)?rf(q->scalar+0xc4):0;
+   if(!isfinite(frames)||frames<0){e=fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);break;}
+   fade(q,0,frames);
+  }else if(flags&0x1000){
+   w32(q->scalar+0x98,flags&~0x1000u);
+   if(!(flags&0x1ef00u)&&u32(q->scalar+0xb0)!=2)
+    fade(q,1,15); /* 2CD470; its bit 0x100 gate is in 0x1EF00. */
+  }
+ }
+ if(fesetenv(&saved))return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);
+ if(!e)s->frontier=0;
+ return e;
 }
 int gh_bgm_requests_scene_event(const gh_bgm_requests*s,int32_t*out){if(!own(s)||!out||!s->scene_event_valid)return 0;*out=s->scene_event;return 1;}
 /* Original 2D0C10 tests placement death even before comparing the kind. */
