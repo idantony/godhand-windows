@@ -427,6 +427,59 @@ static gh_actor_motion_status route_waypoint_ray(gh_enemy202_move *s,
     return GH_ACTOR_MOTION_OK;
 }
 
+static gh_actor_motion_status route_max_depth(gh_enemy202_move *s,float length,
+    float actor_y,unsigned *depth)
+{
+    fenv_t env;
+    if(!set_round(&env,FE_TOWARDZERO))return stop(s,0x2a7650,GH_ACTOR_MOTION_CALLEE);
+    unsigned result=16;
+    if(length>=30){
+        float scaled=mul(sub(length,30),0.25f);
+        result=scaled>=48?64:16+(unsigned)scaled;
+    }
+    if(fabsf(sub(s->path_target[1],actor_y))>3)result=result*24/16;
+    const uint16_t room=s->runtime.entry->b.work->room;
+    if(room==0x300)result=result*20/16;
+    if(room==0x700)result/=2;
+    if(fesetenv(&env))return stop(s,0x2a7650,GH_ACTOR_MOTION_CALLEE);
+    *depth=result;
+    return GH_ACTOR_MOTION_OK;
+}
+
+/* 2A79D0 finds a visible origin edge when the ordinary vertex ray found
+ * none. 2A7AC4 removes the first path entry if the path follows that edge. */
+static gh_actor_motion_status route_from_origin_edge(gh_enemy202_move *s,uint8_t *p,
+    const float origin[4],float length,float actor_y)
+{
+    gh_enemy_route_edge edge;
+    uint32_t pc;
+    gh_actor_motion_status status=gh_enemy_route_edge_002a8038(&s->origin_edge_query,
+        s->navigation,s->runtime.bindings->actors,origin,&edge,&pc);
+    if(status)return stop(s,pc?pc:0x2a8038,status);
+    if(edge.pair==UINT32_MAX){
+        s->route_stage=8;
+        return GH_ACTOR_MOTION_OK;
+    }
+
+    put_half(p+0x5a4,(uint16_t)edge.pair);
+    unsigned max_depth;
+    status=route_max_depth(s,length,actor_y,&max_depth);
+    if(status)return status;
+    uint32_t nodes[16];
+    float cost;
+    memcpy(nodes,p+0x4d0,sizeof(nodes));
+    status=gh_enemy_route_graph_0031be88(s->navigation,edge.vertices[0],s->target_vertex,
+        max_depth,nodes,16,&cost);
+    if(status)return stop(s,0x31be88,status);
+    if(nodes[1]==edge.vertices[1])memmove(nodes,nodes+1,sizeof(nodes)-sizeof(*nodes));
+    memcpy(p+0x4d0,nodes,sizeof(nodes));
+    put(p+0x510,bits(cost));
+    memcpy(p+0x520,edge.projection,12);
+    p[0x530]=0;
+    s->route_stage=9;
+    return GH_ACTOR_MOTION_OK;
+}
+
 static gh_actor_motion_status route_clear_002a74e0(gh_enemy202_move *s,uint8_t *p,
     const float actor[3])
 {
@@ -460,6 +513,7 @@ static gh_actor_motion_status route_clear_002a74e0(gh_enemy202_move *s,uint8_t *
     if(!s->route_stage){
         memcpy(p+0x520,ray.to,12);
         p[0x530]=1;
+        s->origin_edge_query=(gh_enemy_route_edge_query){0};
         s->route_stage=1;
     }
     if(s->route_stage==1){
@@ -477,29 +531,25 @@ static gh_actor_motion_status route_clear_002a74e0(gh_enemy202_move *s,uint8_t *
     if(s->route_stage==3){
         gh_actor_motion_status status=navigation_lookup(s,&s->origin_query,ray.from,&s->origin_vertex);
         if(status)return status;
-        if(s->origin_vertex==UINT32_MAX)return stop(s,0x2a79d0,GH_ACTOR_MOTION_UNSUPPORTED);
-        const uint8_t *origin=s->navigation->vertices.bytes+(size_t)s->origin_vertex*32;
-        memcpy(p+0x520,origin,12);
-        put(p+0x510,bits(length));
-        p[0x530]=0;
-        s->route_stage=5;
+        if(s->origin_vertex==UINT32_MAX){
+            status=route_from_origin_edge(s,p,ray.from,length,actor[1]);
+            if(status)return status;
+        }else{
+            const uint8_t *origin=s->navigation->vertices.bytes+(size_t)s->origin_vertex*32;
+            memcpy(p+0x520,origin,12);
+            put(p+0x510,bits(length));
+            p[0x530]=0;
+            s->route_stage=5;
+        }
     }
     if(s->route_stage==5){
-        unsigned max_depth=16;
-        fenv_t depth_env;
-        if(!set_round(&depth_env,FE_TOWARDZERO))return stop(s,0x2a7650,GH_ACTOR_MOTION_CALLEE);
-        if(length>=30){
-            float scaled=mul(sub(length,30),0.25f);
-            max_depth=scaled>=48?64:16+(unsigned)scaled;
-        }
-        if(fabsf(sub(s->path_target[1],actor[1]))>3)max_depth=max_depth*24/16;
-        if(s->runtime.entry->b.work->room==0x300)max_depth=max_depth*20/16;
-        if(s->runtime.entry->b.work->room==0x700)max_depth/=2;
-        if(fesetenv(&depth_env))return stop(s,0x2a7650,GH_ACTOR_MOTION_CALLEE);
+        unsigned max_depth;
+        gh_actor_motion_status status=route_max_depth(s,length,actor[1],&max_depth);
+        if(status)return status;
         uint32_t nodes[16];
         memcpy(nodes,p+0x4d0,sizeof(nodes));
         float cost;
-        gh_actor_motion_status status=gh_enemy_route_graph_0031be88(s->navigation,
+        status=gh_enemy_route_graph_0031be88(s->navigation,
             s->origin_vertex,s->target_vertex,max_depth,nodes,16,&cost);
         if(status)return stop(s,0x31be88,status);
         memcpy(p+0x4d0,nodes,sizeof(nodes));
@@ -533,6 +583,19 @@ static gh_actor_motion_status route_clear_002a74e0(gh_enemy202_move *s,uint8_t *
             gh_actor_motion_status status=route_waypoint_ray(s,ray.from,second,&hit);
             if(status)return status;
             if(!hit)memcpy(p+0x520,s->navigation->vertices.bytes+(size_t)second*32,12);
+        }
+        s->route_stage=8;
+    }
+    if(s->route_stage==9){
+        const uint32_t first=word(p+0x4d0);
+        if(first<s->navigation->vertex_count){
+            int hit;
+            gh_actor_motion_status status=route_waypoint_ray(s,ray.from,first,&hit);
+            if(status)return status;
+            if(!hit){
+                memcpy(p+0x520,s->navigation->vertices.bytes+(size_t)first*32,12);
+                p[0x530]=1;
+            }
         }
         s->route_stage=8;
     }

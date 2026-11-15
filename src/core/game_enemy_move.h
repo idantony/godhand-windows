@@ -9,7 +9,7 @@
 #include "game_object_opacity.h"
 #include "game_collision_solid_step.h"
 #include "game_terrain_sphere.h"
-#include "game_scene_step.h"
+#include "game_enemy_route_graph.h"
 #include "game_room_state.h"
 
 #ifdef __cplusplus
@@ -52,6 +52,7 @@ typedef struct {
     float path_target[3];
     const gh_scene_nearcheck *navigation;
     gh_enemy_route_query target_query, origin_query;
+    gh_enemy_route_edge_query origin_edge_query;
     gh_enemy202_hit_call damage;
     gh_motion_sound_request hit_sound;
     gh_effect_create_call impact_create;

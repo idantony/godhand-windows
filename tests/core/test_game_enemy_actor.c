@@ -20,6 +20,45 @@ static uint32_t word(const uint8_t *p)
 static void put(uint8_t *p,uint32_t n){memcpy(p,&n,4);}
 static float field(const uint8_t *p){float f;memcpy(&f,p,4);return f;}
 
+static void verify_origin_edge_selection(void)
+{
+ const float heights[]={0,4,1,2,3,5};
+ uint8_t vertices[12][32]={0},pairs[6][12]={0};
+ for(uint16_t i=0;i<6;i++){
+  const float a[4]={-2,heights[i],2,1},b[4]={2,heights[i],2,1};
+  const uint16_t index=(uint16_t)(i*2);
+  memcpy(vertices[index],a,sizeof(a));
+  memcpy(vertices[index+1],b,sizeof(b));
+  put(pairs[i],(uint32_t)index|((uint32_t)(index+1)<<16));
+ }
+ put(pairs[0]+8,0x80000000u);
+ put(pairs[2]+8,0xc0000000u);
+ gh_scene_nearcheck nav={
+  .vertices={.bytes=&vertices[0][0],.size=sizeof(vertices)},.vertex_count=12,
+  .pairs={.bytes=&pairs[0][0],.size=sizeof(pairs)},.pair_count=6
+ };
+ gh_game_scene_tables actors={0};
+ gh_enemy_route_edge_query query={0};
+ gh_enemy_route_edge edge;
+ uint32_t frontier;
+ const float point[]={0,0,2,1},projection[]={0,1,2,1};
+ fenv_t original;
+ C(!fegetenv(&original));
+ C(!fesetround(FE_UPWARD));
+ C(!gh_enemy_route_edge_002a8038(&query,&nav,&actors,point,&edge,&frontier)&&!frontier);
+ C(edge.pair==2&&edge.vertices[0]==4&&edge.vertices[1]==5&&
+   !memcmp(edge.projection,projection,sizeof(projection))&&fegetround()==FE_UPWARD);
+ C(query.ray_cursor==4);
+ for(unsigned i=0;i<4;++i)
+  C(query.candidates[i].edge.pair>0&&query.candidates[i].edge.pair<5);
+ C(gh_enemy_route_edge_002a8038(&query,&nav,&actors,projection,&edge,&frontier)==GH_ACTOR_MOTION_BUSY);
+ for(unsigned i=0;i<6;++i)put(pairs[i]+8,0x80000000u);
+ query=(gh_enemy_route_edge_query){0};
+ C(!gh_enemy_route_edge_002a8038(&query,&nav,&actors,point,&edge,&frontier)&&
+   edge.pair==UINT32_MAX&&!frontier&&fegetround()==FE_UPWARD);
+ C(!fesetenv(&original));
+}
+
 /* Device-free fixture: execute the canonical resolver's original no-bank
  * branch. A real ready match would require the production attached provider. */
 static gh_actor_motion_status lookup_missing_turn_sound(void *context,
@@ -35,6 +74,7 @@ static gh_actor_motion_status lookup_missing_turn_sound(void *context,
 }
 static void verify_move(gh_enemy_actor *enemy,const void *elf,size_t elf_bytes,const gh_scene_nearcheck *navigation,gh_disc *disc)
 {
+ verify_origin_edge_selection();
  gh_boot_work *work=enemy->b.entry.work;
  gh_game_init_state *init=enemy->b.entry.init;
  gh_game_title_player player={0};
