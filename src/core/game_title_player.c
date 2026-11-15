@@ -94,10 +94,10 @@ gh_title_player_status gh_game_actor_construct_0014e990(void*data,size_t bytes,g
  if(!data||!out)return GH_PLAYER_ARGUMENT;if(bytes<0x4d0)return GH_PLAYER_BOUNDS;uint8_t*p=data;actor_0014e990(p);*out=(gh_title_player_view){p,bytes,p+0x30,p+0xb0,0x41ebe8,0x41eb80,GH_TITLE_MEMORY_UNSPECIFIED};return GH_PLAYER_OK;
 }
 
-gh_title_player_status gh_title_player_set_script_pose_0012ce60(const gh_title_player_view *player,
-    const gh_title_player_view *auxiliary,const uint32_t position[3],const uint32_t euler[3])
+gh_title_player_status gh_title_player_set_script_position_0012ce60(const gh_title_player_view *player,
+    const gh_title_player_view *auxiliary,const uint32_t position[3])
 {
-    if(!player||!position||!euler)return GH_PLAYER_ARGUMENT;
+    if(!player||!position)return GH_PLAYER_ARGUMENT;
     if(!player->bytes||player->size<0x690||!player->alias_f0||
         player->original_vtable214!=0x41d220)return GH_PLAYER_UNSUPPORTED;
     uint8_t *bytes=player->bytes;
@@ -115,6 +115,15 @@ gh_title_player_status gh_title_player_set_script_pose_0012ce60(const gh_title_p
         memcpy(&flags,auxiliary->bytes+0x2f0,4);
         w(auxiliary->bytes,0x2f0,flags|1u);
     }
-    memmove(bytes+0x100,euler,12);
+    return GH_PLAYER_OK;
+}
+
+gh_title_player_status gh_title_player_set_script_pose_0012ce60(const gh_title_player_view *player,
+    const gh_title_player_view *auxiliary,const uint32_t position[3],const uint32_t euler[3])
+{
+    if(!euler)return GH_PLAYER_ARGUMENT;
+    gh_title_player_status status=gh_title_player_set_script_position_0012ce60(player,auxiliary,position);
+    if(status)return status;
+    memmove(player->bytes+0x100,euler,12);
     return GH_PLAYER_OK;
 }

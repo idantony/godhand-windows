@@ -2,8 +2,6 @@
 #include "r100_watch_geometry.h"
 #include "../core/game_enemy_ems.h"
 #include <string.h>
-#include <fenv.h>
-#include <math.h>
 
 static const uint32_t entries[]={0x2920,0x2650,0x2490,0x2288,0x2198,0x15b0,0x2d68,0x1bd0,0x11b0,0x1780};
 static uint32_t rd(const void *p){uint32_t n;memcpy(&n,p,4);return n;}
@@ -46,8 +44,6 @@ static gh_r100_script_status hit(gh_r100_live_task *s,unsigned id,int *original)
 }
 
 static float scalar(const void *p){float n;memcpy(&n,p,4);return n;}
-static float add(float a,float b){volatile float n=a+b;return n;}
-static float mul(float a,float b){volatile float n=a*b;return n;}
 
 static gh_r100_script_status center(gh_r100_live_task *s,unsigned id,float destination[3])
 {
@@ -55,23 +51,8 @@ static gh_r100_script_status center(gh_r100_live_task *s,unsigned id,float desti
     if(!s->b.at->headers[0].bytes)return GH_R100_SCRIPT_OK;
     gh_at_native_unit unit;
     gh_r100_script_status status=find_at(s,id,&unit);
-    if(status||!unit.bytes||!(unit.bytes[0x34]&1u))return status;
-    const uint8_t *shape=unit.bytes+4;
-    fenv_t env;
-    if(feholdexcept(&env))return fail(s,0x1f89a8,GH_R100_SCRIPT_CALLEE);
-    if(fesetround(FE_TOWARDZERO)){(void)fesetenv(&env);return fail(s,0x1f89a8,GH_R100_SCRIPT_CALLEE);}
-    if(shape[1]==1||shape[1]==2){
-        destination[0]=scalar(shape+0x10);destination[1]=scalar(shape+4);destination[2]=scalar(shape+0x14);
-        if(shape[1]==1){
-            for(unsigned k=1;k<4;k++){
-                destination[0]=add(destination[0],scalar(shape+0x10+k*8));
-                destination[2]=add(destination[2],scalar(shape+0x14+k*8));
-            }
-            destination[0]=mul(destination[0],.25f);destination[2]=mul(destination[2],.25f);
-        }
-    }
-    destination[1]=add(destination[1],.4f);
-    if(fesetenv(&env)||!isfinite(destination[0])||!isfinite(destination[1])||!isfinite(destination[2]))
+    if(status)return status;
+    if(gh_scene_at_center_002c0e78(unit,destination))
         return fail(s,0x1f89a8,GH_R100_SCRIPT_CALLEE);
     return GH_R100_SCRIPT_OK;
 }

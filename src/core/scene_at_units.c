@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fenv.h>
+#include <math.h>
 typedef struct {gh_at_native_unit view;gh_at_link next;gh_r207_allocation owned;uint32_t door_entry,door_argument;uint8_t linked;} node;
 struct gh_scene_at_units {gh_heap*heap;const void*source;node*nodes;size_t count,capacity;uint8_t*copies[4];uint32_t phase,jump_index,jump_slot,pending_handle;uint16_t room;uint8_t reference;};
 static uint16_t h(const uint8_t*p){return (uint16_t)(p[0]|(unsigned)p[1]<<8);}
@@ -134,6 +135,52 @@ static gh_scene_at_status walk_checked(gh_scene_at_manager*s,gh_at_link link,gh_
 gh_scene_at_status gh_scene_at_first_unit_002c30c0(gh_scene_at_manager*s,gh_at_native_unit*out){if(!s||!out||!s->ready)return GH_AT_ARGUMENT;return walk_checked(s,(gh_at_link){GH_AT_LINK_SLOT,15},out);}
 gh_scene_at_status gh_scene_at_next_unit_002c30c8(gh_scene_at_manager*s,gh_at_native_unit current,gh_at_native_unit*out){if(!s||!out||!own(s,current))return GH_AT_ARGUMENT;node*n=resolve(s->native_units,current.handle);return walk_checked(s,n->next,out);}
 size_t gh_scene_at_native_unit_count(const gh_scene_at_manager*s){return s&&s->native_units?s->native_units->count:0;}
+
+static float center_scalar(const void *p)
+{
+ float value;
+ memcpy(&value,p,4);
+ return value;
+}
+
+static float center_add(float a,float b)
+{
+ volatile float value=a+b;
+ return value;
+}
+
+gh_scene_at_status gh_scene_at_center_002c0e78(gh_at_native_unit unit,float destination[3])
+{
+ if(!destination)return GH_AT_ARGUMENT;
+ if(!unit.bytes)return GH_AT_OK;
+ if(unit.size<0x35)return GH_AT_BOUNDS;
+ if(!(unit.bytes[0x34]&1u))return GH_AT_OK;
+ const uint8_t *shape=unit.bytes+4;
+ fenv_t env;
+ if(feholdexcept(&env))return GH_AT_UNSUPPORTED;
+ if(fesetround(FE_TOWARDZERO)){
+  (void)fesetenv(&env);
+  return GH_AT_UNSUPPORTED;
+ }
+ if(shape[1]==1||shape[1]==2){
+  destination[0]=center_scalar(shape+0x10);
+  destination[1]=center_scalar(shape+4);
+  destination[2]=center_scalar(shape+0x14);
+  if(shape[1]==1){
+   for(unsigned k=1;k<4;k++){
+    destination[0]=center_add(destination[0],center_scalar(shape+0x10+k*8));
+    destination[2]=center_add(destination[2],center_scalar(shape+0x14+k*8));
+   }
+   volatile float x=destination[0]*0.25f,z=destination[2]*0.25f;
+   destination[0]=x;
+   destination[2]=z;
+  }
+ }
+ destination[1]=center_add(destination[1],0.4f);
+ if(fesetenv(&env)||!isfinite(destination[0])||!isfinite(destination[1])||!isfinite(destination[2]))
+  return GH_AT_UNSUPPORTED;
+ return GH_AT_OK;
+}
 
 gh_scene_at_status gh_scene_at_find_id_002c3118(gh_scene_at_manager *manager,
  uint32_t id,gh_at_native_unit *unit)

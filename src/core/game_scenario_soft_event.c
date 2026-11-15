@@ -142,13 +142,21 @@ gh_soft_event_status gh_soft_event_suspend_player_0012c7d0(const gh_title_player
    continue;
   }
   if(!related[i]->bytes||related[i]->size<0x254||
-     related[i]->original_vtable214!=0x41b6a0||w(related[i]->bytes+0x214)!=0x41b6a0)
+     w(related[i]->bytes+0x214)!=related[i]->original_vtable214)
    return GH_SOFT_EVENT_UNSUPPORTED;
+  /* Attached paper 0376 dispatches shared 2A9350 with zero adjustment. */
+  const int paper=i==3&&related[i]->size>=0x5a4&&related[i]->original_vtable214==0x42aa98&&
+     h(related[i]->bytes+0x2fe)==0x376;
+  if(related[i]->original_vtable214!=0x41b6a0&&!paper)return GH_SOFT_EVENT_UNSUPPORTED;
  }
  ww(player->bytes+0x250,w(player->bytes+0x250)|0x8000);
  ww(player->bytes+0x5a0,w(player->bytes+0x5a0)|8);
- for(unsigned i=0;i<4;i++)if(related[i])
+ for(unsigned i=0;i<4;i++){
+  if(!related[i])continue;
   ww(related[i]->bytes+0x250,w(related[i]->bytes+0x250)|0x8000);
+  if(related[i]->original_vtable214==0x42aa98)
+   ww(related[i]->bytes+0x5a0,w(related[i]->bytes+0x5a0)|8);
+ }
  *frontier=0;
  return GH_SOFT_EVENT_OK;
 }

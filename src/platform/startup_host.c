@@ -689,6 +689,41 @@ static gh_game_event_status event_abnormal_fade(void *context, uint32_t *frontie
            status == GH_BGM_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
 }
 
+static gh_game_event_status event_rearm_create(gh_startup_host *h)
+{
+    /* These continuations belong to one Event, while the host and Event
+     * identity survive room changes. The original Release must finish first. */
+    if(h->event.fields.phase||h->event_module.allocation.pointer||
+        h->event_resource.allocation.pointer||h->event_timing.allocation.pointer||
+        h->event_actor_create.work.pointer||h->event_actor_create.task_live||
+        h->event_actor_extra.retargeted||h->event_actor_extra.weapon||
+        h->event_actor_extra.accessory_handle||h->event_actor_extra.accessory_parts.count)
+        return GH_EVENT_UNSUPPORTED;
+    for(size_t i=0;i<sizeof(h->event_actor_extra.row_parts)/sizeof(*h->event_actor_extra.row_parts);++i)
+        if(h->event_actor_extra.row_parts[i].count)return GH_EVENT_UNSUPPORTED;
+    for(size_t i=0;i<h->event_actor_roster.capacity;++i){
+        const gh_event_actor_factory *actor=&h->event_actor_roster.rows[i];
+        if(actor->handle||actor->object.view.bytes||actor->model.bound||
+            actor->room_reference||actor->global_reference)return GH_EVENT_UNSUPPORTED;
+    }
+
+    h->event_create=(gh_event_create_state){0};
+    h->event_play=(gh_event_play_state){0};
+    h->event_quit=(gh_event_quit){0};
+    h->event_camera_quit=(gh_event_camera_quit){0};
+    h->event_additional_light=(gh_event_additional_light){0};
+    h->event_actor_create=(gh_event_actor_create){0};
+    h->event_actor_roster=(gh_event_actor_roster){0};
+    memset(h->event_actor_rows,0,sizeof(h->event_actor_rows));
+    memset(h->event_actor_motions,0,sizeof(h->event_actor_motions));
+    memset(&h->event_actor_extra,0,sizeof(h->event_actor_extra));
+    h->event_actor_play=(gh_event_actor_play){0};
+    h->event_actor_release=(gh_event_actor_release){0};
+    h->event_release=(gh_event_release_stage){0};
+    h->event_release_module_unloaded=0;
+    return GH_EVENT_OK;
+}
+
 static int event_create_stage(void *context,gh_game_event *event,int *done)
 {
     gh_startup_host *h=context;
@@ -696,6 +731,10 @@ static int event_create_stage(void *context,gh_game_event *event,int *done)
     if(event!=&h->event)return GH_EVENT_ARGUMENT;
     if(h->services && gh_game_services_get_scene_view(h->services,&scene))return GH_EVENT_ARGUMENT;
     h->event_link_relative=0;
+    if(h->event_release.complete){
+        gh_game_event_status status=event_rearm_create(h);
+        if(status){event->frontier=0x297038;return status;}
+    }
     const gh_event_create_bindings bindings={
         .event=event,.work=&h->work,.module=&h->event_module,
         .components=&h->event_link.components,.resource=&h->event_resource,
@@ -1172,10 +1211,12 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_camera_status status=gh_game_motion_camera_move_00138600(&h->event_camera,&h->game_init,&h->work,&display,frontier);
         return status?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2c1618){
-        const gh_scene_at_step_callbacks callbacks={.context=&h->r100_exit,.spawn=gh_r100_exit_spawn_001f7858};
+        const gh_scene_at_step_callbacks r100={.context=&h->r100_exit,.spawn=gh_r100_exit_spawn_001f7858};
+        const gh_scene_at_step_callbacks r105={.context=h->services,.spawn=gh_game_services_r105_jump_offer};
+        const gh_scene_at_step_callbacks *callbacks=h->work.room==0x100?&r100:h->work.room==0x105?&r105:NULL;
         int original_return;
         gh_scene_at_status e=gh_scene_at_step_native_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,
-            &h->work,h->work.room==0x100?&callbacks:NULL,&original_return,frontier);
+            &h->work,callbacks,&original_return,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x30f090){
         if(!h->object_step.live_bound){

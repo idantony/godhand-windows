@@ -78,6 +78,14 @@ static int is_r105_first_appearance0_profile(const gh_enemy_request *request)
     }
 }
 
+static int is_r105_battle_profile(const gh_enemy_request *request)
+{
+    /* REL0C08/0C14 clear the original hidden bit when activating these EMS rows. */
+    return request&&request->object_kind==0x202&&!request->appearance&&!request->dependency_flags&&
+        request->flags==0x50100000u&&((request->entry_number==7&&request->dependency_kind==0x200)||
+        (request->entry_number==8&&request->dependency_kind==0x202));
+}
+
 static int is_r105_appearance1_profile(const gh_enemy_request *request)
 {
     return request&&request->object_kind==0x202&&request->dependency_kind==0x203&&
@@ -112,7 +120,8 @@ static int is_r101_appearance0_profile(const gh_enemy_request *request)
 int gh_enemy202_is_room_supported_profile(const gh_enemy_request *request,uint16_t room)
 {
     return gh_enemy202_is_r100_supported_profile(request)||
-        (room==0x105&&(is_r105_first_appearance0_profile(request)||is_r105_appearance1_profile(request)))||
+        (room==0x105&&(is_r105_first_appearance0_profile(request)||is_r105_appearance1_profile(request)||
+                       is_r105_battle_profile(request)))||
         (room==0x101&&(is_r101_appearance1_profile(request)||is_r101_appearance4_profile(request)||
                        is_r101_appearance0_profile(request)));
 }
@@ -211,7 +220,7 @@ gh_actor_model_status gh_enemy202_appearance0_select_0020393c(
 {
     if (!request || !resource || !out || !resource->bytes || resource->kind!=0x202)
         return GH_ACTOR_MODEL_ARGUMENT;
-    if (!is_r100_appearance0_profile(request)&&!is_r105_first_appearance0_profile(request)&&!is_r101_appearance0_profile(request))
+    if (!is_r100_appearance0_profile(request)&&!is_r105_first_appearance0_profile(request)&&!is_r105_battle_profile(request)&&!is_r101_appearance0_profile(request))
         return GH_ACTOR_MODEL_UNSUPPORTED;
     /* Dependency 203 uses 42D4C0[1] -> 203700; dependency 200 takes
      * the underflow branch 2036EC. 20393C keeps those candidate pairs. */

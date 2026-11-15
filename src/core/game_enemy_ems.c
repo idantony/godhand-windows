@@ -404,7 +404,8 @@ gh_scene_placement_status gh_enemy_ems_set_002952d0(gh_enemy_ems *owner,
     const gh_enemy_request *request=&call->request;
     const int heavy=request->entry_number==14&&request->object_kind==0x2a2&&
         request->dependency_kind==0x2a3&&!request->appearance&&!request->flags&&!request->dependency_flags;
-    if(!gh_enemy202_is_r100_supported_profile(request)&&(!heavy||!owner->bindings->names_2a2)){
+    if(!gh_enemy202_is_room_supported_profile(request,owner->bindings->actor.entry.work->room)&&
+       (!heavy||!owner->bindings->names_2a2)){
         *frontier=0x2905d0;return GH_PLACE_UNSUPPORTED;
     }
     if(heavy&&!entry->enemy2a2){
@@ -887,9 +888,10 @@ static gh_actor_motion_status set_entry_suspend(const ems_entry *entry, int susp
     uint32_t *frontier)
 {
     const gh_title_player_view *view = &entry->actor->view;
-    if (entry->enemy2a2) {
+    if (entry->enemy2a2 || entry->enemy2ad) {
         *frontier = 0x2a9350;
-        if (!suspend_view(view, 0x448ca0, 0x5a4)) return GH_ACTOR_MOTION_ARGUMENT;
+        const uint32_t vtable=entry->enemy2ad?0x44a528:0x448ca0;
+        if (!suspend_view(view,vtable,0x5a4)) return GH_ACTOR_MOTION_ARGUMENT;
         set_enemy_suspend_flags(view, suspend);
         return GH_ACTOR_MOTION_OK;
     }
@@ -969,21 +971,29 @@ gh_actor_motion_status gh_enemy_ems_set_stamp_suspend_00295bc0(const gh_enemy_em
     return status;
 }
 
-gh_actor_motion_status gh_enemy_ems_set_stamp_pose_00295a08(const gh_enemy_ems *owner,
-    const gh_game_init_state *manager,gh_enemy_stamp_pose *call,uint8_t stamp,const float position[3],
-    float yaw,uint32_t *frontier)
+gh_actor_motion_status gh_enemy_ems_set_stamp_alpha_00296230(const gh_enemy_ems *owner,
+    const gh_game_init_state *manager,uint8_t stamp,int enabled,uint32_t *frontier)
 {
-    if(!frontier)return GH_ACTOR_MOTION_ARGUMENT;
-    *frontier=0x295a08;
-    if(!manager||!call||!position||!isfinite(position[0])||!isfinite(position[1])||
-       !isfinite(position[2])||!isfinite(yaw))return GH_ACTOR_MOTION_ARGUMENT;
+    if(!frontier||!manager||(enabled!=0&&enabled!=1))return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x296230;
     const ems_entry *entry;
     gh_actor_motion_status status=find_stamp_entry(owner,manager,stamp,&entry,frontier);
     if(status)return status;
-    if(call->stage&&(!entry||call->actor!=entry->actor||
-       memcmp(call->position,position,sizeof(call->position))||memcmp(&call->yaw,&yaw,sizeof(yaw))))
-        return GH_ACTOR_MOTION_BUSY;
-    if(!entry){*frontier=0;return GH_ACTOR_MOTION_OK;}
+    /* 296230 calls 273D28 only when the concrete type string is cEm00. */
+    if(entry&&entry->actor->view.original_kind4ac==0x42c7f0){
+        const gh_title_player_view *view=&entry->actor->view;
+        if(!entry->enemy202||!suspend_view(view,0x4479c8,0x1978))return GH_ACTOR_MOTION_UNSUPPORTED;
+        view->bytes[0x1868]=(uint8_t)enabled;
+        const uint16_t timer=enabled?600:6000;
+        memcpy(view->bytes+0x2ae,&timer,sizeof(timer));
+    }
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
+static gh_actor_motion_status set_em00_position_00276228(const ems_entry *entry,
+    gh_enemy_stamp_pose *call,const float position[3],uint32_t *frontier)
+{
     gh_enemy_actor *enemy=entry->enemy202;
     const gh_title_player_view *view=&entry->actor->view;
     if(!enemy||!suspend_view(view,0x4479c8,0x1978))return GH_ACTOR_MOTION_UNSUPPORTED;
@@ -995,7 +1005,6 @@ gh_actor_motion_status gh_enemy_ems_set_stamp_pose_00295a08(const gh_enemy_ems *
     if(!call->stage){
         call->actor=entry->actor;
         memcpy(call->position,position,sizeof(call->position));
-        call->yaw=yaw;
         memcpy(view->alias_f0,call->position,sizeof(call->position));
         memcpy(bytes+0x490,call->position,sizeof(call->position));
         memcpy(bytes+0xb0,call->position,sizeof(call->position));
@@ -1009,7 +1018,7 @@ gh_actor_motion_status gh_enemy_ems_set_stamp_pose_00295a08(const gh_enemy_ems *
     if(call->stage==2){
         const gh_motion_solve_bindings solve={.model=model,.work=enemy->b.entry.work,.actors=enemy->b.actors,
             .ray=enemy->b.ray,.context=enemy->b.ray_context,.ik_globals=enemy->b.ik,.atan_coeff=enemy->b.atan_coeff};
-        status=gh_actor_motion_solve_00152a20(&call->solve,&solve,policy,frontier);
+        gh_actor_motion_status status=gh_actor_motion_solve_00152a20(&call->solve,&solve,policy,frontier);
         if(status){if(!*frontier)*frontier=0x152a20;return status;}
         call->stage=3;
     }
@@ -1032,9 +1041,51 @@ gh_actor_motion_status gh_enemy_ems_set_stamp_pose_00295a08(const gh_enemy_ems *
             *frontier=attachments[i].entry;
             return GH_ACTOR_MOTION_UNSUPPORTED;
         }
-        const float angles[3]={0.0f,call->yaw,0.0f};
-        memcpy(bytes+0x100,angles,sizeof(angles));
         call->stage=5;
+    }
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy_ems_set_position_00276228(gh_enemy_ems *owner,
+    uint32_t handle,const float position[3],uint32_t *frontier)
+{
+    if(!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x276228;
+    if(!owner||!handle||!position||!isfinite(position[0])||!isfinite(position[1])||
+       !isfinite(position[2]))return GH_ACTOR_MOTION_ARGUMENT;
+    gh_enemy_ems_live live;
+    if(gh_enemy_ems_live_at(owner,handle,&live)||!live.enemy202||!live.model)
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    gh_enemy_stamp_pose call={0};
+    return set_em00_position_00276228(&owner->entries[live.physical_row],&call,position,frontier);
+}
+
+gh_actor_motion_status gh_enemy_ems_set_stamp_pose_00295a08(const gh_enemy_ems *owner,
+    const gh_game_init_state *manager,gh_enemy_stamp_pose *call,uint8_t stamp,const float position[3],
+    float yaw,uint32_t *frontier)
+{
+    if(!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x295a08;
+    if(!manager||!call||!position||!isfinite(position[0])||!isfinite(position[1])||
+       !isfinite(position[2])||!isfinite(yaw))return GH_ACTOR_MOTION_ARGUMENT;
+    const ems_entry *entry;
+    gh_actor_motion_status status=find_stamp_entry(owner,manager,stamp,&entry,frontier);
+    if(status)return status;
+    if(call->stage&&(!entry||call->actor!=entry->actor||
+       memcmp(call->position,position,sizeof(call->position))||memcmp(&call->yaw,&yaw,sizeof(yaw))))
+        return GH_ACTOR_MOTION_BUSY;
+    if(!entry){*frontier=0;return GH_ACTOR_MOTION_OK;}
+    const int update_yaw=call->stage<5;
+    if(!call->stage)call->yaw=yaw;
+    status=set_em00_position_00276228(entry,call,position,frontier);
+    if(status)return status;
+    gh_enemy_actor *enemy=entry->enemy202;
+    gh_actor_model *model=&enemy->entry.initialize.model.model;
+    const gh_static_transform_policy policy=enemy->b.entry.policy;
+    if(update_yaw){
+        const float angles[3]={0.0f,call->yaw,0.0f};
+        memcpy(entry->actor->view.bytes+0x100,angles,sizeof(angles));
     }
     if(call->stage==5){
         gh_actor_model_status model_status=gh_actor_model_update_hierarchy_00149eb8(model,policy);
@@ -1088,6 +1139,29 @@ static void start_enemy_action_00272570(uint8_t *bytes)
     memcpy(bytes+0x16d0,&flags,4);
 }
 
+static void set_enemy_keep_position(const gh_title_player_view *view,const float destination[3])
+{
+    if(view->original_kind4ac==0x42c7f0)memmove(view->bytes+0x1660,destination,12);
+}
+
+gh_actor_motion_status gh_enemy_ems_set_stamp_keep_00296070(const gh_enemy_ems *owner,
+    const gh_game_init_state *manager,uint8_t stamp,const float destination[3],uint32_t *frontier)
+{
+    if(!frontier||!manager||!destination||!isfinite(destination[0])||
+       !isfinite(destination[1])||!isfinite(destination[2]))return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x296070;
+    const ems_entry *entry;
+    gh_actor_motion_status status=find_stamp_entry(owner,manager,stamp,&entry,frontier);
+    if(status)return status;
+    if(entry&&entry->actor->view.original_kind4ac==0x42c7f0){
+        const gh_title_player_view *view=&entry->actor->view;
+        if(!entry->enemy202||!suspend_view(view,0x4479c8,0x1978))return GH_ACTOR_MOTION_UNSUPPORTED;
+        set_enemy_keep_position(view,destination);
+    }
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
 gh_actor_motion_status gh_enemy_ems_start_goto_at2(const gh_enemy_ems *owner,
     const gh_game_init_state *manager,uint8_t stamp,const float destination[3],uint32_t *frontier)
 {
@@ -1107,8 +1181,7 @@ gh_actor_motion_status gh_enemy_ems_start_goto_at2(const gh_enemy_ems *owner,
     start_enemy_action_00272570(view->bytes);
     status=set_enemy_goto(view,destination,0,0,frontier);
     if(status)return status;
-    /* 296070 selects the same cEm202 class before 26E7A8. */
-    if(view->original_kind4ac==0x42c7f0)memmove(view->bytes+0x1660,destination,12);
+    set_enemy_keep_position(view,destination);
     *frontier=0;
     return GH_ACTOR_MOTION_OK;
 }

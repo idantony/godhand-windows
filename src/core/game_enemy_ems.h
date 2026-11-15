@@ -95,6 +95,8 @@ gh_actor_motion_status gh_enemy_ems_set_actor_suspend_00275308(const gh_enemy_em
     const gh_game_init_state *,const gh_game_title_player *,int suspend,uint32_t *);
 gh_actor_motion_status gh_enemy_ems_set_stamp_suspend_00295bc0(const gh_enemy_ems *,
     const gh_game_init_state *,uint8_t stamp,int suspend,uint32_t *frontier);
+gh_actor_motion_status gh_enemy_ems_set_stamp_alpha_00296230(const gh_enemy_ems *,
+    const gh_game_init_state *,uint8_t stamp,int enabled,uint32_t *frontier);
 /* One cEmWrap SetPos on a registered weaponless EM02. The wrapper applies
  * the original position, current pose solve, Euler and final hierarchy. */
 typedef struct {
@@ -107,6 +109,9 @@ typedef struct {
 gh_actor_motion_status gh_enemy_ems_set_stamp_pose_00295a08(const gh_enemy_ems *,
     const gh_game_init_state *,gh_enemy_stamp_pose *,uint8_t stamp,const float position[3],
     float yaw,uint32_t *frontier);
+/* Position-only cEm00 virtual call used for a mounted actor. */
+gh_actor_motion_status gh_enemy_ems_set_position_00276228(gh_enemy_ems *,
+    uint32_t handle,const float position[3],uint32_t *frontier);
 /* Original Goto wrapper for the mode0/mode2 deferred and mode9 immediate R100 calls. */
 gh_actor_motion_status gh_enemy_ems_set_stamp_goto_00295f80(const gh_enemy_ems *,
     const gh_game_init_state *,uint8_t stamp,const float destination[3],uint32_t mode,int immediate,uint32_t *frontier);
@@ -118,6 +123,8 @@ gh_actor_motion_status gh_enemy_ems_start_goto_at3(const gh_enemy_ems *,uint8_t 
     const float destination[3],uint32_t *frontier);
 /* REL1FC4..203C original unsuspend, StartAction and deferred mode0 Goto. */
 gh_actor_motion_status gh_enemy_ems_start_goto_battle(const gh_enemy_ems *,
+    const gh_game_init_state *,uint8_t stamp,const float destination[3],uint32_t *frontier);
+gh_actor_motion_status gh_enemy_ems_set_stamp_keep_00296070(const gh_enemy_ems *,
     const gh_game_init_state *,uint8_t stamp,const float destination[3],uint32_t *frontier);
 gh_actor_motion_status gh_enemy_ems_start_stamp_action_00295ce8(const gh_enemy_ems *,
     const gh_game_init_state *,uint8_t stamp,uint32_t *frontier);

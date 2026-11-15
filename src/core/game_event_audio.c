@@ -77,7 +77,8 @@ static gh_game_event_status prefetch_single_row(gh_event_audio_channel1 *s,
 {
     /* Only the verified single-row call can currently resume without a
      * per-row cursor when a provider reaches a later boundary. */
-    if((s->event_no!=1 && s->event_no!=2) || rows!=1 || row_index || key!=UINT32_MAX || row[0x10]){
+    if((s->event_no!=1 && s->event_no!=2 && s->event_no!=4) ||
+       rows!=1 || row_index || key!=UINT32_MAX || row[0x10]){
         *frontier=0x2d1c78;
         return GH_EVENT_UNSUPPORTED;
     }

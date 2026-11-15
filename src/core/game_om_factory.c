@@ -137,7 +137,9 @@ gh_scene_placement_status gh_om_factory_create_0030fa98(gh_om_factory*f,gh_om_ru
  if(c->bound&&(c->factory!=f||c->kind!=kind||c->resource_id!=id))return GH_PLACE_BUSY;
  if(c->complete){*out=c->object;return GH_PLACE_OK;}
  if(f->runtime_pending&&f->runtime_pending!=c)return GH_PLACE_BUSY;
- if(id!=0xffff||(kind!=0x3eb&&(kind!=0x376||f->bindings.work->room!=0x105)))return fail(f,0x30fe68,kind,GH_PLACE_UNSUPPORTED);
+ const int16_t room=f->bindings.work->room;
+ if(id!=0xffff||(kind!=0x3eb&&(kind!=0x376||(room!=0x105&&room!=2))))
+  return fail(f,0x30fe68,kind,GH_PLACE_UNSUPPORTED);
  const int paper=kind==0x376;
  const size_t bytes=paper?0x790:0x610;
  const uint32_t constructor=paper?0x1c9140:0x1bf478;

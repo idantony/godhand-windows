@@ -78,6 +78,7 @@ void gh_se_voice_last_attached_failure(const gh_se_voice_engine *,gh_se_attached
  * replacement semantics for audited MC/logo records. Starts real
  * XAudio2 voices. Call from original sound update boundary once per frame. */
 gh_voice_status gh_se_voice_update(gh_se_voice_engine *);
+gh_voice_status gh_se_voice_update_with_sound_flags(gh_se_voice_engine *,uint32_t *flags_ac,uint32_t *flags_b0);
 gh_voice_status gh_se_voice_query(const gh_se_voice_engine *,uint32_t handle,gh_se_voice_info *);
 /* Borrowed pending mono PCM; invalid after update/destroy. Read-only QA/view. */
 gh_voice_status gh_se_voice_pcm_view(const gh_se_voice_engine *,uint32_t handle,const int16_t **,size_t *frames);

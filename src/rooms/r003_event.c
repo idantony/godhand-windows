@@ -100,11 +100,12 @@ static void run(void *context,int32_t argument)
     }
 }
 
-gh_r003_status gh_r003_event_init_000001a0(gh_r003_event *s,const gh_r003_bindings *b)
+static gh_r003_status initialize_reserved_room(gh_r003_event *s,const gh_r003_bindings *b,
+    uint16_t room,uint32_t move_offset,size_t work_bytes)
 {
-    if(!s||!b||!b->module||!b->module->bound||b->module->room!=3||b->module->init_offset!=0x1a0||
-       b->module->move_offset!=0x228||!b->heap||!b->disc||!b->threads||!b->reserve||!b->play.event||
-       !b->play.event->initialized||!b->play.work||b->play.work->room!=3||b->soft.work!=b->play.work||
+    if(!s||!b||!b->module||!b->module->bound||b->module->room!=room||b->module->init_offset!=0x1a0||
+       b->module->move_offset!=move_offset||!b->heap||!b->disc||!b->threads||!b->reserve||!b->play.event||
+       !b->play.event->initialized||!b->play.work||b->play.work->room!=room||b->soft.work!=b->play.work||
        b->soft.scenario.bytes!=b->scenario.bytes||b->soft.scenario.manager!=b->scenario.manager)
         return GH_R003_ARGUMENT;
     if(s->work.pointer&&(s->bindings.module!=b->module||s->bindings.heap!=b->heap||
@@ -112,9 +113,12 @@ gh_r003_status gh_r003_event_init_000001a0(gh_r003_event *s,const gh_r003_bindin
         return GH_R003_ARGUMENT;
     if(s->initialized)return GH_R003_OK;
     if(!s->work.pointer){
-        if(gh_heap_allocate(b->heap,12,16,&s->work))return fail(s,0x30f550,GH_R003_MEMORY);
-        const uint32_t initial[]={0,0x3f000000,0x3c23d70a};
-        memcpy(s->work.pointer,initial,sizeof(initial));
+        if(gh_heap_allocate(b->heap,work_bytes,16,&s->work))
+            return fail(s,0x30f550,GH_R003_MEMORY);
+        if(room==3){
+            const uint32_t initial[]={0,0x3f000000,0x3c23d70a};
+            memcpy(s->work.pointer,initial,sizeof(initial));
+        }
         s->bindings=*b;
     }
     s->slot=-1;
@@ -126,6 +130,16 @@ gh_r003_status gh_r003_event_init_000001a0(gh_r003_event *s,const gh_r003_bindin
     s->initialized=1;
     s->frontier=0;
     return GH_R003_OK;
+}
+
+gh_r003_status gh_r003_event_init_000001a0(gh_r003_event *s,const gh_r003_bindings *b)
+{
+    return initialize_reserved_room(s,b,3,0x228,12);
+}
+
+gh_r003_status gh_r002_event_init_000001a0(gh_r003_event *s,const gh_r003_bindings *b)
+{
+    return initialize_reserved_room(s,b,2,0x208,1);
 }
 
 gh_r003_status gh_r003_event_release(gh_r003_event *s)

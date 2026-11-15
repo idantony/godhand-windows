@@ -88,5 +88,5 @@ gh_voice_status gh_sound_control_flush_se_002ca5d8(gh_sound_control *s,gh_se_voi
 {
  if(!s || !s->initialized || !engine)return GH_VOICE_ARGUMENT;
  s->flags_b0&=~UINT32_C(0x04000000);s->flags_ac&=~UINT32_C(0x04000000);
- return gh_se_voice_update(engine);
+ return gh_se_voice_update_with_sound_flags(engine,&s->flags_ac,&s->flags_b0);
 }

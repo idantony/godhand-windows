@@ -989,7 +989,9 @@ def main():
             if "se-adx-sequence" in recorded:
                 compile_object("compile-se-voice-recording-sequence", "src/core/se_voice.c",
                                recording_sequence_voice_object,
-                               [*symbols, "-Dgh_audio_output_play_stereo=__wrap_gh_audio_output_play_stereo"])
+                               [*symbols,
+                                "-Dgh_audio_output_play_stereo=__wrap_gh_audio_output_play_stereo",
+                                "-Dgh_audio_output_play_q12=__wrap_gh_audio_output_play_q12"])
         if focused:
             list(workers.map(compile_extra_test, focused))
     if focused:

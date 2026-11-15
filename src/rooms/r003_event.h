@@ -43,6 +43,9 @@ typedef struct {
 /* R003Init (REL+1A0) allocates its three MoveFlag scalars and registers
  * the original REL+248 task when both reserve bits are set. */
 gh_r003_status gh_r003_event_init_000001a0(gh_r003_event *,const gh_r003_bindings *);
+/* R002 reserves a one-byte room owner and uses the same original
+ * playStartWait provider before its positioned Event+38 jump. */
+gh_r003_status gh_r002_event_init_000001a0(gh_r003_event *,const gh_r003_bindings *);
 gh_r003_status gh_r003_event_release(gh_r003_event *);
 
 #ifdef __cplusplus

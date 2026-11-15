@@ -82,7 +82,7 @@ typedef struct {gh_player_frame_bindings b;uint32_t stage,frontier;uint8_t bound
  gh_player_opacity_call opacity_call;gh_game_player_frame_tail tail;gh_actor_finish_model_call finish_model;
  gh_player_walk_call walk;
  gh_player_run_call run;
- uint8_t enemy_focus_fallback,enemy_focus_previous;
+ uint8_t enemy_focus_fallback,enemy_focus_previous,script_wait_phase;
 } gh_game_player_frame;
 gh_player_frame_status gh_game_player_frame_00108ab0(gh_game_player_frame *,const gh_player_frame_bindings *);
 /* Actual126820 +five-entry button history leaves1268B0/1268F0. */

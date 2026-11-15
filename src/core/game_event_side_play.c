@@ -32,7 +32,8 @@ static gh_game_event_status get_component(const gh_event_data_prefix *data, unsi
         return GH_EVENT_ARGUMENT;
     if (data->components->event_no == 1 ||
         (data->components->event_no == 2 &&
-         (index == 0 || index == 5 || index == 9 || index == 10))) return GH_EVENT_OK;
+         (index == 0 || index == 5 || index == 9 || index == 10)) ||
+        (data->components->event_no == 4 && (index == 1 || index == 10))) return GH_EVENT_OK;
     return GH_EVENT_UNSUPPORTED;
 }
 
@@ -297,6 +298,27 @@ static void apply_layer(uint8_t *const *rows, unsigned count, const uint8_t *mas
     }
 }
 
+static gh_game_event_status scroll_layer_track(const gh_event_data_prefix *data,
+    gh_event_component_view *component, gh_event_sequence_view *track)
+{
+    gh_game_event_status status = get_component(data, 10, 0xd898, 0x78, component);
+    if (status) return status;
+    status = gh_event_sequence_at(data, 10, track);
+    if (status) return status;
+    if (word(component->bytes + 0x10) || word(component->bytes + 0x14) != track->count)
+        return GH_EVENT_ARGUMENT;
+    if (!track->records) return track->count ? GH_EVENT_ARGUMENT : GH_EVENT_OK;
+    if (data->components->event_no != 4 || !track->count || track->stride != 0x28 ||
+        track->bytes != track->count * track->stride) return GH_EVENT_UNSUPPORTED;
+    return GH_EVENT_OK;
+}
+
+static void scroll_layer_mask(uint8_t mask[32], const uint8_t *source)
+{
+    memcpy(mask, source, 32);
+    put(mask, word(mask) & 0x7fffffffu);
+}
+
 gh_game_event_status gh_event_scr_layer_init_00008948(const gh_event_data_prefix *data,
     const gh_room_pools *pools, const gh_scene_meshes *meshes, uint32_t *frontier, int *relative)
 {
@@ -304,8 +326,18 @@ gh_game_event_status gh_event_scr_layer_init_00008948(const gh_event_data_prefix
     *frontier = 0xba70;
     *relative = 1;
     gh_event_component_view component;
-    gh_game_event_status status = get_absent(data, 10, 0xd898, 0x78, &component);
+    gh_event_sequence_view track;
+    gh_game_event_status status = scroll_layer_track(data, &component, &track);
     if (status) return status;
+    const uint8_t *initial = component.bytes + 0x38;
+    for (size_t i = 0; i < track.count; ++i) {
+        const uint8_t *row = track.records + i * track.stride;
+        /* BA70 maps anonymous camera keys to owner -1. The EV04 keys all
+         * start at frame zero of the first camera lane. */
+        if (half(row) != UINT16_MAX || row[2] || row[3] >= data->camera_count ||
+            word(row + 4)) return GH_EVENT_UNSUPPORTED;
+        if (row[3] == 0) initial = row + 8;
+    }
     *relative = 0;
     *frontier = 0x2db5a0;
     uint8_t **rows;
@@ -324,7 +356,8 @@ gh_game_event_status gh_event_scr_layer_init_00008948(const gh_event_data_prefix
         }
     }
     apply_layer(rows, count, origin, 2);
-    apply_layer(rows, count, origin, 0x8000);
+    scroll_layer_mask(cache, initial);
+    apply_layer(rows, count, cache, 0x8000);
     free(rows);
     *frontier = 0;
     return GH_EVENT_OK;
@@ -337,20 +370,44 @@ gh_game_event_status gh_event_scr_layer_move_00008a40(const gh_event_data_prefix
     *frontier = 0x8a40;
     *relative = 1;
     gh_event_component_view component;
-    gh_game_event_status status = get_absent(data, 10, 0xd898, 0x78, &component);
+    gh_event_sequence_view track;
+    gh_game_event_status status = scroll_layer_track(data, &component, &track);
     if (status) return status;
     uint8_t *cache = component.bytes + 0x18, *origin = component.bytes + 0x38;
-    put(origin, word(origin) & 0x7fffffffu);
-    if (memcmp(origin, cache, 0x20)) {
+    const uint8_t *source = origin;
+    if (track.count) {
+        gh_event_component_view camera;
+        status = get_component(data, 1, 0xd1c8, 0x18, &camera);
+        if (status) return status;
+        const int16_t camera_cut = (int16_t)half(camera.bytes + 6);
+        const uint8_t lane = camera.bytes[4];
+        float frame;
+        memcpy(&frame, camera.bytes + 0xc, sizeof(frame));
+        int selected_cut = -1;
+        /* B838 selects the previous key, breaking same-cut ties by the
+         * last source row. Camera lane -1 falls back to the origin. */
+        for (size_t i = 0; lane != UINT8_MAX && i < track.count; ++i) {
+            const uint8_t *row = track.records + i * track.stride;
+            const int cut = row[3];
+            if (cut > camera_cut || cut < selected_cut ||
+                (cut == camera_cut && !lane && frame < 0.0f)) continue;
+            selected_cut = cut;
+            source = row + 8;
+        }
+    }
+    uint8_t mask[32];
+    scroll_layer_mask(mask, source);
+    if (source == origin) memcpy(origin, mask, sizeof(mask));
+    if (memcmp(mask, cache, sizeof(mask))) {
         *relative = 0;
         *frontier = 0x2db518;
         uint8_t **rows;
         uint32_t count;
         status = scroll_views(pools, meshes, &rows, &count);
         if (status) return status;
-        apply_layer(rows, count, origin, 0x8000);
+        apply_layer(rows, count, mask, 0x8000);
         free(rows);
-        memcpy(cache, origin, 0x20);
+        memcpy(cache, mask, sizeof(mask));
     }
     *frontier = 0;
     return GH_EVENT_OK;

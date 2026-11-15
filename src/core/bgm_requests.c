@@ -361,13 +361,14 @@ gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
     if(gh_audio_event_afs_member(s->registry,source->archive_owner,0,&offset,&size)||
        offset!=source->member_offset||size!=source->member_size)
         return fail(s,0x32bb48,GH_BGM_BOUNDS);
-    /* The channel ID is shared by the two single-member event archives.
+    /* The channel ID is shared by the admitted single-member event archives.
      * Verify the indexed member belongs to the admitted disc asset before
      * looking up or retiring an earlier request on the same channel. */
     const char *path;
     switch(source->member_size){
     case 0x21ae3a: path="se/ev/ev01.afs";break;
     case 0x4e303a: path="se/ev/ev02.afs";break;
+    case 0x5ceb3a: path="se/ev/ev04.afs";break;
     default:return fail(s,0x32bb48,GH_BGM_DISC);
     }
     gh_disc_entry archive;

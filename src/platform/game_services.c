@@ -795,12 +795,24 @@ static gh_soft_event_status room_soft_start_effects(void *context,uint32_t *fron
  return gh_soft_event_suspend_effects_002fa470(&objects,frontier);
 }
 
+static const gh_title_player_view *room_soft_player_weapon(gh_game_services *s)
+{
+ if((s->b.work->room==0x105||s->b.work->room==2)&&s->r105_paper.stage==6){
+  const gh_om_object *paper=s->r105_paper.create.object;
+  const gh_title_player_view *player=&s->title_player.view;
+  if(paper&&paper->registered&&paper->runtime_created&&paper->runtime_kind==0x376&&
+     player->bytes&&player->size>=0x6ac&&u32(player->bytes+0x6a8)==paper->handle)
+   return &paper->view;
+ }
+ return s->player_weapon.current?s->player_weapon.current->weapon:NULL;
+}
+
 static gh_soft_event_status room_soft_start_player(void *context,uint32_t *frontier)
 {
  gh_game_services *s=context;
  const gh_title_player_view *const links[4]={
   s->work5f8?&s->work5f8->object.view:NULL,NULL,NULL,
-  s->player_weapon.current?s->player_weapon.current->weapon:NULL};
+  room_soft_player_weapon(s)};
  const uint8_t known_mask=s->player_weapon.known?15:7;
  return gh_soft_event_suspend_player_0012c7d0(&s->title_player.view,links,known_mask,frontier);
 }
@@ -869,7 +881,7 @@ static gh_game_event_status room_soft_end_player(void *context,const gh_title_pl
  gh_game_services *s=context;
  if(player!=&s->title_player.view||!s->player_weapon.known)return GH_EVENT_ARGUMENT;
  const gh_soft_player_suspend_links links={.child_5f8=s->work5f8?&s->work5f8->object.view:NULL,
-  .weapon_6a8=s->player_weapon.current?s->player_weapon.current->weapon:NULL,.known_mask=15};
+  .weapon_6a8=room_soft_player_weapon(s),.known_mask=15};
  return gh_soft_player_unsuspend_0012c7d0(player,&links,frontier);
 }
 static gh_game_event_status room_soft_end_effects(void *context,uint32_t *frontier)
@@ -899,7 +911,7 @@ static gh_r100_script_status room_r100_end_soft(void *context,uint32_t *frontier
  return room_r100_end_live_soft(s,&s->r100_soft_end,frontier);
 }
 
-static gh_game_event_status room_r003_end_soft(void *context,uint32_t *frontier)
+static gh_game_event_status room_reserved_event_end_soft(void *context,uint32_t *frontier)
 {
  gh_game_services *s=context;
  gh_r100_script_status status=room_r100_end_live_soft(s,&s->r003_soft_end,frontier);
@@ -907,7 +919,7 @@ static gh_game_event_status room_r003_end_soft(void *context,uint32_t *frontier)
   status==GH_R100_SCRIPT_UNSUPPORTED?GH_EVENT_UNSUPPORTED:GH_EVENT_CALLEE;
 }
 
-static gh_door_status room_r003_begin_jump(void *context,uint16_t room,const float position[3],
+static gh_door_status room_event_begin_jump(void *context,uint16_t room,const float position[3],
  float yaw,uint8_t kind,uint32_t flags,uint8_t force,uint32_t *frontier)
 {
  gh_game_services *s=context;
@@ -915,7 +927,7 @@ static gh_door_status room_r003_begin_jump(void *context,uint16_t room,const flo
  return s->b.begin_event_room_jump(s->b.event_room_context,room,position,yaw,kind,flags,force,frontier);
 }
 
-static gh_scene_status room_r003_init(void *context,uint32_t *frontier)
+static gh_scene_status room_reserved_event_init(void *context,uint32_t *frontier)
 {
  gh_game_services *s=context;
  const gh_scene_scenario_view scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};
@@ -925,14 +937,26 @@ static gh_scene_status room_r003_init(void *context,uint32_t *frontier)
   .soft={.scenario=scenario,.work=s->b.work,.player_abort_00126770=room_soft_player_abort,.context=s},
   .play={.event=s->b.event,.config=s->b.event_config,.work=s->b.work,.player=&s->title_player.view,
    .fade=s->b.fade,.display=s->b.display,.elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes},
-  .end_soft=room_r003_end_soft,.begin_jump=room_r003_begin_jump,.context=s};
- gh_r003_status status=gh_r003_event_init_000001a0(&s->r003,&bindings);
+  .end_soft=room_reserved_event_end_soft,.begin_jump=room_event_begin_jump,.context=s};
+ const int r002=s->b.work->room==2;
+ gh_r003_status status=r002?gh_r002_event_init_000001a0(&s->r003,&bindings):
+  gh_r003_event_init_000001a0(&s->r003,&bindings);
  *frontier=status?(s->r003.frontier?s->r003.frontier:0x1a0):0;
  if(status){
   s->frontier=*frontier;
-  s->frontier_module_code=s->r003.frontier?0:3;
+  s->frontier_module_code=s->r003.frontier?0:r002?6:3;
  }
  return !status?GH_SCENE_OK:status==GH_R003_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE;
+}
+
+static gh_scene_status room_r002_move(void *context,uint32_t *frontier)
+{
+ const gh_game_services *s=context;
+ if(!s||!s->r003.initialized||s->module.room!=2||s->module.move_offset!=0x208)
+  return GH_SCENE_ARGUMENT;
+ if(frontier)*frontier=0;
+ /* The authenticated R002Move is JR RA / NOP. */
+ return GH_SCENE_OK;
 }
 
 static gh_scene_status room_r003_move(void *context,uint32_t *frontier)
@@ -996,7 +1020,7 @@ static gh_player_init_status restore_player_paper(void *context,const gh_title_p
  uint32_t *frontier)
 {
  gh_game_services *s=context;
- if(!s||!frontier||s->b.work->room!=0x105||player!=&s->title_player.view||
+ if(!s||!frontier||(s->b.work->room!=0x105&&s->b.work->room!=2)||player!=&s->title_player.view||
     s->player_model.root.bytes!=player->bytes)return GH_PLAYER_INIT_UNSUPPORTED;
  /* Original 107F58 can create paper before the OMS placement loop. The
   * typed factory has to own that same object through the later loop. */
@@ -1015,6 +1039,7 @@ static gh_scene_status room_r105_omsub(void *context,uint8_t *room_work,uint32_t
  return gh_r105_gate_000005f8(&s->r105,&s->om_factory,room_r100_om_view,room_r100_collision,s,frontier);
 }
 
+static gh_r100_script_status room_r100_camera_ended(void *,int *,uint32_t *);
 static gh_scene_status room_r105_tutorial(void *context,uint32_t *frontier);
 
 static gh_scene_status room_r105_goto_player(void *context,uint8_t stamp,const float position[3],
@@ -1026,6 +1051,39 @@ static gh_scene_status room_r105_goto_player(void *context,uint8_t stamp,const f
  return !status?GH_SCENE_OK:status==GH_ACTOR_MOTION_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE;
 }
 
+static gh_scene_status room_r105_jump_unsuspend(void *context,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ const gh_game_event_status status=room_soft_end_player(s,&s->title_player.view,frontier);
+ return status==GH_EVENT_OK?GH_SCENE_OK:
+  status==GH_EVENT_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE;
+}
+
+static gh_scene_status room_r105_mount_player(void *context,const uint32_t position[3],
+ uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ *frontier=0x12ce60;
+ const gh_title_player_view *aux=s->player_tail.active_child&&s->player_tail.child_original_return?
+  &s->player_child.object.view:NULL;
+ if(gh_title_player_set_script_position_0012ce60(&s->title_player.view,aux,position))
+  return GH_SCENE_UNSUPPORTED;
+ *frontier=0;
+ return GH_SCENE_OK;
+}
+
+static gh_scene_status room_r105_refresh_mounted_player(void *context,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ *frontier=0x149eb8;
+ if(gh_actor_model_update_hierarchy_00149eb8(&s->player_model,GH_STATIC_BINARY32_REFERENCE)){
+  if(s->player_model.frontier)*frontier=s->player_model.frontier;
+  return GH_SCENE_CALLEE;
+ }
+ *frontier=0;
+ return GH_SCENE_OK;
+}
+
 static gh_scene_status room_r105_init(void *context,uint32_t *frontier)
 {
  gh_game_services *s=context;
@@ -1035,7 +1093,14 @@ static gh_scene_status room_r105_init(void *context,uint32_t *frontier)
   .threads=s->scenario_threads,.at=&s->scene_at,.init=s->b.init,
   .player=&s->title_player.view,.save=s->b.save,.paper_0012c8d8=room_r105_paper,
   .omsub_000005f8=room_r105_omsub,.tutorial_000003b8=room_r105_tutorial,
-  .goto_player_00295f80=room_r105_goto_player,.context=s};
+  .goto_player_00295f80=room_r105_goto_player,.context=s,.enemies=&s->enemies,
+  .start_soft_event=room_r100_start_soft,.set_room_camera=room_r100_set_camera,
+  .gate_factory=&s->om_factory,.object_view=room_r100_om_view,.program_se=room_r100_program_se,
+  .random=&s->b.init->random,.camera_ended=room_r100_camera_ended,
+  .end_soft_event=room_r100_end_live_soft,.collision=room_r100_collision,
+  .buttons=&s->action_buttons,.jump_unsuspend_player=room_r105_jump_unsuspend,
+  .place_mounted_player=room_r105_mount_player,.refresh_mounted_player=room_r105_refresh_mounted_player,
+  .fade=s->b.fade,.display=s->b.display,.reserve=s->b.event_reserve,.request_room=room_event_begin_jump};
  const gh_scene_status result=gh_r105_initialize_000001a8(&s->r105,&bindings);
  *frontier=result?(s->r105.frontier?s->r105.frontier:0x1a8):0;
  return room_r105_status(s,result,frontier);
@@ -1790,7 +1855,8 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
   switch(work->room){
    case 0x20:init=room_init_native;move=room_move_native;break;
    case 0x100:init=room_r100_init;move=room_r100_move;break;
-   case 3:init=room_r003_init;move=room_r003_move;break;
+   case 2:init=room_reserved_event_init;move=room_r002_move;break;
+   case 3:init=room_reserved_event_init;move=room_r003_move;break;
    case 0x105:init=room_r105_init;move=room_r105_move;break;
    case 0x101:init=room_r101_init;move=room_r101_move;break;
    default:return fail(s,GH_SERVICES_FRONTIER,0x2c3440,GH_SCENE_UNSUPPORTED);
@@ -1844,7 +1910,19 @@ void gh_game_services_inspect(const gh_game_services*s,gh_game_services_snapshot
 }
 uint32_t gh_game_services_frontier(const gh_game_services*s){return s?s->frontier:0;}
 int gh_game_services_detail(const gh_game_services*s){return s?s->detail:0;}
-const char *gh_game_services_frontier_module(const gh_game_services*s){return s?(s->frontier_module_code==1?"r020.rel":s->frontier_module_code==2?"r100.rel":s->frontier_module_code==3?"r003.rel":s->frontier_module_code==4?"r105.rel":s->frontier_module_code==5?"r101.rel":NULL):NULL;}
+const char *gh_game_services_frontier_module(const gh_game_services*s)
+{
+ if(!s)return NULL;
+ switch(s->frontier_module_code){
+ case 1:return "r020.rel";
+ case 2:return "r100.rel";
+ case 3:return "r003.rel";
+ case 4:return "r105.rel";
+ case 5:return "r101.rel";
+ case 6:return "r002.rel";
+ default:return NULL;
+ }
+}
 gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  if(s&&release_r101_room_init(s))return s->status;
  if(!s)return GH_SERVICES_ARGUMENT;
@@ -2485,13 +2563,22 @@ static void r105_scenery_task_0028e858(void *context,int32_t argument)
  s->r105_scenery_task_status=GH_SCENE_STEP_UNSUPPORTED;
 }
 
+gh_scene_at_status gh_game_services_r105_jump_offer(void *context,
+ const gh_scene_at_task_request *request,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ return s?gh_r105_jump_offer_001f7858(&s->r105,request,frontier):GH_AT_ARGUMENT;
+}
+
 gh_action_step_status gh_game_services_r105_scenery_action(void *context,uint32_t entry,
  void *argument,uint32_t *frontier)
 {
  gh_game_services *s=context;
  if(!s||!frontier)return GH_ACTION_STEP_ARGUMENT;
  *frontier=entry;
- if(entry!=0x28e7c8||s->b.work->room!=0x105||!argument)return GH_ACTION_STEP_UNSUPPORTED;
+ if(s->b.work->room!=0x105||!argument)return GH_ACTION_STEP_UNSUPPORTED;
+ if(entry==0x2c2138)return gh_r105_jump_action_002c2138(&s->r105,argument,frontier);
+ if(entry!=0x28e7c8)return GH_ACTION_STEP_UNSUPPORTED;
  uint32_t handle;
  gh_enemy_ems_live live;
  if(gh_enemy_ems_handle_for_actor(s->enemies,argument,&handle)||!handle||
@@ -3104,8 +3191,10 @@ gh_scene_step_status gh_game_services_task_status(gh_game_services*s,uint32_t*fr
   return s->tutorial_action.status==GH_ACTION_STEP_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE;
  }
  if(s->r003.initialized&&s->r003.status!=GH_R003_OK){
-  *frontier=s->r003.frontier?s->r003.frontier:0x248;
-  s->frontier=*frontier;s->frontier_module_code=s->r003.frontier?0:3;
+  const int r002=s->b.work->room==2;
+  *frontier=s->r003.frontier?s->r003.frontier:r002?0x210:0x248;
+  s->frontier=*frontier;
+  s->frontier_module_code=s->r003.frontier?0:r002?6:3;
   return s->r003.status==GH_R003_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE;
  }
  if(s->r100_roof.registered&&s->r100_roof.status!=GH_R100_SCRIPT_OK){

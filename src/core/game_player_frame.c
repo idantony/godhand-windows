@@ -1445,6 +1445,55 @@ static gh_player_frame_status escape_grab_00117600(gh_game_player_frame *s)
  return GH_PLAYER_FRAME_OK;
 }
 
+/* Original 11A530 EventWait, unarmed/nonthrow context after R105 JMP1. */
+static gh_player_frame_status event_wait_0011a530(gh_game_player_frame *s)
+{
+ const gh_player_frame_bindings *b=&s->b;
+ uint8_t *p=b->player->view.bytes;
+ uint32_t pc=0;
+ put(p+0x15f4,w(p+0x15f4)|0x80u);
+ if(!s->script_wait_phase){
+  if(p[0x2f6]>1)return GH_PLAYER_FRAME_OK;
+  if(!p[0x2f6]){
+   sh(p+0x5e0,0);
+   sh(p+0x5e2,0);
+   if(!b->auxiliary_bindings_known||b->aux_6a0||b->aux_698||w(p+0x6a0)||w(p+0x698))
+    return fail(s,0x11a530,GH_PLAYER_FRAME_UNSUPPORTED);
+   if(!b->resource||b->resource_bytes<0x30||!b->model||!b->initialize_motion)
+    return fail(s,0x2a8578,GH_PLAYER_FRAME_UNSUPPORTED);
+   s->pending_motion=(gh_player_motion_request){.player=b->player,.model=b->model,
+    .work=b->work,.resource=b->resource,.resource_bytes=b->resource_bytes,
+    .motion_offset=w(b->resource+0x28),.sequence_candidate_offset=w(b->resource+0x2c),
+    .blend_frames=3,.rate=b->rate};
+   s->script_wait_phase=1;
+  }else s->script_wait_phase=2;
+ }
+ if(s->script_wait_phase==1){
+  gh_player_init_status status=b->initialize_motion(b->motion_context,&s->pending_motion,&pc);
+  if(status)return fail(s,pc?pc:0x2a8578,status==GH_PLAYER_INIT_UNSUPPORTED?
+    GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE);
+  p[0x2f6]=1;
+  s->script_wait_phase=2;
+ }
+ if(s->script_wait_phase==2){
+  if(!b->advance_motion||!b->rate)return fail(s,0x157c18,GH_PLAYER_FRAME_UNSUPPORTED);
+  int ended;
+  const gh_player_motion_request request={.player=b->player,.model=b->model,
+   .work=b->work,.resource=b->resource,.resource_bytes=b->resource_bytes,.rate=b->rate};
+  gh_player_frame_status status=b->advance_motion(b->motion_context,&request,&ended,&pc);
+  if(status)return fail(s,pc?pc:0x157c18,status);
+  s->script_wait_phase=3;
+ }
+ if(s->script_wait_phase==3){
+  if(gh_player_root_rotation_0014f9f0(&b->player->view,b->work,GH_STATIC_BINARY32_REFERENCE,&pc))
+   return fail(s,pc?pc:0x14f9f0,GH_PLAYER_FRAME_UNSUPPORTED);
+  s->script_wait_phase=4;
+ }
+ if(gh_player_root_translation_0014f928(&b->player->view,b->work,GH_STATIC_BINARY32_REFERENCE,&pc))
+  return fail(s,pc?pc:0x14f928,GH_PLAYER_FRAME_UNSUPPORTED);
+ return GH_PLAYER_FRAME_OK;
+}
+
 static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame_bindings*b=&s->b;uint8_t*p=b->player->view.bytes;const uint8_t*work=(const uint8_t*)b->work;uint32_t pc=0;float angle;
  if(s->stage==0){if(w(work+0x5d8)&0x80000000u||w(b->init->object_pool+0xacd0)){s->bound=0;s->frontier=0;return GH_PLAYER_FRAME_OK;}s->previous_left=number(w(p+0x60c));if(!isfinite(s->previous_left))return fail(s,0x108b0c,GH_PLAYER_FRAME_NUMERIC);int x=(int)(int8_t)work[0x1f0],y=(int)(int8_t)work[0x1f1];s->left_x=(int16_t)x;s->left_y=(int16_t)y;sf(p+0x60c,(float)(x*x+y*y));s->stage=1;}
  if(s->stage==1){int x=s->left_x,y=s->left_y;if(gh_game_angle_001f8180((float)-x,(float)y,&angle,b->numeric_policy,&pc))return fail(s,pc?pc:0x1f8180,GH_PLAYER_FRAME_UNSUPPORTED);sf(p+0x604,angle);sf(p+0x608,angle<0?-angle:angle);float current=number(w(p+0x60c));p[0x61c]=(uint8_t)(s->previous_left<=100&&current>100);p[0x61d]=(uint8_t)(s->previous_left<=10000&&current>10000);p[0x61f]=(uint8_t)(current>100);s->previous_right=number(w(p+0x618));if(!isfinite(s->previous_right))return fail(s,0x108c40,GH_PLAYER_FRAME_NUMERIC);int x2=(int)(int8_t)work[0x1f2],y2=(int)(int8_t)work[0x1f3];s->right_x=(int16_t)x2;s->right_y=(int16_t)y2;sf(p+0x618,(float)(x2*x2+y2*y2));s->stage=2;}
@@ -1787,6 +1836,11 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
  if(s->stage==15&&s->state_entry==0x11add8){gh_player_frame_status e=hurt_fall_0011add8(s);if(e)return e;s->stage=16;}
  if(s->stage==15&&s->state_entry==0x11b280){gh_player_frame_status e=hurt_rise_0011b280(s);if(e)return e;s->stage=16;}
  if(s->stage==15&&s->state_entry==0x11b5f8){gh_player_frame_status e=hurt_stagger_0011b5f8(s);if(e)return e;s->stage=16;}
+ if(s->stage==15&&s->state_entry==0x11a530){
+  gh_player_frame_status status=event_wait_0011a530(s);
+  if(status)return status;
+  s->stage=16;
+ }
  if(s->stage==15&&s->state_entry==0x10be18){gh_player_frame_status e=idle_frame(s);if(e)return e;s->stage=16;}
  if(s->stage==15&&s->state_entry==0x10cd38){
   gh_player_frame_status status=dodge_0010cd38(s);
@@ -1897,4 +1951,4 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
  }
  return fail(s,s->state_entry?s->state_entry:0x10931c,GH_PLAYER_FRAME_UNSUPPORTED);
 }
-gh_player_frame_status gh_game_player_frame_00108ab0(gh_game_player_frame*s,const gh_player_frame_bindings*b){if(!s||!b||!b->player||!b->player->view.bytes||b->player->view.size<GH_TITLE_PLAYER_BYTES||!b->work||!b->init)return GH_PLAYER_FRAME_ARGUMENT;if(s->bound&&!same(&s->b,b))return GH_PLAYER_FRAME_BUSY;if(!s->bound){s->b=*b;s->bound=1;s->stage=0;s->effect_pending=0;s->heat_stage=0;s->damage_stage=0;s->damage_region_hit=0;s->hurt_phase=0;s->give_index=s->give_phase=0;s->state_entry=0;s->idle_phase=0;s->pending_motion=(gh_player_motion_request){0};s->motion_step_complete=s->idle_end_prefix_done=s->idle_end_needs_random=0;s->input_started=s->post_take_index=0;s->input_result=0;s->post_state=(gh_game_player_post_state){0};s->wall_call=(gh_player_terrain_call){0};s->floor_call=(gh_player_terrain_call){0};s->sphere_call=(gh_terrain_sphere_call){.work=b->work};s->wall_report=(gh_scene_ray_report){0};s->floor_report=(gh_scene_ray_report){0};s->ground_pose=(gh_player_ground_pose_call){0};s->pose_solve=(gh_motion_solve){0};s->model_failure_latched=0;s->sequence_effect_index=0;s->opacity_call=(gh_player_opacity_call){0};s->tail=(gh_game_player_frame_tail){0};s->finish_model=(gh_actor_finish_model_call){0};s->walk=(gh_player_walk_call){0};s->run=(gh_player_run_call){0};}fenv_t env;if(feholdexcept(&env))return GH_PLAYER_FRAME_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_PLAYER_FRAME_NUMERIC;}gh_player_frame_status e=body(s);if(fesetenv(&env))return GH_PLAYER_FRAME_NUMERIC;return e;}
+gh_player_frame_status gh_game_player_frame_00108ab0(gh_game_player_frame*s,const gh_player_frame_bindings*b){if(!s||!b||!b->player||!b->player->view.bytes||b->player->view.size<GH_TITLE_PLAYER_BYTES||!b->work||!b->init)return GH_PLAYER_FRAME_ARGUMENT;if(s->bound&&!same(&s->b,b))return GH_PLAYER_FRAME_BUSY;if(!s->bound){s->b=*b;s->bound=1;s->stage=0;s->effect_pending=0;s->heat_stage=0;s->damage_stage=0;s->damage_region_hit=0;s->hurt_phase=s->script_wait_phase=0;s->give_index=s->give_phase=0;s->state_entry=0;s->idle_phase=0;s->pending_motion=(gh_player_motion_request){0};s->motion_step_complete=s->idle_end_prefix_done=s->idle_end_needs_random=0;s->input_started=s->post_take_index=0;s->input_result=0;s->post_state=(gh_game_player_post_state){0};s->wall_call=(gh_player_terrain_call){0};s->floor_call=(gh_player_terrain_call){0};s->sphere_call=(gh_terrain_sphere_call){.work=b->work};s->wall_report=(gh_scene_ray_report){0};s->floor_report=(gh_scene_ray_report){0};s->ground_pose=(gh_player_ground_pose_call){0};s->pose_solve=(gh_motion_solve){0};s->model_failure_latched=0;s->sequence_effect_index=0;s->opacity_call=(gh_player_opacity_call){0};s->tail=(gh_game_player_frame_tail){0};s->finish_model=(gh_actor_finish_model_call){0};s->walk=(gh_player_walk_call){0};s->run=(gh_player_run_call){0};}fenv_t env;if(feholdexcept(&env))return GH_PLAYER_FRAME_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_PLAYER_FRAME_NUMERIC;}gh_player_frame_status e=body(s);if(fesetenv(&env))return GH_PLAYER_FRAME_NUMERIC;return e;}

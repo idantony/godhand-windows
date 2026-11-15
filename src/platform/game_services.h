@@ -1,5 +1,6 @@
 #ifndef GH_GAME_SERVICES_H
 #define GH_GAME_SERVICES_H
+#include "../core/game_scene_at_step.h"
 #include "../core/game_start.h"
 #include "../core/game_init.h"
 #include "../core/game_stage.h"
@@ -193,6 +194,8 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services *,const gh
  const gh_boot_work *,const gh_game_actor_render_provider *,uint32_t *frontier);
 /* Borrow the same player and object resolver used by ordinary target selection. */
 gh_player_target_bindings gh_game_services_scene_targets(gh_game_services *);
+gh_scene_at_status gh_game_services_r105_jump_offer(void *,
+ const gh_scene_at_task_request *,uint32_t *frontier);
 gh_action_step_status gh_game_services_r105_scenery_action(void *,uint32_t,void *,uint32_t *);
 /* Inspect native script errors immediately after a real Scenario visit. */
 gh_action_step_status gh_game_services_r100_tutorial_action(gh_game_services *,void *,

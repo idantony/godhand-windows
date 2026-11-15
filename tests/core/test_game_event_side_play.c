@@ -50,6 +50,118 @@ static gh_game_event_status prefetch(void *context, const gh_event_audio_prefetc
     return status ? GH_EVENT_CALLEE : GH_EVENT_OK;
 }
 
+static void assert_ev04_scroll_mask(const gh_scene_meshes *meshes, uint32_t expected, uint32_t flag)
+{
+    unsigned selected = 0;
+    for (unsigned i = 0; i < meshes->constructed_count; ++i) {
+        const gh_scene_mesh_object *object;
+        CHECK(!gh_scene_meshes_object_at(meshes, i, &object));
+        const uint8_t *bytes = object->allocation.pointer;
+        const unsigned id = bytes[0x2fd];
+        const uint32_t match = id < 32 ? (expected >> (31 - id)) & 1 : 0;
+        CHECK(!!(word(bytes + 0x250) & flag) == match);
+        selected += match;
+    }
+    CHECK(!expected || selected);
+}
+
+static void test_ev04_scroll(gh_disc *disc, gh_heap *heap, gh_dvd_jobs *dvd,
+    gh_game_event *event, const gh_event_module *module, const uint8_t *elf, size_t elf_size,
+    const uint8_t *core_data, size_t core_size)
+{
+    event->fields.data_number = 4;
+    gh_event_link link = {0};
+    CHECK(!gh_game_event_link_002be890(&link, module, elf, elf_size));
+    CHECK(!gh_event_components_construct_00297680(&link.components, 4));
+
+    gh_event_resource resource = {0};
+    CHECK(!gh_game_event_resource_begin_00297540(&resource, event, dvd, heap));
+    int ready = 0;
+    for (unsigned i = 0; i < 8 && !ready; ++i) {
+        CHECK(!gh_dvd_pump(dvd));
+        CHECK(!gh_game_event_resource_poll_002975d0(&resource, &ready));
+    }
+    CHECK(ready && resource.file_bytes == 2841520);
+    gh_event_data_prefix data = {0};
+    uint32_t frontier;
+    int relative;
+    CHECK(!gh_event_data_bind_prefix_002977e8(&data, &link.components, &resource, &frontier));
+    CHECK(!gh_event_actor_cuts_bind_00297864(&data, &frontier));
+
+    size_t room_size;
+    uint8_t *room_data = load(disc, "st0/r002.dat", &room_size);
+    gh_bundle room;
+    CHECK(!gh_bundle_open(room_data, room_size, &room));
+    gh_game_effects *effects = calloc(1, sizeof(*effects));
+    uint8_t *esp = calloc(1, 0x100180), *emitters = calloc(1, 0x26060);
+    CHECK(effects && esp && emitters);
+    CHECK(!gh_game_effects_initialize_00305a68(effects, esp, 0x100180, emitters, 0x26060,
+        core_data, core_size, &room));
+    CHECK(!gh_event_data_bind_tail_00297880(&data, &link.components, register_effects, effects, &frontier));
+    gh_event_sequence_view track;
+    CHECK(!gh_event_sequence_at(&data, 10, &track) && track.count == 17 &&
+        track.resource_offset == 0x2b4640 && track.stride == 0x28);
+
+    gh_boot_work work = {0};
+    gh_room_pools pools = {0};
+    gh_game_world_light *light = calloc(1, sizeof(*light));
+    gh_stage_textures *textures;
+    gh_game_scene_tables tables = {0};
+    uint8_t serial;
+    gh_scene_meshes meshes = {.factory_serial = &serial};
+    CHECK(light && !gh_game_world_light_construct_002d6d80(light));
+    CHECK(!gh_game_world_light_initialize_with_heap_002d6f40(light, &room, heap));
+    CHECK(!gh_game_room_pools_initialize_002a5d80(&pools, &room, heap));
+    CHECK(!gh_stage_textures_create(&textures));
+    CHECK(!gh_scene_mesh_factory_serial_from_elf(elf, elf_size, &serial));
+    const gh_scene_mesh_construction_bindings bindings = {textures, light, elf, elf_size};
+    CHECK(!gh_scene_meshes_bind_construction(&meshes, &bindings));
+    CHECK(!gh_scene_meshes_construct_0031d1b0(&meshes, &tables, &work, &room, &pools, heap));
+    CHECK(meshes.constructed_count);
+    const gh_scene_mesh_object *saved;
+    CHECK(!gh_scene_meshes_object_at(&meshes, 0, &saved));
+    uint8_t *saved_bytes = saved->allocation.pointer;
+    uint32_t saved_flags = word(saved_bytes + 0x250) | 2;
+    put_word(saved_bytes + 0x250, saved_flags);
+    CHECK(!gh_event_scr_layer_init_00008948(&data, &pools, &meshes, &frontier, &relative));
+    CHECK(!(word(saved_bytes + 0x250) & 2));
+    assert_ev04_scroll_mask(&meshes, 0x38000000, 0x8000);
+
+    gh_event_component_view camera;
+    CHECK(!gh_event_component_at(&link.components, 1, &camera));
+    put_word(camera.bytes + 4, 0x00020000);
+    put_word(camera.bytes + 0xc, 0xbf800000);
+    CHECK(!gh_event_scr_layer_move_00008a40(&data, &pools, &meshes, &frontier, &relative));
+    assert_ev04_scroll_mask(&meshes, 0x78000000, 0x8000);
+    put_word(camera.bytes + 0xc, 0);
+    CHECK(!gh_event_scr_layer_move_00008a40(&data, &pools, &meshes, &frontier, &relative));
+    assert_ev04_scroll_mask(&meshes, 0x58000000, 0x8000);
+    put_word(camera.bytes + 4, 0x00080000); /* No cut 8 key, retains cut 7. */
+    CHECK(!gh_event_scr_layer_move_00008a40(&data, &pools, &meshes, &frontier, &relative));
+    assert_ev04_scroll_mask(&meshes, 0x78000000, 0x8000);
+    put_word(camera.bytes + 4, 0x00150000);
+    CHECK(!gh_event_scr_layer_move_00008a40(&data, &pools, &meshes, &frontier, &relative));
+    assert_ev04_scroll_mask(&meshes, 0, 0x8000);
+    put_word(camera.bytes + 4, 0x001600ff); /* Inactive camera uses origin. */
+    CHECK(!gh_event_scr_layer_move_00008a40(&data, &pools, &meshes, &frontier, &relative));
+    assert_ev04_scroll_mask(&meshes, 0, 0x8000);
+    CHECK(!gh_event_scr_layer_quit_00008af0(&data, &pools, &meshes, &frontier, &relative));
+    CHECK(word(saved_bytes + 0x250) == (saved_flags & ~0x8000u));
+    CHECK(word(track.records + 8) == 0x38000000);
+
+    CHECK(!gh_scene_meshes_release_prefix(&meshes));
+    gh_stage_textures_destroy(textures);
+    CHECK(!gh_game_room_pools_release(&pools));
+    CHECK(!gh_game_world_light_release_presets(light));
+    free(light);
+    free(effects);
+    free(esp);
+    free(emitters);
+    free(room_data);
+    CHECK(!gh_game_event_resource_abort(&resource));
+    puts("PASS EV04 original camera ScrollLayer keys in native R002 registry");
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     gh_disc *disc = NULL;
@@ -314,9 +426,10 @@ int main(int argc, char **argv) {
     free(effects);
     free(esp);
     free(emitters);
+    CHECK(!gh_game_event_resource_abort(&resource));
+    test_ev04_scroll(disc, heap, &dvd, &event, &module, elf, elf_bytes, core_data, core_size);
     free(core_data);
     free(room_data);
-    CHECK(!gh_game_event_resource_abort(&resource));
     CHECK(!gh_game_event_module_abort(&module));
     CHECK(!gh_heap_used(heap) && !gh_heap_destroy(heap));
     gh_disc_close(disc);

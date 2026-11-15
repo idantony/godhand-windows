@@ -15,7 +15,7 @@
 typedef struct {
     size_t frames;
     uint64_t hash;
-    float gain;
+    float gain,right_gain;
     unsigned active,stops,channels;
 } recorded_voice;
 
@@ -38,11 +38,11 @@ static uint64_t pcm_hash(const int16_t *pcm,size_t frames)
 static gh_voice_status record_play(gh_audio_output *output,const gh_adpcm_pcm *pcm,
     uint32_t rate,float left,float right,uint32_t *handle,unsigned channels)
 {
-    CHECK(output==(gh_audio_output *)&transport&&pcm&&pcm->samples&&pcm->frames&&rate==48000&&left==right);
+    CHECK(output==(gh_audio_output *)&transport&&pcm&&pcm->samples&&pcm->frames&&rate==48000);
     if(transport.fail_next){transport.fail_next=0;return GH_VOICE_PLATFORM;}
     CHECK(transport.count<sizeof(transport.voices)/sizeof(transport.voices[0]));
     transport.voices[transport.count]=(recorded_voice){pcm->frames,
-        pcm_hash(pcm->samples,pcm->frames*channels),left,1,0,channels};
+        pcm_hash(pcm->samples,pcm->frames*channels),left,right,1,0,channels};
     *handle=++transport.count;
     return GH_VOICE_OK;
 }
@@ -51,6 +51,13 @@ gh_voice_status __wrap_gh_audio_output_play(gh_audio_output *output,const gh_adp
     uint32_t rate,float left,float right,uint32_t *handle)
 {
     return record_play(output,pcm,rate,left,right,handle,1);
+}
+
+gh_voice_status __wrap_gh_audio_output_play_q12(gh_audio_output *output,const gh_adpcm_pcm *pcm,
+    uint16_t pitch,float left,float right,uint32_t *handle)
+{
+    CHECK(pcm->loop_first==815u*28u&&pcm->loop_frames==814u*28u&&pitch==1365);
+    return record_play(output,pcm,48000,left,right,handle,1);
 }
 
 gh_voice_status __wrap_gh_audio_output_play_stereo(gh_audio_output *output,const gh_adpcm_pcm *pcm,
@@ -79,8 +86,9 @@ gh_voice_status __wrap_gh_audio_output_stop(gh_audio_output *output,uint32_t han
 
 gh_voice_status __wrap_gh_audio_output_voice_gain(gh_audio_output *output,uint32_t handle,float left,float right)
 {
-    CHECK(output==(gh_audio_output *)&transport&&handle&&handle<=transport.count&&left==right);
+    CHECK(output==(gh_audio_output *)&transport&&handle&&handle<=transport.count);
     transport.voices[handle-1].gain=left;
+    transport.voices[handle-1].right_gain=right;
     return GH_VOICE_OK;
 }
 
@@ -110,7 +118,9 @@ static gh_se_voice_engine *new_engine(const gh_audio_registry *registry,gh_disc 
 static uint32_t request(gh_se_voice_engine *voices,int16_t program)
 {
     uint32_t handle=0;
-    CHECK(!gh_se_voice_request_origin(voices,2,program,-1,-1,0,0,&handle)&&handle);
+    gh_voice_status status=gh_se_voice_request_origin(voices,2,program,-1,-1,0,0,&handle);
+    if(status)fprintf(stderr,"origin %x status %d frontier %x\n",program,status,gh_se_voice_frontier(voices));
+    CHECK(!status&&handle);
     return handle;
 }
 
@@ -237,14 +247,14 @@ typedef struct {
 } gate_clip_case;
 
 static void check_gate_clip(gh_se_voice_engine *voices,gh_audio_registry *registry,
-    gh_disc *disc,const void *elf,size_t elf_bytes,const gate_clip_case *test)
+    gh_disc *disc,const void *elf,size_t elf_bytes,const char *archive,const gate_clip_case *test)
 {
     gh_sound_span afd;
     uint64_t offset,bytes;
     size_t index;
     CHECK(!gh_audio_external_sample(registry,2,test->row,&afd,&offset,&bytes)&&afd.size==32&&
           afd.data[2]==test->member&&offset==test->offset&&bytes==test->bytes);
-    CHECK(!gh_disc_find(disc,"se/r100.afs",&index));
+    CHECK(!gh_disc_find(disc,archive,&index));
     uint8_t *encoded=malloc((size_t)bytes);
     CHECK(encoded&&!gh_disc_read(disc,index,offset,encoded,(size_t)bytes));
     gh_adx_key key;
@@ -314,6 +324,46 @@ static void check_paired_player_grab(gh_audio_registry *registry,gh_disc *disc,
     CHECK(!model.sound_borrowers);
 }
 
+static void check_gate_local_cues(gh_se_voice_engine *voices,gh_sound_control *control)
+{
+    const unsigned before=transport.count;
+    const uint32_t duck=UINT32_C(0x04000000),ac=control->flags_ac|0x10u,b0=control->flags_b0|0x20u;
+    control->flags_ac=ac|duck;
+    control->flags_b0=b0|duck;
+    gh_se_voice_info moving,close;
+    const uint32_t p10=request(voices,0x10);
+    CHECK(!gh_sound_control_flush_se_002ca5d8(control,voices));
+    CHECK(control->flags_ac==(ac&~duck)&&control->flags_b0==(b0&~duck));
+    CHECK(!gh_se_voice_query(voices,p10,&moving)&&!moving.pending&&moving.channel==39);
+    const uint32_t p11=request(voices,0x11);
+    CHECK(!gh_se_voice_query(voices,p11,&close)&&close.pending&&close.sample_slot==6&&
+          close.rate==14000&&close.pitch_q12==1194&&close.adsr1==0x80ff&&close.adsr2==0x5fc0);
+    CHECK(control->flags_ac==(ac&~duck)&&control->flags_b0==(b0&~duck));
+    CHECK(gh_se_voice_update(voices)==GH_VOICE_UNSUPPORTED&&gh_se_voice_frontier(voices)==0x2cda80&&
+          transport.count==before+1);
+    CHECK(!gh_sound_control_flush_se_002ca5d8(control,voices));
+    CHECK(!gh_se_voice_query(voices,p11,&close)&&!close.pending&&close.channel==23);
+    CHECK(control->flags_ac==(ac|duck)&&control->flags_b0==(b0|duck));
+    CHECK(transport.count==before+2&&transport.voices[moving.native_voice-1].active&&
+          !transport.voices[moving.native_voice-1].stops);
+    recorded_voice *voice=transport.voices+close.native_voice-1;
+    const unsigned left=0x5a00u*(120u<<8)/0x7f00u/2u;
+    const unsigned right=0x5a00u*(100u<<8)/0x7f00u/2u;
+    CHECK(voice->channels==1&&voice->gain==(float)left/16384.0f&&voice->right_gain==(float)right/16384.0f);
+    CHECK(voice->frames==34964&&voice->hash==UINT64_C(0x206a67707738bcc4));
+    puts("PASS actual R105 gate movement and close cues coexist, channel gains, PCM, AC/B0 and completion ordering");
+    CHECK(!gh_sound_control_flush_se_002ca5d8(control,voices));
+    CHECK(control->flags_ac==(ac|duck)&&control->flags_b0==(b0|duck)&&transport.count==before+2);
+    voice->active=0;
+    CHECK(!gh_sound_control_flush_se_002ca5d8(control,voices));
+    CHECK(gh_se_voice_query(voices,p11,&close)==GH_VOICE_BOUNDS);
+    CHECK(control->flags_ac==(ac|duck)&&control->flags_b0==(b0|duck));
+    CHECK(!gh_sound_control_flush_se_002ca5d8(control,voices));
+    CHECK(control->flags_ac==(ac&~duck)&&control->flags_b0==(b0&~duck));
+    CHECK(!gh_se_voice_query(voices,p10,&moving)&&transport.voices[moving.native_voice-1].active&&
+          !transport.voices[moving.native_voice-1].stops);
+}
+
 int main(int argc,char **argv)
 {
     CHECK(argc==2);
@@ -349,11 +399,22 @@ int main(int argc,char **argv)
     };
     for(unsigned i=0;i<sizeof(gate_clips)/sizeof(gate_clips[0]);i++){
         voices=new_engine(registry,disc,&control,elf,elf_bytes);
-        check_gate_clip(voices,registry,disc,elf,elf_bytes,&gate_clips[i]);
+        check_gate_clip(voices,registry,disc,elf,elf_bytes,"se/r100.afs",&gate_clips[i]);
         gh_se_voice_destroy(voices);
     }
     check_paired_player_grab(registry,disc,&control,elf,elf_bytes,0x100);
     check_paired_player_grab(registry,disc,&control,elf,elf_bytes,0x105);
+    ses=read_asset(disc,"se/r105.ses",&ses_bytes);
+    CHECK(!gh_audio_commit_se_with_external_index(registry,2,ses,ses_bytes,disc,&token)&&
+        gh_audio_token_complete(registry,token));
+    free(ses);
+    const gate_clip_case r105_gate={0x32,2,1,1,48,159744,38992,69209};
+    voices=new_engine(registry,disc,&control,elf,elf_bytes);
+    check_gate_clip(voices,registry,disc,elf,elf_bytes,"se/r105.afs",&r105_gate);
+    gh_se_voice_destroy(voices);
+    voices=new_engine(registry,disc,&control,elf,elf_bytes);
+    check_gate_local_cues(voices,&control);
+    gh_se_voice_destroy(voices);
     free(elf);
     gh_audio_registry_destroy(registry);
     gh_disc_close(disc);

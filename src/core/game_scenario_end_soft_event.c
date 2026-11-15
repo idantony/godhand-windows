@@ -173,15 +173,21 @@ gh_game_event_status gh_soft_player_unsuspend_0012c7d0(
         }
         /* 41B6A0 descriptor at +60: adjust 0, +64: 14E930. */
         if (!object->bytes || object->size < 0x254 ||
-            object->original_vtable214 != 0x41b6a0 ||
-            word(object->bytes + 0x214) != 0x41b6a0)
+            object->original_vtable214 != word(object->bytes+0x214))
             return GH_EVENT_UNSUPPORTED;
+        /* 0376's virtual 2A9350 also carries the 5A0 suspend bit. */
+        const int paper=i==3&&object->size>=0x5a4&&object->original_vtable214==0x42aa98&&
+            (word(object->bytes+0x2fc)>>16)==0x376;
+        if(object->original_vtable214!=0x41b6a0&&!paper)return GH_EVENT_UNSUPPORTED;
     }
 
     and_word(player->bytes + 0x250, 0xffff7fffu);
     and_word(player->bytes + 0x5a0, 0xfffffff7u);
-    for (unsigned i = 0; i < 4; ++i)
-        if (related[i]) and_word(related[i]->bytes + 0x250, 0xffff7fffu);
+    for (unsigned i=0;i<4;++i) {
+        if(!related[i])continue;
+        and_word(related[i]->bytes+0x250,0xffff7fffu);
+        if(related[i]->original_vtable214==0x42aa98)and_word(related[i]->bytes+0x5a0,0xfffffff7u);
+    }
     *frontier = 0;
     return GH_EVENT_OK;
 }

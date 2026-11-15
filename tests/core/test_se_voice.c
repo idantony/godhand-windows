@@ -85,6 +85,30 @@ int main(int argc,char **argv){
  end=GetTickCount64()+2500;
  do{C(gh_se_voice_update(engine)==GH_VOICE_OK);active_count=0;for(unsigned k=1;k<3;++k)if(gh_se_voice_query(engine,handle[k],&info)==GH_VOICE_OK)++active_count;if(!active_count)break;Sleep(10);}while(GetTickCount64()<end);
  C(!active_count); /* real logo voice EOS, not a timer-acknowledged event */
+ gh_se_voice_destroy(engine);
+ /* The actual R105 moving gate uses a bank2 local repeating sample. */
+ C(!gh_disc_find(disc,"se/r105.ses",&index)&&!gh_disc_entry_at(disc,index,&file));
+ data=malloc((size_t)file.size);
+ C(data&&!gh_disc_read(disc,index,0,data,(size_t)file.size)&&
+   !gh_audio_commit_se_with_external_index(registry,2,data,(size_t)file.size,disc,&token));
+ free(data);
+ C(!gh_se_voice_create(registry,output,&defaults,&engine)&&!gh_se_voice_bind_origin_seh(engine,NULL,0));
+ uint32_t gate=0;
+ status=gh_se_voice_request_origin(engine,2,0x10,-1,-1,0,0,&gate);
+ if(status)fprintf(stderr,"R105 gate loop request %d at %08x\n",status,gh_se_voice_frontier(engine));
+ C(!status&&gate&&!gh_se_voice_query(engine,gate,&info));
+ C(info.pending&&info.sample_slot==5&&info.rate==16000&&info.pitch_q12==1365&&
+   info.frames==(815u+814u)*28u&&info.level_q14==0x5a00u*(65u<<8)/0x7f00u/2u);
+ C(!gh_se_voice_update(engine)&&!gh_se_voice_query(engine,gate,&info)&&!info.pending&&info.channel==39);
+ uint64_t gate_played=0;
+ int gate_active=0;
+ for(unsigned wait=0;wait<600&&gate_played<=815u*28u;wait++){
+  Sleep(5);
+  C(!gh_audio_output_active(output,info.native_voice,&gate_active,&gate_played));
+ }
+ C(gate_active&&gate_played>815u*28u&&!gh_se_voice_stop_bank_002cbc58(engine,2,0)&&!gh_se_voice_update(engine));
+ C(!gh_se_voice_query(engine,gate,&info)&&info.retiring&&!info.native_voice);
+ puts("PASS actual R105 bank2 gate loop, original ADPCM markers and native SamplesPlayed");
  gh_se_voice_destroy(engine);gh_audio_output_destroy(output);gh_audio_registry_destroy(registry);gh_disc_close(disc);
  printf("PASS actualMC/logo program->sample->nativePCM/ADSR->muted realXAudio2 voices; LIFO, five channels, equalpriority replacement, completion/reuse; progress%llu\n",(unsigned long long)progress);return 0;
 }
