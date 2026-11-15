@@ -20,6 +20,7 @@ typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;
  const float *atan_coeff;} gh_effect_create_bindings;
 typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_request request;
  gh_effect_view est;uint32_t stage,row,count,slot,serial,frontier,config_flags;gh_game_mt *random_identity;int original_return;
+ const gh_title_player_view *attachment_selector;
  const gh_title_player_view *event_row_actor;const gh_actor_model *event_row_model;
  uint8_t active,complete,configuration_305e88,configuration_2fa158,configuration_nested_group;
  uint32_t configuration_nested_scale,configuration_nested_flags;
@@ -28,6 +29,8 @@ typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_req
  uint8_t configuration_positioned,configuration_player_stun,configuration_death_part_zero,configuration_05288;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
+gh_effect_status gh_effect_create_r101_weapon_002a8608(gh_effect_create_call *,
+ const gh_title_player_view *weapon,const gh_title_player_view *selector,uint32_t index,uint32_t scale);
 /* Only the known non-NULL305E88 configuration (unit scales/VF0 vectors,
  * flags40, actorNULL, mode=index+2200). Caller still owns the414 mark. */
 /* Original explicit config from 2F1D3C; this bounded entry supports group >0
@@ -80,6 +83,7 @@ int gh_effect_devil_emitter_is_bound(const gh_game_effects *,const gh_effect_emi
 int gh_effect_emad_emitter_is_bound(const gh_game_effects *,const gh_effect_emitter_view *);
 int gh_effect_player_stun_row(gh_effect_view);
 int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *);
+int gh_effect_r101_weapon_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
 int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *);

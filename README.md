@@ -41,6 +41,13 @@ A separate Windows title-load replay uses an original-format R101 test save,
 confirms the original chapter map and presents R101 at scene 461. It runs to
 the planned 800-tick limit with 187 player updates and zero renderer errors.
 Independent native CPU replays validate left-stick movement and a Square attack.
+A longer Windows replay uses the original pad mappings to open the R101 gate
+and walk into the corridor beyond it.
+
+A controlled native CPU replay in R105 begins with a saved-open gate and Gene
+at the original exit. Native audio plays the gate sound, the original exit
+loads R002, and the next event initializes its audio and camera track. The
+R002 cutscene actor initialization is still in development.
 
 ### Verified progress
 
@@ -212,7 +219,10 @@ R100 检查点，重载后接收移动和方块攻击。R100 首战结束后从�
 
 另一轮 Windows 回放从标题读取 R101 的原版格式测试档，经原版章节地图确认，在第 461 帧呈现
 R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染无报错。独立的无画面回放也
-验证了摇杆移动和方块攻击。
+验证了摇杆移动和方块攻击。更长的 Windows 回放使用原版手柄映射打开 R101 的门，并走进门后的走廊。
+
+一轮受控的原盘无画面回放从 R105 已开门的存档状态开始，并把 Gene 放在原版出口。原生音频
+播放开门声，原版出口载入 R002，随后初始化下一段过场的音频和镜头轨道。R002 的过场角色初始化仍在开发。
 
 ### 已验证的进展
 

@@ -22,7 +22,8 @@ typedef struct {gh_actor_motion_bindings b;gh_motion_view motion;size_t sequence
  gh_motion_cache caches[255];uint32_t stage,frontier,detail;size_t release_index;
  uint16_t flags;uint8_t bound,complete,sequence_valid;
  uint32_t start_frame_bits,blend_frames,step_rate_bits;float step_dt,step_ratio;uint8_t step_stage;
- uint32_t sequence_stage,sequence_index,sequence_rate_bits;float sequence_time,sequence_window;gh_motion_sound_request pending_sound;uint16_t sequence_variations;uint8_t sequence_pending,sequence_source_flags,sequence_costume_override,sequence_effect_gate;} gh_actor_motion;
+ uint32_t sequence_stage,sequence_index,sequence_rate_bits;float sequence_time,sequence_window;gh_motion_sound_request pending_sound;uint16_t sequence_variations;uint8_t sequence_pending,sequence_source_flags,sequence_costume_override,sequence_effect_gate;
+ const gh_title_player_view *sequence_held_weapon;} gh_actor_motion;
 /* Actual2A8578 initialzero-blend/start0 binding. Secondoffset is RAW a2 candidate, not forcedSEQ:
  * sameMTB3 candidate produces absentSEQ through actual2C7F88; SIZE_MAX isNULL.
  * Includes originaloldSEQ release,

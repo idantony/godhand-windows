@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T09:34:44.091948+00:00",
-  "stage": "native-windows-r100-post-victory-and-r101-saved-scene",
+  "verified_utc": "2026-11-15T10:06:32+00:00",
+  "stage": "native-windows-r101-gate-and-r002-event-initialization",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1255,6 +1255,26 @@
     "exit_tick": 800,
     "exit_code": 0,
     "first_missing_original_operation": null
+  },
+  "native_windows_r101_gate": {
+    "scope": "Original-format test save, original mapped pad movement and the R101 gate",
+    "room": "0101",
+    "gate_opened_and_corridor_entered": true,
+    "bounded_exit_tick": 835,
+    "bounded_exit_code": 3,
+    "player_updates_completed": 222,
+    "runtime_or_render_error_observed": false
+  },
+  "native_cpu_r105_to_r002_event": {
+    "scope": "Controlled saved-open gate and authored exit position, original Circle input, room transition and reserved event initialization",
+    "from_room": "0105",
+    "to_room": "0002",
+    "gate_audio_queued": true,
+    "event_number": 4,
+    "event_disc_audio_initialized": true,
+    "event_camera_track_initialized": true,
+    "first_missing_original_operation": {"module": "event overlay", "address": "000004D0"},
+    "r002_windows_presentation_verified": false
   },
   "native_windows_r100_tutorial": {
     "scope": "Tutorial 1, actual controller approach, Circle open and Cross close",

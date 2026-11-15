@@ -45,6 +45,7 @@ static int authored_actor_scale(const gh_esp_create_call *c,float scale)
     !gh_effect_create_emitter_at(c->b.storage.effects,c->emitter_slot,&emitter)&&
     emitter.serial==c->emitter_serial&&(gh_effect_em00_attack_emitter_is_bound(&emitter)||
     gh_effect_stamp19_attack_part_is_bound(&emitter)||
+    gh_effect_r101_weapon_emitter_is_bound(&emitter)||
     gh_effect_player_attachment_emitter_is_bound(&emitter)||
     gh_effect_devil_emitter_is_bound(c->b.storage.effects,&emitter));
 }

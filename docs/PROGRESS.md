@@ -4,6 +4,26 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R101 gate on Windows and R002 event initialization
+
+The Windows title-load replay confirms the chapter map and uses original mapped
+pad input to open the R101 gate and enter the corridor. The bounded replay
+finishes at tick 835 with 222 player updates and no renderer or window errors.
+
+In an independent native CPU replay, the original R105 exit receives Circle
+from a controlled saved-open state, with Gene placed at the authored exit.
+The real gate voice is queued on the native audio service. The original
+transition loads R002 and starts reserved Event 04, whose disc audio and
+camera track initialize. The replay reaches the original actor load callback
+at event overlay offset `0x04D0`. R002 Windows presentation remains pending.
+
+Windows 从原版章节地图读档，按原版手柄映射打开 R101 的门并走进门后走廊。回放在预定的
+第 835 tick 结束，完成 222 次玩家更新，渲染与窗口均无报错。
+
+另一条原盘无画面回放从 R105 已开门的存档状态开始，将 Gene 放在原版出口并按圆圈。原生
+音频服务接收开门声，原版房间切换载入 R002 并启动预定的 EV04。过场音频和镜头轨道完成
+初始化，回放推进到过场模块原版角色载入回调 `0x04D0`。R002 的 Windows 画面仍待验证。
+
 ## R100 post-battle event and saved R101 presented on Windows
 
 The recorded New Game route presents 500 more native frames after both R100

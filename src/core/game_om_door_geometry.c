@@ -14,7 +14,8 @@ static int initialized_door(const gh_om_door_geometry *state)
 {
     return state&&state->complete&&state->object&&state->owner&&
            state->object->view.bytes&&state->object->view.size>=0x648&&
-           (state->object->source.type==0x300||state->object->source.type==0x354);
+           (state->object->source.type==0x300||state->object->source.type==0x354||
+            state->object->source.type==0x313||state->object->source.type==0x330);
 }
 
 gh_scene_placement_status gh_om_door_set_lock_001bd178(gh_om_door_geometry *state,int on)
