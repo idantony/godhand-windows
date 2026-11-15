@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T15:23:17+00:00",
-  "stage": "native-windows-r102-checkpoint-reload-and-movement",
+  "verified_utc": "2026-11-15T18:40:52+00:00",
+  "stage": "native-windows-r102-later-combat-and-midroom-gate",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1443,5 +1443,44 @@
     "world_gpu_error": 0,
     "effect_post_error": 0,
     "window_error": 0
+  },
+  "native_cpu_r102_midroom_gate": {
+    "scope": "Original gate using an isolated card fixture with prefilled defeat conditions",
+    "prefilled_defeat_count": 6,
+    "prefilled_defeated_enemy_stamp": 16,
+    "original_reinforcements": 5,
+    "camera_event_completed": true,
+    "collision_cleared": true,
+    "door_panels_opened": true,
+    "gate_object_retired": true,
+    "room_frames": 120,
+    "frontier": "00000000",
+    "natural_defeat_route_verified": false,
+    "room_exit_verified": false
+  },
+  "native_cpu_r102_new_game_regression": {
+    "scope": "New Game native CPU scheduler and packets",
+    "room": "0102",
+    "tick_cap": 8000,
+    "room_frames": 1113,
+    "frontier": "00000000"
+  },
+  "native_windows_r102_later_combat": {
+    "scope": "Original title load and mapped replay with Direct3D enabled for the later encounter",
+    "room": "0102",
+    "presented_room_frames": 88,
+    "enemy_stamp": 23,
+    "attack_tick": 1874,
+    "hit_tick": 1907,
+    "player_hp_before": 45,
+    "player_hp_after": 36,
+    "recovery_tick": 1938,
+    "recovery_selector": "6C",
+    "capture_pairs": 64,
+    "capture_pairs_matching_independent_build": 64,
+    "renderer_error": 0,
+    "world_gpu_error": 0,
+    "window_error": 0,
+    "muted": true
   }
 }

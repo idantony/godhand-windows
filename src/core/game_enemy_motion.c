@@ -24,6 +24,8 @@ gh_actor_motion_status gh_enemy_motion_initialize_002036b0(gh_enemy_motion*s,gh_
     selection_pc=0x203a18;status=gh_enemy202_appearance4_select_00203a18(&e->request,r,&selected);break;
    case 5:
     selection_pc=0x203b3c;status=gh_enemy202_appearance5_select_00203b3c(&e->request,r,&selected);break;
+   case 6:
+    selection_pc=0x203c78;status=gh_enemy202_appearance6_select_00203c78(&e->request,r,&selected);break;
    case 9:
     selection_pc=0x20393c;status=gh_enemy202_appearance9_select_0020393c(&e->request,r,&selected);break;
    default:

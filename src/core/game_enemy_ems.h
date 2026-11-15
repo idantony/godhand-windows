@@ -99,6 +99,8 @@ gh_actor_motion_status gh_enemy_ems_set_actor_suspend_00275308(const gh_enemy_em
     const gh_game_init_state *,const gh_game_title_player *,int suspend,uint32_t *);
 gh_actor_motion_status gh_enemy_ems_set_stamp_suspend_00295bc0(const gh_enemy_ems *,
     const gh_game_init_state *,uint8_t stamp,int suspend,uint32_t *frontier);
+gh_actor_motion_status gh_enemy_ems_set_stamp_lock_off_00295c10(const gh_game_init_state *,
+    uint8_t stamp,int enabled,uint32_t *frontier);
 gh_actor_motion_status gh_enemy_ems_set_stamp_alpha_00296230(const gh_enemy_ems *,
     const gh_game_init_state *,uint8_t stamp,int enabled,uint32_t *frontier);
 /* One cEmWrap SetPos on a registered weaponless EM02. The wrapper applies
@@ -119,6 +121,13 @@ gh_actor_motion_status gh_enemy_ems_set_position_00276228(gh_enemy_ems *,
 /* Original Goto wrapper for the mode0/mode2 deferred and mode9 immediate R100 calls. */
 gh_actor_motion_status gh_enemy_ems_set_stamp_goto_00295f80(const gh_enemy_ems *,
     const gh_game_init_state *,uint8_t stamp,const float destination[3],uint32_t mode,int immediate,uint32_t *frontier);
+/* Original non-mode15 26E988 route fields, with the authored timer bits and
+ * immediate-state argument. Returning here does not execute the Move FSM. */
+gh_actor_motion_status gh_enemy_ems_set_stamp_goto_timed_00295f80(const gh_enemy_ems *,
+    const gh_game_init_state *,uint8_t stamp,const float destination[3],uint32_t mode,
+    int immediate,uint32_t timer_bits,uint32_t *frontier);
+gh_actor_motion_status gh_enemy_ems_check_stamp_goto_00296018(const gh_game_init_state *,
+    uint8_t stamp,int *finished);
 /* R100 AT2's original unsuspend, StartAction, mode0 Goto and SetKeepPos. */
 gh_actor_motion_status gh_enemy_ems_start_goto_at2(const gh_enemy_ems *,
     const gh_game_init_state *,uint8_t stamp,const float destination[3],uint32_t *frontier);

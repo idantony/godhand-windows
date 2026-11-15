@@ -2,6 +2,7 @@
 #define GH_R102_ROOM_H
 
 #include "../core/game_om_factory.h"
+#include "../core/game_enemy_ems.h"
 #include "../core/game_room_module.h"
 #include "r100_init.h"
 #include "../core/scene_at_units.h"
@@ -25,6 +26,8 @@ typedef struct {
     gh_room_state *room;
     gh_game_init_state *init;
     gh_scene_at_manager *areas;
+    gh_enemy_ems *const *enemies;
+    const gh_title_player_view *player;
     gh_native_task_entry saved_route;
     void *saved_context;
 } gh_r102_area11_bindings;
@@ -34,15 +37,17 @@ typedef struct {
     gh_heap *heap;
     gh_om_factory *objects;
     gh_r207_allocation work;
-    gh_om_runtime_create weapon, mount;
+    gh_om_runtime_create weapon, mount, ticket;
     gh_object_resource_load item3bc_load;
+    gh_enemy_ems_set_call mount_spawn;
+    gh_game_title_player *mount_enemy;
     gh_r102_om046_bindings task;
     gh_r102_area11_bindings area11;
     uint32_t task_frontier;
     int32_t task_slot, area11_slot;
     uint8_t prefix_complete, om046_stage, task_registered, task_finished, area11_registered;
     uint8_t followup_stage, om094_complete, mount_complete, item3bc_complete, tail_stage;
-    uint8_t saved_intro_registered;
+    uint8_t saved_intro_registered, mount_spawn_step;
 } gh_r102_room;
 
 /* The first original R102 Init call sequence, through 0250. The remaining
@@ -61,12 +66,13 @@ gh_scene_status gh_r102_room_register_om046_00000898(gh_r102_room *,
  * and continues to the next original task registration at 0370. */
 gh_scene_status gh_r102_room_hide_om095_00000348(gh_r102_room *,gh_r100_om_scalar_view,
     void *context,uint32_t *frontier);
-/* Original 0370 registers the 2508 story task. The original first path
- * disables lock-on for stamp 7 and waits until Gene contacts AT 0B. */
+/* Original 0370 registers the 2508 story task for first AT 0B contact
+ * and the separate 23B8 path when re-entering from RoomSave. */
 gh_scene_status gh_r102_room_register_area11_00002508(gh_r102_room *,
     const gh_r102_area11_bindings *,uint32_t *frontier);
 /* Create and initialize the original 0353 at REL0488. */
 gh_scene_status gh_r102_room_create_mount_00000488(gh_r102_room *,uint32_t *frontier);
+gh_scene_status gh_r102_room_mount_reinforcements_00002900(gh_r102_room *,uint32_t *frontier);
 
 /* Main SNR symbol 434 (g_DataManager) and symbol 331 (RoomHeap)
  * feed the original referenced loadWait(kind3BC) at REL0520. */

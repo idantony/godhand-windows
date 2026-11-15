@@ -230,6 +230,9 @@ gh_actor_motion_status gh_enemy_timers_with_weapon_00205ae4(gh_enemy_timers*s,
     if(items==1&&e->request.dependency_kind==0x203&&e->request.appearance==0&&
        (e->request.entry_number==2||(e->b.work->room==0x101&&e->request.entry_number==13)))
      kind=0x361;
+    else if(items==1&&e->b.work->room==0x102&&e->request.dependency_kind==0x200&&
+       e->request.entry_number==0x0a&&e->request.appearance==9)
+     kind=0x361; /* Original 205B00 and 205B10 pass OM0361 for bit 1. */
     else if(items==2&&e->request.dependency_kind==0x202&&e->request.entry_number==16&&e->request.appearance==0)
      kind=0x362;
     else if(items==4&&e->request.dependency_kind==0x202&&e->request.entry_number==18&&e->request.appearance==9)

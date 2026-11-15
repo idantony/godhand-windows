@@ -33,6 +33,9 @@ gh_actor_model_status gh_enemy202_appearance2_select_00203c38(
 /* Actual R100 appearance-5 rows and their shared motion directory. */
 gh_actor_model_status gh_enemy202_appearance5_select_00203b3c(
     const gh_enemy_request *, const gh_object_view *, gh_enemy_initial_motion_selection *);
+/* Actual R102 353 passengers select the original airborne motion. */
+gh_actor_model_status gh_enemy202_appearance6_select_00203c78(
+    const gh_enemy_request *, const gh_object_view *, gh_enemy_initial_motion_selection *);
 /* R100 appearance9 uses the dependency's already selected directory. */
 gh_actor_model_status gh_enemy202_appearance9_select_0020393c(
     const gh_enemy_request *, const gh_object_view *, gh_enemy_initial_motion_selection *);

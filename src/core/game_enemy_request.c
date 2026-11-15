@@ -33,6 +33,24 @@ static gh_actor_motion_status find_room_enemy_002bef60(const gh_room_state *room
     return GH_ACTOR_MOTION_OK;
 }
 
+gh_actor_motion_status gh_enemy_set_data_position_00295380(const gh_room_state *room,
+    uint16_t stamp,const float position[3])
+{
+    if(!position)return GH_ACTOR_MOTION_ARGUMENT;
+    uint8_t *record;
+    const gh_actor_motion_status status=find_room_enemy_002bef60(room,stamp,&record);
+    if(status||!record)return status;
+    uint16_t encoded[3];
+    for(size_t i=0;i<3;++i){
+        uint32_t bits,frontier;
+        memcpy(&bits,position+i,sizeof(bits));
+        if(gh_em_quantize_chopzero_reference(bits,0,encoded+i,&frontier))
+            return GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    memcpy(record,encoded,sizeof(encoded));
+    return GH_ACTOR_MOTION_OK;
+}
+
 gh_actor_motion_status gh_enemy_set_data_appearance_00295458(const gh_room_state *room,
     uint16_t stamp,uint8_t appearance)
 {

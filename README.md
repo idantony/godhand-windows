@@ -63,6 +63,13 @@ frames with matching world and HUD-composited images. In a separate CPU
 replay from New Game, the same enemy's counterattack lowers Gene from 100
 to 91 HP.
 
+A later R102 title-load replay presents 88 Direct3D frames covering an enemy
+attack, Gene's hit reaction at 45 to 36 HP, and the enemy's recovery. A CPU
+test starts with the mid-room gate's defeat conditions set in the card and
+verifies the gate sequence with five reinforcements over 120 room frames.
+The integrated New Game CPU replay reaches 1,113 R102 room frames at its
+planned limit. The normal R102 exit is still in development.
+
 Native CPU replays also verify R100's original Game Over and Retry flow and
 R101's box throw and 200 G pickup. R100 reloads with 100 HP and continues
 for 120 gameplay frames. A longer R101 replay runs for 4,494 native CPU
@@ -261,6 +268,10 @@ EV04 结尾的原版保存菜单已写出有效的 R102 存档。重新启动后
 还验证了 R102 首次近战命中，方块攻击将目标敌人的生命值从 74 降到 71，并播放原版受击动作。
 两次回放各捕获 32 个连续的 Direct3D 帧，对应的场景和 HUD 合成画面逐帧一致。
 另一轮从新游戏开始的 CPU 回放验证了同一敌人的反击，Gene 的生命值从 100 降到 91。
+
+后续 R102 读档回放呈现了 88 个 Direct3D 帧，覆盖敌人攻击、Gene 从 45 HP 降到 36 HP 的
+受击反应，以及敌人收招。CPU 测试用预置击败条件的存档验证了中段门和五个增援，运行了 120 个
+房间帧。合并版本的新游戏 CPU 回放在 1,113 个 R102 房间帧达到预定上限。R102 的正常离场仍在开发。
 
 原生 CPU 回放验证了 R100 的原版 Game Over 和重试，以及 R101 的投箱和拾取 200 金币。
 R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101 回放运行了 4,494 个原生 CPU 帧，

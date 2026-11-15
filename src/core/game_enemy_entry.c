@@ -18,8 +18,8 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
      !((r->dependency_kind==0x2a2&&r->entry_number==6)||
        (r->dependency_kind==0x2a3&&r->entry_number==14))))return fail(s,0x2905d0);
  }else if(profile==SCENERY_ENTRY){
-  if(b->work->room!=0x105||r->object_kind!=0x2ad||r->dependency_kind!=0x2ad||
-     r->entry_number!=63||kind!=0||argument)return fail(s,0x2905d0);
+  if(!gh_enemy2ad_is_room_supported_profile(r,b->work->room)||kind!=0||argument)
+   return fail(s,0x2905d0);
  }else if(profile==DEVIL_ENTRY){
   if(r->object_kind!=0x220||r->dependency_kind!=0x220||b->work->room!=0x100||
      r->flags!=0x400000||r->entry_number!=0xff||r->appearance||r->dependency_flags||

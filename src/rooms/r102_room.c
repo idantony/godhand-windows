@@ -225,21 +225,10 @@ static void wait_for_area11(void *context,int32_t argument)
             task->saved_context,0,&slot,&frontier))state->task_frontier=frontier?frontier:0x2564;
         return;
     }
-    gh_game_title_player *actor;
-    if(gh_enemy_manager_get_00290868(task->init,7,&actor)){
-        state->task_frontier=0x295978;
+    uint32_t frontier=0;
+    if(gh_enemy_ems_set_stamp_lock_off_00295c10(task->init,7,1,&frontier)){
+        state->task_frontier=frontier;
         return;
-    }
-    if(actor&&actor->view.original_kind4ac==0x42c7f0){
-        if(!actor->view.bytes||actor->view.size<0x16d8){
-            state->task_frontier=0x276090;
-            return;
-        }
-        uint8_t *lock=actor->view.bytes+0x16d4;
-        uint32_t lock_flags;
-        memcpy(&lock_flags,lock,sizeof(lock_flags));
-        lock_flags|=0x200000u;
-        memcpy(lock,&lock_flags,sizeof(lock_flags));
     }
     for(;;){
         gh_at_native_unit unit;
@@ -261,7 +250,46 @@ static void wait_for_area11(void *context,int32_t argument)
     memcpy(&flags,task->room->active+4,sizeof(flags));
     flags|=0x01000000u;
     memcpy(task->room->active+4,&flags,sizeof(flags));
-    state->task_frontier=0x25f8; /* Original GetCenterPos AT 19, then SetEm. */
+    gh_at_native_unit target;
+    float position[3]={0};
+    if(gh_scene_at_find_id_002c3118(task->areas,0x19,&target)||
+       gh_scene_at_center_002c0e78(target,position)){
+        state->task_frontier=0x25f8;
+        return;
+    }
+    gh_enemy_ems *enemies=task->enemies?*task->enemies:NULL;
+    gh_game_title_player *spawned;
+    gh_enemy_ems_set_call set={0};
+    if(gh_enemy_ems_set_002952d0(enemies,&set,0x17,&spawned,&frontier)){
+        state->task_frontier=frontier?frontier:0x2952d0;
+        return;
+    }
+    uint32_t count;
+    memcpy(&count,state->work.pointer,sizeof(count));
+    ++count;
+    memcpy(state->work.pointer,&count,sizeof(count));
+    if(gh_enemy_ems_set_stamp_goto_00295f80(enemies,task->init,0x17,position,2,0,&frontier)||
+       gh_enemy_ems_start_stamp_action_00295ce8(enemies,task->init,7,&frontier)||
+       gh_enemy_ems_set_stamp_lock_off_00295c10(task->init,7,0,&frontier)){
+        state->task_frontier=frontier;
+        return;
+    }
+    const float saved_position[]={-11.7f,0.1f,-4.88f};
+    if(gh_enemy_set_data_position_00295380(task->room,7,saved_position)){
+        state->task_frontier=0x295380;
+        return;
+    }
+    if(gh_task_threads_sleep(task->threads,30)){
+        state->task_frontier=0x2d5aa0;
+        return;
+    }
+    if(!task->player||!task->player->alias_f0){
+        state->task_frontier=0x26c0;
+        return;
+    }
+    memcpy(position,task->player->alias_f0,sizeof(position));
+    if(gh_enemy_ems_set_stamp_goto_00295f80(enemies,task->init,7,position,2,0,&frontier))
+        state->task_frontier=frontier;
 }
 
 gh_scene_status gh_r102_room_register_area11_00002508(gh_r102_room *state,
@@ -280,6 +308,7 @@ gh_scene_status gh_r102_room_register_area11_00002508(gh_r102_room *state,
            state->area11.scenario.bytes!=bindings->scenario.bytes||
            state->area11.scenario.size!=bindings->scenario.size||
            state->area11.init!=bindings->init||state->area11.areas!=bindings->areas||
+           state->area11.enemies!=bindings->enemies||state->area11.player!=bindings->player||
            state->area11.saved_route!=bindings->saved_route||state->area11.saved_context!=bindings->saved_context)
             return GH_SCENE_ARGUMENT;
         *frontier=0;
@@ -332,6 +361,41 @@ gh_scene_status gh_r102_room_create_mount_00000488(gh_r102_room *state,uint32_t 
     return GH_SCENE_OK;
 }
 
+/* 1A7EC0 seeks the first FF byte from +610, returning to slot zero
+ * when the source index exceeds 15. A full original queue is a normal result. */
+static void queue_mount_stamp(uint8_t *actor,uint8_t stamp)
+{
+    for(unsigned i=0;i<16;++i){
+        const unsigned index=(unsigned)actor[0x610]+i;
+        uint8_t *slot=actor+0x600+(index<16?index:0);
+        if(*slot==UINT8_MAX){
+            *slot=stamp;
+            ++actor[0x612];
+            return;
+        }
+    }
+}
+
+gh_scene_status gh_r102_room_mount_reinforcements_00002900(gh_r102_room *state,uint32_t *frontier)
+{
+    if(!frontier)return GH_SCENE_ARGUMENT;
+    *frontier=0x2900;
+    if(!state||!state->work.pointer||!state->mount_complete)return GH_SCENE_ARGUMENT;
+    gh_om_object *mount=state->mount.object;
+    if(!mount||!mount->registered||!mount->runtime_created||mount->runtime_kind!=0x353||
+       !mount->view.bytes||mount->view.size<0x630||mount->view.original_vtable214!=0x4275c8)
+        return GH_SCENE_UNSUPPORTED;
+    uint8_t *actor=mount->view.bytes;
+    for(uint8_t stamp=0x20;stamp<=0x22;++stamp)queue_mount_stamp(actor,stamp);
+    uint32_t count;
+    memcpy(&count,state->work.pointer,sizeof(count));
+    count+=3;
+    memcpy(state->work.pointer,&count,sizeof(count));
+    if(actor[0x612])actor[0x615]=(uint8_t)(actor[0x615]+3u); /* Original 1A7F20. */
+    *frontier=0;
+    return GH_SCENE_OK;
+}
+
 gh_scene_status gh_r102_room_preload_00000520(gh_r102_room *state,uint32_t *frontier)
 {
     if(!frontier)return GH_SCENE_ARGUMENT;
@@ -361,7 +425,8 @@ gh_scene_status gh_r102_room_preload_00000520(gh_r102_room *state,uint32_t *fron
 gh_scene_status gh_r102_room_release_prefix(gh_r102_room *state)
 {
     if(!state||(state->objects&&(state->objects->runtime_pending==&state->weapon||
-       state->objects->runtime_pending==&state->mount)))return GH_SCENE_ARGUMENT;
+       state->objects->runtime_pending==&state->mount||
+       state->objects->runtime_pending==&state->ticket)))return GH_SCENE_ARGUMENT;
     if(state->work.pointer&&gh_heap_release(state->heap,state->work))return GH_SCENE_CALLEE;
     *state=(gh_r102_room){0};
     return GH_SCENE_OK;

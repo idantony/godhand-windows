@@ -117,6 +117,19 @@ static int is_r101_appearance0_profile(const gh_enemy_request *request)
          (request->entry_number==15&&request->dependency_kind==0x200&&!request->flags));
 }
 
+static int is_r102_mount_stamp(const gh_enemy_request *request)
+{
+    static const uint16_t dependency[]={0x202,0x200,0x203};
+    return request&&request->object_kind==0x202&&request->entry_number>=0x20&&
+        request->entry_number<=0x22&&request->dependency_kind==dependency[request->entry_number-0x20]&&
+        !request->flags&&!request->dependency_flags;
+}
+
+static int is_r102_appearance6_profile(const gh_enemy_request *request)
+{
+    return is_r102_mount_stamp(request)&&request->appearance==6;
+}
+
 static int is_r102_appearance0_profile(const gh_enemy_request *request)
 {
     if (!request || request->object_kind != 0x202 || request->appearance)
@@ -133,7 +146,12 @@ static int is_r102_appearance0_profile(const gh_enemy_request *request)
                     !request->dependency_flags;
     case 18: return request->dependency_kind == 0x20f && request->flags == 0x10000000u &&
                     !request->dependency_flags;
-    default: return 0;
+    case 23:
+    case 0x19: return request->dependency_kind == 0x202 && !request->flags &&
+                      !request->dependency_flags;
+    case 0x1a: return request->dependency_kind == 0x203 && !request->flags &&
+                      !request->dependency_flags;
+    default: return is_r102_mount_stamp(request);
     }
 }
 
@@ -162,6 +180,13 @@ static int is_r102_appearance5_profile(const gh_enemy_request *request)
             !request->flags);
 }
 
+static int is_r102_appearance9_profile(const gh_enemy_request *request)
+{
+    return request && request->object_kind == 0x202 && request->dependency_kind == 0x200 &&
+        request->entry_number == 0x0a && request->appearance == 9 &&
+        request->flags == 0x10000001u && !request->dependency_flags;
+}
+
 int gh_enemy202_is_room_supported_profile(const gh_enemy_request *request,uint16_t room)
 {
     return gh_enemy202_is_r100_supported_profile(request)||
@@ -170,7 +195,8 @@ int gh_enemy202_is_room_supported_profile(const gh_enemy_request *request,uint16
         (room==0x101&&(is_r101_appearance1_profile(request)||is_r101_appearance4_profile(request)||
                        is_r101_appearance0_profile(request)))||
         (room==0x102&&(is_r102_appearance0_profile(request)||is_r102_appearance1_profile(request)||
-                       is_r102_appearance2_profile(request)||is_r102_appearance5_profile(request)));
+                       is_r102_appearance2_profile(request)||is_r102_appearance5_profile(request)||
+                       is_r102_appearance6_profile(request)||is_r102_appearance9_profile(request)));
 }
 
 int gh_enemy202_body_radius_002070cc(uint32_t scale,uint32_t nominal,uint32_t *bits)
@@ -252,16 +278,31 @@ gh_actor_model_status gh_enemy202_appearance5_select_00203b3c(
     return select_initial_motion(resource,directory,1,3,out);
 }
 
+gh_actor_model_status gh_enemy202_appearance6_select_00203c78(
+    const gh_enemy_request *request, const gh_object_view *resource,
+    gh_enemy_initial_motion_selection *out)
+{
+    if(!request||!resource||!out||!resource->bytes||resource->kind!=0x202)
+        return GH_ACTOR_MODEL_ARGUMENT;
+    if(!is_r102_appearance6_profile(request))return GH_ACTOR_MODEL_UNSUPPORTED;
+    /* 42DD50 maps dependencies 202 and 203 to 203CB0. Dependency 200 takes
+     * 203CA4. Both enter the original {0,2,0,0} dispatch state. */
+    const size_t directory=request->dependency_kind==0x200?0x98:0x648;
+    return select_initial_motion(resource,directory,2,0,out);
+}
+
 gh_actor_model_status gh_enemy202_appearance9_select_0020393c(
     const gh_enemy_request *request, const gh_object_view *resource,
     gh_enemy_initial_motion_selection *out)
 {
     if (!request || !resource || !out || !resource->bytes || resource->kind!=0x202)
         return GH_ACTOR_MODEL_ARGUMENT;
-    if (!is_r100_appearance9_profile(request))
+    if (!is_r100_appearance9_profile(request) && !is_r102_appearance9_profile(request))
         return GH_ACTOR_MODEL_UNSUPPORTED;
-    /* 203700 selects the dependency-202 pair. 20393C leaves it intact. */
-    return select_initial_motion(resource,0x648,1,0,out);
+    /* Appearance 9 maps to 20393C and keeps the dependency's default pair.
+     * The 0200 underflow branch uses 98 and 0202 uses 648 via 203700. */
+    const size_t directory = request->dependency_kind == 0x200 ? 0x98 : 0x648;
+    return select_initial_motion(resource,directory,1,0,out);
 }
 
 gh_actor_model_status gh_enemy202_appearance0_select_0020393c(

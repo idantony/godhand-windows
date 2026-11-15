@@ -35,7 +35,10 @@ typedef struct {
     const uint8_t *resource;
     uint32_t stage,frontier;
 } gh_enemy2ad_init;
-/* Staged 28E0E0 through D7 registration, Room105 save gate and shared
+/* Original room and stamp profiles for native 02AD entry. */
+int gh_enemy2ad_is_room_supported_profile(const gh_enemy_request *,uint16_t room);
+
+/* Staged 28E0E0 through D7 registration, room save gate and common
  * model/base initialization. Actual motion/effect tail retains its PC. */
 gh_actor_model_status gh_enemy2ad_init_prefix_0028e0e0(gh_enemy2ad_init *,
     const gh_title_player_view *,const gh_enemy_request *,const gh_object_view *,

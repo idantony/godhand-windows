@@ -17,6 +17,7 @@ typedef gh_object_step_status (*gh_om_break_effect)(void *, const gh_actor_model
  const uint32_t world_xyz[3], uint32_t yaw_bits, uint32_t *frontier);
 typedef gh_object_step_status (*gh_om_break_collision)(void *, uint64_t key, uint32_t *frontier);
 typedef gh_object_step_status (*gh_om_remove_sound)(void *, gh_actor_model *, uint32_t *frontier);
+typedef gh_object_step_status (*gh_om_mount_release)(void *,gh_om_object *,uint8_t *stage,uint32_t *frontier);
 typedef struct {
  gh_om_runtime_create create;
  gh_motion_sound_request sound;
@@ -47,6 +48,7 @@ typedef struct {
  gh_game_scene_tables *scene_tables;
  gh_om_box_drop_item drop_item;
  gh_om_pickup_award award_item;
+ gh_om_mount_release mount_release;
 } gh_om_frame_runtime;
 typedef struct {const gh_om_factory *factory;gh_om_object *object;
  const gh_title_player_view *contact634;uint32_t handle,entry,frontier;

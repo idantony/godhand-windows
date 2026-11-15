@@ -284,7 +284,9 @@ static void check_gate_clip(gh_se_voice_engine *voices,gh_audio_registry *regist
     CHECK(voice_info(voices,handle).pending&&gh_se_voice_external_adx_nodes(voices)==1);
     uint32_t duplicate=99;
     CHECK(!gh_se_voice_request_origin(voices,2,test->program,-1,-1,0,0,&duplicate)&&!duplicate);
-    CHECK(!gh_se_voice_update(voices)&&transport.count==submitted+1);
+    const gh_voice_status update=gh_se_voice_update(voices);
+    if(update)fprintf(stderr,"sequence %s program %x status %u frontier %08x\n",archive,test->program,update,gh_se_voice_frontier(voices));
+    CHECK(!update&&transport.count==submitted+1);
     const gh_se_voice_info info=voice_info(voices,handle);
     CHECK(!info.pending&&info.channel==test->first_channel&&info.sample_slot==test->row&&info.native_voice==submitted+1);
     const recorded_voice *recorded=transport.voices+submitted;
@@ -415,6 +417,20 @@ int main(int argc,char **argv)
     voices=new_engine(registry,disc,&control,elf,elf_bytes);
     check_gate_local_cues(voices,&control);
     gh_se_voice_destroy(voices);
+    ses=read_asset(disc,"se/r102.ses",&ses_bytes);
+    CHECK(!gh_audio_commit_se_with_external_index(registry,2,ses,ses_bytes,disc,&token)&&
+        gh_audio_token_complete(registry,token));
+    free(ses);
+    const gate_clip_case r102_clips[]={
+        {0x0e,2,1,2,48,159744,131386,116736},
+        {0x32,6,3,1,49,315392,42178,74861},
+        {0x33,4,2,1,49,292864,21136,37443}
+    };
+    for(unsigned i=0;i<sizeof(r102_clips)/sizeof(r102_clips[0]);++i){
+        voices=new_engine(registry,disc,&control,elf,elf_bytes);
+        check_gate_clip(voices,registry,disc,elf,elf_bytes,"se/r102.afs",&r102_clips[i]);
+        gh_se_voice_destroy(voices);
+    }
     free(elf);
     gh_audio_registry_destroy(registry);
     gh_disc_close(disc);

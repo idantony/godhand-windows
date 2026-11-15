@@ -131,7 +131,10 @@ int main(int argc,char **argv)
  gh_hitarea_shape_bindings shapes={&pairs,&math,GH_STATIC_BINARY32_REFERENCE};
  uint8_t serial=0;
  uint32_t fog=0;
- gh_om_initializer_bindings init={.work=&work,.packet_heap=heap,.fog_rgb=&fog,
+ uint8_t save_bytes[GH_CORE_SAVE_BYTES];
+ gh_core_save_view save={save_bytes,sizeof(save_bytes)};
+ CHECK(!gh_core_save_system_init(save));
+ gh_om_initializer_bindings init={.work=&work,.packet_heap=heap,.fog_rgb=&fog,.save=save,
   .init=hitareas,.shapes=&shapes,.dynamic=&dynamic,.elf=elf,.elf_bytes=(size_t)elf_size};
  gh_dvd_jobs dvd;
  gh_dvd_jobs_init(&dvd,disc);
@@ -251,7 +254,7 @@ int main(int argc,char **argv)
  const uint32_t occupied=word(area11.bytes+0x50)|0x80000000u;
  memcpy(area11.bytes+0x50,&occupied,sizeof(occupied));
  CHECK(gh_tasks_run_matching_002d52a0(&tasks).status==GH_TASK_OK);
- CHECK(prefix.task_frontier==0x25f8&&(word(room_state.active+4)&0x01000000u)&&
+ CHECK(prefix.task_frontier==0x2952d0&&(word(room_state.active+4)&0x01000000u)&&
   !tasks.records[prefix.area11_slot].running);
  CHECK(!gh_scene_at_units_release(&areas));
  size_t mount_size;
@@ -278,9 +281,51 @@ int main(int argc,char **argv)
  CHECK(!gh_om_frame_move(&frame,&factory,&move,&work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&!frontier);
  CHECK(frame.complete&&!word(mount_actor+0x2f4));
  CHECK(!gh_om_frame_next_call(&frame));
- mount->view.bytes[0x615]=1;
+ const uint32_t count=word(prefix.work.pointer);
+ CHECK(!gh_r102_room_mount_reinforcements_00002900(&prefix,&frontier)&&!frontier);
+ CHECK(mount_actor[0x600]==0x20&&mount_actor[0x601]==0x21&&mount_actor[0x602]==0x22&&
+       mount_actor[0x612]==3&&mount_actor[0x615]==3&&word(prefix.work.pointer)==count+3);
  CHECK(!gh_om_frame_move(&frame,&factory,&move,&work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&!frontier);
  CHECK(frame.complete&&word(mount_actor+0x2f4)==0x100);
+ CHECK(!gh_om_frame_next_call(&frame));
+ gh_game_collision_solids solids={0};
+ const float canonical_rate=1;
+ const gh_om_frame_runtime runtime={.init=hitareas,.canonical_rate=&canonical_rate,.solids=&solids,.scene_tables=&scene};
+ CHECK(!gh_om_frame_bind_runtime(&frame,&runtime));
+ gh_object_step_status descent=gh_om_frame_move(&frame,&factory,&move,&work,GH_STATIC_BINARY32_REFERENCE,&frontier);
+ if(descent)fprintf(stderr,"mount descent status %u pc %08x\n",descent,frontier);
+ CHECK(!descent&&!frontier&&frame.complete&&word(mount_actor+0x624)==0x41a00000&&
+       word(mount->view.alias_f0+4)==0x419c0000&&!(word(mount_actor+0x5a0)&1u)&&
+       word(mount_actor+0x2f4)==0x10100);
+ for(unsigned i=0;mount_actor[0x2f6]==1&&i<100;++i){
+  CHECK(!gh_om_frame_next_call(&frame));
+  CHECK(!gh_om_frame_move(&frame,&factory,&move,&work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&!frontier);
+ }
+ CHECK(mount_actor[0x2f6]==2&&mount_actor[0x615]==3);
+ CHECK(!gh_om_frame_next_call(&frame));
+ CHECK(gh_om_frame_move(&frame,&factory,&move,&work,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_OBJSTEP_UNSUPPORTED&&
+       frontier==0x1a7f58);
+ size_t ticket_size;
+ uint8_t *ticket_data=load(disc,"om/omda.dat",&ticket_size);
+ CHECK(!gh_game_objects_add_pinned_001fece0(local,0x3da,ticket_data,ticket_size,&original));
+ CHECK(!gh_game_objects_set_file_extent(local,0x3da,ticket_data,ticket_size));
+ gh_om_runtime_create ticket_call={0};
+ gh_om_object *ticket;
+ CHECK(!gh_om_factory_create_0030fa98(&factory,&ticket_call,0x3da,0xffff,&ticket)&&ticket);
+ CHECK(ticket->runtime_kind==0x3da&&ticket->allocation.bytes==0x690&&ticket->resource.bytes==ticket_data);
+ CHECK(ticket->view.original_vtable214==0x429b88&&ticket->view.original_kind4ac==0x4298b0);
+ CHECK(!gh_om_factory_initialize_runtime_ticket_001c0128(&factory,ticket));
+ CHECK(!gh_om_factory_initialize_runtime_ticket_001c0128(&factory,ticket));
+ const uint8_t *ticket_actor=ticket->view.bytes;
+ CHECK(word(ticket_actor+0x560)==0x905&&word(ticket_actor+0x67c)==0x905&&!word(ticket_actor+0x670));
+ CHECK(word(ticket_actor+0x110)==0x3fc00000&&word(ticket_actor+0x114)==0x3fc00000&&
+       word(ticket_actor+0x118)==0x3fc00000&&(word(ticket_actor+0x5b8)&0x48u)==8);
+ CHECK(word(save_bytes+0x28a)==0x03da0102&&word(save_bytes+0x28e)==0x00010001&&
+       (word(save_bytes+0x298)&0xffffu)==0x905&&(word(save_bytes+0x288)&0xffffu)==2);
+ const float ticket_position[4]={-4,2.5f,16,1};
+ CHECK(!gh_om_r101_item_position_001c2630(ticket->initialization,(const uint8_t *)ticket_position));
+ CHECK(!memcmp(ticket->view.alias_f0,ticket_position,12)&&word(save_bytes+0x292)==0x0019ffd8&&
+       word(save_bytes+0x296)==0x090500a0);
  entry.done=0;
  CHECK(gh_task_threads_start(threads,1,preload_item,&entry,0,&slot)==GH_THREAD_OK);
  for(unsigned i=0;!entry.done&&i<12;++i){
@@ -306,7 +351,7 @@ int main(int argc,char **argv)
  gh_game_objects_destroy(local);
  gh_game_objects_destroy(global);
  CHECK(!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));
- free(hitareas);free(resource);free(mount_data);free(control_data);free(layer_data);free(room_data);free(elf);gh_disc_close(disc);
+ free(hitareas);free(resource);free(ticket_data);free(mount_data);free(control_data);free(layer_data);free(room_data);free(elf);gh_disc_close(disc);
  puts("PASS actual R102 original 0363 and om046 flags, 0898 collision, original AT11, om095 layer, 0353 idle and actual 0520 3BC load");
  return 0;
 }

@@ -301,7 +301,9 @@ gh_actor_model_status gh_enemy_weapon_attach_0026ab20(gh_enemy_weapon_init *s,
     if(s->attach_stage&&(s->parent!=parent||s->parent_model!=parent_model||
         s->actors!=actors||s->scroll!=scroll))return GH_ACTOR_MODEL_BUSY;
     const uint32_t parent_kind=word(parent->bytes+0x564);
-    if((parent_kind!=0x202&&(s->weapon->kind!=0x361||parent_kind!=0x203))||
+    const int standard_weapon=s->weapon->kind==0x361&&
+        (parent_kind==0x200||parent_kind==0x203);
+    if((parent_kind!=0x202&&!standard_weapon)||
         (s->weapon->kind==0x363&&parent->bytes[0x17c3]))
         return stop(s,0x26acdc,GH_ACTOR_MODEL_UNSUPPORTED);
 

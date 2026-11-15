@@ -4,6 +4,29 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Later R102 combat and mid-room gate
+
+An original save and mapped controller input reach a later R102 encounter.
+The hidden, muted Windows run presents 88 consecutive Direct3D frames. The
+attack starts at tick 1874, Gene drops from 45 to 36 HP at tick 1907, and the
+enemy begins its original recovery at tick 1938. The 64 captured pairs of
+pre-UI and composited frames match the earlier independent build byte for
+byte. The renderer, GPU and window report zero errors.
+
+A separate title-load fixture supplies the original six-defeat count and a
+qualifying defeated enemy. The original script creates five reinforcements,
+ends the camera event, clears gate collision, moves the panels and retires
+the gate object. The integrated CPU replay completes 120 room frames on
+this fixture and reaches 1,113 R102 room frames in the New Game regression.
+
+原版存档和手柄回放进入 R102 后续交战。Windows 隐藏、静音测试呈现 88 个连续的 Direct3D 帧。
+敌人在第 1874 tick 出招，第 1907 tick 命中，Gene 从 45 HP 降到 36 HP。第 1938 tick 敌人
+进入原版收招。64 组场景和最终合成图与早期独立构建逐帧一致，渲染、GPU 和窗口均无报错。
+
+独立读档测试预置了六次击败计数和一名符合条件的已击败敌人。原版脚本生成五个增援，结束镜头，
+解除门碰撞，移动门扇并清理门物件。合并版本通过了 120 个房间帧的门测试，新游戏 CPU 回放则
+推进了 1,113 个 R102 房间帧。
+
 ## R102 save, reload and movement on Windows
 
 The original Event 04 save prompt writes the R102 checkpoint to a fresh

@@ -119,15 +119,28 @@ static int r101_weapon_est_row(unsigned index,const uint8_t *row,unsigned ordina
         row[0x12e]==((ordinal&1u)?0:15);
 }
 
+static int16_t weapon_swing_room(const gh_title_player_view *weapon,
+ const gh_title_player_view *selector)
+{
+ if(!weapon||!selector||weapon==selector||!weapon->bytes||weapon->size<0x300||
+    !selector->bytes||selector->size<=0x1650||(w(selector->bytes+0x2fc)>>16)!=0x202)
+  return 0;
+ const uint32_t kind=w(weapon->bytes+0x2fc)>>16,dependency=w(selector->bytes+0x564);
+ const unsigned stamp=w(selector->bytes+0x640)&0xffffu,appearance=selector->bytes[0x1650];
+ if(kind==0x361&&dependency==0x203&&stamp==13&&!appearance)return 0x101;
+ if(kind==0x363&&dependency==0x200&&stamp==3&&appearance==1)return 0x102;
+ return 0;
+}
+
+static unsigned weapon_est_count(int16_t room,unsigned index)
+{
+ return room?r101_weapon_est_count(index):0;
+}
+
 gh_effect_status gh_effect_create_r101_weapon_002a8608(gh_effect_create_call *c,
  const gh_title_player_view *weapon,const gh_title_player_view *selector,uint32_t index,uint32_t scale)
 {
- if(!weapon||!weapon->bytes||weapon->size<0x300||
-    (w(weapon->bytes+0x2fc)>>16)!=0x361||
-    !selector||!selector->bytes||selector->size<=0x1650||
-    (w(selector->bytes+0x2fc)>>16)!=0x202||w(selector->bytes+0x564)!=0x203||
-    (w(selector->bytes+0x640)&0xffffu)!=13||selector->bytes[0x1650]||
-    !r101_weapon_est_count(index)||
+ if(!weapon_est_count(weapon_swing_room(weapon,selector),index)||
     scale!=w(selector->bytes+0x114))return GH_EFFECT_ARGUMENT;
  const gh_effect_create_request request={.bank=0x58,.index=index,.actor=weapon,.mode=0,.selector=-1};
  gh_effect_status status=gh_effect_create_begin(c,&request);
@@ -272,6 +285,20 @@ static unsigned devil_ranged_effect_rows(uint32_t index)
  return index>=0x42&&index<=0x45?counts[index-0x42]:0;
 }
 
+static int em0f_route_actor(const gh_title_player_view *actor)
+{
+ return actor&&actor->bytes&&actor->size>0x1650&&actor->original_vtable214==0x4479c8&&
+    (w(actor->bytes+0x2fc)>>16)==0x202&&w(actor->bytes+0x564)==0x20f&&
+    (w(actor->bytes+0x640)&0xffffu)==0x12&&(actor->bytes[0x1650]==0||actor->bytes[0x1650]==4);
+}
+
+static int em0f_route_effect_row(const uint8_t *row)
+{
+ return w(row)==0x1efe8010u&&w(row+4)==0x00800000u&&!row[0xbe]&&
+    !row[0x128]&&row[0x133]==0x1a&&!row[0x136]&&row[0x12e]==132&&
+    row[0x28f]==1&&row[0x290]==2&&row[0x291]==1&&row[0x292]==1;
+}
+
 gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call *call,
  const gh_effect_create_request *request,uint32_t scale)
 {
@@ -293,6 +320,8 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
  }else if(request->bank==0x58&&request->index==0x1e&&!request->mode){
   if(!em0a_attack_actor(actor)||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x15)
    return GH_EFFECT_UNSUPPORTED;
+ }else if(request->bank==0x58&&request->index==0x5d&&!request->mode){
+  if(!em0f_route_actor(actor))return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&request->index==0x3f&&!request->mode){
   if(!devil_effect_actor(actor,actor))return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&devil_ranged_effect_rows(request->index)&&!request->mode){
@@ -477,6 +506,11 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
      !em0a_attack_effect_row(entry.bytes+16+0x2f0)||entry.bytes[16+0x133]!=9||
      entry.bytes[16+0x2f0+0x133]!=0x12)return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
  }
+ if(c->request.bank==0x58&&c->request.index==0x5d&&c->configuration_nested_scale){
+  if(c->count!=1||b->work->room!=0x102||!b->model||b->model->work!=b->work||
+     !c->request.actor||b->model->root.bytes!=c->request.actor->bytes||
+     !em0f_route_effect_row(entry.bytes+16))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+ }
  if(c->request.bank==0x58&&c->request.index==0x59&&c->configuration_nested_scale){
   if(c->count!=10)return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<c->count;i++)
@@ -599,9 +633,13 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
   }
  }
  if(c->attachment_selector){
-  if(b->work->room!=0x101||!b->model||b->model->work!=b->work||
-      !b->model->parts_ready||b->model->root.bytes!=c->request.actor->bytes||
-     c->count!=r101_weapon_est_count(c->request.index))
+  const int16_t room=weapon_swing_room(c->request.actor,c->attachment_selector);
+  if(!room||b->work->room!=room||!b->model||b->model->work!=b->work||
+     !b->model->parts_ready||b->model->root.bytes!=c->request.actor->bytes||
+     c->count!=weapon_est_count(room,c->request.index))
+   return fail(c,0x303a30,GH_EFFECT_UNSUPPORTED);
+  if(room==0x102&&(!b->model->external_parent||
+     b->model->external_parent->root.bytes!=c->attachment_selector->bytes))
    return fail(c,0x303a30,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<c->count;i++){
    const uint8_t *row=entry.bytes+16+i*0x2f0;
@@ -762,6 +800,11 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
  const gh_title_player_view *actor=view->actor;
  const uint8_t *record=view->record.bytes;
  const uint8_t *payload=view->payload;
+ /* 58:5D uses the same part-attached ESP1A path and original unlink order. */
+ if(em0f_route_actor(actor)&&actor==view->selector&&view->model&&view->model->work&&
+    view->model->work->room==0x102&&view->model->root.bytes==actor->bytes&&view->model->part_count&&
+    view->part==view->model->parts&&view->record.size==0x2f0&&record&&payload&&view->payload_size==0x260&&
+    w(payload+0x18c)==0x005d0058u&&!w(payload+0x110)&&em0f_route_effect_row(record))return 1;
  /* 58:27 uses the same attached type7/1A pose and lifetime as PL00 0:42. */
  if(actor&&actor==view->selector&&actor->bytes&&actor->size>=0x644&&
     actor->original_vtable214==0x4479c8&&(w(actor->bytes+0x2fc)>>16)==0x202&&
@@ -804,44 +847,41 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
     w(payload+0x18c)==0x003e0000u&&w(payload+0x110)==UINT32_MAX;
 }
 
-static int r101_weapon_effect_actors(const gh_title_player_view *actor,
- const gh_title_player_view *selector)
-{
- return actor&&selector&&actor!=selector&&actor->bytes&&actor->size>=0x300&&
-        selector->bytes&&selector->size>0x1650&&(w(actor->bytes+0x2fc)>>16)==0x361&&
-        (w(selector->bytes+0x2fc)>>16)==0x202&&w(selector->bytes+0x564)==0x203&&
-        (w(selector->bytes+0x640)&0xffffu)==13&&!selector->bytes[0x1650];
-}
-
 int gh_effect_r101_weapon_emitter_is_bound(const gh_effect_emitter_view *v)
 {
- if(!v||!r101_weapon_effect_actors(v->actor,v->selector)||!v->model||
-    !v->model->work||v->model->work->room!=0x101||v->model->root.bytes!=v->actor->bytes||
+ if(!v)return 0;
+ const int16_t room=weapon_swing_room(v->actor,v->selector);
+ if(!room||!v->model||!v->model->work||v->model->work->room!=room||
+    v->model->root.bytes!=v->actor->bytes||
     v->model->part_count<=3||v->part!=v->model->parts+3||
     !v->payload||v->payload_size!=0x260||
     !v->record.bytes||v->record.size!=0x2f0)return 0;
+ if(room==0x102&&(!v->model->external_parent||
+    v->model->external_parent->root.bytes!=v->selector->bytes))return 0;
  const uint32_t profile=w(v->payload+0x18c);
  const uint8_t *row=v->record.bytes;
  if((profile&0xffffu)!=0x58||w(v->payload+0x110))return 0;
- for(unsigned i=0;i<r101_weapon_est_count(profile>>16);i++)
+ for(unsigned i=0;i<weapon_est_count(room,profile>>16);i++)
   if(r101_weapon_est_row(profile>>16,row,i))return 1;
  return 0;
 }
 
-static int em03_attack_actor(const gh_title_player_view *actor)
+static int em02_em03_attack_actor(const gh_title_player_view *actor)
 {
- if(!actor||!actor->bytes||actor->size<0x644||
-    (w(actor->bytes+0x2fc)>>16)!=0x202||w(actor->bytes+0x564)!=0x203)return 0;
+ if(!actor||!actor->bytes||actor->size<0x644||(w(actor->bytes+0x2fc)>>16)!=0x202)return 0;
  const unsigned stamp=w(actor->bytes+0x640)&0xffffu;
- return stamp==19||(stamp==1&&actor->size>0x1650&&
-    actor->original_vtable214==0x4479c8&&!actor->bytes[0x1650]);
+ const uint32_t dependency=w(actor->bytes+0x564);
+ const int appearance0=actor->size>0x1650&&actor->original_vtable214==0x4479c8&&!actor->bytes[0x1650];
+ return (dependency==0x203&&(stamp==19||(stamp==1&&appearance0)))||
+        (dependency==0x202&&stamp==0x17&&appearance0);
 }
 
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *v)
 {
- if(!v||!em03_attack_actor(v->actor)||!v->model)return 0;
- /* R105 stamp1 runs the same original EM03 58:2D SEQ and part15. */
- if((w(v->actor->bytes+0x640)&0xffffu)==1&&(!v->model->work||v->model->work->room!=0x105))return 0;
+ if(!v||!em02_em03_attack_actor(v->actor)||!v->model)return 0;
+ /* R105 EM03 and R102 EM02 use the original 58:2D SEQ on part 15. */
+ const unsigned stamp=w(v->actor->bytes+0x640)&0xffffu;
+ if(stamp!=19&&(!v->model->work||v->model->work->room!=(stamp==1?0x105:0x102)))return 0;
  return v->selector==v->actor&&
         v->model->root.bytes==v->actor->bytes&&v->model->part_count>15&&
         v->part==v->model->parts+15&&v->record.bytes&&v->record.size==0x2f0&&
@@ -937,6 +977,20 @@ int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *v)
  const unsigned part=v->record.bytes[0xbe];
  return part<v->model->part_count&&v->part==v->model->parts+part;
 }
+/* The 240548 recovery SEQ shares bank 58/index2 with the part-0
+ * emitter already used by the original knockdown/death paths. */
+static int r102_landing_emitter(const gh_effect_emitter_view *v)
+{
+ const gh_title_player_view *actor=v->actor;
+ if(!v->model->work||v->model->work->room!=0x102||actor->size<=0x1650||
+    actor->original_vtable214!=0x4479c8)return 0;
+ const unsigned stamp=w(actor->bytes+0x640)&0xffffu,appearance=actor->bytes[0x1650];
+ const uint32_t kind=w(actor->bytes+0x564);
+ if(!appearance)return stamp==7&&kind==0x200;
+ static const uint16_t dependency[]={0x202,0x200,0x203};
+ return appearance==6&&stamp>=0x20&&stamp<=0x22&&kind==dependency[stamp-0x20];
+}
+
 int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *v)
 {
  return v&&v->actor&&v->actor->bytes&&v->actor->size>=0x644&&v->selector==v->actor&&
@@ -946,6 +1000,7 @@ int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *v)
         ((w(v->actor->bytes+0x564)==0x203&&(w(v->actor->bytes+0x640)&0xffff)==19)||
          (w(v->actor->bytes+0x564)==0x200&&(w(v->actor->bytes+0x640)&0xffff)==20)||
          (v->model->work&&v->model->work->room==0x100&&stamp8_attack_actor(v->actor))||
+         r102_landing_emitter(v)||
          (w(v->actor->bytes+0x564)==0x20a&&!(w(v->actor->bytes+0x640)&0xffff)&&
           v->actor->size>0x1650&&v->actor->bytes[0x1650]==3))&&
         !v->record.bytes[0xbe]&&!v->record.bytes[0x128]&&!v->record.bytes[0x136];
@@ -1187,7 +1242,7 @@ int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *owner,const gh_eff
 
 static int stamp19_attack_esp_bound(const gh_game_effects *owner,const gh_effect_esp_view *v)
 {
- if(!v||!v->payload||v->payload_size!=0x400||!em03_attack_actor(v->actor)||v->actor!=v->selector||
+ if(!v||!v->payload||v->payload_size!=0x400||!em02_em03_attack_actor(v->actor)||v->actor!=v->selector||
     v->actor->original_vtable214!=0x4479c8||
     !v->record.bytes||v->record.size!=0x2f0||(v->type!=9&&v->type!=0x12))
   return 0;
@@ -1210,14 +1265,14 @@ static int r101_weapon_esp_bound(const gh_game_effects *owner,const gh_effect_es
 {
  if(!v||!v->payload||v->payload_size!=0x400||!v->record.bytes||v->record.size!=0x2f0||
     (v->type!=9&&v->type!=0x12&&v->type!=0x18&&v->type!=0x1a)||
-    v->type!=v->record.bytes[0x133]||!r101_weapon_effect_actors(v->actor,v->selector))
+    v->type!=v->record.bytes[0x133]||!weapon_swing_room(v->actor,v->selector))
   return 0;
  gh_effect_emitter_view emitter;
  if(!gh_effect_create_emitter_at(owner,v->emitter_slot,&emitter)&&emitter.serial==v->emitter_serial)
   return emitter.actor==v->actor&&emitter.selector==v->selector&&
          emitter.record.bytes==v->record.bytes&&gh_effect_r101_weapon_emitter_is_bound(&emitter);
  const uint32_t profile=w(v->payload+0x23a);
- const unsigned count=r101_weapon_est_count(profile>>16);
+ const unsigned count=weapon_est_count(weapon_swing_room(v->actor,v->selector),profile>>16);
  if((profile&0xffffu)!=0x58||!count)return 0;
  gh_effect_view est;
  if(gh_effect_est_at_00306030(owner,0x58,profile>>16,&est)||!est.bytes||
@@ -1342,7 +1397,8 @@ int gh_effect_esp_type7_record_bound(const gh_game_effects *e,const gh_effect_es
  }
  if(tag==0x003f0058u||((tag&0xffffu)==0x58&&devil_ranged_effect_rows(tag>>16)))
   return gh_effect_devil_esp_is_bound(e,v);
- if(tag==0x00420000u||tag==0x00270058u||tag==0x00590058u||tag==0x00170000u)return gh_effect_player_attachment_esp_is_bound(e,v);
+ if(tag==0x00420000u||tag==0x00270058u||tag==0x00590058u||tag==0x005d0058u||tag==0x00170000u)
+  return gh_effect_player_attachment_esp_is_bound(e,v);
  if(tag==0x00130006u){
   if(!gh_effect_event_part_is_bound(v->record,v->actor,v->selector))return 0;
  }else if(v->actor||v->selector)return 0;

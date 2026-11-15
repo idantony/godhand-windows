@@ -70,6 +70,7 @@ static uint32_t class_vtable(const gh_om_object *actor)
  if(om_kind(actor)==0x353)return 0x4275c8;
  if(om_kind(actor)==0x355)return 0x4277b8;
  if(om_kind(actor)==0x356)return 0x427880;
+ if(actor->runtime_created&&om_kind(actor)==0x3da)return 0x429b88;
  if(om_kind(actor)==0x41c)return 0x421bb8;
  if(weapon_destructor(om_kind(actor)))return 0x42aa98;
  if(actor->runtime_created&&om_kind(actor)==0x3be)return 0x4290c8;
@@ -95,6 +96,8 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
  if(actor->runtime_created&&!weapon_destructor(om_kind(actor))){
   if(om_kind(actor)==0x3d6)
    return actor->view.size>=0x690&&actor->initialization->stage==4?actor:NULL;
+  if(om_kind(actor)==0x3da)
+   return actor->view.size>=0x690&&actor->initialization->stage==4&&word(actor->view.bytes+0x560)==0x905?actor:NULL;
   return om_kind(actor)==0x3eb&&actor->view.size>=0x610&&
          actor->initialization->stage==3?actor:NULL;
  }
@@ -213,6 +216,7 @@ uint32_t gh_om_retire_entry(uint32_t kind)
  case 0x363:case 0x376:case 0x382:return 0x1c91b0;
  case 0x3be:return 0x1b9030;
  case 0x3d6:return 0x1c00c8;
+ case 0x3da:return 0x1c00c8;
  case 0x3eb:return 0x1bf4b8;
  default:return 0;
  }
@@ -364,6 +368,9 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
     weapon->hit[0]=(gh_hitarea_object){0};
     put(actor+0x654,UINT32_MAX);
    }
+  }else if(om_kind(object)==0x3da){
+   /* 1C00C8 only releases a derived HitArea at +680. The 3DA Init never creates it. */
+   if(word(actor+0x680))return fail(&state->frontier,0x1fe148);
   }else if(om_kind(object)!=0x3eb&&om_kind(object)!=0x353&&om_kind(object)!=0x356&&word(actor+box_field))
    return fail(&state->frontier,om_kind(object)==0x355?0x12ec58:0x1fe278);
   if((om_kind(object)==0x3eb||om_kind(object)==0x353)&&init->hitarea_created)return fail(&state->frontier,0x1b6f38);
@@ -427,10 +434,9 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
      return fail(&state->frontier,state->frontier?state->frontier:0x1fe148);
     *a_created=0;
    }
-  }else if(om_kind(object)==0x356){
-   /* 1A8730 reaches the base destructor without a derived HitArea. */
-  }else if(om_kind(object)==0x3eb||om_kind(object)==0x3d6){
-   /* 1BF4B8 and 1C00C8 continue into 1B6F38. The latter has no +680 unit for 3D6. */
+  }else if(om_kind(object)==0x356||om_kind(object)==0x3eb||
+           om_kind(object)==0x3d6||om_kind(object)==0x3da){
+   /* These classes reach 1B6F38 without a remaining derived HitArea. */
   }else if(om_kind(object)==0x35d){
    if(word(actor+0x604))return fail(&state->frontier,0x1fe148);
   }else if(om_kind(object)==0x304||om_kind(object)==0x310){
@@ -597,7 +603,7 @@ gh_room_pool_status gh_om_destroy_detached_mode3(gh_om300_full_retirement *state
  if(!state->stage){
   gh_om_object *object=registered_om(factory,handle);
   if(!object||(om_kind(object)!=0x304&&om_kind(object)!=0x305&&om_kind(object)!=0x30a&&
-     om_kind(object)!=0x313&&om_kind(object)!=0x324&&om_kind(object)!=0x363&&
+     om_kind(object)!=0x313&&om_kind(object)!=0x324&&om_kind(object)!=0x356&&om_kind(object)!=0x363&&
      om_kind(object)!=0x376&&om_kind(object)!=0x3be&&om_kind(object)!=0x3d6)||
      object->view.bytes!=actor->bytes||object->view.size!=actor->size||
      word(actor->bytes+0x214)!=class_vtable(object)||original!=gh_om_retire_entry(om_kind(object))||

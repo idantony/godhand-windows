@@ -408,6 +408,21 @@ int main(int argc,char **argv)
     CHECK(!gh_enemy_manager_get_00290868(init,18,&paused)&&paused==init->enemy_actors[8]);
     const uint8_t *paused_bytes=paused->view.bytes;
     CHECK(word(paused_bytes+0x2f4)==0x00000100&&word(paused_bytes+0x1644)==residual.flags);
+    uint8_t *runner=paused->view.bytes;
+    uint8_t old_goto[24];
+    memcpy(old_goto,runner+0x16b0,sizeof(old_goto));
+    const uint32_t old_runner_state=word(runner+0x2f4);
+    const float authored_goto[]={3.75f,-1.0f,7.5f};
+    CHECK(!gh_enemy_ems_set_stamp_goto_timed_00295f80(owner,init,18,authored_goto,12,1,0x41f00000,&frontier)&&!frontier);
+    CHECK(!memcmp(runner+0x16b0,authored_goto,sizeof(authored_goto))&&word(runner+0x16c0)==0x41f00000&&
+          word(runner+0x16c4)==12&&word(runner+0x2f4)==0x1300);
+    int goto_done;
+    CHECK(!gh_enemy_ems_check_stamp_goto_00296018(init,18,&goto_done)&&!goto_done);
+    memset(runner+0x16c0,0,4);
+    CHECK(!gh_enemy_ems_check_stamp_goto_00296018(init,18,&goto_done)&&goto_done);
+    CHECK(!gh_enemy_ems_check_stamp_goto_00296018(init,0xff,&goto_done)&&!goto_done);
+    memcpy(runner+0x16b0,old_goto,sizeof(old_goto));
+    memcpy(runner+0x2f4,&old_runner_state,4);
     CHECK(!memcmp(paused_bytes+0x1630,residual.position_xyz,12)&&word(paused_bytes+0x1640)==residual.yaw_bits);
     uint32_t armed_handle=word((uint8_t*)v->allocation.pointer+8*4);
     uint32_t weapon_handle=word((uint8_t*)v->allocation.pointer+9*4);

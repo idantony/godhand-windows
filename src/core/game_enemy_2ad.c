@@ -114,6 +114,14 @@ gh_actor_model_status gh_enemy2ad_model_0028ea38(gh_enemy_model *state,const gh_
     return status;
 }
 
+int gh_enemy2ad_is_room_supported_profile(const gh_enemy_request *request,uint16_t room)
+{
+    if(!request||request->object_kind!=0x2ad||request->dependency_kind!=0x2ad||
+       request->entry_number!=0x3f)return 0;
+    return room==0x105||(room==0x102&&!request->appearance&&!request->flags&&
+        !request->dependency_flags);
+}
+
 gh_actor_model_status gh_enemy2ad_init_prefix_0028e0e0(gh_enemy2ad_init *state,
     const gh_title_player_view *actor,const gh_enemy_request *request,const gh_object_view *resource,
     gh_boot_work *work,gh_core_save_view save,gh_game_effects *effects,gh_room_pools *pools,
@@ -123,8 +131,8 @@ gh_actor_model_status gh_enemy2ad_init_prefix_0028e0e0(gh_enemy2ad_init *state,
     if(!state||!actor||!actor->bytes||actor->size<GH_EM2AD_BYTES||!request||!resource||
        !work||!original||!save.bytes||save.size<0x18||!effects)return GH_ACTOR_MODEL_ARGUMENT;
     *original=0;
-    if(work->room!=0x105||actor->original_vtable214!=0x44a528||request->object_kind!=0x2ad||
-       request->dependency_kind!=0x2ad||request->entry_number!=63){
+    if(actor->original_vtable214!=0x44a528||
+       !gh_enemy2ad_is_room_supported_profile(request,work->room)){
         state->frontier=0x28e0e0;
         return GH_ACTOR_MODEL_UNSUPPORTED;
     }
@@ -154,7 +162,8 @@ gh_actor_model_status gh_enemy2ad_init_prefix_0028e0e0(gh_enemy2ad_init *state,
         state->stage=1;
     }
     if(state->stage==1){
-        state->stage=(read_word(save.bytes+0x14)&0x4000u)?5:2;
+        const uint32_t completed = work->room==0x102 ? 0x2000u : 0x4000u;
+        state->stage=(read_word(save.bytes+0x14)&completed)?5:2;
     }
     if(state->stage==2){
         int model_ready;
