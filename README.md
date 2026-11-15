@@ -19,8 +19,9 @@ counter and registers collisions with two enemies, leaving them at 16 and
 opening enemies with Gene at 1 HP. The original room save records both deaths
 and Windows presents scene 3732. The replay schedules the original difficulty
 confirmation to reproduce the startup timing. The same 2,125 gameplay inputs
-match the native CPU replay. Both replays continue for 500 frames after the
-victory, including the original post-battle event. Gene still has 1 HP.
+match the native CPU replay. A longer Windows replay continues for 900
+presented frames after victory, plays the original post-battle event and
+enters the later grab-escape animation. Gene still has 1 HP.
 
 In a Windows New Game replay, stick input reaches the first tutorial. Circle
 opens the original panel and Cross dismisses it. The game presents the original
@@ -197,7 +198,8 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 挣脱反击，撞击后的两名敌人分别剩下 16 和 24 HP。Windows 新游戏回放用录制的手柄输入击败了
 开场的两名敌人，Gene 剩 1 HP。原版房间存档记录两名敌人的死亡，Windows 呈现了第 3732 帧。
 回放通过安排原版难度确认的时机复现启动流程。同样的 2,125 次玩家更新与无画面回放逐项对齐，
-两条回放也都在首战后继续运行 500 帧，经过原版战后事件，Gene 仍剩 1 HP。
+更长的一轮 Windows 回放在首战后继续呈现 900 帧，经过原版战后事件并进入随后一次抓技的
+挣脱动画，Gene 仍剩 1 HP。
 
 Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面板，再按叉键关闭。画面显示原版文字、
 右摇杆图标和教程背后的场景。

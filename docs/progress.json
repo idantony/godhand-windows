@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T09:26:23.921587+00:00",
+  "verified_utc": "2026-11-15T09:34:44.091948+00:00",
   "stage": "native-windows-r100-post-victory-and-r101-saved-scene",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
@@ -1218,6 +1218,19 @@
     "observed_state_differences_for_compared_updates": 0,
     "exit_tick": 4372,
     "exit_code": 0,
+    "normal_room_exit_verified": false
+  },
+  "native_windows_r100_post_battle_escape": {
+    "scope": "Recorded Windows New Game, original post-battle event and original paired grab escape phase",
+    "room": "0100",
+    "victory_scene_serial": 3732,
+    "first_escape_animation_scene_serial": 4591,
+    "last_presented_scene_serial": 4632,
+    "post_victory_presented_frames": 900,
+    "player_hp_at_end": 1,
+    "exit_tick": 4772,
+    "exit_code": 0,
+    "runtime_or_render_error_observed": false,
     "normal_room_exit_verified": false
   },
   "native_windows_r101_saved_room": {

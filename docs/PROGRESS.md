@@ -8,8 +8,10 @@ See [progress.json](progress.json) for the latest verified, machine-readable sta
 
 The recorded New Game route presents 500 more native frames after both R100
 opening enemies die. At scene 4232, Gene is alive with 1 HP, and the original
-post-battle event has run. The test stops at tick 4372. The normal room exit
-remains in development.
+post-battle event has run. The test stops at tick 4372. A longer recorded
+route presents 900 post-victory frames and reaches the original paired grab
+escape at scene 4591. It exits at tick 4772 with Gene alive at 1 HP. The
+normal room exit remains in development.
 
 An isolated Windows title-load test confirms the original map with Cross.
 The map uses the original clear depth, with sprite Z0 and glyph Z65535 carried
@@ -18,7 +20,9 @@ the planned 800-tick limit the native run reports 187 player updates and
 zero runtime, renderer, GPU or window errors.
 
 Windows 用同一套原版输入打赢 R100 开场两名敌人后，又呈现 500 帧并执行原版战后事件。
-第 4232 帧时 Gene 仍剩 1 HP，测试在第 4372 tick 结束。房间原版出口仍在开发。
+第 4232 帧时 Gene 仍剩 1 HP，测试在第 4372 tick 结束。更长的回放在首战后呈现 900 帧，
+在第 4591 帧进入原版抓技的挣脱动画，在第 4772 tick 正常结束，Gene 仍剩 1 HP。
+房间原版出口仍在开发。
 
 Windows 读档测试从原版章节地图按叉键确认。地图淡入沿用原版深度清除值，精灵深度为 0，
 文字深度为 65535。第 461 帧呈现读档后的 R101 和 HUD。回放到预定的 800 tick 上限，
