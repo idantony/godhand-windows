@@ -3,6 +3,8 @@
 #include "game_cockpit.h"
 #include "dvd_jobs.h"
 #include "packed_message.h"
+#include "game_scenario_exec.h"
+#include "game_action_button_step.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -20,6 +22,22 @@ typedef struct {gh_tutorial_bindings b;gh_r207_allocation resource;gh_bundle_ent
  * Resource/language/manager/runtime outlive all consumers and source views. */
 gh_tutorial_status gh_cockpit_tutorial_room_init_00147028(gh_cockpit_tutorial *,const gh_tutorial_bindings *);
 gh_tutorial_status gh_cockpit_tutorial_next_call(gh_cockpit_tutorial *);
+typedef struct {
+ gh_scene_scenario_view scenario;
+ gh_task_threads *threads;
+ gh_boot_work *work;
+ gh_game_cockpit *cockpit;
+ gh_title_player_view *actor;
+ int32_t slot;
+ gh_action_step_status status;
+ uint32_t frontier;
+ uint8_t scheduled;
+} gh_cockpit_tutorial_action;
+/* Original selected 3EB tutorial. Actor is the registered live runtime view;
+ * Scenario manager owns the fixed-slot fiber and all scheduling flags. */
+gh_action_step_status gh_cockpit_tutorial_action_001bf7d8(gh_cockpit_tutorial_action *,
+ gh_scene_scenario_view,gh_task_threads *,gh_boot_work *,gh_game_cockpit *,gh_title_player_view *,
+ uint32_t *frontier);
 /* Native teardown after Main/queued consumers stop, BEFORE roomheap free or
  * ID compaction. Original147188 itself only resets B0/AC/B8. Clears only
  * matching source-backed views, detaches owned Base then frees owned bytes. */

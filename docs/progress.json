@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T06:16:12.079864+00:00",
-  "stage": "native-windows-r100-grab-r105-enemy-movement",
+  "verified_utc": "2026-11-15T07:00:48.588489+00:00",
+  "stage": "native-windows-r100-tutorial-and-r105-combat",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -176,7 +176,7 @@
     "scope": "EV02 and original R105 transition with the R003 destination selected at title handoff",
     "hidden": true,
     "muted": true,
-    "ticks": 3498,
+    "ticks": 3735,
     "room": "0105",
     "next_room": "0105",
     "original_GameMain_state": 4,
@@ -188,8 +188,8 @@
     "world_gpu_error": 0,
     "effect_post_error": 0,
     "window_error": 0,
-    "frontier": "00306528",
-    "frontier_operation": "EM27 attached sequence effect",
+    "frontier": "0012C0F8",
+    "frontier_operation": "Gene Take, incoming kind 3E",
     "normal_play_entry_verified": false,
     "r105_load_verified": true,
     "native_regression": {
@@ -197,9 +197,9 @@
       "passed_checks": 371,
       "skipped_checks": 18
     },
-    "scene_frames_presented_in_r105": 183,
+    "scene_frames_presented_in_r105": 420,
     "first_r105_scene_serial": 3195,
-    "last_r105_scene_serial": 3377,
+    "last_r105_scene_serial": 3614,
     "first_r105_scene_tick": 3315
   },
   "native_windows_execution": {
@@ -266,7 +266,18 @@
     "renderer_error": 0,
     "world_gpu_error": 0,
     "effect_post_error": 0,
-    "window_error": 0
+    "window_error": 0,
+    "paired_escape_counter": {
+      "ticks": 2727,
+      "scene_frames_presented": 2586,
+      "counter_presented": true,
+      "collateral_source_stamp": 20,
+      "collateral_target_stamp": 19,
+      "collateral_hp_before": 26,
+      "collateral_hp_after": 16,
+      "next_original_call": "00301C20",
+      "next_original_operation": "Collateral particle position initialization"
+    }
   },
   "tests": {
     "native_build": "passed",
@@ -1145,5 +1156,18 @@
     "first_scene_frame_completed": true,
     "world_commands": 258,
     "actor_commands": 75
+  },
+  "native_windows_r100_tutorial": {
+    "scope": "Tutorial 1, actual controller approach, Circle open and Cross close",
+    "room": "0100",
+    "first_tutorial_presented": true,
+    "open_scene_serial": 1655,
+    "closed_scene_serial": 1682,
+    "ticks": 1822,
+    "exit_code": 0,
+    "renderer_error": 0,
+    "world_gpu_error": 0,
+    "effect_post_error": 0,
+    "window_error": 0
   }
 }

@@ -1,4 +1,5 @@
 #include "game_camera_envelope.h"
+#include "sdk_rotation_trig.h"
 #include "id_layout_rotation.h"
 #include <string.h>
 #include <math.h>
@@ -23,7 +24,7 @@ gh_camera_status gh_game_camera_envelope_bind_model(gh_camera_envelope*s,const g
 /* Actual1F8180 bounded native reference, coefficients borrowed from42C350.
  * Neither libc atan nor a generic look-at replacement is used. */
 static float atan_original(const gh_camera_envelope*s,float y,float x){float ay=fabsf(y),ax=fabsf(x),pi=bits(0x40490fdb);if(ax<bits(0x3727c5ac))return ay<bits(0x3727c5ac)?0:(y<0?bits(0xbfc90fdb):bits(0x3fc90fdb));if(ay<bits(0x3727c5ac))return x<0?(y<0?-pi:pi):0;float r=divide(add(ay,-ax),add(ay,ax)),r2=mul(r,r),p=r,result=mul(r,s->atan_coeff[0]);for(unsigned i=1;i<8;i++){p=mul(p,r2);result=add(result,mul(p,s->atan_coeff[i]));}result=add(result,bits(0x3f490fdb));return x<0?(y<0?add(result,-pi):add(pi,-result)):(y<0?-result:result);}
-static gh_camera_status aim(const gh_camera_envelope*s,gh_game_pl_camera*c,uint32_t*f){float d[3];for(unsigned i=0;i<3;i++){d[i]=add(number(c->fields+0x210+i*4),-number(c->fields+0x200+i*4));if(!isfinite(d[i]))return fail(f,0x138358,GH_CAMERA_NUMERIC);}float yaw=(d[0]==0&&d[2]==0)?0:atan_original(s,d[0],d[2]),sn,cs;if(gh_id_sincos_reference(-yaw,&sn,&cs))return fail(f,0x30a7b8,GH_CAMERA_UNSUPPORTED);
+static gh_camera_status aim(const gh_camera_envelope*s,gh_game_pl_camera*c,uint32_t*f){float d[3];for(unsigned i=0;i<3;i++){d[i]=add(number(c->fields+0x210+i*4),-number(c->fields+0x200+i*4));if(!isfinite(d[i]))return fail(f,0x138358,GH_CAMERA_NUMERIC);}float yaw=(d[0]==0&&d[2]==0)?0:atan_original(s,d[0],d[2]),sn,cs;uint32_t rotation_frontier; if(gh_sdk_rotation_sincos_reference_0030a5d0(-yaw,&sn,&cs,GH_STATIC_BINARY32_REFERENCE,&rotation_frontier))return fail(f,0x30a7b8,GH_CAMERA_UNSUPPORTED);
  /* 138358 uses actual MtxInitRotY then30A2B0, including explicit zero terms. */
  float ry=add(add(add(mul(0,d[0]),mul(1,d[1])),mul(0,d[2])),0),rz=add(add(add(mul(-sn,d[0]),mul(0,d[1])),mul(cs,d[2])),0);float pitch=(ry==0&&rz==0)?0:-atan_original(s,ry,rz);if(!isfinite(pitch)||!isfinite(yaw))return fail(f,0x1f8180,GH_CAMERA_NUMERIC);store(c->fields+0x220,pitch);store(c->fields+0x224,yaw);put(c->fields+0x228,0);return GH_CAMERA_OK;}
 static gh_camera_status resolve_target(const gh_player_target_bindings *binding,

@@ -133,7 +133,7 @@ static gh_voice_status play(gh_audio_output *s,const gh_adpcm_pcm *p,uint32_t ra
  const uint16_t block_align=(uint16_t)(channels*sizeof(int16_t));
  if(p->frames>UINT32_MAX/block_align)return GH_VOICE_BOUNDS;
  if((!p->loop_frames&&p->loop_first)||p->loop_first>p->frames||
-    p->loop_frames>p->frames-p->loop_first|| (p->loop_frames&&channels!=1))
+    p->loop_frames>p->frames-p->loop_first)
      return GH_VOICE_ARGUMENT;
  const size_t bytes=p->frames*block_align;
  gh_audio_output_reap(s);

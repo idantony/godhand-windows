@@ -1,4 +1,5 @@
 #include "game_cockpit_tutorial.h"
+#include "game_scenario_soft_event.h"
 #include <stdio.h>
 #include <string.h>
 static gh_tutorial_status fail(gh_cockpit_tutorial*s,uint32_t pc,gh_tutorial_status e){s->frontier=pc;return e;}
@@ -38,4 +39,98 @@ gh_tutorial_status gh_cockpit_tutorial_release(gh_cockpit_tutorial*s){
  if(contains(s,s->b.packed->cursor.bytes))memset(&s->b.packed->cursor,0,sizeof(s->b.packed->cursor));
  if(s->resource.pointer&&gh_heap_release(s->b.room_heap,s->resource))return fail(s,0x30ee40,GH_TUTORIAL_MEMORY);
  memset(s,0,sizeof(*s));return GH_TUTORIAL_OK;
+}
+
+static uint32_t tutorial_word(const uint8_t *bytes)
+{
+ uint32_t word;
+ memcpy(&word,bytes,sizeof(word));
+ return word;
+}
+static void tutorial_put(uint8_t *bytes,uint32_t value)
+{
+ memcpy(bytes,&value,sizeof(value));
+}
+static int tutorial_sleep(gh_cockpit_tutorial_action *s,int32_t frames)
+{
+ if(!gh_task_threads_sleep(s->threads,frames))return 1;
+ s->status=GH_ACTION_STEP_CALLEE;
+ s->frontier=0x2d5aa0;
+ return 0;
+}
+static void tutorial_task_001bf8c8(void *context,int32_t argument)
+{
+ gh_cockpit_tutorial_action *s=context;
+ gh_task_manager *manager=s->scenario.manager;
+ s->frontier=0x1bf8c8;
+ s->status=GH_ACTION_STEP_CALLEE;
+ if(argument!=0||manager->current_index!=s->slot||
+    manager->current!=&manager->records[s->slot])return;
+ uint8_t *actor=s->actor->bytes,*work=(uint8_t *)s->work;
+ const uint16_t message=(uint16_t)(0x2000+(int8_t)actor[0x600]);
+ if(gh_game_cockpit_tutorial_select_001471a8(s->cockpit,message)){
+  s->frontier=0x1471a8;
+  return;
+ }
+ s->status=GH_ACTION_STEP_OK;
+ s->frontier=0;
+ if(!tutorial_sleep(s,10))return;
+ while(!(tutorial_word(work+0x1a0)&0x30000000u))
+  if(!tutorial_sleep(s,1))return;
+ if(gh_game_cockpit_tutorial_request_close(s->cockpit)){
+  s->status=GH_ACTION_STEP_CALLEE;
+  s->frontier=0x1bf920;
+  return;
+ }
+ gh_cockpit_tutorial_view tutorial;
+ do{
+  if(!tutorial_sleep(s,1))return;
+  if(gh_game_cockpit_get_tutorial(s->cockpit,&tutorial)){
+   s->status=GH_ACTION_STEP_CALLEE;
+   s->frontier=0x1bf960;
+   return;
+  }
+ }while(tutorial.state_b8);
+ memset(work+0x5d8,0,8);
+ memset(work+0x5e0,0,4);
+ manager->current->attributes&=~1u;
+ manager->flags&=~1u;
+ actor[0x602]=10;
+ actor[0x603]=0;
+ ++actor[0x2f5];
+ s->scheduled=0;
+ s->actor=NULL;
+}
+
+gh_action_step_status gh_cockpit_tutorial_action_001bf7d8(gh_cockpit_tutorial_action *s,
+ gh_scene_scenario_view scenario,gh_task_threads *threads,gh_boot_work *work,
+ gh_game_cockpit *cockpit,gh_title_player_view *actor,uint32_t *frontier)
+{
+ if(!frontier)return GH_ACTION_STEP_ARGUMENT;
+ *frontier=0x1bf7d8;
+ if(!s||!threads||!work||!cockpit||!actor||!actor->bytes||actor->size<0x604||
+    !scenario.bytes||!scenario.manager||gh_task_threads_manager(threads)!=scenario.manager||
+    !scenario.manager->records||scenario.manager->count<2)return GH_ACTION_STEP_ARGUMENT;
+ if(s->scheduled)return GH_ACTION_STEP_CALLEE;
+ *s=(gh_cockpit_tutorial_action){.scenario=scenario,.threads=threads,.work=work,.cockpit=cockpit,
+    .actor=actor,.slot=-1};
+ uint8_t *raw=(uint8_t *)work;
+ ++actor->bytes[0x2f5];
+ tutorial_put(raw+0x5e0,tutorial_word(raw+0x5e0)|0x100000u);
+ tutorial_put(raw+0x5d8,tutorial_word(raw+0x5d8)|0xfcd00000u);
+ if(gh_scenario_stop_input_0031afa0(work)){
+  *frontier=0x31afa0;
+  return GH_ACTION_STEP_CALLEE;
+ }
+ if(gh_scenario_exec_002c3890(scenario,threads,1,tutorial_task_001bf8c8,s,0,&s->slot,frontier)){
+  if(!*frontier)*frontier=0x2c3920;
+  return GH_ACTION_STEP_CALLEE;
+ }
+ if(s->slot>=0){
+  scenario.manager->records[s->slot].attributes|=1;
+  s->scheduled=1;
+ }
+ scenario.manager->flags|=1;
+ *frontier=0;
+ return GH_ACTION_STEP_OK;
 }

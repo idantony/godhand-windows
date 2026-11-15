@@ -15,7 +15,8 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
    gh_effect_emitter_view view;
    if(!gh_effect_create_emitter_at(b->effects,i,&view)&&view.payload==p&&
       (gh_effect_stamp19_attack_part_is_bound(&view)||gh_effect_stamp19_death_part_is_bound(&view)||gh_effect_knockdown_emitter_is_bound(&view)||gh_effect_em00_attack_emitter_is_bound(&view)||gh_effect_devil_emitter_is_bound(b->effects,&view)||
-       (kind==4&&gh_effect_player_attachment_emitter_is_bound(&view)))&&
+       ((kind==4||(kind==0&&rd(p+0x18c)==0x00420000u))&&
+        gh_effect_player_attachment_emitter_is_bound(&view)))&&
       actor&&view.actor->bytes==actor->bytes){
     /* 302918 only sets the stop request. The Effects step owns child
      * links, pending masks, and final destruction. */

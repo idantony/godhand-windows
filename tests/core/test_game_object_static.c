@@ -55,6 +55,27 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  C(!gh_title_player_construct_00107e40(player_bytes,sizeof(player_bytes),&player));player.initial_memory=GH_TITLE_MEMORY_ZERO_REFERENCE;
  C(!fesetround(FE_DOWNWARD)&&!gh_game_move_objects_0030f090(&state,&pools,&work,timer,&clock,&f)&&fegetround()==FE_DOWNWARD&&clock.calls==2&&state.moved_objects_5caffc==156&&state.profile_752cf8==UINT32_C(0xffffffd8));C(!fesetround(FE_TONEAREST));
  unsigned p10=0,p14=0,uv=0;for(size_t i=0;i<156;i++){const gh_scene_mesh_object*o;C(!gh_scene_meshes_object_at(&meshes,i,&o));uint8_t*p=o->allocation.pointer;C((w(p+0x2f0)&3u)==0);unsigned blend=(w(o->descriptor.script.bytes+o->descriptor.mesh.descriptor_offset+0x3c)>>4)&15;C(o->alpha==(blend?state.alpha_presets[blend]:UINT64_C(0x8000000044)));if(p[0x2be]==10)p10++;else{C(p[0x2be]==14);p14++;}if(rf((uint8_t*)o->node+0x38c)!=0||rf((uint8_t*)o->node+0x390)!=0)uv++;}C(p10&&p14&&uv==6&&meshes.first.test==0x51001);
+ /* Tutorial Stop mode uses the original static packet update on current parity
+  * only. The positive near and far cases already split this actual roster. */
+ uint32_t previous_node[156],previous_object[156],old_uv[156],old_uv_y[156];
+ uint8_t previous_program[156];
+ for(size_t i=0;i<156;i++){
+  const gh_scene_mesh_object *o;C(!gh_scene_meshes_object_at(&meshes,i,&o));
+  previous_node[i]=o->node_program[0];previous_object[i]=o->object_program[0];
+  previous_program[i]=((const uint8_t*)o->allocation.pointer)[0x2be];
+  old_uv[i]=w((const uint8_t*)o->node+0x38c);old_uv_y[i]=w((const uint8_t*)o->node+0x390);
+ }
+ ww((uint8_t*)&work+0x5d8,0x08000000u);ww((uint8_t*)&work+0x210,1);
+ C(!fesetround(FE_UPWARD)&&!gh_game_move_objects_0030f090(&state,&pools,&work,timer,&clock,&f)&&fegetround()==FE_UPWARD);
+ C(!f&&state.moved_objects_5caffc==156);C(!fesetround(FE_TONEAREST));
+ for(size_t i=0;i<156;i++){
+  const gh_scene_mesh_object *o;C(!gh_scene_meshes_object_at(&meshes,i,&o));
+  const uint8_t *p=o->allocation.pointer;
+  C(p[0x2b6]==255&&p[0x2be]==previous_program[i]&&o->node_program[0]==previous_node[i]&&o->object_program[0]==previous_object[i]);
+  C(o->node_program[1]==(0x80000000u|previous_program[i])&&o->object_program[1]==previous_program[i]);
+  C(w((const uint8_t*)o->node+0x38c)==old_uv[i]&&w((const uint8_t*)o->node+0x390)==old_uv_y[i]);
+ }
+ ww((uint8_t*)&work+0x5d8,0);ww((uint8_t*)&work+0x210,0);
  gh_light_player_parts parts={player.bytes,NULL,0};C(!gh_game_world_light_select_002d8408(light,0,&parts)&&!gh_game_world_light_move_002d7560(light,&work,&pools,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
  /* Exercise original force-visible debug bit as an explicit CPU queue fixture,
   * not as a production visibility bypass or a rendered R100 frame. */

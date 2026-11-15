@@ -604,7 +604,7 @@ gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit*s,const gh_boot_work*w
  if(s->update_stage==10){/* Actual13C808 constructor-established resourceNULL. */if(!(s->hud_cold_known&1)||u32(s->fields+0x1dc0+0x94)||base(s,0x1dc0)->owns_run)return frame_stop(s,0x13c950);s->update_stage=11;}
  if(s->update_stage==11){/*13F5D0 global guards precede real140860 cleanup. */if(!(u32(w+0x584)&8)&&!(u32(w+0x58c)&0x80000000)){if(!(s->hud_cold_known&2)||s->fields[0x1e90+0x358])return frame_stop(s,0x140860);if(u32(s->fields+0x1e90+0xa0))return frame_stop(s,0x13f5d0);}s->update_stage=12;}
  if(s->update_stage==12){if(!(s->hud_cold_known&4)||u32(s->fields+0x2220+0x94)||base(s,0x2220)->owns_run)return frame_stop(s,0x13e970);s->update_stage=13;}
- if(s->update_stage==13){if(u32(s->fields+0x1a20+0xb0)){unsigned state=s->fields[0x1a20+0xb8];if(state>=1&&state<=5)return frame_stop(s,0x1471f0);TRY(gameplay_move_base(s,0x1a20,c));}s->update_stage=14;}
+ if(s->update_stage==13){if(u32(s->fields+0x1a20+0xb0)){unsigned state=s->fields[0x1a20+0xb8];if(!s->gameplay_error&&state>=1&&state<=5)TRY(gh_game_cockpit_tutorial_move_001471f0(s));TRY(gameplay_move_base(s,0x1a20,c));}s->update_stage=14;}
  if(s->update_stage==14){/* First true registeredwidget,unlessoriginal77 gate. */if(!s->fields[0x6e0+0x77])TRY(gameplay_radar(s,c));s->gameplay_index=1;s->update_stage=15;}
  if(s->update_stage==15){while(s->gameplay_index<11){unsigned i=s->gameplay_index;if(!s->fields[registry[i].offset+0x77]){if(i==1)TRY(gh_game_cockpit_heat_move_00142060(s,work_state,c));else TRY(gameplay_widget(s,i,work_state,c));}s->gameplay_index++;}s->update_stage=2;}
  if(s->update_stage==1){TRY(frame_move_base(s,0x1520,c));s->update_stage=2;}
@@ -703,7 +703,7 @@ gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit*s,const gh_boot_work*
   if(u32(s->fields+0x1e54)&&u32(s->fields+0x1e5c))return frame_stop(s,0x13cf20);
   if(u32(s->fields+0x1f30)&&(u32(s->fields+0x1f20)&0x80000000))return frame_stop(s,0x140638);
   if(u32(s->fields+0x22b4)&&u32(s->fields+0x22bc))return frame_stop(s,0x13eba0);
-  unsigned kind=s->fields[0x1ad8];if(u32(s->fields+0x1ad0)&&kind>0&&kind<5)return frame_stop(s,0x147460);
+  unsigned kind=s->fields[0x1ad8];if(u32(s->fields+0x1ad0)&&kind>0&&kind<5)TRY(frame_trans(s,0x1a20,c));
   s->draw_stage=1;
  }
  /* ActualfirstregisteredRadar, no widget hidden to bypass its consumer. */
@@ -758,6 +758,84 @@ gh_id_error gh_game_cockpit_get_tutorial(gh_game_cockpit*s,gh_cockpit_tutorial_v
  (uint16_t)(s->fields[0x1a20+0xac]|(unsigned)s->fields[0x1a20+0xad]<<8),
  u32(s->fields+0x1a20+0xb0)!=0,s->fields[0x1a20+0xb8]};return GH_ID_OK;
 }
+gh_id_error gh_game_cockpit_tutorial_select_001471a8(gh_game_cockpit *s,uint16_t message)
+{
+ if(!s||!s->ready)return GH_ID_ARGUMENT;
+ const unsigned o=0x1a20;
+ if(!u32(s->fields+o+0xb0))return GH_ID_OK;
+ gh_id_entry *icons[2];
+ TRY(work(s,o,5,o+0xa4,&icons[0]));
+ TRY(work(s,o,6,o+0xa8,&icons[1]));
+ w16(s,o+0xac,message);
+ s->fields[o+0xb8]=1;
+ icons[0]->flags|=0x08000000;
+ icons[1]->flags|=0x08000000;
+ return GH_ID_OK;
+}
+
+gh_id_error gh_game_cockpit_tutorial_request_close(gh_game_cockpit *s)
+{
+ if(!s||!s->ready)return GH_ID_ARGUMENT;
+ uint8_t *state=s->fields+0x1ad8;
+ if(*state==2||*state==3)*state=4;
+ return GH_ID_OK;
+}
+
+/* 1471F0's tutorial-specific state writes. The caller then performs the
+ * actual Base.Move exactly once through its shared post consumer. */
+gh_id_error gh_game_cockpit_tutorial_move_001471f0(gh_game_cockpit *s)
+{
+ if(!s||!s->ready)return GH_ID_ARGUMENT;
+ const unsigned o=0x1a20;
+ uint8_t *state=s->fields+o+0xb8;
+ if(!u32(s->fields+o+0xb0)||!*state||*state>5)return GH_ID_OK;
+ gh_id_entry *entry[7];
+ for(unsigned i=0;i<7;i++)TRY(work(s,o,(int)i,o+0x90+i*4,&entry[i]));
+ if(*state==1){
+  TRY(restart(s,o));
+  base(s,o)->playing=1;
+  *state=2;
+ }
+ const uint16_t message=(uint16_t)(s->fields[o+0xac]|(unsigned)s->fields[o+0xad]<<8);
+ switch(*state){
+ case 2:
+  if(!entry[0]->source)return GH_ID_ARGUMENT;
+  entry[0]->scale_x=add(entry[0]->scale_x,0.1f);
+  entry[0]->scale_y=add(entry[0]->scale_y,0.1f);
+  if(frame_number(entry[0]->source+0x28)<entry[0]->scale_x){
+   entry[0]->scale_x=frame_number(entry[0]->source+0x28);
+   entry[0]->scale_y=frame_number(entry[0]->source+0x2c);
+   entry[1]->message=entry[2]->message=message;
+   *state=3;
+  }
+  break;
+ case 3:
+  entry[1]->flags&=~0x08000000u;
+  entry[2]->flags&=~0x08000000u;
+  if(message>=0x2000&&message<=0x2005){
+   entry[3]->message=entry[4]->message=(uint16_t)(message+6);
+   if(message==0x2000)entry[5]->flags&=~0x08000000u;
+   if(message==0x2004)entry[6]->flags&=~0x08000000u;
+  }
+  break;
+ case 4:
+  entry[1]->flags|=0x08000000u;
+  entry[2]->flags|=0x08000000u;
+  entry[0]->scale_x=add(entry[0]->scale_x,-0.1f);
+  entry[0]->scale_y=add(entry[0]->scale_y,-0.1f);
+  if(entry[0]->scale_x<0){
+   entry[0]->scale_x=entry[0]->scale_y=0;
+   *state=5;
+  }
+  break;
+ case 5:
+  *state=0;
+  w16(s,o+0xac,0xffff);
+  break;
+ }
+ return GH_ID_OK;
+}
+
 gh_id_error gh_game_cockpit_tutorial_mark_resource(gh_game_cockpit*s,uint32_t job){
  if(!s||!s->ready||!job)return GH_ID_ARGUMENT;
  w32(s,0x1a20+0xb4,job);w32(s,0x1a20+0xb0,1);return GH_ID_OK;

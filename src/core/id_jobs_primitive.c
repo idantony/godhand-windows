@@ -6,7 +6,11 @@ gh_id_error gh_id_texture_quad_prepare(const gh_id_state *manager,const gh_id_ba
  const gh_id_entry *e,gh_id_texture_quad *out){
  gh_id_texture_quad q;gh_id_error error;float width,height,cx,cy;
  if(!manager||!o||!e||!out)return GH_ID_ARGUMENT;
- if(e->kind!=0||e->b89>4||e->draw_rotation!=0||e->f80!=1||e->texture.bytes)return GH_ID_UNSUPPORTED;
+ const int tutorial=o->resource_number==0x1d&&
+    (e->b8a==0x1d||(e->b8a==1&&e->b8b==1));
+ if(e->kind!=0||e->b89>4||e->draw_rotation!=0||e->texture.bytes||
+    (e->f80!=1&&(!tutorial||!isfinite(e->f80)||e->f80<=0||e->f80>2)))
+    return GH_ID_UNSUPPORTED;
  error=gh_id_texture_open(manager,e->b8a,(uint32_t)e->b8b+1,&q.texture);if(error)return error;
  width=e->f68*e->draw_scale_x;height=e->f6c*e->draw_scale_y;cx=e->draw_x+1;cy=e->draw_y+1;
  if(!isfinite(width)||!isfinite(height)||!isfinite(cx)||!isfinite(cy)||width<=0||height<=0)return GH_ID_UNSUPPORTED;
@@ -16,6 +20,12 @@ gh_id_error gh_id_texture_quad_prepare(const gh_id_state *manager,const gh_id_ba
  case 2:q.x0=cx-width;q.x1=cx;q.y0=cy;q.y1=cy+height;break;
  case 3:q.x0=cx;q.x1=cx+width;q.y0=cy-height;q.y1=cy;break;
  default:q.x0=cx-width;q.x1=cx;q.y0=cy-height;q.y1=cy;break;
+ }
+ if(e->f80!=1){
+  /* 2C62CC scales X about the 512-wide original screen center. */
+  const float bias=(512.0f*(1.0f-e->f80))*0.5f;
+  q.x0=q.x0*e->f80+bias;
+  q.x1=q.x1*e->f80+bias;
  }
  q.u0=e->f70[0];q.v0=e->f70[1];q.u1=e->f70[2];q.v1=e->f70[3];
  if(!isfinite(q.u0)||!isfinite(q.v0)||!isfinite(q.u1)||!isfinite(q.v1))return GH_ID_UNSUPPORTED;

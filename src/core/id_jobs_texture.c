@@ -23,14 +23,22 @@ gh_id_error gh_id_texture_open(const gh_id_state *m,uint32_t slot,uint32_t n,gh_
 }
 static int tim2_hud8(const gh_tim2_picture *picture)
 {
- return picture->tex0==GH_ID_TIM2_128X64_PSMT8_TEX0&&picture->width==128&&
-        picture->height==64&&picture->image_type==5&&picture->clut_type==3&&picture->colors==256;
+ const int profile=(picture->tex0==GH_ID_TIM2_128X64_PSMT8_TEX0&&picture->width==128)||
+    (picture->tex0==GH_ID_TIM2_64X64_PSMT8_TEX0&&picture->width==64);
+ return profile&&picture->height==64&&picture->image_type==5&&picture->clut_type==3&&picture->colors==256;
 }
 static int tim2_number4(const gh_tim2_picture *picture)
 {
  return picture->tex0==GH_ID_TIM2_128X128_PSMT4_TEX0&&picture->width==128&&
         picture->height==128&&picture->image_type==4&&picture->clut_type==3&&picture->colors==16;
 }
+static int tim2_tutorial4(const gh_tim2_picture *picture)
+{
+ const int profile=(picture->tex0==GH_ID_TIM2_128X64_PSMT4_TEX0&&picture->width==128)||
+    (picture->tex0==GH_ID_TIM2_64X64_PSMT4_TEX0&&picture->width==64);
+ return profile&&picture->height==64&&picture->image_type==4&&picture->clut_type==3&&picture->colors==16;
+}
+
 gh_id_error gh_id_texture_open_view(const gh_id_view *source,gh_id_texture *out){
  if(!source||!source->bytes||!out)return GH_ID_ARGUMENT;
  gh_id_texture t={.source=*source};
@@ -43,7 +51,7 @@ gh_id_error gh_id_texture_open_view(const gh_id_view *source,gh_id_texture *out)
   int cursor=picture.width==32&&picture.height==32&&((picture.tex0>>30)&15)==5;
   int indexed4=(loading||cursor)&&picture.image_type==4&&picture.clut_type==3&&picture.colors==16&&
                 ((picture.tex0>>20)&63)==20&&((picture.tex0>>26)&15)==5&&!((picture.tex0>>35)&3);
-  if(!indexed4&&!tim2_hud8(&picture)&&!tim2_number4(&picture))return GH_ID_UNSUPPORTED;
+  if(!indexed4&&!tim2_hud8(&picture)&&!tim2_number4(&picture)&&!tim2_tutorial4(&picture))return GH_ID_UNSUPPORTED;
   t.width=picture.width;t.height=picture.height;t.tex0=picture.tex0;*out=t;return GH_ID_OK;
  }
  if(t.source.size<48||u32(t.source.bytes)&0x80000000U)return GH_ID_UNSUPPORTED;
@@ -80,7 +88,7 @@ gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity
   if(p.width!=t->width||p.height!=t->height||t->tex0!=p.tex0)return GH_ID_UNSUPPORTED;
   if(tim2_hud8(&p))e=gh_tim2_rgba8(&p,rgba,capacity);
   else{
-   if(!tim2_number4(&p)&&(t->width!=32||
+   if(!tim2_number4(&p)&&!tim2_tutorial4(&p)&&(t->width!=32||
       (t->height!=32&&(t->height!=16||t->tex0!=UINT64_C(0x115408000)))))return GH_ID_UNSUPPORTED;
    e=gh_tim2_rgba4(&p,rgba,capacity);
   }

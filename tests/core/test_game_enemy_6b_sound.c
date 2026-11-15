@@ -18,7 +18,7 @@ static void store(void*p,float f){memcpy(p,&f,4);}
 /* GNU link wrapping records calls from unchanged production se_voice.
  * No implementation here initializes a device or claims samples played. */
 typedef struct {float left,right;size_t frames;int live;} recorded_voice;
-static recorded_voice submitted[32];
+static recorded_voice submitted[48];
 static unsigned submissions,gain_updates,stops,pitch_updates;
 static char command_order[256];
 static unsigned command_count;
@@ -28,7 +28,7 @@ gh_voice_status __wrap_gh_audio_output_play(gh_audio_output *output,const gh_adp
  uint32_t rate,float left,float right,uint32_t *handle)
 {
  C(output==(gh_audio_output *)&transport&&pcm&&pcm->samples&&pcm->frames&&rate==48000);
- C(submissions<32&&left>=0&&right>=0);
+ C(submissions<sizeof(submitted)/sizeof(submitted[0])&&left>=0&&right>=0);
  size_t nonzero=0;
  for(size_t i=0;i<pcm->frames;++i)nonzero+=pcm->samples[i]!=0;
  C(nonzero>0);
@@ -167,6 +167,7 @@ int main(int argc,char **argv)
  C(ready&&!gh_enemy_se_resolve_002cb418(banks,req.dependency_kind,&resolved)&&resolved==bank);
  check_program(registry,(int16_t)bank,0x0a,9,11025,12628);
  check_program(registry,(int16_t)bank,0x0b,10,11025,9772);
+ check_program(registry,(int16_t)bank,0x10,12,11025,24780);
 
  gh_game_title_player enemy={0};
  int original;
@@ -174,6 +175,7 @@ int main(int argc,char **argv)
  memcpy(enemy.view.bytes+0x2fe,&(uint16_t){0x202},2);
  uint32_t dep=req.dependency_kind;
  memcpy(enemy.view.bytes+0x564,&dep,4);
+ memcpy(enemy.view.bytes+0x640,&(uint16_t){req.entry_number},2);
  gh_object_view resource={.bytes=resource_bytes,.kind=0x202,.size=em_bytes,
       .file_extent=em_bytes,.file_extent_known=1};
  gh_enemy_model model={0};
@@ -195,8 +197,11 @@ int main(int argc,char **argv)
  memcpy(control.listener_position_c0,listener,sizeof(listener));
  memcpy(control.listener_matrix_d0,matrix,sizeof(matrix));
  control.listener_mode110=1;
- for(unsigned i=0;i<2;++i){
-  gh_motion_sound_request request={.model=&model.model,.actor=&enemy.view,.bank=1,.program=(int16_t)(0x0a+i)};
+ const int16_t em00_programs[]={0x0a,0x0b,0x10};
+ const unsigned em00_slots[]={9,10,12};
+ const size_t em00_frames[]={12628,9772,24780};
+ for(unsigned i=0;i<3;++i){
+  gh_motion_sound_request request={.model=&model.model,.actor=&enemy.view,.bank=1,.program=em00_programs[i]};
   uint32_t handle=0,frontier=0,duplicate=99;
   C(!gh_actor_attached_sound_motion(&source,&request,&handle,&frontier)&&!frontier&&handle);
   C(!memcmp(&random,&expected,sizeof(random))); /* No MT variation in either row. */
@@ -207,14 +212,14 @@ int main(int argc,char **argv)
   C(!status);
   gh_se_voice_info info;
   C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&
-    info.position_mode==2&&info.distance==3&&info.pitch_q12&&info.sample_slot==9+i&&
+    info.position_mode==2&&info.distance==3&&info.pitch_q12&&info.sample_slot==em00_slots[i]&&
     info.channel>=45&&info.channel<=47&&info.adsr2==0x5fcb);
-  C(submissions==i+1&&submitted[i].frames>(i?9772u:12628u));
+  C(submissions==i+1&&submitted[i].frames>em00_frames[i]);
   C(info.left_q14||info.right_q14);
   fprintf(stdout,"EM00 cue %02X slot %u pitch %u channel %u PCM %zu\n",request.program,
       info.sample_slot,info.pitch_q12,info.channel,submitted[i].frames);
  }
- C(!gh_actor_attached_sound_abort(&source)&&submissions==2&&stops==2);
+ C(!gh_actor_attached_sound_abort(&source)&&submissions==3&&stops==3);
 
  const size_t attack_frames[]={4312,3388,5684,9044};
  for(int16_t program=4;program<=6;program+=2){
@@ -251,6 +256,23 @@ int main(int argc,char **argv)
    C(!gh_actor_attached_sound_abort(&source)&&stops==submissions);
   }
  }
+
+ C(!gh_actor_attached_sound_bind(&source,&binding));
+ C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+ const gh_motion_sound_request hold_step={.model=&model.model,.actor=&enemy.view,.bank=0,.program=0xae};
+ uint32_t held_step_voice=0,held_step_frontier=0,held_step_duplicate=1;
+ const unsigned before_hold=submissions;
+ C(!gh_actor_attached_sound_motion(&source,&hold_step,&held_step_voice,&held_step_frontier)&&
+   held_step_voice&&!held_step_frontier);
+ C(!gh_actor_attached_sound_motion(&source,&hold_step,&held_step_duplicate,&held_step_frontier)&&
+   !held_step_duplicate&&!held_step_frontier);
+ C(!gh_se_voice_update(voices));
+ gh_se_voice_info step_info;
+ C(!gh_se_voice_query(voices,held_step_voice,&step_info)&&!step_info.pending&&step_info.native_voice&&
+   step_info.bank==0&&step_info.program==0xae&&step_info.sample_slot==103&&step_info.position_mode==2&&
+   step_info.rate==14000&&step_info.adsr2==0x5fc0&&step_info.channel>=28&&step_info.channel<=30);
+ C(submissions==before_hold+1&&submitted[before_hold].frames>3920);
+ C(!gh_actor_attached_sound_abort(&source)&&stops==submissions);
 
  const int16_t core_attack[]={0x83,0x84,0x85,0x87};
  for(unsigned i=0;i<sizeof(core_attack)/sizeof(core_attack[0]);++i){
@@ -438,10 +460,11 @@ int main(int argc,char **argv)
  C(!gh_actor_attached_sound_abort(&source)&&!model.model.sound_borrowers);
  memcpy(enemy.view.bytes+0x640,&(uint16_t){req.entry_number},2);
 
- const size_t em27_frames[]={16408,7336};
- for(unsigned i=0;i<2;++i){
-  em27_cue.program=(int16_t)(0xa+i);
-  check_program(registry,(int16_t)em27_bank,em27_cue.program,9+i,11025,em27_frames[i]);
+ const struct {int16_t program;unsigned slot;size_t frames;} em27_turns[]={
+  {0x0a,9,16408},{0x0b,10,7336},{0x10,12,25060}};
+ for(unsigned i=0;i<sizeof(em27_turns)/sizeof(em27_turns[0]);++i){
+  em27_cue.program=em27_turns[i].program;
+  check_program(registry,(int16_t)em27_bank,em27_cue.program,em27_turns[i].slot,11025,em27_turns[i].frames);
   C(!gh_actor_attached_sound_bind(&source,&binding)&&
     !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
   const unsigned before=submissions;
@@ -452,9 +475,9 @@ int main(int argc,char **argv)
   C(!memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_update(voices));
   gh_se_voice_info info;
   C(!gh_se_voice_query(voices,handle,&info)&&info.bank==em27_bank&&info.program==em27_cue.program&&
-    !info.pending&&info.native_voice&&info.position_mode==2&&info.distance==3&&info.sample_slot==9+i&&
+    !info.pending&&info.native_voice&&info.position_mode==2&&info.distance==3&&info.sample_slot==em27_turns[i].slot&&
     info.rate==11025&&info.adsr2==0x5fcb&&info.channel>=43&&info.channel<=45);
-  C(submissions==before+1&&submitted[before].frames>em27_frames[i]&&(info.left_q14||info.right_q14));
+  C(submissions==before+1&&submitted[before].frames>em27_turns[i].frames&&(info.left_q14||info.right_q14));
   printf("R105 stamp2 EM27 cue %02X slot %u channel %u PCM %zu\n",
       info.program,info.sample_slot,info.channel,submitted[before].frames);
   C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
@@ -481,12 +504,29 @@ int main(int argc,char **argv)
       info.sample_slot,submitted[before].frames);
   C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
  }
+ em27_cue.program=0xae;
+ C(!gh_actor_attached_sound_bind(&source,&binding)&&
+   !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
+ expected=random;
+ uint32_t em27_hold=0;
+ const unsigned before_em27_hold=submissions;
+ C(!gh_actor_attached_sound_motion(&source,&em27_cue,&em27_hold,&frontier)&&
+   em27_hold&&!frontier&&!memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_update(voices));
+ gh_se_voice_info em27_hold_info;
+ C(!gh_se_voice_query(voices,em27_hold,&em27_hold_info)&&em27_hold_info.bank==0&&
+   em27_hold_info.program==0xae&&em27_hold_info.sample_slot==103&&em27_hold_info.native_voice&&
+   em27_hold_info.rate==14000&&em27_hold_info.adsr2==0x5fc0&&em27_hold_info.position_mode==2&&
+   submissions==before_em27_hold+1&&submitted[before_em27_hold].frames>3920);
+ printf("R105 stamp2 EM27 hold footstep %02X slot %u PCM %zu\n",em27_hold_info.program,
+     em27_hold_info.sample_slot,submitted[before_em27_hold].frames);
+ C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
  em27_cue.bank=1;
- em27_cue.program=6;
- const size_t em27_attack_frames[]={8316,9044};
- for(unsigned variant=0;variant<2;++variant){
-  check_program(registry,(int16_t)em27_bank,(int16_t)(6+variant),
-      5+variant,11025,em27_attack_frames[variant]);
+ const size_t em27_attack_frames[]={3668,3360,8316,9044};
+ for(unsigned row=0;row<4;++row){
+  const unsigned variant=row&1u;
+  em27_cue.program=(int16_t)(4+(row&2u));
+  check_program(registry,(int16_t)em27_bank,(int16_t)(4+row),
+      3+row,11025,em27_attack_frames[row]);
   gh_game_mt_seed_0030f2b0(&random,variant?1:2);
   expected=random;
   uint32_t draw;
@@ -501,14 +541,32 @@ int main(int argc,char **argv)
   C(!gh_se_voice_update(voices));
   gh_se_voice_info info;
   C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&
-    info.bank==em27_bank&&info.program==(int16_t)(6+variant)&&info.sample_slot==5+variant&&
+    info.bank==em27_bank&&info.program==(int16_t)(4+row)&&info.sample_slot==3+row&&
     info.rate==11025&&info.adsr1==0x80ff&&info.adsr2==0x5fcb&&info.channel==42&&info.position_mode==2);
-  C(submissions==before+1&&submitted[before].frames>em27_attack_frames[variant]);
-  printf("R105 stamp2 EM27 grab cue %02X slot %u PCM %zu\n",info.program,
+  C(submissions==before+1&&submitted[before].frames>em27_attack_frames[row]);
+  printf("R105 stamp2 EM27 attack cue %02X slot %u PCM %zu\n",info.program,
       info.sample_slot,submitted[before].frames);
   C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
  }
  em27_cue.bank=0;
+ const int16_t em27_core_attack[]={0x83,0x87};
+ for(unsigned cue=0;cue<sizeof(em27_core_attack)/sizeof(em27_core_attack[0]);cue++){
+  em27_cue.program=em27_core_attack[cue];
+  C(!gh_actor_attached_sound_bind(&source,&binding)&&
+    !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
+  expected=random;
+  uint32_t handle=0;
+  const unsigned before=submissions;
+  C(!gh_actor_attached_sound_motion(&source,&em27_cue,&handle,&frontier)&&handle&&!frontier&&
+    !memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_update(voices));
+  gh_se_voice_info info;
+  C(!gh_se_voice_query(voices,handle,&info)&&info.bank==0&&info.program==em27_cue.program&&
+    info.sample_slot==(uint32_t)(info.program-0x2d)&&info.native_voice&&info.rate==16000&&
+    info.adsr2==0x5fc0&&info.position_mode==2&&submissions==before+1&&submitted[before].frames);
+  printf("R105 stamp2 CORE attack %02X slot %u PCM %zu\n",info.program,
+      info.sample_slot,submitted[before].frames);
+  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
+ }
  em27_cue.program=0x8d;
  C(!gh_actor_attached_sound_bind(&source,&binding)&&
    !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
@@ -546,21 +604,26 @@ int main(int argc,char **argv)
  C(!gh_actor_model_bind_packet_inputs(&player_model,heap,&fog)&&
     !gh_actor_model_initialize_00149738(&player_model,&player,&work,&pools,&player_md,&player_tm3,
         0,1,GH_STATIC_BINARY32_REFERENCE,&original)&&original);
- C(!gh_actor_attached_sound_bind(&source,&binding)&&
-    !gh_actor_attached_sound_bind_scene_tables(&source,&tables));
  gh_motion_sound_request footing={.model=&player_model,.actor=&player,.bank=0,.program=0x8c};
- uint32_t footing_handle=0;
- const unsigned before_footing=submissions;
- C(!gh_actor_attached_sound_motion(&source,&footing,&footing_handle,&frontier)&&footing_handle&&!frontier);
- gh_voice_status footing_status=gh_se_voice_update(voices);
- if(footing_status)fprintf(stderr,"footing update %u frontier%08x\n",footing_status,gh_se_voice_frontier(voices));
- C(!footing_status);
- gh_se_voice_info footing_voice;
- C(!gh_se_voice_query(voices,footing_handle,&footing_voice)&&footing_voice.bank==0&&
-    footing_voice.program==0x8c&&footing_voice.sample_slot==91&&footing_voice.rate==14000&&
-    footing_voice.position_mode==2&&footing_voice.distance==3&&footing_voice.native_voice&&
-    footing_voice.adsr2==0x5fc0&&submissions==before_footing+1&&submitted[before_footing].frames>14728);
- C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!player_model.sound_borrowers);
+ const unsigned footing_rooms[]={0x100,0x105};
+ for(unsigned i=0;i<sizeof(footing_rooms)/sizeof(footing_rooms[0]);i++){
+  work.room=footing_rooms[i];
+  C(!gh_actor_attached_sound_bind(&source,&binding)&&
+     !gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+  uint32_t footing_handle=0;
+  const unsigned before_footing=submissions;
+  C(!gh_actor_attached_sound_motion(&source,&footing,&footing_handle,&frontier)&&footing_handle&&!frontier);
+  gh_voice_status footing_status=gh_se_voice_update(voices);
+  if(footing_status)fprintf(stderr,"footing update %u frontier%08x\n",footing_status,gh_se_voice_frontier(voices));
+  C(!footing_status);
+  gh_se_voice_info footing_voice;
+  C(!gh_se_voice_query(voices,footing_handle,&footing_voice)&&footing_voice.bank==0&&
+     footing_voice.program==0x8c&&footing_voice.sample_slot==91&&footing_voice.rate==14000&&
+     footing_voice.position_mode==2&&footing_voice.distance==3&&footing_voice.native_voice&&
+     footing_voice.adsr2==0x5fc0&&submissions==before_footing+1&&submitted[before_footing].frames>14728);
+  printf("R%03X Gene recovery cue 8C slot 91 PCM %zu\n",work.room,submitted[before_footing].frames);
+  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!player_model.sound_borrowers);
+ }
  C(!gh_actor_model_release(&player_model));
  free(player_data);
  C(!gh_enemy_se_banks_destroy(banks));

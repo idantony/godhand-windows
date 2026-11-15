@@ -62,6 +62,23 @@ static void test_om324_break(const void *core,size_t core_size,const gh_bundle *
   C(euler[0]==0&&fabsf(euler[1]-.75f)<0.00001f&&euler[2]==0&&!p[0x16]&&!w(p+0x90));
  }
  C(!gh_game_effect_create_00306528(&call,&b)&&!memcmp(&oracle,&random,sizeof(random))&&w(emit+0x26000)==0xe0000000);
+ gh_effect_create_call collateral={0};
+ C(!gh_effect_create_enemy_counter_impact_begin_00306838(&collateral,position));
+ C(!gh_game_effect_create_00306528(&collateral,&b)&&collateral.complete&&
+   collateral.row==4&&w(emit+0x26000)==0xfe000000);
+ C(!gh_effect_est_at_00306030(effects,0,0xc,&est)&&w(est.bytes+4)==4);
+ const uint8_t items[]={11,57,0,76};
+ for(unsigned i=0;i<4;++i){
+  C(!gh_effect_create_emitter_at(effects,i+3,&view)&&view.initialized&&
+    view.record.bytes==est.bytes+16+i*0x2f0&&view.record.bytes[0x12e]==items[i]&&
+    !view.actor&&!view.selector&&!view.model&&!view.part&&view.first_esp_child==-1&&
+    w(view.payload+0x18c)==0x000c0000&&w(view.payload+0x110)==0xffffffff&&
+    !memcmp(view.payload+0x40,position,12)&&!memcmp(view.payload+0x1c0,position,12));
+ }
+ const gh_game_mt after_collateral=random;
+ C(!gh_game_effect_create_00306528(&collateral,&b)&&
+   !memcmp(&after_collateral,&random,sizeof(random))&&w(emit+0x26000)==0xfe000000);
+ puts("PASS actual CORE0:C paired counter four positioned emitters and idempotent retry");
  gh_effect_create_forget_on_owner_destroy(effects);
  free(effects);free(esp);free(emit);
 }

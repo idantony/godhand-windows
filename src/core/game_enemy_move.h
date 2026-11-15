@@ -16,7 +16,7 @@
 extern "C" {
 #endif
 
-typedef gh_actor_motion_status (*gh_enemy202_player_grab)(void *,const gh_enemy_actor *,uint32_t *);
+typedef gh_actor_motion_status (*gh_enemy202_player_grab)(void *,const gh_enemy_actor *,unsigned,uint32_t *);
 
 typedef struct {
     const gh_scene_nearcheck *owner;

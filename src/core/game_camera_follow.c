@@ -1,4 +1,5 @@
 #include "game_camera_follow.h"
+#include "game_actor_matrix.h"
 #include "id_layout_rotation.h"
 #include <string.h>
 #include <math.h>
@@ -18,8 +19,7 @@ static int elf_read(const uint8_t*b,size_t n,uint32_t va,void*out,size_t bytes){
  return found==1;
 }
 static void identity(float*m){memset(m,0,64);for(unsigned i=0;i<4;i++)m[i*5]=1;}
-static void matrix(float*out,const float*a,const float*b){float m[16];for(unsigned c=0;c<4;c++){for(unsigned r=0;r<4;r++){float v=mul(a[r],b[c*4]);v=add(v,mul(a[r+4],b[c*4+1]));v=add(v,mul(a[r+8],b[c*4+2]));m[c*4+r]=add(v,mul(a[r+12],b[c*4+3]));}}memcpy(out,m,64);}
-static int rotation(const float*a,float*m){float s[3],c[3];for(unsigned i=0;i<3;i++)if(gh_id_sincos_reference(a[i],s+i,c+i))return 0;float x[16]={1,0,0,0,0,c[0],s[0],0,0,-s[0],c[0],0,0,0,0,1},y[16]={c[1],0,-s[1],0,0,1,0,0,s[1],0,c[1],0,0,0,0,1},z[16]={c[2],s[2],0,0,-s[2],c[2],0,0,0,0,1,0,0,0,0,1};identity(m);matrix(m,x,m);matrix(m,y,m);matrix(m,z,m);return 1;}
+static int rotation(const float *angles,float *matrix){uint32_t frontier;return gh_actor_matrix_rotation_00147728(angles,0,matrix,GH_STATIC_BINARY32_REFERENCE,&frontier)==GH_ACTOR_MATRIX_OK;}
 static void apply(float*out,const float*m,const float*p){float v[4];for(unsigned i=0;i<4;i++){float x=mul(m[i],p[0]);x=add(x,mul(m[i+4],p[1]));x=add(x,mul(m[i+8],p[2]));v[i]=add(x,m[i+12]);}memcpy(out,v,16);}
 static int target_matrix(const gh_title_player_view*p,float*m){float a[3];for(unsigned i=0;i<3;i++)a[i]=number(p->bytes+0x100+i*4);if(!rotation(a,m))return 0;for(unsigned i=0;i<3;i++){float x=number(p->alias_f0+i*4);if(!isfinite(x))return 0;m[12+i]=x;}return 1;}
 static int eye_position(gh_game_pl_camera*c,const gh_title_player_view*p,const float*target,float*out){float a[3],m[16],local[3]={0,0,-number(c->fields+0x420)};for(unsigned i=0;i<3;i++){a[i]=number(p->bytes+0x100+i*4);if(i<2)a[i]=add(a[i],number(c->fields+0x410+i*4));if(gh_id_angle_reference_001f7d48(a[i],a+i))return 0;}if(!rotation(a,m))return 0;memcpy(m+12,target,12);apply(out,m,local);return 1;}

@@ -112,7 +112,7 @@ struct gh_game_services {
  uint32_t r105_scenery_handle,r105_scenery_task_frontier;
  gh_scene_step_status r105_scenery_task_status;
  gh_r100_init_tail r100_tail;gh_r100_init_tail_bindings r100_tail_bindings;
- gh_cockpit_tutorial tutorial;gh_object_resource_load tutorial_load;
+ gh_cockpit_tutorial tutorial;gh_cockpit_tutorial_action tutorial_action;gh_object_resource_load tutorial_load;
  gh_om_runtime_create tutorial_create[4];gh_om_object *tutorial_objects[4];
  gh_game_player_abort soft_player_abort;
  uint32_t player_grab_attacker;
@@ -199,6 +199,7 @@ static gh_game_services_status finalize_room_lifetime(gh_game_services*s){
  free(s->om_renders);s->om_renders=NULL;s->om_renders_capacity=0;
  memset(s->tutorial_create,0,sizeof(s->tutorial_create));
  memset(s->tutorial_objects,0,sizeof(s->tutorial_objects));
+ s->tutorial_action=(gh_cockpit_tutorial_action){0};
  gh_om_scene_construct_002a7308(&s->om_placements);
  if(s->r003.work.pointer){
   gh_r003_status status=gh_r003_event_release(&s->r003);
@@ -590,25 +591,38 @@ gh_game_services_status gh_game_services_enemy_set_all_00294ca0(gh_game_services
     .atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL}};
  return enemy_place_error(gh_enemy_ems_spawn_00294ca0(&s->enemies,&s->em_resources,&s->room_state,&s->enemy_bindings,f,detail));
 }
+static int r105_grab_attacker(const gh_game_services *s,const gh_enemy_actor *enemy)
+{
+ if(s->b.work->room!=0x105||!enemy||!enemy->entry.published||enemy->entry.b.init!=s->b.init)return 0;
+ const gh_title_player_view *actor=&enemy->entry.object.view;
+ const uint8_t *raw=actor->bytes;
+ return raw&&actor->size>=0x1651&&actor->original_vtable214==0x4479c8&&
+    u32(raw+0x564)==0x227&&raw[0x640]==2&&!raw[0x641]&&!raw[0x1650];
+}
+
 static int player_motion_request_matches(gh_game_services*s,const gh_player_motion_request*r){
  if(!r||r->player!=&s->title_player||r->model!=&s->player_model||
     r->work!=s->b.work||r->rate!=s->b.rate)return 0;
  if(r->resource==s->player_factory.resource.bytes&&r->resource_bytes==s->player_factory.file_bytes)return 1;
  const uint8_t *p=s->title_player.view.bytes;
  gh_enemy_ems_live live={0};
- if(!p||p[0x2f4]!=1||s->b.work->room!=0x100||!s->player_grab_attacker||
+ if(!p||!s->player_grab_attacker||
     gh_enemy_ems_live_at(s->enemies,s->player_grab_attacker,&live)||!live.enemy202)return 0;
  const unsigned selector=p[0x2f5],phase=p[0x2f6];
- if(selector!=0xa&&selector!=0xb)return 0;
- if(selector==0xa?phase!=0:(phase!=0&&phase!=2&&phase!=6))return 0;
+ if(s->b.work->room!=0x100&&(selector!=0xa||!r105_grab_attacker(s,live.enemy202)))return 0;
+ const int counter=p[0x2f4]==0&&selector==0x39&&phase==0;
+ if(!counter&&(p[0x2f4]!=1||
+     (selector!=0xa&&selector!=0xb)||
+     (selector==0xa?phase!=0:(phase!=0&&phase!=2&&phase!=6))))return 0;
  const gh_object_view *resource=&live.enemy202->entry.resource;
- const size_t row=selector==0xa?0x520:phase==6?0x800:phase==2?0x7f8:0x808;
+ const size_t row=counter?0x538:selector==0xa?0x520:phase==6?0x800:phase==2?0x7f8:0x808;
  return resource->bytes&&resource->file_extent_known&&resource->file_extent>=row+8&&
   resource->file_extent<=resource->size&&
   r->resource==resource->bytes&&r->resource_bytes==resource->size&&
   r->motion_offset==u32(resource->bytes+row)&&
   r->sequence_candidate_offset==u32(resource->bytes+row+4)&&
-  !r->start_frame_bits&&r->blend_frames==(phase==6?3u:0u)&&!r->flags&&r->release_previous_sequence==1;
+  !r->start_frame_bits&&r->blend_frames==(phase==6?3u:0u)&&!r->flags&&
+  r->release_previous_sequence==(s->b.work->room==0x100);
 }
 static gh_player_init_status actor_sound_prepare(gh_game_services*s,gh_actor_attached_sound*sound,uint32_t*frontier){
  if(!s->b.voices)return GH_PLAYER_INIT_OK; /*unbound legacy fixture stays strict on real sound*/
@@ -1899,11 +1913,12 @@ static gh_player_frame_status player_grab_camera(void *context,const gh_actor_mo
 }
 
 /* Original 129718 selectors 2 and 3 share the same cleanup and borrow. */
-static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_actor *enemy,uint32_t *frontier)
+static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_actor *enemy,unsigned argument,uint32_t *frontier)
 {
  gh_game_services*s=context;
  uint8_t*p=s->title_player.view.bytes;
- if(!p||s->title_player.view.size<0x1660||s->b.work->room!=0x100||
+ const int em27=r105_grab_attacker(s,enemy);
+ if(!p||s->title_player.view.size<0x1660||(s->b.work->room!=0x100&&!em27)||
     !enemy||enemy->entry.b.init!=s->b.init||!enemy->entry.published){
   *frontier=0x129718;
   return GH_ACTOR_MOTION_UNSUPPORTED;
@@ -1915,13 +1930,17 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  }
  unsigned selector;
  const uint32_t dependency=u32(attacker+0x564);
- if(dependency==0x200&&attacker[0x640]==20&&attacker[0x2f5]==0x4d)selector=0xa;
- else if(dependency==0x203&&attacker[0x640]==19&&attacker[0x2f5]==0x4e)selector=0xb;
+ if(argument==2&&((dependency==0x200&&attacker[0x640]==20)||em27)&&attacker[0x2f5]==0x4d)selector=0xa;
+ else if(argument==3&&dependency==0x203&&attacker[0x640]==19&&attacker[0x2f5]==0x4e)selector=0xb;
+ else if(argument==0x1d&&dependency==0x200&&attacker[0x640]==20&&attacker[0x2f4]==1&&
+         attacker[0x2f5]==0x1d&&p[0x2f4]==1&&p[0x2f5]==0xa)selector=0x39;
+ else if(argument==0x1d&&dependency==0x200&&attacker[0x640]==20&&attacker[0x2f4]==1&&
+         attacker[0x2f5]==0x1d&&s->soft_player_abort.active&&p[0x2f4]==0&&p[0x2f5]==0x39)selector=0x39;
  else{
   *frontier=0x129718;
   return GH_ACTOR_MOTION_UNSUPPORTED;
  }
- p[0x2f4]=1;p[0x2f5]=(uint8_t)selector;p[0x2f6]=p[0x2f7]=0;
+ p[0x2f4]=argument==0x1d?0:1;p[0x2f5]=(uint8_t)selector;p[0x2f6]=p[0x2f7]=0;
  gh_soft_event_status status=room_soft_player_abort(s,frontier);
  if(status)return status==GH_SOFT_EVENT_UNSUPPORTED?GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_CALLEE;
  const uint32_t cooldown=0x40a00000;
@@ -2304,6 +2323,18 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   gh_enemy202_move *move=enemy.move202;
   if(move->original_returned)*move=(gh_enemy202_move){0};
   if(actor_sound_prepare(s,&s->enemy_sound,f))return GH_SERVICES_ASSET;
+  const gh_title_player_view *enemy_view=&enemy.enemy202->entry.object.view;
+  if(s->enemy_sound.bound&&s->b.work->room==0x100&&enemy_view->size>=0x642&&
+     enemy_view->bytes[0x2f4]==1&&enemy_view->bytes[0x2f5]==0x1d&&
+     u32(enemy_view->bytes+0x564)==0x200&&(u32(enemy_view->bytes+0x640)&0xffffu)==20){
+   gh_voice_status voice=gh_se_voice_bind_external_adx(s->b.voices,s->b.assets->dvd->disc,
+       s->b.sound_control,s->b.boot_elf,s->b.boot_elf_bytes);
+   if(voice){
+    *f=gh_se_voice_frontier(s->b.voices);
+    if(!*f)*f=0x2ca34c;
+    return voice==GH_VOICE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+   }
+  }
   if(s->enemy_sound.bound){
    enemy.enemy202->motion.motion.b.sound=gh_actor_attached_sound_motion;
    enemy.enemy202->motion.motion.b.sound_context=&s->enemy_sound;
@@ -2383,10 +2414,11 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
  if(s->player_frame.bound){
   grab_attacker=s->player_frame.b.grab_attacker;
   grab_resource=s->player_frame.b.grab_resource;
- }else if(s->player_grab_attacker&&v->bytes[0x2f4]==1&&(v->bytes[0x2f5]==0xa||v->bytes[0x2f5]==0xb)){
+ }else if(s->player_grab_attacker&&((v->bytes[0x2f4]==1&&(v->bytes[0x2f5]==0xa||v->bytes[0x2f5]==0xb))||
+     (v->bytes[0x2f4]==0&&v->bytes[0x2f5]==0x39))){
   gh_enemy_ems_live grab={0};
   if(gh_enemy_ems_live_at(s->enemies,s->player_grab_attacker,&grab)||!grab.enemy202){
-   *f=v->bytes[0x2f5]==0xa?0x11c348:0x11c608;
+   *f=v->bytes[0x2f5]==0x39?0x117600:v->bytes[0x2f5]==0xa?0x11c348:0x11c608;
    return GH_SERVICES_FRONTIER;
   }
   grab_attacker=&grab.enemy202->entry.object.view;
@@ -2736,11 +2768,35 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh
  if(!call->trans.complete){*f=0x14a3e8;return GH_SERVICES_ASSET;}return GH_SERVICES_OK;
 }
 
+gh_action_step_status gh_game_services_r100_tutorial_action(gh_game_services *s,void *argument,
+ uint32_t *frontier)
+{
+ if(!frontier)return GH_ACTION_STEP_ARGUMENT;
+ *frontier=0x1bf7d8;
+ if(!s||!argument||s->b.work->room!=0x100)return GH_ACTION_STEP_ARGUMENT;
+ for(unsigned i=0;i<4;i++){
+  gh_om_object *object=s->tutorial_objects[i];
+  if(!object||object!=argument)continue;
+  void *registered=NULL;
+  if(!object->registered||!object->runtime_created||object->runtime_kind!=0x3eb||
+     gh_room_object_lookup(&s->pools,object->handle,GH_ROOM_OBJECT_OM,&s->om_factory,&registered)||
+     registered!=object)return GH_ACTION_STEP_ARGUMENT;
+  const gh_scene_scenario_view scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};
+  return gh_cockpit_tutorial_action_001bf7d8(&s->tutorial_action,scenario,s->scenario_threads,s->b.work,
+    s->cockpit,&object->view,frontier);
+ }
+ return GH_ACTION_STEP_ARGUMENT;
+}
+
 gh_scene_step_status gh_game_services_task_status(gh_game_services*s,uint32_t*frontier){
  if(!s||!frontier)return GH_SCENE_STEP_ARGUMENT;*frontier=0;
  if(s->r105_scenery_task_status){
   *frontier=s->r105_scenery_task_frontier;s->frontier=*frontier;s->frontier_module_code=0;
   return s->r105_scenery_task_status;
+ }
+ if(s->tutorial_action.status!=GH_ACTION_STEP_OK){
+  *frontier=s->tutorial_action.frontier;s->frontier=*frontier;s->frontier_module_code=0;
+  return s->tutorial_action.status==GH_ACTION_STEP_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE;
  }
  if(s->r003.initialized&&s->r003.status!=GH_R003_OK){
   *frontier=s->r003.frontier?s->r003.frontier:0x248;

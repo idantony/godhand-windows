@@ -56,6 +56,21 @@ static int near_box(const uint8_t*model,const float*point,float padding,int*out)
  for(unsigned row=0;row<3;row++){float v=mul(rf(model+0x80+row*4),local[0]);v=add(v,mul(rf(model+0x90+row*4),local[1]));v=add(v,mul(rf(model+0xa0+row*4),local[2]));center[row]=add(v,rf(model+0xb0+row*4));if(!isfinite(center[row]))return 0;}
  *out=1;for(unsigned i=0;i<3;i++){float radius=add(rf(model+0x26c+4*i),padding);if(!isfinite(radius)||radius<0)return 0;if(point[i]>add(center[i],radius)||point[i]<add(center[i],-radius))*out=0;}return 1;
 }
+static uint32_t select_static_program(const gh_game_object_step *s,const uint8_t *p,
+                                      const uint8_t *raw,uint32_t info,uint32_t flags,
+                                      unsigned *program)
+{
+ const gh_object_static_bindings*b=&s->static_objects;
+ if(!b->camera||!b->camera->constructed||!b->player||!b->player->bytes||!b->player->alias_f0||b->player->size<0xc0){return 0x2db6b0;}
+ uintptr_t start=(uintptr_t)b->player->bytes,point=(uintptr_t)b->player->alias_f0;
+ if(point<start||point-start>b->player->size-12||!point_valid(b->camera->fields+0x210)||!point_valid(b->player->alias_f0)){return 0x2db6b0;}
+ if(!(flags&0x08000000u)){float camera[3],player[3];for(unsigned i=0;i<3;i++){camera[i]=rf(b->camera->fields+0x210+4*i);player[i]=rf(b->player->alias_f0+4*i);}int near_camera,near_player;
+  float radius=(float)h(raw+0x5d4);if(!near_box(p,camera,radius,&near_camera)||(!near_camera&&!near_box(p,player,radius,&near_player))){return 0x1f9070;}
+  if(near_camera||near_player)*program=10;
+ }
+ if((raw[0x58c]&0x80u)||(info&0x40000000u))*program=10;
+ return 0;
+}
 gh_object_step_status gh_object_static_move_one(gh_game_object_step*s,gh_scene_mesh_object*o,const gh_boot_work*work,uint32_t*f){
  uint8_t*p=o->allocation.pointer,*node=o->node;const uint8_t*d=o->descriptor.script.bytes+o->descriptor.mesh.descriptor_offset,*raw=(const uint8_t*)work;
  uint32_t info=w(d+0x34),flags=w(p+0x350);gh_object_step_status result=GH_OBJSTEP_OK;uint32_t frontier=0;
@@ -71,7 +86,20 @@ gh_object_step_status gh_object_static_move_one(gh_game_object_step*s,gh_scene_m
   else test=0x5100d;
   if((info&0x08000000u)||(info&0x20000u)||!(info&(0x800000u|0x4000u))){int32_t ref=(int32_t)mul(alpha,128)-1;if(ref<1)ref=0;test|=(uint64_t)(uint32_t)ref<<4;}
   o->test=test; /*319D60->155D60 writes bothparityTESTs*/
-  if(w(raw+0x5d8)&0x08000000u){p[0x2b6]=255;o->node_program[0]=o->node_program[1]=0x8000000e;o->object_program[0]=o->object_program[1]=14;frontier=0x318b58;goto unsupported;}
+  if(w(raw+0x5d8)&0x08000000u){
+   /* 319CC0 applies 148F00 and 155BE8 to the current packet parity.
+    * This early return preserves model+2BE, animation, UV and move count. */
+   const unsigned parity=w(raw+0x210)&1u;
+   unsigned program=14;
+   p[0x2b6]=255;
+   o->node_program[parity]=0x8000000eu;
+   o->object_program[parity]=14;
+   frontier=select_static_program(s,p,raw,info,flags,&program);
+   if(frontier)goto unsupported;
+   o->node_program[parity]=0x80000000u|program;
+   o->object_program[parity]=program;
+   goto done;
+  }
   if(flags&0x80000000u)goto done;
   const uint8_t*side=s->init->side_counter;int32_t count=s32(w(side+8)),progress=s32(w(side+12));
   float factor=1;
@@ -97,15 +125,10 @@ gh_object_step_status gh_object_static_move_one(gh_game_object_step*s,gh_scene_m
  if(d[0x4a]&&d[0x4b]){frontier=0x1f7fb8;goto unsupported;}
  unsigned blend=(w(d+0x3c)>>4)&15;if(blend){if(blend>=8){frontier=0x148f28;goto unsupported;}o->alpha=s->alpha_presets[blend];}
  p[0x2be]=14;
- const gh_object_static_bindings*b=&s->static_objects;
- if(!b->camera||!b->camera->constructed||!b->player||!b->player->bytes||!b->player->alias_f0||b->player->size<0xc0){frontier=0x2db6b0;goto unsupported;}
- uintptr_t start=(uintptr_t)b->player->bytes,point=(uintptr_t)b->player->alias_f0;
- if(point<start||point-start>b->player->size-12||!point_valid(b->camera->fields+0x210)||!point_valid(b->player->alias_f0)){frontier=0x2db6b0;goto unsupported;}
- if(!(flags&0x08000000u)){float camera[3],player[3];for(unsigned i=0;i<3;i++){camera[i]=rf(b->camera->fields+0x210+4*i);player[i]=rf(b->player->alias_f0+4*i);}int near_camera,near_player;
-  float radius=(float)h(raw+0x5d4);if(!near_box(p,camera,radius,&near_camera)||!near_box(p,player,radius,&near_player)){frontier=0x1f9070;goto unsupported;}
-  if(near_camera||near_player)p[0x2be]=10;
- }
- if((raw[0x58c]&0x80u)||(info&0x40000000u))p[0x2be]=10;
+ unsigned program=14;
+ frontier=select_static_program(s,p,raw,info,flags,&program);
+ if(frontier)goto unsupported;
+ p[0x2be]=(uint8_t)program;
  if(info&0x10000u){frontier=0x148200;goto unsupported;}
  if((info&0x200000u)&&w(raw+0x608)){frontier=0x318b58;goto unsupported;}
  /*319960/319968 are actualjrra/nop, verified from this ELF.*/

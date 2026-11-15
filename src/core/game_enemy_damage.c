@@ -100,7 +100,7 @@ static void put_half(uint8_t *p, uint16_t value) {
     memcpy(p, &value, sizeof(value));
 }
 
-static gh_actor_motion_status first_punch_heat(gh_enemy_actor *enemy, int triangle, uint32_t *frontier) {
+static gh_actor_motion_status gain_heat_002a9978(gh_enemy_actor *enemy, float amount, uint32_t *frontier) {
     const gh_enemy_entry_bindings *b = &enemy->entry.b;
     gh_core_save_view save = b->save;
     uint8_t *heat = b->init->heat;
@@ -118,7 +118,10 @@ static gh_actor_motion_status first_punch_heat(gh_enemy_actor *enemy, int triang
         return stop(frontier, 0x2a9978);
     }
     const int easy = !(word(save.bytes + 0x14) & 0x4000000u) && !save.bytes[0x1f];
-    const float amount = triangle ? (easy ? 2.5f : 2.0f) : (easy ? 1.0f : 0.8f);
+    if (easy) {
+        volatile float increased = amount * 1.25f;
+        amount = increased;
+    }
     volatile float sum = current + amount;
     const float next = maximum < sum ? maximum : sum;
     volatile float delta = next - current;
@@ -132,6 +135,14 @@ static gh_actor_motion_status first_punch_heat(gh_enemy_actor *enemy, int triang
     return GH_ACTOR_MOTION_OK;
 }
 
+gh_actor_motion_status gh_enemy_counter_heat_002a9978(gh_enemy_actor *enemy, uint32_t *frontier) {
+    if (!enemy || !enemy->entry.b.init || !enemy->entry.object.view.bytes ||
+        enemy->entry.object.view.size < 0x642 ||
+        (word(enemy->entry.object.view.bytes + 0x640) & 0xffffu) != 20 ||
+        word(enemy->entry.object.view.bytes + 0x564) != 0x200)
+        return stop(frontier, 0x2a9978);
+    return gain_heat_002a9978(enemy, 10.0f, frontier);
+}
 static gh_actor_motion_status first_punch_wall(gh_enemy_actor *enemy, uint32_t *frontier) {
     if (!enemy->b.actors) return stop(frontier, 0x131e10);
     const uint8_t *p = enemy->entry.object.view.bytes;
@@ -168,9 +179,18 @@ static int scenery_reaction_dependency(uint32_t dependency) {
     return dependency == 0x200 || dependency == 0x202 || dependency == 0x203;
 }
 
-/* The OM304 Give sphere selects effect 2E with zero power and the
- * environment flag set in 20A5DC's VT+AC call. */
-static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
+static int r100_counter_collateral(const gh_enemy_actor *enemy,const uint8_t *actor,
+    const gh_title_player_view *source, uint32_t power)
+{
+    return source&&source!=&enemy->entry.object.view&&source->bytes&&source->size>=0x642&&
+        source->original_vtable214==0x4479c8&&word(source->bytes+0x214)==0x4479c8&&
+        half(source->bytes+0x2fe)==0x202&&r100_stamp19(enemy,actor)&&
+        word(source->bytes+0x564)==0x200&&half(source->bytes+0x640)==20&&
+        source->bytes[0x2f4]==1&&source->bytes[0x2f5]==0x1d&&power==10;
+}
+/* Scenery and the released EM00's secondary Give use the non-player
+ * effect 2E path, with the environment flag set in 20A5DC's VT+AC call. */
+static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     gh_enemy_actor *enemy, const gh_title_player_view *source, unsigned rank,
     uint32_t *frontier)
 {
@@ -181,13 +201,20 @@ static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
         return stop(frontier, 0x20a178);
     const unsigned source_kind = half(source->bytes + 0x2fe);
     const uint32_t source_vtable = source_kind == 0x303 ? 0x423230u :
-        source_kind == 0x304 ? 0x423338u : 0;
+        source_kind == 0x304 ? 0x423338u : source_kind == 0x202 ? 0x4479c8u : 0;
+    const uint32_t power = word(body->bytes + 0x4c);
     if (!source_vtable || source->original_vtable214 != source_vtable ||
         word(source->bytes + 0x214) != source_vtable ||
         actor->original_vtable214 != 0x4479c8 || word(p + 0x214) != 0x4479c8 ||
         half(p + 0x2fe) != 0x202 || !scenery_reaction_dependency(word(p + 0x564)) ||
-        word(body->bytes + 0x4c) || word(body->bytes + 0x40) != UINT32_MAX)
+        word(body->bytes + 0x40) != UINT32_MAX)
         return stop(frontier, 0x20a178);
+    if (source_kind == 0x202) {
+        if (!r100_counter_collateral(enemy,p,source,power))
+            return stop(frontier, 0x20a178);
+    } else if (power) {
+        return stop(frontier, 0x20a178);
+    }
 
     if (call->phase == 0) {
         const float drain = number(p + 0x770), cooldown = number(p + 0x54c);
@@ -196,7 +223,7 @@ static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
         uint32_t behavior = word(p + 0x16d0);
         uint16_t flags = half(p + 0x3ac);
         if (!isfinite(drain) || !isfinite(cooldown) || !isfinite(block) || !isfinite(armor) ||
-            (drain > 0 && hp > 0))
+            (drain > 0 && hp > 0) || (power && hp>0 && (uint32_t)hp<=power))
             return stop(frontier, 0x20a178);
         if (cooldown > 0) return GH_ACTOR_MOTION_OK;
         call->effect = 0x2e;
@@ -216,9 +243,11 @@ static gh_actor_motion_status scenery_hit(gh_enemy202_hit_call *call,
             put(p + 0x16d0, behavior);
         }
         put(p + 0x17ac, (uint32_t)hp);
-        /* 28FB88 rounds zero power to zero for this non-player source. */
-        put_half(p + 0x54a, (uint16_t)hp);
-        put(p + 0x17b4, 0);
+        /* Both non-player sources use 28FB88's unscaled environment hit. */
+        put_half(p + 0x54a, (uint16_t)((uint32_t)hp-power));
+        put(p + 0x17a4, word(p + 0x17a4)+power);
+        put(p + 0x17a8, word(p + 0x17a8)+power);
+        put(p + 0x17b4, power);
         put(p + 0x1940, 0xbd4ccccd);
         put(p + 0x54c, 0x41700000);
         put(p + 0x16dc, 0);
@@ -336,7 +365,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         return stop(frontier, 0x20a178);
 
     if (half(body->bytes + 0x46) == 0x2e)
-        return scenery_hit(call, enemy, source, rank, frontier);
+        return environment_hit(call, enemy, source, rank, frontier);
     const uint16_t effect = half(body->bytes + 0x46);
     const int triangle = opening_triangle(enemy, p, effect);
     if (source != player || half(player->bytes + 0x2fe) != 0x100 || (effect != 7 && !triangle))
@@ -369,7 +398,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         call->phase = 1;
     }
     if (call->phase == 1) {
-        gh_actor_motion_status status = first_punch_heat(enemy, triangle, frontier);
+        gh_actor_motion_status status = gain_heat_002a9978(enemy, triangle ? 2.0f : 0.8f, frontier);
         if (status) return status;
         call->phase = 2;
     }
@@ -597,14 +626,27 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     const uint8_t *p = actor->bytes;
     gh_game_init_state *init = enemy->entry.b.init;
     gh_core_save_view save = enemy->entry.b.save;
+    if (actor->size < 0x1944 || !actor->alias_f0 || !body->bytes || body->size < 0x50)
+        return stop(frontier, 0x271810);
     const uint32_t dependency = word(p + 0x564);
-    if (actor->size < 0x1944 || !actor->alias_f0 ||
-        (call->effect == 0x2e ? !scenery_reaction_dependency(dependency) :
+    const int paired_counter = (int32_t)word(init->enemies + 0x514) > 0;
+    if (paired_counter) {
+        const gh_title_player_view *source = NULL;
+        if (call->effect != 0x2e ||
+            gh_hitarea_object_last_hit_actor(body,&source) ||
+            !r100_counter_collateral(enemy,p,source,word(body->bytes+0x4c)))
+            return stop(frontier, 0x271810);
+        /* The positive manager arm always creates CORE0:C. Only active
+         * Heat or original 12C748 (player+5FC != 0) adds attached CORE121. */
+        if (init->heat[0x10] || word(player->bytes+0x5fc))
+            return stop(frontier, 0x271df4);
+    }
+    if ((call->effect == 0x2e ? !scenery_reaction_dependency(dependency) :
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p)) ||
         (half(p + 0x3ac) & 0x100u) || init->heat[0x10] || word(player->bytes + 0x5fc) ||
-        (int32_t)word(init->enemies + 0x514) > 0 || !save.bytes || save.size < 0xaf)
+        (!paired_counter && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);
-    const unsigned costume = gh_core_save_costume(save);
+    const unsigned costume = paired_counter ? 0 : gh_core_save_costume(save);
     if (costume == 1 || costume == 3 || costume == 5 || costume == 7)
         return stop(frontier, 0x271e58);
     const uintptr_t base = (uintptr_t)p, origin = (uintptr_t)actor->alias_f0;
@@ -658,7 +700,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         return stop(frontier, 0x30a2b0);
     call->impact = (gh_enemy202_impact_request){
         .position = {out_x, hit_y, out_z, 1.0f},
-        .bank = 0x58, .index = 0x10, .scale = 1.0f, .mode = -1,
+        .bank = paired_counter ? 0 : 0x58, .index = paired_counter ? 0xc : 0x10,
+        .scale = 1.0f, .mode = -1,
     };
     call->phase = 10;
     return GH_ACTOR_MOTION_OK;

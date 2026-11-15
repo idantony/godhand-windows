@@ -20,7 +20,7 @@ struct QueuedID {
     uint32_t entry_index,consumer;
     uint16_t z=0;bool z_known=false;
 };
-enum class CommandKind {ID,FAN,FADE,NUMBER,COVER,MESSAGE,RADAR,TITLE_TEXT,PAD_ICON};
+enum class CommandKind {ID,FAN,FADE,NUMBER,COVER,MESSAGE,RADAR,TITLE_TEXT,PAD_ICON,TUTORIAL_TEXT,TUTORIAL_PAD_ICON};
 struct QueuedMessage {
     gh_id_text_glyph glyph={};
     std::shared_ptr<const std::vector<uint8_t>> atlas;
@@ -32,6 +32,7 @@ struct QueuedCommand {
     size_t message_glyph_count=0;
     gh_id_texture_quad radar={};
     std::vector<gh_id_text_glyph> title_glyphs;
+    std::vector<QueuedMessage> tutorial_glyphs;
 };
 struct gh_mc_renderer {
     gh_ui_text_renderer *text=nullptr;
@@ -41,6 +42,8 @@ struct gh_mc_renderer {
     const unsigned char *font_mst=nullptr,*font_msa=nullptr;
     const unsigned char *message_mst=nullptr,*message_msa=nullptr;
     std::shared_ptr<const std::vector<uint8_t>> message_atlas[2];
+    const unsigned char *tutorial_mst=nullptr,*tutorial_msa=nullptr;
+    std::shared_ptr<const std::vector<uint8_t>> tutorial_atlas[2];
     std::vector<unsigned char> palette,frame,next;
     std::vector<gh_id_text_glyph> glyphs;
     std::vector<CachedTexture> textures;
@@ -57,7 +60,7 @@ struct gh_mc_renderer {
 static bool null_texture(const gh_id_render_view*s,const gh_id_entry*e)
 {return e->kind==0&&!e->texture.bytes&&(e->b8a==33||(e->b8a<32&&!s->manager->pair[e->b8a].texture_data.bytes));}
 static gh_id_error render_sprite(gh_mc_renderer *r,const gh_id_texture_quad &quad,
-    gh_ui_error *gpu,const gh_ui_depth_write *depth)
+    gh_ui_error *gpu,const gh_ui_depth_write *depth,bool original_icon=false)
 {
     if(!r->sprite)*gpu=gh_ui_sprite_create(512,448,&r->sprite);
     if(*gpu!=GH_UI_OK)return GH_ID_UNSUPPORTED;
@@ -74,7 +77,7 @@ static gh_id_error render_sprite(gh_mc_renderer *r,const gh_id_texture_quad &qua
         if(*gpu!=GH_UI_OK)return GH_ID_UNSUPPORTED;
         r->textures.push_back({quad.texture.source.bytes,item.texture});
     }
-    const gh_ui_sprite_state state={UINT64_C(0x8000000044),0x3001d,0x54,0x60,0,1,1,0,0,0};
+    const gh_ui_sprite_state state={UINT64_C(0x8000000044),original_icon?0x50000u:0x3001du,0x54,0x60,0,1,1,0,0,0};
     *gpu=gh_ui_sprite_batch_with_depth(r->sprite,&state,&item,1,r->frame.data(),r->next.data(),r->next.size(),depth);
     return *gpu==GH_UI_OK?GH_ID_OK:GH_ID_UNSUPPORTED;
 }
@@ -167,6 +170,8 @@ extern "C" void gh_mc_renderer_reset_resources(gh_mc_renderer *r)
     r->font_mst=r->font_msa=nullptr;r->textures.clear();r->polygon_textures.clear();r->fan_textures.clear();r->number_textures.clear();
     r->message_mst=r->message_msa=nullptr;
     for(auto &atlas:r->message_atlas)atlas.reset();
+    r->tutorial_mst=r->tutorial_msa=nullptr;
+    for(auto &atlas:r->tutorial_atlas)atlas.reset();
 }
 extern "C" gh_id_error gh_mc_renderer_enable_reference_polygons(gh_mc_renderer *r,int enabled)
 {if(!r||(enabled!=0&&enabled!=1))return GH_ID_ARGUMENT;if(r->begun)return GH_ID_BUSY;r->reference_polygons=enabled!=0;return GH_ID_OK;}
@@ -273,6 +278,11 @@ extern "C" gh_id_error gh_mc_renderer_queue_view(gh_mc_renderer *r,const gh_id_r
     if(r->queued.size()>=8192)return GH_ID_CAPACITY;
     try {
         QueuedCommand command;command.id={*view,*view->base,*job->entry,job->entry_index,job->consumer_address};
+        // 2AAC28 creates its own 2C54E8 draw environment for tutorial sprites.
+        if(view->base->resource_number==0x1d&&job->entry->kind==0&&job->consumer_address==0x2aaef0){
+            command.id.z=65535;
+            command.id.z_known=true;
+        }
         if(job->entry->kind==1){gh_id_texture_quad digits[10];size_t n=0;gh_id_error e=gh_id_number_prepare(view->manager,view->base,job->entry,digits,10,&n,&r->status.frontier);if(e)return e;
             if(n!=1){r->status.frontier=0x2c70a8;return GH_ID_UNSUPPORTED;}command.kind=CommandKind::NUMBER;command.number=digits[0];}
         r->queued.push_back(command);*tag={bank,depth,r->queued.size()-1};
@@ -288,6 +298,31 @@ extern "C" gh_id_error gh_mc_renderer_queue_fan(gh_mc_renderer*r,const gh_cockpi
     try {QueuedCommand c;c.kind=CommandKind::FAN;c.fan=*fan;r->queued.push_back(c);*tag={6,5,r->queued.size()-1};return GH_ID_OK;}
     catch(const std::bad_alloc&){return GH_ID_MEMORY;}
 }
+static gh_id_error append_tutorial_glyph(gh_mc_renderer *r,const gh_font_slot &font,
+    const gh_id_text_glyph &glyph,std::vector<QueuedMessage> &output)
+{
+    const unsigned parity=glyph.quad.palette_parity;
+    if(!font.bound||!font.mst||!font.msa||parity>1||glyph.quad.slot)
+        return GH_ID_UNSUPPORTED;
+    if(font.mst!=r->tutorial_mst||font.msa!=r->tutorial_msa){
+        for(auto &atlas:r->tutorial_atlas)atlas.reset();
+        r->tutorial_mst=font.mst;
+        r->tutorial_msa=font.msa;
+    }
+    auto &atlas=r->tutorial_atlas[parity];
+    if(!atlas){
+        auto decoded=std::make_shared<std::vector<uint8_t>>(512*256*4);
+        if(gh_font_atlas_bank_rgba(&font,parity,decoded->data(),decoded->size()))
+            return GH_ID_UNSUPPORTED;
+        atlas=std::move(decoded);
+    }
+    int discarded=0;
+    if(gh_scene_message_glyph_discarded(&glyph,atlas->data(),atlas->size(),&discarded))
+        return GH_ID_UNSUPPORTED;
+    if(!discarded)output.push_back({glyph,atlas});
+    return GH_ID_OK;
+}
+
 static gh_id_error queue_text_groups(gh_mc_renderer *r,const gh_id_render_view *view,
     const gh_id_draw_job *job,uint16_t chapter_message,gh_ui_ot_tag *tags,size_t capacity,size_t *count)
 {
@@ -301,34 +336,48 @@ static gh_id_error queue_text_groups(gh_mc_renderer *r,const gh_id_render_view *
     const size_t group_count=result.icon_count+(has_font?1u:0u);
     if(group_count>capacity||group_count>8192-r->queued.size())return GH_ID_CAPACITY;
     if(group_count&&!tags)return GH_ID_ARGUMENT;
+    const bool tutorial=view->base->resource_number==0x1d;
+    const uint32_t font_bank=tutorial?(view->base->mode==6?job->entry->b8d:view->base->mode):6;
+    if(font_bank>=10)return GH_ID_UNSUPPORTED;
     try {
         std::vector<QueuedCommand> groups;
         groups.reserve(group_count);
         if(has_font){
             QueuedCommand text;
-            text.kind=CommandKind::TITLE_TEXT;
+            text.kind=tutorial?CommandKind::TUTORIAL_TEXT:CommandKind::TITLE_TEXT;
             text.id={*view,*view->base,*job->entry,job->entry_index,job->consumer_address};
             text.title_glyphs.reserve(result.glyph_count-result.icon_count);
-            for(size_t i=0;i<result.glyph_count;++i)
-                if(!r->glyphs[i].icon_extent)text.title_glyphs.push_back(r->glyphs[i]);
+            for(size_t i=0;i<result.glyph_count;++i){
+                const auto &glyph=r->glyphs[i];
+                if(glyph.icon_extent)continue;
+                if(tutorial){
+                    status=append_tutorial_glyph(r,view->font->slots[0],glyph,text.tutorial_glyphs);
+                    if(status){r->status.frontier=0x2a53a8;return status;}
+                }else text.title_glyphs.push_back(glyph);
+            }
             groups.push_back(std::move(text));
         }
         for(size_t i=0;i<result.glyph_count;++i){
             if(!r->glyphs[i].icon_extent)continue;
             QueuedCommand icon;
-            icon.kind=CommandKind::PAD_ICON;
+            icon.kind=tutorial?CommandKind::TUTORIAL_PAD_ICON:CommandKind::PAD_ICON;
             status=gh_id_text_icon_quad(view->manager,&r->glyphs[i],&icon.number);
             if(status){r->status.frontier=0x2b1300;return status;}
             icon.id={*view,*view->base,*job->entry,job->entry_index,job->consumer_address};
             icon.id.z=65535;icon.id.z_known=true;
             groups.push_back(std::move(icon));
         }
+        // Original inline icon packets are submitted before 2A5930 closes
+        // the font packet. Same-depth ordering remains with the shared OT.
+        if(tutorial&&has_font)std::rotate(groups.begin(),groups.begin()+1,groups.end());
         const size_t first=r->queued.size();
         r->queued.reserve(first+groups.size());
         for(size_t i=0;i<groups.size();++i){
-            const int32_t depth=groups[i].kind==CommandKind::PAD_ICON?5:2;
+            const bool font_group=groups[i].kind==CommandKind::TITLE_TEXT||
+                groups[i].kind==CommandKind::TUTORIAL_TEXT;
+            const int32_t depth=font_group&&!tutorial?2:5;
             r->queued.push_back(std::move(groups[i]));
-            tags[i]={6,depth,first+i};
+            tags[i]={font_group?font_bank:6,depth,first+i};
         }
         *count=groups.size();
         return GH_ID_OK;
@@ -343,6 +392,9 @@ extern "C" gh_id_error gh_mc_renderer_queue_view_groups_with_chapter(gh_mc_rende
     if(null_texture(view,job->entry)){*count=0;return GH_ID_OK;}
     if(job->entry->kind==2&&view->base->resource_number==11&&
        (job->entry->message==0x20a4||job->entry->message==0x20a5))
+        return queue_text_groups(r,view,job,0,tags,capacity,count);
+    if(r->language==1&&job->entry->kind==2&&view->base->resource_number==0x1d&&
+       job->entry->message>=0x2000&&job->entry->message<=0x2009)
         return queue_text_groups(r,view,job,0,tags,capacity,count);
     if(chapter_message&&job->entry->kind==2&&view->base->resource_number==7&&job->entry->message==0x2022)
         return queue_text_groups(r,view,job,chapter_message,tags,capacity,count);
@@ -519,6 +571,7 @@ static bool tracks_depth(const QueuedCommand &command)
 {
     return command.kind==CommandKind::COVER || command.kind==CommandKind::MESSAGE ||
         command.kind==CommandKind::RADAR || command.kind==CommandKind::FAN || command.kind==CommandKind::PAD_ICON ||
+        command.kind==CommandKind::TUTORIAL_TEXT || command.kind==CommandKind::TUTORIAL_PAD_ICON ||
         ((command.kind==CommandKind::ID || command.kind==CommandKind::NUMBER) && command.id.z_known);
 }
 
@@ -540,6 +593,10 @@ extern "C" gh_id_error gh_mc_renderer_queued_message_depth(gh_mc_renderer *r,
     for(size_t i=0;i<count;++i){
         if(order[i]>=count)return GH_ID_ARGUMENT;
         const auto &command=r->queued[order[i]];
+        if(command.kind==CommandKind::TUTORIAL_PAD_ICON||command.kind==CommandKind::TUTORIAL_TEXT){
+            if(!tracked)return message_depth_unavailable(r);
+            needed=1;
+        }
         if(command.kind==CommandKind::MESSAGE&&!command.messages.empty()){
             if(!tracked)return message_depth_unavailable(r);
             needed=1;
@@ -591,12 +648,31 @@ static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t cou
                 bool known_terminal=depth_known&&i+1==count;
                 error=draw_fade(r,command.fade,command.fade_context,known_terminal?depth_samples.data():nullptr,known_terminal?depth_samples.size():0);
             }
-            else if(command.kind==CommandKind::TITLE_TEXT||command.kind==CommandKind::PAD_ICON){
-                const bool icon=command.kind==CommandKind::PAD_ICON;
+            else if(command.kind==CommandKind::TUTORIAL_TEXT){
+                r->status.consumer=0x2a5930;
+                r->status.frontier=0;
+                r->status.gpu_error=0;
+                error=GH_ID_OK;
+                for(const auto &item:command.tutorial_glyphs){
+                    if(!gh_scene_message_glyph_blit(&item.glyph,item.atlas->data(),item.atlas->size(),
+                        r->frame.data(),r->frame.size(),depth_known?depth_samples.data():nullptr,
+                        depth_known?depth_samples.size():0))continue;
+                    r->status.frontier=0x2a53a8;
+                    error=GH_ID_UNSUPPORTED;
+                    break;
+                }
+                if(!error){r->status.glyphs+=command.tutorial_glyphs.size();++r->status.jobs;}
+                r->status.id_error=error;
+            }
+            else if(command.kind==CommandKind::TITLE_TEXT||command.kind==CommandKind::PAD_ICON||
+                    command.kind==CommandKind::TUTORIAL_PAD_ICON){
+                const bool tutorial_icon=command.kind==CommandKind::TUTORIAL_PAD_ICON;
+                const bool icon=command.kind==CommandKind::PAD_ICON||tutorial_icon;
                 gh_ui_error gpu=GH_UI_OK;
                 gh_ui_depth_write plane={depth_samples.data(),depth_samples.size(),65535};
-                error=icon?render_indexed_quad(r,command.number,&gpu,depth_known?&plane:nullptr,true):
-                    render_font_group(r,command.id.view.font,command.title_glyphs.data(),command.title_glyphs.size(),&gpu);
+                if(tutorial_icon)error=render_sprite(r,command.number,&gpu,depth_known?&plane:nullptr,true);
+                else if(icon)error=render_indexed_quad(r,command.number,&gpu,depth_known?&plane:nullptr,true);
+                else error=render_font_group(r,command.id.view.font,command.title_glyphs.data(),command.title_glyphs.size(),&gpu);
                 r->status.consumer=0x2ab0b8;r->status.opcode=0;r->status.gpu_error=(unsigned)gpu;
                 r->status.id_error=error;r->status.frontier=error?(icon?0x2b1300:0x2a53a8):0;
                 if(error==GH_ID_OK){r->frame.swap(r->next);++r->status.jobs;}

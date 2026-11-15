@@ -61,6 +61,7 @@ gh_id_error gh_id_text_prepare_with_chapter(const gh_id_base *object,const gh_id
  uint16_t chapter_message,gh_id_text_glyph *output,size_t capacity,gh_id_text_result *result){
  gh_id_view table,body,chapter={0};gh_id_error error;uint16_t message;unsigned bank,index,color_group,color_index,align;
  float sx,sy,spacing,line_gap,line_width=0,line_height=0,page_width=0,page_height=0,startx,starty,x,y;
+ float size_factor=1.0f,line_metric=0,baseline_scale[8]={0},heights[8]={0};
  size_t offset,glyphs=0,lines=1,icons=0,chapter_count=0;float chapter_width=0,chapter_height=0;uint32_t default_color,color;int ended=0;
  if(!object||!entry||!menu||!font||!ctx||!result||(!output&&capacity))return GH_ID_ARGUMENT;
  memset(result,0,sizeof(*result));
@@ -73,6 +74,7 @@ gh_id_error gh_id_text_prepare_with_chapter(const gh_id_base *object,const gh_id
   table=packed->cursor;
  }else return fail(result,0,0,0x2aead0);
  error=message_view(&table,index,&body);if(error)return error;
+ const int tutorial_scale=ctx->language==1&&object->resource_number==0x1d&&(message==0x2001||message==0x2002);
  color_group=entry->b8b%10;color_group=color_group>=1&&color_group<=7?color_group+2:2;color_index=entry->b8b/10;
  if(!ctx->palette.bytes||color_index>=5||(size_t)color_group*20+color_index*4+4>ctx->palette.size)return GH_ID_BOUNDS;
  const unsigned char *colors=ctx->palette.bytes+(size_t)color_group*20;
@@ -84,7 +86,29 @@ gh_id_error gh_id_text_prepare_with_chapter(const gh_id_base *object,const gh_id
  for(offset=0;offset+2<=body.size;offset+=2){
   uint16_t code=u16(body.bytes+offset);gh_font_glyph glyph;
   if((code&0xff00)==0x8000){ended=1;break;}
-  if(code==0xa001){if(!line_height)return fail(result,code,offset,0x2b0700);if(line_width-spacing>page_width)page_width=line_width-spacing;page_height+=line_height+line_gap;line_width=line_height=0;lines++;continue;}
+  if(code==0xa001){
+   if(!line_height)return fail(result,code,offset,0x2b0700);
+   if(tutorial_scale){
+    if(lines>=sizeof(heights)/sizeof(heights[0]))return GH_ID_CAPACITY;
+    heights[lines-1]=line_height;
+    line_metric=0;
+   }
+   if(line_width-spacing>page_width)page_width=line_width-spacing;
+   page_height+=line_height+line_gap;
+   line_width=line_height=0;
+   lines++;
+   continue;
+  }
+  /* Actual 2B04C0 B000 family: the next halfword is unsigned percent.
+   * Admit the paired 150/100 button runs of the authenticated US tutorials. */
+  if(code==0xb002&&tutorial_scale){
+   if(body.size-offset<4)return fail(result,code,offset,0x2b04c0);
+   const uint16_t percent=u16(body.bytes+offset+2);
+   if(percent!=100&&percent!=150)return fail(result,code,offset,0x2b04c0);
+   size_factor=(float)percent/100.0f;
+   offset+=2;
+   continue;
+  }
   if(code==0xa301||code==0xb301)continue;
   /* Original 2B04C0 B602 selects an index in the current palette group.
    * Neither it nor B301 consumes width or emits a primitive. */
@@ -109,26 +133,52 @@ gh_id_error gh_id_text_prepare_with_chapter(const gh_id_base *object,const gh_id
   if(code&0x8000)return fail(result,code,offset,0x2b0028);
   if(code>=0x1000)return fail(result,code,offset,0x2a4cb0);
   if(code<14){
-   line_width+=32.0f*sx+spacing; /* 2B12D8 with nonzero language */
-   const float height=(32.0f+12.0f)*sy;
-   if(height>line_height)line_height=height;
+   if(tutorial_scale){
+    line_width+=spacing;
+    line_width+=(size_factor*0.9f)*entry->draw_scale_x*32.0f;
+    const float scaled_y=size_factor*sy;
+    const float height=32.0f*scaled_y+12.0f*sy;
+    if(height>line_height)line_height=height;
+    if(height>line_metric){line_metric=height;baseline_scale[lines-1]=scaled_y;}
+   }else{
+    line_width+=32.0f*sx+spacing; /* 2B12D8 with nonzero language */
+    const float height=(32.0f+12.0f)*sy;
+    if(height>line_height)line_height=height;
+   }
    ++icons;++glyphs;continue;
   }
   if(gh_font_glyph_at(font,code,&glyph)!=GH_FONT_OK||glyph.width<=0)return fail(result,code,offset,0x2a4b20);
-  line_width+=(float)glyph.width*sx+spacing;
-  {float h=((float)font->slots[code>>12].cell_height+12.0f)*sy;if(h>line_height)line_height=h;}
+  if(tutorial_scale){
+   line_width+=spacing;
+   line_width+=((float)glyph.width*size_factor*0.9f)*entry->draw_scale_x;
+   const float scaled_y=size_factor*sy;
+   const float height=(float)font->slots[code>>12].cell_height*scaled_y+12.0f*sy;
+   const float metric=(float)glyph.baseline_delta*scaled_y+12.0f*sy;
+   if(height>line_height)line_height=height;
+   if(metric>line_metric){line_metric=metric;baseline_scale[lines-1]=scaled_y;}
+  }else{
+   line_width+=(float)glyph.width*sx+spacing;
+   const float height=((float)font->slots[code>>12].cell_height+12.0f)*sy;
+   if(height>line_height)line_height=height;
+  }
   glyphs++;
  }
  if(!ended)return GH_ID_BOUNDS;if(line_width-spacing>page_width)page_width=line_width-spacing;page_height+=line_height;
  result->width=page_width;result->height=page_height;result->line_count=lines;result->icon_count=icons;
  if(glyphs>capacity)return GH_ID_CAPACITY;
  align=entry->b89==0?3:entry->b89<=4?0:1;startx=entry->draw_x-((align&1)?page_width*0.5f:0);starty=entry->draw_y-((align&2)?page_height*0.5f:0);x=startx;y=starty;
- {size_t out=0;for(offset=0;offset+2<=body.size;offset+=2){
+ size_factor=1.0f;
+ {size_t out=0,line=0;for(offset=0;offset+2<=body.size;offset+=2){
   uint16_t code=u16(body.bytes+offset);gh_font_glyph glyph;gh_font_draw_state draw;
   if((code&0xff00)==0x8000)break;if(code==0xa301)continue;
   if(code==0xb301){color=default_color;continue;}
   if(code==0xb602){color=u32(colors+u16(body.bytes+offset+2)*4);offset+=2;continue;}
-  if(code==0xa001){x=startx;y+=((float)font->slots[0].cell_height+12.0f)*sy+line_gap;continue;}
+  if(code==0xb002&&tutorial_scale){size_factor=(float)u16(body.bytes+offset+2)/100.0f;offset+=2;continue;}
+  if(code==0xa001){
+   x=startx;
+   y+=(tutorial_scale?heights[line++]:((float)font->slots[0].cell_height+12.0f)*sy)+line_gap;
+   continue;
+  }
   if(code==0x9401){
    const float chapter_x=x;
    draw=(gh_font_draw_state){.scale_x=sx,.scale_y=sy,.alignment_flags=9,
@@ -149,15 +199,16 @@ gh_id_error gh_id_text_prepare_with_chapter(const gh_id_base *object,const gh_id
   if(code<14){
    memset(&output[out],0,sizeof(output[out]));
    output[out].code=code;output[out].x=x;output[out].y=y+12.0f*sy+3.0f;
-   output[out].icon_extent=26.0f*sy;
-   x+=32.0f*sx+spacing;
+   output[out].icon_extent=26.0f*(size_factor*sy);
+   x+=tutorial_scale?32.0f*(size_factor*sy):32.0f*sx+spacing;
    ++out;continue;
   }
   if(gh_font_glyph_at(font,code,&glyph)!=GH_FONT_OK)return GH_ID_BOUNDS;
-  draw.scale_x=sx;draw.scale_y=sy;draw.alignment_flags=9;draw.screen_width=ctx->screen_width;draw.screen_height=ctx->screen_height;draw.gs_y_origin=ctx->gs_y_origin;draw.rgba=color;
-  output[out].code=code;output[out].x=x;output[out].y=y+12.0f*sy;output[out].icon_extent=0;
-  if(gh_font_draw_quad(font,&draw,code,x,y+12.0f*sy,65535,&output[out].quad)!=GH_FONT_DRAW_OK)return fail(result,code,offset,0x2a53a8);
-  x+=(float)glyph.width*sx+spacing;out++;
+  draw.scale_x=tutorial_scale?(size_factor*0.9f)*entry->draw_scale_x:sx;draw.scale_y=size_factor*sy;draw.alignment_flags=9;draw.screen_width=ctx->screen_width;draw.screen_height=ctx->screen_height;draw.gs_y_origin=ctx->gs_y_origin;draw.rgba=color;
+  const float glyph_y=y+(tutorial_scale?(baseline_scale[line]*32.0f-draw.scale_y*32.0f):0)+12.0f*sy;
+  output[out].code=code;output[out].x=x;output[out].y=glyph_y;output[out].icon_extent=0;
+  if(gh_font_draw_quad(font,&draw,code,x,glyph_y,65535,&output[out].quad)!=GH_FONT_DRAW_OK)return fail(result,code,offset,0x2a53a8);
+  x+=(tutorial_scale?(((float)glyph.width*size_factor*0.9f)*entry->draw_scale_x):(float)glyph.width*sx)+spacing;out++;
  }result->glyph_count=out;}
  return GH_ID_OK;
 }

@@ -352,9 +352,29 @@ static gh_id_error scene_cockpit_trans(void *context,gh_id_base *base,uint32_t *
     gh_startup_host *h=context;gh_id_draw_job jobs[640];size_t count=0;gh_id_frontier f={0};
     gh_id_error e=gh_id_jobs_collect_visible(base,jobs,640,&count,&f);
     if(e){if(frontier)*frontier=f.address;return e;}
+    if(base->resource_number==0x1d&&base->packed.bytes&&count){
+        gh_bundle packed;
+        gh_bundle_entry text;
+        if(gh_bundle_open(base->packed.bytes,base->packed.size,&packed)||
+           gh_bundle_find(&packed,"MSD",0,&text)){
+            if(frontier)*frontier=0x2aead0;
+            return GH_ID_UNSUPPORTED;
+        }
+        h->mc_messages.cursor=(gh_id_view){text.bytes,text.size,base->packed.offset+text.offset};
+    }
     for(size_t i=0;i<count;++i){
-        if(!h->scene_ui.draw){if(frontier)*frontier=jobs[i].consumer_address;return GH_ID_UNSUPPORTED;}
-        e=h->scene_ui.draw(h->scene_ui.context,base,&jobs[i],frontier);if(e)return e;
+        if(base->resource_number==0x1d&&jobs[i].entry->kind==2){
+            if(!h->scene_ui.draw_save_map||!h->mc_messages.initialized||
+               h->mc_messages.cursor.bytes==NULL){
+                if(frontier)*frontier=jobs[i].consumer_address;
+                return GH_ID_UNSUPPORTED;
+            }
+            e=h->scene_ui.draw_save_map(h->scene_ui.context,base,&jobs[i],&h->mc_messages,0,frontier);
+        }else{
+            if(!h->scene_ui.draw){if(frontier)*frontier=jobs[i].consumer_address;return GH_ID_UNSUPPORTED;}
+            e=h->scene_ui.draw(h->scene_ui.context,base,&jobs[i],frontier);
+        }
+        if(e)return e;
     }
     return GH_ID_OK;
 }
@@ -1586,6 +1606,14 @@ static gh_scene_step_status scene_scenario_status(void *context,uint32_t *fronti
     }
     return gh_game_services_task_status(h->services,frontier);
 }
+static gh_action_step_status room_r100_action(void *context,uint32_t entry,void *argument,
+    uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    if(entry==0x1bf7d8)return gh_game_services_r100_tutorial_action(h->services,argument,frontier);
+    return gh_r100_exit_action_002c2138(&h->r100_exit,entry,argument,frontier);
+}
+
 static int update_state4(void *context,gh_game_loop *loop)
 {
     gh_startup_host *h=context;gh_game_services_scene_view s;(void)loop;
@@ -1597,9 +1625,9 @@ static int update_state4(void *context,gh_game_loop *loop)
     if(!s.step->action_frame.active||s.step->action_frame.complete)h->action_bindings=(gh_action_step_bindings){
         .buttons=s.action_buttons,.work=&h->work,.cockpit=s.cockpit,.current_player=&s.title_player->view,
         .init=&h->game_init,.auxiliary_binding_known=1,
-        .callback=h->work.room==0x100?gh_r100_exit_action_002c2138:
+        .callback=h->work.room==0x100?room_r100_action:
                   h->work.room==0x105?gh_game_services_r105_scenery_action:NULL,
-        .context=h->work.room==0x105?(void *)h->services:(void *)&h->r100_exit};
+        .context=h->work.room==0x105?(void *)h->services:(void *)h};
     gh_game_scene_step_bindings b={.work=&h->work,.init=&h->game_init,.prepare=s.prepare,
         .save={h->save_bytes,sizeof(h->save_bytes)},.collision=s.collision_pairs,.actors=s.scene_tables,
         .scenario={s.scenario_bytes,s.scenario_bytes_size,s.scenario},.main_threads=h->threads,
@@ -2584,7 +2612,7 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
             out->r100_exit_prompt=(uint8_t)(out->current_room==0x100&&out->game_state==4&&
                 action->complete&&action->bindings==&h->action_bindings&&action->callback_kind==2&&
                 action->callback_entry==0x2c2138&&action->callback_argument&&
-                h->action_bindings.callback==gh_r100_exit_action_002c2138);
+                h->action_bindings.callback==room_r100_action);
             out->scene_stage=scene.step->stage;out->hitarea_phase=c->phase;out->hitarea_slot=c->slot;out->hitarea_node=c->node;
             if(scene.step->scenario_status_pending){
                 out->scenario_task_failed=1;

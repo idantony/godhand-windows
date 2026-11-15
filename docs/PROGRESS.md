@@ -4,6 +4,28 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## First tutorial presented and dismissed on Windows
+
+A Windows New Game replay approaches the first R100 tutorial using the
+original stick input. Circle opens the original tutorial, and frame 1655
+presents its plaque, text and right-stick icon. Cross dismisses it, and frame
+1682 presents the closed state. The merged tutorial and combat sources pass
+371 native checks across 381 C modules. Eighteen opt-in checks were skipped.
+
+A separate Windows pad replay shows the original escape counter. Stamp20
+collides with stamp19 and the original contact reduces stamp19's HP from 26
+to 16. The controlled R003 route presents 420 R105 frames, through Gene's
+first two original damage reactions. The first encounter and its normal
+room exit remain in development.
+
+Windows 新游戏回放通过原版摇杆输入走到 R100 的第一个教程，按圆圈打开面板。第 1655 帧显示
+原版提示框、文字和右摇杆图标。按叉键关闭后，第 1682 帧显示关闭状态。合并后的教程与战斗源码
+编译 381 个 C 模块，通过 371 项原生检查，本次跳过 18 项需额外设备或工具的检查。
+
+另一轮 Windows 手柄回放呈现了原版挣脱反击。被甩出的敌人撞到第一名对手，原版碰撞伤害把对手的
+HP 从 26 降到 16。R003 受控路线进入 R105 后呈现了 420 帧，包括 Gene 的前两次原版受击反应。
+完整首战及其正常房间出口仍在开发。
+
 ## First encounter grab and R105 enemy movement
 
 The hidden, muted New Game replay presents 2,606 scene frames through Gene's

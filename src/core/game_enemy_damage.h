@@ -5,6 +5,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/* Original stamp20 counter Heat gain uses the canonical R100 Heat owner. */
+gh_actor_motion_status gh_enemy_counter_heat_002a9978(gh_enemy_actor *, uint32_t *frontier);
 /* Original 0202 VT+AC arithmetic for the effect-7 player hit. Call at
  * 20A5DC with the signed power already selected by 20A178. Reads the
  * canonical Take ledger source and GameInit Heat, then updates current HP. */

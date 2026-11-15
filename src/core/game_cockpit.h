@@ -47,6 +47,9 @@ gh_id_error gh_game_cockpit_get_system_menu(gh_game_cockpit *,gh_cockpit_system_
 typedef struct {gh_id_base *base;const gh_id_state *manager;uint32_t read_id;uint16_t current_message;
  uint8_t data_present,state_b8;} gh_cockpit_tutorial_view;
 gh_id_error gh_game_cockpit_get_tutorial(gh_game_cockpit *,gh_cockpit_tutorial_view *);
+gh_id_error gh_game_cockpit_tutorial_select_001471a8(gh_game_cockpit *,uint16_t message);
+gh_id_error gh_game_cockpit_tutorial_request_close(gh_game_cockpit *);
+gh_id_error gh_game_cockpit_tutorial_move_001471f0(gh_game_cockpit *);
 gh_id_error gh_game_cockpit_tutorial_mark_resource(gh_game_cockpit *,uint32_t read_id);
 gh_id_error gh_game_cockpit_tutorial_begin_base(gh_game_cockpit *);
 gh_id_error gh_game_cockpit_tutorial_finish_00147028(gh_game_cockpit *);

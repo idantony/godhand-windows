@@ -195,6 +195,8 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services *,const gh
 gh_player_target_bindings gh_game_services_scene_targets(gh_game_services *);
 gh_action_step_status gh_game_services_r105_scenery_action(void *,uint32_t,void *,uint32_t *);
 /* Inspect native script errors immediately after a real Scenario visit. */
+gh_action_step_status gh_game_services_r100_tutorial_action(gh_game_services *,void *,
+    uint32_t *frontier);
 gh_scene_step_status gh_game_services_task_status(gh_game_services *,uint32_t *frontier);
 /* Actual12C418 on SAME player/model/motion, with one invocation cursor. */
 gh_game_event_status gh_game_services_event_return_0031c7e0(gh_game_services *,
