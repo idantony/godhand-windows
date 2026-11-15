@@ -432,6 +432,12 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
 }
 
 /* The selector15 CORE cues use the same spatial owner as the local bank. */
+/* Original EM0A CORE 87 shares the same positional SE descriptor as EM00. */
+static int r100_em0a_core87_source(const struct voice *v,int16_t program)
+{
+ return program==0x87&&v->part_index==-1&&r100_em0a_formation_source(v);
+}
+
 static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
@@ -447,7 +453,8 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
      h(root->bytes+0x2fe)!=0x202)return 0;
   const uint32_t dependency=w(root->bytes+0x564);
   const int em27=(program==0x83||program==0x87)&&r105_em27_voice_source(v);
-  if(!em27&&(dependency!=0x200||aged)&&(dependency!=0x203||em00_only))return 0;
+  if(!em27&&!r100_em0a_core87_source(v,program)&&
+     (dependency!=0x200||aged)&&(dependency!=0x203||em00_only))return 0;
  }else if(!v->combat_profile)return 0;
  const unsigned slot=aged?98u:(unsigned)(program-0x2d);
  const unsigned gain=aged?120u:program==0x83?60u:program==0x85?70u:90u;
@@ -554,6 +561,16 @@ static int paired_grab_player_voice_model(const struct voice *v)
     h(v->model->root.bytes+0x2f4)!=0x0a01)return 0;
  const uint16_t room=v->model->work->room;
  return room==0x100||room==0x105;
+}
+
+static int core_em0a_player_impact_profile(const struct voice *v,const uint8_t *p)
+{
+ return player_fall_voice_model(v)&&v->part_index==-1&&v->model->work&&
+    v->model->work->room==0x100&&!v->requested_bank&&v->requested_program==0xf6&&
+    !v->info.bank&&v->info.program==0xf6&&h(p+4)==120&&w(p+6)==0x00500406u&&
+    h(p+0xe)==0x21&&w(p+0x10)==0x007f0078u&&w(p+0x14)==0x005a0040u&&
+    !w(p+0x18)&&!h(p+0x1c)&&w(p+0x20)==0x45u&&
+    (w(p+0x24)&0x00ffffffu)==0x00000300u&&w(p+0x28)==0xffffu&&!w(p+0x2c);
 }
 
 static int core_fall_impact_profile(const struct voice *v,const uint8_t *p)
@@ -703,7 +720,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
     candidate->model->root.original_vtable214==0x41d220&&
     h(candidate->model->root.bytes+0x2fe)==0x100&&
     (h(candidate->model->root.bytes+0x2f4)==0x0102||
-     (candidate->model->work->room==0x105&&h(candidate->model->root.bytes+0x2f4)==0x0002))&&
+     h(candidate->model->root.bytes+0x2f4)==0x0002)&&
     !h(candidate->model->root.bytes+0x54a)&&
     w(p+4)==0x000f000d&&w(p+8)==0x55&&w(p+0xc)==0x00210000&&
     w(p+0x10)==0x00780078&&w(p+0x14)==0x005a0040&&!w(p+0x18)&&
@@ -734,6 +751,10 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  if((core_fall_impact_profile(candidate,p)||core_grab_impact_profile(candidate,p))&&
     (w(descriptor.data)!=0x35460||
     w(descriptor.data+4)!=18000||w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))
+  return unsupported(s,0x35fc);
+ const int em0a_player_impact=core_em0a_player_impact_profile(candidate,p);
+ if(em0a_player_impact&&(w(descriptor.data)!=485136||w(descriptor.data+4)!=18000||
+    w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))
   return unsupported(s,0x35fc);
  const int player_hurt=player_hurt_profile(candidate,bank,program,p,descriptor.data);
  const int player_recovery=player_recovery_footing_profile(candidate,p,descriptor.data);
@@ -819,7 +840,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
   return unsupported(s,0x35fc);
  if(impact_voice||reaction_voice||ema2_voice||ema2_timer_voice||timed_voice||footstep||sequence_voice||attack_core||
     local_cue_voice||weapon_swing||turn_core||attack_voice||death_voice||knockdown_core||player_hurt||player_recovery||
-    devil_spawn||em0a_attack_voice)candidate->combat_profile=1;
+    devil_spawn||em0a_attack_voice||em0a_player_impact)candidate->combat_profile=1;
  /* The admitted cue keeps its spatial mix when 2CE488 detaches the actor. */
  candidate->door_spatial=(uint8_t)(door||om305);
  rate=w(descriptor.data+4);if(rate<1000 || rate>48000)return unsupported(s,0x38e4);
@@ -1312,7 +1333,7 @@ static gh_voice_status attached_request_body(gh_se_voice_engine*s,const void*own
   v->setup_stage=6;
  }
  if(v->setup_stage==5){gh_voice_status e=attached_profile(s,v->descriptor,core_enemy_footstep_profile(v,
-    v->info.bank,v->info.program,v->descriptor,NULL),(r100_devil_spawn_cue(v,v->descriptor)||(!v->info.program&&r105_emad_loop(v,v->info.bank,0,v->descriptor)))?0:65535,
+    v->info.bank,v->info.program,v->descriptor,NULL)||core_em0a_player_impact_profile(v,v->descriptor),(r100_devil_spawn_cue(v,v->descriptor)||(!v->info.program&&r105_emad_loop(v,v->info.bank,0,v->descriptor)))?0:65535,
     core_grab_impact_profile(v,v->descriptor)?270:90);
  if(e)return e;e=prepare_pcm(s,v->info.bank,v->info.program,v->descriptor,v);if(e)return e;v->priority=v->descriptor[8];v->group_first=v->descriptor[6];v->group_count=v->descriptor[7]+1;v->replace_equal=(v->descriptor[0xe]&0x20)!=0;/* Range is sampled later by actual37C2E0, never expose this intermediate PCM as finalpitch. */if(h(v->descriptor+0x18)||h(v->descriptor+0x1a))v->info.pitch_q12=0;v->setup_stage=6;}
  if(v->setup_stage==6){if(!++s->serial)++s->serial;v->info.original_handle=s->serial;v->request_key=NULL;v->setup_stage=0;v->random=NULL;v->random_context=NULL;v->used=1;v->next=s->head;s->head=(int)index;*handle=v->info.original_handle;}

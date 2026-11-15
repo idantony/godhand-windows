@@ -68,6 +68,9 @@ typedef struct {
     uint32_t actor_handles[255];
 } gh_event_actor_create;
 
+/* Source IDs from EV04's complete original 17-row actor table. */
+int gh_event_actor_ev04_source_kind(uint16_t);
+
 /* After the actual Env allocation, run REL+0AC0, +0BA8 and +0D20.
  * Success here means the original create task was registered. Its first
  * actual object request remains strict at 312A80 if the factory is absent.

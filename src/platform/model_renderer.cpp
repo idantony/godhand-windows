@@ -144,7 +144,12 @@ extern "C" gh_model_gpu_error gh_model_renderer_create(unsigned width,unsigned h
 extern "C" void gh_model_renderer_reset_resources(gh_model_renderer*r){if(r&&r->thread==GetCurrentThreadId())r->materials.clear();}
 extern "C" gh_model_gpu_error gh_model_renderer_upload(gh_model_renderer*r,const gh_stage_material*m,uint32_t*out){
  if(!r||!m||!out||r->thread!=GetCurrentThreadId()||!m->source||!m->rgba_gs||!m->cache_id)return GH_MODEL_GPU_ARGUMENT;
- unsigned w=m->width,h=m->height;if(!w||!h||w>512||h>512||(w&(w-1))||(h&(h-1))||m->rgba_bytes!=(size_t)w*h*4||m->draw_tcc!=1||(m->draw_tfx!=0&&m->draw_tfx!=3)||(m->psm!=19&&m->psm!=20))return GH_MODEL_GPU_UNSUPPORTED;
+ // TEX0 TW/TH describe the texture, independently of the 512x448 target.
+ constexpr unsigned gs_texture_limit=1024;
+ unsigned w=m->width,h=m->height;
+ if(!w||!h||w>gs_texture_limit||h>gs_texture_limit||(w&(w-1))||(h&(h-1))||
+    m->rgba_bytes!=(size_t)w*h*4||m->draw_tcc!=1||(m->draw_tfx!=0&&m->draw_tfx!=3)||
+    (m->psm!=19&&m->psm!=20))return GH_MODEL_GPU_UNSUPPORTED;
  for(size_t i=0;i<r->materials.size();i++)if(r->materials[i]->identity==m->cache_id){*out=(uint32_t)i+1;return GH_MODEL_GPU_OK;}
  if(r->materials.size()>=UINT32_MAX)return GH_MODEL_GPU_MEMORY;
  auto material=std::unique_ptr<Material>(new(std::nothrow)Material);if(!material)return GH_MODEL_GPU_MEMORY;material->identity=m->cache_id;material->width=w;material->height=h;

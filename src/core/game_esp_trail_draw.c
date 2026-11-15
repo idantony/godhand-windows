@@ -60,7 +60,7 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
     b->camera->identity!=b->init->active_camera||b->camera->policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE||
     b->cvt_policy!=GH_FRAME_CHOP_REFERENCE||b->policy!=GH_STATIC_BINARY32_REFERENCE)
   return reject(f,0x147528,GH_EFFECT_UNSUPPORTED);
- if(!stride||(two_edges?mode!=5u:(mode&~2u))||!v->target120_known_null||word(p+0x120)||word(p+0x114)||
+ if(!stride||(two_edges?(mode!=4u&&mode!=5u):(mode&~2u))||!v->target120_known_null||word(p+0x120)||word(p+0x114)||
     !(flags&0x1000000u)||(int8_t)p[0x101]>2)
   return reject(f,pc,GH_EFFECT_UNSUPPORTED);
  const float *history=NULL,*other_history=NULL;
@@ -105,7 +105,7 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
  float u=flags&0x10000000u?-1:1,v_step=flags&0x08000000u?1:-1;
  if(devil)v_step=-v_step; /* 2F5788 seeds signed V before the shared Draw. */
  float u_origin=0,v_origin=0;
- if(two_edges){
+ if(two_edges&&(mode&1)){
   const int frame=(int8_t)p[0x244];
   if(p[0x245]!=1||p[0x246]!=2||frame<0||frame>=2||
      !material->height||material->height%2||word(p+0x2d8)||word(p+0x2d4)!=0x3f800000u)

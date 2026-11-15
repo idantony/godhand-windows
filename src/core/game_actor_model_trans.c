@@ -43,6 +43,11 @@ static gh_actor_model_status suppress(gh_actor_trans_call*c,uint32_t entry,int*o
  if(entry==0x107f20){if(flags&0x80000000u){*out=1;return GH_ACTOR_MODEL_OK;}entry=0x2a7448;}
  else if(entry==0x1004c8){if(flags&0x200000u){*out=1;return GH_ACTOR_MODEL_OK;}entry=0x14b470;}
  else if(entry==0x1b80c0){if(flags&0x20000000u){*out=1;return GH_ACTOR_MODEL_OK;}entry=0x2a7448;}
+ else if((entry==0x27a2b8&&word(p+0x214)==0x447f70u)||
+         (entry==0x27ada8&&word(p+0x214)==0x448028u)){
+  if(flags&0x40000000u){*out=1;return GH_ACTOR_MODEL_OK;}
+  entry=0x14b470;
+ }
  else if(entry==0x2684a0||entry==0x288d40||
          (entry==0x28e9d0&&word(p+0x214)==0x44a528u)){
   /* cEmAD's +30 predicate uses the enemy gate sequence in 28E9D0. */

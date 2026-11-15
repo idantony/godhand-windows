@@ -75,6 +75,21 @@ int main(int argc,char**argv){
     C(vertex->z==1000&&vertex->rgba==0x20808080&&vertex->q==1);
     C(vertex->s==entry->f70[(i&1)?0:2]&&vertex->t==entry->f70[(i&2)?1:3]);
    }
+   /* Encoded X spills into Y, and uniform raw Z saturates in PSMZ16S. */
+   float offscreen[16];
+   memcpy(offscreen,screen,sizeof(offscreen));
+   offscreen[10]=-1000;
+   memcpy(camera.fields,offscreen,sizeof(offscreen));
+   marker.vector_a[0]=64;
+   C(!gh_enemy_marker_quad_002ab360(&camera,&pivot,m,&marker,entry,&packet,&pc)&&!pc);
+   C(packet.visible&&packet.quad.vertex_count==4);
+   for(unsigned i=0;i<4;i++){
+    const gh_effect_trans_vertex *vertex=&packet.quad.vertices[i];
+    const float x=(float)((256.0-entry->draw_x-((i&1)?0:(double)entry->f68*entry->draw_scale_x))/128+64);
+    const float y=(float)((224.0-entry->draw_y+((i&2)?(double)entry->f6c*entry->draw_scale_y:0))/128);
+    const unsigned packed=(unsigned)((2048+x*64)*16)|((unsigned)((2048+y*64)*16)<<16);
+    C(vertex->x12_4==(int32_t)(packed&0xffffu)&&vertex->y12_4==(int32_t)(packed>>16)&&vertex->z==0xffffu);
+   }
    gh_stage_textures *textures;
    const gh_stage_material *material,*again;
    C(!gh_stage_textures_create(&textures));

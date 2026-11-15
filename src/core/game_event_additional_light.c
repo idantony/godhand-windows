@@ -5,7 +5,8 @@
 
 enum {
     COMPONENT = 14, ROW_SIZE = 0x44, RECORD_SIZE = 0x70, RECORDS = 256,
-    EV01_CUTS = 10, EV01_ROWS = 42, EV02_CUTS = 28, EV02_ROWS = 90
+    EV01_CUTS = 10, EV01_ROWS = 42, EV02_CUTS = 28, EV02_ROWS = 90,
+    EV04_CUTS = 24, EV04_ROWS = 70
 };
 
 static uint16_t half(const uint8_t *p)
@@ -55,9 +56,9 @@ static gh_game_event_status track_at(gh_event_link *link, const gh_event_data_pr
     if (status) return status;
     if (word(component->bytes + 0x14) != track->count) return GH_EVENT_FORMAT;
     const unsigned event = link->components.event_no;
-    if (event != 1 && event != 2) return GH_EVENT_UNSUPPORTED;
-    const unsigned cuts = event == 1 ? EV01_CUTS : EV02_CUTS;
-    const unsigned rows = event == 1 ? EV01_ROWS : EV02_ROWS;
+    if (event != 1 && event != 2 && event != 4) return GH_EVENT_UNSUPPORTED;
+    const unsigned cuts = event == 1 ? EV01_CUTS : event == 2 ? EV02_CUTS : EV04_CUTS;
+    const unsigned rows = event == 1 ? EV01_ROWS : event == 2 ? EV02_ROWS : EV04_ROWS;
     if (data->camera_count != cuts || track->count != rows || track->stride != ROW_SIZE ||
         track->bytes != rows * ROW_SIZE || !track->records)
         return GH_EVENT_UNSUPPORTED;
@@ -67,8 +68,8 @@ static gh_game_event_status track_at(gh_event_link *link, const gh_event_data_pr
 static gh_game_event_status map_keys(const gh_event_data_prefix *data,
     gh_event_sequence_view track, uint16_t *cut_start)
 {
-    const int ev02 = data->components->event_no == 2;
-    const unsigned key_flags = ev02 ? 5u : 4u;
+    const unsigned event = data->components->event_no;
+    const unsigned key_flags = event == 1 ? 4u : event == 2 ? 5u : 0x15u;
     for (unsigned cut = 0; cut < data->camera_count; ++cut) {
         gh_event_camera_cut camera;
         uint16_t length;
@@ -88,7 +89,7 @@ static gh_game_event_status map_keys(const gh_event_data_prefix *data,
             cut >= data->camera_count || frame >= (unsigned)(cut_start[cut + 1] - cut_start[cut]) ||
             cut_start[cut] + frame < last_time ||
             key[0x0c] || (key[0x0d] & ~key_flags) ||
-            (key[0x0e] != 2 && (!ev02 || key[0x0e] != 1)) || key[0x0f] ||
+            (key[0x0e] != 2 && (event == 1 || key[0x0e] != 1) && (event != 4 || key[0x0e])) || key[0x0f] ||
             id < 1 || id > 3)
             return GH_EVENT_UNSUPPORTED;
         for (unsigned j = 0; j < 9; ++j) {
@@ -275,7 +276,13 @@ gh_game_event_status gh_event_additional_light_move_00004140(gh_event_additional
     unsigned adds = 0;
     for (unsigned i = 0; i < track.count; ++i) {
         const uint8_t *key = track.records + i * ROW_SIZE;
-        adds += key[3] == cut && (float)half(key + 6) == frame;
+        if (key[3] == cut && (float)half(key + 6) == frame) {
+            if (!key[0x0e] || (key[0x0d] & 0x10)) {
+                *frontier = 0x42b0;
+                return GH_EVENT_UNSUPPORTED;
+            }
+            ++adds;
+        }
     }
     if (adds > RECORDS - count) return GH_EVENT_BOUNDS;
     const uint32_t system_flags = word((const uint8_t *)work + 0x5e4);

@@ -96,6 +96,7 @@ static gh_actor_model_status project(const gh_game_pl_camera *camera,
   return GH_ACTOR_MODEL_UNSUPPORTED;
 
  result.quad.vertex_count=4;
+ unsigned saturated=0;
  for(unsigned i=0;i<4;i++){
   const float local[3]={local_x[i&1],local_y[i>>1],0};
   float world[4],clip[4],q;
@@ -107,18 +108,26 @@ static gh_actor_model_status project(const gh_game_pl_camera *camera,
   for(unsigned k=0;k<3;k++){
    if(!gh_static_vu_ftoi4(mul(clip[k],q),fixed+k))return stop(f,0x30ab48);
   }
-  if(fixed[0]<0||fixed[0]>65535||fixed[1]<0||fixed[1]>65535||
-     fixed[2]<0||fixed[2]>0xfffff)return stop(f,0x15bcf0);
+  /* 15C068..15C094 OR the signed converted coordinates into XYZ2. */
+  uint32_t z=(uint32_t)fixed[2]>>4;
+  if(fixed[2]<0)z|=UINT32_C(0xf0000000);
+  const uint64_t xyz=(uint64_t)(int64_t)fixed[0]|
+      ((uint64_t)(int64_t)fixed[1]<<16)|((uint64_t)z<<32);
+  z=(uint32_t)(xyz>>32);
+  if(z>0xffffu){saturated++;z=0xffffu;}
   gh_effect_trans_vertex *vertex=result.quad.vertices+i;
-  vertex->x12_4=fixed[0];
-  vertex->y12_4=fixed[1];
-  vertex->z=(uint32_t)fixed[2]>>4;
+  vertex->x12_4=(uint16_t)xyz;
+  vertex->y12_4=(uint16_t)(xyz>>16);
+  vertex->z=z;
   vertex->rgba=color;
   vertex->q=1.0f;
   vertex->s=entry->f70[(i&1)?0:2];
   vertex->t=entry->f70[(i&2)?1:3];
   if(!isfinite(vertex->s)||!isfinite(vertex->t))return stop(f,0x15bcf0);
  }
+ /* The PSMZ16S comparison saturates after interpolation. The existing
+  * vertex format can preserve saturation when all four vertices exceed it. */
+ if(saturated&&saturated!=4)return stop(f,0x15bcf0);
  if(base->h44==0)return stop(f,0x31a650);
  result.order=(gh_ui_order_group){.bank=6,.depth=(uint32_t)(int32_t)base->h44};
  result.test=0x5000d;

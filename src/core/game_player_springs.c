@@ -60,34 +60,60 @@ gh_player_springs_status gh_game_player_springs_initialize_00100870(gh_game_play
  uint8_t records[44*0xa0];memcpy(records,c->object.view.bytes+0x4d0,sizeof(records));fenv_t env;if(feholdexcept(&env))return fail(s,0x1038e0,GH_SPRINGS_NUMERIC);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(s,0x1038e0,GH_SPRINGS_NUMERIC);}unsigned neighbors=0;for(unsigned i=1;i<=4;i++)if(s->table_addresses[i])neighbors|=1u<<i;gh_player_springs_status e=setup(&c->model,s->indices,s->count,neighbors,0.1f,records,&s->frontier);if(fesetenv(&env))return fail(s,0x1038e0,GH_SPRINGS_NUMERIC);if(e)return e;memcpy(c->object.view.bytes+0x4d0,records,sizeof(records));s->initialized=1;s->frontier=0;return GH_SPRINGS_OK;
 }
 
-gh_player_springs_status gh_spring_profile_2a0_from_elf(gh_spring_profile_2a0 *out,
-    const void *elf,size_t bytes){
+gh_player_springs_status gh_event_spring_profile_from_elf(gh_event_spring_profile *out,
+    uint16_t kind,const void *elf,size_t bytes){
  if(!out||!elf||out->loaded)return GH_SPRINGS_ARGUMENT;
- gh_spring_profile_2a0 profile={0};memset(profile.indices,255,sizeof(profile.indices));
- static const uint32_t indices[]={0x3c3938,0,0,0,0,0x3c3948,0x3c3958};
- static const uint32_t coefficients[]={0x3c3968,0x3c3990,0x3c39b8};
- for(unsigned i=0;i<7;i++){
-  if(!indices[i])continue;
-  const uint8_t *data;if(!span(elf,bytes,indices[i],10,&data,NULL))return GH_SPRINGS_BOUNDS;
-  memcpy(profile.indices[i],data,10);
+ static const struct {
+  uint16_t kind;
+  unsigned count;
+  float radius;
+  uint32_t indices[4],coefficients[3],scratch;
+ } profiles[]={
+  {0x250,4,0.1f,{0x3c35a0,0,0x3c35a8,0x3c35b0},{0x3c35b8,0x3c35c8,0x3c35d8},0x61a9a0},
+  {0x252,10,0.06f,{0x3c3a40,0,0x3c3a50,0x3c3a60},{0x3c3a70,0x3c3a98,0x3c3ac0},0x61b150},
+  {0x253,20,0.1f,{0x3bfb48,0x3bfb90,0x3bfb60,0x3bfb78},{0x3bfba8,0x3bfbf8,0x3bfc48},0x585240},
+  {0x256,8,0.05f,{0x3c37c8,0,0x3c37d0,0x3c37d8},{0x3c37e0,0x3c3800,0x3c3820},0x61acd0},
+  {0x2a0,10,0.06f,{0x3c3938,0,0x3c3948,0x3c3958},{0x3c3968,0x3c3990,0x3c39b8},0x61af10},
+  {0x628,22,0.1f,{0x3bfc98,0x3bfce0,0x3bfcb0,0x3bfcc8},{0x3bfcf8,0x3bfd50,0x3bfda8},0x585450}
+ };
+ size_t p=0;
+ while(p<sizeof(profiles)/sizeof(*profiles)&&profiles[p].kind!=kind)++p;
+ if(p==sizeof(profiles)/sizeof(*profiles))return GH_SPRINGS_ARGUMENT;
+ gh_event_spring_profile profile={0};
+ profile.count=profiles[p].count;
+ profile.radius=profiles[p].radius;
+ memset(profile.indices,255,sizeof(profile.indices));
+ static const unsigned tables[]={0,1,5,6};
+ for(unsigned i=0;i<sizeof(tables)/sizeof(*tables);i++){
+  if(!profiles[p].indices[i])continue;
+  const uint8_t *data;
+  if(!span(elf,bytes,profiles[p].indices[i],profile.count,&data,NULL))return GH_SPRINGS_BOUNDS;
+  memcpy(profile.indices[tables[i]],data,profile.count);
  }
+ if(profiles[p].indices[1])profile.neighbors=1u<<1;
  for(unsigned i=0;i<3;i++){
-  const uint8_t *data;if(!span(elf,bytes,coefficients[i],40,&data,NULL))return GH_SPRINGS_BOUNDS;
-  for(unsigned j=0;j<10;j++)profile.coefficients[i][j]=u32(data+j*4);
+  const uint8_t *data;
+  if(!span(elf,bytes,profiles[p].coefficients[i],profile.count*4,&data,NULL))return GH_SPRINGS_BOUNDS;
+  for(unsigned j=0;j<profile.count;j++)profile.coefficients[i][j]=u32(data+j*4);
  }
- profile.original_scratch=0x61af10;profile.loaded=1;*out=profile;return GH_SPRINGS_OK;
+ profile.original_scratch=profiles[p].scratch;
+ profile.loaded=1;
+ *out=profile;
+ return GH_SPRINGS_OK;
 }
 
-gh_player_springs_status gh_spring_records_2a0_001038e0(const gh_spring_profile_2a0 *profile,
+gh_player_springs_status gh_event_spring_records_001038e0(const gh_event_spring_profile *profile,
     gh_actor_model *model,uint8_t *records,size_t bytes,gh_static_transform_policy policy,uint32_t *frontier){
  if(frontier)*frontier=0x1038e0;
- if(!profile||!profile->loaded||!model||!model->ready||model->native_identity!=model||
+ if(!profile||!profile->loaded||!profile->count||profile->count>44||
+    !model||!model->ready||model->native_identity!=model||
     !records||bytes<44*0xa0)return GH_SPRINGS_ARGUMENT;
  if(policy!=GH_STATIC_BINARY32_REFERENCE)return GH_SPRINGS_NUMERIC;
  uint8_t staged[44*0xa0];memcpy(staged,records,sizeof(staged));
  fenv_t env;if(feholdexcept(&env))return GH_SPRINGS_NUMERIC;
  if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_SPRINGS_NUMERIC;}
- gh_player_springs_status result=setup(model,profile->indices,10,0,0.06f,staged,frontier);
+ gh_player_springs_status result=setup(model,profile->indices,profile->count,
+  profile->neighbors,profile->radius,staged,frontier);
  if(fesetenv(&env))return GH_SPRINGS_NUMERIC;
  if(result)return result;
  memcpy(records,staged,sizeof(staged));if(frontier)*frontier=0;return GH_SPRINGS_OK;

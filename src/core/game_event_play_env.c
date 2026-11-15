@@ -180,7 +180,7 @@ gh_game_event_status gh_event_fade_init_00006c70(gh_event_components *components
 {
     if (frontier) *frontier = 0x297f80;
     if (!components || !data || data->components != components) return GH_EVENT_ARGUMENT;
-    if (components->event_no == 1)
+    if (components->event_no == 1 || components->event_no == 4)
         return gh_event_fade_init_absent_00006c70(components, data->data, data->bytes, frontier);
 
     gh_event_component_view view;
@@ -251,7 +251,7 @@ gh_game_event_status gh_event_fade_move_00006ca0(gh_event_components *components
     *frontier = 0x6ca0;
     *relative = 1;
     if (!components || !data || data->components != components) return GH_EVENT_ARGUMENT;
-    if (components->event_no == 1) {
+    if (components->event_no == 1 || components->event_no == 4) {
         *relative = 0;
         return gh_event_fade_move_absent_00006ca0(components, fade, frontier);
     }

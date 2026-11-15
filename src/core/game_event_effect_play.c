@@ -29,7 +29,8 @@ static gh_game_event_status absent(const gh_event_data_prefix *data, unsigned in
     gh_event_sequence_view track;
     gh_game_event_status status = gh_event_sequence_at(data, index, &track);
     if (status) return status;
-    if ((data->components->event_no != 1 && !(index == 3 && data->components->event_no == 2)) ||
+    if ((data->components->event_no != 1 && data->components->event_no != 4 &&
+         !(index == 3 && data->components->event_no == 2)) ||
         track.records || track.count ||
         word(view->bytes + 0x10) || word(view->bytes + 0x14))
         return GH_EVENT_UNSUPPORTED;
@@ -75,7 +76,8 @@ static gh_game_event_status effect_sequence(const gh_event_data_prefix *data,
 {
     *row = NULL;
     if (!data->components || !data->components->constructed) return GH_EVENT_ARGUMENT;
-    if (data->components->event_no == 1) return absent(data, 4, 0xd1e8, component);
+    if (data->components->event_no == 1 || data->components->event_no == 4)
+        return absent(data, 4, 0xd1e8, component);
     if (data->components->event_no != 2) return GH_EVENT_UNSUPPORTED;
     if (gh_event_component_at((gh_event_components *)data->components, 4, component) ||
         !component->bytes || component->original_offset != 0xd1e8 || component->size != 0x18)

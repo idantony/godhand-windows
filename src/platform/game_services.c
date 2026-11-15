@@ -140,7 +140,9 @@ struct gh_game_services {
   gh_shadow_call shadow;
   gh_event_pendulum_call pendulum;
  } event_actor_move[GH_EVENT_ACTOR_ROSTER_CAPACITY + 1];
+ gh_event_pendulum_call event_accessory_cloth[2];
  gh_actor_render_call event_actor_render[GH_EVENT_ACTOR_ROSTER_CAPACITY + 1];
+ gh_actor_render_call event_accessory_render[2];
  gh_esp14_provider model_effect;
  gh_services_esp14_slot *esp14_slots[1024], *esp14_retired;
  size_t esp14_limit;
@@ -2052,7 +2054,13 @@ gh_game_event_status gh_game_services_bind_event_actor_roster(gh_game_services *
         .fog_rgb = s->world_light.scalar + 4
     };
     gh_game_event_status status = gh_event_actor_roster_bind(roster, &bindings, rows, capacity);
-    if (!status) s->event_actor_roster = roster;
+    if (!status) {
+        s->event_actor_roster = roster;
+        memset(s->event_actor_move, 0, sizeof(s->event_actor_move));
+        memset(s->event_actor_render, 0, sizeof(s->event_actor_render));
+        memset(s->event_accessory_cloth, 0, sizeof(s->event_accessory_cloth));
+        memset(s->event_accessory_render, 0, sizeof(s->event_accessory_render));
+    }
     return status;
 }
 
@@ -2087,8 +2095,12 @@ static gh_event_actor_factory *event_actor_for_handle(gh_game_services *s, uint3
     gh_event_actor_roster *roster = s->event_actor_roster;
     for (size_t i = 0; i < roster->capacity; ++i)
         if (roster->rows[i].handle == handle) return &roster->rows[i];
-    if (s->event_actor_extra && s->event_actor_extra->olivia_accessory.handle == handle)
-        return &s->event_actor_extra->olivia_accessory;
+    if (s->event_actor_extra) {
+        gh_event_actor_extra *extra = s->event_actor_extra;
+        if (extra->olivia_accessory.handle == handle) return &extra->olivia_accessory;
+        for (size_t i = 0; i < sizeof(extra->ev04_accessory) / sizeof(*extra->ev04_accessory); ++i)
+            if (extra->ev04_accessory[i].handle == handle) return &extra->ev04_accessory[i];
+    }
     return NULL;
 }
 
@@ -2624,9 +2636,24 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
  gh_event_actor_factory *event_actor=event_actor_for_handle(s,handle);
  if(event_actor){
   gh_title_player_view registered;
-  if(entry!=0x2b6930||delta){*f=entry;return GH_SERVICES_FRONTIER;}
+  if(delta){*f=entry;return GH_SERVICES_FRONTIER;}
   if(gh_event_actor_factory_view(event_actor,handle,&registered)||v->bytes!=registered.bytes||
      v->size!=registered.size||v->alias_f0!=registered.alias_f0){*f=entry;return GH_SERVICES_ASSET;}
+  if(entry==0x27a320||entry==0x27ae10){
+   const unsigned accessory=entry==0x27a320?0:1;
+   gh_event_actor_extra *extra=s->event_actor_extra;
+   *f=entry;
+   if(!extra||event_actor!=&extra->ev04_accessory[accessory])return GH_SERVICES_ASSET;
+   gh_cloth_step_bindings cloth={.templates=s->b.cloth_templates,.globals=s->b.cloth_globals,
+    .random=&s->b.init->random,.actors=&s->scene_tables,
+    .matrix_policy=GH_STATIC_BINARY32_REFERENCE,.random_policy=GH_FRAME_CHOP_REFERENCE};
+   gh_event_pendulum_call *call=&s->event_accessory_cloth[accessory];
+   gh_game_event_status status=gh_game_event_accessory_move_0027a320(call,event_actor,
+    &extra->ev04_accessory_springs[accessory],work,&cloth,s->b.player_shared_vector,f);
+   if(!status)memset(call,0,sizeof(*call));
+   return !status?GH_SERVICES_OK:status==GH_EVENT_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
+  }
+  if(entry!=0x2b6930){*f=entry;return GH_SERVICES_FRONTIER;}
   const size_t capacity=sizeof(s->event_actor_move)/sizeof(*s->event_actor_move);
   const int accessory=s->event_actor_extra&&event_actor==&s->event_actor_extra->olivia_accessory;
   const size_t index=accessory?capacity-1:event_actor->actor_index;
@@ -3116,6 +3143,10 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh
   model=&event_actor->model;
   shadow=event_actor->shadow.initialized?&event_actor->shadow:NULL;
   call=&s->event_actor_render[index];
+  if(s->event_actor_extra){
+   for(size_t i=0;i<sizeof(s->event_accessory_render)/sizeof(*s->event_accessory_render);++i)
+    if(event_actor==&s->event_actor_extra->ev04_accessory[i])call=&s->event_accessory_render[i];
+  }
  }else{
   void*registered=NULL;if(gh_room_object_lookup(&s->pools,q->handle,GH_ROOM_OBJECT_OM,&s->om_factory,&registered)){*f=q->original_entry;return GH_SERVICES_FRONTIER;}
   size_t index;for(index=0;index<s->om_factory.count;index++)if(registered==s->om_factory.objects+index)break;

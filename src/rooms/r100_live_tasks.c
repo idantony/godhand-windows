@@ -1,6 +1,7 @@
 #include "r100_live_tasks.h"
 #include "r100_watch_geometry.h"
 #include "../core/game_enemy_ems.h"
+#include "../core/game_enemy_request.h"
 #include <string.h>
 
 static const uint32_t entries[]={0x2920,0x2650,0x2490,0x2288,0x2198,0x15b0,0x2d68,0x1bd0,0x11b0,0x1780};
@@ -659,7 +660,15 @@ static gh_r100_script_status watch(gh_r100_live_task *s)
         }
         status=hit(s,23,&triggered);
         if(status||!triggered)return status;
-        return fail(s,0x296130,GH_R100_SCRIPT_UNSUPPORTED);
+        /* EmWrap 296130 resolves stamp18 and clears the cEm00 placement
+         * flags through the same 2736F8 owner as the ordinary enemy Move. */
+        if(a->view.original_kind4ac==0x42c7f0){
+            uint32_t frontier=0;
+            gh_actor_motion_status result=gh_enemy_clear_set_flags_002736f8(&a->view,s->b.room,&frontier);
+            if(result)return fail(s,frontier?frontier:0x2736f8,GH_R100_SCRIPT_CALLEE);
+        }
+        s->finished=1;
+        return GH_R100_SCRIPT_OK;
     }
     case 0x2d68:{
         if(!s->entered)return GH_R100_SCRIPT_ARGUMENT;

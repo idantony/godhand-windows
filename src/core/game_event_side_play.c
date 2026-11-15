@@ -33,7 +33,8 @@ static gh_game_event_status get_component(const gh_event_data_prefix *data, unsi
     if (data->components->event_no == 1 ||
         (data->components->event_no == 2 &&
          (index == 0 || index == 5 || index == 9 || index == 10)) ||
-        (data->components->event_no == 4 && (index == 1 || index == 10))) return GH_EVENT_OK;
+        (data->components->event_no == 4 && (index == 0 || index == 1 || index == 5 || index == 9 || index == 10)))
+        return GH_EVENT_OK;
     return GH_EVENT_UNSUPPORTED;
 }
 
@@ -61,15 +62,22 @@ static gh_game_event_status scroll_light_track(const gh_event_data_prefix *data,
         return GH_EVENT_UNSUPPORTED;
     if (data->components->event_no == 1)
         return !track->records && !track->count ? GH_EVENT_OK : GH_EVENT_UNSUPPORTED;
-    if (!track->records || track->count != 2 || track->stride != 0x60 || track->bytes != 0xc0)
+    const unsigned event = data->components->event_no;
+    const unsigned keys = event == 4 ? 9 : 2;
+    if (!track->records || track->count != keys || track->stride != 0x60 || track->bytes != keys * 0x60)
         return GH_EVENT_UNSUPPORTED;
 
     /* EV02 supplies two camera keys, with no interpolation or origin
      * substitution. B770 normalizes their anonymous actor index to -1. */
     for (unsigned i = 0; i < track->count; ++i) {
         const uint8_t *row = track->records + i * track->stride;
-        if (word(row) != ((26u + i) << 24 | 0xffffu) || word(row + 4) || word(row + 8) ||
-            word(row + 0x28) != 0x3f800000u)
+        const unsigned cut = event == 4 ? row[3] : 26u + i;
+        const unsigned frame = half(row + 6);
+        uint16_t length;
+        if (word(row) != (cut << 24 | 0xffffu) || half(row + 4) ||
+            (word(row + 8) & ~(event == 4 ? 1u : 0u)) ||
+            (event != 4 && frame) || word(row + 0x28) != 0x3f800000u ||
+            gh_event_camera_cut_length_00004e60(data, cut, &length) || frame >= length)
             return GH_EVENT_UNSUPPORTED;
         for (unsigned offset = 0x40; offset < 0x60; offset += 8) {
             if (!(word(row + offset) & 0x7fffffffu) &&
@@ -159,9 +167,17 @@ gh_game_event_status gh_event_scr_light_move_00008ef8(gh_event_scr_light *state,
             return GH_EVENT_ARGUMENT;
         const unsigned cut = half(camera.bytes + 6);
         if (camera.bytes[4] || cut >= state->data->camera_count) return GH_EVENT_UNSUPPORTED;
+        float frame;
+        memcpy(&frame, camera.bytes + 0xc, sizeof(frame));
+        const uint8_t *next = NULL;
         for (unsigned i = 0; i < track.count; ++i) {
             const uint8_t *row = track.records + i * track.stride;
-            if (row[3] <= cut) key = row;
+            if (row[3] < cut || (row[3] == cut && (float)half(row + 6) <= frame)) key = row;
+            if (!next && (row[3] > cut || (row[3] == cut && (float)half(row + 6) >= frame))) next = row;
+        }
+        if ((word(key + 8) & 1) && next && key != next) {
+            *frontier = 0x9120;
+            return GH_EVENT_UNSUPPORTED;
         }
     }
     uint8_t *world = state->world->scalar;

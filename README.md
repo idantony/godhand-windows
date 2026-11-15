@@ -35,7 +35,8 @@ Game Over menu. Windows presents the reloaded R105 with Gene at 100 HP. A
 separate native CPU replay continues for 60 game frames after that reload.
 Another actual-disc CPU replay restores the R100 checkpoint from Game Over and
 registers movement and a Square attack after the reload. The normal R100 exit
-after the opening encounter is still in development.
+after the opening encounter is still in development. An original controller
+recording now reaches the AT10 area with Gene alive in a native CPU replay.
 
 A separate Windows title-load replay uses an original-format R101 test save,
 confirms the original chapter map and presents R101 at scene 461. It runs to
@@ -44,10 +45,10 @@ Independent native CPU replays validate left-stick movement and a Square attack.
 A longer Windows replay uses the original pad mappings to open the R101 gate
 and walk into the corridor beyond it.
 
-A controlled native CPU replay in R105 begins with a saved-open gate and Gene
-at the original exit. Native audio plays the gate sound, the original exit
-loads R002, and the next event initializes its audio and camera track. The
-R002 cutscene actor initialization is still in development.
+A controlled Windows replay begins with the R105 gate open in room save data
+and Gene at the original exit. Native audio plays the gate sound, and the
+original transition loads R002. Windows presents 102 R002 frames, completes
+the first shot of Event 04, and reaches the original entry to its second shot.
 
 ### Verified progress
 
@@ -215,14 +216,16 @@ Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面
 选入 R003，呈现 EV02 全部 28 个镜头，共 2,785 帧，随后沿原版房间切换进入 R105。
 Gene 战败后，按叉键在原版 Game Over 菜单中选择继续。Windows 呈现重载后的 R105，Gene
 恢复到 100 HP。单独的无画面原盘回放在这次重载后又完成 60 帧。另一轮无画面原盘回放恢复了
-R100 检查点，重载后接收移动和方块攻击。R100 首战结束后从原版出口前往下一场景的流程仍在开发。
+R100 检查点，重载后接收移动和方块攻击。一轮原盘无画面回放通过录制的原版手柄输入走到 R100 的
+AT10 区域，Gene 仍然存活。首战后从原版出口前往下一场景的流程仍在开发。
 
 另一轮 Windows 回放从标题读取 R101 的原版格式测试档，经原版章节地图确认，在第 461 帧呈现
 R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染无报错。独立的无画面回放也
 验证了摇杆移动和方块攻击。更长的 Windows 回放使用原版手柄映射打开 R101 的门，并走进门后的走廊。
 
-一轮受控的原盘无画面回放从 R105 已开门的存档状态开始，并把 Gene 放在原版出口。原生音频
-播放开门声，原版出口载入 R002，随后初始化下一段过场的音频和镜头轨道。R002 的过场角色初始化仍在开发。
+一轮受控的 Windows 回放从 R105 已开门的存档状态开始，并把 Gene 放在原版出口。原生音频
+播放开门声，原版房间切换载入 R002。Windows 呈现了 R002 的 102 帧，完整播放 EV04 的首个
+镜头，并推进到开始第二个镜头的原版逻辑。
 
 ### 已验证的进展
 

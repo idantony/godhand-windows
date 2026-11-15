@@ -122,7 +122,7 @@ static gh_game_event_status init_pendulum(gh_event_actor_extra *s, gh_actor_mode
     p[0x1390] = 1;
     if (!s->pendulum_profile.loaded) {
         if (!s->bindings.boot_elf) return GH_EVENT_UNSUPPORTED;
-        if (gh_spring_profile_2a0_from_elf(&s->pendulum_profile, s->bindings.boot_elf,
+        if (gh_event_spring_profile_from_elf(&s->pendulum_profile, 0x2a0, s->bindings.boot_elf,
             s->bindings.boot_elf_size)) return GH_EVENT_BOUNDS;
     }
     uint8_t *config = p + 0x2f20;
@@ -142,12 +142,15 @@ static gh_game_event_status init_pendulum(gh_event_actor_extra *s, gh_actor_mode
     put(config + 0x64, 0);
     put(config + 0x68, 0);
     put(config + 0x70, 0x3f860a92);
-    if (gh_spring_records_2a0_001038e0(&s->pendulum_profile, actor, p + 0x13a0,
+    if (gh_event_spring_records_001038e0(&s->pendulum_profile, actor, p + 0x13a0,
         44 * 0xa0, GH_STATIC_BINARY32_REFERENCE, frontier)) return GH_EVENT_CALLEE;
     // 2DF938 swaps the +58 borrowed object from self to the actual EL0A.
     s->pendulum_parent = parent;
     return GH_EVENT_OK;
 }
+
+static gh_game_event_status init_ev04_pendulum(gh_event_actor_extra *, gh_actor_model *,
+    uint16_t, uint32_t *);
 
 static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
     const gh_event_actor_create_request *request, uint32_t handle, int *original, uint32_t *frontier) {
@@ -167,6 +170,14 @@ static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
         case 0x607: variant = 5; source = 0x605; break;
         case 0x642: variant = 6; source = 0x641; break;
         case 0x647: variant = 7; source = 0x646; break;
+        case 0x611: variant = 8; source = 0x610; break;
+        case 0x612: variant = 9; source = 0x610; break;
+        case 0x616: variant = 10; source = 0x615; break;
+        case 0x617: variant = 11; source = 0x615; break;
+        case 0x621: variant = 12; source = 0x620; break;
+        case 0x622: variant = 13; source = 0x620; break;
+        case 0x626: variant = 14; source = 0x625; break;
+        case 0x627: variant = 15; source = 0x625; break;
         default: return GH_EVENT_ARGUMENT;
     }
     gh_event_actor_factory *child = &b->roster->rows[request->actor_index];
@@ -187,6 +198,12 @@ static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
         if (variant == 1) {
             if (frontier) *frontier = 0x14a338;
             gh_game_event_status status = hide_hands(&child->model, &s->row_mesh_cursor[variant]);
+            if (status) return status;
+        }
+        if (variant == 15) {
+            if (frontier) *frontier = 0x14a338;
+            static const uint8_t hand[8] = "LH_01";
+            gh_game_event_status status = hide_mesh(&child->model, hand);
             if (status) return status;
         }
         *stage = 2;
@@ -216,7 +233,7 @@ static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
         if (!b->math || !b->math->initialized) return GH_EVENT_UNSUPPORTED;
         static const gh_actor_external_part_pair el01[] = {{0, 2}, {1, 3}, {2, 4}};
         static const gh_actor_external_part_pair el02[] = {{0, 15}, {1, 16}, {17, 9}, {18, 10}};
-        const int wide = variant >= 6 || (variant & 1);
+        const int wide = variant == 6 || (variant & 1);
         const gh_actor_external_part_pair *pairs = wide ? el02 : el01;
         if (gh_actor_model_bind_external_parts(&s->row_parts[variant], &child->model, &parent->model,
             pairs, wide ? 4 : 3)) return GH_EVENT_CALLEE;
@@ -234,6 +251,20 @@ static gh_game_event_status attach_el_pair(gh_event_actor_extra *s,
         } else if (word(env.bytes) == 0x24) {
             p[0x2b5] = 4;
         }
+        *stage = 4;
+    }
+    if (*stage == 3 && (variant == 10 || variant == 14)) {
+        const uint16_t profile = variant == 10 ? 0x252 : 0x256;
+        if (variant == 14) {
+            if (frontier) *frontier = 0x14a338;
+            static const uint8_t mesh[8] = "z_10";
+            gh_game_event_status status = hide_mesh(&child->model, mesh);
+            if (status) return status;
+        }
+        put(request->work + 0x34, profile);
+        gh_game_event_status status = init_ev04_pendulum(s, &child->model, profile, frontier);
+        if (status) return status;
+        p[0x2b5] = 0xfe;
         *stage = 4;
     }
     *original = 1;
@@ -350,6 +381,156 @@ static gh_game_event_status extra_standalone(gh_event_actor_extra *s,
     return GH_EVENT_OK;
 }
 
+static gh_game_event_status init_ev04_pendulum(gh_event_actor_extra *s, gh_actor_model *actor,
+    uint16_t kind, uint32_t *frontier)
+{
+    uint8_t *p = actor->root.bytes;
+    put(p + 0x1394, kind);
+    p[0x1390] = 1;
+    if (frontier) *frontier = 0x2de980;
+    const unsigned index = kind == 0x250 ? 0 : kind == 0x252 ? 1 : 2;
+    gh_event_spring_profile *profile = &s->ev04_pendulums[index];
+    if (!profile->loaded && gh_event_spring_profile_from_elf(profile, kind,
+        s->bindings.boot_elf, s->bindings.boot_elf_size)) return GH_EVENT_BOUNDS;
+    uint8_t *config = p + 0x2f20;
+    memset(config, 0, 0x6c);
+    put(config, profile->count);
+    put(config + 0x38, kind == 0x250 ? 2 : kind == 0x252 ? 6 : 4);
+    put(config + 0x3c, kind == 0x252 ? 0x3ba3d70a : 0x3c75c28f);
+    put(config + 0x40, kind == 0x252 ? 0x3f000000 : 0x3f4ccccd);
+    put(config + 0x44, 1);
+    put(config + 0x4c, 0x3dcccccd);
+    put(config + 0x50, 0x3f000000);
+    put(config + 0x5c, 0x100);
+    put(config + 0x70, 0x3f860a92);
+    if (gh_event_spring_records_001038e0(profile, actor, p + 0x13a0,
+        44 * 0xa0, GH_STATIC_BINARY32_REFERENCE, frontier)) return GH_EVENT_CALLEE;
+    if (frontier) *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+static gh_game_event_status extra_el10(gh_event_actor_extra *s,
+    const gh_event_actor_create_request *request, uint32_t handle, int *original, uint32_t *frontier)
+{
+    gh_game_event_status status = extra_standalone(s, request, handle, original, frontier);
+    if (status) return status;
+    gh_actor_model *actor = &s->bindings.roster->rows[request->actor_index].model;
+    put(request->work + 0x34, 0x250);
+    actor->root.bytes[0x2ff0] = 1; /* Event 4 takes SetRingFlag; Event 22 bypasses it. */
+    return init_ev04_pendulum(s, actor, 0x250, frontier);
+}
+
+static gh_game_event_status initialize_ev04_accessory(gh_event_actor_extra *s,
+    gh_event_actor_factory *actor, gh_event_spring_profile *profile, uint32_t *frontier)
+{
+    const int em53 = actor->kind == 0x253;
+    if (frontier) *frontier = em53 ? 0x27a180 : 0x27ac70;
+    uint8_t *root = actor->object.view.bytes;
+    if (!actor->init_stage) {
+        gh_bundle asset;
+        if (gh_bundle_open(actor->resource.bytes, actor->resource.file_extent, &asset) ||
+            gh_bundle_at(&asset, 0, &actor->geometry) || gh_bundle_at(&asset, 1, &actor->texture) ||
+            memcmp(actor->geometry.tag, "MD\0", 4) || memcmp(actor->texture.tag, "TM3", 4)) return GH_EVENT_FORMAT;
+        if (gh_actor_model_bind_packet_inputs(&actor->model, actor->bindings.packet_heap, actor->bindings.fog_rgb))
+            return GH_EVENT_ARGUMENT;
+        int original = 0;
+        gh_actor_model_status status = gh_actor_model_initialize_00149738(&actor->model, &actor->object.view,
+            actor->bindings.work, actor->bindings.pools, &actor->geometry, &actor->texture, 0, 0,
+            GH_STATIC_BINARY32_REFERENCE, &original);
+        if (status || !original) {
+            if (frontier && actor->model.frontier) *frontier = actor->model.frontier;
+            return status == GH_ACTOR_MODEL_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+        }
+        put(root + 0x2f0, word(root + 0x2f0) | 0x40);
+        root[0x531] = UINT8_MAX;
+        put(root + 0x250, word(root + 0x250) | 0x10000);
+        if (actor->model.parts_allocated) {
+            const gh_actor_part *part;
+            if (gh_actor_model_part_at(&actor->model, 0, &part)) return GH_EVENT_CALLEE;
+            memset(part->bytes + 0xe0, 0, 12);
+            memset(part->alias_d0, 0, 12);
+        }
+        actor->init_stage = 1;
+    }
+    if (actor->init_stage == 1) {
+        if (frontier) *frontier = 0x149eb8;
+        gh_actor_model_status status = gh_actor_model_update_hierarchy_00149eb8(&actor->model,
+            GH_STATIC_BINARY32_REFERENCE);
+        if (status) return status == GH_ACTOR_MODEL_UNSUPPORTED ? GH_EVENT_UNSUPPORTED : GH_EVENT_CALLEE;
+        actor->init_stage = 2;
+    }
+    if (actor->init_stage == 2) {
+        if (frontier) *frontier = em53 ? 0x27a600 : 0x27b0f8;
+        if (!profile->loaded && gh_event_spring_profile_from_elf(profile, actor->kind,
+            s->bindings.boot_elf, s->bindings.boot_elf_size)) return GH_EVENT_BOUNDS;
+        uint8_t *config = root + 0x2130;
+        put(config, profile->count);
+        put(config + 0x3c, 0x3c75c28f);
+        put(config + 0x40, 0x3f4ccccd);
+        put(config + 0x44, 1);
+        put(config + 0x4c, em53 ? 0x3f000000 : 0x3f4ccccd);
+        put(config + 0x50, 0x3f000000);
+        put(config + 0x5c, 0x100);
+        put(config + 0x70, 0x3f860a92);
+        if (gh_event_spring_records_001038e0(profile, &actor->model, root + 0x5b0, 44 * 0xa0,
+            GH_STATIC_BINARY32_REFERENCE, frontier)) return GH_EVENT_CALLEE;
+        actor->init_stage = 3;
+    }
+    return GH_EVENT_OK;
+}
+
+static gh_game_event_status extra_ev04_accessory(gh_event_actor_extra *s,
+    const gh_event_actor_create_request *request, uint32_t handle, int *original, uint32_t *frontier)
+{
+    gh_game_event_status status = extra_standalone(s, request, handle, original, frontier);
+    if (status) return status;
+    *original = 0;
+    const unsigned index = request->source_kind == 0x615 ? 0 : 1;
+    const uint16_t kind = index ? 0x628 : 0x253;
+    const unsigned parent_part = index ? 17 : 2;
+    uint8_t *work = request->work;
+    gh_event_actor_factory *body = &s->bindings.roster->rows[request->actor_index];
+    gh_event_actor_factory *accessory = &s->ev04_accessory[index];
+    if (!accessory->bound) {
+        status = gh_event_actor_factory_bind(accessory, &s->bindings.roster->bindings);
+        if (status) return status;
+    }
+    gh_event_actor_create_request child = {
+        .data = request->data, .actor_index = request->actor_index, .source_kind = kind,
+        .create_kind = kind, .resource_kind = kind, .create_argument = UINT16_MAX
+    };
+    int made;
+    status = gh_event_actor_factory_run(accessory, &child, &made, frontier);
+    if (status) return status;
+    if (made) {
+        status = initialize_ev04_accessory(s, accessory, &s->ev04_accessory_springs[index], frontier);
+        if (status) return status;
+        if (frontier) *frontier = index ? 0x27b260 : 0x27a768;
+        if (gh_actor_model_bind_external_parent(&accessory->model, 0, &body->model, parent_part, accessory))
+            return GH_EVENT_CALLEE;
+        uint8_t *raw = accessory->object.view.bytes;
+        put(raw + 0x21b4, parent_part);
+        put(raw + 0x2168, 11);
+        put(raw + 0x2f0, word(raw + 0x2f0) | 1);
+        put(raw + 0x250, word(raw + 0x250) | 0x10000);
+    }
+    put(work + 0x30, index ? 0x257 : 0x253);
+    if (!index) {
+        body->object.view.bytes[0x2fa0] = 1; /* SetBustFlag. */
+        work[0x24] |= 8;
+    } else {
+        if (frontier) *frontier = 0x14a338;
+        static const uint8_t hands[][8] = {"RH_01", "LH_01", "LH_02"};
+        for (unsigned i = 0; i < sizeof(hands) / sizeof(*hands); ++i) {
+            status = hide_mesh(&body->model, hands[i]);
+            if (status) return status;
+        }
+    }
+    *original = 1;
+    if (frontier) *frontier = 0;
+    return GH_EVENT_OK;
+}
+
 /* REL 202C retargets the same GetJacket owner used by EL00. */
 static gh_game_event_status extra_el05(gh_event_actor_extra *s,
     const gh_event_actor_create_request *request, uint32_t handle, int *original, uint32_t *frontier) {
@@ -413,6 +594,24 @@ gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor
     }
     if (request->source_kind == 0x60a) {
         return attach_olivia_accessory(s, request, handle, original_success, frontier);
+    }
+    if (request->data && request->data->components && request->data->components->event_no == 4) {
+        switch (request->source_kind) {
+        case 0x610:
+            return extra_el10(s, request, handle, original_success, frontier);
+        case 0x611: case 0x612: case 0x616: case 0x617:
+        case 0x621: case 0x622: case 0x626: case 0x627:
+            return attach_el_pair(s, request, handle, original_success, frontier);
+        case 0x615: case 0x625:
+            return extra_ev04_accessory(s, request, handle, original_success, frontier);
+        case 0x618:
+            if (s->ev04_accessory[0].handle)
+                s->ev04_el18_accessory = &s->ev04_accessory[0]; /* REL writes row+38. */
+            /* fall through */
+        case 0x620: case 0x660: case 0x661: case 0x662:
+            return extra_standalone(s, request, handle, original_success, frontier);
+        default: break;
+        }
     }
     if (request->source_kind == 0x630 || request->source_kind == 0x631 ||
         request->source_kind == 0x634 || request->source_kind == 0x639 ||
@@ -553,6 +752,12 @@ gh_game_event_status gh_event_actor_extra_finish(void *opaque, uint32_t *frontie
 
 gh_game_event_status gh_event_actor_extra_abort(gh_event_actor_extra *s) {
     if (!s) return GH_EVENT_ARGUMENT;
+    for (size_t i = 0; i < sizeof(s->ev04_accessory) / sizeof(*s->ev04_accessory); ++i) {
+        gh_event_actor_factory *actor = &s->ev04_accessory[i];
+        if (actor->model.external_owner && gh_actor_model_clear_external_parent(&actor->model, actor))
+            return GH_EVENT_CALLEE;
+        if (gh_event_actor_factory_abort(actor)) return GH_EVENT_CALLEE;
+    }
     if (gh_actor_model_clear_external_parts(&s->accessory_parts) ||
         gh_event_actor_factory_abort(&s->olivia_accessory)) return GH_EVENT_CALLEE;
     for (size_t i = sizeof(s->row_parts) / sizeof(*s->row_parts); i; --i) {

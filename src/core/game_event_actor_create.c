@@ -71,6 +71,13 @@ static gh_game_event_status actor_source_kind(const uint8_t *info, uint16_t *kin
     return GH_EVENT_OK;
 }
 
+int gh_event_actor_ev04_source_kind(uint16_t kind)
+{
+    return (kind >= 0x610 && kind <= 0x612) || (kind >= 0x615 && kind <= 0x618) ||
+        (kind >= 0x620 && kind <= 0x622) || (kind >= 0x625 && kind <= 0x627) ||
+        (kind >= 0x660 && kind <= 0x662);
+}
+
 gh_game_event_status gh_event_actor_create_work_at(const gh_event_actor_create *s,
     size_t actor, const uint8_t **work, size_t *cut_offset) {
     if (!s || !s->stage || !work || !cut_offset) return GH_EVENT_ARGUMENT;
@@ -109,7 +116,8 @@ static gh_game_event_status create_row(gh_event_actor_create *s, size_t index) {
 
     s->frontier = 0x297a48;
     s->frontier_rel = 0x04d0;
-    if ((source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60c) &&
+    const int ev04_actor = b->components->event_no == 4 && gh_event_actor_ev04_source_kind(source);
+    if (!ev04_actor && (source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60c) &&
         (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x634 && source != 0x639 &&
         source != 0x641 && source != 0x642 && source != 0x646 && source != 0x647 &&
         (source < 0x650 || source > 0x652) && source != 0x659 && source != 0x667 && source != 0x367) return GH_EVENT_UNSUPPORTED;

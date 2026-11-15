@@ -4,6 +4,28 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## First R002 cutscene shot presented on Windows
+
+The Windows replay enters R002 through the original R105 exit. Its controlled
+setup supplies the existing open-gate save bit and places Gene at the original
+exit, where the replay presses Circle. The event initializes all 17 original
+actors. The Direct3D renderer uploads the original 1024×128 sprite atlas and
+presents 102 R002 frames, with 16 captured frames from Event 04's first shot.
+The replay reaches the beginning of the second shot at tick 3522 and stops
+at original actor update `0x002DF860`. Renderer and window errors remain zero.
+
+A separate disc replay uses recorded controller samples from New Game to
+reach R100's AT10 area with Gene alive at tick 4730. The original area records
+the hit. The battle counter is 2, and the normal door flow is still in development.
+
+Windows 回放从 R105 原版出口进入 R002。受控测试给定原版已开门存档位和出口处的 Gene 位置，
+回放按圆圈触发切换。过场初始化 17 个原版角色。Direct3D 上传原盘的 1024×128 特效贴图，
+呈现 R002 的 102 帧，从 EV04 首个镜头抓取 16 帧。回放到第 3522 tick，进入第二个镜头后
+在原版角色更新 `0x002DF860` 停下。渲染和窗口均无报错。
+
+另一轮原盘回放从新游戏开始，用录制的原版手柄输入到达 R100 的 AT10 区域。第 4730 tick
+记录到原版区域触发，Gene 仍然存活。战斗计数为 2，正常门流程仍在开发。
+
 ## R101 gate on Windows and R002 event initialization
 
 The Windows title-load replay confirms the chapter map and uses original mapped
@@ -14,15 +36,15 @@ In an independent native CPU replay, the original R105 exit receives Circle
 from a controlled saved-open state, with Gene placed at the authored exit.
 The real gate voice is queued on the native audio service. The original
 transition loads R002 and starts reserved Event 04, whose disc audio and
-camera track initialize. The replay reaches the original actor load callback
-at event overlay offset `0x04D0`. R002 Windows presentation remains pending.
+camera track initialize. This earlier replay reaches the original actor load
+callback at event overlay offset `0x04D0`.
 
 Windows 从原版章节地图读档，按原版手柄映射打开 R101 的门并走进门后走廊。回放在预定的
 第 835 tick 结束，完成 222 次玩家更新，渲染与窗口均无报错。
 
 另一条原盘无画面回放从 R105 已开门的存档状态开始，将 Gene 放在原版出口并按圆圈。原生
 音频服务接收开门声，原版房间切换载入 R002 并启动预定的 EV04。过场音频和镜头轨道完成
-初始化，回放推进到过场模块原版角色载入回调 `0x04D0`。R002 的 Windows 画面仍待验证。
+初始化，这轮较早的回放推进到过场模块原版角色载入回调 `0x04D0`。
 
 ## R100 post-battle event and saved R101 presented on Windows
 

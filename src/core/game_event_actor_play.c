@@ -80,11 +80,35 @@ static int select_primary(const gh_event_actor_cut_lane *lane, float frame, uint
     return 1;
 }
 
+static gh_game_event_status ev04_accessory_visibility(const gh_event_actor_extra *extra, size_t row,
+    uint32_t associated, int active, int transition)
+{
+    const unsigned index = associated == 0x253 ? 0 : 1;
+    const gh_event_actor_factory *child = &extra->ev04_accessory[index];
+    if (!child->handle) return GH_EVENT_OK;
+    if (child->actor_index != row || child->kind != (index ? 0x628 : 0x253) ||
+        !child->object.view.bytes || child->model.external_owner != child)
+        return GH_EVENT_ARGUMENT;
+    uint8_t *p = child->object.view.bytes;
+    const uint32_t flags = word(p + 0x250);
+    if (active) {
+        if (transition || (flags & 0x8000u))
+            put(p + 0x2f0, word(p + 0x2f0) | (transition ? 2u : 1u));
+        put(p + 0x250, flags & ~0x8002u);
+    } else {
+        put(p + 0x250, flags | 0x8002u);
+    }
+    return GH_EVENT_OK;
+}
+
 static gh_game_event_status hide_inactive(const gh_event_actor_extra *extra, size_t actor,
     uint8_t *object, const uint8_t *row) {
     put(object + 0x250, word(object + 0x250) | 0x8002u);
     const uint32_t associated = word(row + 0x30);
     if (!associated) return GH_EVENT_OK;
+    if ((associated == 0x253 || associated == 0x257) &&
+        extra->bindings.creation->bindings.data->components->event_no == 4)
+        return ev04_accessory_visibility(extra, actor, associated, 0, 0);
     if (associated == 0x102 && actor == 3 &&
         extra->bindings.creation->bindings.data->components->event_no == 2) return GH_EVENT_OK;
     if (associated == 0x101 && actor == 0) {
@@ -132,6 +156,18 @@ static gh_game_event_status activate_related(gh_event_actor_play *s, gh_actor_mo
     gh_event_actor_extra *extra = s->bindings.extra;
     const gh_event_data_prefix *data = s->bindings.creation->bindings.data;
     const uint32_t associated = word(row + 0x30);
+    if (data->components->event_no == 4) {
+        if (associated == 0x253 || associated == 0x257) {
+            gh_game_event_status status = ev04_accessory_visibility(extra, s->row, associated, 1,
+                s->rows[s->row].transition);
+            return status ? fail(s, frontier, 0x3810, 1, status) : GH_EVENT_OK;
+        }
+        if (word(row + 4) == 0x618 && extra->ev04_el18_accessory) {
+            uint8_t *p = extra->ev04_el18_accessory->object.view.bytes;
+            if (!p) return fail(s, frontier, 0x3810, 1, GH_EVENT_ARGUMENT);
+            put(p + 0x250, word(p + 0x250) | 0x8002u);
+        }
+    }
     if (!associated) return GH_EVENT_OK;
     if (associated == 0x60d && s->row == extra->olivia_accessory.actor_index && extra->accessory_handle == extra->olivia_accessory.handle &&
         extra->accessory_handle && extra->olivia_accessory.object.view.bytes) {

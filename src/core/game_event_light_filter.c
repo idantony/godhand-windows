@@ -10,6 +10,11 @@ static uint32_t read_word(const uint8_t *p)
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
 }
 
+static unsigned read_half(const uint8_t *p)
+{
+    return p[0] | (unsigned)p[1] << 8;
+}
+
 static int read_component(gh_event_components *components, unsigned index,
                           uint32_t original_offset, size_t size, gh_event_component_view *out)
 {
@@ -43,22 +48,27 @@ static gh_game_event_status mapped_keys(const gh_event_data_prefix *data,
 {
     const unsigned event = data->components->event_no;
     const int object_light = index == OBJECT_LIGHT;
-    if ((event != 1 && event != 2) || data->camera_count != (event == 1 ? 10 : 28))
+    if ((event != 1 && event != 2 && event != 4) ||
+        data->camera_count != (event == 1 ? 10 : event == 2 ? 28 : 24))
         return GH_EVENT_UNSUPPORTED;
-    const unsigned count = object_light ? event : event == 1 ? 10 : 25;
+    const unsigned count = event == 4 ? (object_light ? 10 : 29) : (object_light ? event : event == 1 ? 10 : 25);
     const size_t stride = object_light ? 0x1c : 0x2e8;
     if (!track->records || track->count != count || track->stride != stride ||
         track->bytes != count * stride) return GH_EVENT_UNSUPPORTED;
     for (unsigned i = 0; i < count; ++i) {
         const uint8_t *key = track->records + i * stride;
         unsigned cut = i;
-        if (object_light && event == 1) cut = 1;
+        if (event == 4) cut = key[3];
+        else if (object_light && event == 1) cut = 1;
         if (!object_light && event == 2 && i >= 16) cut += 3;
+        const unsigned frame = read_half(key + 6);
+        const uint32_t supported_modes = event == 4 ? (object_light ? 1u : 3u) : 0;
         uint16_t length;
         gh_event_camera_cut camera;
-        if (read_word(key) != (0xffffu | cut << 24) || read_word(key + 4) ||
+        if (read_word(key) != (0xffffu | cut << 24) || read_half(key + 4) ||
+            (event != 4 && frame) || (read_word(key + 8) & ~supported_modes) ||
             gh_event_camera_cut_at(data, cut, &camera) || !camera.primary ||
-            gh_event_camera_cut_length_00004e60(data, cut, &length) || !length)
+            gh_event_camera_cut_length_00004e60(data, cut, &length) || frame >= length)
             return GH_EVENT_UNSUPPORTED;
     }
     return GH_EVENT_OK;
@@ -144,8 +154,9 @@ static gh_game_event_status previous_key(gh_event_light_filter *state, unsigned 
     const uint8_t *next = NULL;
     for (unsigned i = 0; i < track.count; ++i) {
         const uint8_t *candidate = track.records + i * track.stride;
-        if (candidate[3] <= cut) *key = candidate;
-        if (candidate[3] > cut || (candidate[3] == cut && frame == 0)) {
+        const float key_frame = (float)read_half(candidate + 6);
+        if (candidate[3] < cut || (candidate[3] == cut && key_frame <= frame)) *key = candidate;
+        if (candidate[3] > cut || (candidate[3] == cut && key_frame >= frame)) {
             next = candidate;
             break;
         }

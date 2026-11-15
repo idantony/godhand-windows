@@ -17,32 +17,41 @@ static void vf0(uint8_t *p) {
     put(p + 12, 0x3f800000);
 }
 
-static gh_game_event_status construct_003181a8(gh_event_actor_factory *s) {
+static gh_game_event_status construct_event_actor(gh_event_actor_factory *s, uint16_t kind) {
     const gh_event_actor_factory_bindings *b = &s->bindings;
+    const int accessory = kind == 0x253 || kind == 0x628;
+    const size_t bytes_needed = accessory ? 0x21c0 : GH_EVENT_ACTOR_BYTES;
+    const uint32_t vtable = kind == 0x253 ? 0x447f70 : kind == 0x628 ? 0x448028 : 0x44b528;
     if (word((const uint8_t *)b->work + 0x594) & 0x100000) return GH_EVENT_OK;
     gh_r207_allocation allocation = {0};
-    gh_mem_error error = gh_heap_allocate(b->resources.heap, GH_EVENT_ACTOR_BYTES, 16, &allocation);
+    gh_mem_error error = gh_heap_allocate(b->resources.heap, bytes_needed, 16, &allocation);
     if (error == GH_MEM_CAPACITY) return GH_EVENT_OK;
     if (error) return GH_EVENT_CALLEE;
     uint8_t *bytes = allocation.pointer;
-    memset(bytes, 0, GH_EVENT_ACTOR_BYTES);
+    memset(bytes, 0, bytes_needed);
     gh_title_player_view view;
-    if (gh_game_actor_construct_0014e990(bytes, GH_EVENT_ACTOR_BYTES, &view)) {
+    const gh_title_player_status status = accessory ? gh_game_object_construct_002a7338(bytes, bytes_needed, &view) :
+        gh_game_actor_construct_0014e990(bytes, bytes_needed, &view);
+    if (status) {
         (void)gh_heap_release(b->resources.heap, allocation);
         return GH_EVENT_CALLEE;
     }
-    put(bytes + 0x214, 0x44b528);
-    view.original_vtable214 = 0x44b528;
+    put(bytes + 0x214, vtable);
+    view.original_vtable214 = vtable;
     view.initial_memory = GH_TITLE_MEMORY_ORIGINAL_FACTORY_ZERO;
     static const unsigned row_offsets[] = {0, 0x10, 0x30, 0x40, 0x50, 0x80};
     for (unsigned row = 0; row < 44; ++row) {
         for (unsigned i = 0; i < sizeof(row_offsets) / sizeof(row_offsets[0]); ++i) {
-            vf0(bytes + 0x13a0 + row * 0xa0 + row_offsets[i]);
+            vf0(bytes + (accessory ? 0x5b0 : 0x13a0) + row * 0xa0 + row_offsets[i]);
         }
     }
-    static const unsigned tail_offsets[] = {0x2f80, 0x2fb0, 0x2fd0, 0x2fe0, 0x30c0, 0x30d0};
-    for (unsigned i = 0; i < sizeof(tail_offsets) / sizeof(tail_offsets[0]); ++i) vf0(bytes + tail_offsets[i]);
-    for (unsigned i = 0; i < 8; ++i) vf0(bytes + 0x3000 + i * 0x10);
+    if (accessory) {
+        vf0(bytes + 0x2190);
+    } else {
+        static const unsigned tail_offsets[] = {0x2f80, 0x2fb0, 0x2fd0, 0x2fe0, 0x30c0, 0x30d0};
+        for (unsigned i = 0; i < sizeof(tail_offsets) / sizeof(tail_offsets[0]); ++i) vf0(bytes + tail_offsets[i]);
+        for (unsigned i = 0; i < 8; ++i) vf0(bytes + 0x3000 + i * 0x10);
+    }
     s->object = (gh_game_title_player){
         .allocation = allocation, .heap = b->resources.heap, .view = view, .ready = 1
     };
@@ -73,7 +82,10 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
                         (source == 0x600 && (kind == 0x6f0 || kind == 0x6f2 || kind == 0x6f6)) ||
                         (source == 0x602 && (kind == 0x6f1 || kind == 0x6f3 || kind == 0x6f7)) ||
                         (source == 0x60a && (kind == 0x609 || kind == 0x6f4));
-    if (((source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60d) &&
+    const int ev04_actor = (gh_event_actor_ev04_source_kind(source) || source == 0x253 || source == 0x628) &&
+        request->data && request->data->components &&
+        request->data->components->event_no == 4;
+    if ((!ev04_actor && (source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60d) &&
         (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x634 && source != 0x639 &&
         source != 0x641 && source != 0x642 && source != 0x646 && source != 0x647 &&
         (source < 0x650 || source > 0x652) && source != 0x659 && source != 0x667 && source != 0x367) ||
@@ -92,8 +104,8 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
             if (frontier) *frontier = 0;
             return GH_EVENT_OK;
         }
-        if (frontier) *frontier = 0x3181a8;
-        gh_game_event_status status = construct_003181a8(s);
+        if (frontier) *frontier = kind == 0x253 ? 0x3132d0 : kind == 0x628 ? 0x313390 : 0x3181a8;
+        gh_game_event_status status = construct_event_actor(s, kind);
         if (status) return status;
         if (!s->object.ready) {
             if (frontier) *frontier = 0;
@@ -105,7 +117,7 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
         p[0x2fc] = (*b->factory_serial)++;
         memcpy(p + 0x2fe, &kind, sizeof(kind));
         memcpy(p + 0x300, &kind, sizeof(kind));
-        put(p + 0x2d0, kind == 0x367 ? 0x20000000 : 0x800000);
+        put(p + 0x2d0, kind == 0x253 ? 0x40000000 : kind == 0x367 ? 0x20000000 : 0x800000);
         s->stage = 1;
     }
     if (s->stage == 1) {
@@ -181,10 +193,10 @@ gh_game_event_status gh_event_actor_factory_initialize_model(gh_event_actor_fact
         gh_bundle_error texture = gh_bundle_find(&bundle, "TM3", 0, &s->texture);
         if (texture == GH_BUNDLE_NOT_FOUND) texture = gh_bundle_find(&bundle, "T32", 0, &s->texture);
         if (texture != GH_BUNDLE_OK && texture != GH_BUNDLE_NOT_FOUND) return GH_EVENT_BOUNDS;
-        // 2B6688: EL00 and its three variants are in 44B378. EL01 and
-        // EL02 (+variants) are absent from all three tables and take profile 0.
+        // 2B6688's 44B378 carries original full body shadow owners.
         const unsigned profile = request->source_kind == 0x600 || request->source_kind == 0x605 ||
-            s->kind == 0x60a || s->kind == 0x6f4 ||
+            s->kind == 0x60a || s->kind == 0x610 || s->kind == 0x615 || s->kind == 0x620 ||
+            s->kind == 0x625 || s->kind == 0x6f4 ||
             s->kind == 0x630 || s->kind == 0x631 || s->kind == 0x634 || s->kind == 0x639 || s->kind == 0x641 || s->kind == 0x646 ? 3 : 0;
         put(p + 0x4dc, profile);
         if (profile == 3) {

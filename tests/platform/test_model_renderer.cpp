@@ -1,6 +1,7 @@
 #include "../../src/platform/model_renderer.h"
 #include "../../src/platform/disc.h"
 #include "../../src/assets/tm3.h"
+#include <algorithm>
 #include <array>
 #include <vector>
 #include <cstdio>
@@ -19,7 +20,9 @@ struct Surface{std::vector<uint8_t>rgba;std::vector<uint32_t>z;Surface(uint32_t 
  * the GPU edge/interpolation implementation. Long double retains exact
  * powers-of-two fixture values until mandatory GS integer quantization. */
 static std::array<int,4> sample(const gh_stage_material&m,long double s,long double t,bool linear){
- int64_t u=(int64_t)(s*m.width*65536),v=(int64_t)(t*m.height*65536);
+ constexpr long double gs_texel_limit=2047;
+ int64_t u=(int64_t)(std::clamp(s*m.width,-gs_texel_limit,gs_texel_limit)*65536);
+ int64_t v=(int64_t)(std::clamp(t*m.height,-gs_texel_limit,gs_texel_limit)*65536);
  if(linear){u-=32768;v-=32768;}
  int64_t x=floor_div(u,65536),y=floor_div(v,65536);
  unsigned fx=(unsigned)(u-x*65536)/4096,fy=(unsigned)(v-y*65536)/4096;
@@ -98,6 +101,31 @@ static void effect_packets(gh_model_renderer *r,const gh_stage_material &materia
  oracle(trail,material,state,first);
  oracle(trail,material,state,second);
  compare(r,trail,"PRIM54 ordered trail triangles");
+
+ // R002's ESP draw resolves a 1024x128 PSMT4 atlas. Sample a texel beyond
+ // column 512 so copying or wrapping to the display width fails the test.
+ constexpr unsigned atlas_width=1024,atlas_height=128,atlas_x=768,atlas_y=32;
+ std::vector<uint8_t> atlas_pixels(atlas_width*atlas_height*4);
+ const uint8_t atlas_texel[]={220,100,40,128};
+ std::memcpy(atlas_pixels.data()+(atlas_y*atlas_width+atlas_x)*4,atlas_texel,4);
+ gh_stage_material atlas={};
+ atlas.source=atlas.rgba_gs=atlas_pixels.data();
+ atlas.source_bytes=atlas.rgba_bytes=atlas_pixels.size();
+ atlas.cache_id=UINT64_MAX;
+ atlas.width=atlas_width;atlas.height=atlas_height;atlas.psm=20;atlas.draw_tcc=1;
+ uint32_t atlas_texture=0;
+ C(!gh_model_renderer_upload(r,&atlas,&atlas_texture));
+ state.tex1=0;
+ auto atlas_triangle=triangle(100,255,128);
+ for(auto &vertex:atlas_triangle){
+  vertex.stq[0]=(atlas_x+0.5f)/atlas_width;
+  vertex.stq[1]=(atlas_y+0.5f)/atlas_height;
+ }
+ Surface atlas_expected(0x314159,50);
+ C(!gh_model_renderer_begin(r,0x314159,50));
+ C(!gh_model_renderer_draw_trail(r,&state,atlas_texture,atlas_triangle.data(),3,indices));
+ oracle(atlas_expected,atlas,state,atlas_triangle);
+ compare(r,atlas_expected,"PRIM54 wide indexed sprite atlas");
 
  std::vector<uint8_t> image(512*512*4);
  const uint8_t rgb[]={220,100,40,128};
@@ -280,6 +308,24 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  // PerspectiveSTQ with varyingQ but constant normalized UV remains exact.
  auto perspective=triangle(200,128,128);for(unsigned i=0;i<3;i++){float q=(float)(1u<<i);perspective[i].stq[0]=q*.25f;perspective[i].stq[1]=q*-.125f;perspective[i].stq[2]=q;}
  C(!gh_model_renderer_draw(r,&state,texture,perspective.data(),3,indices,3));oracle(expected,material,state,perspective);compare(r,expected,"perspectiveQ/rationalUV");
+ // A signed Q can cross zero between pixels, where the GS clamps
+ // the projected texel index before the texture repeat operation.
+ const auto crossing_vertices=[] {
+  auto vertices=triangle(200,128,128);
+  for(auto &vertex:vertices){
+   vertex.stq[0]=0.5f;
+   vertex.stq[1]=-0.75f;
+   vertex.stq[2]=2.0f;
+  }
+  vertices[0].stq[2]=-1.0f;
+  return vertices;
+ }();
+ Surface signed_projection(0x102030,0);
+ C(!gh_model_renderer_begin(r,0x102030,0));
+ C(!gh_model_renderer_draw(r,&state,texture,crossing_vertices.data(),3,indices,3));
+ oracle(signed_projection,material,state,crossing_vertices);
+ compare(r,signed_projection,"perspectiveQ/signed-crossing/clamp-before-repeat");
+ expected=signed_projection;
  auto invalid=perspective;invalid[2].stq[2]=std::numeric_limits<float>::quiet_NaN();C(gh_model_renderer_draw(r,&state,texture,invalid.data(),3,indices,3)==GH_MODEL_GPU_UNSUPPORTED);compare(r,expected,"invalidlastvertexatomic");uint32_t bad[3]={0,1,3};C(gh_model_renderer_draw(r,&state,texture,perspective.data(),3,bad,3)==GH_MODEL_GPU_ARGUMENT);compare(r,expected,"invalidlastindexatomic");
  auto unsupported=state;unsupported.dthe=1;C(gh_model_renderer_draw(r,&unsupported,texture,perspective.data(),3,indices,3)==GH_MODEL_GPU_UNSUPPORTED);compare(r,expected,"unsupportedstateatomic");
  unsupported=state;unsupported.texture_function=2;C(gh_model_renderer_draw(r,&unsupported,texture,perspective.data(),3,indices,3)==GH_MODEL_GPU_UNSUPPORTED);compare(r,expected,"unsupportedTFX2atomic");

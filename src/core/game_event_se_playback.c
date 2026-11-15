@@ -21,7 +21,7 @@ gh_game_event_status gh_event_se_move_play_00009aa8(gh_event_link *link,
     *frontier=0x9aa8;*relative=1;
     if(!live_link(link)||!data||data->components!=&link->components||!audio)return GH_EVENT_ARGUMENT;
     const int32_t event_no=link->components.event_no;
-    if(event_no!=1&&event_no!=2)return GH_EVENT_UNSUPPORTED;
+    if(event_no!=1&&event_no!=2&&event_no!=4)return GH_EVENT_UNSUPPORTED;
     gh_event_component_view env,se;
     if(gh_event_component_at(&link->components,0,&env)||env.original_offset!=0xd200||env.size<0x2c||
        gh_event_component_at(&link->components,8,&se)||se.original_offset!=0xd9f0||se.size<0x18)
@@ -65,7 +65,7 @@ gh_game_event_status gh_event_se_quit_play_00009cb8(gh_event_link *link,
     *frontier=0x9cb8;*relative=1;
     if(!live_link(link)||!audio)return GH_EVENT_ARGUMENT;
     const int32_t event_no=link->components.event_no;
-    if(event_no!=1&&event_no!=2)return GH_EVENT_UNSUPPORTED;
+    if(event_no!=1&&event_no!=2&&event_no!=4)return GH_EVENT_UNSUPPORTED;
     *relative=0;
     gh_game_event_status status=gh_event_audio_channel1_data_end_002d1958(audio);
     *frontier=status?(audio->frontier?audio->frontier:0x2d1958):0;

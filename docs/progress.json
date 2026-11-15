@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T10:06:32+00:00",
-  "stage": "native-windows-r101-gate-and-r002-event-initialization",
+  "verified_utc": "2026-11-15T10:53:42+00:00",
+  "stage": "native-windows-r002-ev04-first-shot",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1273,8 +1273,29 @@
     "event_number": 4,
     "event_disc_audio_initialized": true,
     "event_camera_track_initialized": true,
-    "first_missing_original_operation": {"module": "event overlay", "address": "000004D0"},
-    "r002_windows_presentation_verified": false
+    "first_missing_original_operation": {"module": "event overlay", "address": "000004D0"}
+  },
+  "native_windows_r002_ev04_first_shot": {
+    "scope": "Controlled original R105 exit and native Windows R002 presentation using the original disc",
+    "room": "0002",
+    "event_number": 4,
+    "original_actors_initialized": 17,
+    "presented_room_frames": 102,
+    "first_room_scene_serial": 3299,
+    "first_cut_scene_serial": 3330,
+    "last_room_scene_serial": 3400,
+    "captured_cut_zero_scene_range": [3356, 3371],
+    "exit_tick": 3522,
+    "next_original_operation": {"module": "main ELF", "address": "002DF860"},
+    "renderer_or_window_error_observed": false
+  },
+  "native_cpu_r100_at10": {
+    "scope": "Native original-disc New Game replay with recorded original controller samples",
+    "original_area": 10,
+    "first_area_hit_tick": 4730,
+    "player_hp": 1,
+    "battle_count": 2,
+    "normal_room_exit_verified": false
   },
   "native_windows_r100_tutorial": {
     "scope": "Tutorial 1, actual controller approach, Circle open and Cross close",
