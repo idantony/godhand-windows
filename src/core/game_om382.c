@@ -1,5 +1,7 @@
 #include "game_om382.h"
 #include "game_actor_model_nodes.h"
+#include "game_actor_external_parent.h"
+#include "game_event_player_reset.h"
 #include "game_actor_motion_step.h"
 #include "game_enemy_weapon.h"
 #include "game_player_root_delta.h"
@@ -36,7 +38,9 @@ gh_scene_placement_status gh_om382_construct_001c9140(void *data,size_t size,gh_
 gh_scene_placement_status gh_om382_initialize_001c9268(gh_om382_state *s,gh_om_object *object,
     const gh_om_initializer_bindings *b,int *out)
 {
-    if(!s||!object||object->source.type!=0x382||!b||!out)return GH_PLACE_ARGUMENT;
+    if(!s||!object||!b||!out)return GH_PLACE_ARGUMENT;
+    const int paper=object->runtime_created&&object->runtime_kind==0x376&&!object->source.bytes;
+    if(!paper&&(object->runtime_created||object->source.type!=0x382))return GH_PLACE_ARGUMENT;
     *out=0;
     s->frontier=0;
     int initialized=0;
@@ -75,11 +79,13 @@ gh_scene_placement_status gh_om382_initialize_001c9268(gh_om382_state *s,gh_om_o
             }
         }
         p[0x2f4]=0;
-        p[0x2f5]=0x17;
-        p[0x2f6]=p[0x2f7]=0;
+        p[0x2f5]=paper?0:0x17;
+        p[0x2f6]=paper?2:0;
+        p[0x2f7]=0;
         put(p+0x5b8,word(p+0x5b8)&~0x40u);
         p[0x688]=0;
         put(p+0x68c,0);
+        if(paper)put(p+0x2d0,(word(p+0x2d0)&~0x20000000u)|0x80000000u);
         s->common.stage=6;
     }
     *out=1;
@@ -225,4 +231,88 @@ gh_object_step_status gh_om382_move_prefix_001c9860(gh_om382_state *s,const gh_o
         *phase=6;
     }
     return GH_OBJSTEP_OK;
+}
+
+
+gh_scene_placement_status gh_om376_set_paper_0012c8d8(gh_om376_paper *call,
+    gh_om_factory *factory,gh_actor_model *player,gh_core_save_view save,
+    gh_game_scene_tables *tables,gh_collision_scroll_mutation *scroll,uint32_t *frontier)
+{
+    if(!frontier)return GH_PLACE_ARGUMENT;
+    *frontier=0x12c8d8;
+    if(!call||!factory||!factory->bound||factory->bindings.work->room!=0x105||
+       !player||!player->ready||!player->root.bytes||!player->root.alias_f0||
+       player->root.size<0x6ac||player->root.original_vtable214!=0x41d220||
+       player->pools!=factory->bindings.pools||!save.bytes||save.size<GH_CORE_SAVE_BYTES||
+       !tables||!scroll)return GH_PLACE_ARGUMENT;
+    if(call->stage&&(call->player!=player||call->create.factory!=factory))return GH_PLACE_BUSY;
+    uint8_t *pl=player->root.bytes;
+    if(call->stage==6||(!call->stage&&word(pl+0x6a8))){
+        *frontier=0;
+        return GH_PLACE_OK;
+    }
+    if(!call->stage){
+        save.bytes[0x157]=1; /* 001FC120 */
+        gh_om_object *paper=NULL;
+        const gh_scene_placement_status status=gh_om_factory_create_0030fa98(factory,
+            &call->create,0x376,0xffff,&paper);
+        if(status){*frontier=factory->frontier;return status;}
+        if(!paper){*frontier=0;return GH_PLACE_OK;}
+        call->player=player;
+        put(pl+0x6a8,paper->handle);
+        call->stage=1;
+    }
+    gh_om_object *paper=call->create.object;
+    if(call->stage==1){
+        const gh_scene_placement_status status=gh_om_factory_initialize_runtime_376(factory,paper);
+        if(status){*frontier=factory->frontier;return status;}
+        call->stage=2;
+    }
+    gh_actor_model *model=&paper->initialization->model;
+    uint8_t *p=paper->view.bytes;
+    if(call->stage==2){
+        const gh_actor_part *part;
+        *frontier=0x1cf160;
+        if(gh_actor_model_part_at(model,0,&part)||!part->alias_d0)return GH_PLACE_BOUNDS;
+        const gh_actor_model_status status=gh_actor_model_bind_external_parent(model,0,player,2,paper);
+        if(status)return placement_status(status);
+        memcpy(paper->view.alias_f0,player->root.alias_f0,12);
+        memcpy(p+0x490,player->root.alias_f0,12);
+        memset(p+0x100,0,12);
+
+        const unsigned stage=save.bytes[0xae];
+        const uint32_t offset[]={0,0x3d408312u,(stage>=2&&stage<=5)?0xbe1eb852u:0xbe0f5c29u};
+        const uint32_t orientation[]={0,0,0};
+        memcpy(part->alias_d0,offset,12);
+        memcpy(part->bytes+0x100,orientation,12);
+        memcpy(p+0x610,offset,12);
+        memcpy(p+0x620,orientation,12);
+        put(p+0x604,2);
+        p[0x2f4]=p[0x2f6]=p[0x2f7]=p[0x664]=0;
+        p[0x2f5]=1;
+        call->stage=3;
+    }
+    if(call->stage==3){
+        const gh_event_weapon_attachment attachment={&paper->view,model,&player->root,player,2};
+        if(gh_event_weapon_follow_001cf3a8(&attachment,GH_STATIC_BINARY32_REFERENCE,frontier))
+            return GH_PLACE_UNSUPPORTED;
+        call->stage=4;
+    }
+    if(call->stage==4){
+        const gh_actor_model_status status=gh_actor_model_update_hierarchy_00149eb8(model,GH_STATIC_BINARY32_REFERENCE);
+        if(status){*frontier=model->frontier?model->frontier:0x149eb8;return placement_status(status);}
+        call->stage=5;
+    }
+    if(call->stage==5){
+        uint64_t key;
+        uint32_t changed;
+        memcpy(&key,p+0x540,8);
+        if(gh_collision_scroll_set_key_enabled_001331b8(tables,scroll,key,0,&changed)){
+            *frontier=0x1331b8;
+            return GH_PLACE_UNSUPPORTED;
+        }
+        call->stage=6;
+    }
+    *frontier=0;
+    return GH_PLACE_OK;
 }

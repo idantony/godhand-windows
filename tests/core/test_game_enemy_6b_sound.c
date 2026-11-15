@@ -380,6 +380,42 @@ int main(int argc,char **argv)
  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions);
  }
  C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
+
+ size_t player_bytes;
+ uint8_t *player_data=read_file(disc,"pl/pl00.dat",&player_bytes);
+ gh_bundle player_bundle;
+ gh_bundle_entry player_md,player_tm3;
+ C(!gh_bundle_open(player_data,player_bytes,&player_bundle)&&
+    !gh_bundle_find(&player_bundle,"MD",0,&player_md)&&
+    !gh_bundle_find(&player_bundle,"TM3",0,&player_tm3));
+ uint8_t player_raw[GH_TITLE_PLAYER_BYTES]={0};
+ gh_title_player_view player;
+ gh_actor_model player_model={0};
+ C(!gh_title_player_construct_00107e40(player_raw,sizeof(player_raw),&player));
+ memcpy(player.bytes+0x2fe,&(uint16_t){0x100},2);
+ memcpy(player.bytes+0x2f4,&(uint16_t){0x0601},2);
+ memcpy(player.alias_f0,anchor,sizeof(anchor));
+ store(player.bytes+0x5a8,1);
+ C(!gh_actor_model_bind_packet_inputs(&player_model,heap,&fog)&&
+    !gh_actor_model_initialize_00149738(&player_model,&player,&work,&pools,&player_md,&player_tm3,
+        0,1,GH_STATIC_BINARY32_REFERENCE,&original)&&original);
+ C(!gh_actor_attached_sound_bind(&source,&binding)&&
+    !gh_actor_attached_sound_bind_scene_tables(&source,&tables));
+ gh_motion_sound_request footing={.model=&player_model,.actor=&player,.bank=0,.program=0x8c};
+ uint32_t footing_handle=0;
+ const unsigned before_footing=submissions;
+ C(!gh_actor_attached_sound_motion(&source,&footing,&footing_handle,&frontier)&&footing_handle&&!frontier);
+ gh_voice_status footing_status=gh_se_voice_update(voices);
+ if(footing_status)fprintf(stderr,"footing update %u frontier%08x\n",footing_status,gh_se_voice_frontier(voices));
+ C(!footing_status);
+ gh_se_voice_info footing_voice;
+ C(!gh_se_voice_query(voices,footing_handle,&footing_voice)&&footing_voice.bank==0&&
+    footing_voice.program==0x8c&&footing_voice.sample_slot==91&&footing_voice.rate==14000&&
+    footing_voice.position_mode==2&&footing_voice.distance==3&&footing_voice.native_voice&&
+    footing_voice.adsr2==0x5fc0&&submissions==before_footing+1&&submitted[before_footing].frames>14728);
+ C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!player_model.sound_borrowers);
+ C(!gh_actor_model_release(&player_model));
+ free(player_data);
  C(!gh_enemy_se_banks_destroy(banks));
  gh_se_voice_destroy(voices);
  C(!gh_game_room_pools_release(&pools)&&!gh_task_threads_destroy(threads)&&!gh_heap_destroy(heap));

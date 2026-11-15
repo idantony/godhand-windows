@@ -1,5 +1,6 @@
 #include "game_camera.h"
 #include "game_enemy_ems.h"
+#include "game_enemy_2ad.h"
 #include "game_effect_create.h"
 #include "game_actor_external_parent.h"
 #include "game_enemy_retire.h"
@@ -16,11 +17,19 @@ typedef struct {
 } ems_2a2;
 
 typedef struct {
+    gh_enemy_entry entry;
+    gh_enemy2ad_init init;
+    gh_enemy2ad_init_tail tail;
+    uint8_t bank_released;
+} ems_2ad;
+
+typedef struct {
     gh_enemy_actor *enemy202;
     gh_enemy202_move move202;
     gh_enemy_other_move other_move;
     gh_enemy_timers retiring_weapon;
     ems_2a2 *enemy2a2;
+    ems_2ad *enemy2ad;
     gh_game_title_player *actor;
     uint32_t handle;
     const void *registry_owner;
@@ -130,6 +139,73 @@ static gh_actor_motion_status enter_2a2(ems_entry *slot,const gh_enemy_ems_bindi
     return GH_ACTOR_MOTION_OK;
 }
 
+static gh_actor_motion_status enter_2ad(ems_entry *slot,const gh_enemy_ems_bindings *bindings,
+    const gh_enemy_request *request,uint32_t *frontier)
+{
+    ems_2ad *scenery=slot->enemy2ad;
+    gh_enemy_entry *entry=&scenery->entry;
+    const gh_enemy_actor_bindings *actor=&bindings->actor;
+    const gh_enemy_entry_bindings *owners=&actor->entry;
+    gh_game_effects *effects=bindings->effects_2ad.storage.effects;
+    if(!effects){*frontier=0x305758;return GH_ACTOR_MOTION_UNSUPPORTED;}
+
+    int ready;
+    gh_actor_model_status status=gh_enemy_entry_prepare_2ad_002905d0(entry,owners,request,&ready);
+    if(status){*frontier=entry->frontier;return model_error(status);}
+    if(!ready)return GH_ACTOR_MOTION_OK;
+    int result;
+    status=gh_enemy2ad_init_prefix_0028e0e0(&scenery->init,&entry->object.view,request,
+        &entry->resource,owners->work,owners->save,effects,owners->pools,owners->packet_heap,
+        owners->fog_rgb,actor->cockpit,&owners->init->random,owners->policy,&result);
+    if(status!=GH_ACTOR_MODEL_UNSUPPORTED||scenery->init.stage!=4||
+       scenery->init.frontier!=0x2a8578){
+        *frontier=status?scenery->init.frontier:0x28e068;
+        return status?model_error(status):GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    gh_actor_model *model=&scenery->init.model.model;
+    gh_enemy2ad_tail_bindings tail={
+        .rate=actor->canonical_rate,
+        .solve={.model=model,.work=owners->work,.actors=actor->actors,.ray=actor->ray,
+            .context=actor->ray_context,.ik_globals=actor->ik,.atan_coeff=actor->atan_coeff},
+        .motion={.model=model,.work=owners->work,.resource=entry->resource.bytes,
+            .resource_bytes=entry->resource.file_extent,.ik_globals=actor->ik,
+            .save=owners->save,.save_binding_known=1},
+        .effect=bindings->effects_2ad
+    };
+    tail.effect.model=model;
+    status=gh_enemy2ad_init_tail_0028e320(&scenery->tail,&scenery->init,&entry->object.view,
+        &entry->resource,&tail,owners->policy,&result);
+    if(status||result!=1){
+        *frontier=status?scenery->tail.frontier:0x28e068;
+        return status?model_error(status):GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    slot->actor=&entry->object;
+    slot->handle=entry->handle;
+    slot->registry_owner=entry;
+    return GH_ACTOR_MOTION_OK;
+}
+
+static gh_actor_motion_status release_2ad(ems_entry *slot,gh_game_effects *effects,uint32_t *frontier)
+{
+    ems_2ad *scenery=slot->enemy2ad;
+    if(scenery->init.stage&&!scenery->bank_released){
+        gh_effect_view data;
+        if(effects!=scenery->init.effects_owner||
+           gh_enemy2ad_effect_data(&scenery->entry.resource,&data)||
+           gh_game_effects_release_2ad_native(effects,data)){
+            *frontier=0x28e068;
+            return GH_ACTOR_MOTION_UNSUPPORTED;
+        }
+        scenery->bank_released=1;
+    }
+    gh_actor_model_status status=gh_enemy_model_release_prefix(&scenery->init.model);
+    if(!status)status=gh_enemy_entry_abort_prefix(&scenery->entry);
+    if(status){*frontier=0x28e068;return model_error(status);}
+    free(scenery);
+    slot->enemy2ad=NULL;
+    return GH_ACTOR_MOTION_OK;
+}
+
 static gh_actor_motion_status release_2a2(ems_entry *entry,uint32_t *frontier)
 {
     ems_2a2 *heavy=entry->enemy2a2;
@@ -181,7 +257,7 @@ static gh_scene_placement_status spawn(gh_enemy_ems *owner,uint32_t *frontier,in
             room,index,bindings->actor.numeric_policy,&request,&spawn_row,&saved,frontier);
         if(error)return error;
         if(!spawn_row){
-            if(entry->enemy202||entry->enemy2a2)return GH_PLACE_BUSY;
+            if(entry->enemy202||entry->enemy2a2||entry->enemy2ad)return GH_PLACE_BUSY;
             prefix->spawn_cursor++;
             continue;
         }
@@ -198,6 +274,11 @@ static gh_scene_placement_status spawn(gh_enemy_ems *owner,uint32_t *frontier,in
                 if(!entry->enemy2a2)entry->enemy2a2=calloc(1,sizeof(*entry->enemy2a2));
                 if(!entry->enemy2a2)return GH_PLACE_MEMORY;
                 status=enter_2a2(entry,bindings,&request,frontier);
+            }else if(bindings->actor.entry.work->room==0x105&&index==8&&request.entry_number==63&&
+                request.object_kind==0x2ad&&request.dependency_kind==0x2ad){
+                if(!entry->enemy2ad)entry->enemy2ad=calloc(1,sizeof(*entry->enemy2ad));
+                if(!entry->enemy2ad)return GH_PLACE_MEMORY;
+                status=enter_2ad(entry,bindings,&request,frontier);
             }else return GH_PLACE_UNSUPPORTED;
             if(status){*detail=status;return motion_error(status);}
             entry->entered=1;
@@ -224,6 +305,10 @@ static gh_scene_placement_status spawn(gh_enemy_ems *owner,uint32_t *frontier,in
         }
         if(!entry->actor&&entry->enemy2a2){
             gh_actor_motion_status status=release_2a2(entry,frontier);
+            if(status){*detail=status;return motion_error(status);}
+        }
+        if(!entry->actor&&entry->enemy2ad){
+            gh_actor_motion_status status=release_2ad(entry,bindings->effects_2ad.storage.effects,frontier);
             if(status){*detail=status;return motion_error(status);}
         }
         prefix->spawn_cursor++;
@@ -304,7 +389,7 @@ gh_scene_placement_status gh_enemy_ems_set_002952d0(gh_enemy_ems *owner,
         }
         if(existing){call->stage=2;return GH_PLACE_OK;}
         ems_entry *entry=&owner->entries[index];
-        if(entry->enemy202||entry->enemy2a2||entry->entered)return GH_PLACE_BUSY;
+        if(entry->enemy202||entry->enemy2a2||entry->enemy2ad||entry->entered)return GH_PLACE_BUSY;
         row[11]&=0x7fu; /* Original SetEm activates this RoomSave row before CreateEm. */
         int spawn_row;int16_t ignored_saved_hp;
         gh_scene_placement_status status=gh_enemy_request_from_room_00294ca0(owner->room,index,
@@ -582,7 +667,7 @@ gh_actor_motion_status gh_enemy_ems_devil_step_00208be0(gh_enemy_ems *owner,uint
     if(!devil||!devil->live||devil->factory.entry.handle!=handle||!devil_registered(owner))
         return GH_ACTOR_MOTION_ARGUMENT;
     const gh_enemy_move_actor runtime={&devil->factory.entry,&owner->bindings->actor,
-        &devil->finish.nodes,&devil->finish.hitareas};
+        &devil->finish.nodes,&devil->finish.hitareas,&devil->initialize.motion.motion,&devil->finish.timers};
     gh_enemy202_move *move=&devil->move;
     if(move->original_returned)*move=(gh_enemy202_move){0};
     move->impact_bindings=*effects;
@@ -689,6 +774,10 @@ gh_scene_placement_status gh_enemy_ems_live_at(gh_enemy_ems *owner,uint32_t hand
             out->enemy2a2=&entry->enemy2a2->init;
             out->marker_id=&entry->enemy2a2->init.prefix.base.cockpit_base;
             out->other_move=&entry->other_move;
+        }else if(entry->enemy2ad){
+            out->model=&entry->enemy2ad->init.model.model;
+            out->shadow=&entry->enemy2ad->tail.shadow;
+            out->marker_id=&entry->enemy2ad->init.base.cockpit_base;
         }
         return out->model?GH_PLACE_OK:GH_PLACE_UNSUPPORTED;
     }
@@ -1161,6 +1250,10 @@ gh_actor_motion_status gh_enemy_ems_release_native(gh_enemy_ems **slot,uint32_t 
             *frontier=0x1c91b0;
             return GH_ACTOR_MOTION_UNSUPPORTED;
         }
+        if(entry->enemy2ad){
+            gh_actor_motion_status status=release_2ad(entry,owner->bindings->effects_2ad.storage.effects,frontier);
+            if(status)return status;
+        }
         if(entry->enemy2a2){
             gh_actor_motion_status status=release_2a2(entry,frontier);
             if(status)return status;
@@ -1264,6 +1357,7 @@ gh_actor_motion_status gh_enemy_ems_remove_00290770(gh_enemy_ems *owner,gh_enemy
        (call->stage&&(call->owner!=owner||call->handle!=handle)))return GH_ACTOR_MOTION_ARGUMENT;
     if(call->stage==2){*original=call->original_return;return GH_ACTOR_MOTION_OK;}
     ems_entry *entry=retire_find(owner,handle);
+    if(entry&&entry->enemy2ad)return retire_stop(frontier,0x28e068);
     gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
     if(!actor||!actor->published){
         call->owner=owner;call->handle=handle;call->stage=2;
@@ -1342,6 +1436,7 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
         return GH_ACTOR_MOTION_ARGUMENT;
     if(call->stage==7)return GH_ACTOR_MOTION_OK;
     ems_entry *entry=retire_find(owner,handle);
+    if(entry&&entry->enemy2ad)return retire_stop(frontier,0x28e068);
     gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
     if(!actor||!actor_registered(owner,entry)||(detached&&actor->published))
         return retire_stop(frontier,0x290770);
@@ -1431,6 +1526,7 @@ gh_actor_motion_status gh_enemy_ems_finish_detached_mode3(gh_enemy_ems *owner,
     if(!frontier||!owner||!call||call->stage!=6||call->owner!=owner||call->handle!=handle)
         return GH_ACTOR_MOTION_ARGUMENT;
     ems_entry *entry=retire_find(owner,handle);
+    if(entry&&entry->enemy2ad)return retire_stop(frontier,0x28e068);
     gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
     if(!actor||actor->published||!registry_owner||entry->registry_owner!=registry_owner||
        gh_room_object_unregister(actor->b.pools,handle,registry_owner))

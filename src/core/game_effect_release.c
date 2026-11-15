@@ -14,12 +14,23 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
   if(emitter){
    gh_effect_emitter_view view;
    if(!gh_effect_create_emitter_at(b->effects,i,&view)&&view.payload==p&&
-      (gh_effect_stamp19_attack_part_is_bound(&view)||gh_effect_stamp19_death_part_is_bound(&view)||gh_effect_knockdown_emitter_is_bound(&view)||gh_effect_em00_attack_emitter_is_bound(&view))&&
+      (gh_effect_stamp19_attack_part_is_bound(&view)||gh_effect_stamp19_death_part_is_bound(&view)||gh_effect_knockdown_emitter_is_bound(&view)||gh_effect_em00_attack_emitter_is_bound(&view)||gh_effect_devil_emitter_is_bound(b->effects,&view)||
+       (kind==4&&gh_effect_player_attachment_emitter_is_bound(&view)))&&
       actor&&view.actor->bytes==actor->bytes){
     /* 302918 only sets the stop request. The Effects step owns child
      * links, pending masks, and final destruction. */
     const uint32_t stopped=rd(p+0x114)|0x40000000u;
     memcpy(view.payload+0x114,&stopped,sizeof(stopped));
+    continue;
+   }
+  }
+  if(!emitter){
+   gh_effect_esp_view view;
+   if(!gh_effect_create_esp_at(b->effects,i,&view)&&view.payload==p&&
+      (gh_effect_devil_esp_is_bound(b->effects,&view)||
+       (kind==4&&gh_effect_player_attachment_esp_is_bound(b->effects,&view)))&&actor&&view.actor->bytes==actor->bytes){
+    e=gh_effect_create_esp_pause_002fbe50(b->effects,i,view.serial,f);
+    if(e)return e;
     continue;
    }
   }

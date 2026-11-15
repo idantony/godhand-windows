@@ -23,6 +23,9 @@ gh_actor_model_status gh_enemy_entry_002905d0(gh_enemy_entry *,const gh_enemy_en
  * the virtual 284AF8 provider still owns the original return. */
 gh_actor_model_status gh_enemy_entry_prepare_2a2_002905d0(gh_enemy_entry *,
  const gh_enemy_entry_bindings *,const gh_enemy_request *,int32_t manager_kind,uint32_t argument,int *ready);
+/* R105 scenery, through canonical publication before original VT+98. */
+gh_actor_model_status gh_enemy_entry_prepare_2ad_002905d0(gh_enemy_entry *,
+ const gh_enemy_entry_bindings *,const gh_enemy_request *,int *ready);
 typedef struct {
  gh_enemy_entry entry;
  const gh_enemy_entry *parent;

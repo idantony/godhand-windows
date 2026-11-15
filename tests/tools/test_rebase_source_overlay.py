@@ -128,6 +128,22 @@ class RebaseOverlayTest(unittest.TestCase):
                 with self.assertRaisesRegex(RebaseError, "predecessor does not match"):
                     rebase(*receipt, *self.base, self.root / "rejected")
 
+    def test_relative_worker_can_use_an_explicit_base_pin(self):
+        root = self.root / "relative-overlay"
+        self.write_file(root, self.path, self.overlay_content)
+        overlay = self.write_json(root / "receipt.json", {
+            "schema": 1,
+            "files": [{"relative": self.path, "sha256": digest(self.overlay_content),
+                       "supersedes": {"sha256": digest(self.base_content)}}],
+        })
+        target = self.snapshot("target", {self.path: self.base_content.replace(b"last = 1", b"last = 3")})
+        result = rebase(*overlay, *target, self.output, source_base=self.base)
+        self.assertEqual(result["rebase_results"][self.path]["status"], "merged")
+        self.assertEqual((self.output / self.path).read_bytes(), self.overlay_content.replace(b"last = 1", b"last = 3"))
+        self.assertIn({"path": str(self.base[0]), "sha256": self.base[1]}, result["dependencies"])
+        with self.assertRaisesRegex(RebaseError, "SHA-256 mismatch"):
+            rebase(*overlay, *target, self.root / "rejected", source_base=(self.base[0], "0" * 64))
+
     def test_tampered_snapshot_bytes_fail_even_when_only_newline_changed(self):
         target = self.snapshot("target", {self.path: self.base_content})
         self.write_file(target[0].parent.parent, self.path, self.base_content.replace(b"\n", b"\r\n"))

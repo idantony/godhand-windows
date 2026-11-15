@@ -107,3 +107,52 @@ gh_effect_status gh_game_effects_initialize_00305a68(gh_game_effects*s,
  be=gh_bundle_find(room,"EAR",0,&e);if(be==GH_BUNDLE_OK)s->ear=(gh_effect_view){e.bytes,e.size};else if(be!=GH_BUNDLE_NOT_FOUND)return fail(s,0x31ccf0,be,GH_EFFECT_BOUNDS);
  gh_game_effects_pool_reset_00306d18(s);s->ready=1;return GH_EFFECT_OK;
 }
+
+gh_effect_status gh_game_effects_register_2ad_00305758(gh_game_effects *s,gh_effect_view data)
+{
+    if(!s||!s->ready||!data.bytes)return GH_EFFECT_ARGUMENT;
+    s->frontier=0;
+    s->detail=0;
+    gh_bundle bundle;
+    gh_bundle_entry table0,table1,emitters;
+    if(gh_bundle_open(data.bytes,data.size,&bundle)||
+       gh_bundle_find(&bundle,"TBL",0,&table0)||gh_bundle_find(&bundle,"TBL",1,&table1)||
+       gh_bundle_find(&bundle,"EMD",0,&emitters)||table0.size<4||table1.size<4||emitters.size<20||
+       u32(emitters.bytes)!=0x444d45u||u32(emitters.bytes+4)!=1)
+        return fail(s,0x3057d0,0,GH_EFFECT_BOUNDS);
+    /* Actual embedded EMD slot zero is empty, so this adds no emitter
+     * companion and leaves the shared 64-entry table untouched. */
+    if(u32(emitters.bytes+16))return fail(s,0x306a48,0,GH_EFFECT_UNSUPPORTED);
+    for(unsigned i=0;i<64;i++){
+        const gh_effect_resource *resource=s->resources+i;
+        if(resource->kind==0xd7&&(resource->references==UINT32_MAX||
+           resource->tbl0.bytes!=table0.bytes||resource->tbl1.bytes!=table1.bytes||
+           s->emd_tables[0xd7].bytes!=emitters.bytes))
+            return fail(s,0x305908,(int)i,GH_EFFECT_UNSUPPORTED);
+    }
+    return reg(s,0xd7,&bundle);
+}
+
+gh_effect_status gh_game_effects_release_2ad_native(gh_game_effects *s,gh_effect_view data)
+{
+    if(!s||!s->ready||!data.bytes)return GH_EFFECT_ARGUMENT;
+    if(s->native)return GH_EFFECT_UNSUPPORTED;
+    gh_bundle bundle;
+    gh_bundle_entry table0,table1,emitters;
+    if(gh_bundle_open(data.bytes,data.size,&bundle)||
+       gh_bundle_find(&bundle,"TBL",0,&table0)||gh_bundle_find(&bundle,"TBL",1,&table1)||
+       gh_bundle_find(&bundle,"EMD",0,&emitters))return GH_EFFECT_BOUNDS;
+    for(unsigned i=0;i<64;i++){
+        gh_effect_resource *resource=s->resources+i;
+        if(resource->kind!=0xd7)continue;
+        if(!resource->references||resource->tbl0.bytes!=table0.bytes||
+           resource->tbl1.bytes!=table1.bytes||s->emd_tables[0xd7].bytes!=emitters.bytes)
+            return GH_EFFECT_ARGUMENT;
+        if(!--resource->references){
+            *resource=(gh_effect_resource){.kind=5};
+            s->emd_tables[0xd7]=(gh_effect_view){0};
+        }
+        return GH_EFFECT_OK;
+    }
+    return GH_EFFECT_ARGUMENT;
+}

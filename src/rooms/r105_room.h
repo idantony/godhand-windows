@@ -32,16 +32,23 @@ typedef struct {
 typedef struct {
     gh_r105_room_bindings bindings;
     gh_r207_allocation work;
+    const gh_om_object *gate;
     int32_t watcher_slot[2];
     uint32_t watcher_frontier[2];
     uint32_t frontier;
-    uint8_t stage, ready;
+    uint8_t stage, ready,gate_stage;
 } gh_r105_room;
 
 /* Original R105Init prefix. Once scheduled, the original AT0 and battle
  * watchers sleep on the same Scenario backend. Positive unfinished leaves
  * report their own address before any unrecovered behavior. */
 gh_scene_status gh_r105_initialize_000001a8(gh_r105_room *,const gh_r105_room_bindings *);
+/* REL 05F8 uses the registered 0355 gate and fields of the existing
+ * cOmSub work. Its native gate identity lives with that work. */
+gh_scene_status gh_r105_gate_000005f8(gh_r105_room *,const gh_om_factory *,
+    gh_r100_om_scalar_view,
+    gh_r100_init_status (*collision)(void *,const char *,int,uint32_t *),
+    void *,uint32_t *frontier);
 gh_scene_status gh_r105_move_00000398(gh_r105_room *,const gh_om_factory *,gh_game_mt *,
     gh_frame_random *,gh_r100_om_scalar_view,void *other_context,uint32_t *frontier);
 gh_scene_status gh_r105_room_release(gh_r105_room *);

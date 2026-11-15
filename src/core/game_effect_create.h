@@ -25,7 +25,7 @@ typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_req
  uint32_t configuration_nested_scale,configuration_nested_flags;
  const float *configuration_positioned_atan_coeff;
  uint32_t configuration_positioned_position[3],configuration_positioned_yaw;
- uint8_t configuration_positioned,configuration_death_part_zero,configuration_05288;} gh_effect_create_call;
+ uint8_t configuration_positioned,configuration_player_stun,configuration_death_part_zero,configuration_05288;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
 /* Only the known non-NULL305E88 configuration (unit scales/VF0 vectors,
@@ -40,6 +40,7 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
  const gh_effect_create_request *,uint32_t scale);
 /* Original 14FB48 -> 306900, attached 58:02 with explicit part0
  * and otherwise identity configuration. */
+gh_effect_status gh_effect_create_player_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_enemy_death_part0_00306900(gh_effect_create_call *,
  const gh_title_player_view *,int32_t mode);
 /* 2A8608's original 58:2F/30 mode0, selector self, explicit part0. */
@@ -70,7 +71,8 @@ typedef struct {gh_effect_view record;const gh_title_player_view *actor,*selecto
   * duplicate work buffer; consumers also validate payload against storage. */
  uint8_t *payload;size_t payload_size;int32_t first_esp_child;} gh_effect_emitter_view;
 int gh_effect_devil_emitter_is_bound(const gh_game_effects *,const gh_effect_emitter_view *);
-int gh_effect_player_rise_emitter_is_bound(const gh_effect_emitter_view *);
+int gh_effect_player_stun_row(gh_effect_view);
+int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
 int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *);
@@ -97,7 +99,7 @@ gh_effect_status gh_effect_create_esp_devil_trail_init_002f5788(gh_game_effects 
 gh_effect_status gh_effect_create_esp_devil_trail_move_002f5bf8(gh_game_effects *,unsigned,uint32_t,
  const gh_boot_work *,gh_static_transform_policy,uint32_t *);
 int gh_effect_devil_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
-int gh_effect_player_rise_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
+int gh_effect_player_attachment_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_knockdown_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_esp_trail_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 /* Borrow the canonical room arenas; release effects before tearing them down. */

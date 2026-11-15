@@ -8,7 +8,7 @@ static gh_player_post_status bind(gh_game_player_post_state *s,const gh_title_pl
  if(s->player_bytes&&s->player_bytes!=v->bytes)return GH_PLAYER_POST_ARGUMENT;
  s->player_bytes=v->bytes;s->frontier=0;return GH_PLAYER_POST_OK;
 }
-gh_player_post_status gh_player_state_effect_0012bb38(gh_game_player_post_state *s,const gh_title_player_view *v,const gh_effect_release_bindings *effects){
+gh_player_post_status gh_player_state_effect_with_create_0012bb38(gh_game_player_post_state *s,const gh_title_player_view *v,const gh_effect_release_bindings *effects,const gh_effect_create_bindings *create){
  gh_player_post_status e=bind(s,v);if(e)return e;uint8_t *p=v->bytes;
  if(s->effect_phase==2)return GH_PLAYER_POST_OK;
  if(!s->effect_phase){uint32_t flags=word(p+0x15f4);unsigned state=p[0x2f4]|(unsigned)p[0x2f5]<<8;
@@ -16,12 +16,27 @@ gh_player_post_status gh_player_state_effect_0012bb38(gh_game_player_post_state 
   else if(flags&0x40){put(p+0x15f4,flags&~0x40u);s->effect_action=2;}
   s->effect_phase=1;
  }
- if(s->effect_action==1)return fail(s,0x306900,GH_PLAYER_POST_UNSUPPORTED);
+ if(s->effect_action==1){
+  if(!create||!effects||create->storage.effects!=effects->effects)
+   return fail(s,0x306900,GH_PLAYER_POST_UNSUPPORTED);
+  if(!s->stun.active){
+   gh_effect_status status=gh_effect_create_player_stun_part4_00306900(&s->stun,v);
+   if(status)return fail(s,0x306900,GH_PLAYER_POST_ARGUMENT);
+  }
+  gh_effect_status status=gh_game_effect_create_00306528(&s->stun,create);
+  if(status)return fail(s,s->stun.frontier?s->stun.frontier:0x306900,
+     status==GH_EFFECT_UNSUPPORTED?GH_PLAYER_POST_UNSUPPORTED:GH_PLAYER_POST_CALLEE);
+ }
  if(s->effect_action==2){if(!effects)return fail(s,0x306200,GH_PLAYER_POST_UNSUPPORTED);unsigned slot=0;uint32_t pc=0;
   gh_effect_status x=gh_game_effect_release_00306200(effects,v,4,2,&pc,&slot);
   if(x)return fail(s,pc?pc:0x306200,x==GH_EFFECT_UNSUPPORTED?GH_PLAYER_POST_UNSUPPORTED:GH_PLAYER_POST_CALLEE);
  }
  s->effect_phase=2;return GH_PLAYER_POST_OK;
+}
+gh_player_post_status gh_player_state_effect_0012bb38(gh_game_player_post_state *s,
+ const gh_title_player_view *v,const gh_effect_release_bindings *effects)
+{
+ return gh_player_state_effect_with_create_0012bb38(s,v,effects,NULL);
 }
 static gh_player_post_status node_flag(gh_game_player_post_state *s,const gh_game_player_node_cache *cache,unsigned index,uint32_t and_mask,uint32_t or_mask){
  static const unsigned offsets[10]={0x1550,0x1574,0x1554,0x1558,0x155c,0x1560,0x1564,0x1568,0x156c,0x1570};

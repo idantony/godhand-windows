@@ -126,11 +126,15 @@ def merge_tokens(base, target, overlay, substitutions, name):
     return current, "merged-tokens"
 
 
-def worker_receipt(record, receipt):
-    """Normalize a worker's pinned absolute records to relative source paths."""
+def worker_receipt(record, receipt, source_base=None):
+    """Normalize worker file records against a pinned source snapshot."""
     if set(record) - {"schema", "base", "files", "dependencies", "evidence", "proof", "verification", "scope", "history", "integration"}:
         raise RebaseError(f"Unsupported worker overlay fields: {receipt}")
     base = record.get("base")
+    if source_base is not None:
+        if base is not None:
+            raise RebaseError(f"Worker overlay already identifies its base: {receipt}")
+        base = {"path": str(source_base[0]), "sha256": source_base[1]}
     if not isinstance(base, dict) or not isinstance(base.get("path"), str) or not isinstance(record.get("files"), list):
         raise RebaseError(f"Missing worker base or file records: {receipt}")
     base_receipt = Path(base["path"]).resolve()
@@ -145,14 +149,17 @@ def worker_receipt(record, receipt):
         if not isinstance(item, dict):
             raise RebaseError(f"Invalid worker file record: {receipt}")
         name = item.get("relative")
-        if not isinstance(item.get("path"), str) or Path(item["path"]).resolve() != source_path(receipt.parent, name):
+        expected = source_path(receipt.parent, name)
+        path = item.get("path")
+        if (path is not None or source_base is None) and (not isinstance(path, str) or Path(path).resolve() != expected):
             raise RebaseError(f"Worker source path differs from its relative name: {name}")
         # Missing predecessor is only valid for a file absent in the pinned base.
         predecessor = item.get("supersedes")
         if predecessor is not None:
-            if (not isinstance(predecessor, dict) or not isinstance(predecessor.get("path"), str) or
-                    not isinstance(predecessor.get("sha256"), str) or
-                    Path(predecessor["path"]).resolve() != source_path(root, name)):
+            if not isinstance(predecessor, dict) or not isinstance(predecessor.get("sha256"), str):
+                raise RebaseError(f"Invalid worker source predecessor: {name}")
+            path = predecessor.get("path")
+            if (path is not None or source_base is None) and (not isinstance(path, str) or Path(path).resolve() != source_path(root, name)):
                 raise RebaseError(f"Invalid worker source predecessor: {name}")
             output["supersedes"][name] = predecessor["sha256"]
         output["files"].append({"path": name, "sha256": item.get("sha256")})
@@ -175,10 +182,10 @@ def checked_dependencies(record, receipt, field="dependencies"):
         seen.add(path)
 
 
-def load_overlay(receipt, sha256):
+def load_overlay(receipt, sha256, source_base=None):
     record = pinned_json(receipt, sha256)
-    if "base" in record:
-        record = worker_receipt(record, receipt)
+    if "base" in record or source_base is not None:
+        record = worker_receipt(record, receipt, source_base)
     supported = {
         "schema", "files", "base_receipt", "base_receipt_sha256", "supersedes",
         "dependency_files", "requires_overlay_receipt", "requires_overlay_receipt_sha256",
@@ -253,13 +260,13 @@ def check_required_overlay(record, target, manifest, seen, protected):
 
 
 def rebase(overlay_receipt, overlay_sha256, target_receipt, target_sha256, output, *,
-           tokens_path=None, tokens_sha256=None):
+           tokens_path=None, tokens_sha256=None, source_base=None):
     overlay_receipt = overlay_receipt.resolve()
     target_receipt = target_receipt.resolve()
     output = output.resolve()
     if SCRATCH_ROOT not in output.parents:
         raise RebaseError(f"Output must be below the project scratch: {output}")
-    record, files, base, old_manifest = load_overlay(overlay_receipt, overlay_sha256)
+    record, files, base, old_manifest = load_overlay(overlay_receipt, overlay_sha256, source_base)
     if (tokens_path is None) != (tokens_sha256 is None):
         raise RebaseError("Token recipe path and SHA-256 must be supplied together")
     tokens = {}
@@ -292,6 +299,9 @@ def rebase(overlay_receipt, overlay_sha256, target_receipt, target_sha256, outpu
     for key in ("dependencies", "patches", "dependency_files", "requires_overlay_receipt", "requires_overlay_receipt_sha256"):
         if key in record:
             result[key] = record[key]
+    if source_base is not None:
+        result["dependencies"] = result.get("dependencies", []) + [
+            {"path": record["base_receipt"], "sha256": record["base_receipt_sha256"]}]
 
     with tempfile.TemporaryDirectory(prefix="rebase-", dir=output.parent) as directory:
         temporary = Path(directory).resolve()
@@ -335,12 +345,14 @@ def main():
     parser.add_argument("--target", required=True, type=Path)
     parser.add_argument("--target-sha256", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--source-base", nargs=2, metavar=("RECEIPT", "SHA256"),
+                        help="pin the original base for a relative worker receipt without a base")
     parser.add_argument("--tokens", type=Path)
     parser.add_argument("--tokens-sha256")
     args = parser.parse_args()
     try:
         result = rebase(args.overlay, args.overlay_sha256, args.target, args.target_sha256, args.output,
-                        tokens_path=args.tokens, tokens_sha256=args.tokens_sha256)
+                        tokens_path=args.tokens, tokens_sha256=args.tokens_sha256, source_base=args.source_base)
     except (KeyError, OSError, RebaseError, ValueError) as error:
         parser.exit(1, f"{error}\n")
     print(f"Wrote {len(result['files'])} file(s) to {args.output / 'receipt.json'}")

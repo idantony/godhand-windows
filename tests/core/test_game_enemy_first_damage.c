@@ -918,6 +918,31 @@ static gh_player_frame_status hurt_motion_advance(void *opaque,const gh_player_m
     return status?GH_PLAYER_FRAME_CALLEE:GH_PLAYER_FRAME_OK;
 }
 
+typedef struct {
+    const gh_title_player_view *actor;
+    uint16_t expected_first;
+    unsigned first_count,button_attempts;
+} player_stagger_sound;
+
+static gh_actor_motion_status stagger_sound(void *opaque,const gh_motion_sound_request *r,
+    uint32_t *handle,uint32_t *pc)
+{
+    player_stagger_sound *fixture=opaque;
+    if(r->bank||r->actor!=fixture->actor||r->part||!r->model)return GH_ACTOR_MOTION_ARGUMENT;
+    *handle=0;
+    *pc=0;
+    if(r->program==fixture->expected_first){
+        if(fixture->first_count++)return GH_ACTOR_MOTION_ARGUMENT;
+        return GH_ACTOR_MOTION_OK;
+    }
+    if(r->program!=0x8c)return GH_ACTOR_MOTION_ARGUMENT;
+    if(!fixture->button_attempts++){
+        *pc=0x2cba48;
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    return GH_ACTOR_MOTION_OK;
+}
+
 static int enemy_give_player_take(gh_disc *disc,const gh_bundle *room_bundle,gh_enemy_actor *enemy,gh_game_title_player *player,
     gh_game_player_init_tail *tail,gh_actor_model *player_model,const uint8_t *pl00,size_t pl00_bytes,
     const gh_hitarea_frame_bindings *ledger_bindings,gh_hitarea_frame *ledger,const gh_effect_create_bindings *effects)
@@ -1066,6 +1091,58 @@ static int enemy_give_player_take(gh_disc *disc,const gh_bundle *room_bundle,gh_
     CHECK(gh_game_player_frame_00108ab0(&frame,&bindings)==GH_PLAYER_FRAME_UNSUPPORTED&&
         frame.frontier==0x1236e8&&frame.stage==17&&fixture.sound_attempts==3&&word(pl+0x430)==0x3f800000&&
         word(pl+0x548)==next_hp&&(uint16_t)word(points)==40&&!vibration[1][0]);
+    /* Exercise the observed 0601 dispatcher on the same real PL00 model/clip
+     * owner, with controlled phase and input at the earlier-frame boundary. */
+    gh_game_action_buttons actions={0};
+    gh_game_action_buttons_reset_001f72c0(&actions);
+    const gh_player_idle_input_bindings idle={.action_buttons=&actions};
+    bindings.idle_input_bindings=&idle;
+    gh_game_mt after_draw=init->random;
+    uint32_t draw;
+    CHECK(!gh_game_mt_next_0030f348(&after_draw,&draw));
+    player_stagger_sound stagger={.actor=&player->view,.expected_first=(draw&1)?0xcf:0xd0};
+    bindings.damage_sound=stagger_sound;
+    bindings.damage_sound_context=&stagger;
+    fixture.bind=(gh_actor_motion_call){0};
+    memset(vibration,0,sizeof(vibration));
+    memcpy(pl+0x2f4,&(uint32_t){0x01000601},4);
+    uint8_t *work=(uint8_t *)b->entry.work;
+    const uint32_t old_buttons=word(work+8);
+    memcpy(work+8,&(uint32_t){0},4);
+    gh_game_player_frame stagger_frame={.bound=1,.stage=14,.state_entry=0x11a820,.b=bindings};
+    CHECK(gh_game_player_frame_00108ab0(&stagger_frame,&bindings)==GH_PLAYER_FRAME_UNSUPPORTED&&
+        stagger_frame.stage==15&&stagger_frame.hurt_phase==5&&stagger_frame.frontier==0x2cba48);
+    unsigned stagger_row=(draw&1)?0x148:0x150;
+    CHECK(fixture.bind.motion_offset==word(pl00+stagger_row)&&!fixture.bind.release_previous&&
+        fixture.bind.blend_frames==1&&!memcmp(&init->random,&after_draw,sizeof(after_draw)));
+    const gh_player_frame_status staggered=gh_game_player_frame_00108ab0(&stagger_frame,&bindings);
+    fprintf(stderr,"PL00 stagger first status%d pc%08x stage%u phase%u frame%08x row%x\n",
+        staggered,stagger_frame.frontier,stagger_frame.stage,stagger_frame.hurt_phase,word(pl+0x430),stagger_row);
+    CHECK(staggered==GH_PLAYER_FRAME_UNSUPPORTED&&stagger_frame.frontier==0x306900&&
+        stagger_frame.stage==16&&word(pl+0x2f4)==0x01010601&&word(pl+0x430)==0x3f800000&&
+        (uint16_t)word(pl+0x568)==14&&word(pl+0x15b0)==150&&
+        stagger.first_count==1&&stagger.button_attempts==2);
+    CHECK(actions.entries[0].priority==11&&actions.entries[0].life==19&&
+        actions.entries[0].unknown20==16&&actions.entries[0].flags==1&&
+        word(vibration[0]+4)==((0x40000u<<vibration_shift)+1u));
+    bindings.effects=&effects->storage;
+    fixture.bind=(gh_actor_motion_call){0};
+    pl[0x2f6]=2;
+    memcpy(work+8,&(uint32_t){0x00100010},4);
+    stagger_frame=(gh_game_player_frame){.bound=1,.stage=14,.state_entry=0x11a820,.b=bindings};
+    const gh_player_frame_status stagger_loop=gh_game_player_frame_00108ab0(&stagger_frame,&bindings);
+    fprintf(stderr,"PL00 stagger loop status%d pc%08x stage%u phase%u frame%08x\n",stagger_loop,
+        stagger_frame.frontier,stagger_frame.stage,stagger_frame.hurt_phase,word(pl+0x430));
+    CHECK(stagger_loop==GH_PLAYER_FRAME_UNSUPPORTED&&stagger_frame.frontier==0x1236e8&&
+        word(pl+0x2f4)==0x01030601&&word(pl+0x15b0)==124&&fixture.bind.blend_frames==10&&
+        !fixture.bind.release_previous&&fixture.bind.motion_offset==word(pl00+0x49c));
+    memcpy(pl+0x15b0,&(uint32_t){1},4);
+    stagger_frame=(gh_game_player_frame){.bound=1,.stage=14,.state_entry=0x11a820,.b=bindings};
+    CHECK(gh_game_player_frame_00108ab0(&stagger_frame,&bindings)==GH_PLAYER_FRAME_UNSUPPORTED&&
+        stagger_frame.frontier==0x1236e8&&!word(pl+0x2f4)&&(int32_t)word(pl+0x15b0)==-25&&
+        !memcmp(&init->random,&after_draw,sizeof(after_draw)));
+    memcpy(work+8,&old_buttons,4);
+    puts("PASS actual PL00 selector06 motion entry and loop, prompt, inputs, retry and idle return");
     CHECK(!gh_actor_attached_sound_abort(&fixture.attached));
     gh_se_voice_destroy(voices);
     gh_audio_registry_destroy(registry);
@@ -1180,6 +1257,17 @@ static uint32_t rise_clock(void *context)
     return (*(uint32_t *)context)++;
 }
 
+typedef struct {unsigned sprite,trail;} player_stun_draw;
+
+static gh_effect_status count_stun_draw(void *context,const gh_effect_trans_packet *packet)
+{
+    player_stun_draw *draw=context;
+    if(!packet->quad_count)return GH_EFFECT_OK;
+    if(packet->original_callee==0x2ec398)draw->trail++;
+    else if(packet->original_callee==0x2fec38)draw->sprite++;
+    return GH_EFFECT_OK;
+}
+
 static int player_rise_sequence(gh_disc *disc,const gh_bundle *room,gh_game_title_player *player,
     gh_actor_model *model,const uint8_t *pl,size_t pl_size,gh_game_init_state *init,gh_boot_work *work,
     const void *elf,size_t elf_size,gh_game_scene_tables *actors,const float *atan_coeff)
@@ -1239,7 +1327,7 @@ static int player_rise_sequence(gh_disc *disc,const gh_bundle *room,gh_game_titl
         gh_effect_esp_view child;
         if(gh_effect_create_esp_at(effects,0,&child)==GH_EFFECT_OK){
             CHECK(child.initialized&&child.type==0&&child.actor==&player->view&&
-                  child.selector==&player->view&&gh_effect_player_rise_esp_is_bound(effects,&child));
+                  child.selector==&player->view&&gh_effect_player_attachment_esp_is_bound(effects,&child));
             if(!seen_child){
                 gh_game_pl_camera camera={0};
                 gh_display_state display={0};
@@ -1276,6 +1364,72 @@ static int player_rise_sequence(gh_disc *disc,const gh_bundle *room,gh_game_titl
     gh_effect_esp_view child;
     CHECK(seen_child&&gh_effect_create_emitter_at(effects,0,&emitter)!=GH_EFFECT_OK&&
           gh_effect_create_esp_at(effects,0,&child)!=GH_EFFECT_OK);
+    const gh_effect_release_bindings release={.effects=effects,.esp=esp,.esp_bytes=0x100180,
+        .emitters=emit,.emitter_bytes=0x26060,.actor_match=gh_effect_create_actor_match,.context=effects};
+    const gh_player_frame_bindings stun_bind={.player=player,.init=init,.work=work,.model=model,.effects=&release};
+    memcpy(raw+0x2f4,&(uint32_t){0x01000601},4);
+    gh_game_player_frame stun={.b=stun_bind,.bound=1,.stage=16};
+    CHECK(gh_game_player_frame_00108ab0(&stun,&stun_bind)==GH_PLAYER_FRAME_UNSUPPORTED&&
+        stun.frontier==0x1236e8&&stun.stage==17&&stun.post_state.stun.complete&&stun.post_state.stun.row==2);
+    const gh_actor_part *head;
+    CHECK(!gh_actor_model_part_at(model,4,&head)&&!gh_effect_create_bind_trail_pools(effects,model->pools));
+    for(unsigned slot=0;slot<2;slot++){
+        CHECK(!gh_effect_create_emitter_at(effects,slot,&emitter)&&emitter.initialized&&
+            emitter.part==head&&emitter.actor==&player->view&&emitter.selector==&player->view&&
+            word(emitter.payload+0x18c)==0x00040000&&word(emitter.payload+0x110)==4&&emitter.payload[0x1ec]==4);
+    }
+    gh_game_pl_camera camera={0};
+    gh_display_state display={0};
+    CHECK(!gh_game_camera_construct_pl_00139bc8(&camera,&init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+    CHECK(!gh_display_state_from_elf(&display,elf,elf_size)&&!gh_display_static_initialize_002a48a8(&display,1,0xffff));
+    float target[3];
+    memcpy(target,head->bytes+0xb0,12);
+    const float eye[3]={target[0]+2,target[1]+1,target[2]+5};
+    memcpy(camera.fields+0x200,target,12);memcpy(camera.fields+0x210,eye,12);
+    const gh_camera_projection_display settings={&display.screen_width,&display.screen_height_bits,
+        &display.pixel_aspect_bits,&display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+    CHECK(!gh_game_camera_project_00138740(&camera,&settings,&pc));
+    gh_game_camera *previous_camera=init->active_camera;
+    init->active_camera=camera.identity;
+    gh_stage_textures *textures=NULL;
+    CHECK(!gh_stage_textures_create(&textures));
+    player_stun_draw drawn={0};
+    const gh_effects_trans_bindings draw={.storage=release,.work=work,.globals=&globals,.display=&display,
+        .policy=GH_STATIC_BINARY32_REFERENCE,.cvt_policy=GH_FRAME_CHOP_REFERENCE,.emit=count_stun_draw,
+        .context=&drawn,.camera=&camera,.init=init,.textures=textures};
+    unsigned stun_sprites=0,stun_trails=0;
+    for(unsigned age=0;age<8;age++){
+        const gh_effect_status result=gh_game_effects_frame_update_0030f228(&update,&fx);
+        if(result)fprintf(stderr,"PL00 stun Update age%u status%u PC%08x em%u emStage%u esp%u espStage%u\n",
+            age,result,update.frontier,update.emitter_index,update.emitter_stage,update.esp_index,update.esp_stage);
+        CHECK(!result);
+        for(unsigned slot=0;slot<1024;slot++){
+            if(gh_effect_create_esp_at(effects,slot,&child))continue;
+            CHECK(child.initialized&&child.actor==&player->view&&child.selector==&player->view&&
+                gh_effect_player_attachment_esp_is_bound(effects,&child));
+            if(child.type==0)stun_sprites++;
+            else if(child.type==9)stun_trails++;
+        }
+        gh_game_effects_trans trans={0};
+        const gh_effect_status drawn_status=gh_game_effects_trans_002fb310(&trans,&draw);
+        if(drawn_status)fprintf(stderr,"PL00 stun Draw age%u status%u PC%08x esp%u\n",
+            age,drawn_status,trans.frontier,trans.esp_index);
+        CHECK(!drawn_status&&trans.complete);
+    }
+    CHECK(stun_sprites&&stun_trails&&drawn.sprite&&drawn.trail);
+    gh_stage_textures_destroy(textures);
+    init->active_camera=previous_camera;
+    memcpy(raw+0x2f4,&(uint32_t){0},4);
+    stun=(gh_game_player_frame){.b=stun_bind,.bound=1,.stage=16};
+    CHECK(gh_game_player_frame_00108ab0(&stun,&stun_bind)==GH_PLAYER_FRAME_UNSUPPORTED&&
+        stun.frontier==0x1236e8&&stun.stage==17&&!(word(raw+0x15f4)&0x40));
+    for(unsigned slot=0;slot<2;slot++)CHECK(!gh_effect_create_emitter_at(effects,slot,&emitter)&&
+        (word(emitter.payload+0x114)&0x40000000)&&emitter.first_esp_child==-1);
+    for(unsigned age=0;age<5;age++)CHECK(!gh_game_effects_frame_update_0030f228(&update,&fx));
+    for(unsigned slot=0;slot<2;slot++)CHECK(gh_effect_create_emitter_at(effects,slot,&emitter)!=GH_EFFECT_OK);
+    for(unsigned slot=0;slot<1024;slot++)CHECK(gh_effect_create_esp_at(effects,slot,&child)!=GH_EFFECT_OK);
+    printf("PASS PL00 stun bank0:4 part4, %u sprite / %u trail updates, %u/%u Draw packets, ordered release\n",
+        stun_sprites,stun_trails,drawn.sprite,drawn.trail);
     memcpy(raw,before,sizeof(before));
     init->random=random;
     gh_effect_create_forget_on_owner_destroy(effects);
@@ -3654,10 +3808,33 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             init->camera.mode==1&&init->active_camera==&init->camera&&
             init->camera.previous_mode==0x40&&init->camera.previous==&camera.identity&&
             word(base_camera.fields+0x250)==0x41f80000);
+        unsigned live_rise_slots[1024],live_rise_count=0;
+        for(unsigned slot=0;slot<1024;slot++){
+            gh_effect_esp_view view;
+            const size_t offset=(slot>>5)*4;
+            const uint32_t bit=UINT32_C(0x80000000)>>(slot&31);
+            if(!(word(devil_esp+0x100080+offset)&bit)&&
+               !(word(devil_esp+0x100100+offset)&bit)&&
+               !gh_effect_create_esp_at(devil_effects,slot,&view)&&view.initialized&&
+               gh_effect_devil_esp_is_bound(devil_effects,&view)&&
+               word(view.payload+0x23a)==0x003f0058)
+                live_rise_slots[live_rise_count++]=slot;
+        }
+        status=gh_enemy_ems_devil_step_00208be0(owner,child_handle,&camera,&restore,&opacity,
+            navigation,&spawn,&player.view,elf,elf_size,&rise_pc);
+        unsigned paused_rise=0;
+        for(unsigned i=0;i<live_rise_count;i++){
+            const unsigned slot=live_rise_slots[i];
+            paused_rise+=(word(devil_esp+0x100080+(slot>>5)*4)>>(31-(slot&31)))&1u;
+        }
+        fprintf(stderr,"Devil selector00 status%d pc%08x state%08x sample%08x paused%u/%u\n",
+            status,rise_pc,word(rise+0x2f4),word(rise+0x430),paused_rise,live_rise_count);
+        CHECK(!status&&!rise_pc&&ems_fixture.rise_calls==2&&
+            word(rise+0x2f4)==0x00001200&&word(rise+0x430)==0x3f800000&&paused_rise>0);
         CHECK(gh_enemy_ems_devil_step_00208be0(owner,child_handle,&camera,&restore,&opacity,
             navigation,&spawn,&player.view,elf,elf_size,&rise_pc)==GH_ACTOR_MOTION_UNSUPPORTED&&
-            rise_pc==0x211c08&&ems_fixture.rise_calls==2);
-        puts("PASS actual Devil 2705D8 far decision through completed Move and selector00 dispatch");
+            rise_pc==0x217980&&word(rise+0x2f4)==0x00001200);
+        puts("PASS actual Devil selector00 after rise, live effect pause, first EM20 idle sample and approach selector12");
         puts("PASS 220 actual Devil Move, Effects Update, camera and Draw frames through 124F60");
         gh_game_devil_camera_detach(&camera,init);
         CHECK(init->camera.mode==1&&init->active_camera==&init->camera&&!init->camera.previous&&

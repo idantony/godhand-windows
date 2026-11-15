@@ -1,0 +1,59 @@
+#ifndef GH_GAME_ENEMY_2AD_H
+#define GH_GAME_ENEMY_2AD_H
+#include "game_enemy_factory.h"
+#include "game_effects.h"
+#include "game_enemy_model.h"
+#include "game_enemy_base_init.h"
+#include "game_actor_motion_solve.h"
+#include "game_actor_finish_model.h"
+#include "game_actor_motion_call.h"
+#include "game_effect_create.h"
+#include "game_player_shadow.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+#define GH_EM2AD_BYTES 0x1560u
+gh_title_player_status gh_enemy2ad_construct_0028e018(void *,size_t,gh_title_player_view *);
+gh_title_player_status gh_enemy2ad_allocate_00313970(gh_game_title_player *,gh_heap *room_heap,const gh_boot_work *,int *original_nonnull);
+/* Original 28E0E0 imports D7 through the resource-root relative pointer at
+ * +10 before inspecting the room save bit. Borrow the bounded original data. */
+gh_effect_status gh_enemy2ad_effect_data(const gh_object_view *,gh_effect_view *);
+gh_actor_model_status gh_enemy2ad_model_0028ea38(gh_enemy_model *,const gh_title_player_view *,
+    const gh_object_view *,gh_boot_work *,gh_room_pools *,gh_heap *,const void *,
+    gh_static_transform_policy,int *original_return);
+typedef struct {
+    gh_enemy_model model;
+    gh_enemy_base_initialize base;
+    const gh_title_player_view *actor;
+    const gh_game_effects *effects_owner;
+    const uint8_t *resource;
+    uint32_t stage,frontier;
+} gh_enemy2ad_init;
+/* Staged 28E0E0 through D7 registration, Room105 save gate and shared
+ * model/base initialization. Actual motion/effect tail retains its PC. */
+gh_actor_model_status gh_enemy2ad_init_prefix_0028e0e0(gh_enemy2ad_init *,
+    const gh_title_player_view *,const gh_enemy_request *,const gh_object_view *,
+    gh_boot_work *,gh_core_save_view,gh_game_effects *,gh_room_pools *,gh_heap *,
+    const void *,gh_game_cockpit *,gh_game_mt *,gh_static_transform_policy,int *);
+typedef struct {
+    const gh_enemy2ad_init *prefix;
+    gh_actor_motion motion;
+    gh_motion_solve solve;
+    gh_actor_finish_model_call finish;
+    gh_player_shadow shadow;
+    gh_effect_create_call effect;
+    uint32_t stage,frontier;
+} gh_enemy2ad_init_tail;
+typedef struct {
+    const float *rate;
+    gh_motion_solve_bindings solve;
+    gh_actor_motion_bindings motion;
+    gh_effect_create_bindings effect;
+} gh_enemy2ad_tail_bindings;
+gh_actor_model_status gh_enemy2ad_init_tail_0028e320(gh_enemy2ad_init_tail *,gh_enemy2ad_init *,
+    gh_title_player_view *,const gh_object_view *,const gh_enemy2ad_tail_bindings *,
+    gh_static_transform_policy,int *);
+#ifdef __cplusplus
+}
+#endif
+#endif

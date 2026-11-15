@@ -457,7 +457,7 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
  for(;s->esp_index<1024;s->esp_index++){unsigned index=s->esp_index,offset=(index>>5)*4;uint32_t mask=0x80000000u>>(index&31);if(!(word(base+0x100000+offset)&mask)||(word(base+0x100080+offset)&mask)||(word(base+0x100100+offset)&mask)){if(s->serial)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);continue;}gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,index,&v)||!v.initialized||v.payload!=base+(size_t)index*0x400||v.globals!=b->globals)return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);if(s->serial&&s->serial!=v.serial)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&
     !gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&
     !gh_effect_attack_esp_is_bound(b->storage.effects,&v)&&
-    !gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_rise_esp_is_bound(b->storage.effects,&v)&&!gh_effect_devil_esp_is_bound(b->storage.effects,&v))||
+    !gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_attachment_esp_is_bound(b->storage.effects,&v)&&!gh_effect_devil_esp_is_bound(b->storage.effects,&v))||
     word(v.payload+0x114))return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);
  if(!s->serial&&v.actor&&(word(v.actor->bytes+0x250)&0x8000u))continue;uint32_t flags=word((const uint8_t*)b->work+0x5e4),config=word(v.payload+0x104);if(!s->serial&&s->gate_10000&&!(config&2u)&&!((config&0x40u)?(flags&0x4000000u)!=0:v.actor!=NULL))continue;if(!s->serial)s->serial=v.serial;
  if(!s->call_stage&&!s->pending&&(word(v.payload+0x11c)&0x800000u)){s->serial=s->call_stage=0;continue;}if(v.type==0x14){

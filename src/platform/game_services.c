@@ -16,6 +16,7 @@
 #include "../core/scene_at_units.h"
 #include "../core/game_om_factory.h"
 #include "../core/game_om_frame.h"
+#include "../core/game_om382.h"
 #include "../core/game_player_factory.h"
 #include "../core/game_actor_scroll_links.h"
 #include "../core/game_ray_static.h"
@@ -103,6 +104,7 @@ struct gh_game_services {
  gh_soft_event_end r100_soft_end;
  gh_r003_event r003;gh_soft_event_end r003_soft_end;
  gh_r105_room r105;
+ gh_om376_paper r105_paper;
  gh_r100_init_tail r100_tail;gh_r100_init_tail_bindings r100_tail_bindings;
  gh_cockpit_tutorial tutorial;gh_object_resource_load tutorial_load;
  gh_om_runtime_create tutorial_create[4];gh_om_object *tutorial_objects[4];
@@ -200,6 +202,7 @@ static gh_game_services_status finalize_room_lifetime(gh_game_services*s){
   const gh_scene_status status=gh_r105_room_release(&s->r105);
   if(status)return fail(s,GH_SERVICES_BUSY,0x2a94f0,status);
  }
+ s->r105_paper=(gh_om376_paper){0};
  {gh_tutorial_status e=gh_cockpit_tutorial_release(&s->tutorial);if(e)return fail(s,GH_SERVICES_ASSET,s->tutorial.frontier?s->tutorial.frontier:0x147188,e);}
  if(s->b.id->pool_used!=s->cockpit_pool_end||s->b.id->job_count!=s->cockpit_jobs_end)return fail(s,GH_SERVICES_BUSY,0x2aa078,0);
  if(s->b.sound_scene->job||s->b.sound_scene->loading.pointer)return fail(s,GH_SERVICES_BUSY,0x2cabe8,0);
@@ -569,7 +572,9 @@ gh_game_services_status gh_game_services_enemy_set_all_00294ca0(gh_game_services
    .effect=enemy_motion_effect,.effect_context=s,.solids=&s->collision_solids,.default_heap=s->b.assets->heap,
    .node_names=&s->enemy_nodes,.shapes={&s->collision_pairs,s->b.math_globals,GH_STATIC_BINARY32_REFERENCE},
    .numeric_policy=GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,.weapon_scroll=&s->r100.collision},
-  .names_2a2=&s->enemy2a2_nodes};
+  .names_2a2=&s->enemy2a2_nodes,
+  .effects_2ad={.storage=player_effect_storage(s),.work=s->b.work,.random=&s->b.init->random,
+    .atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL}};
  return enemy_place_error(gh_enemy_ems_spawn_00294ca0(&s->enemies,&s->em_resources,&s->room_state,&s->enemy_bindings,f,detail));
 }
 static int player_motion_request_matches(gh_game_services*s,const gh_player_motion_request*r){
@@ -881,6 +886,26 @@ static gh_scene_status room_r105_status(gh_game_services *s,gh_scene_status stat
  return status;
 }
 
+static gh_scene_status room_r105_paper(void *context,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ const gh_scene_placement_status status=gh_om376_set_paper_0012c8d8(&s->r105_paper,
+  &s->om_factory,&s->player_model,s->b.save,&s->scene_tables,&s->r100.collision,frontier);
+ if(!status)return GH_SCENE_OK;
+ return status==GH_PLACE_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE;
+}
+
+static gh_r100_init_status room_r100_collision(void *,const char *,int,uint32_t *);
+
+static gh_scene_status room_r105_omsub(void *context,uint8_t *room_work,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(room_work!=s->r105.work.pointer){*frontier=0x5f8;return GH_SCENE_ARGUMENT;}
+ return gh_r105_gate_000005f8(&s->r105,&s->om_factory,room_r100_om_view,room_r100_collision,s,frontier);
+}
+
+static gh_scene_status room_r105_tutorial(void *context,uint32_t *frontier);
+
 static gh_scene_status room_r105_init(void *context,uint32_t *frontier)
 {
  gh_game_services *s=context;
@@ -888,7 +913,8 @@ static gh_scene_status room_r105_init(void *context,uint32_t *frontier)
   .module=&s->module,.heap=s->b.assets->heap,.work=s->b.work,.room=&s->room_state,
   .scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario},
   .threads=s->scenario_threads,.at=&s->scene_at,.init=s->b.init,
-  .player=&s->title_player.view,.save=s->b.save,.context=s};
+  .player=&s->title_player.view,.save=s->b.save,.paper_0012c8d8=room_r105_paper,
+  .omsub_000005f8=room_r105_omsub,.tutorial_000003b8=room_r105_tutorial,.context=s};
  const gh_scene_status result=gh_r105_initialize_000001a8(&s->r105,&bindings);
  *frontier=result?(s->r105.frontier?s->r105.frontier:0x1a8):0;
  return room_r105_status(s,result,frontier);
@@ -1055,15 +1081,19 @@ static gh_r100_init_status room_tutorial_load(void*p,uint16_t kind,int reference
  gh_object_status e=gh_game_objects_load_wait_001fe8a0(&s->tutorial_load,s->objects,kind,&s->object_resources,reference,&resource,frontier);
  return !e?GH_R100_INIT_OK:e==GH_OBJECT_UNSUPPORTED?GH_R100_INIT_UNSUPPORTED:GH_R100_INIT_CALLEE;
 }
-static gh_r100_init_status room_tutorial_create(void*p,uint16_t kind,uint16_t id,gh_r100_om_view*out,uint32_t*frontier){
- gh_game_services*s=p;*out=(gh_r100_om_view){0};
- if(s->r100_tail.stage<4||s->r100_tail.stage>=16||(s->r100_tail.stage-4)%3)return GH_R100_INIT_ARGUMENT;
- unsigned index=(s->r100_tail.stage-4)/3;
+static gh_r100_init_status room_tutorial_create_at(gh_game_services*s,unsigned index,
+ uint16_t kind,uint16_t id,gh_r100_om_view*out,uint32_t*frontier){
+ *out=(gh_r100_om_view){0};
  gh_scene_placement_status e=gh_om_factory_create_0030fa98(&s->om_factory,&s->tutorial_create[index],kind,id,&s->tutorial_objects[index]);
  if(frontier)*frontier=s->om_factory.frontier;
  if(e)return e==GH_PLACE_UNSUPPORTED?GH_R100_INIT_UNSUPPORTED:GH_R100_INIT_CALLEE;
  gh_om_object*o=s->tutorial_objects[index];if(o)*out=(gh_r100_om_view){o->view.bytes,o->view.size,o->view.bytes};
  return GH_R100_INIT_OK;
+}
+static gh_r100_init_status room_tutorial_create(void*p,uint16_t kind,uint16_t id,gh_r100_om_view*out,uint32_t*frontier){
+ gh_game_services*s=p;
+ if(s->r100_tail.stage<4||s->r100_tail.stage>=16||(s->r100_tail.stage-4)%3)return GH_R100_INIT_ARGUMENT;
+ return room_tutorial_create_at(s,(s->r100_tail.stage-4)/3,kind,id,out,frontier);
 }
 static gh_om_object *room_tutorial_object(gh_game_services*s,const gh_r100_om_view*v){
  if(!v||!v->bytes||v->identity!=v->bytes)return NULL;
@@ -1080,6 +1110,27 @@ static gh_r100_init_status room_tutorial_position(void*p,const gh_r100_om_view*v
  gh_game_services*s=p;gh_om_object*o=room_tutorial_object(s,v);if(!o)return GH_R100_INIT_ARGUMENT;
  gh_scene_placement_status e=gh_om3eb_set_position_001b7e50(o,position);if(e&&frontier)*frontier=0x1b7e50;
  return !e?GH_R100_INIT_OK:e==GH_PLACE_UNSUPPORTED?GH_R100_INIT_UNSUPPORTED:GH_R100_INIT_CALLEE;
+}
+/* R105 REL 03B8 issues one runtime tutorial with the original selector 4. */
+static gh_scene_status room_r105_tutorial(void *context,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ gh_r100_om_view object;
+ gh_r100_init_status status=room_tutorial_init(s,frontier);
+ if(status)goto done;
+ status=room_tutorial_load(s,0x3eb,1,frontier);
+ if(status)goto done;
+ status=room_tutorial_create_at(s,0,0x3eb,0xffff,&object,frontier);
+ if(status||!object.bytes)goto done;
+ status=room_tutorial_object_init(s,&object,frontier);
+ if(status)goto done;
+ static const uint32_t position_bits[4]={0xc1180000,0xbfa7ae15,0x426d6666,0x3f800000};
+ float position[4];
+ memcpy(position,position_bits,sizeof(position));
+ status=room_tutorial_position(s,&object,position,frontier);
+ if(!status)object.bytes[0x600]=4;
+done:
+ return !status?GH_SCENE_OK:status==GH_R100_INIT_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE;
 }
 static gh_scene_status room_r100_init(void*p,uint32_t*frontier){
  gh_game_services*s=p;

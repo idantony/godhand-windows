@@ -368,6 +368,22 @@ static int r100_devil_spawn_cue(const struct voice *v,const uint8_t *p)
     !w(p+0x18)&&!w(p+0x1c)&&w(p+0x20)==4&&!w(p+0x24)&&!w(p+0x28)&&!w(p+0x2c);
 }
 
+/* Actual PL00 recovery selector06 plays CORE 8C at the actor root. */
+static int player_recovery_footing_profile(const struct voice *voice,const uint8_t *row,
+ const uint8_t *sample)
+{
+ if(!player_fall_voice_model(voice)||voice->part_index!=-1||
+    voice->requested_bank||voice->requested_program!=0x8c||
+    voice->info.bank||voice->info.program!=0x8c||voice->info.position_mode!=2||
+    !voice->model->work||voice->model->work->room!=0x100||
+    h(voice->model->root.bytes+0x2f4)!=0x0601)return 0;
+ return w(row)==0x008c0000u&&h(row+4)==91&&w(row+6)==0x024b020eu&&
+    h(row+0xa)==0&&h(row+0xc)==0&&h(row+0xe)==0x20&&w(row+0x10)==0x00460046u&&
+    w(row+0x14)==0x005a0040u&&!w(row+0x18)&&w(row+0x1c)==0x00010000u&&w(row+0x20)==5&&
+    w(row+0x24)==1&&w(row+0x28)==0xffffu&&!w(row+0x2c)&&
+    w(sample)==0x80ad0u&&w(sample+4)==14000&&w(sample+8)==0x5fc080ffu&&!w(sample+12);
+}
+
 static int player_fall_grunt_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
@@ -480,6 +496,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
     w(descriptor.data+4)!=18000||w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))
   return unsupported(s,0x35fc);
  const int player_hurt=player_hurt_profile(candidate,bank,program,p,descriptor.data);
+ const int player_recovery=player_recovery_footing_profile(candidate,p,descriptor.data);
  const int door=r100_door_open_profile(candidate);
  if(door&&(w(descriptor.data)!=0x19750u||w(descriptor.data+4)!=14000||
     w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))return unsupported(s,0x35fc);
@@ -513,7 +530,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  if(attack_core&&!core_enemy_attack_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
  if(impact_voice||reaction_voice||ema2_voice||ema2_timer_voice||timed_voice||footstep||sequence_voice||attack_core||
-    local_cue_voice||turn_core||attack_voice||death_voice||knockdown_core||player_hurt||devil_spawn)candidate->combat_profile=1;
+    local_cue_voice||turn_core||attack_voice||death_voice||knockdown_core||player_hurt||player_recovery||devil_spawn)candidate->combat_profile=1;
  /* The admitted cue keeps its spatial mix when 2CE488 detaches the actor. */
  candidate->door_spatial=(uint8_t)door;
  rate=w(descriptor.data+4);if(rate<1000 || rate>48000)return unsupported(s,0x38e4);

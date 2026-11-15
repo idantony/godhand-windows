@@ -31,6 +31,8 @@ typedef struct {
     const gh_enemy_actor_bindings *bindings;
     gh_enemy_node_cache *nodes;
     gh_enemy_hitareas *hitareas;
+    gh_actor_motion *motion;
+    gh_enemy_timers *timers;
 } gh_enemy_move_actor;
 typedef gh_actor_motion_status (*gh_enemy_devil_selector)(void *,uint32_t *);
 

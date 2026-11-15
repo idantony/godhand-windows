@@ -5,6 +5,21 @@ history was compacted; private receipts and Git preserve old checkpoints.
 
 ## Current verified checkpoints
 
+- Exact256 `room-transition-256-r105-em203-spawn` passes the R105 room
+  initialization and starts original scene updates (State4, stage13, tick3327)
+  after 2,785 controlled R003 CPU frames. EM227 and EM20A use their original
+  first-motion tables. EM203 appearance1 uses variant2. The exact next call
+  `002CBF78` belongs to EMS02AD and asks for bank11 program18, part -1.
+  `se/emad.ses` sample0 has ADPCM start/end+repeat markers. Loop conversion
+  and the positional occlusion consumer are under integration. First native
+  R105 presentation is pending. Proof `analysis/room-transition-256-r105-cpu-private.json`.
+- Exact254 `room-transition-254-r100-stun-r105-pose` presents 2,490 R100
+  frames in Windows New Game, including the first original Gene recovery
+  frame at tick2631. The original PL00 selector06 clip and cue and stun
+  timeout dispatch run through the native scheduler. At this checkpoint,
+  the next original HUD action prompt operation is `0013BD40`, ID7. The
+  standard regression passes 370 checks across 381 C modules, with 18
+  opt-in skips. Proof `analysis/room-transition-254-r100-windows-private.json`.
 - Exact247 `room-transition-247-r100-em03-cue` recovers the original EM03
   program10 for stamp19. Windows New Game presents 2,489 R100 frames and
   stops at Gene's recovery dispatch `0011A820` (state 0601). No renderer,

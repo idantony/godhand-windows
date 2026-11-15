@@ -3,6 +3,7 @@
 
 #include "game_om_frame.h"
 #include "game_actor_motion_call.h"
+#include "game_collision_scroll.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,6 +24,19 @@ gh_scene_placement_status gh_om382_construct_001c9140(void *,size_t,gh_title_pla
 gh_scene_placement_status gh_om382_initialize_001c9268(gh_om382_state *,gh_om_object *,
     const gh_om_initializer_bindings *,int *);
 gh_scene_placement_status gh_om382_abort(gh_om382_state *);
+
+typedef struct {
+    gh_om_runtime_create create;
+    gh_actor_model *player;
+    uint8_t stage;
+} gh_om376_paper;
+
+/* Actual pl00::setPaper first-visit R105 path. The live registered OM owns
+ * its model, while PL00 borrows its handle and owns the attachment parent. */
+gh_scene_placement_status gh_om376_set_paper_0012c8d8(gh_om376_paper *,gh_om_factory *,
+    gh_actor_model *player,gh_core_save_view,gh_game_scene_tables *,
+    gh_collision_scroll_mutation *,uint32_t *frontier);
+
 gh_object_step_status gh_om382_move_prefix_001c9860(gh_om382_state *,const gh_om_frame_runtime *,
     const gh_object_opacity_environment *,uint8_t *phase,float *rate,
     gh_static_transform_policy,uint32_t *frontier);
