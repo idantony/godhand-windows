@@ -12,7 +12,8 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
   gh_effect_status e=b->actor_match(b->context,emitter,i,actor,&match,f);if(e)return e;
   if(!match)continue;
   const uint32_t profile=rd(p+(emitter?0x18c:0x23a));
-  const int attached=kind==4||(kind==3&&profile==0x00040000u)||(kind==0&&(profile==0x00590058u||
+  const int attached=kind==4||(kind==3&&(profile==0x00040000u||profile==0x00250000u))||
+      (kind==0&&(profile==0x00590058u||
       profile==0x005d0058u||(emitter&&profile==0x00420000u)));
   if(emitter){
    gh_effect_emitter_view view;
@@ -31,7 +32,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
    gh_effect_esp_view view;
    if(!gh_effect_create_esp_at(b->effects,i,&view)&&view.payload==p&&
       (gh_effect_devil_esp_is_bound(b->effects,&view)||
-       (kind==0&&rd(p+0x23a)==0x002b0058u&&gh_effect_em00_attack_esp_is_bound(b->effects,&view))||
+       (kind==0&&(profile==0x002b0058u||profile==0x001d0058u)&&gh_effect_em00_attack_esp_is_bound(b->effects,&view))||
        (attached&&gh_effect_player_attachment_esp_is_bound(b->effects,&view)))&&actor&&view.actor->bytes==actor->bytes){
     e=gh_effect_create_esp_pause_002fbe50(b->effects,i,view.serial,f);
     if(e)return e;

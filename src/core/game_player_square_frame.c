@@ -1,6 +1,8 @@
 /* Original ordinary combo state 10D3A8, resumed by exact callee boundary. */
 #include "game_player_square_frame.h"
 #include "game_player_attack_recent.h"
+#include "game_player_square_input.h"
+#include "game_player_idle_input.h"
 #include "game_player_root_delta.h"
 #include "id_layout_rotation.h"
 #include <string.h>
@@ -15,6 +17,7 @@ static void sh(void *p,uint16_t n){memcpy(p,&n,2);}
 static void scalar(void *p,float n){memcpy(p,&n,4);}
 static float add(float a,float b){volatile float n=a+b;return n;}
 static float mul(float a,float b){volatile float n=a*b;return n;}
+static float sub(float a,float b){volatile float n=a-b;return n;}
 static gh_player_frame_status stop(gh_player_square_frame *s,uint32_t pc,gh_player_frame_status e)
 {
  s->frontier=pc;
@@ -65,13 +68,40 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
   return stop(s,0x123938,GH_PLAYER_FRAME_UNSUPPORTED);
  if(sequence&0x10){
   put(p+0x15f4,flags|0x400u);
-  if((pressed&2)||p[0x622]||p[0x623])return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
+  if((pressed&2)||p[0x623])return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
   if(!b->target_bindings)return stop(s,0x129cc8,GH_PLAYER_FRAME_UNSUPPORTED);
   uint32_t pc=0;
+  if(p[0x622]){
+   /* 123BA8 bypasses the close action scan for an existing combo.
+    * 123CE4 refreshes the actual attack target even on the branch that
+    * rejects a repeat of Triangle until the SEQ allows the link. */
+   if(!half(p+0x5e0)||p[0x624]||!b->target_640)
+    return stop(s,0x123ba8,GH_PLAYER_FRAME_UNSUPPORTED);
+   const gh_player_target_status target=gh_player_attack_target_00124540(
+       b->target_bindings,f->init,b->target_640,&pc);
+   if(target)return target_error(s,pc?pc:0x124540,target);
+   if(b->target_640->handle){
+    float xyz[3];
+    const gh_player_frame_status status=target_position(s,b,xyz);
+    if(status)return status;
+    if(p[0x61f]){
+     const uint8_t *origin=f->player->view.alias_f0;
+     const float dx=sub(xyz[0],value(origin)),dy=sub(xyz[1],value(origin+4));
+     const float dz=sub(xyz[2],value(origin+8));
+     if(dy>1.2f&&add(mul(dx,dx),mul(dz,dz))<4.0f)
+      return stop(s,0x123d80,GH_PLAYER_FRAME_UNSUPPORTED);
+    }
+   }
+  }
   gh_player_target_status e=gh_player_small_object_gate_00129cc8(b->target_bindings,&pc);
   if(e)return target_error(s,pc?pc:0x129cc8,e);
   if(word(f->init->enemies+0x5ac)||word(f->init->enemies+0x5b0))
    return stop(s,0x12a108,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(p[0x622]){
+   const gh_player_frame_status status=gh_player_triangle_input_00123f44(
+       &f->player->view,f->save,1,&s->input_result,&pc);
+   return status?stop(s,pc?pc:0x123f44,status):GH_PLAYER_FRAME_OK;
+  }
   if(p[0x621]){
    if((flags&0x8000u)||(p[0x61f]&&value(p+0x608)>2.3561945f))
     return stop(s,0x12c000,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -111,9 +141,7 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
  if((sequence&0x10)&&(pressed&4))return stop(s,0x124244,GH_PLAYER_FRAME_UNSUPPORTED);
  if(sequence&0x40)put(p+0x15f4,word(p+0x15f4)|0x100u);
  if(sequence&0x20){
-   /* 1242E0..124388, neutral caller-mode1. */
-  if(p[0x61f]||p[0x621]||p[0x622]||p[0x623]||pressed)
-   return stop(s,0x1242c4,GH_PLAYER_FRAME_UNSUPPORTED);
+  /* 1242E0 opens original movement and interaction handling at a permitted link. */
   put(p+0x15f4,word(p+0x15f4)|0x400u);
   if(word(p+0x15f4)&0x20){
    if(!b->target_bindings)return stop(s,0x12a610,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -128,6 +156,23 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
    if(found.handle)return stop(s,0x2dc108,GH_PLAYER_FRAME_UNSUPPORTED);
    put(p+0x6a4,0);
    if(half(work+0x5b0)==0x608)return stop(s,0x2c2568,GH_PLAYER_FRAME_UNSUPPORTED);
+  }
+  if(p[0x61f]){
+   const float angle=value(p+0x608),magnitude=value(p+0x60c);
+   if(!isfinite(angle)||!isfinite(magnitude))
+    return stop(s,0x1243ac,GH_PLAYER_FRAME_NUMERIC);
+   const unsigned next=angle<1.2217305f?(magnitude<10000.0f?1u:2u):
+       angle>2.0943952f?3u:0u;
+   if(p[0x2f4]||p[0x2f5]!=next){
+    uint32_t pc=0;
+    const gh_player_frame_status status=gh_game_player_input_cleanup_0012bfb8(f,&pc);
+    if(status)return stop(s,pc?pc:0x12bfb8,status);
+    p[0x2f4]=p[0x2f6]=0;
+    p[0x2f5]=(uint8_t)next;
+    p[0x2f7]=(uint8_t)(next==2&&(word(p+0x15f4)&0x4000u));
+    s->input_result=1;
+    return GH_PLAYER_FRAME_OK;
+   }
   }
  }
  s->input_result=0;

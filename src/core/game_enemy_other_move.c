@@ -5,6 +5,7 @@
 #include "game_scene_at_geometry.h"
 #include "game_enemy_timers.h"
 #include "frame_state.h"
+#include "id_layout_rotation.h"
 #include <fenv.h>
 #include <math.h>
 #include <string.h>
@@ -171,6 +172,10 @@ gh_actor_motion_status gh_enemy_other_move_bind_2a2_services(gh_enemy_other_move
 }
 
 enum { HEAVY_TIMER_CONVERT=28, HEAVY_TIMER_SOUND, HEAVY_TIMER_DRAW };
+enum { HEAVY_LEAVE_BIND=46, HEAVY_LEAVE_STEP, HEAVY_LEAVE_HOME, HEAVY_LEAVE_ROOT };
+enum { HEAVY_HOME_ROUTE=51, HEAVY_HOME_SELECT, HEAVY_HOME_BIND, HEAVY_HOME_CUE,
+       HEAVY_HOME_TURN, HEAVY_HOME_STEP, HEAVY_HOME_DRAW, HEAVY_HOME_WORLD,
+       HEAVY_HOME_SPECIAL_WORLD, HEAVY_HOME_ARRIVAL };
 
 enum { HEAVY_REACTION_SOLID=32, HEAVY_REACTION_SELECT, HEAVY_REACTION_BEGIN,
        HEAVY_REACTION_SOUND, HEAVY_REACTION_STEP, HEAVY_REACTION_WORLD };
@@ -390,6 +395,168 @@ static gh_actor_motion_status heavy_reaction_002887d0(gh_enemy_other_move *s,
     return GH_ACTOR_MOTION_OK;
 }
 
+gh_actor_motion_status gh_enemy_other_move_bind_navigation(gh_enemy_other_move *s,
+    const gh_scene_nearcheck *navigation)
+{
+    if(!s||!navigation)return GH_ACTOR_MOTION_ARGUMENT;
+    if(s->navigation&&s->navigation!=navigation)return GH_ACTOR_MOTION_BUSY;
+    s->navigation=navigation;
+    return GH_ACTOR_MOTION_OK;
+}
+
+static gh_actor_motion_status heavy_home_route(gh_enemy_other_move *s,
+    gh_enemy2a2_virtual_init *actor,const float origin[3])
+{
+    uint8_t *p=actor->prefix.root->bytes;
+    float target[3];
+    memcpy(target,p+0x1590,sizeof(target));
+    const gh_actor_motion_status status=gh_enemy_route_clear_002a74e0(&s->route,p,origin,
+        target,s->navigation,actor->pose.bindings.actors,actor->pose.bindings.init,
+        actor->prefix.bindings.work->room);
+    if(status)return stop(s,s->route.frontier,status);
+    gh_enemy_route_waypoint_002a7ca0(p,p+0x1570);
+    return GH_ACTOR_MOTION_OK;
+}
+
+/* 286D10 periodically refreshes a real shared PFD route while the heavy
+ * enemy follows the selected home clip. Keep the per-call RNG and cue at
+ * their original points so resuming a lower routine cannot duplicate them. */
+static gh_actor_motion_status heavy_walk_home_00286d10(gh_enemy_other_move *s,
+    gh_enemy2a2_virtual_init *actor)
+{
+    gh_enemy2a2_init *prefix=&actor->prefix;
+    gh_title_player_view *root=prefix->root;
+    uint8_t *p=root->bytes;
+    const gh_boot_work *work=prefix->bindings.work;
+    uint32_t pc=0;
+    if(s->stage==5){
+        float origin[3];
+        fenv_t env;
+        if(!point(root,origin)||!begin(&env))return stop(s,0x1f7eb0,GH_ACTOR_MOTION_CALLEE);
+        const float x=sub(scalar(p+0x1590),origin[0]),z=sub(scalar(p+0x1598),origin[2]);
+        s->home_distance=add(mul(x,x),mul(z,z));
+        if(fesetenv(&env)||!isfinite(s->home_distance))
+            return stop(s,0x1f7eb0,GH_ACTOR_MOTION_UNSUPPORTED);
+        put(p+0x15b0,word(p+0x15b0)&~1u);
+        s->stage=((word((const uint8_t *)work+0x210)^p[0x2fc])&7u)?
+            HEAVY_HOME_SELECT:HEAVY_HOME_ROUTE;
+    }
+    if(s->stage==HEAVY_HOME_ROUTE){
+        float origin[3];
+        if(!point(root,origin))return stop(s,0x1f7eb0,GH_ACTOR_MOTION_BOUNDS);
+        gh_actor_motion_status status=heavy_home_route(s,actor,origin);
+        if(status)return status;
+        s->stage=HEAVY_HOME_SELECT;
+    }
+    if(s->stage==HEAVY_HOME_SELECT){
+        if(p[0x2f6]>3){s->stage=12;return GH_ACTOR_MOTION_OK;}
+        if(p[0x2f6]==1||p[0x2f6]==3)s->stage=HEAVY_HOME_TURN;
+        else{
+            const uint32_t dependency=word(p+0x564);
+            const int special=dependency==0x2a7||dependency==0x2ab;
+            const int wounded=(int16_t)half(p+0x54a)<(int16_t)half(p+0x548);
+            size_t row=0x178;
+            if(p[0x2f6]==0){
+                if(wounded)row=special?0x40:0xb8;
+                else if(special)row=0x38;
+                else{
+                    uint32_t choice;
+                    if(!prefix->bindings.random||
+                        gh_game_mt_next_0030f348(prefix->bindings.random,&choice))
+                        return stop(s,0x31cfe0,GH_ACTOR_MOTION_ARGUMENT);
+                    row=(choice&1u)?0x38:0x40;
+                }
+            }
+            s->reaction_resource_offset=(uint16_t)row;
+            s->stage=HEAVY_HOME_BIND;
+        }
+    }
+    if(s->stage==HEAVY_HOME_BIND){
+        if(!s->motion.active){
+            const size_t row=s->reaction_resource_offset;
+            if(!prefix->resource.bytes||prefix->resource.file_extent<row+8)
+                return stop(s,0x286d10,GH_ACTOR_MOTION_BOUNDS);
+            gh_actor_motion_bindings b=prefix->motion.b;
+            b.effect=s->effect;b.context=s->effect_context;
+            b.sound=s->sound;b.sound_context=s->sound_context;
+            const uint8_t *clip=prefix->resource.bytes+row;
+            gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(
+                &s->motion,&prefix->motion,&b,word(clip),word(clip+4),0,10,0,1);
+            if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
+        }
+        gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(&s->motion);
+        if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
+        s->sound_request=(gh_motion_sound_request){.model=&prefix->model.model,
+            .actor=root,.bank=1,.program=p[0x2f6]?0x5c:0x5a};
+        s->stage=HEAVY_HOME_CUE;
+    }
+    if(s->stage==HEAVY_HOME_CUE){
+        if(!s->sound)return stop(s,0x2cba48,GH_ACTOR_MOTION_UNSUPPORTED);
+        uint32_t handle;
+        gh_actor_motion_status status=s->sound(s->sound_context,&s->sound_request,&handle,&pc);
+        if(status)return stop(s,pc?pc:0x2cba48,status);
+        ++p[0x2f6];
+        s->stage=HEAVY_HOME_TURN;
+    }
+    if(s->stage==HEAVY_HOME_TURN){
+        const float work_rate=scalar((const uint8_t *)work+0x55c);
+        const float yaw=scalar(p+0x104);
+        const gh_player_target_bindings *bindings=s->target_bindings;
+        float origin[3],target[3],turn;
+        fenv_t env;
+        if(!bindings||!point(root,origin)||!isfinite(work_rate)||!begin(&env))
+            return stop(s,0x2a7498,GH_ACTOR_MOTION_UNSUPPORTED);
+        memcpy(target,p+0x1570,sizeof(target));
+        const float cap=mul(0.09817477f,work_rate);
+        const gh_player_target_status status=gh_player_target_angle_002da038(bindings->elf,
+            bindings->elf_bytes,origin,target,yaw,cap,&turn,&pc);
+        float next=status?0:add(yaw,turn);
+        if(fesetenv(&env)||status)return stop(s,pc?pc:0x2da038,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(gh_id_angle_reference_001f7d48(next,&next))
+            return stop(s,0x1f7d48,GH_ACTOR_MOTION_UNSUPPORTED);
+        put_float(p+0x104,next);
+        s->stage=HEAVY_HOME_STEP;
+    }
+    if(s->stage==HEAVY_HOME_STEP){
+        if(!actor->pose.bindings.rate)return stop(s,0x157c18,GH_ACTOR_MOTION_UNSUPPORTED);
+        int ended;
+        gh_actor_motion_status status=gh_actor_motion_step_00157c18(&prefix->motion,
+            *actor->pose.bindings.rate,prefix->bindings.policy,&ended,&pc);
+        if(status)return stop(s,pc?pc:0x157c18,status);
+        s->stage=p[0x2f6]==3?HEAVY_HOME_SPECIAL_WORLD:HEAVY_HOME_WORLD;
+        if(ended&&p[0x2f6]==3)p[0x2f6]=0;
+        else if(ended&&!(word(p+0x15b0)&0x200u)&&s->home_distance>100.0f){
+            const uint32_t dependency=word(p+0x564);
+            if(dependency!=0x2a7&&dependency!=0x2ab)s->stage=HEAVY_HOME_DRAW;
+        }
+    }
+    if(s->stage==HEAVY_HOME_DRAW){
+        uint32_t choice;
+        if(!prefix->bindings.random||gh_game_mt_next_0030f348(prefix->bindings.random,&choice))
+            return stop(s,0x31cfe0,GH_ACTOR_MOTION_ARGUMENT);
+        if(!(choice&7u)){
+            p[0x2f6]=2;
+            put(p+0x15b0,word(p+0x15b0)|0x200u);
+        }
+        s->stage=HEAVY_HOME_WORLD;
+    }
+    if(s->stage==HEAVY_HOME_WORLD||s->stage==HEAVY_HOME_SPECIAL_WORLD){
+        gh_actor_motion_status status=heavy_root_motion_002da9b8(s,prefix);
+        if(status)return status;
+        if(s->stage==HEAVY_HOME_WORLD&&s->home_distance<1.0f)s->stage=HEAVY_HOME_ARRIVAL;
+        else s->stage=12;
+    }
+    if(s->stage==HEAVY_HOME_ARRIVAL){
+        fenv_t env;
+        if(!begin(&env))return stop(s,0x286fa4,GH_ACTOR_MOTION_CALLEE);
+        const float height=fabsf(sub(scalar(p+0x1594),scalar(root->alias_f0+4)));
+        if(fesetenv(&env)||!isfinite(height))return stop(s,0x286fa4,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(height<1.0f)memset(p+0x2f4,0,4);
+        s->stage=12;
+    }
+    return GH_ACTOR_MOTION_OK;
+}
+
 static gh_actor_motion_status heavy_move_substate_002866f8(gh_enemy_other_move *s,
     gh_enemy2a2_virtual_init *actor)
 {
@@ -401,7 +568,7 @@ static gh_actor_motion_status heavy_move_substate_002866f8(gh_enemy_other_move *
     if(s->stage==5){
         if(p[0x2f4]!=0)return stop(s,0x2856c0,GH_ACTOR_MOTION_UNSUPPORTED);
         if(p[0x2f5]>12)p[0x2f5]=0;
-        if(p[0x2f5]!=2||p[0x2f6]>1)return stop(s,p[0x2f5]==2?0x2866f8:0x285eb8,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(p[0x2f5]!=2||p[0x2f6]>3)return stop(s,p[0x2f5]==2?0x2866f8:0x285eb8,GH_ACTOR_MOTION_UNSUPPORTED);
         if(!s->opacity)return stop(s,0x2866f8,GH_ACTOR_MOTION_UNSUPPORTED);
         int found;
         gh_actor_motion_status status=mode1_lookup_00291010(s,actor,&found);
@@ -413,25 +580,38 @@ static gh_actor_motion_status heavy_move_substate_002866f8(gh_enemy_other_move *
         if(gh_collision_solid_set_enabled_001351d8(actor->pose.bindings.solids,root,0,&pc))
             return stop(s,pc?pc:0x1351d8,GH_ACTOR_MOTION_UNSUPPORTED);
         if(!p[0x2f6])put(p+0x15b0,word(p+0x15b0)&~1u);
-        s->stage=p[0x2f6]?8:7;
+        switch(p[0x2f6]){
+        case 0:s->stage=7;break;
+        case 1:s->stage=8;break;
+        case 2:s->stage=HEAVY_LEAVE_BIND;break;
+        default:s->stage=HEAVY_LEAVE_STEP;break;
+        }
     }
-    if(s->stage==7){
+    if(s->stage==7||s->stage==HEAVY_LEAVE_BIND){
+        const int leaving=s->stage==HEAVY_LEAVE_BIND;
         if(!s->motion.active){
             gh_actor_motion_bindings b=prefix->motion.b;
             b.effect=s->effect;b.context=s->effect_context;
             b.sound=s->sound;b.sound_context=s->sound_context;
-            if(!prefix->resource.bytes||prefix->resource.file_extent<0x30)
-                return stop(s,0x286858,GH_ACTOR_MOTION_BOUNDS);
+            const size_t row=leaving?0x30:0x28;
+            if(!prefix->resource.bytes||prefix->resource.file_extent<row+8)
+                return stop(s,leaving?0x28697c:0x2867ac,GH_ACTOR_MOTION_BOUNDS);
             gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(
-                &s->motion,&prefix->motion,&b,word(prefix->resource.bytes+0x28),
-                word(prefix->resource.bytes+0x2c),0,10,0,1);
+                &s->motion,&prefix->motion,&b,word(prefix->resource.bytes+row),
+                word(prefix->resource.bytes+row+4),0,10,0,1);
             if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
         }
         gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(&s->motion);
         if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
-        memmove(p+0x5c0,root->alias_f0,12);
+        if(leaving){
+            put(p+0x15b0,word(p+0x15b0)&~1u);
+            p[0x1560]=0;
+            s->stage=HEAVY_LEAVE_STEP;
+        }else{
+            memmove(p+0x5c0,root->alias_f0,12);
+            s->stage=8;
+        }
         ++p[0x2f6];
-        s->stage=8;
     }
     if(s->stage==8){
         fenv_t env;
@@ -478,6 +658,41 @@ static gh_actor_motion_status heavy_move_substate_002866f8(gh_enemy_other_move *
             if(scalar(p+0x15bc)<=0)s->stage=HEAVY_TIMER_DRAW;
         }
         if(s->stage==11)s->stage=12;
+    }
+    if(s->stage==HEAVY_LEAVE_STEP){
+        int ended;
+        if(!actor->pose.bindings.rate)return stop(s,0x157c18,GH_ACTOR_MOTION_UNSUPPORTED);
+        gh_actor_motion_status status=gh_actor_motion_step_00157c18(&prefix->motion,
+            *actor->pose.bindings.rate,policy,&ended,&pc);
+        if(status)return stop(s,pc?pc:0x157c18,status);
+        s->stage=ended?HEAVY_LEAVE_HOME:HEAVY_LEAVE_ROOT;
+    }
+    if(s->stage==HEAVY_LEAVE_HOME){
+        float origin[4];
+        if(!point(root,origin))return stop(s,0x1f7eb0,GH_ACTOR_MOTION_BOUNDS);
+        fenv_t env;
+        if(!begin(&env))return stop(s,0x1f7eb0,GH_ACTOR_MOTION_CALLEE);
+        const float x=sub(scalar(p+0x1590),origin[0]);
+        const float y=sub(scalar(p+0x1594),origin[1]);
+        const float z=sub(scalar(p+0x1598),origin[2]);
+        const float range=add(mul(x,x),mul(z,z));
+        if(fesetenv(&env)||!isfinite(range)||!isfinite(y))
+            return stop(s,0x1f7eb0,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(range>=1.0f||fabsf(y)>=1.0f){
+            gh_actor_motion_status status=heavy_home_route(s,actor,origin);
+            if(status)return status;
+            memset(p+0x2f4,0,4);
+            p[0x2f5]=4;
+            s->stage=HEAVY_LEAVE_ROOT;
+        }else{
+            memset(p+0x2f4,0,4);
+            s->stage=12;
+        }
+    }
+    if(s->stage==HEAVY_LEAVE_ROOT){
+        gh_actor_motion_status status=heavy_root_motion_002da9b8(s,prefix);
+        if(status)return status;
+        s->stage=12;
     }
     /* Original 286928 reloads the timer before the optional 28696C voice. */
     if(s->stage==HEAVY_TIMER_DRAW){
@@ -676,7 +891,12 @@ gh_actor_motion_status gh_enemy2a2_move_002856c0(gh_enemy_other_move *s,
              (s->stage>=HEAVY_POISON_SOLID&&s->stage<=HEAVY_POISON_RELOAD)){
         gh_actor_motion_status status=heavy_poison_00287090(s,actor);
         if(status)return status;
-    }else if(s->stage<12||(s->stage>=HEAVY_TIMER_CONVERT&&s->stage<=HEAVY_TIMER_DRAW)){
+    }else if((s->stage==5&&!p[0x2f4]&&p[0x2f5]==4)||
+             (s->stage>=HEAVY_HOME_ROUTE&&s->stage<=HEAVY_HOME_ARRIVAL)){
+        gh_actor_motion_status status=heavy_walk_home_00286d10(s,actor);
+        if(status)return status;
+    }else if(s->stage<12||(s->stage>=HEAVY_TIMER_CONVERT&&s->stage<=HEAVY_TIMER_DRAW)||
+             (s->stage>=HEAVY_LEAVE_BIND&&s->stage<=HEAVY_LEAVE_ROOT)){
         gh_actor_motion_status status=heavy_move_substate_002866f8(s,actor);
         if(status)return status;
     }

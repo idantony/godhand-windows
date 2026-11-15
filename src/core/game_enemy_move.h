@@ -12,6 +12,7 @@
 #include "game_enemy_route_graph.h"
 #include "game_room_state.h"
 #include "game_om_factory.h"
+#include "game_om_frame.h"
 #include "game_cloth_finish.h"
 
 #ifdef __cplusplus
@@ -20,16 +21,10 @@ extern "C" {
 
 typedef gh_actor_motion_status (*gh_enemy202_player_grab)(void *,const gh_enemy_actor *,unsigned,uint32_t *);
 
-typedef struct {
-    const gh_scene_nearcheck *owner;
-    float point[4],distance[8];
-    uint32_t vertices[8];
-    uint8_t initialized,visibility,index,complete;
-} gh_enemy_route_query;
-
 typedef gh_actor_motion_status (*gh_enemy202_devil_spawn)(void *,const gh_enemy_actor *,
     const gh_enemy_request *,uint32_t *);
 typedef gh_actor_motion_status (*gh_enemy202_death_release)(void *,const gh_enemy_actor *,uint32_t *);
+typedef gh_actor_motion_status (*gh_enemy202_item_drop)(void *,gh_om_box_item_drop *,const gh_enemy_actor *,uint16_t,uint32_t *);
 
 typedef struct {
     gh_enemy_entry *entry;
@@ -57,14 +52,13 @@ typedef struct {
     uint32_t frontier, dispatch_pc, pending_ai_pc;
     float path_target[3];
     const gh_scene_nearcheck *navigation;
-    gh_enemy_route_query target_query, origin_query;
-    gh_enemy_route_edge_query origin_edge_query;
+    gh_enemy_route_call route;
     gh_enemy202_hit_call damage;
     gh_motion_sound_request hit_sound;
     gh_effect_create_call impact_create;
     gh_effect_create_bindings impact_bindings;
-    uint32_t target_vertex, origin_vertex, pickup_weapon_handle;
-    uint8_t visibility_done, path_target_ready, visibility_hit, route_stage;
+    uint32_t pickup_weapon_handle;
+    uint8_t visibility_done, path_target_ready, visibility_hit;
     uint8_t original_returned, substate67_stage, post_body_index, post_node_index, substate67_phase;
     gh_actor_motion_call substate67_motion;
     const gh_object_opacity_environment *opacity;
@@ -97,6 +91,9 @@ typedef struct {
     void *death_release_context;
     uint16_t death_item;
     uint8_t death_fade_phase;
+    gh_om_box_item_drop death_drop;
+    gh_enemy202_item_drop death_item_spawn;
+    void *death_item_context;
     gh_effect_create_call death_effect_create, ambient_light_effect, stun_effect_create;
     gh_scene_at_manager *scene_jump_at;
     gh_bundle scene_jump_room;

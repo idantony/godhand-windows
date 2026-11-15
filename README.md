@@ -98,14 +98,14 @@ and enemy audio. R101's later combat presentation remains in development.
 
 The new-game east route now breaks the original door, continues into the
 armed encounter, and reaches the original Game Over menu after a lethal
-hit. Confirming Retry restores Gene to 100 HP in R100. A separate west
-route reaches the original reinforcement area with its Devil encounter
-active. A controller replay from a zero-defeat R102 checkpoint records the
-first of six qualifying defeats and plays the following enemy grab and
-escape. A direct R103 replay drops the first attacker with its second
-escape counter and wakes the original second wave. Direct3D presents the
-escape counter and the movement that follows it during the original door
-route from an R102 gate-ready checkpoint.
+hit. Confirming Retry restores Gene to 100 HP in R100. A separate west-route
+replay reaches the original reinforcement area and lands two Triangle hits
+during its Devil encounter. A controller replay from a zero-defeat R102
+checkpoint records two of the six qualifying defeats with Gene at 33 HP.
+A native CPU replay from an isolated R103 test save defeats four enemies
+across the first two arena waves and triggers the original third wave.
+Direct3D presents the escape counter and the movement that follows it in a
+separate R102 gate-ready replay through the original door into R103.
 
 ### Verified progress
 
@@ -136,7 +136,7 @@ route from an R102 gate-ready checkpoint.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters. Subsequent opening frames create original
   event effects, update their lifetimes and render sprites and framebuffer warp.
-- The frozen regression build compiles 383 C modules and passes 390 native checks.
+- The current regression build passes 390 native checks.
   This run includes muted hardware audio and movie decoding. Earlier runs also
   exercised the two optional independent ADX sample comparisons.
   Restricted GPU pixels match separate CPU equations. The recovered OT traversal
@@ -321,10 +321,10 @@ R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101
 验证了箱子与掉落物释放、原版 DIE 标记和敌人音效。R101 后续战斗的画面仍待验收。
 
 从新游戏开始的东侧回放打破原版木门，在后续持械战斗中被击倒，并在原版 Game Over 界面
-确认重试，以 100 HP 回到 R100。独立的西侧路线触发原版恶魔遭遇并抵达增援区域。R102
-从零击败存档开始，用手柄打出六个所需击败中的第一个，并运行后续敌人的抓取与挣脱。
-直接进入 R103 的回放用第二次挣脱反击击倒第一波敌人，触发原版第二波。从预置开门条件的
-R102 检查点出发，Direct3D 连续呈现进入 R103 后的挣脱反击和恢复摇杆移动。
+确认重试，以 100 HP 回到 R100。西侧回放进入原版增援区域，在恶魔遭遇期间打出两次三角攻击。
+R102 从零击败存档开始，用手柄打出开门所需的六次击败中的两次，Gene 还剩 33 HP。
+从独立的 R103 测试存档开始，原生 CPU 回放击倒前两波共四名敌人，并触发原版第三波。
+另一条从预置开门条件的 R102 检查点出发的 Direct3D 回放经过原版门，进入 R103 后呈现挣脱反击和摇杆移动。
 
 ### 已验证的进展
 
@@ -345,7 +345,7 @@ R102 检查点出发，Direct3D 连续呈现进入 R103 后的挣脱反击和恢
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始 FX 调用 0x30F228 创建 4 个环境发射器。
   后续片头帧创建原剧情特效，更新其生命周期，并绘制精灵和画面扭曲。
-- 冻结回归构建编译 383 个 C 模块，通过 390 项原生检查，包括静音设备音频和影片解码。
+- 当前回归构建通过 390 项原生检查，包括静音设备音频和影片解码。
   先前回归也完成了两项可选的独立 ADX 样本对比。受限 GPU 像素与独立 CPU 方程一致。
   绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。

@@ -77,6 +77,12 @@ static gh_actor_motion_status capture_blend(gh_actor_motion*s)
  m->blend_globals=s->b.ik_globals;
  return GH_ACTOR_MOTION_OK;
 }
+/* The original R100 EM20 motion uses selector bit 2 for mirroring. */
+int gh_actor_motion_mirror_supported(const gh_actor_model *model){
+ if(!model||!model->root.bytes||model->root.size<0x642||!model->work||model->work->room!=0x100)return 0;
+ const uint8_t *p=model->root.bytes;
+ return half(p+0x2fe)==0x220&&rd(p+0x564)==0x220&&half(p+0x640)==0xff;
+}
 int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_bits,
  uint32_t blend_frames,uint16_t flags){
  if(!b||!b->model||!b->model->root.bytes||b->model->root.size<0x5ac)return 0;
@@ -97,7 +103,7 @@ int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_
  }
  if(kind==0x220&&dependency==0x220&&b->work&&b->work->room==0x100&&
     b->model->root.size>=0x642&&half(p+0x640)==0xff&&!p[0x2f4]&&
-    p[0x2f5]==0x12&&!p[0x2f6]&&blend_frames==2&&!flags)
+    p[0x2f5]==0x12&&!p[0x2f6]&&blend_frames==2&&!(flags&~2u))
   return start_bits==0x40000000u; /* 21821C starts the original retreat at frame 2. */
  if(kind!=0x202)return 0;
  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a)return 0;
@@ -136,6 +142,7 @@ static gh_actor_motion_status seed_seek_root(gh_actor_motion *s,uint8_t *p){
   }
   root[track.channel]=value;
  }
+ if(s->flags&2u)root[0]=-root[0];
  memcpy(p+0x310,root,12);
  if(s->flags&0x40u)memcpy(p+0x320,root,12);
  memcpy(p+0x340,root+3,12);
@@ -151,7 +158,8 @@ static gh_actor_motion_status begin_motion(gh_actor_motion*s,const gh_actor_moti
  if(b->model->root.size<required)return GH_ACTOR_MOTION_ARGUMENT;
  uint8_t*p=b->model->root.bytes;
  const int seek=gh_actor_motion_seek_start(b,start_frame_bits,blend_frames,flags);
- if((flags&~0x40u)||(start_frame_bits&&!seek)||(flags&&!blend_frames))return fail(s,0x157568,flags?flags:start_frame_bits);
+ const unsigned allowed=gh_actor_motion_mirror_supported(b->model)?0x42u:0x40u;
+ if((flags&~allowed)||(start_frame_bits&&!seek)||(flags&&!blend_frames))return fail(s,0x157568,flags?flags:start_frame_bits);
  if(blend_frames&&b->model->native_identity!=b->model)return GH_ACTOR_MOTION_ARGUMENT;
  if(blend_frames&&(!b->ik_globals||!b->ik_globals->initialized||(b->model->blend_globals&&b->model->blend_globals!=b->ik_globals)))return fail(s,0x156d70,0);
  if(s->bound&&(s->b.model!=b->model||s->b.resource!=b->resource||s->b.work!=b->work||s->motion.offset!=motion||s->sequence_offset!=sequence||s->flags!=flags||s->start_frame_bits!=start_frame_bits||s->blend_frames!=blend_frames))return GH_ACTOR_MOTION_BUSY;

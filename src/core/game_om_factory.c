@@ -89,7 +89,7 @@ static gh_scene_placement_status initialize_class(gh_om_object*o,const gh_om_ini
  switch(o->source.type){case 0x351:return gh_om351_initialize_001a6098(o->initialization,o,b,out);case 0x300:case 0x313:case 0x330:case 0x333:return gh_om_door_initialize_001b7118(o->initialization,o,b,out);case 0x303:return gh_om303_initialize_00187a78((gh_om303_state*)o->initialization,o,b,out);case 0x304:return gh_om304_initialize_00187d88((gh_om304_state*)o->initialization,o,b,out);case 0x305:return gh_om305_initialize_00188b50((gh_om305_state*)o->initialization,o,b,out);case 0x307:return gh_om307_initialize_001890b0((gh_om307_state*)o->initialization,o,b,out);case 0x30b:return gh_om30b_initialize_0018cf88((gh_om309_state*)o->initialization,o,b,out);case 0x30c:return gh_om30c_initialize_0018dd40((gh_om309_state*)o->initialization,o,b,out);case 0x331:return gh_om331_initialize_0019c670((gh_om309_state*)o->initialization,o,b,out);case 0x30a:return gh_om30a_initialize_0018c180((gh_om30a_state*)o->initialization,o,b,out);case 0x30e:return gh_om30e_initialize_0018ed30((gh_om30e_state*)o->initialization,o,b,out);case 0x310:return gh_om310_initialize_0018f218((gh_om310_state*)o->initialization,o,b,out);case 0x311:return gh_om311_initialize_001902f8((gh_om311_state*)o->initialization,o,b,out);case 0x317:case 0x318:case 0x31a:return gh_om31a_initialize_001932d8((gh_om303_state*)o->initialization,o,b,out);case 0x320:return gh_om320_initialize_00195d08((gh_om320_state*)o->initialization,o,b,out);case 0x322:return gh_om322_initialize_00196188((gh_om322_state*)o->initialization,o,b,out);case 0x323:return gh_om323_initialize_001977b0((gh_om323_state*)o->initialization,o,b,out);case 0x324:return gh_om324_initialize_00198d40((gh_om324_state*)o->initialization,o,b,out);case 0x326:return gh_om326_initialize_00199e58((gh_om30e_state*)o->initialization,o,b,out);case 0x338:return gh_om338_initialize_0019dfb8((gh_om303_state*)o->initialization,o,b,out);case 0x339:return gh_om339_initialize_0019e2a8((gh_om303_state*)o->initialization,o,b,out);case 0x33f:return gh_om33f_initialize_0019f190((gh_om33f_state*)o->initialization,o,b,out);case 0x346:return gh_om346_initialize_001a0e98((gh_om346_state*)o->initialization,o,b,out);case 0x354:return gh_om354_initialize_001a8200(o->initialization,o,b,out);case 0x355:return gh_om355_initialize_001a83e0(o->initialization,o,b,out);
  case 0x356:return gh_om_common_initialize_001b6fb8(o->initialization,o,b,out); /* 1A8758 */case 0x35d:return gh_om35d_initialize_001ae928((gh_om35d_state*)o->initialization,o,b,out);case 0x382:return gh_om382_initialize_001c9268((gh_om382_state*)o->initialization,o,b,out);case 0x308:return gh_om308_initialize_0018a680((gh_om309_state*)o->initialization,o,b,out);case 0x309:return gh_om309_initialize_0018b378((gh_om309_state*)o->initialization,o,b,out);case 0x3d3:case 0x3d4:case 0x3d5:return gh_om_r101_item_initialize_001c0128(o->initialization,o,b,out);case 0x357:case 0x41c:return gh_om041c_initialize_0017b940((gh_om041c_state*)o->initialization,o,b,out);default:return GH_PLACE_UNSUPPORTED;}}
 static gh_scene_placement_status abort_class(gh_om_object*o){if(o->runtime_created){
- if(o->runtime_kind==0x3eb||o->runtime_kind==0x353||o->runtime_kind==0x3d6||o->runtime_kind==0x3da)return gh_om_initialize_abort(o->initialization);
+ if(o->runtime_kind==0x3eb||o->runtime_kind==0x353||o->runtime_kind==0x3d6||o->runtime_kind==0x3da||o->runtime_kind==0x3c4)return gh_om_initialize_abort(o->initialization);
  if(o->runtime_kind==0x3be)return gh_om3be_abort((gh_om3be_state *)o->initialization);
  if(o->runtime_kind==0x376||o->runtime_kind==0x363){
   if(o->initialization->model.external_owner&&gh_actor_model_clear_external_parent(&o->initialization->model,o))return GH_PLACE_BUSY;
@@ -183,7 +183,8 @@ gh_scene_placement_status gh_om_factory_create_0030fa98(gh_om_factory*f,gh_om_ru
  const int mount=kind==0x353&&room==0x102;
  const int ticket=kind==0x3da&&room==0x102;
  const int projectile=kind==0x3be&&room==0x100;
- const int item=kind==0x3d6&&(room==0x101||room==0x103);
+ const int item=(kind==0x3d6&&(room==0x101||room==0x103))||
+                (kind==0x3c4&&(room==0x102||room==0x103));
  if(id!=0xffff||(kind!=0x3eb&&!paper&&!room_weapon&&!mount&&!projectile&&!item&&!ticket))
   return fail(f,0x30fe68,kind,GH_PLACE_UNSUPPORTED);
  const int weapon=paper||room_weapon;
@@ -328,11 +329,14 @@ gh_scene_placement_status gh_om_factory_initialize_runtime_3be(gh_om_factory *f,
 
 
 
-gh_scene_placement_status gh_om_factory_initialize_runtime_3d6(gh_om_factory *f,gh_om_object *o,int *out)
+gh_scene_placement_status gh_om_factory_initialize_runtime_item_001c0128(gh_om_factory *f,gh_om_object *o,int *out)
 {
- if(!f||!f->bound||!o||!out||!o->runtime_created||o->runtime_kind!=0x3d6||!o->registered||
+ if(!f||!f->bound||!o||!out||!o->runtime_created||!o->registered||
     o->runtime_resource_id!=0xffff||!f->bindings.initializer||
     f->bindings.initializer->work!=f->bindings.work)return GH_PLACE_ARGUMENT;
+ const int16_t room=f->bindings.work->room;
+ const uint16_t kind=o->runtime_kind;
+ if(!(((room==0x101||room==0x103)&&kind==0x3d6)||((room==0x102||room==0x103)&&kind==0x3c4)))return GH_PLACE_ARGUMENT;
  void *same=NULL;
  if(gh_room_object_lookup(f->bindings.pools,o->handle,GH_ROOM_OBJECT_OM,f,&same)||same!=o)return GH_PLACE_ARGUMENT;
  if(!o->initialization){
@@ -340,7 +344,7 @@ gh_scene_placement_status gh_om_factory_initialize_runtime_3d6(gh_om_factory *f,
   if(!o->initialization)return GH_PLACE_MEMORY;
  }
  gh_scene_placement_status status=gh_om_r101_item_initialize_001c0128(o->initialization,o,f->bindings.initializer,out);
- if(status)return fail(f,o->initialization->frontier?o->initialization->frontier:0x1c0128,0x3d6,status);
+ if(status)return fail(f,o->initialization->frontier?o->initialization->frontier:0x1c0128,kind,status);
  return GH_PLACE_OK;
 }
 

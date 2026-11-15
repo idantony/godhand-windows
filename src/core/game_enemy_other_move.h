@@ -7,6 +7,7 @@
 #include "game_actor_motion_call.h"
 #include "game_collision_solid_step.h"
 #include "game_terrain_sphere.h"
+#include "game_enemy_route_graph.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,12 +23,14 @@ typedef struct {
     void *sound_context;
     gh_actor_motion_call motion;
     gh_motion_solve solve;
+    const gh_scene_nearcheck *navigation;
+    gh_enemy_route_call route;
     gh_actor_finish_model_call finish;
     gh_collision_solid_frame solid;
     gh_terrain_sphere_call sphere;
     gh_player_terrain_call wall, floor;
     gh_scene_ray_report report;
-    float old[3];
+    float old[3], home_distance;
     uint32_t frontier, timer_word;
     unsigned texture_cursor;
     uint8_t stage, original_returned, nearby;
@@ -41,6 +44,8 @@ gh_actor_motion_status gh_enemy_other_move_bind_targets(gh_enemy_other_move *,
 gh_actor_motion_status gh_enemy_other_move_bind_2a2_services(gh_enemy_other_move *,
     const gh_object_opacity_environment *,gh_motion_effect_consumer,void *,
     gh_motion_sound_consumer,void *);
+gh_actor_motion_status gh_enemy_other_move_bind_navigation(gh_enemy_other_move *,
+    const gh_scene_nearcheck *);
 /* Stable per-invocation cursors. Borrow existing EMS factory owners. */
 gh_actor_motion_status gh_enemy2a2_move_002856c0(gh_enemy_other_move *,
     gh_enemy2a2_virtual_init *,const gh_title_player_view *);

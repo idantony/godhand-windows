@@ -159,8 +159,8 @@ static void verify_move(gh_enemy_actor *enemy,const void *elf,size_t elf_bytes,c
  C((word(p+0x16d0)&0x408002u)==0x408000u&&field(p+0x24c)==1);
  C(word(p+0x5b4)==0&&field(p+0x5b8)==90);
  C(state.post_body_index==2&&word(p+0x16f8)==1&&(word(p+0x16d0)&0x1000u));
- C(navigation->vertex_count==88&&state.target_query.owner==navigation&&state.origin_query.owner==navigation);
- C(state.target_query.complete&&state.origin_query.complete&&state.target_vertex==48&&state.origin_vertex==72);
+ C(navigation->vertex_count==88&&state.route.target_query.owner==navigation&&state.route.origin_query.owner==navigation);
+ C(state.route.target_query.complete&&state.route.origin_query.complete&&state.route.target_vertex==48&&state.route.origin_vertex==72);
  C(enemy->b.actors->ray.native_queries==queries+11&&fegetround()==FE_TOWARDZERO);
  queries=enemy->b.actors->ray.native_queries;
  before=hash(p,enemy->entry.object.view.size);
@@ -222,7 +222,7 @@ static void verify_move(gh_enemy_actor *enemy,const void *elf,size_t elf_bytes,c
  uint32_t route[16];
  memset(route,0xa5,sizeof(route));
  float cost=-1;
- C(!gh_enemy_route_graph_0031be88(navigation,state.origin_vertex,state.target_vertex,16,route,16,&cost));
+ C(!gh_enemy_route_graph_0031be88(navigation,state.route.origin_vertex,state.route.target_vertex,16,route,16,&cost));
  uint32_t expected_route[]={72,45,46,84,47,48,0xffff};
  C(!memcmp(route,expected_route,sizeof(expected_route))&&route[7]==0xa5a5a5a5u&&fabsf(cost-23.249788f)<1e-5f);
  C(fegetround()==FE_TOWARDZERO);

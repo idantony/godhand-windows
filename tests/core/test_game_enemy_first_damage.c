@@ -2759,8 +2759,8 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     const gh_actor_motion_status route=gh_enemy202_move_00208be0(&move,turner,
         &player.view,elf,elf_size);
     fprintf(stderr,"selector3 periodic status%d pc=%08x route=%u state=%08x flags=%08x\n",
-        route,move.frontier,move.route_stage,word(turning+0x2f4),word(turning+0x16d0));
-    CHECK(!route && !move.frontier && move.original_returned && move.route_stage==4 &&
+        route,move.frontier,move.route.route_stage,word(turning+0x2f4),word(turning+0x16d0));
+    CHECK(!route && !move.frontier && move.original_returned && move.route.route_stage==4 &&
         word(turning+0x2f4)==0x00006b00 && (word(turning+0x16d0)&0x8002u)==2u);
     CHECK(turning[0x530] && (word(turning+0x16d4)&0x08000000u) &&
         !memcmp(turning+0x16a0,turning+0x520,12));
@@ -3871,7 +3871,8 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             word(rise+0x2f4)==0x00001200&&word(rise+0x430)==0x3f800000&&paused_rise>0);
         CHECK(gh_enemy_ems_devil_step_00208be0(owner,child_handle,&camera,&restore,&opacity,
             navigation,&spawn,&player.view,elf,elf_size,&rise_pc)==GH_ACTOR_MOTION_UNSUPPORTED&&
-            rise_pc==0x217aa4&&word(rise+0x2f4)==0x00001200); /* Original selector12 phase 0, approach variant. */
+            rise_pc==0x2180b0&&word(rise+0x2f4)==0x00001200&&
+            (word(rise+0x16d0)&0x08000400u)==0x08000400u); /* Selector12 reaches its alternate approach arm. */
         puts("PASS actual Devil selector00 after rise, live effect pause, first EM20 idle sample and approach selector12");
         puts("PASS 220 actual Devil Move, Effects Update, camera and Draw frames through 124F60");
         gh_game_devil_camera_detach(&camera,init);

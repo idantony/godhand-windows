@@ -49,7 +49,7 @@ static int weapon(const gh_om_object*o){return o&&(o->source.type==0x382||paper(
 static int r101_item(const gh_om_object *o)
 {
  if(!o)return 0;
- if(o->runtime_created)return o->runtime_kind==0x3d6||
+ if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c4||
      (o->runtime_kind==0x3da&&o->view.bytes&&o->view.size>=0x690&&word(o->view.bytes+0x560)==0x905);
  return o->source.type>=0x3d3&&o->source.type<=0x3d5;
 }
@@ -398,13 +398,14 @@ static gh_object_step_status fragment305_spawn_001c3540(gh_om_frame_state *state
 static gh_object_step_status fragment_tick_records(gh_om_frame_state *s,const gh_boot_work *work,
  gh_actor_model *model,uint8_t *segments,unsigned first,unsigned maximum,uint32_t *f)
 {
+ enum { MAX_FRAGMENTS = 13 };
  uint8_t *actor=s->object->view.bytes;
  const unsigned count=model->part_count<maximum?model->part_count:maximum;
  const float rate=mul(number(s->runtime.init->enemies+0x548),number((const uint8_t *)work+0x574));
- if(actor[0x2b4]!=model->part_count||!isfinite(rate))
+ if(actor[0x2b4]!=model->part_count||!isfinite(rate)||count>MAX_FRAGMENTS)
   return fail(s,0x292f50,f,GH_OBJSTEP_UNSUPPORTED);
- uint8_t records[9][0x60];
- float matrices[9][16];
+ uint8_t records[MAX_FRAGMENTS][0x60];
+ float matrices[MAX_FRAGMENTS][16];
  memset(matrices,0,sizeof(matrices));
  uint32_t frontier=0;
  for(unsigned i=first;i<count;i++){
@@ -546,10 +547,11 @@ static gh_object_step_status box_fragments_spawn(gh_om_frame_state *s,uint32_t *
  uint8_t *actor=s->object->view.bytes;
  uint32_t pc=0;
  const int kind304=s->object->source.type==0x304;
- const unsigned first=kind304?0:1, limit=kind304?6:9;
- const uint32_t entry=kind304?0x188798:0x18cb18;
+ const int kind33f=s->object->source.type==0x33f;
+ const unsigned first=kind304?0:1, limit=kind304?6:kind33f?13:9;
+ const uint32_t entry=kind304?0x188798:kind33f?0x19fb20:0x18cb18;
  const unsigned count=model->part_count<limit?model->part_count:limit;
- /* 188798/18CB18 share the mesh/part changes but have different
+ /* 188798, 18CB18 and 19FB20 share the mesh/part changes but have different
   * starting indices and record storage. */
  if(!model->part_count||model->part_count!=actor[0x2b4]||
     model->script.mesh_count<2||!s->runtime.fragment_atan_coeff||
@@ -569,7 +571,7 @@ static gh_object_step_status box_fragments_spawn(gh_om_frame_state *s,uint32_t *
  }
  if(gh_actor_model_update_hierarchy_00149eb8(model,GH_STATIC_BINARY32_REFERENCE))
   return fail(s,model->frontier?model->frontier:0x149eb8,f,GH_OBJSTEP_CALLEE);
- float position[9][3],angles[9][3];
+ float position[13][3],angles[13][3];
  for(unsigned i=first;i<count;i++){
   float matrix[16];
   memcpy(matrix,model->parts[i].bytes+0x80,sizeof(matrix));
@@ -646,10 +648,12 @@ static gh_object_step_status box_break(gh_om_frame_state *s,
  uint8_t *actor=object->view.bytes;
  uint32_t pc=0;
  const int kind304=object->source.type==0x304;
- const uint32_t entry=kind304?0x1881f0:0x18c580;
+ const int kind33f=object->source.type==0x33f;
+ const uint32_t entry=kind304?0x1881f0:kind33f?0x19f588:0x18c580;
  uint8_t *timer=actor+(kind304?0x600:0x654);
- const int arena_box=work->room==0x103&&object->source.type==0x30a&&
-    object->view.original_vtable214==0x4238d8;
+ const int arena_box=work->room==0x103&&
+    ((object->source.type==0x30a&&object->view.original_vtable214==0x4238d8)||
+     (kind33f&&object->view.original_vtable214==0x4267f8));
  if((work->room!=0x101&&!arena_box)||policy!=GH_STATIC_BINARY32_REFERENCE||!s->runtime_bound||
     !s->runtime.init||fragment->segments!=actor+(kind304?0x610:0x660)||!object->view.alias_f0)
   return fail(s,entry,f,GH_OBJSTEP_UNSUPPORTED);
@@ -717,7 +721,7 @@ static gh_object_step_status box_break(gh_om_frame_state *s,
    s->special_phase=11;
   }
   if(s->special_phase==11){
-   put(actor+0x5b0,(word(actor+0x5b0)&~8u)|0x12u);
+   put(actor+0x5b0,(word(actor+0x5b0)&~8u)|(kind33f?2u:0x12u));
    if(kind304){
     if(word(actor+0x608))return fail(s,0x1fd718,f,GH_OBJSTEP_UNSUPPORTED);
     if(fragment->sphere_created&&
@@ -754,7 +758,7 @@ static gh_object_step_status box_break(gh_om_frame_state *s,
   }
   s->special_phase=8;
  }
- return fragment_tick(s,work,kind304?0:1,kind304?6:9,f);
+ return fragment_tick(s,work,kind304?0:1,kind304?6:kind33f?13:9,f);
 }
 
 static gh_object_step_status flag_move(gh_om_frame_state *s,gh_static_transform_policy policy,uint32_t *f)
@@ -1077,14 +1081,15 @@ static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_w
  uint8_t *p=actor->bytes;
  if(!actor->alias_f0||actor->size<0x680||!s->runtime.scene_tables||!s->runtime.init)
   return fail(s,0x1c0678,f,GH_OBJSTEP_ARGUMENT);
+ const unsigned kind=s->object->runtime_kind;
+ const int dropped_item=s->object->runtime_created&&(((work->room==0x101||work->room==0x103)&&kind==0x3d6)||((work->room==0x102||work->room==0x103)&&kind==0x3c4));
  if(p[0x2f4]){
-  if(p[0x2f4]==1&&s->object->runtime_created&&s->object->runtime_kind==0x3d6)
+  if(p[0x2f4]==1&&dropped_item)
    return remove_object(s,f); /* Original PMF[1] 1C2260 -> 1B79B0. */
   return fail(s,s->entry,f,GH_OBJSTEP_UNSUPPORTED);
  }
  if(s->special_phase)return GH_OBJSTEP_OK;
- if(s->object->runtime_created&&s->object->runtime_kind==0x3d6&&
-    (p[0x2f6]==4||p[0x2f6]==5)){
+ if(dropped_item&&(p[0x2f6]==4||p[0x2f6]==5)){
   if(p[0x2f6]==4){
    if(!s->runtime.award_item)return fail(s,0x1c2408,f,GH_OBJSTEP_UNSUPPORTED);
    if(!s->pickup.stage){
@@ -1192,7 +1197,7 @@ static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_w
       distance=add(distance,mul(delta,delta));
      }
      if(distance<((p[0x676]&4u)?16.0f:4.0f)){
-      if(!s->object->runtime_created||s->object->runtime_kind!=0x3d6||word(p+0x670)!=0x31)
+      if(!dropped_item||word(p+0x670)!=0x31)
        return fail(s,0x1c20d8,f,GH_OBJSTEP_UNSUPPORTED);
       int blocked=0;
       if(p[0x676]&1u){
@@ -1680,9 +1685,10 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
    else if (p[0x2f4] == 3) status = remove_object(s, f);
    if (status) return status;
    s->phase = 4;
-  } else if((s->object->source.type==0x30a||s->object->source.type==0x304)&&
+  } else if((s->object->source.type==0x30a||s->object->source.type==0x304||
+       (w->room==0x103&&s->object->source.type==0x33f))&&
        (p[0x2f4]==2||p[0x2f4]==3||s->special_phase==8)){
-   /* 18C8A8 and 188528 share 1B79B0 -> 312708, VT+4C empty. */
+   /* 18C8A8, 188528 and 19F8B0 share 1B79B0 -> 312708, VT+4C empty. */
    gh_object_step_status status=(p[0x2f4]==2||s->special_phase==8)?
        box_break(s,w,policy,f):remove_object(s,f);
    if(status)return status;

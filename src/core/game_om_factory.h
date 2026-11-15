@@ -38,7 +38,7 @@ gh_scene_placement_status gh_om_factory_initialize_runtime_ticket_001c0128(gh_om
 gh_scene_placement_status gh_om_factory_initialize_runtime_3eb(gh_om_factory *,gh_om_object *,int *original_return);
 gh_scene_placement_status gh_om_factory_initialize_runtime_376(gh_om_factory *,gh_om_object *);
 gh_scene_placement_status gh_om_factory_initialize_runtime_3be(gh_om_factory *,gh_om_object *);
-gh_scene_placement_status gh_om_factory_initialize_runtime_3d6(gh_om_factory *,gh_om_object *,int *original_return);
+gh_scene_placement_status gh_om_factory_initialize_runtime_item_001c0128(gh_om_factory *,gh_om_object *,int *original_return);
 gh_scene_placement_status gh_om_factory_object_view(const gh_om_factory *,uint32_t handle,gh_title_player_view *);
 /* Native abort of this constructor-only prefix. No originalvirtualInit ran;
  * releases acquiredreference and SAMEarena, unregistering ONLYownhandles. */

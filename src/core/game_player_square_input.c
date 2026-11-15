@@ -86,8 +86,13 @@ gh_player_frame_status gh_player_triangle_input_00123f44(
         return GH_PLAYER_FRAME_ARGUMENT;
     }
     uint8_t *p=player->bytes;
-    if(p[0x61f]||(word(p+0x15f4)&0x38000u)){
-        *frontier=p[0x61f]?0x123ecc:0x123f44;
+    if(p[0x61f]){
+        const float angle=number(p+0x608);
+        if(!isfinite(angle)){*frontier=0x123ed8;return GH_PLAYER_FRAME_NUMERIC;}
+        if(angle>2.35619449615478515625f){*frontier=0x123efc;return GH_PLAYER_FRAME_UNSUPPORTED;}
+    }
+    if(word(p+0x15f4)&0x38000u){
+        *frontier=0x123f44;
         return GH_PLAYER_FRAME_UNSUPPORTED;
     }
     /* 12C000(set1) returns true for the same set at/above its limit. */

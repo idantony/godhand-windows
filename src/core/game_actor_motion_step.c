@@ -14,6 +14,7 @@ static float sub(float a,float b){volatile float x=a-b;return x;}
 static float mul(float a,float b){volatile float x=a*b;return x;}
 static gh_actor_motion_status fail(uint32_t*f,uint32_t a){*f=a;return GH_ACTOR_MOTION_UNSUPPORTED;}
 static unsigned motion_flags_allowed(const gh_actor_model *model){
+ if(gh_actor_motion_mirror_supported(model))return 0x42u;
  const uint8_t *p=model->root.bytes;
  /* Original 24C3C8 sets 434 bit 8 for the ordinary frontal reaction.
   * Sample tests bit 2, sequence tests bit 20, and advance tests 1/4/10. */
@@ -22,8 +23,11 @@ static unsigned motion_flags_allowed(const gh_actor_model *model){
  const uint32_t dependency=rd(p+0x564);
  if(kind==0x204&&model->work&&model->work->room==0x103&&
     model->root.original_vtable214==0x4479c8&&model->root.size>0x1650&&
-    p[0x1650]==24&&dependency==0x200&&(half(p+0x640)==2||half(p+0x640)==3)&&
-    p[0x2f4]==1&&!p[0x2f5])return 0x48u;
+    p[0x1650]==24&&p[0x2f4]==1&&!p[0x2f5]){
+  const unsigned stamp=half(p+0x640);
+  if((dependency==0x200&&(stamp==2||stamp==3))||
+     (dependency==0x203&&(stamp==6||stamp==7)))return 0x48u;
+ }
  if(kind!=0x202)return 0x40u;
  /* 25FA18 sets the same sample bit for the R100 transform death clip. */
  if(model->root.size>=0x642&&dependency==0x200&&half(p+0x640)==8&&
@@ -36,10 +40,10 @@ static unsigned motion_flags_allowed(const gh_actor_model *model){
  const int stamp20=model->root.size>=0x642&&dependency==0x200&&half(p+0x640)==20&&
     model->work&&(uint16_t)model->work->room==0x100;
  const int r102_em00=dependency==0x200&&model->work&&(uint16_t)model->work->room==0x102;
- const int gate_guard=r102_em00&&model->root.size>0x1650&&half(p+0x640)==0x10&&
-    !p[0x1650]&&!half(p+0x54a);
+ const int r102_death=r102_em00&&model->root.size>0x1650&&!half(p+0x54a)&&
+    ((half(p+0x640)==0x10&&!p[0x1650])||(half(p+0x640)==11&&p[0x1650]==5));
  const int allowed=(p[0x2f4]==1&&(dependency==0x20a||stamp19||stamp20||r102_em00))||
-                   (p[0x2f4]==2&&(stamp19||stamp20||gate_guard));
+                   (p[0x2f4]==2&&(stamp19||stamp20||r102_death));
  return allowed?0x48u:0x40u;
 }
 static gh_actor_motion_status track_value(gh_actor_motion*s,unsigned index,float time,int cached,float*out,uint32_t*f){
@@ -57,14 +61,42 @@ gh_actor_motion_status gh_actor_motion_sample_00158328(gh_actor_motion*s,gh_stat
  }
  float values[256][9];for(unsigned i=0;i<256;i++)for(unsigned j=0;j<9;j++)if(indices[i][j]>=0){gh_actor_motion_status e=track_value(s,(unsigned)indices[i][j],time,(i==255&&j<3)||(i!=255&&j>=3&&j<6),&values[i][j],f);if(e)return e;}
  for(unsigned j=0;j<9;j++){float v=indices[255][j]>=0?values[255][j]:(j<6?0:1);wf(p+(j<3?0x310+j*4:j<6?0x340+(j-3)*4:0x370+(j-6)*4),v);}
- float angle[4],wrapped[4];memcpy(angle,p+0x340,16);if(gh_actor_euler_adjust_001f7da0(angle,wrapped,policy,f))return GH_ACTOR_MOTION_UNSUPPORTED;memcpy(p+0x340,wrapped,12);
+ const int mirror=(half(p+0x434)&2u)!=0;
+ if(mirror)wf(p+0x310,-rf(p+0x310));
+ float angle[4],wrapped[4];memcpy(angle,p+0x340,16);if(gh_actor_euler_adjust_001f7da0(angle,wrapped,policy,f))return GH_ACTOR_MOTION_UNSUPPORTED;
+ if(mirror){wrapped[1]=-wrapped[1];wrapped[2]=-wrapped[2];}
+ memcpy(p+0x340,wrapped,12);
  for(unsigned i=0;i<m->part_count;i++){
-  gh_actor_part*part=&m->parts[i];uint8_t*q=part->bytes;if(!q||!part->alias_d0)return GH_ACTOR_MOTION_ARGUMENT;uint32_t flags=rd(q+0x154);
-  if(flags&0x2000)flags|=0x400000;if(flags&0x8000)flags|=0x200000;flags&=~0x80u;wr(q+0x154,flags);if(flags&1)continue;
+  gh_actor_part*part=&m->parts[i];
+  uint8_t*q=part->bytes;
+  if(!q||!part->alias_d0)return GH_ACTOR_MOTION_ARGUMENT;
+  uint32_t flags=rd(q+0x154);
+  if(flags&0x2000)flags|=0x400000;
+  if(flags&0x8000)flags|=0x200000;
+  wr(q+0x154,flags);
+  /* 1586D4 uses typed part14C for the target, including original self links.
+   * The source flags independently mask the reflected rotation channels. */
+  const int mirror_part=mirror&&(part->mirror_is_self||part->mirror>=0)&&!(flags&0x00800000u);
+  const int mirror_angles=mirror_part&&!(flags&0x03000000u);
+  if(mirror_part&&!part->mirror_is_self){
+   if((unsigned)part->mirror>=m->part_count)return fail(f,0x158730);
+   part=&m->parts[part->mirror];
+   q=part->bytes;
+   if(!q||!part->alias_d0)return GH_ACTOR_MOTION_ARGUMENT;
+   flags=rd(q+0x154);
+  }
+  flags&=~0x80u;
+  wr(q+0x154,flags);
+  if(flags&1)continue;
   for(unsigned j=0;j<9;j++){
    if((j<3&&(flags&0x200))||(j>=3&&j<6&&(flags&0x100))||(j>=6&&(flags&0x400)))continue;
    uint8_t*target=j<3?part->alias_d0+j*4:j<6?q+0x100+(j-3)*4:q+0x110+(j-6)*4;
-   if(indices[i][j]>=0){wf(target,values[i][j]);flags|=0x80;wr(q+0x154,flags);}
+   if(indices[i][j]>=0){
+    const int negate=(j==0&&mirror_part)||((j==4||j==5)&&mirror_angles);
+    wf(target,negate?-values[i][j]:values[i][j]);
+    flags|=0x80;
+    wr(q+0x154,flags);
+   }
    else if(j<3&&blend>0&&!(flags&0x100000))memcpy(target,q+0xe0+j*4,4);
    else if(j>=3&&j<6&&(flags&0x8000))wr(target,0);
   }
