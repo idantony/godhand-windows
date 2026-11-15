@@ -218,6 +218,79 @@ gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *
     return GH_ACTOR_MODEL_OK;
 }
 
+gh_actor_model_status gh_om_weapon_bind_0026ab20(const gh_event_weapon_attachment *a,
+    uint16_t kind,const void *owner,gh_game_scene_tables *actors,gh_collision_scroll_mutation *scroll,
+    gh_static_transform_policy policy,uint8_t *stage,uint32_t *frontier)
+{
+    if(!stage||!frontier)return GH_ACTOR_MODEL_ARGUMENT;
+    *frontier=0;
+    if(!a||!a->weapon||!a->weapon->bytes||a->weapon->size<0x665||!a->weapon_model||
+       a->weapon_model->root.bytes!=a->weapon->bytes||!a->parent||!a->parent_model||
+       a->parent_model->root.bytes!=a->parent->bytes||!owner||!actors||!scroll||
+       (a->parent_part!=10&&a->parent_part!=16)||kind<0x361||kind>0x363||*stage>5)
+        return GH_ACTOR_MODEL_ARGUMENT;
+    uint8_t *p=a->weapon->bytes;
+    gh_actor_model *model=a->weapon_model;
+    if(*stage>=2&&(model->external_owner!=owner||model->external_parent!=a->parent_model||
+       model->external_parent_index!=(uint32_t)a->parent_part))return GH_ACTOR_MODEL_BUSY;
+    if(*stage<=1){
+        const gh_actor_part *hand,*child;
+        *frontier=0x1cf160;
+        if(gh_actor_model_part_at(a->parent_model,(unsigned)a->parent_part,&hand)||
+           gh_actor_model_part_at(model,0,&child)||!hand->bytes||!child->bytes||!child->alias_d0)
+            return GH_ACTOR_MODEL_UNSUPPORTED;
+        const gh_actor_model_status status=gh_actor_model_bind_external_parent(model,0,
+            a->parent_model,(unsigned)a->parent_part,owner);
+        if(status)return status;
+        const uint32_t xyz_standard[]={0x3e4ccccd,0xbcf5c28f,0x3e99999a};
+        const uint32_t xyz_363[]={0x3e99999a,0xbd8f5c29,0x3f19999a};
+        uint32_t xyz[3];
+        memcpy(xyz,kind==0x363?xyz_363:xyz_standard,sizeof(xyz));
+        uint32_t angles[]={0,0x3eb2b8c2,0};
+        if(a->parent_part==10){
+            xyz[0]^=0x80000000u;
+            angles[1]^=0x80000000u;
+        }
+        memcpy(child->alias_d0,xyz,12);
+        memcpy(child->bytes+0x100,angles,12);
+        put(p+0x604,(unsigned)a->parent_part);
+        memcpy(p+0x610,xyz,12);
+        memcpy(p+0x620,angles,12);
+        p[0x2f4]=0;
+        p[0x2f5]=1;
+        p[0x2f6]=p[0x2f7]=p[0x664]=0;
+        *stage=2;
+    }
+    if(*stage==2){
+        const gh_game_event_status status=gh_event_weapon_follow_001cf3a8(a,policy,frontier);
+        if(status){
+            if(!*frontier)*frontier=0x1cf3a8;
+            return GH_ACTOR_MODEL_UNSUPPORTED;
+        }
+        *stage=3;
+    }
+    if(*stage==3){
+        const gh_actor_model_status status=gh_actor_model_update_hierarchy_00149eb8(model,policy);
+        if(status){
+            *frontier=model->frontier?model->frontier:0x149eb8;
+            return status;
+        }
+        *stage=4;
+    }
+    if(*stage==4){
+        char name[9]={0};
+        uint32_t changed;
+        memcpy(name,p+0x540,8);
+        if(gh_collision_scroll_set_enabled_001332d0(actors,scroll,name,0,&changed)){
+            *frontier=0x1331b8;
+            return GH_ACTOR_MODEL_UNSUPPORTED;
+        }
+        *stage=5;
+    }
+    *frontier=0;
+    return GH_ACTOR_MODEL_OK;
+}
+
 gh_actor_model_status gh_enemy_weapon_attach_0026ab20(gh_enemy_weapon_init *s,
     const gh_title_player_view *parent,gh_actor_model *parent_model,
     gh_game_scene_tables *actors,gh_collision_scroll_mutation *scroll)
@@ -233,72 +306,20 @@ gh_actor_model_status gh_enemy_weapon_attach_0026ab20(gh_enemy_weapon_init *s,
         return stop(s,0x26acdc,GH_ACTOR_MODEL_UNSUPPORTED);
 
     gh_title_player_view *weapon=&s->weapon->object.view;
-    uint8_t *p=weapon->bytes;
-    const gh_static_transform_policy policy=s->weapon->bindings.policy;
-    const unsigned parent_index=parent->bytes[0x17c3]?10:16;
-    const gh_actor_part *hand,*child;
-    if(gh_actor_model_part_at(parent_model,parent_index,&hand)||
-        gh_actor_model_part_at(&s->model,0,&child)||!hand->bytes||!child->bytes||!child->alias_d0)
-        return stop(s,0x1cf160,GH_ACTOR_MODEL_UNSUPPORTED);
-    s->frontier=0;
-
     if(!s->attach_stage){
         memmove(weapon->alias_f0,parent->alias_f0,12);
-        memmove(p+0x490,weapon->alias_f0,12);
-        memset(p+0x100,0,12);
+        memmove(weapon->bytes+0x490,weapon->alias_f0,12);
+        memset(weapon->bytes+0x100,0,12);
         s->parent=parent;
         s->parent_model=parent_model;
         s->actors=actors;
         s->scroll=scroll;
         s->attach_stage=1;
     }
-    if(s->attach_stage==1){
-        gh_actor_model_status status=gh_actor_model_bind_external_parent(&s->model,0,parent_model,
-            parent_index,s);
-        if(status)return stop(s,0x1cf160,status);
-        const uint32_t xyz_361_362[]={0x3e4ccccd,0xbcf5c28f,0x3e99999a};
-        const uint32_t xyz_363[]={0x3e99999a,0xbd8f5c29,0x3f19999a};
-        uint32_t xyz[3];
-        memcpy(xyz,s->weapon->kind==0x363?xyz_363:xyz_361_362,sizeof(xyz));
-        uint32_t angles[]={0,0x3eb2b8c2,0};
-        if(parent_index==10){
-            xyz[0]^=0x80000000u;
-            angles[1]^=0x80000000u;
-        }
-        memcpy(child->alias_d0,xyz,12);
-        memcpy(child->bytes+0x100,angles,12);
-        put(p+0x604,parent_index);
-        memcpy(p+0x610,xyz,12);
-        memcpy(p+0x620,angles,12);
-        p[0x2f4]=0;
-        p[0x2f5]=1;
-        p[0x2f6]=0;
-        p[0x2f7]=0;
-        p[0x664]=0;
-        s->attach_stage=2;
-    }
-    if(s->attach_stage==2){
-        const gh_event_weapon_attachment attachment={weapon,&s->model,parent,parent_model,parent_index};
-        uint32_t pc=0;
-        gh_game_event_status status=gh_event_weapon_follow_001cf3a8(&attachment,policy,&pc);
-        if(status)return stop(s,pc?pc:0x1cf3a8,GH_ACTOR_MODEL_UNSUPPORTED);
-        s->attach_stage=3;
-    }
-    if(s->attach_stage==3){
-        gh_actor_model_status status=gh_actor_model_update_hierarchy_00149eb8(&s->model,policy);
-        if(status)return stop(s,s->model.frontier?s->model.frontier:0x149eb8,status);
-        s->attach_stage=4;
-    }
-    if(s->attach_stage==4){
-        char name[9]={0};
-        memcpy(name,p+0x540,8);
-        uint32_t changed;
-        /* Original 1331B8 argument 0 sets triangle flag bit2. */
-        if(gh_collision_scroll_set_enabled_001332d0(actors,scroll,name,0,&changed))
-            return stop(s,0x1331b8,GH_ACTOR_MODEL_UNSUPPORTED);
-        s->attach_stage=5;
-    }
-    return GH_ACTOR_MODEL_OK;
+    const gh_event_weapon_attachment attachment={weapon,&s->model,parent,parent_model,
+        parent->bytes[0x17c3]?10:16};
+    return gh_om_weapon_bind_0026ab20(&attachment,s->weapon->kind,s,actors,scroll,
+        s->weapon->bindings.policy,&s->attach_stage,&s->frontier);
 }
 
 gh_actor_model_status gh_enemy_weapon_release_init(gh_enemy_weapon_init *s)

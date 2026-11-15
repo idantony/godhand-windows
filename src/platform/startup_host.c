@@ -2489,6 +2489,57 @@ gh_qa_game_over_state gh_startup_host_qa_game_over_state(const gh_startup_host *
         fields[0x92]==1&&fields[0x93]==0&&fields[0x90]==1;
     return result;
 }
+static gh_qa_enemy_status qa_enemy_status(const gh_title_player_view *view,uint32_t handle)
+{
+    gh_qa_enemy_status result={0};
+    if(!view->bytes||view->size<0x642||!view->alias_f0)return result;
+    const uint8_t *actor=view->bytes;
+    if(actor[0x2fe]!=2||actor[0x2ff]!=2)return result;
+    result.handle=handle;
+    memcpy(result.position,view->alias_f0,sizeof(result.position));
+    memcpy(&result.stamp,actor+0x640,2);
+    memcpy(&result.hp,actor+0x54a,2);
+    result.state=actor[0x2f4];
+    result.substate=actor[0x2f5];
+    result.phase=actor[0x2f6];
+    result.ready=1;
+    return result;
+}
+gh_qa_enemy_status gh_startup_host_qa_enemy_status(const gh_startup_host *h,uint32_t handle)
+{
+    gh_title_player_view view={0};
+    if(!h||!on_owner(h)||!handle||h->game_loop.game_state[0]!=4||
+       gh_game_services_actor_view(h->services,handle,&view)){
+        const gh_qa_enemy_status missing={0};
+        return missing;
+    }
+    return qa_enemy_status(&view,handle);
+}
+gh_qa_enemy_status gh_startup_host_qa_nearest_em00(const gh_startup_host *h,const float origin[3])
+{
+    gh_qa_enemy_status nearest={0};
+    if(!h||!origin||!on_owner(h)||h->game_loop.game_state[0]!=4)return nearest;
+    const gh_player_target_bindings targets=gh_game_services_scene_targets(h->services);
+    if(!targets.pools)return nearest;
+    float best=144.f;
+    for(size_t i=0;i<targets.pools->object_slots;i++){
+        const gh_room_object_binding *binding=targets.pools->objects+i;
+        if(binding->kind!=GH_ROOM_OBJECT_ENEMY||!binding->object)continue;
+        const gh_game_title_player *enemy=binding->object;
+        const gh_qa_enemy_status actor=qa_enemy_status(&enemy->view,binding->handle);
+        if(!actor.ready||!actor.hp||actor.hp>=0x8000||enemy->view.bytes[0x617])continue;
+        uint32_t dependency;
+        memcpy(&dependency,enemy->view.bytes+0x564,4);
+        if(dependency!=0x200)continue;
+        const float dx=actor.position[0]-origin[0],dz=actor.position[2]-origin[2];
+        const float dy=actor.position[1]-origin[1],distance=dx*dx+dz*dz;
+        if(distance<best&&dy>=-1.25f&&dy<=1.25f){
+            nearest=actor;
+            best=distance;
+        }
+    }
+    return nearest;
+}
 #endif
 gh_host_error gh_startup_host_set_fade_consumer(gh_startup_host *h,gh_host_fade_consumer consumer,void *context)
 {

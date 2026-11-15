@@ -4,6 +4,7 @@
 #include "game_effect_create.h"
 #include "game_actor_external_parent.h"
 #include "game_enemy_retire.h"
+#include "game_om300_retire.h"
 #include "game_enemy_row2.h"
 #include "game_player_root_delta.h"
 #include <math.h>
@@ -1703,6 +1704,15 @@ gh_actor_motion_status gh_enemy_ems_mark_held_weapon_00312708(gh_enemy_ems *owne
     if(!entry||!entry->enemy202||entry->retiring_weapon.held)
         return retire_stop(frontier,0x1b79b0);
     gh_enemy_timers *timers=&entry->enemy202->timers;
+    const gh_om_object *room_weapon=gh_enemy_timers_room_weapon(timers);
+    if(room_weapon){
+        /* +6EC points to an existing OM in this case. Mark the same object,
+         * then end the borrow so the ordinary OM destructor retires it. */
+        gh_room_pool_status status=gh_om_retire_mark_00312708(timers->room_weapon_factory,
+            room_weapon->handle,voices,frontier);
+        if(status)return retire_stop(frontier,*frontier?*frontier:0x312708);
+        return gh_enemy_timers_release_room_weapon(timers);
+    }
     gh_enemy_weapon_init *held=gh_enemy_timers_held_weapon_runtime(timers);
     if(!held||!held->weapon||held->attach_stage!=5||!held->model.ready||
        held->parent!=&entry->actor->view||

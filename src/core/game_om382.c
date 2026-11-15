@@ -141,9 +141,8 @@ static gh_object_step_status select_clip(gh_om382_state *s,unsigned index,uint32
     return status?stop(frontier,pc?pc:0x2a8578,GH_OBJSTEP_UNSUPPORTED):GH_OBJSTEP_OK;
 }
 
-/* Original 00/01 (1CA040) for the PL00 paper attachment. The two weapon
- * shrink cases are separate classes. */
-static gh_object_step_status paper_attached(gh_om382_state *s,const gh_om_frame_runtime *runtime,
+/* Original shared 00/01 (1CA040) after an ordinary weapon or paper attach. */
+static gh_object_step_status weapon_attached(gh_om382_state *s,const gh_om_frame_runtime *runtime,
     float rate,uint32_t *frontier)
 {
     gh_title_player_view *view=&s->common.object->view;
@@ -315,14 +314,15 @@ gh_object_step_status gh_om382_move_prefix_001c9860(gh_om382_state *s,const gh_o
         if(p[0x2f4])return stop(frontier,0x1c9860,GH_OBJSTEP_UNSUPPORTED);
         if(*phase!=1)return GH_OBJSTEP_ARGUMENT;
         gh_object_step_status status;
-        if(p[0x2f5]==1)status=paper_attached(s,runtime,*rate,frontier);
+        if(p[0x2f5]==1)status=weapon_attached(s,runtime,*rate,frontier);
         else if(p[0x2f5]==0x13)status=paper_loose(&object->view,*rate,policy,frontier);
         else return stop(frontier,0x1c9a50,GH_OBJSTEP_UNSUPPORTED);
         if(!status)*phase=6;
         return status;
     }
-    if(object->runtime_created&&object->runtime_kind==0x363&&!p[0x2f4]&&!p[0x2f5]){
-        gh_object_step_status status=grounded_weapon_001c9af0(s,runtime,phase,*rate,frontier);
+    if(object->runtime_created&&object->runtime_kind==0x363&&!p[0x2f4]&&p[0x2f5]<=1){
+        gh_object_step_status status=p[0x2f5]?
+            weapon_attached(s,runtime,*rate,frontier):grounded_weapon_001c9af0(s,runtime,phase,*rate,frontier);
         if(!status)*phase=6;
         return status;
     }

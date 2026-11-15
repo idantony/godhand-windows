@@ -24,7 +24,10 @@ static gh_room_pool_status retire(gh_room_death_dispatch *state,const gh_room_de
 {
  uint32_t handle=state->retiring_handle,entry=0;
  gh_room_pool_status status;
- if(enemy_kind(state->retiring_kind)||state->retiring_kind==0x363){
+ gh_title_player_view om;
+ const int factory_weapon=state->retiring_kind==0x363&&b->door.factory&&
+    !gh_om_factory_object_view(b->door.factory,handle,&om);
+ if(enemy_kind(state->retiring_kind)||(state->retiring_kind==0x363&&!factory_weapon)){
   gh_actor_motion_status enemy=state->retiring_kind==0x363?
    gh_enemy_ems_retire_weapon_0030f8b0(b->enemies,&state->enemy,handle,&b->enemy,&entry):
    gh_enemy_ems_retire_0030f8b0(b->enemies,&state->enemy,handle,&b->enemy,&entry);
@@ -45,7 +48,7 @@ static gh_room_pool_status retire(gh_room_death_dispatch *state,const gh_room_de
  case 0x300:case 0x303:case 0x304:case 0x305:case 0x307:case 0x30a:case 0x30e:case 0x310:
  case 0x320:case 0x322:case 0x323:case 0x324:
  case 0x33f:case 0x346:case 0x354:case 0x35d:case 0x309:case 0x3eb:
- case 0x31a:case 0x338:case 0x339:case 0x355:case 0x376:case 0x382:case 0x3be:case 0x41c:
+ case 0x31a:case 0x338:case 0x339:case 0x355:case 0x363:case 0x376:case 0x382:case 0x3be:case 0x41c:
   status=gh_om_retire_0030f8b0(&state->door,&b->door,handle);
   entry=state->door.frontier?state->door.frontier:gh_om_retire_entry(state->retiring_kind);
   if(!status)state->door=(gh_om300_full_retirement){0};
@@ -109,7 +112,7 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
    return fail(state,handle,0x312708);
   if(closing&&(flags&0xe0000000u)!=0xe0000000u)return fail(state,handle,0x30f5f0);
   if(!(flags&0x80000000u)){
-   if(kind==0x363)return fail(state,handle,0x312708);
+   if(kind==0x363&&actor!=&om_view)return fail(state,handle,0x312708);
    if(enemy_kind(kind)){
     gh_actor_motion_status enemy=gh_enemy_death_mark_00312708(&state->enemy_mark,
      b->enemies,handle,b->voices,&frontier);

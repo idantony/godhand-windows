@@ -556,8 +556,40 @@ static gh_id_error heat_rank_reset(gh_game_cockpit *s,unsigned field,gh_id_entry
  return status;
 }
 
+/* Original DIE rank keeps each warning latched at the exact life threshold. */
+static gh_id_error gameplay_heat_die_warnings(gh_game_cockpit *s,float ratio,int life_changed)
+{
+ const unsigned o=0x460;
+ gh_id_entry *entry;
+ if(life_changed){
+  TRY(heat_rank_reset(s,0x1e8,&entry));
+  TRY(heat_rank_reset(s,0x1fc,&entry));
+  entry->flags&=~0x08000000u;
+ }
+ static const uint32_t bits[]={0x10000000u,0x08000000u,0x04000000u};
+ static const float thresholds[]={.8f,.5f,.25f};
+ uint32_t flags=u32(s->fields+o+0x90);
+ for(unsigned i=0;i<3;i++){
+  const unsigned field=0x1ec+i*4;
+  if(ratio<thresholds[i]&&!(flags&bits[i])){
+   TRY(heat_entry(s,field,&entry));
+   entry->flags&=~0x08000000u;
+   TRY(heat_rank_reset(s,field,&entry));
+   flags|=bits[i];
+   w32(s,o+0x90,flags);
+  }else if(ratio>thresholds[i]){
+   flags&=~bits[i];
+   w32(s,o+0x90,flags);
+   TRY(heat_entry(s,field,&entry));
+   entry->flags|=0x08000000u;
+  }
+ }
+ return GH_ID_OK;
+}
+
 /* Original 142060 keeps the old portrait until its rank-level family completes. */
-static gh_id_error gameplay_heat_rank(gh_game_cockpit *s,unsigned level,int32_t life)
+static gh_id_error gameplay_heat_rank(gh_game_cockpit *s,unsigned level,int32_t life,
+ float ratio,int life_changed)
 {
  const unsigned o=0x460;
  unsigned old=s->fields[o+0x17c]|(unsigned)s->fields[o+0x17d]<<8;
@@ -597,6 +629,12 @@ static gh_id_error gameplay_heat_rank(gh_game_cockpit *s,unsigned level,int32_t 
  }
  TRY(heat_entry(s,0x1f8,&entry));
  entry->seed=old+1;
+ if(old==3){
+  entry->flags|=0x08000000u;
+  TRY(heat_entry(s,0x1e4,&entry));
+  entry->flags&=~0x08000000u;
+  return gameplay_heat_die_warnings(s,ratio,life_changed);
+ }
  entry->flags&=~0x08000000u;
  TRY(heat_entry(s,0x1e4,&entry));
  entry->flags|=0x08000000u;
@@ -625,7 +663,7 @@ static gh_id_error gameplay_heat_body(gh_game_cockpit*s,const gh_boot_work*work_
   unsigned upgrades=0;for(unsigned i=0;i<6&&i<save.bytes[0x156];i++)if(save.bytes[0xa8+i])upgrades++;
   int lev=level(save);if(lev==4)lev=3;else if(lev==5)lev=4;lev--;
   unsigned oldlev=s->fields[o+0x17c]|(unsigned)s->fields[o+0x17d]<<8;
-  if(lev<0||lev>=3||oldlev>=3||upgrades<s->fields[o+0x260])return frame_stop(s,0x142060);
+  if(lev<0||lev>3||oldlev>3||upgrades<s->fields[o+0x260])return frame_stop(s,0x142060);
   uint32_t heat_flags=u32(s->fields+o+0x90);
   float smoothed=heat_flags&0x40000000?frame_number(s->fields+o+0x268):heat_ratio;
   smoothed=add(smoothed,-mul(add(smoothed,-heat_ratio),.1f));
@@ -664,7 +702,7 @@ static gh_id_error gameplay_heat_body(gh_game_cockpit*s,const gh_boot_work*work_
    if(u32(w+0x598)&0x8000000)save.bytes[0x156]=6;
    TRY(heat_entry(s,0x130+(i+7)*4,&e));if(i<save.bytes[0x156])e->flags&=~0x8000000u;else e->flags|=0x8000000;
   }s->fields[o+0x260]=(uint8_t)upgrades;
-  TRY(gameplay_heat_rank(s,(unsigned)lev,life));
+  TRY(gameplay_heat_rank(s,(unsigned)lev,life,ratio,life!=oldlife));
   /* Actual 1FACB0 mutates Save.maximum, not the player's HP/profile. */
   if(u32(w+0x598)&0x8000000)save.bytes[0x154]=13;uint32_t maxlife=100u+20u*save.bytes[0x154];memcpy(save.bytes+0x80,&maxlife,4);
   TRY(heat_entry(s,0xa8,&e));e->scale_x=add(mul(add((float)maxlife,-100)/260,2.6f),1);

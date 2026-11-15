@@ -52,7 +52,7 @@ static gh_actor_motion_status mark_202(gh_enemy_death_mark *state,
        owner, because the native constructor does not store guest pointers. */
     static const uint16_t mark_attached[]={0x6ec,0x6f0,0x6f8,0x6fc,0x700,
         0x704,0x708,0x734,0x6f4,0x70c,0x730,0x738};
-    if(enemy&&gh_enemy_timers_held_weapon(&enemy->timers)){
+    if(enemy&&gh_enemy_timers_weapon_kind(&enemy->timers)){
         gh_actor_motion_status status=gh_enemy_ems_mark_held_weapon_00312708(
             owner,state->handle,state->voices,frontier);
         if(status)return status;

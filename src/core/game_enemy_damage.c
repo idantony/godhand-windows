@@ -36,6 +36,11 @@ static int r100_stamp8(const gh_enemy_actor *enemy, const uint8_t *actor) {
         enemy->entry.b.work && (uint16_t)enemy->entry.b.work->room == 0x100;
 }
 
+static int r102_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
+    return effect == 7 && word(actor + 0x564) == 0x200 &&
+        enemy->entry.b.work && enemy->entry.b.work->room == 0x102;
+}
+
 static int opening_triangle(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
     return effect == 0x12 && (r100_stamp19(enemy, actor) || r100_stamp20(enemy, actor) ||
         r100_stamp8(enemy, actor));
@@ -110,7 +115,7 @@ static gh_actor_motion_status gain_heat_002a9978(gh_enemy_actor *enemy, float am
     const gh_enemy_entry_bindings *b = &enemy->entry.b;
     gh_core_save_view save = b->save;
     uint8_t *heat = b->init->heat;
-    if (!save.bytes || save.size < 0x20 || !b->work || (uint16_t)b->work->room != 0x100)
+    if (!save.bytes || save.size < 0x20 || !b->work)
         return stop(frontier, 0x2a9978);
     if (heat[0x10]) return GH_ACTOR_MOTION_OK;
 
@@ -125,6 +130,10 @@ static gh_actor_motion_status gain_heat_002a9978(gh_enemy_actor *enemy, float am
     }
     const int easy = !(word(save.bytes + 0x14) & 0x4000000u) && !save.bytes[0x1f];
     if (easy) {
+        volatile float increased = amount * 1.25f;
+        amount = increased;
+    }
+    if ((uint16_t)b->work->room == 0x801) {
         volatile float increased = amount * 1.25f;
         amount = increased;
     }
@@ -181,14 +190,18 @@ static gh_actor_motion_status first_punch_wall(gh_enemy_actor *enemy, uint32_t *
     return GH_ACTOR_MOTION_OK;
 }
 
+static int r101_scenery_reaction_enemy(const gh_enemy_actor *enemy, const uint8_t *actor)
+{
+    return word(actor + 0x564) == 0x227 && half(actor + 0x640) == 9 &&
+           actor[0x1650] == 4 && enemy->entry.b.work && enemy->entry.b.work->room == 0x101;
+}
+
 static int scenery_reaction_enemy(const gh_enemy_actor *enemy, const uint8_t *actor) {
     const uint32_t dependency = word(actor + 0x564);
     /* Original 20A178 accepts effect 2E from scenery and maps the live
      * receiver to selector 11, including the exchanged R101 actor. */
     return dependency == 0x200 || dependency == 0x202 || dependency == 0x203 ||
-           (dependency == 0x227 && half(actor + 0x640) == 9 &&
-            actor[0x1650] == 4 && enemy->entry.b.work &&
-            enemy->entry.b.work->room == 0x101);
+           r101_scenery_reaction_enemy(enemy, actor);
 }
 
 static uint32_t scenery_hit_vtable(unsigned kind)
@@ -205,6 +218,25 @@ static int r100_counter_collateral(const gh_enemy_actor *enemy,const uint8_t *ac
         word(source->bytes+0x564)==0x200&&half(source->bytes+0x640)==20&&
         source->bytes[0x2f4]==1&&source->bytes[0x2f5]==0x1d&&power==10;
 }
+static gh_actor_motion_status environment_pressure_sound(gh_enemy202_hit_call *call,
+    gh_enemy_actor *enemy, int16_t bank, uint16_t program, uint32_t *frontier)
+{
+    const gh_actor_motion_bindings *b = &enemy->motion.motion.b;
+    gh_motion_sound_request *request = &call->pressure_sound;
+    if (!b->sound || !b->model) return stop(frontier, 0x2cba48);
+    if (!request->model) {
+        *request = (gh_motion_sound_request){
+            .model = b->model, .actor = &enemy->entry.object.view, .bank = bank,
+        };
+        memcpy(&request->program, &program, sizeof(program));
+    }
+    uint32_t handle;
+    gh_actor_motion_status status = b->sound(b->sound_context, request, &handle, frontier);
+    if (status) return status;
+    *request = (gh_motion_sound_request){0};
+    return GH_ACTOR_MOTION_OK;
+}
+
 /* Scenery and the released EM00's secondary Give use the non-player
  * effect 2E path, with the environment flag set in 20A5DC's VT+AC call. */
 static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
@@ -216,6 +248,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
     if (!source || !source->bytes || source->size < 0x300)
         return stop(frontier, 0x20a178);
+    enum { PRESSURE_CORE_SOUND = 40, PRESSURE_LOCAL_SOUND };
     const unsigned source_kind = half(source->bytes + 0x2fe);
     const uint32_t source_vtable = source_kind == 0x202 ? 0x4479c8u : scenery_hit_vtable(source_kind);
     const uint32_t power = word(body->bytes + 0x4c);
@@ -273,11 +306,33 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
         if ((p[0x17bd] == 1 && rank >= 3) || (p[0x17bd] == 2 && rank >= 2)) {
             uint32_t points = word(p + 0x16e8);
             if ((int32_t)word(p + 0x16ec) < 1) points += 5;
-            if ((int32_t)points > 200) return stop(frontier, 0x26ecd0);
+            if ((int32_t)points > 200) {
+                const int em03 = word(p + 0x564) == 0x203 && half(p + 0x640) == 13 &&
+                    !p[0x1650] && enemy->entry.b.work && enemy->entry.b.work->room == 0x101;
+                if (!em03 && !r101_scenery_reaction_enemy(enemy, p))
+                    return stop(frontier, 0x26ecd0);
+                call->phase = PRESSURE_CORE_SOUND;
+            }
             put(p + 0x16e8, points);
         }
         if (!rank && (p[0x17bd] == 1 || p[0x17bd] == 2))
             return stop(frontier, 0x1fa010);
+        if (call->phase == 1) call->phase = 2;
+    }
+    /* 26ECD0 plays both authored cues before clearing pressure. A stalled
+     * sound retains its request and the points already added by 20A178. */
+    if (call->phase == PRESSURE_CORE_SOUND) {
+        gh_actor_motion_status status = environment_pressure_sound(call, enemy, 0, 0xf7, frontier);
+        if (status) return status;
+        call->phase = PRESSURE_LOCAL_SOUND;
+    }
+    if (call->phase == PRESSURE_LOCAL_SOUND) {
+        const uint16_t program = (uint16_t)(word(p + 0x424) + 0x14u); /* 1595F0 */
+        gh_actor_motion_status status = environment_pressure_sound(call, enemy, 1, program, frontier);
+        if (status) return status;
+        put(p + 0x16ec, rank >= 3 && rank <= 5 ? 300u : 150u);
+        put(p + 0x16e8, 0);
+        put(p + 0x16dc, 0); /* 26EE40(actor, 0, 0) leaves the manager timer alone. */
         call->phase = 2;
     }
     if (call->phase == 2) {
@@ -494,13 +549,16 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int opening_203 = r100_stamp19(enemy, p);
     const int opening_200 = r100_stamp20(enemy, p) || (triangle && r100_stamp8(enemy, p));
     const int opening_pair = opening_203 || opening_200;
+    const int ordinary_punch = r102_punch(enemy, p, effect);
+    const int hit_probe_selector = opening_pair || ordinary_punch;
+    const int counter_selector = opening_200 || ordinary_punch;
 
     if (call->phase == 0) {
         const float drain = number(p + 0x770), cooldown = number(p + 0x54c);
         const float block = number(p + 0x1740), armor = number(p + 0x1734);
         const uint16_t hp = half(p + 0x54a);
         uint16_t flags = half(p + 0x3ac);
-        if ((!opening_pair && dependency != 0x20a) || !hp || hp >= 0x8000 ||
+        if ((!hit_probe_selector && dependency != 0x20a) || !hp || hp >= 0x8000 ||
             !isfinite(drain) || drain > 0 || !isfinite(cooldown) || cooldown > 0 ||
             !isfinite(block) || !isfinite(armor))
             return stop(frontier, 0x20a178);
@@ -587,16 +645,16 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             (behavior & (opening_pair ? 0x806020u : 0x802020u)) ||
             (status & 0x80040u) || (p[0x2f4] == 1 && p[0x2f5] == 0x16))
             return stop(frontier, 0x20a7e0);
-        if (p[0x17bc] != (unsigned)opening_pair || p[0x17ba] != (unsigned)opening_pair ||
-            p[0x17b9] != (unsigned)opening_200 || p[0x17bb] != 1)
+        if (p[0x17bc] != (unsigned)hit_probe_selector || p[0x17ba] != (unsigned)hit_probe_selector ||
+            p[0x17b9] != (unsigned)counter_selector || p[0x17bb] != 1)
             return stop(frontier, 0x20cac8);
         /* 20D138 returns 0. With selector 1, 20CAC8 draws once before
          * rejecting effect 7. 20D398 requires selector 3 for effect 7,
-         * and 20CD00 rejects selector 0. Stamp20 selector1 returns at rank 1.
+         * and 20CD00 rejects selector 0. Selector 1 returns at rank 1.
          * The rank2+ selector1 branch has an additional counter draw. */
-        if (!triangle && opening_200 && rank >= 2)
+        if (!triangle && counter_selector && rank >= 2)
             return stop(frontier, 0x20cd00);
-        if (opening_pair) {
+        if (hit_probe_selector) {
             gh_game_mt mt=body->state->random;
             uint32_t probe_random;
             if (gh_game_mt_next_0030f348(&mt, &probe_random))
@@ -723,10 +781,11 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     uint8_t *p = enemy->entry.object.view.bytes;
     const float timer = number(p + 0x17cc);
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
-    const int triangle = body->bytes && body->size >= 0x48 &&
-        opening_triangle(enemy, p, half(body->bytes + 0x46));
+    const uint16_t effect = body->bytes && body->size >= 0x48 ? half(body->bytes + 0x46) : 0;
+    const int triangle = opening_triangle(enemy, p, effect);
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
-    if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) && !triangle) ||
+    if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
+         !r100_stamp20(enemy, p) && !triangle && !r102_punch(enemy, p, effect)) ||
         (amplified && !(triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p)))))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
@@ -797,7 +856,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         return stop(frontier, 0x271d7c);
     if ((!thrown_box && (call->effect == 0x2e ? !scenery_reaction_enemy(enemy,p) :
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
-            !(call->effect == 0x12 && r100_stamp8(enemy, p)))) ||
+            !(call->effect == 0x12 && r100_stamp8(enemy, p)) &&
+            !r102_punch(enemy, p, half(body->bytes + 0x46)))) ||
         init->heat[0x10] || word(player->bytes + 0x5fc) ||
         (!manager_active && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);

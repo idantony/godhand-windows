@@ -29,7 +29,8 @@ static unsigned motion_flags_allowed(const gh_actor_model *model){
  /* 25E790 uses the same bit while sampling either opening actor's death clip. */
  const int stamp20=model->root.size>=0x642&&dependency==0x200&&half(p+0x640)==20&&
     model->work&&(uint16_t)model->work->room==0x100;
- const int allowed=(p[0x2f4]==1&&(dependency==0x20a||stamp19||stamp20))||
+ const int r102_em00=dependency==0x200&&model->work&&(uint16_t)model->work->room==0x102;
+ const int allowed=(p[0x2f4]==1&&(dependency==0x20a||stamp19||stamp20||r102_em00))||
                    (p[0x2f4]==2&&(stamp19||stamp20));
  return allowed?0x48u:0x40u;
 }

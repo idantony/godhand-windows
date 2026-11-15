@@ -4,6 +4,7 @@
 #include "game_hitarea_objects.h"
 #include "game_hitarea_shapes.h"
 #include "game_collision_scroll.h"
+#include "game_event_player_reset.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,6 +58,10 @@ gh_actor_model_status gh_om_weapon_spheres_release(gh_hitarea_object[2],uint8_t 
 /* Actual VT42AA98+44, for factory kinds 361 through 363. */
 gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *,
     gh_enemy_weapon *, const gh_hitarea_shape_bindings *, int *original_return);
+/* The original 26AB20 offsets and 1CF160 link for the ordinary weapon class. */
+gh_actor_model_status gh_om_weapon_bind_0026ab20(const gh_event_weapon_attachment *,
+    uint16_t kind,const void *owner,gh_game_scene_tables *,gh_collision_scroll_mutation *,
+    gh_static_transform_policy,uint8_t *stage,uint32_t *frontier);
 /* Original 26AA30 nonnull transform copy, then the bounded enemy-202 weapon
  * 26AB20 -> 1CF160 attachment. No raw guest pointer is published. */
 gh_actor_model_status gh_enemy_weapon_attach_0026ab20(gh_enemy_weapon_init *,

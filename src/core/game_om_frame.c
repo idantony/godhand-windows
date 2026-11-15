@@ -1629,13 +1629,19 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
   if(weapon_model&&word(p+0x600))return fail(s,0x1cf3a8,f,GH_OBJSTEP_UNSUPPORTED);
   if(weapon_model&&c->model.external_owner){
    const uint8_t *parent;
-   if(!paper(s->object)||p[0x2f4]||p[0x2f5]!=1||c->model.external_owner!=s->object||
-      !s->environment_bound||!s->environment.current_player||
+   if(p[0x2f4]||p[0x2f5]!=1||c->model.external_owner!=s->object||
       gh_actor_model_external_parent_at(&c->model,0,&parent)||
-      c->model.external_parent->root.bytes!=s->environment.current_player->bytes||
       word(p+0x604)!=c->model.external_parent_index)return fail(s,0x1cf3a8,f,GH_OBJSTEP_UNSUPPORTED);
+   const gh_title_player_view *parent_actor=&c->model.external_parent->root;
+   if(paper(s->object)){
+    if(!s->environment_bound||!s->environment.current_player||
+       parent_actor->bytes!=s->environment.current_player->bytes)
+     return fail(s,0x1cf3a8,f,GH_OBJSTEP_UNSUPPORTED);
+   }else if(!s->object->runtime_created||s->object->runtime_kind!=0x363||w->room!=0x102||
+      parent_actor->size<0x568||word(parent_actor->bytes+0x564)!=0x200)
+    return fail(s,0x1cf3a8,f,GH_OBJSTEP_UNSUPPORTED);
    const gh_event_weapon_attachment attachment={&s->object->view,&c->model,
-    s->environment.current_player,c->model.external_parent,(int32_t)word(p+0x604)};
+    parent_actor,c->model.external_parent,(int32_t)word(p+0x604)};
    uint32_t pc=0;
    if(gh_event_weapon_follow_001cf3a8(&attachment,policy,&pc))
     return fail(s,pc?pc:0x1cf3a8,f,GH_OBJSTEP_UNSUPPORTED);

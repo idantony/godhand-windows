@@ -3,6 +3,7 @@
 #include "../src/platform/startup_qa_repeat_square.h"
 #include "../src/platform/startup_qa_r100_pad_tape.h"
 #include "../src/platform/startup_qa_r102_walk.h"
+#include "../src/platform/startup_qa_r102_punch.h"
 #include "../src/platform/startup_qa_title.h"
 #include "../src/platform/startup_qa_save_map_continue.h"
 #include "../src/platform/disc.h"
@@ -119,7 +120,7 @@ struct R102CardProbe {
 
 static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh_native_input &input,
     uint64_t max_ticks,bool controlled_r003,QAR100PadTape &tape,uint64_t after_victory,bool jump_r105,
-    bool walk_r102,bool approach_r102,bool save_r102,uint64_t load_frames)
+    bool walk_r102,bool approach_r102,bool save_r102,bool load_r102,uint64_t load_frames,bool steer_r102)
 {
     if(!configure_cpu_sink(host,&sink,ffmpeg))return fail("consumer setup");
     QAStartupTitleProbe title;
@@ -127,7 +128,7 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
     R102CardProbe card;
     bool card_complete=false;
     QARepeatSquareProbe combat;
-    combat.enabled=!controlled_r003&&!tape.enabled&&!load_frames;
+    combat.enabled=!controlled_r003&&!tape.enabled&&!load_r102;
     combat.triangle=combat.pair=combat.continue_after_pair=combat.packet_only=true;
 
     gh_startup_snapshot snapshot={};
@@ -139,10 +140,12 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
     unsigned r102_world=0,r102_actors=0;
     QAR102WalkProbe walk;
     walk.enabled=walk_r102;
+    QAR102PunchProbe punch;
+    punch.enabled=approach_r102;
     bool pad_complete=false;
     int r003_cut=-1,r002_cut=-2,r002_state=-1;
     while(snapshot.ticks<max_ticks&&snapshot.phase==GH_HOST_RUNNING&&!combat.complete()&&!pad_complete&&!walk.complete&&!card_complete){
-        title.sample(snapshot,input,!load_frames,false);
+        title.sample(snapshot,input,!load_r102,false);
         gh_native_gamepad_sample pad=tape.enabled?tape.sample(snapshot):combat.sample(snapshot);
         if(jump_r105&&snapshot.current_room==0x105&&snapshot.game_state==4&&
            snapshot.scene_frame_ready&&snapshot.ticks>3326&&(snapshot.ticks&1)){
@@ -154,21 +157,34 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
             pad=card.save_pad(snapshot,completed_frames);
         else if(jump_r105&&snapshot.current_room==2&&snapshot.game_state==4&&snapshot.save_map_active)
             pad=r002_save_map.sample(snapshot,completed_frames);
-        if(load_frames&&snapshot.save_map_active)pad=r002_save_map.sample(snapshot,completed_frames);
-        else if(load_frames&&(snapshot.title_live||snapshot.mc_load_mode))pad=card.load_pad(snapshot);
+        if(load_r102&&snapshot.save_map_active)pad=r002_save_map.sample(snapshot,completed_frames);
+        else if(load_r102&&(snapshot.title_live||snapshot.mc_load_mode))pad=card.load_pad(snapshot);
         if(walk.applies(snapshot))pad=walk.sample(snapshot,r102_frames);
-        if(approach_r102&&snapshot.current_room==0x102&&snapshot.game_state==4&&snapshot.player_pose_ready){
-            pad={};
-            pad.connected=1;
-            if(r102_frames>=8&&r102_frames<180)pad.left_y=32767;
-            if(r102_frames==184)pad.buttons=0x4000;
-        }
+        if(punch.applies(snapshot))
+            pad=steer_r102?punch.sample_live(host,snapshot,r102_frames):punch.sample(r102_frames);
         gh_native_input_snapshot controls={};
         if(!gh_native_input_tick_device(&input,snapshot.work,&pad,&controls)||
            gh_startup_host_set_input(host,&controls)!=GH_HOST_OK)return fail("native input");
+        if(approach_r102&&snapshot.current_room==0x102){
+            if(r102_frames==8&&pad.left_y&&controls.analog_valid)
+                std::fprintf(stderr,"CPU_R102_APPROACH_ANALOG frame=%llu tick=%llu y=%d axis=%d\n",
+                    (unsigned long long)r102_frames,(unsigned long long)snapshot.ticks,
+                    (int)pad.left_y,(int)controls.analog.axes[1]);
+            if(pad.buttons==0x4000&&(controls.raw_pressed&0x80u))
+                std::fprintf(stderr,"CPU_R102_APPROACH_SQUARE frame=%llu tick=%llu pressed=%016llX\n",
+                    (unsigned long long)r102_frames,(unsigned long long)snapshot.ticks,
+                    (unsigned long long)controls.pressed);
+        }
         const unsigned previous_world=sink.world,previous_actors=sink.actor;
+        const uint32_t previous_player=snapshot.player_handle,previous_hp=snapshot.player_hp;
         gh_startup_host_tick(host);
         if(gh_startup_host_snapshot(host,&snapshot)!=GH_HOST_OK)return fail("scheduler snapshot");
+        punch.observe(host,snapshot,controls);
+        if(approach_r102&&snapshot.current_room==0x102&&previous_player&&
+           snapshot.player_handle==previous_player&&snapshot.player_hp<previous_hp)
+            std::fprintf(stderr,"CPU_R102_PLAYER_DAMAGE tick=%llu player=%u hp_before=%u hp_after=%u state=%02X/%02X\n",
+                (unsigned long long)snapshot.ticks,previous_player,previous_hp,snapshot.player_hp,
+                snapshot.player_state[0],snapshot.player_state[1]);
         if(jump_r105&&snapshot.current_room==2&&snapshot.game_state==4&&
            (snapshot.event_cut!=r002_cut||snapshot.event_state!=r002_state)){
             r002_cut=snapshot.event_cut;
@@ -206,6 +222,11 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
                         (unsigned long long)snapshot.ticks,(unsigned long long)r102_frames,
                         (unsigned)snapshot.player_hp,r102_world,r102_actors);
                 }
+                if(load_r102&&approach_r102&&r102_frames==1){
+                    if(!card.title_list_seen)return fail("R102 title load slot");
+                    std::fprintf(stderr,"CPU_R102_APPROACH_LOADED tick=%llu hp=%u\n",
+                        (unsigned long long)snapshot.ticks,(unsigned)snapshot.player_hp);
+                }
                 walk.observe_frame(snapshot,completed_frames,r102_frames);
                 if(approach_r102&&(r102_frames==1||r102_frames%32==0))
                     approach_trace(snapshot,r102_frames);
@@ -226,6 +247,7 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
     combat.report();
     tape.report("CPU_R100_PAD_TAPE");
     walk.report("CPU_R102_WALK",r102_frames);
+    punch.report("CPU_R102_PUNCH");
     if(approach_r102&&snapshot.current_room==0x102)approach_trace(snapshot,r102_frames);
     const gh_se_attached_failure &voice=snapshot.attached_voice_failure;
     if(voice.frontier&&voice.frontier==snapshot.unavailable_entry)
@@ -247,11 +269,20 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
     if(snapshot.unavailable_entry&&snapshot.current_enemy_placement_ready)
         std::fprintf(stderr,"CPU_REPLAY_ENEMY {\"handle\":%u,\"stamp\":%u,\"dependency\":\"%04X\","
             "\"appearance\":%u,\"state\":\"%04X\",\"phase\":%u,\"variant\":%u,"
-            "\"distance_xz_squared_bits\":\"%08X\",\"flags_16d0\":\"%08X\",\"flags_16d4\":\"%08X\"}\n",
+            "\"distance_xz_squared_bits\":\"%08X\",\"home_mode\":%u,\"flags_16d0\":\"%08X\",\"flags_16d4\":\"%08X\"}\n",
             snapshot.last_move_handle,snapshot.current_enemy_stamp,snapshot.current_enemy_dependency,
             snapshot.current_enemy_appearance,snapshot.current_actor_state,snapshot.current_enemy_phase,
-            snapshot.current_enemy_variant,snapshot.current_enemy_distance_bits,
+            snapshot.current_enemy_variant,snapshot.current_enemy_distance_bits,snapshot.current_enemy_home_reason,
             snapshot.current_enemy_flags_16d0,snapshot.current_enemy_flags_16d4);
+    if(approach_r102&&snapshot.current_room==0x102&&snapshot.current_enemy_placement_ready){
+        for(unsigned i=0;i<snapshot.current_b_samples;i++){
+            if(snapshot.current_b_group[i]!=2||snapshot.current_b_source_kind[i]!=0x100)continue;
+            const uint32_t *take=snapshot.current_b_words[i];
+            std::fprintf(stderr,"CPU_R102_TAKE actor=%u stamp=%u hp=%u max_hp=%u effect=%u power=%u flags=%08X\n",
+                snapshot.last_move_handle,snapshot.current_enemy_stamp,snapshot.current_actor_hp54a,
+                snapshot.current_actor_hp548,take[0x44/4]>>16,take[0x4c/4],take[0x60/4]);
+        }
+    }
     std::printf("{\"scope\":\"native scheduler and packets, no graphics presentation\","
         "\"ticks\":%llu,\"elapsed_seconds\":%.3f,\"room\":\"%04X\",\"next_room\":\"%04X\","
         "\"game_state\":%u,\"scene_stage\":%u,\"phase\":%u,\"frontier\":\"%08X\","
@@ -276,16 +307,20 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
 int main(int argc,char **argv)
 {
     const bool walk_r102=argc==6&&!std::strcmp(argv[5],"--r102-walk");
-    const bool approach_r102=argc==6&&!std::strcmp(argv[5],"--r102-approach");
+    const bool steer_new_game=argc==6&&!std::strcmp(argv[5],"--r102-steer");
+    const bool approach_new_game=steer_new_game||(argc==6&&!std::strcmp(argv[5],"--r102-approach"));
     const bool save_r102=argc==6&&!std::strcmp(argv[5],"--r102-save");
     const bool load_r102=(argc==6||argc==7)&&!std::strcmp(argv[5],"--r102-title-load");
-    const bool jump_r105=save_r102||walk_r102||approach_r102||(argc==6&&!std::strcmp(argv[5],"--r105-jump"));
+    const bool steer_after_load=load_r102&&argc==7&&!std::strcmp(argv[6],"--r102-steer");
+    const bool approach_after_load=steer_after_load||(load_r102&&argc==7&&!std::strcmp(argv[6],"--r102-approach"));
+    const bool approach_r102=approach_new_game||approach_after_load;
+    const bool jump_r105=save_r102||walk_r102||approach_new_game||(argc==6&&!std::strcmp(argv[5],"--r105-jump"));
     const bool controlled_r003=jump_r105||(argc==6&&!std::strcmp(argv[5],"--r003-controlled"));
     const bool post_victory=argc==9&&!std::strcmp(argv[7],"--after-victory-frames");
     const bool pad_tape=(argc==7||post_victory)&&!std::strcmp(argv[5],"--pad-tape");
     if(argc!=5&&!controlled_r003&&!pad_tape&&!load_r102){
         std::fprintf(stderr,"Usage: probe-startup-cpu <ISO> <FFmpeg> <profile path> <max ticks> "
-            "[--r003-controlled | --r105-jump | --r102-walk | --r102-approach | --r102-save | --r102-title-load [frames] | --pad-tape CSV [--after-victory-frames N]]\n");
+            "[--r003-controlled | --r105-jump | --r102-walk | --r102-approach | --r102-save | --r102-title-load [frames | --r102-approach] | --pad-tape CSV [--after-victory-frames N]]\n");
         return 2;
     }
     QAR100PadTape tape;
@@ -294,8 +329,8 @@ int main(int argc,char **argv)
     errno=0;
     const uint64_t max_ticks=std::strtoull(argv[4],&end,10);
     if(argv[4][0]<'1'||argv[4][0]>'9'||errno||*end)return fail("tick-limit parsing");
-    uint64_t load_frames=load_r102?120:0;
-    if(load_r102&&argc==7){
+    uint64_t load_frames=load_r102&&!approach_after_load?120:0;
+    if(load_frames&&argc==7){
         errno=0;
         load_frames=std::strtoull(argv[6],&end,10);
         if(argv[6][0]<'1'||argv[6][0]>'9'||errno||*end||load_frames>=max_ticks)
@@ -336,7 +371,7 @@ int main(int argc,char **argv)
     }
     fixture_sink sink={};
     const int result=replay(host,sink,argv[2],input,max_ticks,controlled_r003,tape,after_victory,jump_r105,
-                            walk_r102,approach_r102,save_r102,load_frames);
+                            walk_r102,approach_r102,save_r102,load_r102,load_frames,steer_new_game||steer_after_load);
     if(gh_startup_host_destroy(host)!=GH_HOST_OK){
         std::fprintf(stderr,"CPU replay host cleanup failed\n");
         if(result==0)return 1;

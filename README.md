@@ -56,11 +56,18 @@ enemies and HUD.
 The original save menu at the end of Event 04 writes a valid R102 checkpoint.
 A fresh launch loads that checkpoint through the original title and save-map
 flow. Direct3D presents 36 consecutive R102 frames while a controlled stick
-input moves Gene. Full R102 combat remains in development.
+input moves Gene. Two independent title-load runs also present the first
+verified R102 melee hit and its follow-through. Square lowers the targeted
+enemy from 74 to 71 HP. Each run captures the same 32 consecutive Direct3D
+frames with matching world and HUD-composited images. In a separate CPU
+replay from New Game, the same enemy's counterattack lowers Gene from 100
+to 91 HP.
 
 Native CPU replays also verify R100's original Game Over and Retry flow and
 R101's box throw and 200 G pickup. R100 reloads with 100 HP and continues
-for 120 gameplay frames. The R101 replay verifies the box and item releases.
+for 120 gameplay frames. A longer R101 replay runs for 4,494 native CPU
+frames and verifies the box and item releases, the original DIE marker
+and enemy audio. R101's later combat presentation remains in development.
 
 ### Verified progress
 
@@ -91,10 +98,9 @@ for 120 gameplay frames. The R101 replay verifies the box and item releases.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters. Subsequent opening frames create original
   event effects, update their lifetimes and render sprites and framebuffer warp.
-- The frozen regression build compiles 381 C modules and passes 371 native checks.
-  Eighteen checks that need extra tools or devices were skipped in this run.
-  Earlier Windows verification exercised muted hardware audio, movie decoding
-  and the full independent ADX comparison.
+- The frozen regression build compiles 383 C modules and passes 390 native checks.
+  This run includes muted hardware audio and movie decoding. Earlier runs also
+  exercised the two optional independent ADX sample comparisons.
   Restricted GPU pixels match separate CPU equations. The recovered OT traversal
   preserves bank order, bucket depth, LIFO packet groups and previous-frame presentation.
 - The two RNG routines in the same DLL pass 20544 exact state/float-bit
@@ -251,10 +257,14 @@ R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染�
 显示原版场景、Gene、敌人与 HUD。
 
 EV04 结尾的原版保存菜单已写出有效的 R102 存档。重新启动后，通过原版标题菜单和存档地图
-读入该存档。测试用摇杆让 Gene 移动，Direct3D 连续呈现 R102 的 36 帧。R102 的完整战斗仍待验证。
+读入该存档。测试用摇杆让 Gene 移动，Direct3D 连续呈现 R102 的 36 帧。两次独立读档
+还验证了 R102 首次近战命中，方块攻击将目标敌人的生命值从 74 降到 71，并播放原版受击动作。
+两次回放各捕获 32 个连续的 Direct3D 帧，对应的场景和 HUD 合成画面逐帧一致。
+另一轮从新游戏开始的 CPU 回放验证了同一敌人的反击，Gene 的生命值从 100 降到 91。
 
 原生 CPU 回放验证了 R100 的原版 Game Over 和重试，以及 R101 的投箱和拾取 200 金币。
-R100 重载后以 100 点生命值开始并继续运行 120 帧。R101 回放也经过了箱子与掉落物的释放流程。
+R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101 回放运行了 4,494 个原生 CPU 帧，
+验证了箱子与掉落物释放、原版 DIE 标记和敌人音效。R101 后续战斗的画面仍待验收。
 
 ### 已验证的进展
 
@@ -275,8 +285,9 @@ R100 重载后以 100 点生命值开始并继续运行 120 帧。R101 回放也
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始 FX 调用 0x30F228 创建 4 个环境发射器。
   后续片头帧创建原剧情特效，更新其生命周期，并绘制精灵和画面扭曲。
-- 冻结回归构建编译 381 个 C 模块，通过 371 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
-  受限 GPU 像素与独立 CPU 方程一致。绘制保留原 OT 的层级、
+- 冻结回归构建编译 383 个 C 模块，通过 390 项原生检查，包括静音设备音频和影片解码。
+  先前回归也完成了两项可选的独立 ADX 样本对比。受限 GPU 像素与独立 CPU 方程一致。
+  绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
   这不是 PS2 实机验证。上游匹配比例也不是本项目的移植完成比例。

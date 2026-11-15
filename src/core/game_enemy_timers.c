@@ -1,4 +1,6 @@
 #include "game_enemy_timers.h"
+#include "game_actor_external_parent.h"
+#include "game_om_initialize.h"
 #include <string.h>
 #include <stdlib.h>
 static uint32_t word(const uint8_t*p,size_t o){uint32_t v;memcpy(&v,p+o,4);return v;}
@@ -109,6 +111,83 @@ gh_enemy_weapon_init *gh_enemy_timers_held_weapon_runtime(gh_enemy_timers *s)
 }
 
 
+static gh_om_object *room_weapon_at(gh_om_factory *factory,uint32_t handle)
+{
+ void *registered=NULL;
+ if(!factory||!factory->bound||!handle||gh_room_object_lookup(factory->bindings.pools,
+      handle,GH_ROOM_OBJECT_OM,factory,&registered)||!registered)return NULL;
+ gh_om_object *object=registered;
+ return object->registered&&object->handle==handle&&object->runtime_created&&object->runtime_kind==0x363&&
+    !object->source.bytes&&object->view.bytes&&object->view.size==GH_ENEMY_WEAPON_363_BYTES&&
+    object->view.original_vtable214==0x42aa98&&object->initialization&&
+    object->initialization->object==object&&object->initialization->model.ready?object:NULL;
+}
+
+const gh_om_object *gh_enemy_timers_room_weapon(const gh_enemy_timers *s)
+{
+ if(!s||s->room_weapon_stage!=5)return NULL;
+ const gh_om_object *object=room_weapon_at(s->room_weapon_factory,s->room_weapon_handle);
+ return object&&object->initialization->model.external_owner==object?object:NULL;
+}
+
+unsigned gh_enemy_timers_weapon_kind(const gh_enemy_timers *s)
+{
+ const gh_enemy_weapon_init *held=registered_weapon(s);
+ if(held)return held->weapon->kind;
+ const gh_om_object *room_weapon=gh_enemy_timers_room_weapon(s);
+ return room_weapon?room_weapon->runtime_kind:0;
+}
+
+gh_actor_motion_status gh_enemy_timers_pickup_room_weapon_0026ab20(gh_enemy_timers *s,
+ gh_enemy_entry *enemy,gh_om_factory *factory,uint32_t handle,gh_game_scene_tables *actors,
+ gh_collision_scroll_mutation *scroll)
+{
+ if(!s||!enemy||!enemy->b.work||!enemy->object.view.bytes||
+    enemy->object.view.size<=0x17c3||!actors||!scroll)
+  return GH_ACTOR_MOTION_ARGUMENT;
+ s->frontier=0x26ab20;
+ gh_om_object *object=room_weapon_at(factory,handle);
+ if(!object||s->held||factory->bindings.pools!=enemy->b.pools||
+    enemy->b.work->room!=0x102||word(enemy->object.view.bytes,0x564)!=0x200)
+  return GH_ACTOR_MOTION_UNSUPPORTED;
+ if(s->room_weapon_handle&&(s->room_weapon_factory!=factory||s->room_weapon_handle!=handle))
+  return GH_ACTOR_MOTION_BUSY;
+ gh_actor_model *model=&object->initialization->model;
+ gh_actor_model *parent=&enemy->initialize.model.model;
+ if(!s->room_weapon_handle){
+  const uint8_t *p=object->view.bytes;
+  if(model->external_owner||p[0x2f4]||p[0x2f5]||!p[0x664])
+   return GH_ACTOR_MOTION_UNSUPPORTED;
+  s->room_weapon_factory=factory;
+  s->room_weapon_handle=handle;
+ }else if(model->external_owner&&(model->external_owner!=object||model->external_parent!=parent))
+  return GH_ACTOR_MOTION_BUSY;
+ const gh_event_weapon_attachment attachment={&object->view,model,&enemy->object.view,parent,
+    enemy->object.view.bytes[0x17c3]?10:16};
+ const gh_actor_model_status status=gh_om_weapon_bind_0026ab20(&attachment,object->runtime_kind,
+    object,actors,scroll,enemy->b.policy,&s->room_weapon_stage,&s->frontier);
+ if(status)return weapon_error(s,s->frontier?s->frontier:0x26ab20,status);
+ return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy_timers_release_room_weapon(gh_enemy_timers *s)
+{
+ if(!s)return GH_ACTOR_MOTION_ARGUMENT;
+ if(!s->room_weapon_handle)return GH_ACTOR_MOTION_OK;
+ gh_om_object *object=room_weapon_at(s->room_weapon_factory,s->room_weapon_handle);
+ if(object){
+  gh_actor_model *model=&object->initialization->model;
+  if(model->external_owner){
+   const gh_actor_model_status status=gh_actor_model_clear_external_parent(model,object);
+   if(status)return weapon_error(s,0x1cf160,status);
+  }
+ }
+ s->room_weapon_factory=NULL;
+ s->room_weapon_handle=0;
+ s->room_weapon_stage=0;
+ return GH_ACTOR_MOTION_OK;
+}
+
 gh_actor_motion_status gh_enemy_timers_finish_held_retirement(gh_enemy_timers *s)
 {
  if(!s||!s->held)return GH_ACTOR_MOTION_ARGUMENT;
@@ -123,7 +202,8 @@ gh_actor_motion_status gh_enemy_timers_finish_held_retirement(gh_enemy_timers *s
 
 gh_actor_motion_status gh_enemy_timers_release_native(gh_enemy_timers *s)
 {
- if(!s)return GH_ACTOR_MOTION_ARGUMENT;
+ gh_actor_motion_status detached=gh_enemy_timers_release_room_weapon(s);
+ if(detached)return detached;
  if(!s->held)return GH_ACTOR_MOTION_OK;
  s->held->present=0;
  gh_actor_model_status status=gh_enemy_weapon_release_init(&s->held->init);

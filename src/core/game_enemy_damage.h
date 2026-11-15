@@ -20,6 +20,7 @@ typedef struct {
 } gh_enemy202_impact_request;
 typedef struct {
     gh_enemy202_impact_request impact;
+    gh_motion_sound_request pressure_sound;
 
     uint8_t phase, reacted, effect;
 } gh_enemy202_hit_call;

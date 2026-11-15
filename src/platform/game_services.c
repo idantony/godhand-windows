@@ -4386,6 +4386,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
    enemy.enemy202->motion.motion.b.sound_context=&s->enemy_sound;
   }
   s->enemy_opacity=(gh_object_opacity_environment){s->b.init,enemy_scene_camera(s),&s->title_player.view,1};
+  move->projectile_factory=&s->om_factory;
   gh_actor_motion_status e=gh_enemy202_move_bind_navigation(move,&s->step.nearcheck);
   const gh_player_target_bindings targets=gh_game_services_scene_targets(s);
   if(!e)e=gh_enemy202_move_bind_targets(move,&targets);
@@ -4570,7 +4571,8 @@ static gh_game_services_status destroy_om(gh_game_services *s,
  if(object->view.bytes!=request->actor.bytes){
   *frontier=request->original_entry;return GH_SERVICES_ASSET;
  }
- if(request->original_entry==0x1c91b0&&(!object->runtime_created||object->runtime_kind!=0x376)){
+ if(request->original_entry==0x1c91b0&&(!object->runtime_created||
+    (object->runtime_kind!=0x376&&object->runtime_kind!=0x363))){
   *frontier=request->original_entry;return GH_SERVICES_FRONTIER;
  }
  if(!s->om_retirement.stage){

@@ -62,7 +62,7 @@ typedef struct {
     gh_motion_sound_request hit_sound;
     gh_effect_create_call impact_create;
     gh_effect_create_bindings impact_bindings;
-    uint32_t target_vertex, origin_vertex;
+    uint32_t target_vertex, origin_vertex, pickup_weapon_handle;
     uint8_t visibility_done, path_target_ready, visibility_hit, route_stage;
     uint8_t original_returned, substate67_stage, post_body_index, post_node_index, substate67_phase;
     gh_actor_motion_call substate67_motion;

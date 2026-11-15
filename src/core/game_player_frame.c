@@ -844,7 +844,12 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      ((s->pending_damage==15&&dependency==0x20a)||(s->pending_damage==20&&(close_enemy||stamp8_attack)));
    const int stamp19_fall=s->pending_damage_kind==0x3e&&(s->pending_damage==45||s->pending_damage==23)&&
      dependency==0x203&&stamp==19;
-   if(!r101_weapon&&!r105_short_hit&&!r105_combo_hit&&!em03_fall&&(b->work->room!=0x100||(!short_hit&&!stamp19_fall&&!em0a_override)))
+   /* R102 stamp 11 uses the same unarmed selector 15 Give row. */
+   const int r102_short_hit=b->work->room==0x102&&dependency==0x200&&stamp==11&&
+     source->bytes[0x2f4]==0&&source->bytes[0x2f5]==0x15&&source->bytes[0x2f6]==1&&
+     s->pending_damage_kind==0x37&&s->pending_damage==20;
+   if(!r101_weapon&&!r102_short_hit&&!r105_short_hit&&!r105_combo_hit&&!em03_fall&&
+      (b->work->room!=0x100||(!short_hit&&!stamp19_fall&&!em0a_override)))
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   }
   gh_player_frame_status status=damage_hp_0012c0f8(s,s->pending_damage);

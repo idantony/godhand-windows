@@ -139,8 +139,27 @@ int main(int argc,char**argv){
   if(mode==0){
    check_rank_change(s,&work,&callbacks,save_bytes,fields,1008,1,0x35,0x204);
    check_rank_change(s,&work,&callbacks,save_bytes,fields,992,0,0x38,0x200);
+   save_bytes[0x154]=0;
+   put(save_bytes+0x84,28);
+   check_rank_change(s,&work,&callbacks,save_bytes,fields,3000,2,0x35,0x204);
+   check_rank_change(s,&work,&callbacks,save_bytes,fields,4011,3,0x35,0x204);
+   const uint32_t hidden=0x08000000u;
+   C((entry(s,0x1f8)->flags&hidden)&&!(entry(s,0x1e4)->flags&hidden));
+   C(!(entry(s,0x1ec)->flags&hidden)&&!(entry(s,0x1f0)->flags&hidden)&&
+     (entry(s,0x1f4)->flags&hidden));
+   /* The 25% warning holds its visibility at exact equality in either direction. */
+   const unsigned life_sequence[]={25,24,25,26};
+   const unsigned hidden_sequence[]={1,0,0,1};
+   for(unsigned i=0;i<4;i++){
+    put(save_bytes+0x84,life_sequence[i]);
+    C(!gh_game_cockpit_heat_move_00142060(s,&work,&callbacks));
+    C(!!(entry(s,0x1f4)->flags&hidden)==hidden_sequence[i]);
+    C(!(entry(s,0x1fc)->flags&hidden));
+   }
+   check_rank_change(s,&work,&callbacks,save_bytes,fields,3999,2,0x38,0x200);
+   C(!(entry(s,0x1f8)->flags&hidden)&&(entry(s,0x1e4)->flags&hidden));
   }
   C(!gh_game_cockpit_destroy(s)&&!gh_id_runtime_destroy(r));free(init);free(m);memcpy(elf,original,en);
  }
- C(!memcmp(language,asset_copy,ln));free(asset_copy);free(original);free(elf);free(language);puts("PASS actualUSA405ID Heat142060 stablelife1/zeroHeat real warnings/pulse/slots/4IDMove/SaveMaximum; fourFEnv/damage-heal resets+shake/positive Heat smoothing, readiness, release alpha, room reset and rank1 transition in both directions; assets unchanged");return 0;
+ C(!memcmp(language,asset_copy,ln));free(asset_copy);free(original);free(elf);free(language);puts("PASS actualUSA405ID Heat142060 stablelife1/zeroHeat real warnings/pulse/slots/4IDMove/SaveMaximum; fourFEnv/damage-heal resets+shake/positive Heat smoothing, readiness, release alpha, room reset and numeric and DIE rank transitions, warning threshold latches; assets unchanged");return 0;
 }

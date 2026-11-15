@@ -222,6 +222,14 @@ gh_host_error gh_startup_host_qa_r003_title_handoff(gh_startup_host *);
 typedef struct {uint32_t continue_count;int retry_ready;} gh_qa_game_over_state;
 /* Read the original cockpit choice and continue counter on the owner thread. */
 gh_qa_game_over_state gh_startup_host_qa_game_over_state(const gh_startup_host *);
+typedef struct {
+    uint32_t handle;
+    float position[3];
+    uint16_t stamp,hp;
+    uint8_t ready,state,substate,phase;
+} gh_qa_enemy_status;
+gh_qa_enemy_status gh_startup_host_qa_enemy_status(const gh_startup_host *,uint32_t handle);
+gh_qa_enemy_status gh_startup_host_qa_nearest_em00(const gh_startup_host *,const float origin[3]);
 #endif
 /* Advances selected tasks, then the actual DVD queue in original relative
  * order. A tick is a scheduler visit, not a timed/video frame. Audio startup

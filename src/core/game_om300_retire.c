@@ -37,7 +37,7 @@ static uint32_t om_kind(const gh_om_object *actor)
 
 static int weapon_destructor(uint32_t kind)
 {
- return kind==0x376||kind==0x382;
+ return kind==0x363||kind==0x376||kind==0x382;
 }
 
 static uint32_t class_vtable(const gh_om_object *actor)
@@ -92,7 +92,7 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
   return actor->view.size>=0x630&&actor->initialization->stage==4?actor:NULL;
  if(actor->runtime_created&&om_kind(actor)==0x3be)
   return actor->view.size==0x630&&((gh_om3be_state *)actor->initialization)->stage==9?actor:NULL;
- if(actor->runtime_created&&om_kind(actor)!=0x376){
+ if(actor->runtime_created&&!weapon_destructor(om_kind(actor))){
   if(om_kind(actor)==0x3d6)
    return actor->view.size>=0x690&&actor->initialization->stage==4?actor:NULL;
   return om_kind(actor)==0x3eb&&actor->view.size>=0x610&&
@@ -210,7 +210,7 @@ uint32_t gh_om_retire_entry(uint32_t kind)
  case 0x355:return 0x1a8380;
  case 0x356:return 0x1a8730;
  case 0x41c:return 0x17b8f0;
- case 0x376:case 0x382:return 0x1c91b0;
+ case 0x363:case 0x376:case 0x382:return 0x1c91b0;
  case 0x3be:return 0x1b9030;
  case 0x3d6:return 0x1c00c8;
  case 0x3eb:return 0x1bf4b8;
@@ -597,7 +597,8 @@ gh_room_pool_status gh_om_destroy_detached_mode3(gh_om300_full_retirement *state
  if(!state->stage){
   gh_om_object *object=registered_om(factory,handle);
   if(!object||(om_kind(object)!=0x304&&om_kind(object)!=0x305&&om_kind(object)!=0x30a&&
-     om_kind(object)!=0x313&&om_kind(object)!=0x324&&om_kind(object)!=0x376&&om_kind(object)!=0x3be&&om_kind(object)!=0x3d6)||
+     om_kind(object)!=0x313&&om_kind(object)!=0x324&&om_kind(object)!=0x363&&
+     om_kind(object)!=0x376&&om_kind(object)!=0x3be&&om_kind(object)!=0x3d6)||
      object->view.bytes!=actor->bytes||object->view.size!=actor->size||
      word(actor->bytes+0x214)!=class_vtable(object)||original!=gh_om_retire_entry(om_kind(object))||
      (word(actor->bytes+0x250)&0xa0000000u)!=0xa0000000u)

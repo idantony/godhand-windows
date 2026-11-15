@@ -2,11 +2,13 @@
 #define GH_GAME_ENEMY_TIMERS_H
 #include "game_enemy_node_cache.h"
 #include "game_enemy_weapon.h"
+#include "game_om_factory.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 typedef struct gh_enemy_held_weapon gh_enemy_held_weapon;
-typedef struct {gh_enemy_node_cache *nodes;uint32_t stage,cursor,frontier,pending_word,words[3],timer_bits[3];uint8_t pending;gh_enemy_held_weapon *held;} gh_enemy_timers;
+typedef struct {gh_enemy_node_cache *nodes;uint32_t stage,cursor,frontier,pending_word,words[3],timer_bits[3];uint8_t pending;gh_enemy_held_weapon *held;
+ gh_om_factory *room_weapon_factory;uint32_t room_weapon_handle;uint8_t room_weapon_stage;} gh_enemy_timers;
 /* Actual30F518/31D000 shiftsMTword>>1 BEFORE signedCVT then*2^-31.
  * Timer expression is three orderedMUL5/MUL30/ADD150 referenceoperations. */
 gh_actor_motion_status gh_enemy_mt_timer_reference(uint32_t mt_word,gh_em_numeric_policy,uint32_t *unit_bits,uint32_t *timer_bits);
@@ -22,6 +24,13 @@ gh_actor_motion_status gh_enemy_timers_with_weapon_00205ae4(gh_enemy_timers *,
 /* Typed original enemy +6EC. A partial factory never appears as an attached weapon. */
 const gh_enemy_weapon_init *gh_enemy_timers_held_weapon(const gh_enemy_timers *);
 gh_enemy_weapon_init *gh_enemy_timers_held_weapon_runtime(gh_enemy_timers *);
+/* A ground pickup borrows the existing registered OM for original +6EC. */
+const gh_om_object *gh_enemy_timers_room_weapon(const gh_enemy_timers *);
+unsigned gh_enemy_timers_weapon_kind(const gh_enemy_timers *);
+gh_actor_motion_status gh_enemy_timers_pickup_room_weapon_0026ab20(gh_enemy_timers *,
+    gh_enemy_entry *,gh_om_factory *,uint32_t handle,gh_game_scene_tables *,
+    gh_collision_scroll_mutation *);
+gh_actor_motion_status gh_enemy_timers_release_room_weapon(gh_enemy_timers *);
 /* Drop only a previously transferred and fully retired weapon companion. */
 gh_actor_motion_status gh_enemy_timers_finish_held_retirement(gh_enemy_timers *);
 gh_actor_motion_status gh_enemy_timers_release_native(gh_enemy_timers *);

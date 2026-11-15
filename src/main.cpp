@@ -5,6 +5,7 @@
 #include "platform/startup_qa_game_over.h"
 #include "platform/startup_qa_r100_pad_tape.h"
 #include "platform/startup_qa_r102_walk.h"
+#include "platform/startup_qa_r102_punch.h"
 #include "platform/startup_qa_repeat_square.h"
 #include "platform/startup_qa_title.h"
 #include "platform/startup_qa_save_map_continue.h"
@@ -791,6 +792,7 @@ static void usage()
 #ifdef GH_NATIVE_STARTUP_QA
     std::fprintf(stderr,"       --qa-game-over-retry --qa-capture FILE [--qa-r003-controlled | --qa-r102-capture]\n");
     std::fprintf(stderr,"       --qa-r102-walk [--qa-load] --qa-capture FILE [--qa-capture-count 36]\n");
+    std::fprintf(stderr,"       --qa-r102-punch [--qa-load] --qa-capture FILE --qa-capture-count 32\n");
     std::fprintf(stderr,"       --qa-pad-tape CSV [--qa-level-confirm-tick N] [--qa-after-victory-frames N]\n");
 #endif
 }
@@ -952,6 +954,8 @@ int main(int argc,char **argv)
     QAStartupTitleProbe qa_title;
     QASaveMapContinueProbe qa_save_map;
     QAR102WalkProbe qa_r102_walk;
+    QAR102PunchProbe qa_r102_punch;
+    bool qa_r102_punch_fast=false;
     QAControlProbe qa_control;
     QARepeatSquareProbe qa_repeat_square;
     QAGameOverRetryProbe qa_retry;
@@ -971,6 +975,10 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-r102-capture")||!std::strcmp(argv[i],"--qa-r102-walk")){
             qa_r102=true;qa_confirm=true;
             qa_r102_walk.enabled=!std::strcmp(argv[i],"--qa-r102-walk");
+        }
+        else if(!std::strcmp(argv[i],"--qa-r102-punch")||!std::strcmp(argv[i],"--qa-r102-punch-fast")){
+            qa_r102=true;qa_confirm=true;qa_r102_punch.enabled=true;
+            qa_r102_punch_fast=!std::strcmp(argv[i],"--qa-r102-punch-fast");
         }
         else if(!std::strcmp(argv[i],"--qa-pad-tape")&&i+1<argc){qa_pad_tape_path=argv[++i];qa_new_game=qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-after-victory-frames")&&i+1<argc){
@@ -1025,6 +1033,9 @@ int main(int argc,char **argv)
     if(qa_load&&(qa_new_game||prefix)){std::fprintf(stderr,"QA load requires the full title flow and a separate profile.\n");return 2;}
     if(qa_r102&&(prefix||qa_control.mode||qa_repeat_square.enabled||!qa_capture)){
         std::fprintf(stderr,"R102 QA requires a capture path and its own gameplay input.\n");return 2;
+    }
+    if(qa_r102_punch.enabled&&(qa_r102_walk.enabled||qa_capture_count!=QAR102PunchProbe::capture_count)){
+        std::fprintf(stderr,"R102 punch QA requires its 32 consecutive capture frames.\n");return 2;
     }
     if(qa_r003&&(prefix||qa_control.mode||qa_repeat_square.enabled)){
         std::fprintf(stderr,"Controlled R003 QA requires a standalone title handoff.\n");return 2;
@@ -1186,12 +1197,19 @@ int main(int argc,char **argv)
                         if(!qa_r102_first)qa_r102_first=qa_r102_last;
                         ++qa_r102_frames;
                         qa_r102_walk.observe_frame(app.snapshot,qa_r102_last,qa_r102_frames);
+                        qa_r102_punch.presented(qa_r102_last);
                     }
                     qa_control.presented(app.prepared_scene_serial);
                     qa_repeat_square.presented(app.prepared_scene_serial);
                     if(app.prepared_scene_serial>=qa_capture_frame&&app.prepared_scene_serial<=qa_last_capture_scene)
                         std::fprintf(stderr,"QA_CAPTURE_PRESENTED %llu\n",(unsigned long long)app.prepared_scene_serial);
                     if(qa_r102_walk.complete){result=0;break;}
+                    if(qa_r102_punch.applies(app.snapshot)&&qa_r102_punch.press_room_frame&&
+                       qa_r102_frames==qa_r102_punch.press_room_frame+QAR102PunchProbe::capture_count){
+                        result=qa_r102_punch.hit_scene&&qa_r102_last>=qa_r102_punch.hit_scene+10&&
+                            qa_captured==qa_capture_count?0:5;
+                        break;
+                    }
                     if(qa_pad_tape.presented(app.snapshot,app.prepared_scene_serial)){
                         const std::string victory=std::string(qa_capture)+".battle-won.rgba";
                         if(!qa_write_capture(victory,app.queued_pixels)||
@@ -1237,6 +1255,7 @@ int main(int argc,char **argv)
                 if(qa_r102&&qa_load&&app.snapshot.current_room==0x20&&app.snapshot.save_map_active)
                     pad=qa_save_map.sample(app.snapshot,app.prepared_scene_serial);
                 if(qa_r102_walk.applies(app.snapshot))pad=qa_r102_walk.sample(app.snapshot,qa_r102_frames);
+                if(qa_r102_punch.applies(app.snapshot))pad=qa_r102_punch.sample_live(app.host,app.snapshot,qa_r102_frames);
                 if(!gh_native_input_tick_device(&qa_input,app.snapshot.work,&pad,&input))break;
                 if(retry_confirm)qa_retry.record_confirm(app.snapshot.ticks,input);
             }
@@ -1251,6 +1270,7 @@ int main(int argc,char **argv)
                 if(host_error!=GH_HOST_OK){std::fprintf(stderr,"QA R003 handoff mismatch.\n");break;}
                 qa_r003_handoff=app.snapshot.ticks;
             }
+            qa_r102_punch.observe(app.host,app.snapshot,input);
             qa_control.observe(app.snapshot,input);
             qa_repeat_square.observe(app.snapshot,input);
             if(qa_retry.enabled&&qa_retry.confirm_edge)
@@ -1283,7 +1303,8 @@ int main(int argc,char **argv)
                     app.snapshot.game_state==4&&app.snapshot.event_number==4&&
                     app.snapshot.event_cut==1&&app.snapshot.event_cut_frame>=8.0f;
                 const bool r102_scene=(qa_r003_handoff||qa_load)&&app.snapshot.current_room==0x102&&app.snapshot.game_state==4;
-                if(qa_capture&&qa_captured<qa_capture_count&&app.snapshot.scene_frame_serial>=qa_capture_frame&&
+                const bool capture_due=!qa_r102_punch.enabled||qa_r102_punch.press_room_frame;
+                if(qa_capture&&capture_due&&qa_captured<qa_capture_count&&app.snapshot.scene_frame_serial>=qa_capture_frame&&
                    (qa_r102?r102_scene:!qa_r003||controlled_scene)){
                     if(qa_capture_count>1&&app.world_pixels.empty()){
                         std::fprintf(stderr,"QA capture range requires the matching pre-UI world frame\n");break;
@@ -1311,6 +1332,10 @@ int main(int argc,char **argv)
                 result=prefix&&phase==GH_HOST_FRONTIER&&app.presented_mc>0?0:4;break;
             }
             if(max_ticks&&app.snapshot.ticks>=max_ticks){result=3;break;}
+#ifdef GH_NATIVE_STARTUP_QA
+            // The fast QA route retains the normal startup and movie pacing.
+            if(qa_r102_punch_fast&&(qa_r003_handoff||qa_r102_frames))continue;
+#endif
             app.window_error=gh_window_wait_frame(app.window,&clock);
             if(app.window_error!=GH_WINDOW_OK){result=app.window_error==GH_WINDOW_CLOSED?0:1;break;}
         }
@@ -1400,6 +1425,7 @@ int main(int argc,char **argv)
         std::fprintf(stderr,"QA_R102_STATUS {\"first_scene\":%llu,\"last_scene\":%llu,\"frames\":%llu}\n",
             (unsigned long long)qa_r102_first,(unsigned long long)qa_r102_last,(unsigned long long)qa_r102_frames);
     qa_r102_walk.report("QA_R102_WALK",qa_r102_frames);
+    qa_r102_punch.report("QA_R102_PUNCH");
     if(qa_control.mode)
         std::fprintf(stderr,"QA_CONTROL_STATUS mode=%s saw_event=%u pressed=%u motion_presented=%u\n",
             qa_control.mode,(unsigned)qa_control.saw_event,(unsigned)qa_control.pressed,(unsigned)qa_control.reported_motion);
