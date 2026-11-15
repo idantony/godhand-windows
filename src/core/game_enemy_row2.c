@@ -41,9 +41,9 @@ static int is_r100_appearance0_profile(const gh_enemy_request *request)
     if(request->entry_number==16)
         return request->dependency_kind==0x202&&request->flags==0x04000002u;
     return request->flags==0x04000000u &&
-        (((request->entry_number==19||request->entry_number==26||request->entry_number==30) && request->dependency_kind==0x203) ||
-         ((request->entry_number==20||request->entry_number==27||request->entry_number==28||request->entry_number==31) && request->dependency_kind==0x200) ||
-         ((request->entry_number==29||request->entry_number==32) && request->dependency_kind==0x202));
+        (((request->entry_number==19||request->entry_number==25||request->entry_number==26||request->entry_number==30) && request->dependency_kind==0x203) ||
+         ((request->entry_number==20||request->entry_number==23||request->entry_number==27||request->entry_number==28||request->entry_number==31) && request->dependency_kind==0x200) ||
+         ((request->entry_number==24||request->entry_number==29||request->entry_number==32) && request->dependency_kind==0x202));
 }
 
 static int is_r100_appearance1_profile(const gh_enemy_request *request)
@@ -68,7 +68,7 @@ int gh_enemy202_is_r100_supported_profile(const gh_enemy_request *request)
 
 int gh_enemy202_body_radius_002070cc(uint32_t scale,uint32_t nominal,uint32_t *bits)
 {
-    if (!bits || scale<0x3f800000 || scale>0x3f8ccccd ||
+    if (!bits || ((scale<0x3f800000 || scale>0x3f8ccccd) && scale!=0x3f99999a) ||
         (nominal!=0x3e99999a && nominal!=0x3ecccccd)) return 0;
     /* Binary32 exponents 0 and -2. Both finite positive operands are exact. */
     uint64_t product=(uint64_t)((scale&0x7fffff)|0x800000)*((nominal&0x7fffff)|0x800000);

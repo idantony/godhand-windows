@@ -47,8 +47,10 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
  const gh_effect_esp_view*v,gh_effect_trans_packet*out,uint32_t*f){
  if(!b||!v||!out||!v->payload)return GH_EFFECT_ARGUMENT;
  const uint8_t *p=v->payload;
- if(v->type!=9||!v->initialized||!gh_effect_esp_trail_is_bound(b->storage.effects,v)||
-    v->payload_size!=0x400||word(p+0xf0)!=0x44e8c8)return reject(f,0x2ec398,GH_EFFECT_ARGUMENT);
+ const int two_edges=v->type==0x20;
+ if((v->type!=9&&!two_edges)||!v->initialized||!gh_effect_esp_trail_is_bound(b->storage.effects,v)||
+    v->payload_size!=0x400||word(p+0xf0)!=(two_edges?0x44f4f8u:0x44e8c8u))
+  return reject(f,0x2ec398,GH_EFFECT_ARGUMENT);
  if(word(p+0x11c)&0x800000u){*out=(gh_effect_trans_packet){0};return GH_EFFECT_OK;}
  const unsigned stride=word(p+0x2e4);
  const uint32_t pc=stride==1?0x2ec398:0x2edf70,flags=word(p+0x11c),mode=word(p+0x2e0);
@@ -57,17 +59,20 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
     b->camera->identity!=b->init->active_camera||b->camera->policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE||
     b->cvt_policy!=GH_FRAME_CHOP_REFERENCE||b->policy!=GH_STATIC_BINARY32_REFERENCE)
   return reject(f,0x147528,GH_EFFECT_UNSUPPORTED);
- if(!stride||(mode&~2u)||!v->target120_known_null||word(p+0x120)||word(p+0x114)||
+ if(!stride||(two_edges?mode!=5u:(mode&~2u))||!v->target120_known_null||word(p+0x120)||word(p+0x114)||
     !(flags&0x1000000u)||(int8_t)p[0x101]>2)
   return reject(f,pc,GH_EFFECT_UNSUPPORTED);
- const float *history=NULL;
+ const float *history=NULL,*other_history=NULL;
  unsigned count=0;
- if(gh_effect_create_esp_trail_view(b->storage.effects,slot,v->serial,&history,&count)||
+ if(gh_effect_create_esp_trail_view_edges(b->storage.effects,slot,v->serial,&history,&other_history,&count)||
     count<2||count>26||(stride!=1&&((count-1)/stride?((count-1)/stride+2):3)>=count))
   return reject(f,0x2edea0,GH_EFFECT_UNSUPPORTED);
- float camera[16],eye[3],points[26][3];
+ float camera[16],eye[3],points[26][3],other_points[26][3];
  memcpy(camera,b->camera->fields,64);memcpy(eye,b->camera->fields+0x210,12);
- for(unsigned i=0;i<count;i++)centre(history,i,stride,points[i]);
+ for(unsigned i=0;i<count;i++){
+  centre(history,i,stride,points[i]);
+  if(other_history)centre(other_history,i,stride,other_points[i]);
+ }
  const float bias=num(p+0x254);
  float head[3],direction[3],projected[4];
  for(unsigned j=0;j<3;j++){head[j]=history[j];direction[j]=add(head[j],-eye[j]);}
@@ -96,7 +101,19 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
  const float first_width=num(p+0x24),last_width=num(p+0x20);
  float width=first_width,step=divf(add(last_width,-first_width),(float)count);
  if(mode&2)step=add(step,step);
- const float u=(flags&0x10000000u)?-1:1, direction_v=(flags&0x08000000u)?1:-1;
+ float u=flags&0x10000000u?-1:1,v_step=flags&0x08000000u?1:-1;
+ float u_origin=0,v_origin=0;
+ if(two_edges){
+  const int frame=(int8_t)p[0x244];
+  if(p[0x245]!=1||p[0x246]!=2||frame<0||frame>=2||
+     !material->height||material->height%2||word(p+0x2d8)||word(p+0x2d4)!=0x3f800000u)
+   return reject(f,pc,GH_EFFECT_UNSUPPORTED);
+  /* 2EDF70 replaces both strips' UV with the current 1x2 atlas cell. */
+  u_origin=flags&0x10000000u?1.0f:0.0f;
+  v_origin=mul((float)frame,0.5f);
+  v_step=0.5f;
+  if(flags&0x08000000u){v_origin=add(v_origin,v_step);v_step=-v_step;}
+ }
  unsigned kick_history=6;
  gh_effect_trans_vertex prior[2]={0};
  gh_effect_trans_packet packet={0};
@@ -121,14 +138,20 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
  for(unsigned i=0;i<count;i++){
   if(i){width=add(width,(mode&2)&&i>=count/2?-step:step);if((mode&2)&&i>=count/2&&width<0)width=0;}
   const float *point=points[i],*next=points[i?i:1],*prev=points[i?i-1:0];
-  float tangent[3],ray[3],normal[3];
-  for(unsigned j=0;j<3;j++){tangent[j]=add(next[j],-prev[j]);ray[j]=add(point[j],-eye[j]);}
-  for(unsigned j=0;j<3;j++){unsigned k=(j+1)%3,l=(j+2)%3;normal[j]=add(mul(ray[k],tangent[l]),-mul(ray[l],tangent[k]));}
-  if(!norm(normal)||!isfinite(width))return reject(f,0x30a370,GH_EFFECT_UNSUPPORTED);
+  float normal[3];
+  if(!two_edges){
+   float tangent[3],ray[3];
+   for(unsigned j=0;j<3;j++){tangent[j]=add(next[j],-prev[j]);ray[j]=add(point[j],-eye[j]);}
+   for(unsigned j=0;j<3;j++){unsigned k=(j+1)%3,l=(j+2)%3;normal[j]=add(mul(ray[k],tangent[l]),-mul(ray[l],tangent[k]));}
+   if(!norm(normal)||!isfinite(width))return reject(f,0x30a370,GH_EFFECT_UNSUPPORTED);
+  }
+  const float texture_v_step=divf(mul(v_step,(float)i),(float)(count-1));
+  const float texture_v=two_edges?add(v_origin,texture_v_step):texture_v_step;
   gh_effect_trans_quad segment={0};
   for(unsigned side=0;side<2;side++){
    float corner[3],clip[4];
-   for(unsigned j=0;j<3;j++)corner[j]=add(point[j],mul(side?width:-width,normal[j]));
+   if(two_edges)memcpy(corner,side?other_points[i]:point,12);
+   else for(unsigned j=0;j<3;j++)corner[j]=add(point[j],mul(side?width:-width,normal[j]));
    if(!xyz(camera,corner,clip))return reject(f,0x30a2b0,GH_EFFECT_UNSUPPORTED);
    int32_t fixed[3];
    for(unsigned j=0;j<3;j++)if(!gh_static_vu_ftoi4(mul(clip[j],q),fixed+j))
@@ -137,7 +160,7 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
    if(fixed[2]<0||x<0x400-d->screen_width/2||x>0xc00+d->screen_width-d->screen_width/2||
       y<d->gs_y_origin-0x400||y>d->gs_y_origin+d->screen_lines+0x400)kick_history|=1;
    const gh_effect_trans_vertex current={.x12_4=fixed[0],.y12_4=fixed[1],.z=(uint32_t)fixed[2]>>4,
-    .rgba=colour,.q=1,.s=side?u:0,.t=divf(mul(direction_v,(float)i),(float)(count-1))};
+    .rgba=colour,.q=1,.s=side?add(u_origin,u):u_origin,.t=texture_v};
    if(!(kick_history&7u)&&i){
     unsigned k=segment.vertex_count;
     segment.vertices[k]=prior[side?1:0];segment.vertices[k+1]=prior[side?0:1];

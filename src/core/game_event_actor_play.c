@@ -85,6 +85,8 @@ static gh_game_event_status hide_inactive(const gh_event_actor_extra *extra, siz
     put(object + 0x250, word(object + 0x250) | 0x8002u);
     const uint32_t associated = word(row + 0x30);
     if (!associated) return GH_EVENT_OK;
+    if (associated == 0x102 && actor == 3 &&
+        extra->bindings.creation->bindings.data->components->event_no == 2) return GH_EVENT_OK;
     if (associated == 0x101 && actor == 0) {
         if (extra->weapon) {
             const gh_title_player_view *weapon = extra->weapon->weapon;
@@ -126,8 +128,9 @@ static int reset_pose(gh_actor_model *model, const uint8_t *row, int first_frame
 }
 
 static gh_game_event_status activate_related(gh_event_actor_play *s, gh_actor_model *model,
-    const uint8_t *row, float frame, uint32_t *frontier) {
-    const gh_event_actor_extra *extra = s->bindings.extra;
+    const uint8_t *row, size_t cut_offset, float frame, uint32_t *frontier) {
+    gh_event_actor_extra *extra = s->bindings.extra;
+    const gh_event_data_prefix *data = s->bindings.creation->bindings.data;
     const uint32_t associated = word(row + 0x30);
     if (!associated) return GH_EVENT_OK;
     if (associated == 0x60d && s->row == extra->olivia_accessory.actor_index && extra->accessory_handle == extra->olivia_accessory.handle &&
@@ -136,28 +139,25 @@ static gh_game_event_status activate_related(gh_event_actor_play *s, gh_actor_mo
         put(p + 0x250, word(p + 0x250) & ~0x8002u);
         return GH_EVENT_OK;
     }
-    if (associated != 0x101 || s->row) return fail(s, frontier, 0x3810, 1, GH_EVENT_UNSUPPORTED);
-    gh_game_player_child *child = extra->bindings.child;
-    if (!child || !extra->bindings.attachment || child->model.external_parent != model ||
-        child->model.external_owner != extra->bindings.attachment ||
-        child->model.external_parent_index != 17) {
-        return fail(s, frontier, 0x100ed8, 0, GH_EVENT_UNSUPPORTED);
-    }
-    uint8_t *p = child->object.view.bytes;
+    const int el00 = associated == 0x101 && s->row == 0;
+    const int el05 = associated == 0x102 && s->row == 3 && data->components->event_no == 2;
+    if (!el00 && !el05) return fail(s, frontier, 0x3810, 1, GH_EVENT_UNSUPPORTED);
+
+    unsigned bit = 0;
     if (frame == 0) {
-        if (!s->cut) return fail(s, frontier, 0x3810, 1, GH_EVENT_UNSUPPORTED);
-        gh_event_actor_cut previous;
-        if (gh_event_actor_cut_at(s->bindings.creation->bindings.data, s->row, s->cut - 1, &previous)) {
+        /* REL3810 reads the immediately preceding primary word, including
+         * the physically preceding bytes for the first authored cut. */
+        const size_t current = cut_offset + s->cut * 0x1cu;
+        if (current < 0x18 || current > data->bytes)
             return fail(s, frontier, 0x3810, 1, GH_EVENT_BOUNDS);
-        }
-        const unsigned bit = s->rows[s->row].transition ? 2 : previous.lanes[0].primary ? 0 : 1;
-        put(p + 0x2f0, word(p + 0x2f0) | bit);
+        bit = s->rows[s->row].transition ? 2 : word(data->data + current - 0x18) ? 0 : 1;
     }
+    gh_game_event_status status = gh_event_actor_extra_attach_jacket_00100ed8(extra, model);
+    if (status) return fail(s, frontier, 0x100ed8, 0, status);
+    uint8_t *p = extra->bindings.child->object.view.bytes;
+    put(p + 0x2f0, word(p + 0x2f0) | bit);
     put(p + 0x250, word(p + 0x250) & ~0x8002u);
-    put(p + 0x20d4, 17);
-    const unsigned costume = gh_core_save_costume(extra->bindings.save);
-    put(p + 0x2088, costume == 2 || costume == 3 ? 11 : costume == 4 || costume == 5 ? 7 : 12);
-    if (extra->weapon) {
+    if (el00 && extra->weapon) {
         const gh_title_player_view *weapon = extra->weapon->weapon;
         if (!weapon || !weapon->bytes || weapon->size < 0x254) return GH_EVENT_BOUNDS;
         put(weapon->bytes + 0x250, word(weapon->bytes + 0x250) & ~0x8002u);
@@ -166,7 +166,7 @@ static gh_game_event_status activate_related(gh_event_actor_play *s, gh_actor_mo
 }
 
 static gh_game_event_status move_active(gh_event_actor_play *s, gh_actor_model *model,
-    const uint8_t *row, float frame, uint32_t *frontier) {
+    const uint8_t *row, size_t cut_offset, float frame, uint32_t *frontier) {
     const gh_event_actor_play_bindings *b = &s->bindings;
     const gh_event_data_prefix *data = b->creation->bindings.data;
     gh_event_actor_play_row *play_row = &s->rows[s->row];
@@ -217,7 +217,7 @@ static gh_game_event_status move_active(gh_event_actor_play *s, gh_actor_model *
     }
     if (s->row_stage == 4) {
         if (model->first_node) {
-            gh_game_event_status status = activate_related(s, model, row, frame, frontier);
+            gh_game_event_status status = activate_related(s, model, row, cut_offset, frame, frontier);
             if (status) return status;
         }
         s->row_stage = 5;
@@ -310,7 +310,7 @@ gh_game_event_status gh_event_actor_play_move_000014c8(gh_event_actor_play *s,
                 play_row->transition = (uint8_t)reset_pose(&actor->model, read_row, frame == 0);
                 s->row_stage = 2;
             }
-            gh_game_event_status status = move_active(s, &actor->model, read_row, frame, frontier);
+            gh_game_event_status status = move_active(s, &actor->model, read_row, row_offset, frame, frontier);
             if (status) return status;
         } else {
             gh_game_event_status status = hide_inactive(b->extra, s->row, view.bytes, read_row);

@@ -14,10 +14,10 @@ typedef struct {
     const gh_event_data_prefix *data;
     gh_game_world_light *world_light;
     const void *allocation;
-    uint16_t cut_start[11];
+    uint16_t cut_start[29];
 } gh_event_additional_light;
 
-/* EV01's camera-global light track, with the same live WorldLight pool
+/* EV01/EV02 camera-global light tracks share the live WorldLight pool
  * consumed by actor lighting. Zero this state on a new event invocation. */
 gh_game_event_status gh_event_additional_light_init_000040d8(gh_event_additional_light *,
     gh_event_link *, const gh_event_data_prefix *, gh_game_world_light *, uint32_t *frontier);

@@ -67,6 +67,13 @@ gh_game_event_status gh_event_fade_init_absent_00006c70(
 gh_game_event_status gh_event_fade_move_absent_00006ca0(
     gh_event_components *components, gh_screen_fade *fade, uint32_t *frontier);
 
+/* Typed event Fade track and canonical renderer-facing Fade owner. */
+gh_game_event_status gh_event_fade_init_00006c70(gh_event_components *,
+    const gh_event_data_prefix *, uint32_t *);
+gh_game_event_status gh_event_fade_move_00006ca0(gh_event_components *,
+    const gh_event_data_prefix *, gh_screen_fade *, const gh_display_state *,
+    const gh_boot_work *, uint32_t *, int *);
+
 #ifdef __cplusplus
 }
 #endif

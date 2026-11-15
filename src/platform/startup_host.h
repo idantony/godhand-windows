@@ -203,10 +203,17 @@ gh_host_error gh_startup_host_set_effect_consumer(gh_startup_host *,gh_effect_tr
  * material view until its resource epoch/cache expires. Never creates a second
  * manager, reads the disc or acknowledges a GPU operation. */
 gh_host_error gh_startup_host_resolve_tex0(gh_startup_host *,uint64_t,const gh_stage_material **);
+/* 2FA620 samples scene TEX0 row511 on the linear-filtered top edge. In the
+ * 512x448 scene layout this row resides in the stage palette allocation. */
+gh_host_error gh_startup_host_read_scene_wrap_row(gh_startup_host *,uint32_t pixels[256]);
 /* Owner-fiber only, normally once before each timed engine tick. Writes raw
  * 32-bit and logical64-bit original work fields via memcpy, no host-long casts.
  * Does not invent physical input, replay, analog or pad-lock policy. */
 gh_host_error gh_startup_host_set_input(gh_startup_host *,const gh_native_input_snapshot *);
+#ifdef GH_NATIVE_STARTUP_QA
+/* Isolate R003 presentation by replacing the pending title room handoff. */
+gh_host_error gh_startup_host_qa_r003_title_handoff(gh_startup_host *);
+#endif
 /* Advances selected tasks, then the actual DVD queue in original relative
  * order. A tick is a scheduler visit, not a timed/video frame. Audio startup
  * performs actual synchronous native commits; no fake per-frame RPC polling.

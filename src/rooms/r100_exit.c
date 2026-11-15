@@ -25,6 +25,19 @@ static gh_scene_at_status stop(uint32_t *frontier,uint32_t address,gh_scene_at_s
     return status;
 }
 
+void gh_r100_exit_event_reserve_00000a38(gh_event_reserve_work *event)
+{
+    memset(event,0,sizeof(*event));
+    event->mode=2;
+    event->destination_room=0x105;
+    const uint32_t xyz[]={0xc0875c29,0xc03c28f6,0x429a6666};
+    const uint32_t yaw=0xc010a3d7;
+    memcpy(event->position,xyz,sizeof(xyz));
+    memcpy(&event->yaw,&yaw,sizeof(yaw));
+    event->flags=3;
+    event->flags|=8;
+}
+
 static void exit_task_00000a38(void *context,int32_t argument)
 {
     gh_r100_exit *owner=context;
@@ -38,15 +51,7 @@ static void exit_task_00000a38(void *context,int32_t argument)
     }
 
     store(b->room->active+4,word(b->room->active+4)|UINT32_C(0x400000));
-    memset(event,0,sizeof(*event));
-    event->mode=2;
-    event->destination_room=0x105;
-    const uint32_t xyz[]={0xc0875c29,0xc03c28f6,0x429a6666};
-    const uint32_t yaw=0xc010a3d7;
-    memcpy(event->position,xyz,sizeof(xyz));
-    memcpy(&event->yaw,&yaw,sizeof(yaw));
-    event->flags=3;
-    event->flags|=8;
+    gh_r100_exit_event_reserve_00000a38(event);
 
     if(b->work->room!=3){
         const float zero_vec[3]={0};

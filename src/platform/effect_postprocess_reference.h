@@ -30,16 +30,19 @@ gh_effect_post_status gh_effect_post_sample(const gh_effect_post_surface *,uint3
 gh_effect_post_status gh_effect_postprocess_apply(const gh_effect_trans_packet *,
  const gh_effect_post_sampler *,gh_effect_post_context *,gh_effect_post_receipt *,uint32_t *frontier);
 /* Original 2FA620 copies eight source strips into the 256x448 warp surface.
- * A linear top sample can borrow an unavailable GS row. Leave that target
- * row untouched and let the warp consumer prove its footprint avoids it. */
+ * Linear top samples take a quarter of scene TEX0 row511. The optional
+ * wrapped_row supplies the 256 even-column CT32 storage words for that row.
+ * If absent, leave the top row untouched and track its availability. */
 gh_effect_post_status gh_effect_postprocess_capture_scene(const gh_effect_trans_packet *,
  const gh_effect_post_sampler *, const gh_effect_post_surface *scene,
- gh_effect_post_surface *capture, uint32_t x_origin, uint32_t y_origin, int *first_row_known);
+ gh_effect_post_surface *capture, uint32_t x_origin, uint32_t y_origin,
+ const uint32_t wrapped_row[256],int *first_row_known);
 /* Validate source-known rows for raster-covered, source-dependent samples
- * of the scene capture and player-impact fans. */
+ * of the scene capture and impact fans. display_alias_known means the
+ * base-zero texture includes the live scene's aliased rows after row447. */
 gh_effect_post_status gh_effect_postprocess_warp_source_known(const gh_effect_trans_packet *,
  const gh_effect_post_sampler *,uint32_t width,uint32_t height,uint32_t x_origin,uint32_t y_origin,
- int first_row_known);
+ int first_row_known,int display_alias_known);
 #ifdef __cplusplus
 }
 #endif

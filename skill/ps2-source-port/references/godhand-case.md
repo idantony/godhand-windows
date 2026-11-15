@@ -22,6 +22,19 @@ native floating interpolation profile. This is not proof of every GS raster
 precision detail. Analytic full-surface coverage and prior RGBA/Z regressions
 must accompany the wider domain.
 
+Separate packed input depth from the depth-buffer precision. The original
+R003 EV02 cut18 sprite supplies `0x3DCC9` with ZBUF PSMZ16S. The native
+triangle path retains its input precision through interpolation and
+saturates the sample to `0xFFFF` before the depth test and write. Validate
+overflow with a GREATER test against existing `0xFFFF` and a triangle that
+crosses the range. [PCSX2 software depth comparison reference](https://github.com/PCSX2/pcsx2/blob/master/pcsx2/GS/Renderers/SW/GSDrawScanline.cpp#L642-L678)
+
+When overlapping GS framebuffer and texture addresses share a page layout,
+prove the alias before widening sample bounds. Here the display CT24 TEX0 is
+512x512 with TBW8. From row448 it aliases the live CT32 scene at FBP0x70.
+The native renderer copies that segment at the effect's original position in
+the ordering table. A GPU regression samples the bilinear page boundary.
+
 Actual ESP14 factory 3139E0 allocates 0x4E0 bytes in room arena 754C10.
 The original allocator consumes this size plus its 0x20-byte header. Kind500
 participates in shared visibility at +538 and +5A0. In the actual R100 arena

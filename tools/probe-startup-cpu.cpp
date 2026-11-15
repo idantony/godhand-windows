@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -27,17 +28,20 @@ static bool load_input_map(const char *iso,std::vector<uint8_t> &elf,gh_native_i
            gh_native_input_map_from_elf(elf.data(),elf.size(),1,&map);
 }
 
-static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh_native_input &input,uint64_t max_ticks)
+static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh_native_input &input,
+    uint64_t max_ticks,bool controlled_r003)
 {
     if(!configure_cpu_sink(host,&sink,ffmpeg))return fail("consumer setup");
     QAStartupTitleProbe title;
     QARepeatSquareProbe combat;
-    combat.enabled=combat.triangle=combat.pair=combat.continue_after_pair=combat.packet_only=true;
+    combat.enabled=!controlled_r003;
+    combat.triangle=combat.pair=combat.continue_after_pair=combat.packet_only=true;
 
     gh_startup_snapshot snapshot={};
     if(gh_startup_host_snapshot(host,&snapshot)!=GH_HOST_OK)return fail("initial snapshot");
     const auto started=std::chrono::steady_clock::now();
-    uint64_t completed_frames=0;
+    uint64_t completed_frames=0,r003_handoff=0,r003_frames=0;
+    int r003_cut=-1;
     while(snapshot.ticks<max_ticks&&snapshot.phase==GH_HOST_RUNNING&&!combat.complete()){
         title.sample(snapshot,input,true,false);
         const gh_native_gamepad_sample pad=combat.sample(snapshot);
@@ -46,10 +50,23 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
            gh_startup_host_set_input(host,&controls)!=GH_HOST_OK)return fail("native input");
         gh_startup_host_tick(host);
         if(gh_startup_host_snapshot(host,&snapshot)!=GH_HOST_OK)return fail("scheduler snapshot");
+        if(controlled_r003&&!r003_handoff&&snapshot.current_room==0x20&&snapshot.game_state==5&&
+           snapshot.next_room==0x100){
+            if(gh_startup_host_qa_r003_title_handoff(host)!=GH_HOST_OK)return fail("R003 title handoff");
+            r003_handoff=snapshot.ticks;
+        }
         combat.observe(snapshot,controls);
         if(snapshot.phase==GH_HOST_RUNNING&&snapshot.scene_frame_ready&&snapshot.scene_frame_serial!=completed_frames){
             completed_frames=snapshot.scene_frame_serial;
             combat.presented(completed_frames);
+            if(r003_handoff&&snapshot.current_room==3&&snapshot.game_state==4){
+                ++r003_frames;
+                if(snapshot.event_number==2&&snapshot.event_cut>=0&&snapshot.event_cut!=r003_cut){
+                    r003_cut=snapshot.event_cut;
+                    std::fprintf(stderr,"CPU_R003_CUT cut=%d scene=%llu\n",r003_cut,
+                        (unsigned long long)completed_frames);
+                }
+            }
         }
         // Let the real asynchronous video decoder produce Movie0's next frame.
         if(sink.movie&&!snapshot.movie_video.complete)Sleep(15);
@@ -67,19 +84,23 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
         "\"game_state\":%u,\"scene_stage\":%u,\"phase\":%u,\"frontier\":\"%08X\","
         "\"last_move\":\"%08X\",\"actor_stamp\":%u,\"actor_dependency\":%u,"
         "\"packet_frame_serial\":%llu,\"world_commands\":%u,\"actor_commands\":%u,\"effect_commands\":%u,"
+        "\"r003_controlled_handoff_tick\":%llu,\"r003_packet_frames\":%llu,\"r003_last_ev02_cut\":%d,"
         "\"movie_frames_decoded\":%u,\"probe_complete\":%s}\n",
         (unsigned long long)snapshot.ticks,seconds,(unsigned)snapshot.current_room,(unsigned)snapshot.next_room,
         (unsigned)snapshot.game_state,snapshot.scene_stage,(unsigned)snapshot.phase,snapshot.unavailable_entry,
         snapshot.last_move_entry,snapshot.current_enemy_stamp,snapshot.current_enemy_dependency,
-        (unsigned long long)completed_frames,sink.world,sink.actor,sink.effects,sink.movie,combat.complete()?"true":"false");
+        (unsigned long long)completed_frames,sink.world,sink.actor,sink.effects,
+        (unsigned long long)r003_handoff,(unsigned long long)r003_frames,r003_cut,sink.movie,
+        combat.complete()?"true":"false");
     if(combat.complete())return 0;
     return snapshot.phase==GH_HOST_FRONTIER?4:snapshot.phase==GH_HOST_RUNNING?3:1;
 }
 
 int main(int argc,char **argv)
 {
-    if(argc!=5){
-        std::fprintf(stderr,"Usage: probe-startup-cpu <ISO> <FFmpeg> <absent profile path> <max ticks>\n");
+    const bool controlled_r003=argc==6&&!std::strcmp(argv[5],"--r003-controlled");
+    if(argc!=5&&!controlled_r003){
+        std::fprintf(stderr,"Usage: probe-startup-cpu <ISO> <FFmpeg> <absent profile path> <max ticks> [--r003-controlled]\n");
         return 2;
     }
     char *end=nullptr;
@@ -102,7 +123,7 @@ int main(int argc,char **argv)
     if(gh_startup_host_create_with_profile(argv[1],argv[3],1,0,64*1024*1024,&host)!=GH_HOST_OK)
         return fail("native startup creation");
     fixture_sink sink={};
-    const int result=replay(host,sink,argv[2],input,max_ticks);
+    const int result=replay(host,sink,argv[2],input,max_ticks,controlled_r003);
     if(gh_startup_host_destroy(host)!=GH_HOST_OK){
         std::fprintf(stderr,"CPU replay host cleanup failed\n");
         if(result==0)return 1;

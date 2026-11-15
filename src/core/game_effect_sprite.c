@@ -24,7 +24,7 @@ static gh_effect_status body(gh_game_effects*e,unsigned slot,uint32_t serial,con
  const int em00_attack=gh_effect_em00_attack_esp_is_bound(e,&v);
  if(v.type==0x12&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v))return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  if((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&
-    !gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v))
+    !gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v)&&!gh_effect_player_rise_esp_is_bound(e,&v))
     return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  uint8_t*p=v.payload;uint32_t flags=word(p+0x11c);float projection[16],view[16],transform[16],world[16];
  memcpy(projection,b->camera->fields+0x100,64);memcpy(view,b->camera->fields+0x140,64);
@@ -85,11 +85,16 @@ static gh_effect_status body(gh_game_effects*e,unsigned slot,uint32_t serial,con
   if(!gh_static_vu_reciprocal(biased[3],&q))return fail(f,0x30a468,GH_EFFECT_UNSUPPORTED);
   int32_t biased_z;
   if(!gh_static_vu_ftoi4(mul(biased[2],q),&biased_z))return fail(f,0x30a570,GH_EFFECT_UNSUPPORTED);
-  /* Negative biased Z selects the mutable original 3C3BBC fallback. */
-  if(biased_z<0)return fail(f,0x2fde60,GH_EFFECT_UNSUPPORTED);
-  if(!cvt_chop(mul(biased[3],10),&distance)||distance>INT32_MAX-50)
-    return fail(f,0x2fde60,GH_EFFECT_UNSUPPORTED);
-  result.original_depth=distance+50;
+  if(biased_z<0){
+   /* 2FE058 sets the ordering bucket to 50 and reads the retail
+    * ELF's 3C3BBC integer before computing the shared vertex delta. */
+   biased_z=1000000;
+   result.original_depth=50;
+  }else{
+   if(!cvt_chop(mul(biased[3],10),&distance)||distance>INT32_MAX-50)
+     return fail(f,0x2fde60,GH_EFFECT_UNSUPPORTED);
+   result.original_depth=distance+50;
+  }
   volatile float delta=(float)biased_z-(float)center_fixed[2];
   if(!cvt_chop(delta,&depth_delta))return fail(f,0x2fde60,GH_EFFECT_UNSUPPORTED);
  }

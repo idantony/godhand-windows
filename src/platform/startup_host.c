@@ -815,7 +815,7 @@ static gh_game_event_status event_play_visit(void *context, uint32_t site, int *
         return gh_event_wait_vib_visit(components, data, &host->work, site, frontier, relative);
     case 0x296da4:
         *relative = 0;
-        return gh_event_fade_init_absent_00006c70(components, data->data, data->bytes, frontier);
+        return gh_event_fade_init_00006c70(components, data, frontier);
     case 0x296db0:
         return gh_event_additional_light_init_000040d8(&host->event_additional_light, &host->event_link,
             data, scene.world_light, frontier);
@@ -866,7 +866,7 @@ static gh_game_event_status event_play_visit(void *context, uint32_t site, int *
         return GH_EVENT_OK;
     case 0x296eb4:
         *relative = 0;
-        return gh_event_fade_move_absent_00006ca0(components, &host->fade, frontier);
+        return gh_event_fade_move_00006ca0(components, data, &host->fade, &host->display, &host->work, frontier, relative);
     case 0x296ec0: {
         gh_game_event_status status = gh_event_additional_light_move_00004140(&host->event_additional_light,
             &host->work, frontier);
@@ -2215,6 +2215,23 @@ gh_host_error gh_startup_host_set_input(gh_startup_host *h,const gh_native_input
     if(!on_owner(h))return GH_HOST_THREADS;
     return gh_native_input_store_work(&h->work,input)?GH_HOST_OK:GH_HOST_ARGUMENT;
 }
+#ifdef GH_NATIVE_STARTUP_QA
+gh_host_error gh_startup_host_qa_r003_title_handoff(gh_startup_host *h)
+{
+    if(!h||h->phase!=GH_HOST_RUNNING||h->work.room!=0x20||
+       h->game_loop.game_state[0]!=5||h->event_reserve.flags)return GH_HOST_ARGUMENT;
+    if(!on_owner(h))return GH_HOST_THREADS;
+    uint8_t *work=(uint8_t *)&h->work;
+    if(work[0x5b4]!=0||work[0x5b5]!=1||work[0x5b8]!=1)return GH_HOST_ARGUMENT;
+    gh_r100_exit_event_reserve_00000a38(&h->event_reserve);
+    work[0x5b4]=3;
+    work[0x5b5]=work[0x5b8]=0;
+    work[0x5ba]=0xff;
+    memset(work+0x5c0,0,12);
+    memset(work+0x5d0,0,4);
+    return GH_HOST_OK;
+}
+#endif
 gh_host_error gh_startup_host_set_fade_consumer(gh_startup_host *h,gh_host_fade_consumer consumer,void *context)
 {
     if(!h || h->ticks || h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
@@ -2244,6 +2261,15 @@ gh_host_error gh_startup_host_resolve_tex0(gh_startup_host *h,uint64_t tex0,cons
     if(GetCurrentThreadId()!=h->owner_thread)return GH_HOST_THREADS;
     gh_stage_status e=gh_stage_tex0_material(h->game_stage.textures,tex0,material);
     return !e?GH_HOST_OK:e==GH_STAGE_MEMORY?GH_HOST_MEMORY:GH_HOST_ASSET;
+}
+gh_host_error gh_startup_host_read_scene_wrap_row(gh_startup_host *h,uint32_t pixels[256])
+{
+    if(!h||!pixels||!h->display.initialized||h->display.screen_width!=512||h->display.screen_lines!=448)
+        return GH_HOST_ARGUMENT;
+    if(GetCurrentThreadId()!=h->owner_thread)return GH_HOST_THREADS;
+    for(unsigned x=0;x<256;++x)
+        if(gh_stage_vram_ct32(h->game_stage.textures,0x0e00,8,x*2,511,pixels+x))return GH_HOST_ASSET;
+    return GH_HOST_OK;
 }
 gh_host_error gh_startup_host_set_actor_consumer(gh_startup_host *h,gh_actor_draw_emit emit,void *context)
 {

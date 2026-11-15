@@ -5,7 +5,7 @@
 
 enum {
     COMPONENT = 14, ROW_SIZE = 0x44, RECORD_SIZE = 0x70, RECORDS = 256,
-    EV01_CUTS = 10, EV01_ROWS = 42
+    EV01_CUTS = 10, EV01_ROWS = 42, EV02_CUTS = 28, EV02_ROWS = 90
 };
 
 static uint16_t half(const uint8_t *p)
@@ -54,17 +54,22 @@ static gh_game_event_status track_at(gh_event_link *link, const gh_event_data_pr
     gh_game_event_status status = gh_event_sequence_at(data, COMPONENT, track);
     if (status) return status;
     if (word(component->bytes + 0x14) != track->count) return GH_EVENT_FORMAT;
-    if (link->components.event_no != 1 || data->camera_count != EV01_CUTS ||
-        track->count != EV01_ROWS || track->stride != ROW_SIZE ||
-        track->bytes != EV01_ROWS * ROW_SIZE || !track->records)
+    const unsigned event = link->components.event_no;
+    if (event != 1 && event != 2) return GH_EVENT_UNSUPPORTED;
+    const unsigned cuts = event == 1 ? EV01_CUTS : EV02_CUTS;
+    const unsigned rows = event == 1 ? EV01_ROWS : EV02_ROWS;
+    if (data->camera_count != cuts || track->count != rows || track->stride != ROW_SIZE ||
+        track->bytes != rows * ROW_SIZE || !track->records)
         return GH_EVENT_UNSUPPORTED;
     return GH_EVENT_OK;
 }
 
 static gh_game_event_status map_keys(const gh_event_data_prefix *data,
-    gh_event_sequence_view track, uint16_t cut_start[EV01_CUTS + 1])
+    gh_event_sequence_view track, uint16_t *cut_start)
 {
-    for (unsigned cut = 0; cut < EV01_CUTS; ++cut) {
+    const int ev02 = data->components->event_no == 2;
+    const unsigned key_flags = ev02 ? 5u : 4u;
+    for (unsigned cut = 0; cut < data->camera_count; ++cut) {
         gh_event_camera_cut camera;
         uint16_t length;
         if (gh_event_camera_cut_at(data, cut, &camera) || !camera.primary ||
@@ -80,9 +85,10 @@ static gh_game_event_status map_keys(const gh_event_data_prefix *data,
         /* 6978 keeps FFFF, 8378 maps it to camera-global FF. The four timing
          * repair calls leave these primary keys inside their original cuts. */
         if (word(key) != (0xffffu | cut << 24) || half(key + 4) ||
-            cut >= EV01_CUTS || frame >= (unsigned)(cut_start[cut + 1] - cut_start[cut]) ||
+            cut >= data->camera_count || frame >= (unsigned)(cut_start[cut + 1] - cut_start[cut]) ||
             cut_start[cut] + frame < last_time ||
-            key[0x0c] || (key[0x0d] & ~4u) || key[0x0e] != 2 || key[0x0f] ||
+            key[0x0c] || (key[0x0d] & ~key_flags) ||
+            (key[0x0e] != 2 && (!ev02 || key[0x0e] != 1)) || key[0x0f] ||
             id < 1 || id > 3)
             return GH_EVENT_UNSUPPORTED;
         for (unsigned j = 0; j < 9; ++j) {
@@ -187,7 +193,7 @@ static void set_key(gh_event_additional_light *state, const uint8_t *key,
     }
     memcpy(p + 0x40, key + 0x38, 4);
     put(p + 0x50, 1);
-    put(p + 0x58, 0xf0800000);
+    put(p + 0x58, 0xf0800000u | ((key[0x0d] & 1u) ? 0x80000u : 0));
     put_half(p + 0x5c, half(key + 0x42));
     put_half(p + 0x5e, half(key + 0x40));
     memcpy(p + 0x60, key + 0x3c, 4);
@@ -257,7 +263,7 @@ gh_game_event_status gh_event_additional_light_move_00004140(gh_event_additional
         return GH_EVENT_ARGUMENT;
     const unsigned cut = half(camera.bytes + 6);
     const float frame = number(camera.bytes + 0x0c);
-    if (camera.bytes[4] || cut >= EV01_CUTS || cut != word(env.bytes + 0x10) ||
+    if (camera.bytes[4] || cut >= state->data->camera_count || cut != word(env.bytes + 0x10) ||
         !isfinite(frame) || frame < 0 ||
         frame > state->cut_start[cut + 1] - state->cut_start[cut] - 1) {
         *frontier = 0x4ed0;
@@ -290,7 +296,7 @@ gh_game_event_status gh_event_additional_light_move_00004140(gh_event_additional
             if (kept + preset_count > RECORDS - adds) return GH_EVENT_BOUNDS;
         }
     }
-    /* No deletion/restore rows in EV01. The cut-start purge precedes every
+    /* These tracks have no deletion/restore rows. The cut-start purge precedes every
      * exact-frame add, including repeated IDs in file order. */
     if (number(env.bytes + 0x14) == 0) {
         for (unsigned i = 0; i < RECORDS; ++i) {

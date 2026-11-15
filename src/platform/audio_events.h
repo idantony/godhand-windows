@@ -23,6 +23,10 @@ gh_voice_status gh_audio_output_set_gain(gh_audio_output *,float gain);
  * Successful submit/start is real voice consumption, not proof of audibility. */
 gh_voice_status gh_audio_output_play(gh_audio_output *,const gh_adpcm_pcm *,
  uint32_t rate,float left,float right,uint32_t *voice);
+/* Interleaved signed PCM16, left then right. Frames count sample pairs.
+ * Each input channel is routed exclusively to its matching output. */
+gh_voice_status gh_audio_output_play_stereo(gh_audio_output *,const gh_adpcm_pcm *,
+ uint32_t rate,float left,float right,uint32_t *voice);
 /* Original SPU2 pitch register units (4096 = 48000Hz). Host resampling replaces
  * hardware interpolation; preserves the original quantized playback rate. */
 gh_voice_status gh_audio_output_play_q12(gh_audio_output *,const gh_adpcm_pcm *,

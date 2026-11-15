@@ -119,9 +119,12 @@ Ghidra 包装工具现在会核对本轮日志、完整函数清单、输出生�
 programs in an isolated SES registry. The report includes program fields,
 sample offsets, ADSR and decoded frame counts. It writes JSON only and uses
 no audio device. Registry bank 1 in this report is local to the audit.
+Use `--ses se/r100.ses --external 0d 35 36` to follow the three gate cues
+through their AFD rows to the AFS member offsets and ADX headers.
 
 声音检查工具可用 `--ses se/em00.ses 0 1 2` 核对指定音效表、样本偏移、ADSR 和解码
 帧数。报告的 bank 1 是检查工具的临时编号，游戏运行时由原版音效表管理器分配编号。
+`--ses se/r100.ses --external 0d 35 36` 可沿 AFD 记录核对开门音效的 AFS 成员偏移和 ADX 头。
 
 `tools/export-startup-capture.py --proof RECEIPT --output IMAGE.png` converts
 the latest nonblack, presented composite to RGB PNG after checking its recorded

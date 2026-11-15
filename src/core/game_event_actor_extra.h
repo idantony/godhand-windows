@@ -55,6 +55,8 @@ typedef struct {
 /* Borrow the same published player, jacket attachment and known weapon slot.
  * Keep the original player/model owners alive until after extra_abort. */
 gh_game_event_status gh_event_actor_extra_bind(gh_event_actor_extra *, const gh_event_actor_extra_bindings *);
+/* Rebind the original jacket to the selected event actor's part17. */
+gh_game_event_status gh_event_actor_extra_attach_jacket_00100ed8(gh_event_actor_extra *, gh_actor_model *);
 gh_game_event_status gh_event_actor_extra_run(void *, const gh_event_actor_create_request *,
     uint32_t handle, int *original_success, uint32_t *frontier);
 gh_game_event_status gh_event_actor_extra_finish(void *, uint32_t *frontier);

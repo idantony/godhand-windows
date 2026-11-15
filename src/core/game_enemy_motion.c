@@ -57,3 +57,78 @@ gh_actor_motion_status gh_enemy_motion_initial_step_00204abc(gh_enemy_motion*s,f
  }
  s->frontier=0x152a20;e->frontier=s->frontier;return GH_ACTOR_MOTION_UNSUPPORTED;
 }
+
+static gh_actor_motion_status devil_stop(gh_enemy_devil_initialize *s,uint32_t pc,
+ gh_actor_motion_status status)
+{
+ s->owner->entry.frontier=s->frontier=pc;
+ return status;
+}
+
+gh_actor_motion_status gh_enemy_devil_initialize_0028ebf0(gh_enemy_devil_initialize *s,
+ gh_enemy_devil_entry *owner,const gh_enemy_devil_bindings *b)
+{
+ if(!s||!owner||!b||!b->cockpit||!b->solids||!owner->parent)
+  return GH_ACTOR_MOTION_ARGUMENT;
+ if(s->owner&&(s->owner!=owner||s->bindings.cockpit!=b->cockpit||
+    s->bindings.solids!=b->solids||s->bindings.ik!=b->ik||
+    s->bindings.sound!=b->sound||s->bindings.sound_context!=b->sound_context||
+    s->bindings.rate!=b->rate))return GH_ACTOR_MOTION_BUSY;
+ if(!s->owner){s->owner=owner;s->bindings=*b;}
+ gh_enemy_entry *e=&owner->entry;
+ if(!s->stage){
+  gh_actor_model_status status=gh_enemy_devil_continue_002022d0(&s->tail,owner,b->cockpit);
+  if(status!=GH_ACTOR_MODEL_UNSUPPORTED||s->tail.stage!=3||s->tail.frontier!=0x202b88)
+   return devil_stop(s,s->tail.frontier?s->tail.frontier:0x28ebf0,GH_ACTOR_MOTION_UNSUPPORTED);
+  s->stage=1;
+ }
+ uint8_t *p=e->object.view.bytes;
+ if(s->stage==1){
+  gh_actor_model_status status=gh_enemy_hp_initialize_00202b88(
+      &s->hp,&s->tail,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE);
+  if(status!=GH_ACTOR_MODEL_UNSUPPORTED||s->hp.stage!=1||s->hp.frontier!=0x2036b0)
+   return devil_stop(s,s->hp.frontier?s->hp.frontier:0x202b88,GH_ACTOR_MOTION_UNSUPPORTED);
+  put(p,0x54c,0x40a00000);
+  s->cue=(gh_motion_sound_request){.model=&e->initialize.model.model,
+      .actor=&e->object.view,.bank=0,.program=5};
+  s->stage=2;
+ }
+ if(s->stage==2){
+  if(!b->sound)return devil_stop(s,0x2cba48,GH_ACTOR_MOTION_UNSUPPORTED);
+  uint32_t handle,pc=0;
+  gh_actor_motion_status status=b->sound(b->sound_context,&s->cue,&handle,&pc);
+  if(status)return devil_stop(s,pc?pc:0x2cba48,status);
+  s->stage=3;
+ }
+ if(s->stage==3){
+  uint32_t pc=0;
+  if(gh_collision_solid_set_enabled_001351d8(b->solids,&e->object.view,0,&pc))
+   return devil_stop(s,pc?pc:0x1351d8,GH_ACTOR_MOTION_UNSUPPORTED);
+  /* 26EB00 starts the original opacity ramp. */
+  put(p,0x54c,0x41700000);put(p,0x24c,0);put(p,0x1704,0x3f800000);
+  put(p,0x250,word(p,0x250)|0x10u);
+  p[0x2f4]=0;p[0x2f5]=4;p[0x2f6]=2;p[0x2f7]=0;
+  s->stage=4;
+ }
+ if(s->stage==4){
+  const gh_object_view *r=&e->resource;
+  if(!r->bytes||!r->file_extent_known||r->file_extent>r->size||r->file_extent<0x1d80)
+   return devil_stop(s,0x2036b0,GH_ACTOR_MOTION_BOUNDS);
+  gh_enemy_motion *m=&s->motion;
+  gh_actor_motion_bindings bind={.model=&e->initialize.model.model,.resource=r->bytes,
+      .resource_bytes=r->file_extent,.work=e->b.work,.ik_globals=b->ik,
+      .sound=b->sound,.sound_context=b->sound_context};
+  m->motion_offset=word(r->bytes,0x1d78);m->sequence_offset=word(r->bytes,0x1d7c);
+  gh_actor_motion_status status=gh_actor_motion_begin_002a8578(
+      &m->motion,&bind,m->motion_offset,m->sequence_offset,0);
+  if(status)return devil_stop(s,m->motion.frontier?m->motion.frontier:0x2a8578,status);
+  m->hp=&s->hp;m->stage=2;
+  if((word(e->b.save.bytes,0x14)&0x4000000)||*e->b.scenario14)
+   put(p,0x16d4,word(p,0x16d4)|2u);
+  s->stage=5;
+ }
+ int ended;
+ gh_actor_motion_status status=gh_enemy_motion_initial_step_00204abc(
+     &s->motion,b->rate,e->b.policy,&ended);
+ return devil_stop(s,s->motion.frontier?s->motion.frontier:0x157c18,status);
+}

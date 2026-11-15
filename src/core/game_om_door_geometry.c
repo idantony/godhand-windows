@@ -77,3 +77,15 @@ gh_scene_placement_status gh_om_door_set_open_001bcfb0(gh_om_door_geometry *stat
     }
     return GH_PLACE_OK;
 }
+
+gh_scene_placement_status gh_om_door_rebuild_collision_001bd228(gh_om_door_geometry *state,
+    const gh_om_door_shared *shared,gh_static_transform_policy policy)
+{
+    if(!initialized_door(state))return GH_PLACE_ARGUMENT;
+    if(state->box||w(state->object->view.bytes+0x644))return GH_PLACE_UNSUPPORTED;
+    state->complete=0;
+    gh_scene_placement_status status=gh_om_door_geometry_001bd228(state,state->object,
+        state->owner,shared,policy);
+    if(status)state->complete=1;
+    return status;
+}

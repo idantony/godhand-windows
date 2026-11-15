@@ -91,6 +91,78 @@ static gh_r100_script_status watch_camera(void *context,gh_room_camera_start *st
     return !status&&started?GH_R100_SCRIPT_OK:GH_R100_SCRIPT_CALLEE;
 }
 
+typedef struct {
+    gh_r100_live_tasks *tasks;
+    gh_r100_live_bindings *bindings;
+    unsigned soft,camera,sound,wait,end,pose;
+    const gh_title_player_view *player;
+} successor_probe;
+
+static gh_r100_script_status successor_register(void *context,uint32_t entry,int32_t request,uint32_t *pc)
+{
+    successor_probe *probe=context;
+    if(entry!=0x1780||request!=-1)return GH_R100_SCRIPT_ARGUMENT;
+    return gh_r100_live_register(probe->tasks,probe->bindings,entry,request,pc);
+}
+
+static gh_r100_script_status successor_soft(void *context,gh_soft_event_start *state,
+    unsigned kind,uint32_t *pc)
+{
+    successor_probe *probe=context;
+    if(!state||kind||probe->soft)return GH_R100_SCRIPT_ARGUMENT;
+    ++probe->soft;*pc=0;
+    return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status successor_camera(void *context,gh_room_camera_start *state,
+    const char *name,uint32_t *pc)
+{
+    successor_probe *probe=context;
+    if(!state||strcmp(name,"A06")||probe->soft!=1||probe->camera)return GH_R100_SCRIPT_ARGUMENT;
+    ++probe->camera;*pc=0;
+    return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status successor_sound(void *context,int16_t program,uint32_t *pc)
+{
+    successor_probe *probe=context;
+    if(program!=0x36||probe->camera!=1)return GH_R100_SCRIPT_ARGUMENT;
+    ++probe->sound;*pc=0;
+    return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status successor_wait(void *context,int *ended,uint32_t *pc)
+{
+    successor_probe *probe=context;
+    if(probe->sound!=1||probe->wait)return GH_R100_SCRIPT_ARGUMENT;
+    ++probe->wait;*ended=1;*pc=0;
+    return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status successor_end(void *context,gh_soft_event_end *state,uint32_t *pc)
+{
+    successor_probe *probe=context;
+    if(!state||probe->wait!=1||probe->end)return GH_R100_SCRIPT_ARGUMENT;
+    ++probe->end;*pc=0;
+    return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status successor_pose(void *context,const uint32_t xyz[3],
+    const uint32_t euler[3],uint32_t *pc)
+{
+    successor_probe *probe=context;
+    const uint32_t expected_xyz[3]={0x40370a3d,0,0xc27bae14};
+    const uint32_t expected_euler[3]={0,0xc0400000,0};
+    if(probe->end!=1||probe->pose||memcmp(xyz,expected_xyz,12)||memcmp(euler,expected_euler,12))
+        return GH_R100_SCRIPT_ARGUMENT;
+    if(gh_title_player_set_script_pose_0012ce60(probe->player,NULL,xyz,euler)){
+        *pc=0x12ce60;
+        return GH_R100_SCRIPT_UNSUPPORTED;
+    }
+    ++probe->pose;*pc=0;
+    return GH_R100_SCRIPT_OK;
+}
+
 static gh_r100_script_status battle_checkpoint(void *context,uint32_t *frontier)
 {
     ++*(unsigned *)context;
@@ -715,6 +787,20 @@ int main(int argc,char **argv)
         CHECK(!gh_enemy_ems_handle_for_actor(owner,spawned,&handle)&&handle&&
             gh_enemy_ems_lookup(owner,handle)==spawned);
     }
+    gh_r100_live_task post_battle=tasks.tasks[7];
+    post_battle.battle_tail_stage=13;
+    post_battle.b.set_room_camera=NULL;
+    CHECK(gh_r100_battle_tail_00001e80(&post_battle)==GH_R100_SCRIPT_UNSUPPORTED&&
+          post_battle.battle_tail_stage==17&&post_battle.frontier==0x2c3ed8);
+    CHECK(post_battle.battle_destination[0]!=0||post_battle.battle_destination[2]!=0);
+    for(unsigned stamp=26;stamp<=28;stamp++){
+        gh_game_title_player *spawned=NULL;
+        CHECK(!gh_enemy_manager_get_00290868(init,(uint8_t)stamp,&spawned)&&spawned);
+        const uint8_t *raw=spawned->view.bytes;
+        CHECK(!memcmp(raw+0x16b0,post_battle.battle_destination,12)&&
+              word(raw+0x16c0)==0x497423fe&&word(raw+0x16c4)==0&&
+              (word(raw+0x16d0)&0x20000000u));
+    }
     CHECK(!tasks.tasks[7].set_enemy.stage);
     CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK&&checkpoint_calls==1&&
           tasks.tasks[7].battle_spawn_index==8&&word(room_runtime.work.pointer)==16);
@@ -764,6 +850,74 @@ int main(int argc,char **argv)
     const gh_enemy_motion *motion13=&live13.enemy202->motion;
     CHECK(motion13->stage>=2&&motion13->motion_offset==word(model_data+0xbd8)&&
           motion13->sequence_offset==word(model_data+0xbdc)&&stamp13->view.bytes[0x2f7]==2);
+    gh_at_native_unit at11={0};
+    CHECK(!gh_scene_at_first_unit_002c30c0(&at,&at11));
+    while(at11.bytes&&(word(at11.bytes+0x34)>>16)!=0xb)
+        CHECK(!gh_scene_at_next_unit_002c30c8(&at,at11,&at11));
+    CHECK(at11.bytes);
+    const uint32_t at11_before=word(at11.bytes+0x50);
+    memcpy(at11.bytes+0x50,&(uint32_t){at11_before&~0x80000000u},4);
+    const uint32_t active_before=word(stamp13->view.bytes+0x16d0);
+    memcpy(stamp13->view.bytes+0x16d0,&(uint32_t){active_before|2u},4);
+    const uint32_t escape_before=word(stamp14->view.bytes+0x15b0);
+    const uint32_t input_ready_before=word(target->bytes+0x15f4);
+    uint8_t old_pose[4][12];
+    memcpy(old_pose[0],target->alias_f0,12);
+    memcpy(old_pose[1],target->bytes+0x490,12);
+    memcpy(old_pose[2],target->bytes+0xb0,12);
+    memcpy(old_pose[3],target->bytes+0x100,12);
+    successor_probe successor={.tasks=&tasks,.player=target};
+    gh_r100_live_bindings next_b=live_b;
+    successor.bindings=&next_b;
+    next_b.context=&successor;
+    next_b.start_soft_event=successor_soft;
+    next_b.set_room_camera=successor_camera;
+    next_b.program_se=successor_sound;
+    next_b.camera_ended=successor_wait;
+    next_b.end_soft_event=successor_end;
+    next_b.battle_player_pose=successor_pose;
+    post_battle.b.context=&successor;
+    post_battle.b.battle_register=successor_register;
+    post_battle.battle_tail_stage=24;
+    CHECK(!gh_r100_battle_tail_00001e80(&post_battle)&&post_battle.finished&&
+          tasks.tasks[9].registered&&!tasks.tasks[9].entered);
+    for(unsigned tick=0;tick<4&&!tasks.tasks[9].successor_already_active;tick++)
+        CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    CHECK(tasks.tasks[9].entered&&tasks.tasks[9].successor_stage==1&&
+          tasks.tasks[9].successor_already_active&&!successor.soft&&
+          word(stamp14->view.bytes+0x1590)==0x416051ec&&
+          word(stamp14->view.bytes+0x1594)==0x3eeb851f&&
+          word(stamp14->view.bytes+0x1598)==0xc260a3d7);
+    memcpy(at11.bytes+0x50,&(uint32_t){at11_before|0x80000000u},4);
+    memcpy(target->bytes+0x15f4,&(uint32_t){input_ready_before|0x400u},4);
+    for(unsigned tick=0;tick<4&&!tasks.tasks[9].status&&!tasks.tasks[9].finished;tick++)
+        CHECK(gh_tasks_run_matching_002d52a0(&task_manager).status==GH_TASK_OK);
+    fprintf(stderr,"REL1780 frontier%08x stage%u tail%u work%u\n",tasks.tasks[9].frontier,
+        tasks.tasks[9].successor_stage,tasks.tasks[9].successor_tail_stage,word(room_runtime.work.pointer));
+    CHECK(tasks.tasks[9].finished&&!tasks.tasks[9].frontier&&tasks.tasks[9].successor_short_path&&
+          successor.soft==1&&successor.camera==1&&successor.sound==1&&successor.wait==1&&successor.end==1&&successor.pose==1&&
+          word(room_runtime.work.pointer)==19&&
+          (word(room.active+4)&0x08000000u)&&
+          word(stamp14->view.bytes+0x15b0)==(escape_before|8u));
+    for(uint8_t stamp=23;stamp<=25;stamp++){
+        gh_game_title_player *enemy=NULL;
+        CHECK(!gh_enemy_manager_get_00290868(init,stamp,&enemy)&&enemy&&
+              word(enemy->view.bytes+0x16c0)==0x497423fe&&word(enemy->view.bytes+0x16c4)==2&&
+              (word(enemy->view.bytes+0x16d0)&0x20000000u));
+    }
+    CHECK(word(target->alias_f0)==0x40370a3d&&word(target->alias_f0+8)==0xc27bae14&&
+          !memcmp(target->alias_f0,target->bytes+0x490,12)&&
+          !memcmp(target->alias_f0,target->bytes+0xb0,12)&&word(target->bytes+0x104)==0xc0400000);
+    memcpy(target->alias_f0,old_pose[0],12);
+    memcpy(target->bytes+0x490,old_pose[1],12);
+    memcpy(target->bytes+0xb0,old_pose[2],12);
+    memcpy(target->bytes+0x100,old_pose[3],12);
+    memcpy(at11.bytes+0x50,&at11_before,4);
+    memcpy(target->bytes+0x15f4,&input_ready_before,4);
+    memcpy(stamp13->view.bytes+0x16d0,&active_before,4);
+    memcpy(stamp14->view.bytes+0x15b0,&escape_before,4);
+    puts("PASS REL1780 real stamps23/24/25 and mode2 Goto through original player pose and natural task return");
+
     CHECK(!gh_enemy_manager_get_00290868(init,16,&stamp16)&&stamp16&&
           !gh_enemy_ems_handle_for_actor(owner,stamp16,&stamp16_handle));
     const gh_enemy_weapon_init *held362=gh_enemy_ems_held_weapon(owner,stamp16_handle,0);

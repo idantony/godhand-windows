@@ -23,7 +23,7 @@ extern "C" {
 #endif
 struct gh_player_idle_input;struct gh_player_idle_input_bindings;
 typedef enum {GH_PLAYER_FRAME_OK,GH_PLAYER_FRAME_ARGUMENT,GH_PLAYER_FRAME_BUSY,GH_PLAYER_FRAME_NUMERIC,GH_PLAYER_FRAME_UNSUPPORTED,GH_PLAYER_FRAME_CALLEE} gh_player_frame_status;
-typedef struct {const gh_title_player_view *actor;int32_t kind;uint32_t parameter_bits,argument3,mode;int32_t selector;} gh_player_frame_effect_request;
+typedef struct {const gh_title_player_view *actor;int32_t kind;uint32_t parameter_bits,argument3,mode;int32_t selector;uint32_t sequence_scale;} gh_player_frame_effect_request;
 /* Required actual306528 producer. Native status is separate from original
  * void return; only complete real effect creation may returnOK. */
 typedef gh_player_frame_status (*gh_player_frame_effect_create)(void *,const gh_player_frame_effect_request *,uint32_t *frontier);

@@ -234,7 +234,7 @@ static gh_effect_status check_type0_packet(void *context,const gh_effect_trans_p
     CHECK(p->prim==0x54 && p->test==0x5000d && p->alpha==UINT64_C(0x8000000048));
     CHECK(p->frame_mask==0xff000000 && p->zbuf==UINT64_C(0x13a0000f8));
     CHECK(p->writes_clamp && !p->clamp && p->inherited_sampler);
-    CHECK(p->writes_tex0 && p->tex0==UINT64_C(0x20000005dc148000));
+    CHECK(p->writes_tex0 && p->tex0==UINT64_C(0x20000005dd408000));
     const gh_stage_material *m=p->material;
     CHECK(m && m->source==probe->source.bytes && m->source_bytes==probe->source.size);
     CHECK(m->width==128 && m->height==128 && m->psm==20 && m->draw_tcc && !m->draw_tfx);

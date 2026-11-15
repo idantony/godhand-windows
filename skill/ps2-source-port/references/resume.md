@@ -1,9 +1,189 @@
 # Active project resume: God Hand
 
-Updated 2026-11-12 local. Check live Git/reports/agents before acting. Changing
+Updated 2026-11-15 local. Check live Git/reports/agents before acting. Changing
 history was compacted; private receipts and Git preserve old checkpoints.
 
 ## Current verified checkpoints
+
+- Exact234 `room-transition-234-wrap-row-r100-cues`, pin
+  `8f35cc4e6f9ee48a0f814b4f48046ee36fb979161f768b27873f51b88000e005`.
+  Actual controlled Windows presents all 28 EV02 cuts and 2,785 R003 frames
+  (serials 362–3146), then State5 selects R105 and stops at Flag handle149
+  retirement `00312708`. All native drawing/window errors are zero.
+  `analysis/room-transition-234-ev02-windows-private.json`. The early
+  `002FA620` linear wrap samples physical CT32 row511 from the stage texture
+  store and row0 from the rendered scene. Keep this distinct from the CT24
+  display alias. Broad result is 379 C modules, 366 checks, 18 opt-in skips.
+  Both the QA and ordinary Windows targets build. In R100 the exact234 fast
+  CPU run reaches `002DB6B0` after 1,984 packets. The cumulative auto-close
+  delta `r100-door-auto-over234-delta` has real three-door coverage.
+- R003 State5 retirement leaves and R105 module load are available as the
+  rebased G bundles `r003-state5-retirement-leaves-over234-delta` and
+  `r105-module-loader-over234-delta`. The worker verified R105 State3 reaches
+  EMS `002905D0` with an extra diagnostic physical retirement visit. Genuine
+  State5 still needs host ownership disposal at original `0030F5F0` once
+  the ordinary mark/age visits finish. Do not add a gameplay tick for cleanup.
+- Exact232 CPU probe with `--r003-controlled` finishes 2,785 R003 packet
+  frames and all 28 EV02 cuts in 11.526 seconds. Original State5 selects R105
+  and stops in room retirement `00312708` on Flag handle149. The quick sink
+  completes waveOut buffers immediately. Use a paced sink or actual hardware
+  to establish the number of original wait/retirement visits. Proof in G
+  `verification/room-transition-232-cpu/r003.json` and its trace.
+- Exact230 controlled Windows reaches EV02 cut18 frame40 after 1,781 R003
+  presents. `002FEC38` sprite rejects authored vertex Z `0x3DCC9` in the
+  frontend even though the packet is valid. Exact233 keeps the packet value
+  and saturates interpolated depth at the PSMZ16S maximum. Its complete
+  512x448 GPU RGBA/depth oracle passes including comparison and interpolation.
+  Snapshot `room-transition-233-r003-z16-triangle-depth`, hash
+  `d3c4be9181e67443c398609639bb4528978a1fe0eb1ad7e60f9f9a886283279c`.
+  Controlled Windows replay reached 2,526 R003 frames and EV02 cut25 before
+  the second feedback capture stopped. Exact234 clears the capture.
+- R100 exact232 fast probe passes the rise effect, selector07 and door
+  contact, then reaches original `001BC538`. Worker exact232 with opening
+  plus original bank2:3 attached cue goes to player `00123938` at tick2203.
+  The cumulative opening receipt is `r100-door-open-over229-delta`.
+  Carry only verified worker deltas after checking current preimages.
+
+- Exact222 `room-transition-222-combat-event-and-successor`, pin
+  `50b89ce0b5e18ea0679273a47b2719a015c27e33bc518f815a01c9c065d2439b`.
+  Five focused checks pass. Windows New Game actual ISO reached tick2083,
+  1942 scene presents and original PL00 rise-effect call `00306528`.
+  `analysis/room-transition-222-triangle-pair-continue-private.json`.
+- Exact224 `room-transition-224-r003-tim2-live-combat`, pin
+  `5f13d93325a2da17dc11d0f6225956cc935de838c7ff433731521f7de9d4e8f1`.
+  Broad regression passes 379 modules and 365 tests, with 18 opt-in skips.
+  Includes original REL1780 A06 finish, Devil emitter Init, original R100
+  bank2:35/36 ADX, and R003 depth/TIM2. Separate actual-disc CPU fixture
+  completes 1327 R003 scene frames through EV02 cut11, then cut12 ESP07.
+- Exact224 controlled Windows derivative supplied the actual R100 A38 tuple
+  at the title handoff, with no R100 clear claim. It presented 51 R003 frames
+  (serial345–395), verified captures385–387 and stopped on a width-zero
+  alignment1 UI sprite at `002AAEF0`. The pre-UI world image and scope are in
+  `analysis/private-captures/r003-windows-world-scene-387.png` and
+  `analysis/room-transition-224-r003-windows-controlled-private.json`.
+  The first direct PowerShell run with forward-slash arguments stopped on
+  title audio; the short, absolute Windows path retry reached R003.
+  With original zero-coverage alignments0..4, controlled Windows replay
+  presented 1344 R003 frames (serial345–1688) through EV02 cut12, stops at
+  `002E9BA0` with all four renderer/window error fields clear. Private
+  receipt `analysis/room-transition-224-r003-windows-alignment-private.json`.
+  Follow-up same-executable capture verifies the visibly presented cut1
+  composite at serial702, `analysis/private-captures/r003-windows-ev02-cut1.png`,
+  raw/trace in G `verification/r003-cut1-capture-224`.
+  Resolve args with pathlib and keep captures separate.
+- Exact226 `room-transition-226-r100-devil-rise-r003-esp07`
+  adds real-disc-proven Devil full Init/EMS owner and controlled first parent
+  death Move, source-backed PL00 rise effect, native CORE05 spatial cue and
+  R003 cut12 one-layer ESP07. The first Devil live Move `00212C08` and actual
+  stamp8 lethal trigger still require verification. Worker receipt paths
+  `r100-devil0220-ems-over224-delta`, `r100-player-rise-effect-over222-delta`,
+  and `r003-ev02-esp07-layer1-over212-delta` under G snapshots.
+  Real-device attached sound and first-damage passed in 226. Successor EMS
+  focus exposed a stale game_enemy_row2.c inside the Devil bundle. Exact227
+  `room-transition-227-composed-r100-r003`, pin
+  `bb818191a5e80f5712ff0dd54c0ae3f3ef4a2caadd5fdfdfa4486a00790db63f`,
+  reapplies only that bundle's Devil radius guard over exact224's successor
+  admission. Broad check and normal Windows New Game rerun are in progress.
+
+- Exact221 `room-transition-221-both-6c-devil-factory` passes five focused
+  checks and actual Windows advances through both enemies' selector6C to
+  tick2069, 1928 scene presents. Stamp19 dep0203 stops at the original
+  `00213710` phase0 selector06. No renderer, GPU, postprocess or window
+  errors. The Devil0220 tested constructor/model is composed here; the
+  separate initializer still needs live EMS attachment and later leaves.
+- Exact220 isolated original R003 is independently replayed from the composed
+  archive, 285 CPU frames to EV02 cut1. Private receipts in `analysis/`.
+  Real muted XAudio2 also consumes original R100 stereo AFD2 from this build,
+  96079 frames, cursor960, channel49. No live gate trigger during this test.
+- Public `main` is `e327558aabf4d35129ed7357d10d899d058cc927`, verified by
+  `git ls-remote`. Code rollback point `860f9e3`, based on exact217
+  `14bbf406e9183b43ae69c3fd0bc919d73d78f95634d0c9ec3e286c52d6b90b7b`.
+  The broad run passes 379 modules and 365 checks, with 18 opt-in skips.
+  Public documentation describes the separate Windows and controlled CPU runs.
+- Exact219 `room-transition-219-r100-two-recoveries`, pin
+  `a7ac597500175531c505e0628976659de1e25c15d316a2e3f9f90f28a73f84d3`.
+  Windows presents 1886 scenes and reaches tick2027. The original stamp20
+  selector6C ran, then the same address `0023C620` stops on stamp19 dep0203
+  phase0. Gene's visible HP is 100→91→81→78, including the split knockdown
+  damage. `analysis/room-transition-219-triangle-pair-continue-private.json`.
+  Actual disc focus verifies the stamp19 selector6C on six MT cases and the
+  detail override. Compose it with exact220 for a fresh Windows replay.
+- Exact220 `room-transition-220-r003-event-r100-gate`, pin
+  `9ce72a64dbc12c3113019aa46bcc35b2b81309a1f2589b637222abab6b782fea`.
+  Seven focused checks pass. Adds original R003 EV02 jacket transfers and
+  SE playback. The isolated actual ISO route completed 285 CPU scenes and
+  cut0, then stops at cut1 `002B61B0` on bank6:index2 attachment. Original
+  R100 gate now rebuilds two OM54 boxes before its camera/action and releases
+  them after it. All eight original EMS calls, AT11 and three typed Goto
+  requests pass controlled fixtures. REL1780 successor and real live gate
+  conditions remain outstanding. Bank2:0D is stereo ADX, AFD2/member1; actual
+  96079 frames verified through recording transport, native XAudio2 stereo
+  buffer routing verified in a device-free fixture.
+- Exact216 Windows presents 1816 scenes with two original hits by Gene and
+  two received hits including the fall. Independent actual ISO controlled
+  A38/Continue/State5 replay completes R003 first scene and original BGM fade.
+  Before both, exact214 recovered all nine actual CORE6E voice variants.
+- Exact213 `room-transition-213-fast-native-replay`, pin
+  `38fc62d6a82ae5a0e696bab54a92f50b496958aa6ae14ead9ca6fb12d24cb8e9`.
+  Five focused checks pass. The committed-source candidate CPU runner shares
+  the Windows QA title and combat input generators. With the actual ISO it
+  decoded 90 Movie0 frames and reached R100 tick1970 in 8.445s after two
+  enemy hits, then stopped at another player Take `0012C0F8`. The collector
+  neither renders nor measures audibility. It keeps real muted XAudio2 and
+  completes Movie0/BGM waveOut buffers in the test adapter. The Windows
+  replay may hit a different branch due to transport and timing.
+- Exact212 Windows reached `002CE588` again. A temporary diagnostic in G:
+  showed the player requested bank0/program0x6E, then actual MT selected
+  0x74; a fixture requesting 0x74 directly did not reproduce that branch.
+  All nine authored 0x6E variants were inventoried in
+  `analysis/r100-player-hurt-core-variants-private.json`; exact214 applies
+  those descriptors and samples to the pending occlusion route.
+- Exact209 `room-transition-209-impact-wave-route`, pin
+  `148f6ed83421d5eebaf703c812d98c819814757fc1008b2ef9b86d8428de4574`.
+  Six focused checks and Windows QA build passed. Actual Windows presented
+  1796 scenes. At tick1937 the player-impact effect allocator and ESP07
+  initialization advance into sibling ESP18 `002F3F30` continuous camera shake.
+  `analysis/room-transition-209-triangle-pair-continue-private.json` records
+  no renderer, GPU, postprocess or window error before that stop.
+- Exact210 `room-transition-210-impact-native`, pin
+  `336e41192f3299e5e70b3f42aaffee9e8258dd3acc4f29a487885810b65a3e8c`.
+  Composes continuous ESP18, the ordered ESP07 feedback fans and captures,
+  and camera view offsets before the combined and clipping matrices. All six
+  focused checks pass. Windows passed ESP18 and generated scene1797 without
+  a renderer or GPU error. It stopped before the presentation receipt advanced
+  beyond 1796, at `002CE588` pending bank0/program116 player sound update
+  (part -1, flags104, mode0). Private receipt in `analysis/`.
+- Exact208 `room-transition-208-room-and-fx-regression`, pin
+  `2449bbd28748f2c9484dd4729c4ae1fd79b1693caa53ffd4271f8487b1becd94`.
+  Local checkpoint `4a2c545`. Full native verification passes 379 modules
+  and 363 checks with 18 optional skips. Windows startup QA builds. Preserves
+  EV01's existing indexed4 TEX0 word and adds the genuine lethal indexed8
+  TIM2. Includes EV02 actors through EL31 and 22-row production capacity,
+  with independent fixture coverage. Real Windows Title Load presented
+  1918 scenes and passed to the same type07 impact allocator at tick2243.
+  `analysis/room-transition-208-title-load-execution-private.json` records it.
+- Current source adds actual R003 type08 wave and the camera-local sprite
+  projection. Independent direct-entry CPU replay with the ordered EV02
+  actor overlay reaches 36 complete R003 scenes and all 22 actor rows, then
+  stops at EV02 extra-play `00296CFC`. That overlay is separate from exact210.
+  The R100 route reaches original AT10 and waits
+  for actual gate 40000000. Original REL1BD0 has a 12-defeat cold threshold
+  (9 under alternate Work flag), plus earlier REL2D68 and RoomSave conditions.
+  The two opening deaths alone do not authorize passing H03_gt.
+- Exact207 Windows New Game passed the authored close hit Take (kind37,
+  original power20), then stopped at the bank0:3 type07 impact allocation
+  002FACA8, tick1937, 1796 scene presents. First R100 enemy still HP50 after
+  two presented hits. Independently, the continuous actual-ISO CPU replay
+  passed the full first R003 frame and post-frame original 30-tick scene
+  BGM fade after controlled A38 preconditions, with 258 world and 75 actor
+  commands. The two E: `analysis/room-transition-207-*-private.json` receipts
+  describe each scope. No Windows over-door proof yet.
+- Exact206 Windows passed 0030A5D0 and presented 1796 scenes before the
+  first live close hit on Gene at 0012C0F8. Independent Windows GPU checks
+  pass ordered trail triangles and projected base-zero warp pixels. The
+  separate CPU input replay prototype reaches genuine combat in 7–9s, with
+  different timing. After exact208 stamp19 6B handling, it reaches attached
+  bank7/program0A `002CBF78` at tick1789. It does not certify Windows results.
 
 - Exact205 `room-transition-205-native-trail-draw`, pin
   `5a3a87af43e7ffd7ba09615673cea09ccdf779206cd331d1e59af0974f264a3b`.
@@ -1514,6 +1694,15 @@ For unfinished observations, record-startup-frontier.py verifies the same
 source/build/process and hashes captured output. It distinguishes an original
 stop from a native error and writes to fresh G scratch. Older runner receipts
 require independent stdout/stderr and optional capture digests.
+
+For faster behavior probes, build the frozen tree with
+`python -B tools/build-windows.py --target startup-cpu-qa --scratch G:/...`.
+Invoke `build/windows-startup-cpu-qa/probe-startup-cpu.exe` with ISO, FFmpeg,
+absent profile path and a positive tick cap, in that order. It drives actual
+New Game with the shared Triangle/Continue pad probe and reports CPU packet
+frames. Exit 4 records an original frontier, 3 records the tick cap and 0
+requires R003 packet completion through that probe. Keep Windows rendering
+and device-backed acceptance in the independent `startup-qa` run.
 
 For meaningfulpush: copyexactmatchingstandardreports, createhonestwindowproof;
 export-progress.py --verified-source-root FROZEN --world-layer-proof PRIVATE

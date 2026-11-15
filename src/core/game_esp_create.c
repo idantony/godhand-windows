@@ -45,8 +45,11 @@ static int authored_actor_scale(const gh_esp_create_call *c,float scale)
     !gh_effect_create_emitter_at(c->b.storage.effects,c->emitter_slot,&emitter)&&
     emitter.serial==c->emitter_serial&&gh_effect_em00_attack_emitter_is_bound(&emitter);
 }
-static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const uint8_t*r,const uint8_t*source){
- if(r[0x290]==1&&gh_effect_r003_esp08_row((gh_effect_view){r,0x2f0})){
+static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const gh_effect_emitter_view *emitter){
+ const uint8_t *r=emitter->record.bytes,*source=emitter->payload;
+ const int event_scale=w(source+0x18c)==0x00070006u&&r[0xbe]==10&&r[0x133]==0&&
+    gh_effect_event_part_is_bound(emitter->record,emitter->actor,emitter->selector);
+ if(r[0x290]==1&&(gh_effect_r003_esp08_row(emitter->record)||event_scale)){
   /* 301648–301878 scale mode1 seeds the local transform from the first
    * authored scale key and the curve magnitude from two RNG draws. */
   for(unsigned offset=0x18;offset<=0x44;offset+=4)
@@ -307,7 +310,7 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
  }
  if(c->stage==3){gh_effect_view first,secondary;status=texture(c,(int16_t)h(r+0x28c),r[0x12e],&first);if(status)return status;if(!first.bytes){status=texture(c,0,0xff,&first);if(status)return status;}secondary=first;if(w(r+4)&0x08000000u){status=texture(c,(int16_t)h(r+0x28c),r[0x297],&secondary);if(status)return status;}status=gh_effect_create_esp_bind_textures(b->storage.effects,c->slot,c->serial,first,secondary);if(status)return fail(c,0x3060b0,status);c->stage=4;}
  if(c->stage==4){status=source_flags(c,p,r,source);if(status)return status;c->stage=5;}
- if(c->stage==5){status=initial_scale(c,p,r,source);if(status)return status;c->stage=6;}
+ if(c->stage==5){status=initial_scale(c,p,&emitter);if(status)return status;c->stage=6;}
  if(c->stage==6){status=initial_transform(c,p,r,source);if(status)return status;c->stage=7;}
  if(c->stage==7){status=initial_direction(c,p,r,source);if(status)return status;c->stage=8;}
  if(c->stage==8){status=initial_colour(c,p,r,source);if(status)return status;c->stage=9;}
@@ -323,10 +326,8 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
   return GH_EFFECT_OK;
  }
  if(view.type==7&&c->stage==10){
-  gh_effect_view impact;
-  if(view.actor||view.selector||w(p+0xf0)!=0x44e770u||!b->globals||
-     gh_effect_est_at_00306030(b->storage.effects,0,3,&impact)||!impact.bytes||
-     impact.size<0x300||r!=impact.bytes+16)
+  if(w(p+0xf0)!=0x44e770u||!b->globals||
+     !gh_effect_esp_type7_record_bound(b->storage.effects,&view))
      return fail(c,0x2e9ba0,GH_EFFECT_UNSUPPORTED);
   const float radius=mul(floating(r+0x144),0.01f);
   const float extent=mul(floating(r+0x150),0.1f);
@@ -364,6 +365,14 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
  if(view.type==0x18&&c->stage==10)return initialize_18(c,p,r);
  if(view.type==0x13&&c->stage==10)return initialize_13(c,p,r);
  if(view.type==8&&c->stage==10)return initialize_8(c,p,view.record);
+ if(view.type==0x20&&c->stage==10){
+  uint32_t pc=0;
+  status=gh_effect_create_esp_trail_edges_002f62f8(b->storage.effects,c->slot,c->serial,
+      w((const uint8_t*)b->work+0x594),b->policy,&pc);
+  if(status)return fail(c,pc?pc:0x2f62f8,status);
+  c->complete=1;c->stage=12;
+  return GH_EFFECT_OK;
+ }
  if(view.type==9&&c->stage==10){
   uint32_t pc=0;
   float position[4];

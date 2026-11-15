@@ -1,5 +1,6 @@
 #include "game_actor_attached_sound.h"
 #include "game_enemy_factory.h"
+#include "game_enemy_initialize.h"
 #include "game_enemy_model.h"
 #include <windows.h>
 #include <stdio.h>
@@ -11,6 +12,73 @@ static uint8_t *read_file(gh_disc*d,const char*p,size_t*n){size_t i;gh_disc_entr
 typedef struct {gh_sound_scene*s;gh_bundle*b;gh_boot_work*w;gh_dvd_jobs*d;gh_heap*h;gh_task_threads*t;int done;} loader;
 static void load(void*p,int32_t unused){loader*l=p;(void)unused;C(!gh_sound_scene_initialize_002cabe8(l->s,l->b,l->w,l->d,l->h,l->t));l->done=1;}
 static void store(void*p,float f){memcpy(p,&f,4);}
+
+static void devil_spawn_sound(gh_disc *disc,gh_heap *heap,gh_room_pools *pools,gh_boot_work *work,
+ gh_audio_output *output,const gh_actor_attached_sound_bindings *bindings)
+{
+ size_t size;
+ uint8_t *data=read_file(disc,"em/em20.dat",&size);
+ gh_game_title_player enemy={0};
+ int original;
+ C(!gh_enemy202_allocate_003130e0(&enemy,heap,work,&original)&&original);
+ memcpy(enemy.view.bytes+0x2fe,&(uint16_t){0x220},2);
+ gh_enemy_request placement={.object_kind=0x220,.dependency_kind=0x220,.flags=0x400000,.entry_number=0xff};
+ gh_object_view resource={.bytes=data,.kind=0x220,.size=size,.file_extent=size,.file_extent_known=1};
+ uint8_t save[GH_CORE_SAVE_BYTES]={0},scenario=0;
+ uint32_t fog=0;
+ gh_enemy_initialize init={0};
+ C(gh_enemy202_initialize_prefix_002022d0(&init,&enemy.view,&placement,&resource,work,
+    (gh_core_save_view){save,sizeof(save)},&scenario,NULL,pools,heap,&fog,
+    GH_STATIC_BINARY32_REFERENCE)==GH_ACTOR_MODEL_UNSUPPORTED&&init.frontier==0x28ebf0);
+ gh_actor_model *model=&init.model.model;
+ store(enemy.view.alias_f0,10);
+ store(enemy.view.alias_f0+4,0);
+ store(enemy.view.alias_f0+8,0);
+ store(enemy.view.alias_f0+12,1);
+ store(enemy.view.bytes+0x5a8,1);
+ gh_sound_control *control=bindings->control;
+ uint32_t matrix[16],position[4];
+ memcpy(matrix,control->listener_matrix_d0,sizeof(matrix));
+ memcpy(position,control->listener_position_c0,sizeof(position));
+ const int32_t listener_mode=control->listener_mode110;
+ memset(control->listener_matrix_d0,0,sizeof(matrix));
+ for(unsigned i=0;i<4;i++)store(&control->listener_matrix_d0[i*5],1);
+ memset(control->listener_position_c0,0,sizeof(position));
+ store(control->listener_position_c0+1,1.3f);
+ store(control->listener_position_c0+3,1);
+ control->listener_mode110=1;
+
+ gh_actor_attached_sound source={0};
+ C(!gh_actor_attached_sound_bind(&source,bindings));
+ gh_motion_sound_request request={.model=model,.actor=&enemy.view,.bank=0,.program=5};
+ uint32_t handle=0,frontier=0;
+ gh_game_mt before=*bindings->random;
+ C(!gh_actor_attached_sound_motion(&source,&request,&handle,&frontier)&&handle&&!frontier);
+ gh_se_voice_engine *voices=bindings->voices;
+ gh_se_voice_info info;
+ C(!gh_se_voice_query(voices,handle,&info)&&info.pending&&info.position_mode==2&&info.rate==18000&&
+    info.sample_slot==0&&info.pitch_q12==1536&&info.frames==51894&&model->sound_borrowers==1);
+ const int16_t *pcm;
+ size_t frames;
+ C(!gh_se_voice_pcm_view(voices,handle,&pcm,&frames)&&pcm&&frames==51894);
+ C(!gh_se_voice_update(voices)&&!gh_se_voice_query(voices,handle,&info)&&info.native_voice&&
+    !info.pending&&info.channel==49&&info.distance==10&&!info.azimuth&&!info.pan&&info.level_q14==9070);
+ store(enemy.view.alias_f0,20);
+ C(!gh_se_voice_update(voices)&&!gh_se_voice_query(voices,handle,&info)&&info.distance==20&&
+    info.level_q14==8526&&!memcmp(&before,bindings->random,sizeof(before)));
+ uint64_t played=0;
+ for(unsigned i=0;i<30&&!played;i++){
+  int active;
+  Sleep(5);
+  C(!gh_audio_output_active(output,info.native_voice,&active,&played)&&active);
+ }
+ C(played>0&&!gh_actor_attached_sound_abort(&source)&&!model->sound_borrowers);
+ memcpy(control->listener_matrix_d0,matrix,sizeof(matrix));
+ memcpy(control->listener_position_c0,position,sizeof(position));
+ control->listener_mode110=listener_mode;
+ C(!gh_enemy202_initialize_abort_prefix(&init)&&!gh_game_title_player_release(&enemy));
+ free(data);
+}
 static void square_voice_samples(gh_audio_registry *registry,gh_se_voice_engine *voices,
  gh_actor_attached_sound *source,const gh_actor_attached_sound_bindings *bindings,
  gh_actor_model *model,gh_title_player_view *player)
@@ -155,6 +223,7 @@ int main(int argc,char**argv){
  C(!gh_actor_attached_sound_bind(&source,&bindings));control.gain_bits[0]=0;C(gh_actor_attached_sound_motion(&source,&request,&handle,&f)==GH_ACTOR_MOTION_UNSUPPORTED&&f==0x375630&&!handle&&model.sound_borrowers==1&&gh_se_voice_attached_reservations(voices)==1);expected=mt;C(gh_actor_attached_sound_motion(&source,&request,&handle,&f)==GH_ACTOR_MOTION_UNSUPPORTED&&!memcmp(&mt,&expected,sizeof(mt)));control.gain_bits[0]=0x42fe0000;C(!gh_actor_attached_sound_motion(&source,&request,&handle,&f)&&handle&&!memcmp(&mt,&expected,sizeof(mt))&&!gh_se_voice_attached_reservations(voices));C(!gh_actor_attached_sound_abort(&source)&&!model.sound_borrowers);
  /* Part source is the SAME canonical payload; a copied part descriptor is rejected. */ C(!gh_actor_attached_sound_bind(&source,&bindings));request.program=0x161;request.part=model.parts+2;store(model.parts[2].alias_f0,17);store(model.parts[2].alias_f0+4,19);C(!gh_actor_attached_sound_motion(&source,&request,&handle,&f)&&!gh_se_voice_query(voices,handle,&info)&&info.attached_part==2&&info.source_position[0]==17&&info.source_position[1]>20.29f);gh_actor_part foreign=*request.part;request.part=&foreign;C(gh_actor_attached_sound_motion(&source,&request,&first,&f)==GH_ACTOR_MOTION_ARGUMENT&&!first&&model.sound_borrowers==1);C(!gh_actor_attached_sound_abort(&source)&&!model.sound_borrowers);square_voice_samples(r,voices,&source,&bindings,&model,&player);
  shared_voice_owners(d,heap,&pools,&work,voices,&source,&bindings,&model,&player);
+ devil_spawn_sound(d,heap,&pools,&work,output,&bindings);
  request.part=NULL;request.program=0x1e; /* Same 64 EE slots as origin requests; exhaustion precedes MT and borrowing. */
  for(unsigned i=0;i<64;i++)C(!gh_se_voice_request_origin(voices,0,0x160,-1,-1,0,0,&handle)&&handle);C(!gh_actor_attached_sound_bind(&source,&bindings));expected=mt;C(!gh_actor_attached_sound_motion(&source,&request,&handle,&f)&&!handle&&!model.sound_borrowers&&!memcmp(&expected,&mt,sizeof(mt)));C(!gh_actor_attached_sound_abort(&source));gh_se_voice_destroy(voices);gh_audio_output_destroy(output);
  C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_task_threads_destroy(threads)&&!gh_heap_destroy(heap));free(resource);free(room);gh_audio_registry_destroy(r);gh_disc_close(d);puts("PASS actualR100/PL00 attachedFoot sameMT variant, shared64EEpool, pitchrange exact37D760, fixedpitch real mutedXAudio2 progress/EOS, same-key reuse, modelborrow/detach/abort, lateerror retry/FEnv");return 0;

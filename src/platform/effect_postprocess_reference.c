@@ -127,7 +127,8 @@ done:
 
 gh_effect_post_status gh_effect_postprocess_capture_scene(const gh_effect_trans_packet *p,
  const gh_effect_post_sampler *state,const gh_effect_post_surface *scene,
- gh_effect_post_surface *capture,uint32_t x_origin,uint32_t y_origin,int *first_row_known)
+ gh_effect_post_surface *capture,uint32_t x_origin,uint32_t y_origin,
+ const uint32_t wrapped_row[256],int *first_row_known)
 {
  if(!p||!first_row_known||!surface_valid(scene)||!surface_valid(capture))return GH_EFFECT_POST_ARGUMENT;
  if(p->kind!=GH_EFFECT_PASS_SCENE_CAPTURE||p->original_callee!=0x2fa620||
@@ -162,6 +163,17 @@ gh_effect_post_status gh_effect_postprocess_capture_scene(const gh_effect_trans_
  if(status)return status;
  status=gh_effect_post_sample(scene,512,512,state,255*32+8,447*16+4,boundary);
  if(status)return status;
+ if(linear&&wrapped_row){
+  // U=x*32+8 selects one column; V=4 interpolates wrapped row511 and row0.
+  for(unsigned x=0;x<256;++x){
+   const uint8_t *current=scene->rgba+x*8;
+   uint8_t *target=capture->rgba+x*4;
+   for(unsigned channel=0;channel<3;++channel){
+    const unsigned wrapped=(wrapped_row[x]>>(channel*8))&255u;
+    target[channel]=(uint8_t)((wrapped+3u*current[channel])/4u);
+   }
+  }
+ }
  for(unsigned y=first_y;y<448;y++){
   for(unsigned x=0;x<256;x++){
    uint8_t rgba[4];
@@ -170,7 +182,7 @@ gh_effect_post_status gh_effect_postprocess_capture_scene(const gh_effect_trans_
    memcpy(capture->rgba+(size_t)y*capture->stride+x*4,rgba,3);
   }
  }
- *first_row_known=!first_y;
+ *first_row_known=!first_y||wrapped_row!=NULL;
  return GH_EFFECT_POST_OK;
 }
 
@@ -188,9 +200,10 @@ static float warp_interpolate(float a,float b,float c,float wb,float wc){
  return value;
 }
 static gh_effect_post_status warp_known(const gh_effect_trans_packet*p,const gh_effect_post_sampler*state,
- unsigned width,unsigned height,unsigned ox,unsigned oy,int first_known){
+ unsigned width,unsigned height,unsigned ox,unsigned oy,int first_known,int display_alias_known){
  if(!p||!width||!height||width>2048||height>2048||ox>65535||oy>65535||
-    (first_known!=0&&first_known!=1))return GH_EFFECT_POST_ARGUMENT;
+    (first_known!=0&&first_known!=1)||(display_alias_known!=0&&display_alias_known!=1))
+    return GH_EFFECT_POST_ARGUMENT;
  const int display=p->source==GH_EFFECT_SURFACE_DISPLAY_BASE0;
  if(p->kind!=GH_EFFECT_PASS_SCENE_WARP||p->quad_count!=1||
     p->quads[0].vertex_count!=6||p->prim!=0x5d||p->test!=0x5000c||
@@ -205,7 +218,7 @@ static gh_effect_post_status warp_known(const gh_effect_trans_packet*p,const gh_
  warp_sample_vertex vertices[6];
  const unsigned texture_rows=display?512:256;
  const unsigned first_row=display||first_known?0:1;
- const unsigned available_rows=display?448:256;
+ const unsigned available_rows=display?(display_alias_known?512:448):256;
  int safely_inside=1,all_alpha_zero=1;
  for(unsigned i=0;i<6;i++){
     const gh_effect_trans_vertex*v=p->quads[0].vertices+i;
@@ -262,10 +275,11 @@ static gh_effect_post_status warp_known(const gh_effect_trans_packet*p,const gh_
 }
 
 gh_effect_post_status gh_effect_postprocess_warp_source_known(const gh_effect_trans_packet*p,
- const gh_effect_post_sampler*state,uint32_t width,uint32_t height,uint32_t ox,uint32_t oy,int first_known){
+ const gh_effect_post_sampler*state,uint32_t width,uint32_t height,uint32_t ox,uint32_t oy,
+ int first_known,int display_alias_known){
  fenv_t env;
  if(feholdexcept(&env))return GH_EFFECT_POST_UNSUPPORTED;
  if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_EFFECT_POST_UNSUPPORTED;}
- gh_effect_post_status status=warp_known(p,state,width,height,ox,oy,first_known);
+ gh_effect_post_status status=warp_known(p,state,width,height,ox,oy,first_known,display_alias_known);
  return fesetenv(&env)?GH_EFFECT_POST_UNSUPPORTED:status;
 }

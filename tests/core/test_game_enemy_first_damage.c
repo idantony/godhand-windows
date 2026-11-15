@@ -1,3 +1,7 @@
+#include "game_enemy_finalize.h"
+#include "game_enemy_solids.h"
+#include "game_enemy_motion.h"
+#include "game_enemy_entry.h"
 #include "game_esp14.h"
 #include "game_esp_trail_draw.h"
 #include "game_effects_trans.h"
@@ -1148,6 +1152,136 @@ static int retire_stamp19_trans(gh_enemy_ems *,const gh_enemy_ems_live *,uint32_
     const gh_effect_create_bindings *,const gh_title_player_view *,gh_game_init_state *,
     gh_game_scene_tables *,const void *,size_t,gh_room_pools *,gh_heap *);
 
+typedef struct {
+    gh_effect_create_call call;
+    gh_effect_create_bindings bindings;
+    unsigned calls;
+} rise_effect_probe;
+
+static gh_player_frame_status create_rise_effect(void *context,const gh_player_frame_effect_request *request,
+    uint32_t *frontier)
+{
+    rise_effect_probe *probe=context;
+    if(request->kind!=0x3e||request->parameter_bits||request->argument3||
+        request->mode!=UINT32_MAX||request->selector!=-1||!request->sequence_scale)
+        return GH_PLAYER_FRAME_ARGUMENT;
+    const gh_effect_create_request create={.bank=0,.index=0x3e,.actor=request->actor,.mode=-1,.selector=-1};
+    ++probe->calls;
+    gh_effect_status status=gh_effect_create_actor_sequence_0014fb48(&probe->call,&create,request->sequence_scale);
+    if(!status)status=gh_game_effect_create_00306528(&probe->call,&probe->bindings);
+    *frontier=probe->call.frontier;
+    return !status?GH_PLAYER_FRAME_OK:status==GH_EFFECT_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+}
+
+static uint32_t rise_clock(void *context)
+{
+    return (*(uint32_t *)context)++;
+}
+
+static int player_rise_sequence(gh_disc *disc,const gh_bundle *room,gh_game_title_player *player,
+    gh_actor_model *model,const uint8_t *pl,size_t pl_size,gh_game_init_state *init,gh_boot_work *work,
+    const void *elf,size_t elf_size,gh_game_scene_tables *actors,const float *atan_coeff)
+{
+    size_t core_size;
+    uint8_t *core=load(disc,"etc/core.dat",&core_size);
+    gh_game_effects *effects=calloc(1,sizeof(*effects));
+    uint8_t *esp=calloc(1,0x100180),*emit=calloc(1,0x26060);
+    CHECK(core&&effects&&esp&&emit&&!gh_game_effects_initialize_00305a68(
+        effects,esp,0x100180,emit,0x26060,core,core_size,room));
+    uint8_t *raw=player->view.bytes;
+    uint8_t before[GH_TITLE_PLAYER_BYTES];
+    memcpy(before,raw,sizeof(before));
+    const gh_game_mt random=init->random;
+    memcpy(raw+0x430,&(uint32_t){0},4);
+    memcpy(raw+0x41c,&(uint32_t){UINT32_MAX},4);
+    memcpy(raw+0x444,&(uint32_t){0x3f800000},4);
+    memcpy(raw+0x3a8,&(uint32_t){0x3f800000},4);
+    memcpy(raw+0x434,&(uint32_t){0},4);
+    raw[0x420]=0;
+    gh_actor_motion motion={.bound=1,.complete=1,.sequence_valid=1,.sequence_offset=word(pl+0x178),
+        .b={.model=model,.work=work,.resource=pl,.resource_bytes=pl_size}};
+    uint32_t pc;
+    CHECK(motion.sequence_offset==0xabd20&&!gh_actor_motion_sequence_002c7fd0(&motion,1,GH_STATIC_BINARY32_REFERENCE,&pc));
+    CHECK((word(raw+0x3ac)>>16)==1&&raw[0x3b0]==0&&raw[0x3b1]==0x3e&&
+          word(raw+0x3b4)==UINT32_MAX&&raw[0x3b8]==0xff&&raw[0x3b9]==7);
+    rise_effect_probe probe={.bindings={.storage={.effects=effects,.esp=esp,.emitters=emit,
+        .esp_bytes=0x100180,.emitter_bytes=0x26060},.work=work,.random=&init->random,.model=model}};
+    const gh_player_frame_bindings bindings={.player=player,.init=init,.work=work,.model=model,
+        .effect_create=create_rise_effect,.effect_context=&probe};
+    gh_game_player_frame frame={.b=bindings,.bound=1,.stage=24};
+    const gh_player_frame_status status=gh_game_player_frame_00108ab0(&frame,&bindings);
+    fprintf(stderr,"PL00 Rise FX actual status%u pc%08x stage%u effects%u create%08x/%u\n",
+        status,frame.frontier,frame.stage,probe.calls,probe.call.frontier,probe.call.stage);
+    CHECK(frame.stage==25&&frame.sequence_effect_index==1&&probe.calls==1&&probe.call.complete&&probe.call.original_return);
+    gh_effect_emitter_view emitter;
+    CHECK(!gh_effect_create_emitter_at(effects,0,&emitter)&&emitter.initialized&&
+        emitter.actor==&player->view&&emitter.selector==&player->view&&
+        emitter.model==model&&emitter.part==model->parts+27&&
+        word(emitter.payload+0x18c)==0x003e0000&&word(emitter.payload+0x110)==UINT32_MAX&&
+        word(emitter.payload+0x1e0)==word(raw+0x114));
+    CHECK(gh_game_player_frame_00108ab0(&frame,&bindings)==status&&probe.calls==1);
+    gh_effects_frame_globals globals={0};
+    gh_game_scene_aux profile={0};
+    gh_game_effects_frame update={0};
+    uint32_t clock=0;
+    CHECK(!gh_effects_frame_globals_from_elf(&globals,elf,elf_size));
+    const gh_effects_frame_bindings fx={.storage=probe.bindings.storage,.work=work,.init=init,
+        .current_player=&player->view,.globals=&globals,.profile=&profile,.clock=rise_clock,
+        .clock_context=&clock,.atan_coeff=atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE,.actors=actors};
+    uint32_t seen_child=0;
+    for(unsigned age=0;age<60;age++){
+        const gh_effect_status result=gh_game_effects_frame_update_0030f228(&update,&fx);
+        if(result)fprintf(stderr,"PL00 Rise FX update age%u status%u frontier%08x stage%u emitterStage%u espStage%u\n",
+            age,result,update.frontier,update.stage,update.emitter_stage,update.esp_stage);
+        CHECK(!result);
+        gh_effect_esp_view child;
+        if(gh_effect_create_esp_at(effects,0,&child)==GH_EFFECT_OK){
+            CHECK(child.initialized&&child.type==0&&child.actor==&player->view&&
+                  child.selector==&player->view&&gh_effect_player_rise_esp_is_bound(effects,&child));
+            if(!seen_child){
+                gh_game_pl_camera camera={0};
+                gh_display_state display={0};
+                CHECK(!gh_game_camera_construct_pl_00139bc8(&camera,&init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+                CHECK(!gh_display_state_from_elf(&display,elf,elf_size)&&!gh_display_static_initialize_002a48a8(&display,1,0xffff));
+                float target[3],eye[3];
+                memcpy(target,player->view.alias_f0,12);target[1]+=1;
+                memcpy(eye,target,12);eye[0]+=2;eye[1]+=2;eye[2]+=7;
+                memcpy(camera.fields+0x200,target,12);memcpy(camera.fields+0x210,eye,12);
+                const gh_camera_projection_display settings={&display.screen_width,&display.screen_height_bits,
+                    &display.pixel_aspect_bits,&display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+                CHECK(!gh_game_camera_project_00138740(&camera,&settings,&pc));
+                gh_game_camera *previous_camera=init->active_camera;
+                init->active_camera=camera.identity;
+                const gh_effect_sprite_camera sprite={&camera,init,&display,
+                    GH_STATIC_BINARY32_REFERENCE,GH_FRAME_CHOP_REFERENCE};
+                gh_effect_sprite_projection projected={0};
+                const gh_effect_status projected_status=gh_effect_sprite_project_002fe0d8(effects,0,child.serial,&sprite,&projected,&pc);
+                init->active_camera=previous_camera;
+                if(projected_status)fprintf(stderr,"PL00 Rise projection frontier %08x\n",pc);
+                CHECK(!projected_status&&projected.visible);
+                float alpha=0;
+                float actor_alpha;
+                memcpy(&actor_alpha,raw+0x24c,sizeof(actor_alpha));
+                const double expected_alpha=(word(raw+0x250)&2u)?0.0:
+                    128.0*(double)actor_alpha*raw[0x2b6]*raw[0x2b7]*raw[0x2bc]/(255.0*255.0*255.0);
+                CHECK(!gh_effect_actor_sprite_alpha_002fec38(effects,&child,128,0.5f,&alpha,&pc)&&
+                      fabs((double)alpha-expected_alpha)<0.0001);
+            }
+            CHECK(!seen_child||child.serial==seen_child);
+            seen_child=child.serial;
+        }
+    }
+    gh_effect_esp_view child;
+    CHECK(seen_child&&gh_effect_create_emitter_at(effects,0,&emitter)!=GH_EFFECT_OK&&
+          gh_effect_create_esp_at(effects,0,&child)!=GH_EFFECT_OK);
+    memcpy(raw,before,sizeof(before));
+    init->random=random;
+    gh_effect_create_forget_on_owner_destroy(effects);
+    free(effects);free(esp);free(emit);free(core);
+    puts("PASS actual PL00 rise SEQ bank0:3E stage24, actor part27, 60 updates, and native retirement");
+    return 0;
+}
+
 static int verify_stamp19_attack_effect(const gh_enemy202_move *move,
     const gh_effect_create_bindings *effects,const gh_enemy_actor *enemy,
     const gh_title_player_view *player,gh_game_init_state *init,
@@ -1767,6 +1901,63 @@ static int em00_attack_effect(gh_enemy_actor *enemy,gh_game_title_player *player
     printf("PASS actual R100 stamp20 21A538 row144 SEQ%06X -> 14FB48 bank58:%02X, four authentic emitter parts\n",
         sequence,effect_index);
     return 0;
+}
+
+typedef struct {
+    const gh_enemy_devil_entry *devil;
+    const gh_motion_sound_request *pending;
+    unsigned calls;
+} devil_cue_proof;
+
+static gh_actor_motion_status devil_cue(void *context,const gh_motion_sound_request *request,
+    uint32_t *handle,uint32_t *frontier)
+{
+    devil_cue_proof *proof=context;
+    const gh_enemy_entry *entry=&proof->devil->entry;
+    if(request->model!=&entry->initialize.model.model||request->actor!=&entry->object.view||
+        request->bank||request->program!=5||request->part||request->other_actor||
+        request->argument7||request->argument8)return GH_ACTOR_MOTION_ARGUMENT;
+    if(!proof->calls++){
+        proof->pending=request;
+        *frontier=0x2cba48;
+        return GH_ACTOR_MOTION_CALLEE;
+    }
+    if(proof->calls!=2||proof->pending!=request)return GH_ACTOR_MOTION_ARGUMENT;
+    *handle=1;
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
+typedef struct {
+    gh_enemy_ems *ems;
+    const gh_effect_create_bindings *effect;
+    const gh_motion_sound_request *pending;
+    unsigned calls;
+} ems_devil_fixture;
+
+static gh_actor_motion_status ems_devil_cue(void *context,const gh_motion_sound_request *cue,
+    uint32_t *handle,uint32_t *frontier)
+{
+    ems_devil_fixture *fixture=context;
+    if(!cue->model||!cue->actor||cue->model->root.bytes!=cue->actor->bytes||
+        cue->bank||cue->program!=5||cue->part||cue->other_actor||cue->argument7||cue->argument8)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    if(!fixture->calls++){
+        fixture->pending=cue;
+        *frontier=0x2cba48;
+        return GH_ACTOR_MOTION_CALLEE;
+    }
+    if(fixture->calls!=2||fixture->pending!=cue)return GH_ACTOR_MOTION_ARGUMENT;
+    *handle=1;
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+static gh_actor_motion_status ems_devil_spawn(void *context,const gh_enemy_actor *parent,
+    const gh_enemy_request *request,uint32_t *frontier)
+{
+    ems_devil_fixture *fixture=context;
+    return gh_enemy_ems_spawn_devil_002905d0(fixture->ems,parent,request,fixture->effect,
+        ems_devil_cue,fixture,frontier);
 }
 
 static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_t *elf, size_t elf_size,
@@ -2395,6 +2586,72 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             rank_peer[i]->bytes[0x617]=rank_hidden[i];
         }
         puts("PASS actual stamp20 selectors 5/6 in the original distance band, both original rank outcomes");
+        {
+            uint8_t before[0x1978];
+            memcpy(before,actor,sizeof(before));
+            const gh_actor_motion saved_motion=entry->motion.motion;
+            const gh_game_mt saved_rng=init->random;
+            memcpy(actor+0x2f4,&(uint32_t){0x00000700u},4);
+            memcpy(actor+0x3ac,&(uint16_t){0},2);
+            memcpy(actor+0x618,&(uint32_t){0x40dfeaa8u},4);
+            memcpy(actor+0x16d8,&(uint32_t){100},4);
+            for(unsigned phase=0;phase<2;phase++){
+                move=(gh_enemy202_move){0};
+                CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+                CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+                CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+                CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+                move.stage=10;
+                const gh_actor_motion_status current=gh_enemy202_move_00208be0(&move,entry,&player.view,elf,elf_size);
+                if(current)fprintf(stderr,"stamp20 selector07 phase%u status%d pc%08x stage%u\n",
+                    phase,current,move.frontier,move.substate67_stage);
+                CHECK(!current&&move.original_returned&&move.pending_ai_pc==0x213ea8);
+                CHECK(actor[0x2f6]==1);
+                if(!phase)CHECK(move.substate67_motion.motion_offset==word(entry->entry.resource.bytes+0xb8)&&
+                    move.substate67_motion.candidate_offset==word(entry->entry.resource.bytes+0xbc)&&
+                    move.substate67_motion.blend_frames==10&&!move.substate67_motion.release_previous);
+            }
+            memcpy(actor,before,sizeof(before));
+            entry->motion.motion=saved_motion;
+            init->random=saved_rng;
+            puts("PASS actual EM00 stamp20 selector07 rowB8/BC and two original Move returns");
+        }
+
+        for(unsigned selector=0;selector<7;selector++){
+            uint32_t draw=0;
+            gh_game_mt initial;
+            gh_game_mt expected;
+            for(uint32_t seed=0;;seed++){
+                CHECK(seed<256);
+                gh_game_mt_seed_0030f2b0(&initial,seed);
+                expected=initial;
+                CHECK(!gh_game_mt_next_0030f348(&expected,&draw));
+                if(draw%6u==selector%6u)break;
+            }
+            memcpy(actor,actor_before,sizeof(actor_before));
+            entry->motion.motion=motion_before;
+            init->random=initial;
+            memcpy(actor+0x2f4,&(uint32_t){0x00006c00u|(selector==6?0x01000000u:0)},4);
+            memcpy(actor+0x3ac,&(uint16_t){0x50},2);
+            move=(gh_enemy202_move){0};
+            CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+            CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+            CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+            CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+            move.stage=10;
+            const gh_actor_motion_status status=gh_enemy202_move_00208be0(&move,entry,&player.view,elf,elf_size);
+            fprintf(stderr,"stamp20 selector6C draw%u status%d pc%08x phase%u row%03x\n",
+                selector,status,move.frontier,actor[0x2f6],move.reaction_resource_offset);
+            CHECK(!status&&move.original_returned&&move.pending_ai_pc==0x23c620&&actor[0x2f6]==1);
+            const uint32_t row=selector==6?0x3e4:0x3c4+8*selector;
+            CHECK(move.reaction_resource_offset==row&&move.substate67_motion.motion_offset==word(entry->entry.resource.bytes+row)&&
+                !memcmp(&init->random,&expected,sizeof(expected))&&(word(actor+0x16d0)&0x400u));
+        }
+        memcpy(actor,actor_before,sizeof(actor_before));
+        entry->motion.motion=motion_before;
+        init->random=rng;
+        puts("PASS actual EM00 stamp20 selector6C unsigned six-way clip and detail override");
+
         if(!attack_effect){
             gh_collision_pair_shape colliders[4];
             uint8_t give_before[4][0x60],shape_before[4][GH_COLLISION_RECORD_BYTES];
@@ -2584,6 +2841,111 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             word(actor+0x16dc)==50 && word(init->enemies+0x510)==15 &&
             word(actor+0x171c)==0x44160000u);
 
+        {
+            uint8_t before[0x1978];
+            memcpy(before,actor,sizeof(before));
+            const gh_actor_motion saved_motion=near->motion.motion;
+            const gh_game_mt saved_rng=init->random;
+            gh_game_mt expected=saved_rng;
+            uint32_t draw;
+            CHECK(!gh_game_mt_next_0030f348(&expected,&draw));
+            memcpy(actor+0x2f4,&(uint32_t){0x00000600u},4);
+            memcpy(actor+0x3ac,&(uint16_t){0},2);
+            memcpy(actor+0x618,&(uint32_t){0x40dfeaa8u},4);
+            memcpy(actor+0x16d8,&(uint32_t){0},4);
+            memcpy(actor+0x16a0,target_xyz,12);
+            move=(gh_enemy202_move){0};
+            CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+            CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+            CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+            CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+            move.stage=10;
+            const gh_actor_motion_status current=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+            fprintf(stderr,"stamp19 selector06 status%d pc%08x phase%u motion%zx candidate%zx\n",
+                current,move.frontier,actor[0x2f6],move.substate67_motion.motion_offset,
+                move.substate67_motion.candidate_offset);
+            CHECK(!current&&move.original_returned&&move.pending_ai_pc==0x213710);
+            CHECK(move.substate67_motion.motion_offset==word(near->entry.resource.bytes+0x660)&&
+                move.substate67_motion.candidate_offset==word(near->entry.resource.bytes+0x664)&&
+                !memcmp(&init->random,&expected,sizeof(expected)));
+            CHECK(actor[0x2f6]==1&&word(actor+0x5f0)==89&&word(actor+0x5f4)==120+draw%60u);
+            memcpy(actor,before,sizeof(before));
+            near->motion.motion=saved_motion;
+            init->random=saved_rng;
+            puts("PASS actual EM02 stamp19 selector06 row660/664 and original Move return");
+        }
+        {
+            uint8_t before[0x1978];
+            memcpy(before,actor,sizeof(before));
+            const gh_actor_motion saved_motion=near->motion.motion;
+            const gh_game_mt saved_rng=init->random;
+            memcpy(actor+0x2f4,&(uint32_t){0x00000700u},4);
+            memcpy(actor+0x3ac,&(uint16_t){0},2);
+            memcpy(actor+0x618,&(uint32_t){0x40dfeaa8u},4);
+            memcpy(actor+0x16d8,&(uint32_t){100},4);
+            for(unsigned phase=0;phase<2;phase++){
+                move=(gh_enemy202_move){0};
+                CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+                CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+                CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+                CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+                move.stage=10;
+                const gh_actor_motion_status current=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+                if(current)fprintf(stderr,"stamp19 selector07 phase%u status%d pc%08x stage%u\n",
+                    phase,current,move.frontier,move.substate67_stage);
+                CHECK(!current&&move.original_returned&&move.pending_ai_pc==0x213ea8);
+                CHECK(actor[0x2f6]==1);
+                if(!phase)CHECK(move.substate67_motion.motion_offset==word(near->entry.resource.bytes+0x658)&&
+                    move.substate67_motion.candidate_offset==word(near->entry.resource.bytes+0x65c)&&
+                    move.substate67_motion.blend_frames==10&&!move.substate67_motion.release_previous);
+            }
+            memcpy(actor,before,sizeof(before));
+            near->motion.motion=saved_motion;
+            init->random=saved_rng;
+            puts("PASS actual EM02 stamp19 selector07 row658/65C and two original Move returns");
+        }
+        /* Original 43AEE0 dependency table routes 0203 through the same 23C6A4
+         * unsigned-six-way branch. Exercise actual EM02 assets for stamp19. */
+        {
+            uint8_t before[0x1978];
+            memcpy(before,actor,sizeof(before));
+            const gh_actor_motion saved_motion=near->motion.motion;
+            const gh_game_mt saved_rng=init->random;
+            for(unsigned selector=0;selector<7;selector++){
+                gh_game_mt expected;
+                for(uint32_t seed=0;;seed++){
+                    CHECK(seed<256);
+                    gh_game_mt_seed_0030f2b0(&init->random,seed);
+                    expected=init->random;
+                    uint32_t draw;
+                    CHECK(!gh_game_mt_next_0030f348(&expected,&draw));
+                    if(draw%6u==selector%6u)break;
+                }
+                memcpy(actor,before,sizeof(before));
+                near->motion.motion=saved_motion;
+                memcpy(actor+0x2f4,&(uint32_t){0x00006c00u|(selector==6?0x01000000u:0)},4);
+                memcpy(actor+0x3ac,&(uint16_t){0x50},2);
+                move=(gh_enemy202_move){0};
+                CHECK(!gh_enemy202_move_bind_navigation(&move,navigation));
+                CHECK(!gh_enemy202_move_bind_opacity(&move,&opacity));
+                CHECK(!gh_enemy202_move_bind_player_aux_698(&move,NULL));
+                CHECK(!gh_enemy202_move_bind_targets(&move,&targets));
+                move.stage=10;
+                const gh_actor_motion_status current=gh_enemy202_move_00208be0(&move,near,&player.view,elf,elf_size);
+                const uint32_t row=selector==6?0x3e4:0x3c4+8*selector;
+                fprintf(stderr,"stamp19 selector6C %u status%d pc%08x row%03x\n",
+                    selector,current,move.frontier,move.reaction_resource_offset);
+                CHECK(!current&&move.original_returned&&move.pending_ai_pc==0x23c620&&actor[0x2f6]==1);
+                CHECK(move.reaction_resource_offset==row&&
+                    move.substate67_motion.motion_offset==word(near->entry.resource.bytes+row)&&
+                    move.substate67_motion.candidate_offset==word(near->entry.resource.bytes+row+4)&&
+                    !memcmp(&init->random,&expected,sizeof(expected)));
+            }
+            memcpy(actor,before,sizeof(before));
+            near->motion.motion=saved_motion;
+            init->random=saved_rng;
+            puts("PASS actual EM02 stamp19 selector6C all six clips and detail override");
+        }
         near->motion.motion.b.sound=record_stamp19_attack_sound;
         near->motion.motion.b.sound_context=near;
         uint32_t first_attack_row=0;
@@ -2766,9 +3128,10 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
     motion->b.sound_context=NULL;
 
     CHECK(!enemy_give_player_take(disc,room_bundle,first->enemy202,&player,&tail,&setup.model,pl,pl_size,&lb,&ledger,effect_bind));
+    if(!attack_effect)CHECK(!player_rise_sequence(disc,room_bundle,&player,&setup.model,pl,pl_size,init,b->entry.work,elf,elf_size,b->actors,b->atan_coeff));
     if(!attack_effect){
         /* Start at the original lethal dispatcher with the actual R100
-         * placement and EM02 model. No synthetic child can pass 2905D0. */
+         * placement and EM02 model. Use its actual request for the child factory. */
         gh_enemy_actor *dying=selector1->enemy202;
         uint8_t *p=selector1->actor->view.bytes;
         CHECK(p[0x640]==8&&word(p+0x564)==0x200&&!(word(p+0x16d4)&0x20));
@@ -2794,6 +3157,248 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
         status=gh_enemy202_move_00208be0(&death,dying,&player.view,elf,elf_size);
         CHECK(status==GH_ACTOR_MOTION_UNSUPPORTED&&death.frontier==0x2905d0&&
             !memcmp(&init->random,&predicted,sizeof(predicted)));
+
+        gh_audio_registry *registry;
+        gh_sound_control control={0};
+        gh_dvd_jobs dvd;
+        gh_se_mix mix;
+        gh_se_voice_engine *voices;
+        unsigned output_identity=0;
+        CHECK(!gh_audio_registry_create(&registry)&&!gh_audio_startup_load(registry,disc)&&
+            !gh_sound_control_from_startup(&control,disc,registry)&&
+            !gh_se_mix_boot_defaults_002c9e78(&mix,0,GH_SE_DSP_NATIVE_LINEAR_REFERENCE)&&
+            !gh_se_voice_create(registry,(gh_audio_output *)&output_identity,&mix,&voices));
+        gh_dvd_jobs_init(&dvd,disc);
+        gh_enemy_se_bindings bank_bind={.control=&control,.registry=registry,.disc=disc,.dvd=&dvd,
+            .default_heap=heap,.room_heap=heap,.voices=voices};
+        gh_enemy_se_banks *banks;
+        CHECK(!gh_enemy_se_banks_from_startup(&bank_bind,&banks));
+        uint8_t *work=(uint8_t *)b->entry.work;
+        const uint32_t saved_sound_flags=word(work+0x5e4);
+        const uint32_t enabled_sound_flags=saved_sound_flags&~0x20000000u;
+        memcpy(work+0x5e4,&enabled_sound_flags,4);
+        int32_t bank;
+        const gh_enemy_se_status requested=gh_enemy_se_request_002cb278(banks,b->entry.work,0x220,&bank);
+        fprintf(stderr,"stamp8 devil bank status%d slot%d frontier%08x\n",
+            requested,bank,gh_enemy_se_frontier(banks));
+        CHECK(!requested&&bank>=1);
+        int ready=0;
+        for(unsigned i=0;i<16&&!ready;++i){
+            CHECK(!gh_dvd_pump(&dvd)&&!gh_enemy_se_banks_update_002cf440(banks)&&
+                !gh_enemy_se_ready_002cb778(banks,bank,&ready));
+        }
+        CHECK(ready&&!gh_game_objects_append_sound_slot(b->entry.room_objects,0x220,bank));
+        gh_enemy_entry_bindings devil_bind=b->entry;
+        devil_bind.banks=banks;
+        devil_bind.resources.sound_check=gh_enemy_se_object_sound_check;
+        devil_bind.resources.sound_context=banks;
+        const uint32_t manager_count=word(init->enemies+0x508);
+        const uint8_t serial_before=*b->entry.factory_serial;
+        gh_enemy_devil_entry devil={0};
+        gh_actor_model_status created=gh_enemy_devil_entry_002905d0(&devil,&devil_bind,child,&dying->entry);
+        fprintf(stderr,"stamp8 devil status%d frontier%08x entry-stage%u model-stage%u\n",
+            created,devil.entry.frontier,devil.entry.stage,devil.entry.initialize.model.stage);
+        CHECK(created==GH_ACTOR_MODEL_UNSUPPORTED&&devil.entry.frontier==0x28ebf0);
+        const gh_enemy_entry *e=&devil.entry;
+        const uint8_t *d=e->object.view.bytes;
+        const gh_enemy_model *m=&e->initialize.model;
+        CHECK(devil.parent==&dying->entry&&e->published&&e->resource_from_room&&
+            e->resource.kind==0x220&&e->resource.file_extent==1240192&&e->initialize.stage==3&&
+            m->model.ready&&m->occurrence==0&&m->geometry.bytes&&m->texture.bytes&&
+            e->object.view.original_vtable214==0x4479c8&&e->object.view.size==GH_EM202_BYTES&&
+            (word(d+0x2fc)>>16)==0x220&&(word(d+0x640)&0xffff)==0xff&&word(d+0x564)==0x220&&
+            word(d+0x1644)==0x400000&&!memcmp(d+0x1630,child->position_xyz,12)&&
+            d[0x2fc]==serial_before&&*b->entry.factory_serial==(uint8_t)(serial_before+1)&&
+            word(init->enemies+0x508)==manager_count+1&&init->enemy_actors[e->slot]==&e->object);
+        uint32_t sound_count;
+        int32_t sound_slots[10];
+        CHECK(!gh_game_objects_sound_slots(b->entry.room_objects,0x220,&sound_count,sound_slots)&&
+            sound_count==1&&sound_slots[0]==bank);
+        fprintf(stderr,"stamp8 devil model parts%u\n",(unsigned)m->model.part_count);
+        const uint32_t handle=e->handle;
+        CHECK(gh_enemy_devil_entry_002905d0(&devil,&devil_bind,child,&dying->entry)==
+            GH_ACTOR_MODEL_UNSUPPORTED&&e->frontier==0x28ebf0&&e->handle==handle&&
+            *b->entry.factory_serial==(uint8_t)(serial_before+1)&&word(init->enemies+0x508)==manager_count+1);
+        uint8_t program[48];
+        CHECK(!gh_audio_get_program(registry,0,5,0,program));
+        gh_sound_span descriptor,sample;
+        CHECK(!gh_audio_sample_at(registry,0,program[4]|(unsigned)program[5]<<8,&descriptor,&sample));
+        gh_adpcm_pcm pcm={0};
+        CHECK(!gh_audio_decode_ps_adpcm(sample.data,sample.size,&pcm)&&pcm.frames);
+        fprintf(stderr,"stamp8 devil CORE05 slot%u rate%u frames%zu\n",
+            program[4]|(unsigned)program[5]<<8,word(descriptor.data+4),pcm.frames);
+        gh_audio_pcm_release(&pcm);
+
+        gh_enemy_devil_initialize construct={0};
+        devil_cue_proof cue={.devil=&devil};
+        gh_enemy_devil_bindings continuation={.cockpit=b->cockpit,.solids=b->solids,.ik=b->ik,
+            .sound=devil_cue,.sound_context=&cue,.rate=*b->canonical_rate};
+        const uint32_t counter=word(init->enemies+0x55c);
+        gh_actor_motion_status initialized=gh_enemy_devil_initialize_0028ebf0(&construct,&devil,&continuation);
+        fprintf(stderr,"stamp8 devil init status%d frontier%08x stage%u hp%u\n",
+            initialized,construct.frontier,construct.stage,construct.hp.hp);
+        CHECK(initialized==GH_ACTOR_MOTION_CALLEE&&construct.frontier==0x2cba48&&cue.calls==1);
+        const unsigned difficulty=b->entry.save.bytes[0x1f];
+        const unsigned hp=difficulty==0?264u:difficulty==2?350u:330u;
+        CHECK(word(d+0x104)==child->yaw_bits&&!memcmp(e->object.view.alias_f0,child->position_xyz,12)&&
+            d[0x140]==4&&d[0x622]==1&&d[0x17c1]==1&&word(d+0x548)==(hp<<16|hp)&&
+            word(d+0x17d0)==counter&&word(init->enemies+0x55c)==counter+1&&
+            word(d+0x110)==0x3f99999a&&word(d+0x114)==0x3f99999a&&word(d+0x118)==0x3f99999a);
+        initialized=gh_enemy_devil_initialize_0028ebf0(&construct,&devil,&continuation);
+        fprintf(stderr,"stamp8 devil first pose status%d frontier%08x motion-stage%u\n",
+            initialized,construct.frontier,construct.motion.stage);
+        CHECK(initialized==GH_ACTOR_MOTION_UNSUPPORTED&&construct.frontier==0x152a20&&
+            construct.motion.stage==4&&cue.calls==2&&word(d+0x2f4)==0x00020400&&
+            word(d+0x54c)==0x41700000&&!word(d+0x24c)&&word(d+0x1704)==0x3f800000&&
+            (word(d+0x250)&0x10)&&construct.motion.motion_offset==0x11a600&&
+            construct.motion.sequence_offset==0x11f8c0&&construct.motion.motion.sequence_valid&&
+            word(init->enemies+0x55c)==counter+1);
+        CHECK(gh_enemy_devil_initialize_0028ebf0(&construct,&devil,&continuation)==
+            GH_ACTOR_MOTION_UNSUPPORTED&&construct.frontier==0x152a20&&cue.calls==2);
+        gh_enemy_devil_pose devil_pose={0};
+        gh_motion_solve_bindings solve={.model=&devil.entry.initialize.model.model,.work=b->entry.work,
+            .actors=b->actors,.ray=b->ray,.context=b->ray_context,.ik_globals=b->ik,.atan_coeff=b->atan_coeff};
+        const unsigned solids_before=b->solids->unit_count;
+        const gh_game_mt before_pose=init->random;
+        initialized=gh_enemy_devil_pose_00152a20(&devil_pose,&construct,&solve,b->default_heap);
+        fprintf(stderr,"stamp8 devil solved status%d frontier%08x pose%u shadow%u solid%u\n",
+            initialized,devil_pose.frontier,devil_pose.pose.stage,devil_pose.shadow.stage,devil_pose.solids.stage);
+        CHECK(initialized==GH_ACTOR_MOTION_UNSUPPORTED&&devil_pose.frontier==0x306528&&
+            devil_pose.pose.stage==3&&devil_pose.shadow.stage==1&&devil_pose.solids.stage==5&&
+            devil_pose.solids.unit&&devil_pose.solids.sphere&&
+            devil_pose.solids.unit->object==&devil.entry.object.view&&
+            b->solids->unit_count==solids_before+1&&d[0x1868]==1&&d[0x614]==1&&d[0x531]==5&&
+            word(d+0x16cc)==0x3ecccccd&&!word(d+0x16f0)&&
+            !memcmp(&init->random,&before_pose,sizeof(before_pose)));
+        CHECK(gh_enemy_devil_pose_00152a20(&devil_pose,&construct,&solve,b->default_heap)==
+            GH_ACTOR_MOTION_UNSUPPORTED&&devil_pose.frontier==0x306528&&
+            b->solids->unit_count==solids_before+1);
+        size_t core_bytes;
+        uint8_t *core=load(disc,"etc/core.dat",&core_bytes);
+        gh_game_effects *devil_effects=calloc(1,sizeof(*devil_effects));
+        uint8_t *devil_esp=calloc(1,0x100180),*devil_emitters=calloc(1,0x26060);
+        CHECK(core&&devil_effects&&devil_esp&&devil_emitters&&
+            !gh_game_effects_initialize_00305a68(devil_effects,devil_esp,0x100180,devil_emitters,
+                0x26060,core,core_bytes,room_bundle));
+        gh_effect_create_bindings spawn=*effect_bind;
+        spawn.storage=(gh_effect_release_bindings){.effects=devil_effects,.esp=devil_esp,.esp_bytes=0x100180,
+            .emitters=devil_emitters,.emitter_bytes=0x26060};
+        gh_effect_view est;
+        CHECK(!gh_effect_est_at_00306030(devil_effects,0x58,3,&est)&&word(est.bytes+4)==8);
+        gh_actor_model *spawn_model=&devil.entry.initialize.model.model;
+        const unsigned full_parts=spawn_model->parts_allocated;
+        /* Deliberately suspend at the first row using part16, then retry
+         * with the original 29-part model and the same emitter cursor. */
+        spawn_model->parts_allocated=11;
+        initialized=gh_enemy_devil_spawn_effect_00306528(&devil_pose,&spawn);
+        spawn_model->parts_allocated=full_parts;
+        fprintf(stderr,"stamp8 devil FX status%d frontier%08x row%u stage%u work5d8%08x\n",initialized,devil_pose.frontier,devil_pose.spawn_effect.row,devil_pose.spawn_effect.stage,word((const uint8_t *)spawn.work+0x5d8));
+        CHECK(initialized==GH_ACTOR_MOTION_BOUNDS&&devil_pose.frontier==0x303a30&&
+            devil_pose.spawn_effect.row==5&&devil_pose.spawn_effect.stage==3&&d[0x1868]==1);
+        gh_effect_emitter_view first_emitter;
+        CHECK(!gh_effect_create_emitter_at(devil_effects,0,&first_emitter)&&first_emitter.initialized);
+        initialized=gh_enemy_devil_spawn_effect_00306528(&devil_pose,&spawn);
+        CHECK(initialized==GH_ACTOR_MOTION_UNSUPPORTED&&devil_pose.frontier==0x14b730&&
+            devil_pose.spawn_effect.complete&&devil_pose.spawn_effect.original_return&&
+            devil_pose.solids.stage==4&&!d[0x1868]&&word(d+0x16f0)==0x3f800000);
+        static const unsigned part_indices[]={4,4,10,10,8,16,16,14};
+        for(unsigned i=0;i<8;i++){
+            gh_effect_emitter_view emitter;
+            const gh_actor_part *part=NULL;
+            CHECK(!gh_actor_model_part_at(spawn_model,part_indices[i],&part)&&
+                !gh_effect_create_emitter_at(devil_effects,i,&emitter)&&emitter.initialized&&
+                emitter.actor==&devil.entry.object.view&&emitter.selector==emitter.actor&&
+                emitter.model==spawn_model&&emitter.part==part&&
+                emitter.record.bytes==est.bytes+16+i*0x2f0&&
+                emitter.serial==first_emitter.serial+i&&word(emitter.payload+0x110)==1);
+        }
+        CHECK(gh_enemy_devil_spawn_effect_00306528(&devil_pose,&spawn)==GH_ACTOR_MOTION_UNSUPPORTED&&
+            devil_pose.frontier==0x14b730&&devil_pose.spawn_effect.row==8);
+        gh_enemy_devil_finish finish={0};
+        gh_game_mt expected_final_random=init->random;
+        uint32_t final_draw=0;
+        for(unsigned i=0;i<4;i++)CHECK(!gh_game_mt_next_0030f348(&expected_final_random,&final_draw));
+        int original_child=0;
+        initialized=gh_enemy_devil_finish_002055b8(&finish,&devil_pose,b->node_names,&b->shapes,&original_child);
+        fprintf(stderr,"stamp8 devil final status%d frontier%08x stage%u return%d\n",
+            initialized,finish.frontier,finish.stage,original_child);
+        CHECK(!initialized&&original_child==1&&finish.final.complete&&finish.hitareas.stage==4&&
+            finish.nodes.stage==2&&finish.timers.stage==2&&finish.behavior.stage==2&&
+            d[0x17b9]==3&&d[0x17b8]==1&&d[0x17ba]==0&&d[0x17bd]==1&&
+            d[0x17bb]==1&&d[0x17bc]==0&&word(d+0x76c)==0x3f800000&&
+            word(d+0x560)==0xffff&&d[0x17bf]==final_draw%3&&
+            !memcmp(&init->random,&expected_final_random,sizeof(expected_final_random)));
+        for(unsigned i=0;i<6;i++)CHECK(finish.hitareas.created[i]&&!finish.hitareas.units[i].fallback);
+        for(unsigned i=0;i<9;i++)CHECK(finish.hitareas.indices[i]>=0);
+        static const unsigned body_parts[]={1,3,19,23};
+        unsigned seen_parts=0;
+        for(unsigned i=0;i<4;i++){
+            gh_collision_pair_shape shape;
+            const uint8_t *record,*matrix;
+            CHECK(!gh_hitarea_node_at(&finish.hitareas.units[0],i,&record,&shape)&&
+                !gh_collision_pair_shape_source_matrix(&shape,&matrix));
+            for(unsigned part_index=0;part_index<4;part_index++){
+                const gh_actor_part *part=NULL;
+                CHECK(!gh_actor_model_part_at(spawn_model,body_parts[part_index],&part));
+                if(matrix==part->bytes+0x80){
+                    CHECK(word(shape.record+0x1f0)==(part_index?0x3eb851ec:0x3ef5c290));
+                    seen_parts|=1u<<part_index;
+                }
+            }
+        }
+        CHECK(seen_parts==15);
+        puts("PASS stamp8 Devil actual full virtual Init and nine native HitArea shapes");
+        CHECK(!gh_enemy_devil_finish_002055b8(&finish,&devil_pose,b->node_names,&b->shapes,&original_child)&&
+            original_child==1&&!memcmp(&init->random,&expected_final_random,sizeof(expected_final_random)));
+        gh_effect_create_forget_on_owner_destroy(devil_effects);
+
+        puts("PASS stamp8 Devil actual bank58/03 eight attached emitters and retry");
+        CHECK(!gh_enemy_hitareas_abort_prefix(&finish.hitareas));
+        CHECK(!gh_enemy_solids_abort_prefix(&devil_pose.solids)&&b->solids->unit_count==solids_before);
+        CHECK(!gh_enemy_entry_abort_prefix(&devil.entry)&&word(init->enemies+0x508)==manager_count);
+        *devil_effects=(gh_game_effects){0};
+        memset(devil_esp,0,0x100180);memset(devil_emitters,0,0x26060);
+        CHECK(!gh_game_effects_initialize_00305a68(devil_effects,devil_esp,0x100180,devil_emitters,
+            0x26060,core,core_bytes,room_bundle));
+        gh_enemy_entry_bindings *live_entry=&((gh_enemy_actor_bindings *)b)->entry;
+        const gh_enemy_entry_bindings saved_entry=*live_entry;
+        *live_entry=devil_bind; /* Same fixture EMS owner now has the actual preloaded bank. */
+        ems_devil_fixture ems_fixture={.ems=owner,.effect=&spawn};
+        CHECK(!gh_enemy202_move_bind_devil_spawn(&death,ems_devil_spawn,&ems_fixture));
+        CHECK(!gh_enemy202_move_bind_opacity(&death,&opacity));
+        status=gh_enemy202_move_00208be0(&death,dying,&player.view,elf,elf_size);
+        CHECK(status==GH_ACTOR_MOTION_CALLEE&&death.frontier==0x2cba48&&ems_fixture.calls==1&&
+            !p[0x2f6]&&word(init->enemies+0x508)==manager_count+1);
+        unsigned pending_slot=0;
+        while(pending_slot<64&&init->enemy_last!=init->enemies+20*pending_slot)++pending_slot;
+        CHECK(pending_slot<64);
+        gh_game_title_player *pending_actor=init->enemy_actors[pending_slot];
+        CHECK(pending_actor&&pending_actor->view.bytes==ems_fixture.pending->actor->bytes);
+        uint32_t child_handle;
+        CHECK(!gh_enemy_ems_handle_for_actor(owner,pending_actor,&child_handle)&&!child_handle);
+        status=gh_enemy202_move_00208be0(&death,dying,&player.view,elf,elf_size);
+        fprintf(stderr,"stamp8 Devil EMS Move status%d frontier%08x phase%u calls%u\n",
+            status,death.frontier,death.death_phase,ems_fixture.calls);
+        CHECK(!status&&death.original_returned&&ems_fixture.calls==2&&p[0x2f6]==1&&
+            (word(p+0x568)&0xffff)==0xdc&&word(init->enemies+0x508)==manager_count+1);
+        CHECK(!gh_enemy_ems_handle_for_actor(owner,pending_actor,&child_handle)&&child_handle&&
+            gh_enemy_ems_lookup(owner,child_handle)==pending_actor);
+        gh_enemy_ems_live transformed;
+        CHECK(!gh_enemy_ems_live_at(owner,child_handle,&transformed)&&transformed.devil&&
+            transformed.actor==pending_actor&&transformed.model&&transformed.shadow&&
+            word(pending_actor->view.bytes+0x2f4)==0x00020400);
+        uint32_t abort_pc;
+        CHECK(gh_enemy_ems_abort_devil_native(owner,&abort_pc)==GH_ACTOR_MOTION_BUSY&&abort_pc==0x306200);
+        gh_effect_create_forget_on_owner_destroy(devil_effects);
+        CHECK(!gh_enemy_ems_abort_devil_native(owner,&abort_pc)&&word(init->enemies+0x508)==manager_count&&
+            !gh_enemy_ems_lookup(owner,child_handle)&&b->solids->unit_count==solids_before);
+        *live_entry=saved_entry;
+        free(devil_emitters);free(devil_esp);free(devil_effects);free(core);
+        puts("PASS stamp8 original 25FE30 spawn retry, genuine 0220 publication and parent Move");
+        memcpy(work+0x5e4,&saved_sound_flags,4);
+        CHECK(!gh_enemy_se_banks_destroy(banks));
+        gh_se_voice_destroy(voices);
+        gh_audio_registry_destroy(registry);
     }
 release_player:
     for (unsigned i=0;i<5;i++) {

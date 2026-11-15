@@ -668,6 +668,7 @@ def main():
         ("game-player-ground-pose", "tests/core/test_game_player_ground_pose.c", "elf"),
         ("game-ee-acos", "tests/core/test_game_ee_acos.c", "none"),
         ("game-om-frame", "tests/core/test_game_om_frame.c", "iso"),
+        ("game-r100-door-sound", "tests/core/test_game_r100_door_sound.c", "both"),
         ("game-om-damage", "tests/core/test_game_om_damage.c", "none"),
         ("game-om-reaction", "tests/core/test_game_om_reaction.c", "none"),
         ("game-om-damage-frame", "tests/core/test_game_om_damage_frame.c", "iso"),
@@ -811,6 +812,7 @@ def main():
         "save-map-sound",
     }
     recording_voice_object = output / "se_voice_recording_transport.o"
+    recording_sequence_voice_object = output / "se_voice_recording_sequence.o"
     try:
         manifest["test_contracts"] = check_contracts(PROJECT, extra_tests)
     except TestContractError as error:
@@ -907,7 +909,10 @@ def main():
 
     def compile_extra_test(test):
         name, source, _ = test
-        transport = [recording_voice_object] if name in recording_transport_tests else []
+        if name == "se-adx-sequence":
+            transport = [recording_sequence_voice_object]
+        else:
+            transport = [recording_voice_object] if name in recording_transport_tests else []
         # A fixture's own transport symbols precede the archive, so the linker
         # selects only production modules still needed by that fixture.
         run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms", "-Isrc/assets"]
@@ -964,14 +969,20 @@ def main():
             manifest.setdefault("response_files", []).append(response)
             run("archive-native-modules", [compiler, "ar", "@" + response["path"]])
             fresh_archive.replace(native_archive)
-        if any(case[0] in recording_transport_tests for case in (focused or extra_tests)):
+        recorded = recording_transport_tests.intersection(case[0] for case in (focused or extra_tests))
+        if recorded:
             # Windows COFF links the recording transport by renaming only the
             # calls in this test object. The ordinary voice object stays intact.
             functions = ("play", "active", "stop", "voice_gain", "voice_pitch_ratio")
             symbols = ["-Dgh_audio_output_" + name + "=__wrap_gh_audio_output_" + name
                        for name in functions]
-            compile_object("compile-se-voice-recording-transport",
-                           "src/core/se_voice.c", recording_voice_object, symbols)
+            if recorded - {"se-adx-sequence"}:
+                compile_object("compile-se-voice-recording-transport",
+                               "src/core/se_voice.c", recording_voice_object, symbols)
+            if "se-adx-sequence" in recorded:
+                compile_object("compile-se-voice-recording-sequence", "src/core/se_voice.c",
+                               recording_sequence_voice_object,
+                               [*symbols, "-Dgh_audio_output_play_stereo=__wrap_gh_audio_output_play_stereo"])
         if focused:
             list(workers.map(compile_extra_test, focused))
     if focused:

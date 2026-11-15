@@ -14,6 +14,7 @@
 #include "game_om382.h"
 #include "frame_state.h"
 #include "game_om_reaction.h"
+#include "game_player_targets.h"
 #include "id_layout_rotation.h"
 #include <string.h>
 #include <math.h>
@@ -256,6 +257,68 @@ static gh_object_step_status flag_move(gh_om_frame_state *s,gh_static_transform_
     return status?fail(s,flag->frontier?flag->frontier:0x17baf0,f,GH_OBJSTEP_UNSUPPORTED):GH_OBJSTEP_OK;
 }
 
+static gh_object_step_status door_wait_contact(gh_om_frame_state *s,gh_om_init_state *c,
+    gh_static_transform_policy policy,uint32_t *frontier)
+{
+    if(policy!=GH_STATIC_BINARY32_REFERENCE)return fail(s,0x1f7d48,frontier,GH_OBJSTEP_UNSUPPORTED);
+    const gh_title_player_view *door_view=&s->object->view;
+    const gh_title_player_view *contact=s->contact634;
+    if(!door_view->alias_f0||!contact->alias_f0||!c->bindings)
+        return fail(s,0x2da038,frontier,GH_OBJSTEP_ARGUMENT);
+    float from[3],to[3],facing,turn;
+    memcpy(from,door_view->alias_f0,sizeof(from));
+    memcpy(to,contact->alias_f0,sizeof(to));
+    if(gh_id_angle_reference_001f7d48(add(number(door_view->bytes+0x104),-1.5707964f),&facing))
+        return fail(s,0x1f7d48,frontier,GH_OBJSTEP_UNSUPPORTED);
+    uint32_t pc=0;
+    if(gh_player_target_angle_002da038(c->bindings->elf,c->bindings->elf_bytes,
+        from,to,facing,3.1415927f,&turn,&pc))
+        return fail(s,pc?pc:0x2da038,frontier,GH_OBJSTEP_UNSUPPORTED);
+    if(gh_om_door_set_open_001bcfb0(&c->geometry_state,turn<0.0f,0))
+        return fail(s,0x1bcfb0,frontier,GH_OBJSTEP_UNSUPPORTED);
+    return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status door_open_step(gh_om_frame_state *s,gh_om_init_state *c,
+    gh_static_transform_policy policy,uint32_t *frontier)
+{
+    uint8_t *p=s->object->view.bytes;
+    if(policy!=GH_STATIC_BINARY32_REFERENCE)
+        return fail(s,0x1bc538,frontier,GH_OBJSTEP_UNSUPPORTED);
+    if(!p[0x2f6]){
+        const unsigned kind=half(p+0x2fe);
+        if(kind!=0x314&&kind!=0x354){
+            if(!s->runtime_bound||!s->runtime.break_sound)
+                return fail(s,0x2cba48,frontier,GH_OBJSTEP_UNSUPPORTED);
+            s->break_sound=(gh_motion_sound_request){.model=&c->model,.actor=&s->object->view,
+                .bank=2,.program=3};
+            uint32_t handle=0,pc=0;
+            gh_actor_motion_status status=s->runtime.break_sound(s->runtime.context,&s->break_sound,&handle,&pc);
+            if(status)return fail(s,pc?pc:0x2cba48,frontier,
+                status==GH_ACTOR_MOTION_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);
+        }
+        p[0x2f7]=0;
+        p[0x2f6]=1;
+    }
+    if(p[0x2f6]!=1)return GH_OBJSTEP_OK;
+    const float yaw=number(p+0x104),target=number(p+0x640);
+    const uint32_t step_bits=0x3e0efa35u;
+    const float cap=number((const uint8_t *)&step_bits);
+    if(!isfinite(yaw)||!isfinite(target))
+        return fail(s,0x2da1f8,frontier,GH_OBJSTEP_UNSUPPORTED);
+    float delta=add(target,-yaw);
+    if(delta>3.1415927f)delta=add(delta,-6.2831855f);
+    if(delta<-3.1415927f)delta=add(delta,6.2831855f);
+    if(delta>cap)delta=cap;
+    if(delta<-cap)delta=-cap;
+    float wrapped;
+    if(gh_id_angle_reference_001f7d48(add(yaw,delta),&wrapped))
+        return fail(s,0x1f7d48,frontier,GH_OBJSTEP_UNSUPPORTED);
+    memcpy(p+0x104,&wrapped,4);
+    if(wrapped==target)memset(p+0x2f4,0,4);
+    return GH_OBJSTEP_OK;
+}
+
 static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_static_transform_policy policy,uint32_t*f){
  uint8_t*p=s->object->view.bytes;gh_om_init_state*c=common(s);
  if(!s->phase){if(word((const uint8_t*)w+0x5d8)&0x20000000u){s->complete=1;return GH_OBJSTEP_OK;}put(p+0x5b4,0);s->phase=1;}
@@ -313,9 +376,18 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
   else if(simple(s->object)||plain(s->object)||segments(s->object)||s->object->source.type==0x307){if(p[0x2f4]){uint32_t pc=state_entry(s->object->source.type,p[0x2f4]);return fail(s,pc?pc:s->entry,f,GH_OBJSTEP_UNSUPPORTED);}}
   else{
    if(p[0x2f4])return fail(s,p[0x2f4]==1?0x1bc6e8:p[0x2f4]==2?0x1bc748:p[0x2f4]==3?0x1bcb18:0x1bc0a0,f,GH_OBJSTEP_UNSUPPORTED);
-   if(p[0x2f5])return fail(s,p[0x2f5]==1?0x1bc538:p[0x2f5]==2?0x1bc610:0x1bc1c8,f,GH_OBJSTEP_UNSUPPORTED);
-   if(word(p+0x620)&1)return fail(s,0x2db6b0,f,GH_OBJSTEP_UNSUPPORTED);
-   unsigned rawcounter=half(p+0x630);int counter=rawcounter<32768?(int)rawcounter:(int)rawcounter-65536;if(s->contact634&&counter>4)return fail(s,0x1f7d48,f,GH_OBJSTEP_UNSUPPORTED);
+   if(p[0x2f5]==1){
+    gh_object_step_status status=door_open_step(s,c,policy,f);
+    if(status)return status;
+   }else{
+    if(p[0x2f5])return fail(s,p[0x2f5]==2?0x1bc610:0x1bc1c8,f,GH_OBJSTEP_UNSUPPORTED);
+    if(word(p+0x620)&1)return fail(s,0x2db6b0,f,GH_OBJSTEP_UNSUPPORTED);
+    unsigned rawcounter=half(p+0x630);int counter=rawcounter<32768?(int)rawcounter:rawcounter-65536;
+    if(s->contact634&&counter>4){
+     gh_object_step_status status=door_wait_contact(s,c,policy,f);
+     if(status)return status;
+    }
+   }
   }
   if (s->phase == 2) s->phase = 3;
  }

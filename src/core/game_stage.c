@@ -82,9 +82,12 @@ gh_stage_status gh_stage_tim2_sprite_resolve(gh_stage_textures*s,const void*raw,
  if(e)return e==GH_TIM2_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;
  const unsigned psm=(unsigned)(picture.tex0>>20)&63u;
  const unsigned tw=(unsigned)(picture.tex0>>26)&15u,th=(unsigned)(picture.tex0>>30)&15u;
- const int indexed4=picture.width==128&&(picture.height==128||picture.height==64)&&
-    picture.image_type==4&&picture.clut_type==3&&picture.colors==16&&psm==20&&
-    tw==7&&th==(picture.height==128?7u:6u);
+ /* 151990 uses 309C30's even GS pitch for both 64- and 128-wide
+  * indexed pictures. EV02's cut6 uses the 64x64 PSMT4 variant. */
+ const int size4=(picture.width==128&&(picture.height==128||picture.height==64))||
+    (picture.width==64&&picture.height==64);
+ const int indexed4=size4&&picture.image_type==4&&picture.clut_type==3&&picture.colors==16&&psm==20&&
+    tw==(picture.width==128?7u:6u)&&th==(picture.height==128?7u:6u);
  /* The actual 58:2F trail uses this single-picture, linear TIM2 PSMT8 profile. */
  const int indexed8=picture.width==64&&picture.height==64&&picture.image_type==5&&
     picture.clut_type==3&&picture.colors==256&&psm==19&&tw==6&&th==6;
@@ -104,7 +107,7 @@ gh_stage_status gh_stage_tim2_sprite_resolve(gh_stage_textures*s,const void*raw,
  for(size_t i=3;i<bytes;i+=4)p->pixels[i]=(uint8_t)((p->pixels[i]+1u)/2u);
  /* 151990 sets TCC and CLD and retains TEX0 dimensions. Native cache
   * identity supplies storage, so TEX0's TBP/CBP address fields stay zero. */
- const uint64_t format_bits=indexed8?(uint64_t)psm<<20:UINT64_C(0x140000);
+ const uint64_t format_bits=(uint64_t)psm<<20;
  uint64_t tex0=UINT64_C(0x2000000400000000)|format_bits|
     (picture.tex0&UINT64_C(0x00000001fc000000))|UINT64_C(2)<<14;
  p->view=(gh_stage_material){raw,p->pixels,n,bytes,++s->next_material_id,tex0,

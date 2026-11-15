@@ -33,6 +33,9 @@ typedef struct {
     uint8_t pending;
 } gh_r100_exit;
 
+/* Exact original event reservation issued by R100 REL A38. */
+void gh_r100_exit_event_reserve_00000a38(gh_event_reserve_work *);
+
 /* Original SceneAt deferred request and kind2 ActionButton invocation for
  * R100 jump0. The owner and bindings outlive the registered Scenario task. */
 gh_scene_at_status gh_r100_exit_spawn_001f7858(void *,const gh_scene_at_task_request *,uint32_t *frontier);

@@ -158,7 +158,10 @@ def main():
     def compile_module(module):
         name, source = module
         obj = build / (name + ".o")
-        compile_object("compile-" + name, c_driver(compiler) + ["-c", source, "-o", obj], source, obj)
+        driver = c_driver(compiler)
+        if args.target in ("startup-qa", "startup-cpu-qa") and name == "startup_host":
+            driver += ["-DGH_NATIVE_STARTUP_QA=1"]
+        compile_object("compile-" + name, driver + ["-c", source, "-o", obj], source, obj)
         return obj
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
         objects = list(executor.map(compile_module, modules))
@@ -167,7 +170,7 @@ def main():
                    "title-ui": "probe-title-ui.exe", "model-qa": "test-model-renderer.exe",
                    "world-qa": "test-world-composition.exe", "scene-message-qa": "test-scene-message-depth.exe",
                    "save-map-qa": "test-save-map-chapter.exe"}[args.target]
-    if args.target == "startup-qa":
+    if args.target in ("startup-qa", "startup-cpu-qa"):
         flags.append("-DGH_NATIVE_STARTUP_QA=1")
     def compile_cpp(source):
         name = "cxx-" + Path(source).stem

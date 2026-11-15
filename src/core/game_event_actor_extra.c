@@ -27,7 +27,8 @@ gh_game_event_status gh_event_actor_extra_bind(gh_event_actor_extra *s, const gh
     return GH_EVENT_OK;
 }
 
-static gh_game_event_status retarget_jacket(gh_event_actor_extra *s, gh_actor_model *model) {
+gh_game_event_status gh_event_actor_extra_attach_jacket_00100ed8(gh_event_actor_extra *s, gh_actor_model *model) {
+    if (!s || !s->bound || !model || !s->bindings.child) return GH_EVENT_ARGUMENT;
     const gh_event_actor_extra_bindings *b = &s->bindings;
     gh_game_player_child *child = b->child;
     gh_player_child_attachment *attachment = b->attachment;
@@ -66,9 +67,16 @@ static gh_game_event_status retarget_jacket(gh_event_actor_extra *s, gh_actor_mo
     const unsigned costume = gh_core_save_costume(b->save);
     put(p + 0x20d4, 17);
     put(p + 0x2088, costume == 2 || costume == 3 ? 11 : costume == 4 || costume == 5 ? 7 : 12);
-    // REL+1E98 and +1EBC..1EC0. The setter between them touches no flags.
-    put(p + 0x250, (s->old_250 & ~0x8002u) | 0x10000u);
-    put(p + 0x2f0, s->old_2f0 | 1);
+    return GH_EVENT_OK;
+}
+
+static gh_game_event_status retarget_jacket(gh_event_actor_extra *s, gh_actor_model *model) {
+    gh_game_event_status status = gh_event_actor_extra_attach_jacket_00100ed8(s, model);
+    if (status) return status;
+    uint8_t *p = s->bindings.child->object.view.bytes;
+    // The original creation caller edits current flags around the 100ED8 setter.
+    put(p + 0x250, (word(p + 0x250) & ~0x8002u) | 0x10000u);
+    put(p + 0x2f0, word(p + 0x2f0) | 1);
     return GH_EVENT_OK;
 }
 

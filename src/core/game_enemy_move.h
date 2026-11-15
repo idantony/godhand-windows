@@ -22,6 +22,8 @@ typedef struct {
     uint8_t initialized,visibility,index,complete;
 } gh_enemy_route_query;
 
+typedef gh_actor_motion_status (*gh_enemy202_devil_spawn)(void *,const gh_enemy_actor *,
+    const gh_enemy_request *,uint32_t *);
 typedef gh_actor_motion_status (*gh_enemy202_death_release)(void *,const gh_enemy_actor *,uint32_t *);
 
 typedef struct {
@@ -61,6 +63,8 @@ typedef struct {
     const gh_room_state *room_state;
     gh_player_target_bindings targets;
     gh_enemy_request death_transform_request;
+    gh_enemy202_devil_spawn devil_spawn;
+    void *devil_spawn_context;
     uint8_t death_phase,death_effect_cursor,death_ground_cursor;
     float death_ground[2][4];
     gh_enemy202_death_release death_release;
@@ -83,6 +87,8 @@ gh_actor_motion_status gh_enemy202_move_bind_targets(gh_enemy202_move *,const gh
 gh_actor_motion_status gh_enemy202_move_bind_near_sound(gh_enemy202_move *,gh_enemy_ema2_hit_sound,void *);
 /* Borrow the selected RoomSave for original 2736F8 -> 295498. */
 gh_actor_motion_status gh_enemy202_move_bind_room_state(gh_enemy202_move *,const gh_room_state *);
+gh_actor_motion_status gh_enemy202_move_bind_devil_spawn(gh_enemy202_move *,
+    gh_enemy202_devil_spawn,void *);
 gh_actor_motion_status gh_enemy202_move_bind_death_release(gh_enemy202_move *,
     gh_enemy202_death_release,void *);
 /* One invocation of original 208BE0. Keep the cursor on a suspended result;

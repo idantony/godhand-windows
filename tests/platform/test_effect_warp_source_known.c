@@ -20,7 +20,7 @@ static gh_effect_trans_packet packet(void){
  return p;
 }
 static gh_effect_post_status run(const gh_effect_trans_packet*p,const gh_effect_post_sampler*s){
- return gh_effect_postprocess_warp_source_known(p,s,512,448,28672,29184,0);
+ return gh_effect_postprocess_warp_source_known(p,s,512,448,28672,29184,0,0);
 }
 static void t_all(gh_effect_trans_packet*p,float t){for(unsigned i=0;i<6;i++)p->quads[0].vertices[i].t=t;}
 int main(void){
@@ -48,7 +48,7 @@ int main(void){
  C(run(&p,&linear)==GH_EFFECT_POST_OK);
  t_all(&p,1.4375f/256);
  C(run(&p,&linear)==GH_EFFECT_POST_BOUNDS);
- C(gh_effect_postprocess_warp_source_known(&p,&linear,512,448,28672,29184,1)==GH_EFFECT_POST_OK);
+ C(gh_effect_postprocess_warp_source_known(&p,&linear,512,448,28672,29184,1,0)==GH_EFFECT_POST_OK);
  p=packet();t_all(&p,0);
  for(unsigned i=0;i<6;i++)p.quads[0].vertices[i].y12_4-=32*16;
  C(run(&p,&linear)==GH_EFFECT_POST_OK);
@@ -64,6 +64,22 @@ int main(void){
  linear.tex1=UINT64_C(0xffffff3800000360);
  C(p.quads[0].vertices[4].t>1);
  C(run(&p,&linear)==GH_EFFECT_POST_OK);
+ /* Actual R003 scene1689 first ESP07 uses the original display/FRAME alias. */
+ p.original_callee=0x2e9d48;
+ p.source=GH_EFFECT_SURFACE_DISPLAY_BASE0;
+ p.tex0=UINT64_C(0x2000000664120000);
+ const int r003_xy[6][2]={{32490,34369},{28672,29184},{36864,29184},
+                         {36864,36352},{28672,36352},{28672,29184}};
+ const uint32_t r003_t[6]={0x3f228000u,0x3b000000u,0x3b000000u,
+                           0x3f608000u,0x3f608000u,0x3b000000u};
+ for(unsigned i=0;i<6;i++){
+  p.quads[0].vertices[i].x12_4=r003_xy[i][0];
+  p.quads[0].vertices[i].y12_4=r003_xy[i][1];
+  memcpy(&p.quads[0].vertices[i].t,r003_t+i,4);
+  p.quads[0].vertices[i].rgba=0x08808080u;
+ }
+ C(run(&p,&linear)==GH_EFFECT_POST_BOUNDS);
+ C(gh_effect_postprocess_warp_source_known(&p,&linear,512,448,28672,29184,0,1)==GH_EFFECT_POST_OK);
  const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};
  for(unsigned i=0;i<4;i++){
   C(!fesetround(modes[i])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));

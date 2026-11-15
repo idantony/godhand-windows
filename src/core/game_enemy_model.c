@@ -27,14 +27,15 @@ gh_actor_model_status gh_enemy_model_initialize_00208268(gh_enemy_model*s,const 
  *original=0;s->frontier=0;
  uint32_t dependency=word(root->bytes,0x564);
  unsigned occurrence;
- if(half(root->bytes,0x2fe)!=0x202 ||
-    gh_enemy_model_occurrence_002ddea0(0x202,dependency,&occurrence)){
+ const unsigned kind=half(root->bytes,0x2fe);
+ if(kind==0x220&&dependency==0x220&&work->room==0x100)occurrence=0;
+ else if(kind!=0x202||gh_enemy_model_occurrence_002ddea0(kind,dependency,&occurrence)){
   s->frontier=0x2ddea0;return GH_ACTOR_MODEL_UNSUPPORTED;
  }
  if((dependency==0x200||dependency==0x202||dependency==0x203)&&(word(root->bytes,0x164c)&1)){
   s->frontier=0x149ad8;return GH_ACTOR_MODEL_UNSUPPORTED;
  }
- if(resource->kind!=0x202||!resource->bytes||!resource->file_extent_known||resource->file_extent>resource->size)return GH_ACTOR_MODEL_ARGUMENT;
+ if(resource->kind!=kind||!resource->bytes||!resource->file_extent_known||resource->file_extent>resource->size)return GH_ACTOR_MODEL_ARGUMENT;
  if(s->stage&&(s->resource!=resource->bytes||s->occurrence!=occurrence))return GH_ACTOR_MODEL_BUSY;
  if(!s->stage){
   gh_bundle_error e=sparse_find(resource->bytes,resource->file_extent,"MD",occurrence,&s->geometry);

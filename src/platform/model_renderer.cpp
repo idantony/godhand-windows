@@ -81,7 +81,8 @@ int3 select_color(uint selector,int3 source,int3 destination){return selector==0
   // sample each edge is in[0,area], so its high word is also zero. Convert
   // the exact unsigned low words once, preserving the existing float profile.
   precise float3 w=float3(e0.x,e1.x,e2.x)/float(area.x);
-  uint z=uint(interpolate(float(a.xyzd.z),float(b.xyzd.z),float(c.xyzd.z),w));
+  // PSMZ16S limits the interpolated source Z before comparison and writeback.
+  uint z=min(65535u,uint(interpolate(float(a.xyzd.z),float(b.xyzd.z),float(c.xyzd.z),w)));
   uint zmode=(state.x>>17)&3;
   if((state.x&65536)!=0&&(zmode==0||(zmode==2&&z<oldZ)||(zmode==3&&z<=oldZ)))continue;
   if((state.x&16384)!=0&&((destination.a>>7)&1)!=((state.x>>15)&1))continue;
@@ -194,7 +195,7 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
   // values do not enter any raster primitive, so do not consume them.
   if(!referenced[i])continue;
   out.xyzd[0]=(int32_t)((uint32_t)v.xyz_fixed4[0]&65535)-(int32_t)s->xy_offset_x16;out.xyzd[1]=(int32_t)((uint32_t)v.xyz_fixed4[1]&65535)-(int32_t)s->xy_offset_y16;
-  uint32_t z=((uint32_t)v.xyz_fixed4[2]>>4)&0xffffff;if(z>65535)return GH_MODEL_GPU_UNSUPPORTED;
+  uint32_t z=((uint32_t)v.xyz_fixed4[2]>>4)&0xffffff;
   out.xyzd[2]=(int32_t)z;out.xyzd[3]=(v.fog_fixed4>>4)&255;
   if(!std::isfinite(v.stq[2])||v.stq[2]<0.000001f||v.stq[2]>1000000)return GH_MODEL_GPU_UNSUPPORTED;
   for(unsigned c=0;c<3;c++){if(!std::isfinite(v.stq[c])||(c<2&&std::fabs((double)v.stq[c]/v.stq[2])>16))return GH_MODEL_GPU_UNSUPPORTED;out.stq[c]=v.stq[c];}
@@ -261,6 +262,7 @@ static gh_model_gpu_error draw_scene_warp(gh_model_renderer *r,
  const size_t row_bytes=width*4;
  if(!r||!r->begun||!state||!capture||!vertices||r->thread!=GetCurrentThreadId()||
     bytes!=row_bytes*captured_height)return GH_MODEL_GPU_ARGUMENT;
+ if(display_base0&&(r->width!=width||r->height!=captured_height))return GH_MODEL_GPU_UNSUPPORTED;
  if(texa!=0x80||state->primitive!=0x5d||state->test!=0x5000c||
     state->frame_mask!=0xff000000u||state->texture_function)return GH_MODEL_GPU_UNSUPPORTED;
  auto &cache=display_base0?r->display_warp:r->scene_capture;
@@ -286,8 +288,15 @@ static gh_model_gpu_error draw_scene_warp(gh_model_renderer *r,
  }
  const D3D11_BOX region={0,0,0,width,static_cast<UINT>(known/row_bytes),1};
  r->context.p->UpdateSubresource(cache->image.p,0,&region,pixels.data(),static_cast<UINT>(row_bytes),0);
+ if(display_base0){
+  // At FBW8, CT24 rows448..511 alias CT32 scene FRAME FBP0x70.
+  // Snapshot the aliased RGB at this point in the ordering table.
+  const D3D11_BOX aliased={0,0,0,width,height-captured_height,1};
+  r->context.p->CopySubresourceRegion(cache->image.p,0,0,captured_height,0,r->color.p,0,&aliased);
+ }
  static const uint32_t indices[]={0,1,2,0,2,3,0,3,4,0,4,5};
- return draw_material(r,state,*cache,vertices,6,indices,12,true);
+ // TEXA TA0=128 yields the vertex alpha exactly for this CT24 modulation.
+ return draw_material(r,state,*cache,vertices,6,indices,12,true,display_base0);
 }
 extern "C" gh_model_gpu_error gh_model_renderer_draw_scene_warp(gh_model_renderer *r,
  const gh_model_draw_state *state,const uint8_t *capture,size_t bytes,uint64_t texa,

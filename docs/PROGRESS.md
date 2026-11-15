@@ -4,6 +4,31 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## All 28 R003 EV02 cuts presented on Windows
+
+A hidden, muted Windows run uses the original A38 destination at title
+handoff to isolate R003. It presents 2,785 R003 frames across all 28 EV02
+cuts. Renderer, GPU, postprocess and window error counts are zero. Original
+GameMain State5 selects R105 and reaches the Flag object's retirement at
+`0x00312708` in R003. The regular Windows executable also builds. The frozen
+native regression suite passes 366 checks across 379 C modules, with 18
+device- or tool-dependent checks skipped.
+
+A separate New Game run reaches 1,995 presented R100 scene frames, with
+Gene's HP falling from 100 to 91, 81 and 78. The next enemy operation is
+`0x00213EA8`. The full combat encounter, player-driven transition into R003,
+and loading R105 after EV02 remain in development.
+
+隐藏、静音的 Windows 回放在标题交接时通过原版 A38 目的地进入 R003，呈现 EV02 的
+全部 28 个镜头，共 2,785 帧。渲染器、GPU、后处理和窗口错误数均为 0。原版
+GameMain State5 选定 R105，停在 R003 的 Flag 对象清理 `0x00312708`。普通 Windows
+可执行文件也已编译。冻结版编译 379 个 C 模块，通过 366 项原生检查，本次跳过
+18 项需额外设备或工具的检查。
+
+另一轮新游戏回放在 R100 呈现 1,995 个场景帧，Gene 的 HP 从 100 依次降到 91、81、78，
+停在下一处敌人行为 `0x00213EA8`。完整首战、由玩家操作进入 R003，以及 EV02 后加载 R105
+仍在开发。
+
 ## Two-way combat and a controlled R003 transition
 
 A Windows New Game replay presents 1,816 original scene frames. Two Triangle

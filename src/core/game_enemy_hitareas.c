@@ -9,7 +9,9 @@ gh_actor_motion_status gh_enemy_hitareas_initialize_00207018(gh_enemy_hitareas*s
  gh_enemy_entry*e=behavior->timers->nodes->solids->shadow->pose->motion->hp->tail->entry;uint8_t*p=e->object.view.bytes;gh_actor_model*m=&e->initialize.model.model;
  if(!e->b.init->hitarea_cold_constructed){s->frontier=0x1fde00;return GH_ACTOR_MOTION_UNSUPPORTED;}
  uint32_t scale=word(p,0x118);
- if(scale!=0x3f800000&&!gh_enemy202_is_r100_supported_profile(&e->request)){
+ const int devil=e->request.object_kind==0x220&&e->request.dependency_kind==0x220&&
+     e->b.work->room==0x100&&e->request.flags==0x400000&&scale==0x3f99999a;
+ if(scale!=0x3f800000&&!devil&&!gh_enemy202_is_r100_supported_profile(&e->request)){
   s->frontier=0x2070cc;return GH_ACTOR_MOTION_UNSUPPORTED;
  }
  if(!s->stage){s->behavior=behavior;s->b=*b;for(unsigned i=0;i<9;i++)s->indices[i]=-1;s->stage=1;}

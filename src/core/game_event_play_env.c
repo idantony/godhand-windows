@@ -1,6 +1,9 @@
 #include "game_event_play_env.h"
 #include "game_scenario_soft_event.h"
 #include "game_player_node_cache.h"
+#include <fenv.h>
+#include <math.h>
+#include <limits.h>
 #include <string.h>
 
 static uint32_t read_word(const uint8_t *bytes) {
@@ -149,6 +152,172 @@ gh_game_event_status gh_event_fade_move_absent_00006ca0(
         view.bytes[0x18] = 0;
     }
     if (frontier) *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+static unsigned fade_half(const uint8_t *p)
+{
+    return p[0] | (unsigned)p[1] << 8;
+}
+
+static gh_game_event_status fade_track(const gh_event_data_prefix *data,
+    gh_event_component_view *view, gh_event_sequence_view *track)
+{
+    gh_game_event_status status = component((gh_event_components *)data->components, 13, 0xd248, 0x1c, view);
+    if (status) return status;
+    status = gh_event_sequence_at(data, 13, track);
+    if (status) return status;
+    if (data->components->event_no != 2 || data->camera_count != 28 ||
+        !track->records || track->count != 14 || track->stride != 0x10 ||
+        track->bytes != 0xe0 || read_word(view->bytes + 0x10) ||
+        read_word(view->bytes + 0x14) != track->count)
+        return GH_EVENT_UNSUPPORTED;
+    return GH_EVENT_OK;
+}
+
+gh_game_event_status gh_event_fade_init_00006c70(gh_event_components *components,
+    const gh_event_data_prefix *data, uint32_t *frontier)
+{
+    if (frontier) *frontier = 0x297f80;
+    if (!components || !data || data->components != components) return GH_EVENT_ARGUMENT;
+    if (components->event_no == 1)
+        return gh_event_fade_init_absent_00006c70(components, data->data, data->bytes, frontier);
+
+    gh_event_component_view view;
+    gh_event_sequence_view track;
+    gh_game_event_status status = fade_track(data, &view, &track);
+    if (status) return status;
+    for (unsigned i = 0; i < track.count; ++i) {
+        const uint8_t *row = track.records + i * track.stride;
+        uint16_t length;
+        gh_event_camera_cut cut;
+        if (fade_half(row) != 0xffff || row[2] || row[4] || row[5] ||
+            read_word(row + 8) != 1 || gh_event_camera_cut_at(data, row[3], &cut) || !cut.primary ||
+            gh_event_camera_cut_length_00004e60(data, row[3], &length) || fade_half(row + 6) >= length)
+            return GH_EVENT_UNSUPPORTED;
+    }
+    memcpy(view.bytes, "FADE", sizeof("FADE"));
+    view.bytes[0x18] = 0;
+    if (frontier) *frontier = 0;
+    return GH_EVENT_OK;
+}
+
+static gh_game_event_status fade_color(const gh_event_data_prefix *data,
+    const uint8_t *previous, const uint8_t *next, unsigned cut, float frame, uint32_t *color)
+{
+    if (!next || previous == next) {
+        *color = read_word(previous + 0x0c);
+        return GH_EVENT_OK;
+    }
+
+    unsigned start[28] = {0};
+    for (unsigned i = 0; i < next[3]; ++i) {
+        gh_event_camera_cut source;
+        gh_game_event_status status = gh_event_camera_cut_at(data, i, &source);
+        if (status) return status;
+        start[i + 1] = start[i] + (source.primary ? fade_half(source.primary + 4) : 0);
+    }
+    const unsigned low = start[previous[3]] + fade_half(previous + 6);
+    const unsigned high = start[next[3]] + fade_half(next + 6);
+    if (low >= high) return GH_EVENT_FORMAT;
+
+    fenv_t saved;
+    if (feholdexcept(&saved)) return GH_EVENT_CALLEE;
+    if (fesetround(FE_TONEAREST)) {
+        (void)fesetenv(&saved);
+        return GH_EVENT_CALLEE;
+    }
+    const float time = (float)start[cut] + frame;
+    const float fraction = 1.0f - ((float)high - time) / (float)(high - low);
+    uint32_t rgba = 0;
+    if (fraction >= 0 && fraction <= 1) {
+        for (unsigned i = 0; i < 4; ++i) {
+            const unsigned a = previous[0x0c + i], b = next[0x0c + i];
+            const float n = a == b ? (float)a : (float)a * (1.0f - fraction) + (float)b * fraction;
+            rgba |= (uint32_t)(uint8_t)n << (8 * i);
+        }
+    }
+    if (fesetenv(&saved)) return GH_EVENT_CALLEE;
+    if (!(fraction >= 0 && fraction <= 1)) return GH_EVENT_FORMAT;
+    *color = rgba;
+    return GH_EVENT_OK;
+}
+
+gh_game_event_status gh_event_fade_move_00006ca0(gh_event_components *components,
+    const gh_event_data_prefix *data, gh_screen_fade *fade, const gh_display_state *display,
+    const gh_boot_work *work, uint32_t *frontier, int *relative)
+{
+    if (!frontier || !relative) return GH_EVENT_ARGUMENT;
+    *frontier = 0x6ca0;
+    *relative = 1;
+    if (!components || !data || data->components != components) return GH_EVENT_ARGUMENT;
+    if (components->event_no == 1) {
+        *relative = 0;
+        return gh_event_fade_move_absent_00006ca0(components, fade, frontier);
+    }
+    gh_event_component_view view, env, camera;
+    gh_event_sequence_view track;
+    gh_game_event_status status = fade_track(data, &view, &track);
+    if (status) return status;
+    if (memcmp(view.bytes, "FADE", sizeof("FADE"))) return GH_EVENT_ARGUMENT;
+    status = component(components, 0, 0xd200, 0x44, &env);
+    if (status) return status;
+    status = component(components, 1, 0xd1c8, 0x18, &camera);
+    if (status) return status;
+
+    const unsigned cut = fade_half(camera.bytes + 6);
+    float frame;
+    memcpy(&frame, camera.bytes + 0x0c, sizeof(frame));
+    if (camera.bytes[4] || cut >= data->camera_count || !isfinite(frame) || frame < 0)
+        return GH_EVENT_UNSUPPORTED;
+
+    const uint8_t *previous = NULL, *next = NULL;
+    unsigned previous_order = 0, next_order = UINT_MAX;
+    for (unsigned i = 0; i < track.count; ++i) {
+        const uint8_t *row = track.records + i * track.stride;
+        const unsigned key_cut = row[3], key_frame = fade_half(row + 6);
+        const unsigned order = key_cut << 16 | key_frame;
+        if ((key_cut < cut || (key_cut == cut && (float)key_frame <= frame)) &&
+            (!previous || order >= previous_order)) {
+            previous = row;
+            previous_order = order;
+        }
+        if ((key_cut > cut || (key_cut == cut && (float)key_frame >= frame)) &&
+            order <= next_order) {
+            next = row;
+            next_order = order;
+        }
+    }
+
+    uint32_t color = 0;
+    if (previous) {
+        if (read_word(env.bytes + 0x28) & 0x20u) {
+            *frontier = 0;
+            return GH_EVENT_OK;
+        }
+        *frontier = 0x6d60;
+        status = fade_color(data, previous, next, cut, frame, &color);
+        if (status) return status;
+    }
+    if (!(color >> 24)) {
+        if (view.bytes[0x18]) {
+            if (!fade) return GH_EVENT_ARGUMENT;
+            gh_screen_fade_kill_003076e0(fade);
+            view.bytes[0x18] = 0;
+        }
+    } else {
+        *frontier = 0x307208;
+        *relative = 0;
+        if (!fade || !display || !display->initialized || !work) return GH_EVENT_ARGUMENT;
+        const uint8_t *raw = (const uint8_t *)work;
+        const gh_screen_fade_context context = {display->screen_width, display->gs_y_origin,
+            read_word(raw + 0x564), read_word(raw + 0x5e0)};
+        if (gh_screen_fade_start_00307208(fade, &context, 0, 0x1a, 0, color, color, 0))
+            return GH_EVENT_CALLEE;
+        gh_screen_fade_set_ot_00307760(fade, 6, 9);
+        view.bytes[0x18] = 1;
+    }
+    *frontier = 0;
     return GH_EVENT_OK;
 }
 

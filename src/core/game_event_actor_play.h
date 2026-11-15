@@ -11,7 +11,7 @@ extern "C" {
 typedef struct {
     const gh_event_actor_create *creation;
     gh_event_actor_roster *roster;
-    const gh_event_actor_extra *extra;
+    gh_event_actor_extra *extra;
     gh_actor_motion *motions;
     size_t motion_capacity;
     const float *rate;

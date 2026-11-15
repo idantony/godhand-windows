@@ -35,20 +35,27 @@ static std::array<int,4> sample(const gh_stage_material&m,long double s,long dou
  }return out;
 }
 static bool alpha_test(unsigned a,uint64_t test){if(!(test&1))return true;unsigned ref=(unsigned)(test>>4)&255;switch((test>>1)&7){case 0:return false;case 1:return true;case 2:return a<ref;case 3:return a<=ref;case 4:return a==ref;case 5:return a>=ref;case 6:return a>ref;default:return a!=ref;}}
-static void oracle(Surface&dst,const gh_stage_material&m,const gh_model_draw_state&s,const std::array<gh_static_gs_vertex,3>&v){
+static void oracle(Surface&dst,const gh_stage_material&m,const gh_model_draw_state&s,const std::array<gh_static_gs_vertex,3>&v,bool tcc0=false){
  unsigned touched=0;
  for(unsigned y=64;y<320;y++)for(unsigned x=64;x<320;x++){
   if(x+y>=384)continue; // independent analytic top/left-inclusive coverage
   long double b=(long double)(x-64)/256,c=(long double)(y-64)/256,a=1-b-c;
   auto weighted=[&](long double x0,long double x1,long double x2){return a*x0+b*x1+c*x2;};
   size_t p=(size_t)y*W+x,o=p*4;
-  uint32_t depth=(uint32_t)weighted(((uint32_t)v[0].xyz_fixed4[2]>>4)&0xffffff,((uint32_t)v[1].xyz_fixed4[2]>>4)&0xffffff,((uint32_t)v[2].xyz_fixed4[2]>>4)&0xffffff);
+  uint32_t depth=(uint32_t)std::min(65535.0L,weighted(((uint32_t)v[0].xyz_fixed4[2]>>4)&0xffffff,
+    ((uint32_t)v[1].xyz_fixed4[2]>>4)&0xffffff,((uint32_t)v[2].xyz_fixed4[2]>>4)&0xffffff));
   unsigned zm=(unsigned)(s.test>>17)&3;
   if((s.test&0x10000)&&(zm==0||(zm==2&&depth<dst.z[p])||(zm==3&&depth<=dst.z[p])))continue;
   if((s.test&0x4000)&&((dst.rgba[o+3]>>7)&1)!=((s.test>>15)&1))continue;
   long double q=weighted(v[0].stq[2],v[1].stq[2],v[2].stq[2]);
   auto tex=sample(m,weighted(v[0].stq[0],v[1].stq[0],v[2].stq[0])/q,weighted(v[0].stq[1],v[1].stq[1],v[2].stq[1])/q,(s.tex1&32)!=0);
-  int src[4];for(unsigned k=0;k<4;k++)src[k]=(int)std::min<int64_t>(255,(int64_t)tex[k]*(int64_t)weighted(v[0].rgba[k],v[1].rgba[k],v[2].rgba[k])/128);
+  int shade[4],src[4];for(unsigned k=0;k<4;k++)shade[k]=(int)weighted(v[0].rgba[k],v[1].rgba[k],v[2].rgba[k]);
+  for(unsigned k=0;k<4;k++){
+   int64_t value=(int64_t)tex[k]*shade[k]/128;
+   if(s.texture_function==3)value=k<3?value+shade[3]:tex[3];
+   if(tcc0&&k==3)value=shade[3];
+   src[k]=(int)std::min<int64_t>(255,value);
+  }
   bool pass=alpha_test((unsigned)src[3],s.test);unsigned fail=(unsigned)(s.test>>12)&3;
   if(!pass&&!fail)continue;
   bool color=pass||fail!=2,writez=(pass||fail==2)&&s.z_write;
@@ -62,9 +69,14 @@ static void oracle(Surface&dst,const gh_stage_material&m,const gh_model_draw_sta
      int factor=cc==0?src[3]:cc==1?dst.rgba[o+3]:(int)((s.alpha>>32)&255);
      rgb=floor_div((int64_t)(component(ca)-component(cb))*factor,128)+component(cd);
     }
-    dst.rgba[o+k]=(uint8_t)sat(rgb);
+    unsigned mask=(s.frame_mask>>(8*k))&255;
+    dst.rgba[o+k]=(uint8_t)((dst.rgba[o+k]&mask)|(sat(rgb)&~mask));
    }
-   if(pass||fail!=3)dst.rgba[o+3]=(uint8_t)(src[3]|(s.fba?128:0));
+   if(pass||fail!=3){
+    unsigned mask=s.frame_mask>>24;
+    unsigned alpha=(unsigned)src[3]|(s.fba?128u:0u);
+    dst.rgba[o+3]=(uint8_t)((dst.rgba[o+3]&mask)|(alpha&~mask));
+   }
   }
   if(writez)dst.z[p]=depth;touched++;
  }
@@ -72,6 +84,122 @@ static void oracle(Surface&dst,const gh_stage_material&m,const gh_model_draw_sta
 }
 static void compare(gh_model_renderer*r,const Surface&expected,const char*label){std::vector<uint8_t>got(N*4);std::vector<uint32_t>z(N);C(!gh_model_renderer_readback(r,got.data(),got.size(),z.data(),z.size()));size_t bad=0;for(size_t i=0;i<N;i++){if(std::memcmp(got.data()+i*4,expected.rgba.data()+i*4,4)||z[i]!=expected.z[i]){if(!bad)std::fprintf(stderr,"%s mismatch(%zu,%zu) RGBA%u,%u,%u,%u/%u,%u,%u,%u Z%u/%u\n",label,i%W,i/W,got[i*4],got[i*4+1],got[i*4+2],got[i*4+3],expected.rgba[i*4],expected.rgba[i*4+1],expected.rgba[i*4+2],expected.rgba[i*4+3],z[i],expected.z[i]);bad++;}}C(!bad);}
 static std::array<gh_static_gs_vertex,3> triangle(uint32_t z,unsigned fog,unsigned alpha){std::array<gh_static_gs_vertex,3>v{};const unsigned xy[3][2]={{64,64},{320,64},{64,320}};for(unsigned i=0;i<3;i++){v[i].xyz_fixed4[0]=(int32_t)(0x10000u+1792*16+xy[i][0]*16);v[i].xyz_fixed4[1]=(int32_t)(0x20000u+1824*16+xy[i][1]*16);v[i].xyz_fixed4[2]=(int32_t)(0x10000000u+(z<<4)+15);v[i].fog_fixed4=(uint16_t)((fog<<4)|15);v[i].stq[2]=1;for(unsigned c=0;c<3;c++)v[i].rgba[c]=128;v[i].rgba[3]=alpha;}v[0].stq[0]=-.25f;v[0].stq[1]=-.125f;v[1].stq[0]=1.75f;v[1].stq[1]=-.125f;v[2].stq[0]=-.25f;v[2].stq[1]=1.875f;return v;}
+static void effect_packets(gh_model_renderer *r,const gh_stage_material &material,uint32_t texture,
+ gh_model_draw_state state){
+ state.primitive=0x54;state.test=0x5000d;state.alpha=UINT64_C(0x8000000048);state.z_write=0;
+ const auto first=triangle(100,255,128);
+ auto second=triangle(90,255,64);
+ for(auto &v:second)v.rgba[0]=64;
+ const gh_static_gs_vertex list[]={first[0],first[1],first[2],second[0],second[1],second[2]};
+ const uint32_t indices[]={0,1,2,3,4,5};
+ Surface trail(0x314159,50);
+ C(!gh_model_renderer_begin(r,0x314159,50));
+ C(!gh_model_renderer_draw_trail(r,&state,texture,list,6,indices));
+ oracle(trail,material,state,first);
+ oracle(trail,material,state,second);
+ compare(r,trail,"PRIM54 ordered trail triangles");
+
+ std::vector<uint8_t> image(512*512*4);
+ const uint8_t rgb[]={220,100,40,128};
+ constexpr unsigned x=122,y=344;
+ std::memcpy(image.data()+(y*512+x)*4,rgb,4);
+ gh_stage_material base0={};base0.width=base0.height=512;base0.rgba_gs=image.data();
+ auto sample=triangle(100,255,128);
+ for(unsigned i=0;i<3;++i){
+  const float q=(float)(1u<<i);
+  sample[i].stq[0]=(x+0.5f)*q/512;sample[i].stq[1]=(y+0.5f)*q/512;sample[i].stq[2]=q;
+ }
+ const gh_static_gs_vertex fan[]={sample[0],sample[1],sample[2],sample[2],sample[2],sample[2]};
+ state.primitive=0x5d;state.test=0x5000c;state.alpha=UINT64_C(0x8000000044);
+ state.tex1=0;state.frame_mask=0xff000000u;
+ Surface warp(0x314159,50);
+ C(!gh_model_renderer_begin(r,0x314159,50));
+ C(!gh_model_renderer_draw_display_warp(r,&state,image.data(),512*448*4,0x80,fan));
+ oracle(warp,base0,state,sample);
+ compare(r,warp,"projected mode0 warp from display base zero");
+
+ // Bilinear sampling across the CT24/scene FRAME page boundary.
+ const uint8_t display_edge[]={220,100,40,128};
+ const uint8_t live_scene[]={0x59,0x41,0x31,128};
+ for(unsigned column=0;column<512;column++){
+  std::memcpy(image.data()+(447*512+column)*4,display_edge,4);
+  std::memcpy(image.data()+(448*512+column)*4,live_scene,4);
+ }
+ for(auto &v:sample){v.stq[0]=(x+0.5f)/512;v.stq[1]=(448.0f+1.0f/32)/512;v.stq[2]=1;}
+ const gh_static_gs_vertex alias_fan[]={sample[0],sample[1],sample[2],sample[2],sample[2],sample[2]};
+ state.tex1=96;
+ Surface alias(0x314159,50);
+ C(!gh_model_renderer_begin(r,0x314159,50));
+ C(!gh_model_renderer_draw_display_warp(r,&state,image.data(),512*448*4,0x80,alias_fan));
+ oracle(alias,base0,state,sample);
+ compare(r,alias,"base-zero warp across original display/scene page boundary");
+}
+
+static void depth_saturation(gh_model_renderer *r,const gh_stage_material &material,uint32_t texture,
+ gh_model_draw_state state){
+ constexpr uint32_t indices[]={0,1,2};
+ state.primitive=0x5b;
+ state.test=0x70000;
+ state.alpha=0x44;
+ state.z_write=1;
+ const auto r003=triangle(0x3dcc9,255,128);
+ Surface saturated(0x314159,0xffff);
+ C(!gh_model_renderer_begin(r,0x314159,0xffff));
+ C(!gh_model_renderer_draw(r,&state,texture,r003.data(),r003.size(),indices,3));
+ compare(r,saturated,"PSMZ16S saturates source before GREATER");
+
+ auto mixed=triangle(0x2000,255,128);
+ mixed[1].xyz_fixed4[2]=0x22000<<4;
+ Surface interpolated(0x314159,0);
+ C(!gh_model_renderer_begin(r,0x314159,0));
+ C(!gh_model_renderer_draw(r,&state,texture,mixed.data(),mixed.size(),indices,3));
+ oracle(interpolated,material,state,mixed);
+ compare(r,interpolated,"PSMZ16S saturation follows triangle interpolation");
+}
+static void display_texel(gh_model_renderer *r,gh_model_draw_state state){
+ const uint32_t indices[]={0,1,2};
+ state.test=0x507fd;state.alpha=0x44;
+ for(unsigned step=0;step<3;step++){
+  const uint32_t packed=step==0?0x005faa72:0xffb3318d;
+  const uint8_t pixel[]={(uint8_t)packed,(uint8_t)(packed>>8),(uint8_t)(packed>>16),(uint8_t)(packed>>24)};
+  gh_stage_material texel={};texel.width=texel.height=1;texel.rgba_gs=pixel;
+  auto v=triangle(320,255,step==2?127:160);
+  for(auto &vertex:v){vertex.stq[0]=vertex.stq[1]=0;vertex.rgba[0]=64;vertex.rgba[2]=192;}
+  state.tex1=step==0?0:96;
+  Surface expected(0x16304c,50);C(!gh_model_renderer_begin(r,0x16304c,50));
+  C(!gh_model_renderer_draw_display_texel(r,&state,packed,v.data(),v.size(),indices,3));
+  oracle(expected,texel,state,v,true);compare(r,expected,"displayBase0/CT32/1x1/TCC0/MODULATE");
+  C(expected.z[64*W+64]==(step==2?50u:320u));
+ }
+}
+/* Independent analytic coverage of the two halves of the complete packedXY
+ * square. Area=65535^2 exceeds signed32, and outside pixel edges can exceed
+ * unsigned32. Exact integer inequalities also exercise shared top-left edges;
+ * no copy of the shader's partial products or edge routine is used here. */
+static void wide_triangles(gh_model_renderer*r,const gh_stage_material&m,uint32_t texture,const gh_model_draw_state&base){
+ const uint32_t indices[3]={0,1,2};const uint32_t offsets[][2]={{28672,29184},{28671,29184},{0,0},{65535,65535},{65535,0},{0,65535}};
+ const auto tex=sample(m,.25L,-.125L,false);
+ for(const auto&offset:offsets)for(unsigned half=0;half<2;half++)for(unsigned reversed=0;reversed<2;reversed++){
+  auto s=base;s.test=0x50003;s.tex1=0;s.alpha=0x44;s.primitive=0x1c;s.texture_function=0;s.fba=s.pabe=0;s.z_write=1;s.xy_offset_x16=offset[0];s.xy_offset_y16=offset[1];
+  const uint32_t xy[2][3][2]={{{0,0},{65535,0},{0,65535}},{{65535,65535},{0,65535},{65535,0}}};
+  std::array<gh_static_gs_vertex,3>v{};
+  for(unsigned i=0;i<3;i++){v[i].xyz_fixed4[0]=(int32_t)(0x10000u+xy[half][i][0]);v[i].xyz_fixed4[1]=(int32_t)(0x20000u+xy[half][i][1]);v[i].xyz_fixed4[2]=(100<<4)|15;v[i].stq[0]=.25f;v[i].stq[1]=-.125f;v[i].stq[2]=1;for(auto&c:v[i].rgba)c=128;}
+  if(reversed)std::swap(v[1],v[2]);
+  Surface expected(0x314159,0);C(!gh_model_renderer_begin(r,0x314159,0));C(!gh_model_renderer_draw(r,&s,texture,v.data(),v.size(),indices,3));
+  for(unsigned y=0;y<H;y++)for(unsigned x=0;x<W;x++){
+   int64_t px=(int64_t)offset[0]+x*16,py=(int64_t)offset[1]+y*16;
+   bool inside=half?(px<65535&&py<65535&&px+py>=65535):(px>=0&&py>=0&&px+py<65535);
+   if(inside){size_t p=(size_t)y*W+x;for(unsigned c=0;c<4;c++)expected.rgba[p*4+c]=(uint8_t)tex[c];expected.z[p]=100;}
+  }
+  compare(r,expected,"fullPackedXY/analyticHalfPlanes/reversed/sharedEdge/extremeOffsets");
+ }
+ // Three collinear points must stay empty even when cancelling products
+ // exceed signed32. No interpolation or texture sample may be invented.
+ for(const auto&offset:offsets){auto s=base;s.xy_offset_x16=offset[0];s.xy_offset_y16=offset[1];s.test=0x50003;
+  auto v=triangle(100,255,128);for(unsigned i=0;i<3;i++){uint32_t raw=i==0?0:i==1?65535:32767;v[i].xyz_fixed4[0]=(int32_t)raw;v[i].xyz_fixed4[1]=(int32_t)raw;}
+  Surface expected(0x314159,0);C(!gh_model_renderer_begin(r,0x314159,0));C(!gh_model_renderer_draw(r,&s,texture,v.data(),v.size(),indices,3));compare(r,expected,"wideDegenerateCancellation");
+ }
+}
 int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));auto bytes=load(d,"st1/r100.dat");gh_disc_close(d);gh_bundle room,scp;gh_bundle_entry e;C(!gh_bundle_open(bytes.data(),bytes.size(),&room)&&!gh_bundle_find(&room,"SCP",0,&e)&&!gh_bundle_open(e.bytes,e.size,&scp)&&!gh_bundle_find(&scp,"TM3",0,&e));gh_tm3_bundle tm3;gh_tm3_picture picture;C(!gh_tm3_open(e.bytes,e.size,&tm3)&&!gh_tm3_member(&tm3,37,&picture)&&picture.width==32&&picture.height==32);
  std::vector<uint8_t>pixels((size_t)picture.width*picture.height*4);C(!gh_tm3_rgba_gs(&picture,pixels.data(),pixels.size()));
  unsigned maxalpha=0;for(size_t i=3;i<pixels.size();i+=4)if(pixels[i]>maxalpha)maxalpha=pixels[i];std::printf("actualmember37 alphaMax%u\n",maxalpha);
@@ -87,6 +215,18 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
   state.tex1=linear?96:0;state.alpha=blend?0x44:0x48;auto v=triangle(100,fog,255);v[1].xyz_fixed4[2]+=256*16;v[2].xyz_fixed4[2]+=512*16;
   Surface expected(0x16304c,50);C(!gh_model_renderer_begin(r,0x16304c,50));C(!gh_model_renderer_draw(r,&state,texture,v.data(),3,indices,3));oracle(expected,material,state,v);compare(r,expected,"actualmaterial37/nearestbilinear/fog/alpha");
   size_t changed=0;for(auto depth:expected.z)if(depth!=50)changed++;C(changed>1000);
+ }
+ // HIGHLIGHT2's vertex alpha brightens RGB while output alpha is the sampled
+ // texture alpha. Independent analytic coverage/64-bit GS equations compare
+ // the whole real-resource surface, including filtering/fog/blend/alpha-test.
+ gh_stage_material highlight_material=material;highlight_material.cache_id=3;highlight_material.draw_tfx=3;uint32_t highlight_texture=0;C(!gh_model_renderer_upload(r,&highlight_material,&highlight_texture));
+ for(unsigned linear=0;linear<2;linear++)for(unsigned shade_alpha:{0u,64u,128u,255u}){
+  auto highlight=state;highlight.texture_function=3;highlight.tex1=linear?96:0;highlight.alpha=0x44;highlight.test=0x50003;
+  auto v=triangle(100,128,shade_alpha);v[1].rgba[0]=64;v[2].rgba[1]=192;
+  Surface expected_highlight(0x16304c,50);C(!gh_model_renderer_begin(r,0x16304c,50));
+  C(!gh_model_renderer_draw(r,&highlight,highlight_texture,v.data(),3,indices,3));oracle(expected_highlight,highlight_material,highlight,v);compare(r,expected_highlight,"HIGHLIGHT2/realRGB/texturealpha/vertexhighlight/filter/fog/blend");
+  auto reject=highlight;reject.test=0x507fd;Surface expected_reject(0x16304c,50);C(!gh_model_renderer_begin(r,0x16304c,50));
+  C(!gh_model_renderer_draw(r,&reject,highlight_texture,v.data(),3,indices,3));oracle(expected_reject,highlight_material,reject,v);compare(r,expected_reject,"HIGHLIGHT2/alphaTESTusesTexture/notVertex");for(auto z:expected_reject.z)C(z==50);
  }
  // Explicit alpha128 fixture keeps realmaterial37 RGB texels but replaces
  // alpha solely for positiveGREATER127/depth/control tests. It is NOT an
@@ -108,6 +248,31 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
   C(!gh_model_renderer_draw(r,&write,texture,v.data(),3,indices,3));oracle(dstalpha,material,write,v);compare(r,dstalpha,"FBAalpha128/PABEnoblend");
   v=triangle(400,128,128);C(!gh_model_renderer_draw(r,&dat,texture,v.data(),3,indices,3));oracle(dstalpha,material,dat,v);compare(r,dstalpha,"DAT1afterFBA");
  }
+ // Original actor opacity prepass writes depth through alpha testing,
+ // preserving all four bytes of the existing framebuffer.
+ {
+  auto ordinary=state;ordinary.test=0x50003;ordinary.alpha=0x44;ordinary.tex1=0;
+  auto prepass=ordinary;prepass.test=0x507fd;prepass.alpha=0x8000000044ull;
+  prepass.tex1=0xffffff3800000360ull;prepass.frame_mask=UINT32_MAX;
+  Surface expected_masked(0x314159,10);C(!gh_model_renderer_begin(r,0x314159,10));
+  auto seed=triangle(100,255,128);
+  C(!gh_model_renderer_draw(r,&ordinary,texture,seed.data(),3,indices,3));
+  oracle(expected_masked,material,ordinary,seed);
+  auto original_color=expected_masked.rgba;
+  for(unsigned alpha:{128u,127u}){
+   auto v=triangle(alpha==128?300:400,255,alpha);
+   C(!gh_model_renderer_draw(r,&prepass,texture,v.data(),3,indices,3));
+   oracle(expected_masked,material,prepass,v);
+  }
+  C(expected_masked.rgba==original_color&&expected_masked.z[96*W+96]==300);
+  compare(r,expected_masked,"actor-opacity/FRAME-mask-all/alpha-test/depth");
+  for(unsigned depth:{250u,300u}){
+   auto v=triangle(depth,255,64);v[0].rgba[0]=64;
+   C(!gh_model_renderer_draw(r,&ordinary,texture,v.data(),3,indices,3));
+   oracle(expected_masked,material,ordinary,v);
+   compare(r,expected_masked,"actor-opacity/FRAME-unmask/ZGEQUAL");
+  }
+ }
  // Same geometry: true ZGEQUAL/order, fractional tint and alpha test thresholds.
  state.tex1=96;state.alpha=0x44;Surface expected(0x102030,0);C(!gh_model_renderer_begin(r,0x102030,0));
  for(unsigned step=0;step<4;step++){auto v=triangle(step==1?99:100,255,step==2?127:128);for(auto&vertex:v)vertex.rgba[0]=step==3?64:128;C(!gh_model_renderer_draw(r,&state,texture,v.data(),3,indices,3));oracle(expected,material,state,v);}
@@ -117,6 +282,20 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  C(!gh_model_renderer_draw(r,&state,texture,perspective.data(),3,indices,3));oracle(expected,material,state,perspective);compare(r,expected,"perspectiveQ/rationalUV");
  auto invalid=perspective;invalid[2].stq[2]=std::numeric_limits<float>::quiet_NaN();C(gh_model_renderer_draw(r,&state,texture,invalid.data(),3,indices,3)==GH_MODEL_GPU_UNSUPPORTED);compare(r,expected,"invalidlastvertexatomic");uint32_t bad[3]={0,1,3};C(gh_model_renderer_draw(r,&state,texture,perspective.data(),3,bad,3)==GH_MODEL_GPU_ARGUMENT);compare(r,expected,"invalidlastindexatomic");
  auto unsupported=state;unsupported.dthe=1;C(gh_model_renderer_draw(r,&unsupported,texture,perspective.data(),3,indices,3)==GH_MODEL_GPU_UNSUPPORTED);compare(r,expected,"unsupportedstateatomic");
+ unsupported=state;unsupported.texture_function=2;C(gh_model_renderer_draw(r,&unsupported,texture,perspective.data(),3,indices,3)==GH_MODEL_GPU_UNSUPPORTED);compare(r,expected,"unsupportedTFX2atomic");
+ // Recovered ADC/CLIP indices can leave a carry vertex unused. Its invalid
+ // Q must not block the real triangles; referencing it remains a strict error.
+ std::array<gh_static_gs_vertex,4> carry{};for(unsigned i=0;i<3;i++)carry[i]=perspective[i];carry[3].stq[2]=std::numeric_limits<float>::quiet_NaN();
+ Surface carried(0x314159,0);C(!gh_model_renderer_begin(r,0x314159,0));
+ C(!gh_model_renderer_draw(r,&state,texture,carry.data(),carry.size(),indices,3));oracle(carried,material,state,perspective);compare(r,carried,"unreferencedInvalidCarry/realIndices");
+ const uint32_t used_carry[3]={0,1,3};C(gh_model_renderer_draw(r,&state,texture,carry.data(),carry.size(),used_carry,3)==GH_MODEL_GPU_UNSUPPORTED);compare(r,carried,"referencedInvalidCarryAtomic");
+ C(!gh_model_renderer_draw(r,&state,texture,carry.data(),carry.size(),indices,0));compare(r,carried,"noIndicesNoVertexConsumption");expected=carried;
+ wide_triangles(r,material,texture,state);
+ display_texel(r,state);
+ effect_packets(r,material,texture,state);
+ depth_saturation(r,material,texture,state);
+ // Resume the former image so the existing final failure guard stays atomic.
+ C(!gh_model_renderer_begin(r,0x314159,0));C(!gh_model_renderer_draw(r,&state,texture,carry.data(),carry.size(),indices,3));
  C(gh_model_renderer_begin(r,0,65536)==GH_MODEL_GPU_UNSUPPORTED);compare(r,expected,"invalidclearatomic");gh_model_renderer_reset_resources(r);C(gh_model_renderer_draw(r,&state,texture,perspective.data(),3,indices,3)==GH_MODEL_GPU_ARGUMENT);gh_model_renderer_destroy(r);
- std::puts("PASS realR100TM3member37 GPU upload; full512x448 RGBA+Z independenthighprecision analyticcoverage/STQ/GSbilinear/TFX/fog256/alpha48+44/depth/order/packedXYZF2/atomicfailure; explicitnumericfixture, notgameframe/hardwarebitexact");return 0;
+ std::puts("PASS realR100TM3member37 GPU upload; full512x448 RGBA+Z independenthighprecision analyticcoverage/STQ/GSbilinear/MODULATE+HIGHLIGHT2/texturealpha+vertexhighlight/fog256/alpha48+44/depth/order/packedXYZF2/atomicfailure; explicitnumericfixture, notgameframe/hardwarebitexact");return 0;
 }

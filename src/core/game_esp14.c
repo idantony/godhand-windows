@@ -813,7 +813,8 @@ gh_effect_status gh_effect_actor_sprite_alpha_002fec38(const gh_game_effects *ow
     if (!gh_esp14_nested_sprite_is_bound(v->record, v->actor, v->selector) &&
         !gh_effect_event_part_is_bound(v->record, v->actor, v->selector) &&
         !gh_effect_em00_attack_esp_is_bound(owner,v) &&
-        !gh_effect_knockdown_esp_is_bound(owner,v)) return GH_EFFECT_UNSUPPORTED;
+        !gh_effect_knockdown_esp_is_bound(owner,v) &&
+        !gh_effect_player_rise_esp_is_bound(owner,v)) return GH_EFFECT_UNSUPPORTED;
     const uint8_t *p = v->actor->bytes;
     float result;
     if (v->payload[0x11c] & 0x80u) {

@@ -23,6 +23,14 @@ gh_actor_model_status gh_enemy_entry_002905d0(gh_enemy_entry *,const gh_enemy_en
  * the virtual 284AF8 provider still owns the original return. */
 gh_actor_model_status gh_enemy_entry_prepare_2a2_002905d0(gh_enemy_entry *,
  const gh_enemy_entry_bindings *,const gh_enemy_request *,int32_t manager_kind,uint32_t argument,int *ready);
+typedef struct {
+ gh_enemy_entry entry;
+ const gh_enemy_entry *parent;
+} gh_enemy_devil_entry;
+/* R100 25FE30 child: shared cEm factory and model, then strict at 28EBF0.
+ * A live typed parent is retained for the original virtual argument. */
+gh_actor_model_status gh_enemy_devil_entry_002905d0(gh_enemy_devil_entry *,
+ const gh_enemy_entry_bindings *,const gh_enemy_request *,const gh_enemy_entry *parent);
 /* Nativeabort only ownpausedprefix, not original290770/virtual destructor. */
 gh_actor_model_status gh_enemy_entry_abort_prefix(gh_enemy_entry *);
 #ifdef __cplusplus

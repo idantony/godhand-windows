@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-11T18:57:56.625845+00:00",
-  "stage": "native-windows-R100-two-way-combat",
+  "verified_utc": "2026-11-15T03:56:03.222730+00:00",
+  "stage": "native-windows-R003-ev02-complete-presentation",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -171,6 +171,28 @@
       "scope": "Original149738 parts, ordered nodes and semantic skin packet construction for actual OM00/PL00/PL01; shared149EB8 initial hierarchy and child100420/springs",
       "GPU_skinning_animation_or_gameplay_verified": false
     }
+  },
+  "native_windows_controlled_r003": {
+    "scope": "EV02 playback isolated with the original A38 destination at title handoff",
+    "hidden": true,
+    "muted": true,
+    "ticks": 3268,
+    "room": "0003",
+    "next_room": "0105",
+    "original_GameMain_state": 5,
+    "scene_frames_presented_in_r003": 2785,
+    "first_r003_scene_serial": 362,
+    "last_r003_scene_serial": 3146,
+    "ev02_camera_cuts_presented": 28,
+    "renderer_error": 0,
+    "world_gpu_error": 0,
+    "effect_post_error": 0,
+    "window_error": 0,
+    "frontier": "00312708",
+    "frontier_operation": "R003 Flag object retirement",
+    "normal_play_entry_verified": false,
+    "r105_load_verified": false,
+    "native_regression": {"c_modules": 379, "passed_checks": 366, "skipped_checks": 18}
   },
   "native_windows_execution": {
     "scope": "R100 New Game with original opening and two-way combat",

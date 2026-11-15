@@ -44,7 +44,7 @@ static void check_scene_capture(const gh_effect_post_sampler *nearest,const gh_e
  const gh_effect_post_sampler *states[]={nearest,linear};
  for(unsigned filter=0;filter<2;filter++){
   memset(target.rgba,0xa5,target.bytes);
-  C(!gh_effect_postprocess_capture_scene(&packet,states[filter],&source,&target,28672,29184,&row));
+  C(!gh_effect_postprocess_capture_scene(&packet,states[filter],&source,&target,28672,29184,NULL,&row));
   C(row==(int)!filter);
   for(unsigned y=0;y<448;y++)for(unsigned x=0;x<256;x++){
    const uint8_t *pixel=target.rgba+(size_t)y*target.stride+x*4;
@@ -56,11 +56,18 @@ static void check_scene_capture(const gh_effect_post_sampler *nearest,const gh_e
    }
   }
  }
+ uint32_t wrapped[256];
+ for(unsigned x=0;x<256;++x)wrapped[x]=0xff114000u|x;
+ C(!gh_effect_postprocess_capture_scene(&packet,linear,&source,&target,28672,29184,wrapped,&row)&&row==1);
+ for(unsigned x=0;x<256;++x){
+  const uint8_t *pixel=target.rgba+x*4;
+  C(pixel[0]==(x+3u*(uint8_t)(x*2))/4&&pixel[1]==16&&pixel[2]==59&&pixel[3]==0xa5);
+ }
  packet.quads[7].vertices[1].v12_4++;
  memset(target.rgba,0xa5,target.bytes);
  row=-1;
- C(gh_effect_postprocess_capture_scene(&packet,linear,&source,&target,28672,29184,&row)==GH_EFFECT_POST_UNSUPPORTED);
- C(row==-1&&target.rgba[256*4]==0xa5);
+ C(gh_effect_postprocess_capture_scene(&packet,linear,&source,&target,28672,29184,wrapped,&row)==GH_EFFECT_POST_UNSUPPORTED);
+ C(row==-1&&target.rgba[0]==0xa5&&target.rgba[256*4]==0xa5);
  free(target.rgba);free(source.rgba);
 }
 static void check_impact_warp(const gh_effect_post_sampler *nearest,const gh_effect_post_sampler *linear)
@@ -79,20 +86,22 @@ static void check_impact_warp(const gh_effect_post_sampler *nearest,const gh_eff
    .x12_4=x[i]*16,.y12_4=y[i]*16,.q=1,.t=447.0f/512.0f,.rgba=0x80808080u
   };
  }
- C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,0));
+ C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,0,0));
  for(unsigned i=0;i<6;i++)packet.quads[0].vertices[i].t=448.0f/512.0f;
- C(gh_effect_postprocess_warp_source_known(&packet,nearest,4,4,0,0,1)==GH_EFFECT_POST_BOUNDS);
- C(gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1)==GH_EFFECT_POST_BOUNDS);
+ C(gh_effect_postprocess_warp_source_known(&packet,nearest,4,4,0,0,1,0)==GH_EFFECT_POST_BOUNDS);
+ C(gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1,0)==GH_EFFECT_POST_BOUNDS);
+ C(!gh_effect_postprocess_warp_source_known(&packet,nearest,4,4,0,0,1,1));
+ C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1,1));
  for(unsigned i=0;i<6;i++)packet.quads[0].vertices[i].rgba=0x00808080u;
- C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1));
+ C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1,0));
  packet.source=GH_EFFECT_SURFACE_3C00;
  packet.tex0=UINT64_C(0x2000000620113c00);
  for(unsigned i=0;i<6;i++){
   packet.quads[0].vertices[i].t=.5f/256.0f;
   packet.quads[0].vertices[i].rgba=0x80808080u;
  }
- C(gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,0)==GH_EFFECT_POST_BOUNDS);
- C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1));
+ C(gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,0,0)==GH_EFFECT_POST_BOUNDS);
+ C(!gh_effect_postprocess_warp_source_known(&packet,linear,4,4,0,0,1,0));
 }
 int main(int argc,char**argv){
  C(argc==2||argc==3);uint8_t one[4]={9,7,3,255},sample[4]={99,99,99,99};gh_effect_post_surface tiny={one,4,4,1,1};gh_effect_post_sampler linear={.tex1=0x60,.known=1,.policy=GH_EFFECT_SAMPLE_NATIVE_SEPARABLE_4BIT},nearest={.known=1,.policy=GH_EFFECT_SAMPLE_NATIVE_SEPARABLE_4BIT};

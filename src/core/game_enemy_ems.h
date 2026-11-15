@@ -46,7 +46,7 @@ typedef struct {
     gh_enemy_actor *enemy202;
     gh_enemy202_move *move202;
     unsigned physical_row;
-    uint8_t held_weapon;
+    uint8_t held_weapon,devil;
     gh_enemy2a2_virtual_init *enemy2a2;
     gh_enemy_weapon_init *weapon;
     gh_enemy_other_move *other_move;
@@ -54,6 +54,12 @@ typedef struct {
 } gh_enemy_ems_live;
 /* Borrow registered runtime storage; use one Move cursor per physical row. */
 gh_scene_placement_status gh_enemy_ems_live_at(gh_enemy_ems *,uint32_t handle,gh_enemy_ems_live *);
+/* R100 forced 0220 entry from stamp8's 25FE30. Stable pending owner
+ * survives a suspended virtual Init and becomes visible after return1. */
+gh_actor_motion_status gh_enemy_ems_spawn_devil_002905d0(gh_enemy_ems *,
+    const gh_enemy_actor *,const gh_enemy_request *,const gh_effect_create_bindings *,
+    gh_motion_sound_consumer,void *,uint32_t *);
+gh_actor_motion_status gh_enemy_ems_abort_devil_native(gh_enemy_ems *,uint32_t *);
 /* Same live +6EC relation, discoverable by either original registry handle. */
 const gh_enemy_weapon_init *gh_enemy_ems_held_weapon(const gh_enemy_ems *,
     uint32_t enemy_handle, uint32_t weapon_handle);
@@ -91,6 +97,13 @@ gh_actor_motion_status gh_enemy_ems_start_goto_at2(const gh_enemy_ems *,
 /* R100 AT3's original cEmWrap calls, on the same registered live actor. */
 gh_actor_motion_status gh_enemy_ems_start_goto_at3(const gh_enemy_ems *,uint8_t stamp,
     const float destination[3],uint32_t *frontier);
+/* REL1FC4..203C original unsuspend, StartAction and deferred mode0 Goto. */
+gh_actor_motion_status gh_enemy_ems_start_goto_battle(const gh_enemy_ems *,
+    const gh_game_init_state *,uint8_t stamp,const float destination[3],uint32_t *frontier);
+gh_actor_motion_status gh_enemy_ems_start_stamp_action_00295ce8(const gh_enemy_ems *,
+    const gh_game_init_state *,uint8_t stamp,uint32_t *frontier);
+gh_actor_motion_status gh_enemy_ems_start_goto_successor(const gh_enemy_ems *,
+    uint8_t stamp,const float destination[3],uint32_t *frontier);
 /* Original soft-event suspend/resume through the canonical enemy manager list. */
 gh_actor_motion_status gh_enemy_ems_set_suspend_002948e8(const gh_enemy_ems *,
     const gh_game_init_state *, int suspend, uint32_t *frontier);

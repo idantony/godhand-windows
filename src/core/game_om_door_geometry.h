@@ -19,6 +19,8 @@ gh_scene_placement_status gh_om_door_geometry_001bd228(gh_om_door_geometry *,gh_
 gh_scene_placement_status gh_om_door_set_lock_001bd178(gh_om_door_geometry *,int on);
 gh_scene_placement_status gh_om_door_set_open_001bcfb0(gh_om_door_geometry *,
     int direction,int immediate);
+gh_scene_placement_status gh_om_door_rebuild_collision_001bd228(gh_om_door_geometry *,
+    const gh_om_door_shared *,gh_static_transform_policy);
 gh_scene_placement_status gh_om_door_release_collision_001bd3f0(gh_om_door_geometry *);
 gh_scene_placement_status gh_om_door_geometry_abort(gh_om_door_geometry *);
 #ifdef __cplusplus

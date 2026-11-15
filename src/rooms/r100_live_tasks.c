@@ -5,7 +5,7 @@
 #include <fenv.h>
 #include <math.h>
 
-static const uint32_t entries[]={0x2920,0x2650,0x2490,0x2288,0x2198,0x15b0,0x2d68,0x1bd0,0x11b0};
+static const uint32_t entries[]={0x2920,0x2650,0x2490,0x2288,0x2198,0x15b0,0x2d68,0x1bd0,0x11b0,0x1780};
 static uint32_t rd(const void *p){uint32_t n;memcpy(&n,p,4);return n;}
 static uint16_t half(const void *p){uint16_t n;memcpy(&n,p,2);return n;}
 static void wr(void *p,uint32_t n){memcpy(p,&n,4);}
@@ -340,6 +340,277 @@ static gh_r100_script_status at2_payload(gh_r100_live_task *s)
     return end_soft_event(s); /* REL28D8 */
 }
 
+gh_r100_script_status gh_r100_battle_tail_00001e80(gh_r100_live_task *s)
+{
+    if(!s||s->entry!=0x1bd0||s->battle_stage!=2||s->battle_spawn_index!=8)
+        return GH_R100_SCRIPT_ARGUMENT;
+    s->frontier_relative=0;
+    while(s->battle_tail_stage<10){
+        unsigned gate=s->battle_tail_stage/5, step=s->battle_tail_stage%5;
+        uint32_t pc=0;
+        gh_r100_script_status status;
+        if(step==0){
+            if(!s->b.pools||!s->b.object_view){
+                s->frontier_relative=1;
+                return fail(s,gate?0x1f10:0x1e80,GH_R100_SCRIPT_UNSUPPORTED);
+            }
+            status=gh_r100_find_om_0014fd98(s->b.pools,s->b.object_view,s->b.context,
+                gate?"gate01":"gate00",&s->battle_gate,&pc);
+            if(status)return fail(s,pc?pc:0x14fd98,status);
+            if(!s->battle_gate.identity){s->battle_tail_stage+=5;continue;}
+        }else{
+            const unsigned operation=step==2?2:step==4?3:0;
+            const int arg0=step==2?(int)gate:step==3?1:0;
+            const uint32_t original=operation==2?0x1bcfb0:operation==3?0x1bd228:0x1bd178;
+            if(!s->b.battle_door)return fail(s,original,GH_R100_SCRIPT_UNSUPPORTED);
+            status=s->b.battle_door(s->b.context,s->battle_gate.identity,operation,arg0,0,&pc);
+            if(status)return fail(s,pc?pc:original,status);
+        }
+        ++s->battle_tail_stage;
+    }
+    if(s->battle_tail_stage==10){
+        uint32_t pc=0;
+        if(!s->b.program_se)return fail(s,0x2cb968,GH_R100_SCRIPT_UNSUPPORTED);
+        gh_r100_script_status status=s->b.program_se(s->b.context,0x0d,&pc);
+        if(status)return fail(s,pc?pc:0x2cb968,status);
+        ++s->battle_tail_stage;
+    }
+    if(s->battle_tail_stage==11){
+        uint32_t pc=0;
+        if(!s->b.battle_collision)return fail(s,0x1332d0,GH_R100_SCRIPT_UNSUPPORTED);
+        if(s->b.battle_collision(s->b.context,"H03_gt",0,&pc))
+            return fail(s,pc?pc:0x1332d0,GH_R100_SCRIPT_CALLEE);
+        ++s->battle_tail_stage;
+    }
+    if(s->battle_tail_stage==12){
+        gh_r100_script_status status=start_soft_event(s);
+        if(status)return status;
+        ++s->battle_tail_stage;
+    }
+    if(s->battle_tail_stage==13){
+        if(!s->b.at)return fail(s,0x2c2a48,GH_R100_SCRIPT_UNSUPPORTED);
+        gh_r100_script_status status=center(s,0x11,s->battle_destination);
+        if(status)return status;
+        ++s->battle_tail_stage;
+    }
+    while(s->battle_tail_stage<17){
+        if(!s->b.enemies||!*s->b.enemies)return fail(s,0x295bc0,GH_R100_SCRIPT_UNSUPPORTED);
+        uint32_t pc=0;
+        gh_actor_motion_status status=gh_enemy_ems_start_goto_battle(*s->b.enemies,s->b.init,
+            (uint8_t)(26+s->battle_tail_stage-14),s->battle_destination,&pc);
+        if(status)return fail(s,pc?pc:0x295bc0,GH_R100_SCRIPT_UNSUPPORTED);
+        ++s->battle_tail_stage;
+    }
+    if(s->battle_tail_stage==17){
+        gh_r100_script_status status=set_room_camera(s,"A01");
+        if(status)return status;
+        ++s->battle_tail_stage;
+    }
+    if(s->battle_tail_stage==18){
+        gh_r100_script_status status=wait_camera(s);
+        if(status)return status;
+        ++s->battle_tail_stage;
+    }
+    if(s->battle_tail_stage==19){
+        if(!s->b.end_soft_event)return fail(s,0x2c3c10,GH_R100_SCRIPT_UNSUPPORTED);
+        uint32_t pc=0;
+        gh_r100_script_status status=s->b.end_soft_event(s->b.context,&s->soft_end,&pc);
+        if(status)return fail(s,pc?pc:0x2c3c10,status);
+        ++s->battle_tail_stage;
+    }
+    while(s->battle_tail_stage<24){
+        const unsigned gate=(s->battle_tail_stage-20)/2;
+        uint32_t pc=0;
+        gh_r100_script_status status;
+        if(!(s->battle_tail_stage&1)){
+            status=gh_r100_find_om_0014fd98(s->b.pools,s->b.object_view,s->b.context,
+                gate?"gate01":"gate00",&s->battle_gate,&pc);
+            if(status)return fail(s,pc?pc:0x14fd98,status);
+        }else if(s->battle_gate.identity){
+            if(!s->b.battle_door)return fail(s,0x1bd3f0,GH_R100_SCRIPT_UNSUPPORTED);
+            status=s->b.battle_door(s->b.context,s->battle_gate.identity,1,0,0,&pc);
+            if(status)return fail(s,pc?pc:0x1bd3f0,status);
+        }
+        ++s->battle_tail_stage;
+    }
+    if(s->battle_tail_stage==24){
+        uint32_t pc=0;
+        gh_r100_script_status status=s->b.battle_register?
+            s->b.battle_register(s->b.context,0x1780,-1,&pc):GH_R100_SCRIPT_UNSUPPORTED;
+        if(status){
+            s->frontier_relative=!pc;
+            return fail(s,pc?pc:0x1780,status);
+        }
+        ++s->battle_tail_stage;
+    }
+    s->finished=1;
+    return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status successor_escape(gh_r100_live_task *s)
+{
+    uint32_t pc=0;
+    gh_game_title_player *heavy=NULL;
+    gh_r100_script_status status=enemy_actor(s->b.init,14,&heavy,&pc);
+    if(status)return fail(s,pc,status);
+    if(heavy&&heavy->view.original_kind4ac==0x448a00){
+        const gh_title_player_view *view=&heavy->view;
+        if(!view->bytes||view->size<0x15b4||view->original_vtable214!=0x448ca0)
+            return fail(s,0x289028,GH_R100_SCRIPT_UNSUPPORTED);
+        wr(view->bytes+0x15b0,rd(view->bytes+0x15b0)|8u);
+    }
+    return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status successor_after_sound(gh_r100_live_task *s)
+{
+    enum { ACTION13, RESUME13, RESUME14, SLEEP60, START_ESCAPE, WAIT_A05,
+           SUSPEND14, SUSPEND13, CAMERA_A06, SOUND36,
+           SET_23, SET_24, SET_25, GOTO_23, GOTO_24, GOTO_25, WAIT_A06, END_SOFT, PLAYER_POSE };
+    gh_r100_script_status status;
+    uint32_t pc=0;
+    if(!s->b.enemies||!*s->b.enemies)return fail(s,0x295ce8,GH_R100_SCRIPT_UNSUPPORTED);
+    gh_enemy_ems *owner=*s->b.enemies;
+    if(!s->successor_tail_stage&&s->successor_short_path)s->successor_tail_stage=SET_23;
+    for(;s->successor_tail_stage<=PLAYER_POSE;++s->successor_tail_stage){
+        const unsigned stage=s->successor_tail_stage;
+        switch(stage){
+        case ACTION13:
+            if(gh_enemy_ems_start_stamp_action_00295ce8(owner,s->b.init,13,&pc))
+                return fail(s,pc?pc:0x295ce8,GH_R100_SCRIPT_UNSUPPORTED);
+            break;
+        case RESUME13: case RESUME14: case SUSPEND14: case SUSPEND13:
+            if(gh_enemy_ems_set_stamp_suspend_00295bc0(owner,s->b.init,
+                (stage==RESUME13||stage==SUSPEND13)?13:14,stage>=SUSPEND14,&pc))
+                return fail(s,pc?pc:0x295bc0,GH_R100_SCRIPT_UNSUPPORTED);
+            break;
+        case SLEEP60:
+            if(gh_task_threads_sleep(s->b.threads,60))return fail(s,0x2d5aa0,GH_R100_SCRIPT_THREAD);
+            break;
+        case START_ESCAPE:
+            status=successor_escape(s);
+            if(status)return status;
+            break;
+        case WAIT_A05: case WAIT_A06:
+            status=wait_camera(s);
+            if(status)return status;
+            if(stage==WAIT_A05)s->camera_start=(gh_room_camera_start){0};
+            break;
+        case CAMERA_A06:
+            status=set_room_camera(s,"A06");
+            if(status)return status;
+            break;
+        case SOUND36:
+            status=program_se(s,0x36);
+            if(status)return status;
+            break;
+        case SET_23: case SET_24: case SET_25:
+            status=set_enemy(s,owner,(uint8_t)(23+stage-SET_23),1);
+            if(status)return status;
+            break;
+        case GOTO_23: case GOTO_24: case GOTO_25:{
+            const unsigned index=stage-GOTO_23;
+            static const uint8_t ids[]={0x0c,0x0e,0x0d};
+            float destination[3];
+            status=center(s,ids[index],destination);
+            if(status)return status;
+            if(gh_enemy_ems_start_goto_successor(owner,(uint8_t)(23+index),destination,&pc))
+                return fail(s,pc?pc:0x295f80,GH_R100_SCRIPT_UNSUPPORTED);
+            break;
+        }
+        case END_SOFT:
+            if(!s->b.end_soft_event)return fail(s,0x2c3c10,GH_R100_SCRIPT_UNSUPPORTED);
+            status=s->b.end_soft_event(s->b.context,&s->soft_end,&pc);
+            if(status)return fail(s,pc?pc:0x2c3c10,status);
+            break;
+        case PLAYER_POSE:{
+            if(!s->b.battle_player_pose)return fail(s,0x12ce60,GH_R100_SCRIPT_UNSUPPORTED);
+            const uint32_t xyz[3]={0x40370a3d,0,0xc27bae14};
+            const uint32_t euler[3]={0,0xc0400000,0};
+            status=s->b.battle_player_pose(s->b.context,xyz,euler,&pc);
+            if(status)return fail(s,pc?pc:0x12ce60,status);
+            break;
+        }
+        }
+    }
+    s->finished=1;
+    return GH_R100_SCRIPT_OK;
+}
+
+static gh_r100_script_status battle_successor_00001780(gh_r100_live_task *s)
+{
+    enum { SET_ESCAPE, WAIT_FOR_AT11, WAIT_FOR_EVENT, START_SOFT, SELECT_PATH,
+           START_ESCAPE, START_CAMERA, SOUND, NEXT_CALL };
+    gh_r100_script_status status;
+    uint32_t pc=0;
+    gh_game_title_player *heavy=NULL;
+    if(s->successor_stage==SET_ESCAPE){
+        status=enemy_actor(s->b.init,14,&heavy,&pc);
+        if(status)return fail(s,pc,status);
+        if(heavy&&heavy->view.original_kind4ac==0x448a00){
+            const uint32_t bits[4]={0x416051ec,0x3eeb851f,0xc260a3d7,0x3f800000};
+            float position[4];
+            memcpy(position,bits,sizeof(position));
+            if(gh_enemy2a2_set_escape_position_00289038(heavy,position))
+                return fail(s,0x289038,GH_R100_SCRIPT_UNSUPPORTED);
+        }
+        ++s->successor_stage;
+    }
+    if(s->successor_stage==WAIT_FOR_AT11){
+        int triggered;
+        status=hit(s,0xb,&triggered);
+        if(status)return status;
+        if(!triggered){
+            gh_game_title_player *enemy=NULL;
+            status=enemy_actor(s->b.init,13,&enemy,&pc);
+            if(status)return fail(s,pc,status);
+            int is_active;
+            status=active(s,enemy,&is_active);
+            if(status)return status;
+            if(is_active)s->successor_already_active=1;
+            return GH_R100_SCRIPT_OK;
+        }
+        ++s->successor_stage;
+    }
+    if(s->successor_stage==WAIT_FOR_EVENT){
+        int ready;
+        status=event_ready(s,&ready);
+        if(status||!ready)return status;
+        wr(s->b.room->active+4,rd(s->b.room->active+4)|0x08000000u);
+        ++s->successor_stage;
+    }
+    if(s->successor_stage==START_SOFT){
+        status=start_soft_event(s);
+        if(status)return status;
+        ++s->successor_stage;
+    }
+    if(s->successor_stage==SELECT_PATH){
+        int died=0;
+        if(!s->successor_already_active){
+            status=dead(s,13,NULL,&died);
+            if(status)return status;
+        }
+        s->successor_short_path=(uint8_t)(died||s->successor_already_active);
+        s->successor_stage=s->successor_short_path?START_ESCAPE:START_CAMERA;
+    }
+    if(s->successor_stage==START_ESCAPE){
+        status=successor_escape(s);
+        if(status)return status;
+        ++s->successor_stage;
+    }
+    if(s->successor_stage==START_CAMERA){
+        status=set_room_camera(s,s->successor_short_path?"A06":"A05");
+        if(status)return status;
+        ++s->successor_stage;
+    }
+    if(s->successor_stage==SOUND){
+        status=program_se(s,s->successor_short_path?0x36:0x35);
+        if(status)return status;
+        ++s->successor_stage;
+    }
+    return successor_after_sound(s);
+}
+
 static gh_r100_script_status watch(gh_r100_live_task *s)
 {
     int triggered=0,ready=0,died=0;
@@ -503,6 +774,7 @@ static gh_r100_script_status watch(gh_r100_live_task *s)
         s->frontier_relative=1;
         return fail(s,0x1318,GH_R100_SCRIPT_UNSUPPORTED); /* next original EmWrap action */
     }
+    case 0x1780:return battle_successor_00001780(s);
     case 0x1bd0:{
         if(!s->battle_stage){
             const uint32_t flags=rd(s->b.room->active+4);
@@ -532,8 +804,7 @@ static gh_r100_script_status watch(gh_r100_live_task *s)
             if(status)return status;
             ++s->battle_spawn_index;
         }
-        s->frontier_relative=1;
-        return fail(s,0x1e80,GH_R100_SCRIPT_UNSUPPORTED); /* next original door lookup */
+        return gh_r100_battle_tail_00001e80(s);
     }
     default:return fail(s,s->entry,GH_R100_SCRIPT_UNSUPPORTED);
     }

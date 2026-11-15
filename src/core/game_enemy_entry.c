@@ -7,13 +7,18 @@ static void put(uint8_t*p,size_t o,uint32_t v){memcpy(p+o,&v,4);}
 static void half(uint8_t*p,size_t o,uint16_t v){memcpy(p+o,&v,2);}
 static gh_actor_model_status fail(gh_enemy_entry*s,uint32_t pc){s->frontier=pc;return GH_ACTOR_MODEL_UNSUPPORTED;}
 static int same_request(const gh_enemy_request*a,const gh_enemy_request*b){return a->object_kind==b->object_kind&&!memcmp(a->position_xyz,b->position_xyz,12)&&a->yaw_bits==b->yaw_bits&&a->flags==b->flags&&a->dependency_kind==b->dependency_kind&&a->dependency_flags==b->dependency_flags&&a->appearance==b->appearance&&a->entry_number==b->entry_number;}
-static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry_bindings*b,const gh_enemy_request*r,int32_t kind,uint32_t argument,int*ready,int heavy){
+typedef enum { ORDINARY_ENTRY, HEAVY_ENTRY, DEVIL_ENTRY } entry_profile;
+static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry_bindings*b,const gh_enemy_request*r,int32_t kind,uint32_t argument,int*ready,entry_profile profile){
  if(!s||!b||!ready||!b->init||!b->pools||!b->room_objects||!b->global_objects||!b->work||!b->room_heap||!b->packet_heap||!b->fog_rgb||!b->factory_serial||!b->scenario14||!b->save.bytes)return GH_ACTOR_MODEL_ARGUMENT;
  *ready=0;if(!r||kind< -1)return GH_ACTOR_MODEL_OK;
- if(heavy){
+ if(profile==HEAVY_ENTRY){
   if(r->object_kind!=0x2a2||r->appearance||r->flags||r->dependency_flags||
      !((r->dependency_kind==0x2a2&&r->entry_number==6)||
        (r->dependency_kind==0x2a3&&r->entry_number==14)))return fail(s,0x2905d0);
+ }else if(profile==DEVIL_ENTRY){
+  if(r->object_kind!=0x220||r->dependency_kind!=0x220||b->work->room!=0x100||
+     r->flags!=0x400000||r->entry_number!=0xff||r->appearance||r->dependency_flags||
+     kind!=0||argument)return fail(s,0x2905d0);
  }else if(r->object_kind!=0x202||(r->dependency_kind!=0x20a&&!gh_enemy202_is_r100_supported_profile(r)))return fail(s,0x2905d0);
  if(s->stage&&(s->b.init!=b->init||s->b.pools!=b->pools||s->b.work!=b->work||s->b.room_objects!=b->room_objects||s->b.global_objects!=b->global_objects||s->manager_kind!=kind||s->argument!=argument||s->b.room_heap!=b->room_heap||s->b.packet_heap!=b->packet_heap||s->b.factory_serial!=b->factory_serial||!same_request(&s->request,r)))return GH_ACTOR_MODEL_BUSY;
  if(!s->stage){int slot;if(gh_enemy_manager_find_free_00290958(b->init,&slot))return GH_ACTOR_MODEL_ARGUMENT;if(slot<0)return GH_ACTOR_MODEL_OK;s->slot=slot;s->b=*b;s->request=*r;s->manager_kind=kind;s->argument=argument;s->stage=1;}
@@ -22,10 +27,10 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
  }
  if(s->stage==2){gh_object_status e=gh_game_object_sounds_001feaa0(&s->sound,s->b.room_objects,r->object_kind,r->dependency_kind,r->dependency_flags,s->b.work,s->b.banks,s->b.resources.threads,&s->frontier);if(e)return fail(s,s->frontier?s->frontier:0x1feaa0);s->stage=3;}
  if(s->stage==3){const gh_room_vector*a,*v;if(gh_room_registry_view(s->b.pools,0x754c30,&a)||gh_room_registry_view(s->b.pools,0x754c58,&v))return GH_ACTOR_MODEL_ARGUMENT;if(a->count==a->capacity||v->count==v->capacity)return GH_ACTOR_MODEL_OK;
-  int present;gh_title_player_status e=heavy?
+  int present;gh_title_player_status e=profile==HEAVY_ENTRY?
       gh_enemy2a2_allocate_00313820(&s->object,s->b.room_heap,s->b.work,&present):
       gh_enemy202_allocate_003130e0(&s->object,s->b.room_heap,s->b.work,&present);
-  if(e)return fail(s,heavy?0x313820:0x3130e0);if(!present)return GH_ACTOR_MODEL_OK;
+  if(e)return fail(s,profile==HEAVY_ENTRY?0x313820:0x3130e0);if(!present)return GH_ACTOR_MODEL_OK;
   uint8_t*p=s->object.view.bytes;p[0x2fc]=*s->b.factory_serial;*s->b.factory_serial=(uint8_t)(*s->b.factory_serial+1);half(p,0x2fe,(uint16_t)r->object_kind);put(p,0x2d0,0x40000000);half(p,0x300,(uint16_t)r->object_kind);s->stage=4;
  }
  if(s->stage==4){gh_object_status e=gh_game_objects_acquire_001fea48(s->b.room_objects,r->object_kind,&s->resource);if(e==GH_OBJECT_OK){s->room_reference=1;if(s->resource.bytes)s->resource_from_room=1;}else if(e!=GH_OBJECT_MISSING)return fail(s,0x1fea48);s->stage=5;}
@@ -41,7 +46,7 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
 gh_actor_model_status gh_enemy_entry_prepare_2a2_002905d0(gh_enemy_entry*s,
  const gh_enemy_entry_bindings*b,const gh_enemy_request*r,int32_t kind,uint32_t argument,int*ready)
 {
- return prepare_entry(s,b,r,kind,argument,ready,1);
+ return prepare_entry(s,b,r,kind,argument,ready,HEAVY_ENTRY);
 }
 
 gh_actor_model_status gh_enemy_entry_002905d0(gh_enemy_entry*s,const gh_enemy_entry_bindings*b,
@@ -50,10 +55,35 @@ gh_actor_model_status gh_enemy_entry_002905d0(gh_enemy_entry*s,const gh_enemy_en
  if(!original)return GH_ACTOR_MODEL_ARGUMENT;
  *original=0;
  int ready;
- gh_actor_model_status status=prepare_entry(s,b,r,kind,argument,&ready,0);
+ gh_actor_model_status status=prepare_entry(s,b,r,kind,argument,&ready,ORDINARY_ENTRY);
  if(status||!ready)return status;
  gh_actor_model_status e=gh_enemy202_initialize_prefix_002022d0(&s->initialize,&s->object.view,&s->request,&s->resource,s->b.work,s->b.save,s->b.scenario14,s->b.borrowed586aa4,s->b.pools,s->b.packet_heap,s->b.fog_rgb,s->b.policy);s->frontier=s->initialize.frontier;return e;
 }
+gh_actor_model_status gh_enemy_devil_entry_002905d0(gh_enemy_devil_entry *call,
+ const gh_enemy_entry_bindings *b,const gh_enemy_request *r,const gh_enemy_entry *parent)
+{
+ if(!call||!b||!b->init||!r||!parent||&call->entry==parent)return GH_ACTOR_MODEL_ARGUMENT;
+ gh_enemy_entry *child=&call->entry;
+ if(child->stage&&call->parent!=parent)return GH_ACTOR_MODEL_BUSY;
+ if(!parent->published||parent->b.init!=b->init||parent->b.pools!=b->pools||
+    parent->b.work!=b->work||parent->request.object_kind!=0x202||
+    parent->request.dependency_kind!=0x200||parent->request.entry_number!=8||
+    parent->slot<0||parent->slot>=64||b->init->enemy_actors[parent->slot]!=&parent->object)
+  return fail(child,0x25fe30);
+ void *registered=NULL;
+ if(gh_room_object_lookup(b->pools,parent->handle,GH_ROOM_OBJECT_ENEMY,parent,&registered)||
+    registered!=&parent->object)return fail(child,0x25fe30);
+ int ready=0;
+ gh_actor_model_status status=prepare_entry(child,b,r,0,0,&ready,DEVIL_ENTRY);
+ if(child->stage)call->parent=parent;
+ if(status||!ready)return status;
+ status=gh_enemy202_initialize_prefix_002022d0(&child->initialize,&child->object.view,
+     &child->request,&child->resource,child->b.work,child->b.save,child->b.scenario14,
+     child->b.borrowed586aa4,child->b.pools,child->b.packet_heap,child->b.fog_rgb,child->b.policy);
+ child->frontier=child->initialize.frontier;
+ return status;
+}
+
 gh_actor_model_status gh_enemy_entry_abort_prefix(gh_enemy_entry*s){
  if(!s)return GH_ACTOR_MODEL_ARGUMENT;if(!s->stage)return GH_ACTOR_MODEL_OK;
  if(s->published){unsigned k=(unsigned)s->slot;gh_game_init_state*i=s->b.init;if(k>=64||i->enemy_actors[k]!=&s->object||i->enemies[k*20+16]!=1)return GH_ACTOR_MODEL_BUSY;

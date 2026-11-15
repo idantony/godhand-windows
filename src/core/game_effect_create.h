@@ -69,6 +69,7 @@ typedef struct {gh_effect_view record;const gh_title_player_view *actor,*selecto
  /* SAME creator-owned slot, for the original per-frame consumer. Never a
   * duplicate work buffer; consumers also validate payload against storage. */
  uint8_t *payload;size_t payload_size;int32_t first_esp_child;} gh_effect_emitter_view;
+int gh_effect_player_rise_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
 int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *);
@@ -89,6 +90,7 @@ struct gh_effects_frame_globals;
 typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;
  uint8_t *payload;size_t payload_size;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t initialized,type;struct gh_effects_frame_globals *globals;gh_game_scene_tables *scene_actors;int32_t parent_emitter,previous,next;uint32_t parent_serial;/* Snapshot of known300458-zeroed source218, not a removedtoken test. */uint8_t target120_known_null;} gh_effect_esp_view;
 int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
+int gh_effect_player_rise_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_knockdown_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_esp_trail_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 /* Borrow the canonical room arenas; release effects before tearing them down. */
@@ -99,6 +101,12 @@ gh_effect_status gh_effect_create_esp_trail_sample_002ec218(gh_game_effects *,un
  const float position[4],uint32_t *frontier);
 gh_effect_status gh_effect_create_esp_trail_view(const gh_game_effects *,unsigned,uint32_t,
  const float **positions,unsigned *count);
+gh_effect_status gh_effect_create_esp_trail_edges_002f62f8(gh_game_effects *,unsigned,uint32_t,
+ uint32_t work594,gh_static_transform_policy,uint32_t *frontier);
+gh_effect_status gh_effect_create_esp_trail_edges_002f6740(gh_game_effects *,unsigned,uint32_t,
+ gh_static_transform_policy,uint32_t *frontier);
+gh_effect_status gh_effect_create_esp_trail_view_edges(const gh_game_effects *,unsigned,uint32_t,
+ const float **positions,const float **other_edge,unsigned *count);
 gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_bindings *,unsigned emitter_slot,uint32_t emitter_serial,unsigned *slot,uint32_t *serial,int *allocated,uint32_t *frontier);
 gh_effect_status gh_effect_create_esp_at(const gh_game_effects *,unsigned,gh_effect_esp_view *);
 /* Native cancellation of only this unfinished original virtualInit. Never a
@@ -113,6 +121,7 @@ gh_effect_status gh_effect_create_esp_commit_type6(gh_game_effects *,unsigned,ui
 /* R003 SSD bank3/index0 parentless class08, original 2FFC20/2EA908. */
 int gh_effect_r003_esp08_row(gh_effect_view);
 gh_effect_status gh_effect_create_esp_commit_8(gh_game_effects *,unsigned,uint32_t);
+int gh_effect_esp_type7_record_bound(const gh_game_effects *,const gh_effect_esp_view *);
 gh_effect_status gh_effect_create_esp_commit_type7(gh_game_effects *,unsigned slot,uint32_t serial);
 gh_effect_status gh_effect_create_esp_commit_14(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_12(gh_game_effects *,unsigned,uint32_t);

@@ -89,6 +89,37 @@ class StartupRunnerTests(unittest.TestCase):
                         with self.assertRaisesRegex(tool.proof.ProofError, "exit and presented defeat disagree"):
                             tool.run(prepared)
 
+    def test_controlled_r003_receipt_requires_its_own_presented_frames(self):
+        for index, capture in enumerate((452, 399)):
+            scratch = self.root / f"controlled-r003-{index}"
+            prepared = tool.prepare(self.snapshot, scratch, self.iso, self.ffmpeg,
+                                    build_scratch=self.scratch, r003_controlled=True)
+            self.assertIn("--qa-r003-controlled", prepared["command"])
+            self.assertNotIn("--qa-new-game", prepared["command"])
+            status = dict(handoff_tick=383, first_scene=400, last_scene=466, frames=67, last_ev02_cut=0)
+            trace = (f"QA_R003_PRESENTED cut=0 scene=451\nQA_CAPTURE_PRESENTED {capture}\n"
+                     f"QA_R003_STATUS {json.dumps(status)}\n").encode("utf-8")
+            qa = self.qa(playable_game_verified=False, frontier_module="main ELF",
+                         scene_frames_presented=466, effect_post_error=0)
+            with patch.object(tool.subprocess, "run", self.fake_run(qa, trace)):
+                if capture >= status["first_scene"]:
+                    self.assertEqual(tool.run(prepared)["controlled_r003"], status)
+                    runner = self.snapshot / "tools/run-startup-qa.py"
+                    runner.parent.mkdir()
+                    runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+                    options = {"expected_frontier": "00142060", "build_scratch": self.scratch}
+                    with self.assertRaisesRegex(frontier.proof.ProofError, "unexpected process executable or QA flags"):
+                        frontier.validate(self.snapshot, scratch, **options)
+                    recorded, _ = frontier.validate(self.snapshot, scratch, r003_controlled=True, **options)
+                    self.assertEqual(recorded["observation"]["controlled_r003"], status)
+                else:
+                    with self.assertRaisesRegex(tool.proof.ProofError, "capture presented outside controlled R003"):
+                        tool.run(prepared)
+
+        with self.assertRaisesRegex(tool.proof.ProofError, "controlled R003 requires its own title run"):
+            tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                         title_load=True, r003_controlled=True)
+
     def test_repeat_triangle_pair_requires_two_presented_deaths_and_room_save(self):
         successful = {"defeat_scene": 77, "stamp19_scene": 62, "stamp20_scene": 75,
                       "stamp19_handle": 253, "stamp20_handle": 254, "room_dead_mask": 3}

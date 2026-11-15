@@ -11,15 +11,15 @@ not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
 **Early development.** The Windows New Game replay plays all ten original
 opening cuts and reaches two-way combat in R100. Two Triangle hits lower the
-enemy's HP from 74 to 50. Enemy attacks lower Gene's HP from 100 to 81, with
+enemy's HP from 74 to 50. Enemy attacks lower Gene's HP from 100 to 78, with
 a hit reaction and knockdown in presented frames. The hidden, muted run
-presents 1,816 scene frames before reaching the next enemy behavior.
+presents 1,995 scene frames before reaching the next enemy behavior.
 
 A separate Windows title-load run restores an original-format test save and
-presents R100. A controlled native packet test enters R003 through the original
-Door Continue and room teardown flow and completes the first scene frame.
-Completing the first encounter and reaching R003 through normal play remain
-in progress.
+presents R100. A controlled Windows run presents all 28 original EV02 cuts
+in R003 over 2,785 frames, then reaches the original room exit toward R105.
+Completing the first encounter, entering R003 through normal play, and loading
+R105 through that exit remain in progress.
 
 ### Verified progress
 
@@ -50,7 +50,7 @@ in progress.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters. Subsequent opening frames create original
   event effects, update their lifetimes and render sprites and framebuffer warp.
-- The frozen regression build compiles 379 C modules and passes 365 native checks.
+- The frozen regression build compiles 379 C modules and passes 366 native checks.
   Eighteen checks that need extra tools or devices were skipped in this run.
   Earlier Windows verification exercised muted hardware audio, movie decoding
   and the full independent ADX comparison.
@@ -138,6 +138,15 @@ and battle input, records completed packet frames, and reports the first
 unsupported original operation. This target uses muted XAudio2 for sound
 effects and collects drawing packets without presenting a window.
 
+For a controlled R003 graphics replay, freeze the source and build the frozen
+`startup-qa` target. Run `tools/run-startup-qa.py --r003-controlled` with that
+`--snapshot`, the `--build-scratch` used by the build, and a fresh `--scratch`.
+The probe uses the original R100 A38 destination at the title handoff. Its
+report records presented R003 frames and EV02 cuts. Use `--capture-frame` to
+select a scene serial and `--capture-count` to retain consecutive frames.
+To inspect the same room's scheduler and drawing packets quickly, append
+`--r003-controlled` to `probe-startup-cpu.exe` after the tick limit.
+
 | Directory | Purpose |
 |---|---|
 | `src/`, `tests/` | Recovered source, native backends and meaningful checks |
@@ -163,11 +172,12 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 使用 Jak 专用反编译器。
 
 **仍处于早期开发。** Windows 新游戏回放播完原版开场十个镜头并进入 R100 双向战斗。
-两次三角攻击把敌人 HP 从 74 打到 50。敌人把 Gene 的 HP 从 100 打到 81，
-受击和击倒画面均已呈现。隐藏、静音的实跑共呈现 1,816 个场景帧，随后停在下一个敌人行为。
+两次三角攻击把敌人 HP 从 74 打到 50。Gene 的 HP 三次受击后从 100 降到 78，
+受击和击倒画面均已呈现。隐藏、静音的实跑共呈现 1,995 个场景帧，随后停在下一个敌人行为。
 
 独立的 Windows 标题读档实跑恢复了原版格式的测试档，并呈现 R100。受控的原生绘制指令测试
-走完原版 Door Continue 和旧房间清理，进入 R003 并完成首帧。正常打完首战并进入 R003
+走完原版 Door Continue 和旧房间清理，进入 R003。Windows 受控实跑呈现了 EV02 全部 28 个镜头，
+共 2,785 帧，随后进入通往 R105 的原版退出流程。正常打完首战进入 R003、从此处加载 R105
 的连续流程仍在验证中。
 
 ### 已验证的进展
@@ -189,7 +199,7 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始 FX 调用 0x30F228 创建 4 个环境发射器。
   后续片头帧创建原剧情特效，更新其生命周期，并绘制精灵和画面扭曲。
-- 冻结回归构建编译 379 个 C 模块，通过 365 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
+- 冻结回归构建编译 379 个 C 模块，通过 366 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
   受限 GPU 像素与独立 CPU 方程一致。绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
@@ -214,6 +224,14 @@ Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音
 FFmpeg、一个不存在的存档目录和正整数 tick 上限。该工具复用标题和战斗的测试输入，
 记录完成的绘制指令帧，并报告第一个尚未接通的原始调用。工具以静音 XAudio2 处理音效，
 收集绘制指令时不呈现窗口。
+
+单独验证 R003 画面时，先冻结源码并构建该快照的 `startup-qa` 目标。用
+`tools/run-startup-qa.py --r003-controlled` 指定 `--snapshot`、构建时的
+`--build-scratch` 和新的 `--scratch`。回放在标题交接处使用原版 R100 A38
+目的地，报告实际呈现的 R003 帧和 EV02 镜头。用 `--capture-frame` 指定画面帧号，
+用 `--capture-count` 保存连续帧。
+需要快速查看同一房间的调度和绘制指令时，在 `probe-startup-cpu.exe` 的 tick 上限后
+追加 `--r003-controlled`。
 
 有用文件保存在 `E:\godhand_windows`，构建、缓存及大日志保存在
 `G:\middle_thing\godhand_windows`。原镜像始终只读，原始反汇编等私有恢复证据及外部工具二进制不进 Git。

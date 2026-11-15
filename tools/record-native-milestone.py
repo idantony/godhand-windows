@@ -54,6 +54,30 @@ def expected_stop(value):
     return result
 
 
+def controlled_r003_status(log, qa):
+    marker = "QA_R003_STATUS "
+    records = [line[len(marker):] for line in log.splitlines() if line.startswith(marker)]
+    require(len(records) == 1, "missing or duplicate controlled R003 status")
+    status = json.loads(records[0])
+    fields = ("handoff_tick", "first_scene", "last_scene", "frames", "last_ev02_cut")
+    require(isinstance(status, dict) and all(type(status.get(key)) is int for key in fields),
+            "invalid controlled R003 status")
+    handoff, first, last, count, cut = (status[key] for key in fields)
+    ticks, scenes = qa.get("ticks"), qa.get("scene_frames_presented")
+    require(type(ticks) is int and type(scenes) is int and 0 < handoff <= ticks and 0 < first <= last <= scenes
+            and count == last - first + 1, "controlled R003 has no verified presented range")
+    cuts = [(int(n), int(serial)) for n, serial in re.findall(r"^QA_R003_PRESENTED cut=(\d+) scene=(\d+)$", log, re.M)]
+    previous_scene = first - 1
+    for expected, (number, serial) in enumerate(cuts):
+        require(number == expected and previous_scene < serial <= last,
+                "controlled R003 cut markers disagree with presented range")
+        previous_scene = serial
+    require(cut == len(cuts) - 1, "controlled R003 cut markers disagree with presented range")
+    captures = [int(serial) for serial in re.findall(r"^QA_CAPTURE_PRESENTED (\d+)$", log, re.M)]
+    require(all(first <= serial <= last for serial in captures), "capture presented outside controlled R003")
+    return status
+
+
 class Inputs:
     def __init__(self):
         self.files = {}
@@ -122,6 +146,33 @@ def artifact_path(raw, scratch, label):
     path = Path(raw).resolve()
     require(under(path, scratch / "build"), f"{label} artifact is outside matching scratch/build: {path}")
     return path
+
+
+def startup_build_inputs(snapshot, scratch, project):
+    """Shared launch/receipt preflight for an exact startup-qa build."""
+    require(under(snapshot, SCRATCH_ROOT) and under(scratch, SCRATCH_ROOT),
+            "snapshot and scratch must be below project G scratch")
+    inputs = Inputs()
+    receipt, receipt_fact = inputs.report(snapshot / "analysis/source-snapshot.json")
+    require(receipt.get("status") == "copied-exact-bytes; not-yet-built-or-tested",
+            "invalid source snapshot receipt")
+    require(Path(receipt.get("snapshot", "")).resolve() == snapshot, "source snapshot path mismatch")
+    require(Path(receipt.get("source_project", "")).resolve() == project.resolve(), "source project mismatch")
+    hashes = receipt.get("source_sha256")
+    require(isinstance(hashes, dict) and hashes, "empty snapshot source map")
+    for name, sha in hashes.items():
+        inputs.checked(source_path(snapshot, name), sha)
+    report, report_fact = inputs.report(snapshot / "analysis/windows-startup-qa-build.json")
+    require(report.get("status") == "built" and report.get("target") == "startup-qa",
+            "matching startup-qa build must be built")
+    require(report.get("is_playable_game") is False, "build must retain non-playable scope")
+    steps(report, "windows")
+    source_map(inputs, snapshot, hashes, report, "windows")
+    executable = scratch / "build/windows-startup-qa/probe-native-startup.exe"
+    require(Path(report.get("executable", "")).resolve() == executable,
+            "executable belongs to another scratch")
+    exe_sha = inputs.checked(executable, report.get("executable_sha256"))
+    return inputs, executable, exe_sha, receipt_fact, report_fact
 
 
 def validate(snapshot_arg, scratch_arg, frontier=None):

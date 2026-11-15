@@ -49,6 +49,10 @@ gh_title_player_status gh_title_player_read_vitality(const gh_title_player_view 
 /* Nativeownedallocationcleanup only, not a fabricated gamevirtualdestructor.
  * Thisconstructoronly path attaches no subordinate heap/GPU/collisionowners. */
 gh_title_player_status gh_game_title_player_release(gh_game_title_player *);
+/* Original cPl VT+74 SetPositionMulti then VT+7C Euler, with typed +68C. */
+gh_title_player_status gh_title_player_set_script_pose_0012ce60(const gh_title_player_view *,
+    const gh_title_player_view *auxiliary,const uint32_t position[3],const uint32_t euler[3]);
+
 #ifdef __cplusplus
 }
 #endif

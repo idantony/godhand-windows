@@ -42,7 +42,7 @@ def launch_project(snapshot):
 
 
 def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370,
-            capture_count=1, control_probe=None, title_load=False, build_scratch=None):
+            capture_count=1, control_probe=None, title_load=False, build_scratch=None, r003_controlled=False):
     """Read-only preflight. No launch or output creation occurs on rejection."""
     snapshot, scratch = Path(snapshot_arg).resolve(), Path(scratch_arg).resolve()
     build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
@@ -55,6 +55,7 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
                   f"require 1 <= capture-count <= {MAX_CAPTURE_COUNT} and range within max-ticks")
     proof.require(control_probe is None or control_probe in CONTROL_PROBES, "unknown control probe")
     proof.require(not (title_load and control_probe), "gameplay input requires NewGame")
+    proof.require(not (r003_controlled and (title_load or control_probe)), "controlled R003 requires its own title run")
     project = launch_project(snapshot)
     iso = Path(iso_arg or project / "God Hand (USA)(Uncensor Patch v1.0).iso").resolve()
     ffmpeg = Path(ffmpeg_arg or project / ".tools/ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe").resolve()
@@ -68,8 +69,9 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
     else:
         proof.require(not profile.exists(), "QA profile must be absent; refusing to touch existing profile")
     proof.require(not capture.exists() and not Path(str(capture) + ".world.rgba").exists() and not any(p.exists() for p in outputs), "QA outputs already exist; use a fresh scratch cohort")
+    mode = "--qa-load" if title_load else "--qa-r003-controlled" if r003_controlled else "--qa-new-game"
     command = [str(executable), "--iso", str(iso), "--profile", str(profile), "--ffmpeg", str(ffmpeg),
-               "--hidden", "--muted", "--qa-load" if title_load else "--qa-new-game", "--qa-capture", str(capture),
+               "--hidden", "--muted", mode, "--qa-capture", str(capture),
                "--qa-capture-frame", str(capture_frame), "--max-ticks", str(max_ticks)]
     if capture_count > 1:
         proof.require(not any(scratch.glob(capture.stem + ".scene-*.rgba")),
@@ -79,7 +81,7 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
         command.extend(("--qa-control", control_probe))
     return {"command": command, "scratch": scratch, "build_scratch": build_scratch, "executable": executable,
             "executable_sha256": exe_sha, "source_snapshot": receipt_fact, "windows_build": report_fact,
-            "control_probe": control_probe}
+            "control_probe": control_probe, "r003_controlled": r003_controlled}
 
 
 def run(prepared):
@@ -118,16 +120,21 @@ def run(prepared):
     proof.require(qa.get("hidden") is True and qa.get("muted") is True and qa.get("synthetic_input") is True
                   and qa.get("prefix_mode") is False, "QA did not confirm expected execution flags")
     control = prepared.get("control_probe")
+    r003_controlled = prepared.get("r003_controlled", False)
     continue_after_pair = control == "repeat-triangle-pair-continue"
     pair = continue_after_pair or control == "repeat-triangle-pair"
     repeated_attack = pair or control in ("repeat-square", "repeat-triangle")
-    valid_exit_codes = (0, 3, 4) if repeated_attack else (0, 4)
+    valid_exit_codes = (0, 3, 4) if repeated_attack or r003_controlled else (0, 4)
     proof.require(qa.get("exit_code") == receipt["exit_code"] and receipt["exit_code"] in valid_exit_codes,
                   "unexpected child exit; inspect QA output")
     for field in ("renderer_error", "world_gpu_error", "window_error"):
         proof.require(qa.get(field) == 0, "QA reported " + field)
     summary = {"exit_code": receipt["exit_code"], "frontier": qa.get("frontier"), "ticks": qa.get("ticks"),
                "world_packets_submitted": qa.get("world_packets_submitted"), "receipt": str(scratch / "startup-process.json")}
+    if r003_controlled:
+        proof.require(qa.get("effect_post_error") == 0, "controlled R003 reported effect_post_error")
+        log = (scratch / "startup-newgame.stderr.log").read_text(encoding="utf-8-sig")
+        summary["controlled_r003"] = proof.controlled_r003_status(log, qa)
     if repeated_attack:
         marker = "QA_REPEAT_STATUS "
         with (scratch / "startup-newgame.stderr.log").open(encoding="utf-8", errors="replace") as stream:
@@ -182,10 +189,11 @@ def main():
     parser.add_argument("--control-probe", choices=CONTROL_PROBES,
                         help="send original pad input after EV01 and two neutral player updates")
     parser.add_argument("--title-load", action="store_true", help="select Load Game using the scratch profile-load directory")
+    parser.add_argument("--r003-controlled", action="store_true", help="isolate R003 using the original A38 destination at title handoff")
     args = parser.parse_args()
     try:
         prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame,
-                           args.capture_count, args.control_probe, args.title_load, args.build_scratch)
+                           args.capture_count, args.control_probe, args.title_load, args.build_scratch, args.r003_controlled)
         require_frozen_runner(args.snapshot)
         print(json.dumps(run(prepared)), flush=True)
     except (proof.ProofError, OSError, ValueError) as error:

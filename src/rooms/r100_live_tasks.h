@@ -33,6 +33,10 @@ typedef struct {
     gh_r100_om_scalar_view object_view;
     gh_r100_script_status (*camera_ended)(void *,int *,uint32_t *);
     gh_r100_script_status (*end_soft_event)(void *,gh_soft_event_end *,uint32_t *);
+    gh_r100_script_door battle_door;
+    gh_r100_collision_enable battle_collision;
+    gh_r100_script_register_other battle_register;
+    gh_r100_script_status (*battle_player_pose)(void *,const uint32_t[3],const uint32_t[3],uint32_t *);
 } gh_r100_live_bindings;
 struct gh_r100_live_tasks;
 typedef struct {
@@ -48,8 +52,12 @@ typedef struct {
     gh_soft_event_end soft_end;
     uint8_t devil_event_stage,battle_stage,battle_spawn_index,post_devil_stage;
     struct gh_r100_live_tasks *owner;
+    gh_r100_om_view battle_gate;
+    uint8_t battle_tail_stage;
+    float battle_destination[3];
+    uint8_t successor_stage,successor_already_active,successor_short_path,successor_tail_stage;
 } gh_r100_live_task;
-typedef struct gh_r100_live_tasks {gh_r100_live_task tasks[9];} gh_r100_live_tasks;
+typedef struct gh_r100_live_tasks {gh_r100_live_task tasks[10];} gh_r100_live_tasks;
 /* Original BC0 registrations. The supported wait paths run real scenario
  * fibers and native gates. The first unrecovered positive branch is explicit. */
 int gh_r100_live_entry(uint32_t entry);
@@ -57,6 +65,8 @@ int gh_r100_live_entry(uint32_t entry);
  * initialized 747B00 vector when the manager has no matching actor. */
 gh_r100_script_status gh_r100_enemy_position_00295ab8(const gh_game_init_state *,
     uint8_t stamp,const gh_game_math_globals *,float out[4],uint32_t *frontier);
+/* Continuation after all eight original REL1BD0 SetEm calls. */
+gh_r100_script_status gh_r100_battle_tail_00001e80(gh_r100_live_task *);
 gh_r100_script_status gh_r100_live_register(gh_r100_live_tasks *,const gh_r100_live_bindings *,
     uint32_t entry,int32_t request,uint32_t *frontier);
 #ifdef __cplusplus

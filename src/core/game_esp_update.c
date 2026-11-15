@@ -126,7 +126,7 @@ static gh_effect_status update_07(gh_esp_update_call *c,uint8_t *p)
 
 static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b,unsigned slot,uint32_t serial){
  if(!c||!b||!b->work||!b->globals||!b->globals->initialized||!b->storage.effects||!b->storage.esp||!b->storage.emitters||b->storage.esp_bytes<0x100180||b->storage.emitter_bytes<0x26060)return GH_EFFECT_ARGUMENT;if(c->identity&&(c->identity!=c||c->slot!=slot||c->serial!=serial||!same(&c->b,b)))return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);if(b->policy!=GH_STATIC_BINARY32_REFERENCE)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);c->frontier=0;if(c->complete)return GH_EFFECT_OK;
- gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,slot,&v)||v.serial!=serial||!v.initialized||v.globals!=b->globals||v.payload!=b->storage.esp+(size_t)slot*0x400||v.payload_size!=0x400||v.record.size!=0x2f0)return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;const uint8_t*r=v.record.bytes;uint32_t vtable=v.type==0?0x44fad0u:v.type==6?0x44e6d8u:v.type==7?0x44e770u:v.type==8?0x44e820u:v.type==9?0x44e8c8u:v.type==0x12?0x44eb70u:v.type==0x13?0x44ec68u:v.type==0x14?GH_ESP14_VTABLE:v.type==0x18?0x44f078u:v.type==0x1a?0x44f270u:0;
+ gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,slot,&v)||v.serial!=serial||!v.initialized||v.globals!=b->globals||v.payload!=b->storage.esp+(size_t)slot*0x400||v.payload_size!=0x400||v.record.size!=0x2f0)return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;const uint8_t*r=v.record.bytes;uint32_t vtable=v.type==0?0x44fad0u:v.type==6?0x44e6d8u:v.type==7?0x44e770u:v.type==8?0x44e820u:v.type==9?0x44e8c8u:v.type==0x12?0x44eb70u:v.type==0x13?0x44ec68u:v.type==0x14?GH_ESP14_VTABLE:v.type==0x18?0x44f078u:v.type==0x1a?0x44f270u:v.type==0x20?0x44f4f8u:0;
  if(!vtable||w(p+0xf0)!=vtable)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);
  /* 2F01B8 calls the base Move before three optional oscillations. */
  if(v.type==0x12&&(rf(p+0x2c8)!=0.0f||rf(p+0x2cc)!=0.0f||rf(p+0x2dc)!=0.0f))
@@ -149,7 +149,7 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
   c->identity=c;c->b=*b;c->slot=slot;c->serial=serial;c->stage=1;
  }
  if(c->stage==1){
-  if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&!gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&!gh_effect_em00_attack_esp_is_bound(b->storage.effects,&v)&&!gh_effect_knockdown_esp_is_bound(b->storage.effects,&v))||w(p+0x114))
+  if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&!gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&!gh_effect_em00_attack_esp_is_bound(b->storage.effects,&v)&&!gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_rise_esp_is_bound(b->storage.effects,&v))||w(p+0x114))
     return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);
   if(v.parent_emitter>=0&&v.actor&&(w(v.actor->bytes+0x250)&0x80000000u)){
    uint32_t f=0;gh_effect_status status=gh_effect_create_esp_pause_002fbe50(b->storage.effects,slot,serial,&f);
@@ -169,7 +169,9 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
  if(c->stage==6){int length=sh(p+0x238);if(length>0&&sh(p+0x22e)>=length){if(!(w(p+0x11c)&0x800u)){gh_effect_status status=retire(c);if(status)return status;}else half(p+0x22e,(w(p+0x11c)&0x400u)?0:length);}if(!c->retired){float time;int n;if(!advance(c,rf(p+0x234),scaled(c,p,r),&time)||!integer(time,&n))return stop(c,0x2fc9a8,GH_EFFECT_UNSUPPORTED);sf(p+0x234,time);half(p+0x22e,n);c->stage=7;}}
  if(c->stage==7){gh_effect_status s=colour(c,p,r);if(s)return s;if(!c->retired)c->stage=8;}
  if(c->stage==8){if(w(p+0x11c)&0x4000000u){float time;int n;if(!advance(c,rf(p+0x240),scaled(c,p,r),&time)||!integer(time,&n))return stop(c,0x2fcf88,GH_EFFECT_UNSUPPORTED);uint8_t frame=p[0x244];if((int8_t)p[0x23f]<=(int8_t)(uint8_t)n){time=0;uint8_t next=(uint8_t)(frame+1);if((int8_t)p[0x2a0]<=(int8_t)next)next=(w(p+0x11c)&0x2000000u)?0:frame;frame=next;}sf(p+0x240,time);p[0x244]=frame;}c->stage=9;}
- if(c->stage==9&&v.type==8&&p[0x140]==1&&(w(p+0x11c)&0x400000u)){
+ const int event_scale=v.type==0&&uh(p+0x23a)==6&&uh(p+0x23c)==7&&r[0xbe]==10&&
+    gh_effect_event_part_is_bound(v.record,v.actor,v.selector);
+ if(c->stage==9&&(v.type==8||event_scale)&&p[0x140]==1&&(w(p+0x11c)&0x400000u)){
   float factor;
   if(!key_curve(p,0x14c,1,sh(p+0x238),0,&factor))return stop(c,0x2fd078,GH_EFFECT_UNSUPPORTED);
   float scale[3]={mul(rf(p+0x144),factor),mul(rf(p+0x148),factor),rf(p+0x28)};
@@ -191,6 +193,12 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
  if(c->stage==16&&v.type==7){
     gh_effect_status status=update_07(c,p);
     if(status)return status;
+ }
+ if(c->stage==16&&v.type==0x20){
+    uint32_t pc=0;
+    gh_effect_status status=gh_effect_create_esp_trail_edges_002f6740(b->storage.effects,slot,serial,
+       b->policy,&pc);
+    if(status)return stop(c,pc?pc:0x2f6740,status);
  }
  if(c->stage==16&&v.type==9){
     uint32_t pc=0;

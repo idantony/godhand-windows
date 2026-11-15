@@ -89,6 +89,7 @@ struct gh_game_services {
  gh_enemy_node_names enemy_nodes;gh_enemy2a2_node_names enemy2a2_nodes;
  gh_object_opacity_environment enemy_opacity;
  gh_actor_render_call *enemy_renders;
+ gh_actor_render_call devil_render;
  gh_game_scene_step step;gh_r020_title*title;gh_scene_hook scenario_exit,scenario_callback104;
  gh_scene_meshes meshes;
  gh_room_death_dispatch scene_death;
@@ -912,7 +913,7 @@ static gh_r100_script_status room_r100_door(void *context,const void *identity,
 {
  gh_game_services *s=context;
  if(!frontier)return GH_R100_SCRIPT_ARGUMENT;
- *frontier=operation==0?0x1bd178:operation==1?0x1bd3f0:0x1bcfb0;
+ *frontier=operation==0?0x1bd178:operation==1?0x1bd3f0:operation==3?0x1bd228:0x1bcfb0;
  if(!identity)return GH_R100_SCRIPT_ARGUMENT;
  for(size_t i=0;i<s->om_factory.count;i++){
   gh_om_object *o=&s->om_factory.objects[i];
@@ -926,11 +927,28 @@ static gh_r100_script_status room_r100_door(void *context,const void *identity,
   gh_scene_placement_status e;
   if(operation==0&&!arg1)e=gh_om_door_set_lock_001bd178(&o->initialization->geometry_state,arg0);
   else if(operation==1&&!arg0&&!arg1)e=gh_om_door_release_collision_001bd3f0(&o->initialization->geometry_state);
+  else if(operation==2)e=gh_om_door_set_open_001bcfb0(&o->initialization->geometry_state,arg0,arg1);
+  else if(operation==3&&!arg0&&!arg1)e=gh_om_door_rebuild_collision_001bd228(
+   &o->initialization->geometry_state,s->b.door_shared,GH_STATIC_BINARY32_REFERENCE);
   else return GH_R100_SCRIPT_UNSUPPORTED;
   if(!e){*frontier=0;return GH_R100_SCRIPT_OK;}
   return e==GH_PLACE_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE;
  }
  return GH_R100_SCRIPT_UNSUPPORTED;
+}
+static gh_r100_script_status room_r100_successor_player(void *context,const uint32_t xyz[3],
+ const uint32_t euler[3],uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(!frontier)return GH_R100_SCRIPT_ARGUMENT;
+ *frontier=0x12ce60;
+ if(!s||!s->title_player.ready)return GH_R100_SCRIPT_UNSUPPORTED;
+ const gh_title_player_view *aux=s->player_tail.active_child&&s->player_tail.child_original_return?
+  &s->player_child.object.view:NULL;
+ gh_title_player_status result=gh_title_player_set_script_pose_0012ce60(&s->title_player.view,aux,xyz,euler);
+ if(result)return result==GH_PLAYER_UNSUPPORTED?GH_R100_SCRIPT_UNSUPPORTED:GH_R100_SCRIPT_CALLEE;
+ *frontier=0;
+ return GH_R100_SCRIPT_OK;
 }
 static gh_r100_script_status room_r100_scripts_bind(gh_game_services*s){
  if(s->r100_scripts.bound)return GH_R100_SCRIPT_OK;
@@ -980,7 +998,9 @@ static gh_r100_init_status room_r100_task_exec(void*p,uint32_t entry,int32_t arg
    .math=s->b.math_globals,.elf=s->b.boot_elf,.elf_size=s->b.boot_elf_bytes,.scene_tables=&s->scene_tables,
    .start_soft_event=room_r100_start_soft,.set_room_camera=room_r100_set_camera,
    .program_se=room_r100_program_se,.pools=&s->pools,.object_view=room_r100_om_view,
-   .camera_ended=room_r100_camera_ended,.end_soft_event=room_r100_end_live_soft};
+   .camera_ended=room_r100_camera_ended,.end_soft_event=room_r100_end_live_soft,
+   .battle_door=room_r100_door,.battle_collision=room_r100_collision,
+   .battle_register=room_r100_register_other,.battle_player_pose=room_r100_successor_player};
   e=gh_r100_live_register(&s->r100_live,&bindings,entry,argument,&f);
  }else return GH_R100_INIT_UNSUPPORTED;
  if(e){if(frontier)*frontier=f;return e==GH_R100_SCRIPT_UNSUPPORTED?GH_R100_INIT_UNSUPPORTED:GH_R100_INIT_CALLEE;}
@@ -1484,7 +1504,7 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
    uint32_t f=0;gh_actor_motion_status e=gh_enemy_ems_release_native(&s->enemies,&f);
    if(e)return fail(s,GH_SERVICES_ASSET,f?f:0x290770,e);
   }
-  free(s->enemy_renders);s->enemy_renders=NULL;
+  free(s->enemy_renders);s->enemy_renders=NULL;s->devil_render=(gh_actor_render_call){0};
   if(gh_r100_init_release(&s->r100))return fail(s,GH_SERVICES_ASSET,0x208,0);
  if(gh_scene_at_units_release(&s->scene_at))return fail(s,GH_SERVICES_ASSET,0x2c1270,0);
  gh_scene_dynamic_cancel_update(&s->dynamic_objects);
@@ -1741,8 +1761,11 @@ static gh_player_frame_status player_frame_effect_create(void*p,const gh_player_
  int32_t mode;memcpy(&mode,&r->mode,4);
  gh_effect_create_request request={.bank=r->parameter_bits,.index=(uint32_t)r->kind,.actor=r->actor,.mode=mode,.selector=r->selector};
  gh_effect_create_call*c=&s->player_effect_create;gh_effect_status e;
- if(!c->active||c->complete){e=gh_effect_create_begin(c,&request);if(e)return GH_PLAYER_FRAME_ARGUMENT;}
- else if(c->request.bank!=request.bank||c->request.index!=request.index||c->request.actor!=request.actor||c->request.mode!=request.mode||c->request.selector!=request.selector)return GH_PLAYER_FRAME_BUSY;
+ if(!c->active||c->complete){e=r->sequence_scale?gh_effect_create_actor_sequence_0014fb48(c,&request,r->sequence_scale):
+   gh_effect_create_begin(c,&request);
+  if(e){*f=0x306528;return e==GH_EFFECT_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_ARGUMENT;}}
+ else if(c->request.bank!=request.bank||c->request.index!=request.index||c->request.actor!=request.actor||c->request.mode!=request.mode||c->request.selector!=request.selector||
+   c->configuration_nested_scale!=r->sequence_scale)return GH_PLAYER_FRAME_BUSY;
  gh_effect_create_bindings b={.storage=player_effect_storage(s),.work=s->b.work,.random=&s->b.init->random,.model=&s->player_model};
  e=gh_game_effect_create_00306528(c,&b);*f=c->frontier;
  if(e)return e==GH_EFFECT_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
@@ -1867,6 +1890,18 @@ static gh_actor_motion_status release_stamp19_enemy(void *context,const gh_enemy
  return status;
 }
 
+static gh_actor_motion_status spawn_stamp8_devil(void *context,const gh_enemy_actor *parent,
+ const gh_enemy_request *request,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ const gh_effect_create_bindings effects={.storage=player_effect_storage(s),
+     .work=s->b.work,.random=&s->b.init->random,
+     .atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL};
+ return gh_enemy_ems_spawn_devil_002905d0(s->enemies,parent,request,&effects,
+     s->enemy_sound.bound?gh_actor_attached_sound_motion:NULL,
+     s->enemy_sound.bound?&s->enemy_sound:NULL,frontier);
+}
+
 gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services*s,uint32_t handle,
  uint32_t entry,int16_t delta,const gh_title_player_view*v,const gh_boot_work*work,
  const gh_game_actor_render_provider*provider,uint32_t*f){
@@ -1908,6 +1943,11 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
    *f=entry;return GH_SERVICES_ASSET;
   }
   if(delta){*f=entry;return GH_SERVICES_FRONTIER;}
+  if(enemy.devil){
+   /* 20FA64 selector4 dispatch for the newly initialized Devil. */
+   *f=entry==0x208be0&&v->bytes[0x2f4]==0&&v->bytes[0x2f5]==4?0x212c08:entry;
+   return GH_SERVICES_FRONTIER;
+  }
   if(enemy.other_move){
    gh_enemy_other_move *move=enemy.other_move;
    if(move->original_returned)*move=(gh_enemy_other_move){0};
@@ -1949,6 +1989,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   if(!e)e=gh_enemy202_move_bind_near_sound(move,enemy_ema2_near_sound,s);
   if(!e)e=gh_enemy202_move_bind_room_state(move,&s->room_state);
   if(!e)e=gh_enemy202_move_bind_death_release(move,release_stamp19_enemy,s);
+  if(!e)e=gh_enemy202_move_bind_devil_spawn(move,spawn_stamp8_devil,s);
   if(!e&&s->b.camera_envelope){
    const gh_effect_create_bindings impact={.storage=player_effect_storage(s),
     .work=s->b.work,.random=&s->b.init->random,.atan_coeff=s->b.camera_envelope->atan_coeff};
@@ -2205,6 +2246,7 @@ gh_game_services_status gh_game_services_scene_retire_objects_0030f8b0(gh_game_s
  }
  free(s->enemy_renders);
  s->enemy_renders=NULL;
+ s->devil_render=(gh_actor_render_call){0};
  s->scene_death=(gh_room_death_dispatch){0};
  s->scene_death_bindings=(gh_room_death_bindings){0};
  return GH_SERVICES_OK;
@@ -2257,11 +2299,12 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh
  gh_scene_placement_status ee=gh_enemy_ems_live_at(s->enemies,q->handle,&enemy);
  if(ee){*f=0x14a3e8;return enemy_place_error(ee);}
  if(enemy.actor){
-  if(!s->enemy_renders){
+  if(!enemy.devil&&!s->enemy_renders){
    s->enemy_renders=calloc(128,sizeof(*s->enemy_renders));
    if(!s->enemy_renders){*f=0x14a3e8;return GH_SERVICES_MEMORY;}
   }
-  model=enemy.model;shadow=enemy.shadow;call=&s->enemy_renders[2*enemy.physical_row+enemy.held_weapon];
+  model=enemy.model;shadow=enemy.shadow;
+  call=enemy.devil?&s->devil_render:&s->enemy_renders[2*enemy.physical_row+enemy.held_weapon];
  }else if(effect_actor){
   model=&effect_actor->instance.child.model;call=&effect_actor->render;
  }else if(!gh_game_player_factory_scalar_view(&s->player_factory,q->handle,&player)){
@@ -2359,17 +2402,11 @@ gh_game_event_status gh_game_services_event_return_0031c7e0(gh_game_services *s,
  if(!player->bytes||player->size<0x690||!player->alias_f0||
     player->original_vtable214!=0x41d220||u32(player->bytes+0x214)!=0x41d220||
     player->bytes[0x2fe]!=0||player->bytes[0x2ff]!=1)return GH_EVENT_UNSUPPORTED;
- const gh_title_player_view *aux=s->player_tail.active_child&&s->player_tail.child_original_return?&s->player_child.object.view:NULL;
- if((aux&&(!aux->bytes||aux->size<0x2f4))||(!aux&&u32(player->bytes+0x68c)))return GH_EVENT_UNSUPPORTED;
- uint8_t *raw=player->bytes;
- /* VT12CE60 writes position XYZ to all three views; VT2A9420 writes Euler. */
- memcpy(player->alias_f0,event->fields.position_bits,12);
- memcpy(raw+0x490,event->fields.position_bits,12);
- memcpy(raw+0xb0,event->fields.position_bits,12);
  const uint32_t euler[3]={0,event->fields.angle_bits,0};
- memcpy(raw+0x100,euler,12);
- memcpy(raw+0x30,event->fields.position_bits,12);
- if(aux){const uint32_t flags=u32(aux->bytes+0x2f0)|1u;memcpy(aux->bytes+0x2f0,&flags,4);}
+ uint32_t pose_frontier;
+ if(room_r100_successor_player(s,event->fields.position_bits,euler,&pose_frontier))
+  return GH_EVENT_UNSUPPORTED;
+ memcpy(player->bytes+0x30,event->fields.position_bits,12);
  *frontier=0;
  return GH_EVENT_OK;
 }
