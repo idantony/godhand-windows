@@ -425,7 +425,8 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     }
     enum { amplified_power_ready = 16 };
     if (call->phase == 2 && (half(p + 0x3ac) & 0x100u)) {
-        if (!triangle || !r100_stamp20(enemy, p) || p[0x2f4] || p[0x2f5] != 0x15 ||
+        if (!triangle || (!r100_stamp20(enemy, p) && !r100_stamp8(enemy, p)) ||
+            p[0x2f4] || p[0x2f5] != 0x15 ||
             p[0x2f7] || !rank)
             return stop(frontier, 0x20a4e8);
         /* 20A4CC adds a separate Heat gain before switching on the hit kind. */
@@ -630,7 +631,7 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
         opening_triangle(enemy, p, half(body->bytes + 0x46));
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) && !triangle) ||
-        (amplified && !(triangle && r100_stamp20(enemy, p))))
+        (amplified && !(triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p)))))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
     if (triangle) {
@@ -688,7 +689,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
             return stop(frontier, 0x271df4);
     }
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
-    if (amplified && (call->effect != 0x12 || !r100_stamp20(enemy, p) || manager_active))
+    if (amplified && (call->effect != 0x12 || manager_active ||
+        (!r100_stamp20(enemy, p) && !r100_stamp8(enemy, p))))
         return stop(frontier, 0x271cf8);
     if (amplified && ((word((const uint8_t *)enemy->entry.b.work + 0x590) & 0x800u) ||
                       (word(p + 0x16d4) & 0x8000u)))

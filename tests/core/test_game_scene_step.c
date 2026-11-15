@@ -52,6 +52,31 @@ static void test_fibers(int mode){fibers*f=calloc(1,sizeof(*f));C(f);f->mode=mod
  C(gh_tasks_run_matching_002d52a0(&f->parent).status==GH_TASK_OK&&f->returned&&f->entered==2);C(f->child.step==gh_task_threads_step&&f->child.step_context==f->binding.scenario_threads&&f->child.current_index==-1&&!f->child.current&&!f->child_records[2].running);
  C(gh_task_threads_destroy(f->binding.scenario_threads)==GH_THREAD_OK&&gh_task_threads_destroy(f->binding.main_threads)==GH_THREAD_OK);free(f);
 }
+typedef struct {
+ gh_game_init_state *init;
+ unsigned produced, light_attempts;
+} enemy_light_probe;
+
+static gh_scene_step_status probe_enemy_light(void *context,uint32_t address,
+ uint32_t argument,uint32_t *frontier)
+{
+ enemy_light_probe *probe=context;
+ if(address==0x306528){
+  C(argument==9&&probe->init->enemies[0x518]==1&&!probe->produced&&!probe->light_attempts);
+  C(probe->init->side_counter[4]==0xa5&&get(probe->init->side_counter+8)==0xa5a5a5a5u);
+  probe->produced++;
+  return GH_SCENE_STEP_OK;
+ }
+ if(address==0x2d8408){
+  C(argument==1&&probe->produced==1&&probe->init->side_counter[4]==1);
+  C(!get(probe->init->side_counter+8)&&!get(probe->init->side_counter+12));
+  if(!probe->light_attempts++){*frontier=address;return GH_SCENE_STEP_CALLEE;}
+  return GH_SCENE_STEP_OK;
+ }
+ *frontier=address;
+ return GH_SCENE_STEP_UNSUPPORTED;
+}
+
 static void test_live_enemies(gh_game_scene_step_bindings b)
 {
  gh_game_init_state *init=malloc(sizeof(*init));C(init);
@@ -84,12 +109,18 @@ static void test_live_enemies(gh_game_scene_step_bindings b)
  C(gh_enemy_manager_step_rates_00290250(init,1,&special)==GH_INIT_LINKS&&special==17&&get(actor_bytes[0]+0x5a8)==0x3f900000);
  init->enemy_next[3]=UINT8_MAX;
 
- /* Original special-actor BGM transition is strict after the rate prefix. */
+ /* The special actor changes the environment once, after the rate prefix. */
  put(actor_bytes[1]+0x564,0x220);init->enemies[0x538]=5;
+ memset(init->side_counter+4,0xa5,12);
  state=(gh_game_scene_step){.stage=10};
- C(gh_game_scene_step_002a6690(&state,&b)==GH_SCENE_STEP_UNSUPPORTED&&state.frontier==0x291d48&&state.enemy_stage==3);
+ C(gh_game_scene_step_002a6690(&state,&b)==GH_SCENE_STEP_UNSUPPORTED&&state.frontier==0x306528&&state.enemy_stage==4);
  C(init->enemies[0x538]==4&&get(actor_bytes[1]+0x5a8)==0x3f400000);
- C(gh_game_scene_step_002a6690(&state,&b)==GH_SCENE_STEP_UNSUPPORTED&&state.frontier==0x291d48&&init->enemies[0x538]==4);
+ enemy_light_probe probe={.init=init};
+ b.external=probe_enemy_light;b.external_context=&probe;
+ C(gh_game_scene_step_002a6690(&state,&b)==GH_SCENE_STEP_CALLEE&&state.frontier==0x2d8408&&state.enemy_stage==5);
+ C(probe.produced==1&&probe.light_attempts==1&&init->enemies[0x538]==4);
+ C(gh_game_scene_step_002a6690(&state,&b)==GH_SCENE_STEP_UNSUPPORTED&&state.frontier==0x2d7560&&state.stage==11);
+ C(probe.produced==1&&probe.light_attempts==2&&init->enemies[0x538]==4);
  free(init);
 }
 int main(int argc,char**argv){gh_disc*d;size_t index,elfn;gh_disc_entry asset;uint8_t*data,*elf;gh_bundle bundle;gh_bundle_entry pfd;gh_heap*heap;gh_game_scene_step step;gh_game_scene_step_bindings b={0};gh_boot_work work={0};gh_game_prepare prepare={0};gh_collision_pairs collision={0};gh_game_scene_tables actors={0};gh_scene_at_manager at={0};gh_game_action_buttons buttons={0};gh_game_event event;uint8_t scalar[0x114]={0},action_flag=255;gh_task_record32 records[16]={0};gh_task_manager scenario={.records=records,.capacity=16,.count=16,.current_index=-1};gh_game_init_state*init=calloc(1,sizeof(*init));C(argc==2&&init);

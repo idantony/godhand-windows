@@ -1,5 +1,9 @@
 #include "game_event_side_play.h"
+#include "game_event_light_filter.h"
 #include "game_message_step.h"
+
+#include <fenv.h>
+#include <math.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -148,6 +152,44 @@ gh_game_event_status gh_event_scr_light_init_00008b20(gh_event_scr_light *state,
     return GH_EVENT_OK;
 }
 
+/* REL9120 uses the authored camera timeline, then applies the same
+ * WorldLight fields as a direct 8FF0 key. XYZ bounds exclude vector W. */
+static gh_game_event_status interpolate_scroll_light(const gh_event_data_prefix *data,
+    const uint8_t *previous, const uint8_t *next, unsigned cut, float frame, uint8_t out[0x60])
+{
+    fenv_t env;
+    if (feholdexcept(&env)) return GH_EVENT_CALLEE;
+    if (fesetround(FE_TONEAREST)) {
+        (void)fesetenv(&env);
+        return GH_EVENT_CALLEE;
+    }
+    float factor;
+    gh_game_event_status status = gh_event_light_interpolation_factor_00004f08(
+        data, previous, next, cut, frame, &factor);
+    if (!status) {
+        memcpy(out, previous, 0x60);
+        const unsigned floats[] = {0x0c,0x10,0x14,0x1c,0x20,0x24,
+                                  0x40,0x44,0x48,0x4c,0x50,0x54,0x58,0x5c};
+        for (unsigned i = 0; i < sizeof(floats) / sizeof(*floats); ++i) {
+            const unsigned at = floats[i];
+            float a, b;
+            memcpy(&a, previous + at, sizeof(a));
+            memcpy(&b, next + at, sizeof(b));
+            const float value = gh_event_light_lerp_00006c38(a, b, factor);
+            if (!isfinite(value)) {
+                status = GH_EVENT_UNSUPPORTED;
+                break;
+            }
+            memcpy(out + at, &value, sizeof(value));
+        }
+        for (unsigned i = 0x2c; i < 0x40; ++i)
+            out[i] = (uint8_t)gh_event_light_lerp_00006c38(previous[i], next[i], factor);
+    }
+    if (fesetenv(&env)) return GH_EVENT_CALLEE;
+    return status;
+}
+
+
 gh_game_event_status gh_event_scr_light_move_00008ef8(gh_event_scr_light *state,
     uint32_t *frontier)
 {
@@ -160,6 +202,7 @@ gh_game_event_status gh_event_scr_light_move_00008ef8(gh_event_scr_light *state,
     gh_game_event_status status = scroll_light_track(state->data, &component, &track);
     if (status) return status;
     const uint8_t *key = component.bytes + 0x1c;
+    uint8_t interpolated[0x60];
     if (track.count) {
         gh_event_component_view camera;
         if (gh_event_component_at((gh_event_components *)state->data->components, 1, &camera) ||
@@ -177,7 +220,9 @@ gh_game_event_status gh_event_scr_light_move_00008ef8(gh_event_scr_light *state,
         }
         if ((word(key + 8) & 1) && next && key != next) {
             *frontier = 0x9120;
-            return GH_EVENT_UNSUPPORTED;
+            status = interpolate_scroll_light(state->data, key, next, cut, frame, interpolated);
+            if (status) return status;
+            key = interpolated;
         }
     }
     uint8_t *world = state->world->scalar;

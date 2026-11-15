@@ -9,6 +9,13 @@ extern "C" {
 /* Canonical additional cSnd scene fields. Borrow one instance in BGM requests;
  * no guest pointers, no second registry/controller. Firstboot R020/default
  * tables only. This is not an SPU2 reverb implementation or bank2 voice player. */
+enum {GH_SOUND_TS_ROWS=8};
+/* Original 2CB080 mutable fields. The source remains borrowed and immutable. */
+typedef struct {
+ uint32_t offset,voice14;
+ uint16_t volume10;
+ uint8_t flags0c,disabled12,state13;
+} gh_sound_ts_row;
 typedef struct {gh_sound_control *control;gh_audio_registry *registry;
  gh_bundle_entry seh,bmh,ts;gh_audio_token bank2;
  uint32_t sample_budget,fade_ratio_bits,default_ratio_bits;
@@ -17,6 +24,8 @@ typedef struct {gh_sound_control *control;gh_audio_registry *registry;
  int sound_group130;uint8_t startup_bound,ready;
  gh_r207_allocation loading;uint32_t job;size_t file_bytes;
  uint32_t frontier;int detail;
+ gh_sound_ts_row ts_rows[GH_SOUND_TS_ROWS];
+ uint8_t ts_count;
 } gh_sound_scene;
 typedef enum {GH_SOUND_SCENE_OK,GH_SOUND_SCENE_ARGUMENT,GH_SOUND_SCENE_BUSY,
  GH_SOUND_SCENE_ASSET,GH_SOUND_SCENE_UNSUPPORTED} gh_sound_scene_status;
@@ -25,8 +34,8 @@ typedef enum {GH_SOUND_SCENE_OK,GH_SOUND_SCENE_ARGUMENT,GH_SOUND_SCENE_BUSY,
  * DSP state; no RPC result or hardware reverb completion is fabricated. */
 gh_sound_scene_status gh_sound_scene_from_startup(gh_sound_scene *,gh_sound_control *,gh_audio_registry *);
 /* Actual2CABE8 firstboot path: bounded real roompack search, real queuedDVDread
- * and native fiber wait, owned bank2 commit. R020 has no SEH/BMH/TS. Nonempty
- * tables are explicit unsupported before loading. No voice is acknowledged.
+ * and native fiber wait, owned bank2 commit. R020 has no SEH/BMH/TS. The
+ * authored R102 TS list is initialized separately from its per-frame uses.
  * Caller pumps sameDVDqueue after task traversal; allocator replacesSPU space
  * with real host-owned registry bytes under original default sample budget. */
 gh_sound_scene_status gh_sound_scene_initialize_002cabe8(gh_sound_scene *,

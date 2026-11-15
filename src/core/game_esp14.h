@@ -69,6 +69,7 @@ gh_effect_status gh_esp14_model_dispose(gh_esp14_model *);
 
 /* Original CORE0:C third EST row, matched by identity in the loaded bank. */
 int gh_effect_core0c_radial_record_bound(const gh_game_effects *,gh_effect_view);
+int gh_effect_ev04_radial_record_bound(const gh_game_effects *,gh_effect_view);
 
 /* Shared 300EF8 positive record flag 0x00200000. Inputs use the same staged
  * slot as the caller. It consumes the original three LCG steps. */

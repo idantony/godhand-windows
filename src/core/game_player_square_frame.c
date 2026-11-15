@@ -87,7 +87,26 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
  }
  if(sequence&0x40){
   put(p+0x15f4,word(p+0x15f4)|0x400u);
-  if(p[0x627]||p[0x61e])return stop(s,0x1240f8,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(p[0x627]||p[0x61e]){
+   uint8_t variant=0;
+   if(!p[0x627]){
+    if(!f->camera||!f->camera->constructed||!f->camera->identity)
+     return stop(s,0x138f88,GH_PLAYER_FRAME_UNSUPPORTED);
+    if(((uint32_t)f->camera->identity->mode&1u)&&word(f->camera->fields+0x520)){
+     s->input_result=0;
+     return GH_PLAYER_FRAME_OK;
+    }
+    if(!isfinite(value(p+0x614)))return stop(s,0x124154,GH_PLAYER_FRAME_NUMERIC);
+    if(value(p+0x614)<=2.3561945f)return stop(s,0x124154,GH_PLAYER_FRAME_UNSUPPORTED);
+    put(p+0x54c,0x40a00000);
+    variant=1;
+   }
+   p[0x2f4]=p[0x2f6]=0;
+   p[0x2f5]=6;
+   p[0x2f7]=variant;
+   s->input_result=1;
+   return GH_PLAYER_FRAME_OK;
+  }
  }
  if((sequence&0x10)&&(pressed&4))return stop(s,0x124244,GH_PLAYER_FRAME_UNSUPPORTED);
  if(sequence&0x40)put(p+0x15f4,word(p+0x15f4)|0x100u);

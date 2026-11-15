@@ -1,6 +1,37 @@
 #include "sound_scene.h"
 #include <stdio.h>
 #include <string.h>
+static uint32_t word(const uint8_t *bytes)
+{
+ uint32_t value;
+ memcpy(&value,bytes,sizeof(value));
+ return value;
+}
+
+static gh_sound_scene_status read_ts(const gh_bundle_entry *entry,gh_sound_ts_row rows[GH_SOUND_TS_ROWS],uint8_t *count)
+{
+ *count=0;
+ if(!entry->bytes)return GH_SOUND_SCENE_OK;
+ const uint8_t *data=entry->bytes;
+ if(entry->size<16||word(data)!=0x5354)return GH_SOUND_SCENE_ASSET;
+ const uint32_t version=word(data+4),declared=word(data+12);
+ if(!version)return GH_SOUND_SCENE_OK;
+ if(version!=0x3f8ccccdu||declared>GH_SOUND_TS_ROWS)return GH_SOUND_SCENE_UNSUPPORTED;
+ size_t offset=word(data+8);
+ for(uint32_t i=0;i<declared;++i){
+  if(offset<16||offset%4||offset>entry->size||entry->size-offset<0x30||offset>UINT32_MAX)
+   return GH_SOUND_SCENE_ASSET;
+  const uint8_t *record=data+offset;
+  const size_t stride=0x30+0x10*(size_t)record[0xe];
+  if(stride>entry->size-offset||(word(record)!=0)!=(i+1<declared))return GH_SOUND_SCENE_ASSET;
+  rows[i]=(gh_sound_ts_row){.offset=(uint32_t)offset,.volume10=(uint16_t)(record[0x10]|record[0x11]<<8),
+      .flags0c=record[0xc]};
+  offset+=stride;
+ }
+ *count=(uint8_t)declared;
+ return GH_SOUND_SCENE_OK;
+}
+
 static gh_sound_scene_status fail(gh_sound_scene*s,uint32_t f,int d,gh_sound_scene_status e){s->frontier=f;s->detail=d;return e;}
 gh_sound_scene_status gh_sound_scene_from_startup(gh_sound_scene*s,gh_sound_control*c,gh_audio_registry*r){
  if(!s||!c||!r||!c->initialized)return GH_SOUND_SCENE_ARGUMENT;
@@ -10,7 +41,7 @@ gh_sound_scene_status gh_sound_scene_from_startup(gh_sound_scene*s,gh_sound_cont
   * through2C9F58. Its2CA220 call has NOcSndargument: it configuresADX,
   * not these arrays. Later2CABE8 writes1/defaultstep/current=-1/-2/-1.
   * Bindthis singleowner early so original2CAF28 can pumpthose realzeros. */
- *s=(gh_sound_scene){0};s->control=c;s->registry=r;s->sound_group130=0;s->startup_bound=1;
+ *s=(gh_sound_scene){0};c->ts_head2c=NULL;s->control=c;s->registry=r;s->sound_group130=0;s->startup_bound=1;
  return GH_SOUND_SCENE_OK;
 }
 gh_sound_scene_status gh_sound_scene_release_loading(gh_sound_scene*s,gh_dvd_jobs*d,gh_heap*h){
@@ -23,6 +54,7 @@ gh_sound_scene_status gh_sound_scene_initialize_002cabe8(gh_sound_scene*s,
  const gh_bundle*b,gh_boot_work*w,gh_dvd_jobs*d,gh_heap*h,gh_task_threads*t){
  gh_bundle_entry e;gh_bundle_error be;gh_disc_entry de;size_t index;char path[32];
  gh_sound_span programs,sys,samples,afd;gh_dvd_error dr;gh_audio_status ar;
+ gh_bundle_entry ts={0};gh_sound_ts_row ts_rows[GH_SOUND_TS_ROWS];uint8_t ts_count;
  if(!s||!s->startup_bound||!b||!w||!d||!d->disc||!h||!t)return GH_SOUND_SCENE_ARGUMENT;
  if(s->ready||s->loading.pointer)return GH_SOUND_SCENE_BUSY;s->frontier=0;s->detail=0;
  /* Original stores BMH before SEH. Keep each verified present view even if the
@@ -31,6 +63,11 @@ gh_sound_scene_status gh_sound_scene_initialize_002cabe8(gh_sound_scene*s,
  be=gh_bundle_find(b,"SEH",0,&e);if(be==GH_BUNDLE_OK)s->seh=e;else if(be!=GH_BUNDLE_NOT_FOUND)return fail(s,0x31ccf0,be,GH_SOUND_SCENE_ASSET);
  if(s->seh.bytes||s->bmh.bytes)return fail(s,s->seh.bytes?0x2ca390:0x2d2cf0,0,GH_SOUND_SCENE_UNSUPPORTED);
  if(s->sound_group130!=0)return fail(s,0x2ca390,0,GH_SOUND_SCENE_UNSUPPORTED);
+ be=gh_bundle_find(b,"TS",0,&ts);
+ if(be!=GH_BUNDLE_OK&&be!=GH_BUNDLE_NOT_FOUND)return fail(s,0x31ccf0,be,GH_SOUND_SCENE_ASSET);
+ if(be==GH_BUNDLE_NOT_FOUND)ts=(gh_bundle_entry){0};
+ const gh_sound_scene_status ts_status=read_ts(&ts,ts_rows,&ts_count);
+ if(ts_status)return fail(s,0x2cb080,0,ts_status);
  /* An already occupied bank requires its original
   * release/update path; preserve registry generation rather than guessing. */
  ar=gh_audio_bank_views(s->registry,2,&programs,&sys,&samples,&afd);
@@ -57,9 +94,11 @@ gh_sound_scene_status gh_sound_scene_initialize_002cabe8(gh_sound_scene*s,
  /* Native SPU-allocation replacement now owns a fresh room bank; keep the
   * SAME heap companion/registry identity and generation, not a cold reset. */
  s->control->room_heaps[1].closed=0;
- be=gh_bundle_find(b,"TS",0,&e);if(be==GH_BUNDLE_OK){s->ts=e;return fail(s,0x2cb080,0,GH_SOUND_SCENE_UNSUPPORTED);}
- if(be!=GH_BUNDLE_NOT_FOUND)return fail(s,0x31ccf0,be,GH_SOUND_SCENE_ASSET);
- /* Empty2CB080 still clears Work+5E4 bit800 and native list is truly empty. */
+ /* 2CB080 adds rows at the head, so traversal starts from the last.
+  * The first source word is a nonzero continuation, never a host pointer. */
+ s->ts=ts;s->ts_count=ts_count;
+ memcpy(s->ts_rows,ts_rows,(size_t)ts_count*sizeof(*ts_rows));
+ s->control->ts_head2c=ts_count?&s->ts_rows[ts_count-1]:NULL;
  {uint32_t v;memcpy(&v,(uint8_t*)w+0x5e4,4);v&=~0x800u;memcpy((uint8_t*)w+0x5e4,&v,4);}
  s->fade_ratio_bits=0x3f800000;s->default_ratio_bits=0x3c9374bc;
  for(unsigned i=0;i<5;i++){s->ratios60[i]=s->fade_ratio_bits;s->ratios74[i]=s->fade_ratio_bits;s->ratios88[i]=s->default_ratio_bits;}

@@ -149,6 +149,50 @@ static void test_ev04_scroll(gh_disc *disc, gh_heap *heap, gh_dvd_jobs *dvd,
     CHECK(word(saved_bytes + 0x250) == (saved_flags & ~0x8000u));
     CHECK(word(track.records + 8) == 0x38000000);
 
+    gh_game_init_state *init = calloc(1, sizeof(*init));
+    uint8_t save_bytes[0x18] = {0};
+    const gh_core_save_view save = {save_bytes, sizeof(save_bytes)};
+    const gh_light_player_parts player = {.owner = &meshes};
+    gh_event_scr_light cinematic = {0};
+    CHECK(init && !gh_event_scr_light_init_00008b20(&cinematic, &data, light, init,
+        save, &player, &frontier, &relative));
+    gh_event_sequence_view light_keys;
+    CHECK(!gh_event_sequence_at(&data, 5, &light_keys) && light_keys.count == 9 &&
+          light_keys.stride == 0x60);
+    const uint8_t *a = light_keys.records + 6 * 0x60, *b = a + 0x60;
+    CHECK(a[3] == 20 && b[3] == 20);
+    put_word(camera.bytes + 4, 0x00140000);
+    put_word(camera.bytes + 0x0c, 0);
+    CHECK(!gh_event_scr_light_move_00008ef8(&cinematic, &frontier) &&
+          !memcmp(light->scalar + 0x30, a + 0x0c, 12));
+    put_word(camera.bytes + 0x0c, 0x41100000);
+    CHECK(!gh_event_scr_light_move_00008ef8(&cinematic, &frontier));
+    const unsigned world_float[] = {0x30,0x34,0x38,0x50,0x54,0x58,
+        0x10,0x14,0x64,0x68,0x18,0x1c,0x20,0x24};
+    const unsigned sequence_float[] = {0x0c,0x10,0x14,0x1c,0x20,0x24,
+        0x40,0x44,0x48,0x4c,0x50,0x54,0x58,0x5c};
+    for (unsigned i = 0; i < sizeof(world_float) / sizeof(*world_float); ++i) {
+        float before, after, result;
+        memcpy(&before, a + sequence_float[i], sizeof(before));
+        memcpy(&after, b + sequence_float[i], sizeof(after));
+        memcpy(&result, light->scalar + world_float[i], sizeof(result));
+        CHECK(result == (before + after) * .5f);
+    }
+    CHECK(word(light->scalar + 0x3c) == 0x3f800000 && word(light->scalar + 0x5c) == 0x3f800000);
+    const unsigned group_world[] = {0, 0x60, 8}, group_src[] = {0x2c, 0x34, 0x38}, group_sizes[] = {8, 4, 8};
+    for (unsigned i = 0; i < 3; ++i)
+        for (unsigned j = 0; j < group_sizes[i]; ++j)
+            CHECK(light->scalar[group_world[i] + j] ==
+                ((unsigned)a[group_src[i] + j] + b[group_src[i] + j]) / 2);
+    put_word(camera.bytes + 0x0c, 0x41900000);
+    CHECK(!gh_event_scr_light_move_00008ef8(&cinematic, &frontier) &&
+          !memcmp(light->scalar + 0x30, b + 0x0c, 12));
+    free(init);
+    puts("PASS EV04 SCRLIGHT cut20 midpoint and exact endpoint in original WorldLight fields");
+
+
+
+
     CHECK(!gh_scene_meshes_release_prefix(&meshes));
     gh_stage_textures_destroy(textures);
     CHECK(!gh_game_room_pools_release(&pools));

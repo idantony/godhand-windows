@@ -155,6 +155,11 @@ static int r105_battle_enemy(const gh_boot_work *work,const uint8_t *actor)
     return (stamp==7&&dependency==0x200)||(stamp==8&&dependency==0x202);
 }
 
+static int r105_gate_approach(const gh_boot_work *work,const uint8_t *actor)
+{
+    return r105_battle_enemy(work,actor)&&word(actor+0x16c4)==2;
+}
+
 static gh_actor_motion_status rank(gh_enemy202_move *s,uint8_t *p,
     const float player[3],const float self[3])
 {
@@ -2004,10 +2009,10 @@ static gh_actor_motion_status attack_choice_00262aa8(gh_enemy202_move *s,uint8_t
     *chosen=0;
     const int ordinary=word(p+0x564)==0x200&&enemy->b.entry.work->room==0x100&&
         (distance<=144.0f||!(word(p+0x16d0)&0x200000u));
-    const int r105_battle_goto=r105_battle_enemy(enemy->b.entry.work,p)&&
-        word(p+0x16c4)==2&&number(word(p+0x16c0))>0;
+    /* The gate actors keep their approach route after the override timer
+     * expires. 262AA8 then proceeds to the ordinary attack checks. */
     if(em03_approach_range(s,p,distance)||ordinary||r100_stamp18_armed_approach(enemy,p)||
-       r105_opening_enemy(enemy->b.entry.work,p)||r105_battle_goto){
+       r105_opening_enemy(enemy->b.entry.work,p)||r105_gate_approach(enemy->b.entry.work,p)){
         if(!isfinite(distance)||distance<0||!isfinite(face))
             return stop(s,0x262aa8,GH_ACTOR_MOTION_UNSUPPORTED);
         return attack_choice_common(s,p,distance,chosen);
@@ -2423,6 +2428,7 @@ static gh_actor_motion_status advance_substate0_00211c08(gh_enemy202_move *s,uin
                     actor_state->entry->b.work->room==0x100;
                 if(r100_em0a||r100_stamp18_armed_approach(s->enemy,p)||em03_approach_range(s,p,distance)||
                     r105_opening_enemy(actor_state->entry->b.work,p)||
+                    r105_gate_approach(actor_state->entry->b.work,p)||
                     (dependency==0x200&&actor_state->entry->b.work->room==0x100&&distance<=144.0f)){
                     status=continue_ordinary_00212670(s,p,distance);
                     if(status)return status;
@@ -3587,7 +3593,7 @@ static gh_actor_motion_status advance_substate6_00213710(gh_enemy202_move *s,uin
     const uint32_t dependency=word(p+0x564);
     const int stamp19=dependency==0x203&&half(p+0x640)==19&&!p[0x1650];
     const int em0a=dependency==0x20a&&!half(p+0x640)&&p[0x1650]==3;
-    const int r105=r105_opening_enemy(work,p);
+    const int r105=r105_opening_enemy(work,p)||r105_battle_enemy(work,p);
     const int r101=work->room==0x101&&dependency==0x203&&half(p+0x640)==13&&!p[0x1650];
     if((!r101&&!r105&&((dependency!=0x200&&!stamp19&&!em0a)||work->room!=0x100))||!isfinite(distance)||distance<0)
         return stop(s,0x213710,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -3603,7 +3609,7 @@ static gh_actor_motion_status advance_substate6_00213710(gh_enemy202_move *s,uin
         gh_actor_motion_call *call=&s->substate67_motion;
         if(!call->active){
             /* Table 435504 selects the EM02 and EM0A rows. EM27 uses the default. */
-            const size_t row=held?0x4b8:em0a?0x840:dependency==0x203?0x660:0xc0;
+            const size_t row=held?0x4b8:em0a?0x840:(dependency==0x202||dependency==0x203)?0x660:0xc0;
             if(!resource->bytes||!resource->file_extent_known||resource->file_extent<row+8||
                 resource->file_extent>resource->size||motion->b.resource!=resource->bytes)
                 return stop(s,0x213a58,GH_ACTOR_MOTION_BOUNDS);
@@ -4222,6 +4228,9 @@ static gh_actor_motion_status advance_substate6b_or_6c(gh_enemy202_move *s,uint8
     const unsigned stamp=half(p+0x640);
     const int opening_actor=(dependency==0x203&&stamp==19)||(dependency==0x200&&stamp==20);
     const int substate6c=s->pending_ai_pc==0x23c620;
+    /* Patched SLUS 23C680 underflows dep0200 into the same default table.
+     * The stamp8 unarmed bind reaches 23D134 with t1 zero. */
+    const int stamp8_6c=substate6c&&dependency==0x200&&stamp==8&&p[0x1650]==5;
     const int common_6b=!substate6c&&p[0x1650]==2&&((dependency==0x200&&stamp==3)||(dependency==0x202&&stamp==4)||(dependency==0x203&&stamp==5));
     /* Original 6C dispatch uses default 23C6A4 for the R105 trio:
      * EM00 unsigned underflow, EM03 entry 43AEE4, EM27 entry 43AF74. */
@@ -4230,7 +4239,7 @@ static gh_actor_motion_status advance_substate6b_or_6c(gh_enemy202_move *s,uint8
     const gh_enemy_weapon_init *held=gh_enemy_timers_held_weapon(&enemy->timers);
     if(r101_held&&(!held||!held->weapon||held->weapon->kind!=0x361||word(p+0x6ec)))
         return stop(s,0x23c308,GH_ACTOR_MOTION_UNSUPPORTED);
-    if(!r101_held&&!r105&&(work->room!=0x100||((!opening_actor||p[0x1650])&&!common_6b)))
+    if(!r101_held&&!r105&&(work->room!=0x100||((!opening_actor||p[0x1650])&&!common_6b&&!stamp8_6c)))
         return stop(s,s->pending_ai_pc,GH_ACTOR_MOTION_UNSUPPORTED);
     if(!s->substate67_stage){
         put(p+0x16d0,word(p+0x16d0)|0x400u);
@@ -4264,7 +4273,7 @@ static gh_actor_motion_status advance_substate6b_or_6c(gh_enemy202_move *s,uint8
         if(!call->active){
             const uint8_t *row=enemy->entry.resource.bytes+s->reaction_resource_offset;
             gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(
-                call,motion,&motion->b,word(row),word(row+4),0,10,p[0x17c3]?2:0,!(common_6b||r105));
+                call,motion,&motion->b,word(row),word(row+4),0,10,p[0x17c3]?2:0,!(common_6b||r105||stamp8_6c));
             if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
         }
         gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(call);
@@ -6472,7 +6481,7 @@ static gh_actor_motion_status advance_state1_0024c0f0(gh_enemy202_move *s,uint8_
         const int stamp8=dependency==0x200&&half(p+0x640)==8&&
             (uint16_t)s->enemy->b.entry.work->room==0x100;
         if(!(((dependency==0x20a||stamp19||stamp20)&&p[0x2f5]==0)||
-            (stamp8&&p[0x2f5]==1)||
+            (stamp8&&(p[0x2f5]==1||(p[0x2f5]==7&&!positive_hp(p))))||
             ((stamp19||stamp20)&&(p[0x2f5]==1||(p[0x2f5]==7&&!positive_hp(p))))||
             (stamp20&&(p[0x2f5]==0x1d||p[0x2f5]==0xd))||
             ((dependency==0x200||dependency==0x202||dependency==0x203)&&p[0x2f5]==0x11)))

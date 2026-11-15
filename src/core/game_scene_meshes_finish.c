@@ -40,16 +40,17 @@ static void matrix(float*out,const float*a,const float*b){float m[16];
 }
 /* 147728 order0: SDK premultiplies X,Y,Z. 147B60/147BF8 use
  * 30A2E0 column-major T*R*S. Coefficients at3C3C90 verified below. */
-static gh_scene_mesh_status transform(const float*angle,const float*position,float*out){
+static gh_scene_mesh_status transform(const float*angle,const float*position,const float*scale,float*out){
  float sx,cx,sy,cy,sz,cz;
  if(gh_id_sincos_reference(angle[0],&sx,&cx)||gh_id_sincos_reference(angle[1],&sy,&cy)||gh_id_sincos_reference(angle[2],&sz,&cz))return GH_MESH_UNSUPPORTED;
  float rx[16]={1,0,0,0,0,cx,sx,0,0,add(0,-sx),cx,0,0,0,0,1};
  float ry[16]={cy,0,add(0,-sy),0,0,1,0,0,sy,0,cy,0,0,0,0,1};
  float rz[16]={cz,sz,0,0,add(0,-sz),cz,0,0,0,0,1,0,0,0,0,1};
  float identity[16]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1},rotation[16],translation[16];
+ float scaling[16]={scale[0],0,0,0,0,scale[1],0,0,0,0,scale[2],0,0,0,0,1};
  memcpy(translation,identity,sizeof(identity));memcpy(translation+12,position,12);
  matrix(rotation,rx,identity);matrix(rotation,ry,rotation);matrix(rotation,rz,rotation);
- matrix(out,translation,rotation);matrix(out,out,identity);return GH_MESH_OK;
+ matrix(out,translation,rotation);matrix(out,out,scaling);return GH_MESH_OK;
 }
 static uint32_t half_bits(uint16_t h){
  uint32_t mantissa=h&1023u,exponent;
@@ -65,10 +66,15 @@ gh_scene_mesh_status gh_scene_meshes_finish_object_reference(gh_scene_meshes*s,g
  if(!s->prepared||!o->factory_ready||!o->handle||!o->node||!o->packet_allocation.pointer)return GH_MESH_BUSY;
  const gh_scene_mesh_descriptor*d=&o->descriptor;const uint8_t*desc=d->script.bytes+d->mesh.descriptor_offset;
  if((d->mesh.flags&~0xc0174320u)||d->node_flags!=0x1001000u||!s->tables->scroll_texture.bytes)return fail(s,0x31d3d0,0,GH_MESH_UNSUPPORTED);
- /* Observed unit-scale, static object profile. In the bounded [-3,3]
-  * Euler domain the preceding1F7DA0 range reduction subtracts exactlyzero. */
- float angle[3];for(unsigned i=0;i<3;i++){angle[i]=f32(desc+0x1c+4*i);
-  if(u32(desc+0x10+4*i)!=0x3f800000u||!isfinite(angle[i])||fabsf(angle[i])>3.0f||u32(desc+0x4c+4*i))return fail(s,0x147728,0,GH_MESH_UNSUPPORTED);
+ /* Initial pose uses the SCR scale and angles. 3187D8 converts the separate
+  * angular velocity at +4C from degrees and enables flag index 3. */
+ float angle[3],scale[3],angular_speed[3];
+ for(unsigned i=0;i<3;i++){
+  angle[i]=f32(desc+0x1c+4*i);
+  scale[i]=f32(desc+0x10+4*i);
+  angular_speed[i]=f32(desc+0x4c+4*i);
+  if(!isfinite(scale[i])||!isfinite(angle[i])||fabsf(angle[i])>3.0f||!isfinite(angular_speed[i]))
+   return fail(s,0x147728,0,GH_MESH_UNSUPPORTED);
  }
  if((u32(desc+0x3c)&15u)>5u)return fail(s,0x319e00,0,GH_MESH_UNSUPPORTED);
  float distance=f32(desc+0x44);if(!isfinite(distance)||distance<0||distance>3276.0f)return fail(s,0x3187d8,0,GH_MESH_UNSUPPORTED);
@@ -100,7 +106,13 @@ gh_scene_mesh_status gh_scene_meshes_finish_object_reference(gh_scene_meshes*s,g
  for(unsigned i=0;i<3;i++){volatile float lo=(float)min[i]/100.0f,hi=(float)max[i]/100.0f;
   volatile float difference=hi-lo,half=difference*.5f,sum=half+lo;extent[i]=half;center[i]=sum;position[i]=f32(desc+0x28+4*i);}
  volatile float scaled_distance=distance*10.0f;distance_tenths=(int32_t)scaled_distance;
- e=transform(angle,position,world);
+ e=transform(angle,position,scale,world);
+ const float radians_per_degree=0.017453292f;
+ int rotates=0;
+ for(unsigned i=0;i<3;i++){
+  angular_speed[i]=mul(angular_speed[i],radians_per_degree);
+  rotates|=angular_speed[i]!=0.0f;
+ }
  int restore=fesetenv(&saved);if(restore)return fail(s,0x148f50,0,GH_MESH_UNSUPPORTED);
  if(e)return fail(s,0x30a5d0,0,e);
  for(unsigned i=0;i<3;i++)if(!isfinite(position[i]))return fail(s,0x1476d0,0,GH_MESH_UNSUPPORTED);
@@ -110,7 +122,8 @@ gh_scene_mesh_status gh_scene_meshes_finish_object_reference(gh_scene_meshes*s,g
  memcpy(o->materials,material,sizeof(material));o->fog_rgb=u32(light->scalar+4)&0xffffffu;
  for(unsigned axis=0;axis<3;axis++){wf(p+0x260+4*axis,center[axis]);wf(p+0x26c+4*axis,extent[axis]);
   memcpy(p+0x110+4*axis,desc+0x10+4*axis,4);memcpy(p+0x100+4*axis,desc+0x1c+4*axis,4);
-  wf(p+0xb0+4*axis,position[axis]);w32(p+0x310+4*axis,constant[axis]);w32(p+0x120+4*axis,0x3f800000);
+  wf(p+0xb0+4*axis,position[axis]);w32(p+0x310+4*axis,constant[axis]);
+  wf(p+0x120+4*axis,scale[axis]);wf(p+0x340+4*axis,angular_speed[axis]);
  }
  p[0x2b1]=1;p[0x2fd]=d->mesh.layer;w32(p+0x2f8,d->mesh_index);w32(p+0x250,0x400480);
  /* Actual first descriptor3187D8: use programs10 in both parity buffers;
@@ -125,6 +138,7 @@ gh_scene_mesh_status gh_scene_meshes_finish_object_reference(gh_scene_meshes*s,g
  w32(p+0x324,half_bits(u16(desc+0x3e)));w32(p+0x328,half_bits(u16(desc+0x40)));
  w32(p+0x254,0xc0000000);w16(p+0x2ae,(uint16_t)distance_tenths);p[0x2b0]=(uint8_t)((distance_tenths*15)/100);w32(p+0x2b8,half_bits(u16(desc+0x48)));
  uint32_t model_flags=u32(p+0x350)&~0x10000000u;
+ if(rotates)model_flags|=0x10000000u;
  /* 318B20–318B3C routes flag5 meshes to the late Scenario update. */
  if(d->mesh.flags&0x20u)model_flags|=0x20000000u;
  w32(p+0x350,model_flags);

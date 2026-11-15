@@ -47,10 +47,10 @@ and walk into the corridor beyond it.
 
 A controlled Windows replay begins with the R105 gate open in room save data
 and Gene at the original exit. Native audio plays the gate sound, and the
-original transition loads R002. Direct3D presents 725 R002 frames through the
-first four shots of Event 04. A separate original-disc CPU replay completes
-the first 20 shots and begins the next one. The two runs verify presentation
-and native game logic at different depths.
+original transition loads R002. Direct3D presents 3,390 consecutive R002
+frames through all 24 shots of Event 04 and the original save prompt. The
+replay selects Continue with the original pad input and enters R102
+initialization. R102's first gameplay frame remains in development.
 
 ### Verified progress
 
@@ -226,9 +226,9 @@ R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染�
 验证了摇杆移动和方块攻击。更长的 Windows 回放使用原版手柄映射打开 R101 的门，并走进门后的走廊。
 
 一轮受控的 Windows 回放从 R105 已开门的存档状态开始，并把 Gene 放在原版出口。原生音频
-播放开门声，原版房间切换载入 R002。Direct3D 呈现了 R002 的 725 帧，完整播放 EV04 的
-前四个镜头。另一轮原盘 CPU 回放走完前 20 个镜头，进入第 21 个镜头。两轮分别验证了实际呈现
-和后续的原版游戏逻辑。
+播放开门声，原版房间切换载入 R002。Direct3D 连续呈现了 R002 的 3,390 帧，完整播放 EV04 的
+24 个镜头并显示原版保存界面。回放用原版按键选择继续，进入 R102 初始化。R102 的首帧游戏画面
+仍在开发。
 
 ### 已验证的进展
 

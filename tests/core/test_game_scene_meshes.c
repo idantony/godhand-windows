@@ -1,4 +1,5 @@
 #include "game_scene_meshes.h"
+#include "game_object_step.h"
 #include "game_stage.h"
 #include <fenv.h>
 #include <math.h>
@@ -8,6 +9,70 @@
 #include <string.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"line%d %s\n",__LINE__,#x);exit(1);}}while(0)
 static uint32_t u32(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
+gh_object_step_status gh_object_static_move_one(gh_game_object_step *,gh_scene_mesh_object *,
+                                              const gh_boot_work *,uint32_t *);
+
+static void r102_transform(gh_disc *disc,const void *elf,size_t elf_bytes,
+                           gh_stage_textures *textures,const gh_game_world_light *light)
+{
+ size_t index;
+ gh_disc_entry file;
+ CHECK(gh_disc_find(disc,"st1/r102.dat",&index)==GH_DISC_OK&&gh_disc_entry_at(disc,index,&file)==GH_DISC_OK);
+ uint8_t *asset=malloc((size_t)file.size);
+ gh_bundle room;
+ CHECK(asset&&gh_disc_read(disc,index,0,asset,(size_t)file.size)==GH_DISC_OK&&
+       gh_bundle_open(asset,(size_t)file.size,&room)==GH_BUNDLE_OK);
+ gh_heap *heap;
+ gh_room_pools pools={0};
+ CHECK(gh_heap_create(32*1024*1024,&heap)==GH_MEM_OK&&
+       gh_game_room_pools_initialize_002a5d80(&pools,&room,heap)==GH_POOL_OK);
+ gh_game_scene_tables tables={0};
+ gh_boot_work work={.room=0x102};
+ uint8_t serial=0;
+ gh_scene_meshes meshes={.factory_serial=&serial};
+ const gh_scene_mesh_construction_bindings bindings={textures,light,elf,elf_bytes};
+ CHECK(gh_scene_meshes_bind_construction(&meshes,&bindings)==GH_MESH_OK);
+ CHECK(gh_scene_meshes_construct_0031d1b0(&meshes,&tables,&work,&room,&pools,heap)==GH_MESH_OK);
+ CHECK(meshes.count==meshes.constructed_count);
+ static gh_game_init_state init;
+ gh_game_init_state_initialize(&init);
+ const gh_game_pl_camera camera={.constructed=1};
+ uint8_t player_bytes[0xc0]={0};
+ const gh_title_player_view player={.bytes=player_bytes,.size=sizeof(player_bytes),.alias_f0=player_bytes+0xb0};
+ gh_game_object_step step={.init=&init,.ratio10_bits=0x3f000000,
+                           .static_objects={.camera=&camera,.player=&player}};
+ const float half=0.5f;
+ memcpy((uint8_t *)&work+0x574,&half,sizeof(half));
+ unsigned fans=0,scale_meshes=0;
+ for(size_t i=0;i<meshes.count;++i){
+  const gh_scene_mesh_object *object;
+  CHECK(gh_scene_meshes_object_at(&meshes,i,&object)==GH_MESH_OK);
+  const char *name=object->descriptor.mesh.name;
+  uint8_t *root=object->allocation.pointer;
+  if(!strncmp(name,"_5z_fa",6)){
+   ++fans;
+   CHECK((u32(root+0x350)&0x10000000u)&&u32(root+0x344)==0x3c8efa35&&!u32(root+0x104));
+   const int rounding=fegetround();
+   uint32_t frontier=0;
+   CHECK(!fesetround(FE_DOWNWARD));
+   CHECK(gh_object_static_move_one(&step,(gh_scene_mesh_object *)object,&work,&frontier)==GH_OBJSTEP_OK&&
+         !frontier&&fegetround()==FE_DOWNWARD&&!step.move_object_stage);
+   CHECK(!fesetround(rounding));
+   CHECK(root[0x140]==4&&u32(root+0x104)==0x3b8efa35&&u32(root+0x88)>0x80000000u);
+   CHECK(gh_object_static_move_one(&step,(gh_scene_mesh_object *)object,&work,&frontier)==GH_OBJSTEP_OK&&!frontier&&
+         u32(root+0x104)==0x3c0efa35);
+  }else if(!strcmp(name,"_22b")&&object->descriptor.script_index==14){
+   ++scale_meshes;
+   CHECK(!(u32(root+0x350)&0x10000000u)&&u32(root+0x80)==0x40000000&&
+         u32(root+0x94)==0x3f800000&&u32(root+0xa8)==0x40000000&&u32(root+0x120)==0x40000000);
+  }
+ }
+ CHECK(fans==2&&scale_meshes==1);
+ CHECK(gh_scene_meshes_release_prefix(&meshes)==GH_MESH_OK&&
+       gh_game_room_pools_release(&pools)==GH_POOL_OK&&!gh_heap_used(heap)&&gh_heap_destroy(heap)==GH_MEM_OK);
+ free(asset);
+}
+
 int main(int argc,char**argv){
  CHECK(argc==2);gh_disc*d;CHECK(gh_disc_open(argv[1],&d)==GH_DISC_OK);size_t ix;gh_disc_entry file;
  CHECK(gh_disc_find(d,"st1/r100.dat",&ix)==GH_DISC_OK&&gh_disc_entry_at(d,ix,&file)==GH_DISC_OK&&file.size==1440352);
@@ -85,5 +150,8 @@ int main(int argc,char**argv){
  CHECK(gh_scene_meshes_release_prefix(&meshes)==GH_MESH_OK&&!pools.vectors[0].count&&!pools.vectors[1].count&&gh_heap_used(heap)==initial);
  CHECK(gh_game_room_pools_release(&pools)==GH_POOL_OK&&gh_heap_used(heap)==0&&gh_heap_destroy(heap)==GH_MEM_OK);
  printf("PASS R100 28 SCR/156 mesh descriptors: %zu streams/%zu rawVIF vertices, XYZ[%d,%d,%d]..[%d,%d,%d]; realfactory prefix, sharedregistry identity, default155678 frontier; 156boundconstructors complete including actualSDK rotated objects, FEnv preserved, reverse host cleanup\n",streams,vertices,min[0],min[1],min[2],max[0],max[1],max[2]);
+ gh_stage_textures_destroy(textures);
+ CHECK(gh_stage_textures_create(&textures)==GH_STAGE_OK);
+ r102_transform(d,elf,elf_bytes,textures,light);
  gh_stage_textures_destroy(textures);free(light);free(elf);free(raw);gh_disc_close(d);return 0;
 }

@@ -884,6 +884,32 @@ static void set_enemy_suspend_flags(const gh_title_player_view *view, int suspen
     memcpy(view->bytes + 0x5a0, &flags, sizeof(flags));
 }
 
+static gh_actor_motion_status set_ema202_suspend(const gh_title_player_view *view,
+    const gh_enemy_weapon_init *held, int suspend, uint32_t *frontier)
+{
+    *frontier = 0x275308;
+    if (!suspend_view(view, 0x4479c8, 0x1978))
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    static const uint16_t attachment_offsets[] = {
+        0x6ec, 0x6f0, 0x6f8, 0x6fc, 0x700, 0x704, 0x708, 0x734, 0x6f4, 0x70c,
+        0x1964, 0x196c, 0x1970, 0x1974, 0x740, 0x744, 0x748, 0x74c, 0x750
+    };
+    for (unsigned i = 0; i < sizeof(attachment_offsets) / sizeof(*attachment_offsets); ++i) {
+        if (object_word(view->bytes + attachment_offsets[i])) {
+            *frontier = 0x275384 + i * 0x20;
+            return GH_ACTOR_MOTION_UNSUPPORTED;
+        }
+    }
+    const gh_title_player_view *weapon = held ? &held->weapon->object.view : NULL;
+    if (weapon && !suspend_view(weapon, 0x42aa98, 0x5a4)) {
+        *frontier = 0x275384;
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    set_enemy_suspend_flags(view, suspend);
+    if (weapon) set_enemy_suspend_flags(weapon, suspend);
+    return GH_ACTOR_MOTION_OK;
+}
+
 static gh_actor_motion_status set_entry_suspend(const ems_entry *entry, int suspend,
     uint32_t *frontier)
 {
@@ -896,27 +922,9 @@ static gh_actor_motion_status set_entry_suspend(const ems_entry *entry, int susp
         return GH_ACTOR_MOTION_OK;
     }
     *frontier = 0x275308;
-    if (!entry->enemy202 || !suspend_view(view, 0x4479c8, 0x1978))
-        return GH_ACTOR_MOTION_UNSUPPORTED;
-    static const uint16_t attachment_offsets[] = {
-        0x6ec, 0x6f0, 0x6f8, 0x6fc, 0x700, 0x704, 0x708, 0x734, 0x6f4, 0x70c,
-        0x1964, 0x196c, 0x1970, 0x1974, 0x740, 0x744, 0x748, 0x74c, 0x750
-    };
-    for (unsigned i = 0; i < sizeof(attachment_offsets) / sizeof(*attachment_offsets); ++i) {
-        if (object_word(view->bytes + attachment_offsets[i])) {
-            *frontier = 0x275384 + i * 0x20;
-            return GH_ACTOR_MOTION_UNSUPPORTED;
-        }
-    }
-    const gh_enemy_weapon_init *held = gh_enemy_timers_held_weapon(&entry->enemy202->timers);
-    const gh_title_player_view *weapon = held ? &held->weapon->object.view : NULL;
-    if (weapon && !suspend_view(weapon, 0x42aa98, 0x5a4)) {
-        *frontier = 0x275384;
-        return GH_ACTOR_MOTION_UNSUPPORTED;
-    }
-    set_enemy_suspend_flags(view, suspend);
-    if (weapon) set_enemy_suspend_flags(weapon, suspend);
-    return GH_ACTOR_MOTION_OK;
+    if (!entry->enemy202) return GH_ACTOR_MOTION_UNSUPPORTED;
+    return set_ema202_suspend(view, gh_enemy_timers_held_weapon(&entry->enemy202->timers),
+        suspend, frontier);
 }
 
 static gh_actor_motion_status find_stamp_entry(const gh_enemy_ems *owner,
@@ -947,6 +955,12 @@ gh_actor_motion_status gh_enemy_ems_set_actor_suspend_00275308(const gh_enemy_em
     if(!manager||!actor||(suspend!=0&&suspend!=1))return GH_ACTOR_MOTION_ARGUMENT;
     if(!owner||owner->running||owner->closing||owner->bindings->actor.entry.init!=manager||
        actor->view.original_vtable214!=0x4479c8)return GH_ACTOR_MOTION_UNSUPPORTED;
+    if(owner->devil&&actor==&owner->devil->factory.entry.object){
+        if(!owner->devil->live||!devil_registered(owner))return GH_ACTOR_MOTION_BUSY;
+        gh_actor_motion_status status=set_ema202_suspend(&actor->view,NULL,suspend,frontier);
+        if(!status)*frontier=0;
+        return status;
+    }
     for(unsigned i=0;i<EMS_ROWS;++i){
         const ems_entry *entry=owner->entries+i;
         if(entry->actor!=actor)continue;
@@ -1290,7 +1304,12 @@ gh_actor_motion_status gh_enemy_ems_set_suspend_002948e8(const gh_enemy_ems *own
             if (!actor->view.bytes || actor->view.size < 0x300) return GH_ACTOR_MOTION_BOUNDS;
             const uint8_t *kind_bytes = actor->view.bytes + 0x2fe;
             unsigned kind = (unsigned)kind_bytes[0] | (unsigned)kind_bytes[1] << 8;
-            if (kind >= 0x200 && kind < 0x300) {
+            if (kind == 0x220 && owner->devil && actor == &owner->devil->factory.entry.object) {
+                if (!owner->devil->live || !devil_registered(owner))
+                    return GH_ACTOR_MOTION_UNSUPPORTED;
+                gh_actor_motion_status status = set_ema202_suspend(&actor->view, NULL, suspend, frontier);
+                if (status) return status;
+            } else if (kind >= 0x200 && kind < 0x300) {
                 const ems_entry *entry = NULL;
                 for (unsigned i = 0; i < EMS_ROWS; ++i)
                     if (owner->entries[i].actor == actor) { entry = &owner->entries[i]; break; }

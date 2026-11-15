@@ -60,5 +60,29 @@ int main(int argc,char**argv){gh_disc*d;gh_audio_registry*r;gh_sound_control con
   uint32_t expected_off,expected_bytes;memcpy(&expected_off,pair,4);memcpy(&expected_bytes,pair+4,4);
   CHECK(off==expected_off&&bytes==expected_bytes);
  }
+
+ CHECK(gh_audio_release_bank(r,2)==GH_AUDIO_OK);
+ scene=(gh_sound_scene){0};
+ CHECK(gh_sound_scene_from_startup(&scene,&control,r)==GH_SOUND_SCENE_OK);
+ free(pack);pack=read_file(d,"st1/r102.dat",&n);CHECK(gh_bundle_open(pack,n,&bundle)==GH_BUNDLE_OK);
+ gh_bundle_entry ts;
+ CHECK(gh_bundle_find(&bundle,"TS",0,&ts)==GH_BUNDLE_OK&&ts.size==704);
+ w.room=0x102;c.returned=0;visits=0;
+ /* Break the last sentinel in the test's owned room buffer before any enqueue. */
+ uint8_t *sentinel=pack+ts.offset+0x240;
+ CHECK(!*sentinel);*sentinel=1;
+ CHECK(gh_sound_scene_initialize_002cabe8(&scene,&bundle,&w,&dvd,h,t)==GH_SOUND_SCENE_ASSET&&
+       scene.frontier==0x2cb080&&!scene.job&&!scene.ready&&!gh_heap_used(h));
+ *sentinel=0;
+ CHECK(gh_task_threads_start(t,2,load,&c,0,&slot)==GH_THREAD_OK);
+ while(!c.returned&&visits++<12){CHECK(gh_tasks_run_matching_002d52a0(&m).status==GH_TASK_OK);CHECK(gh_dvd_pump(&dvd)==GH_DVD_OK);}
+ CHECK(c.returned&&c.status==GH_SOUND_SCENE_OK&&scene.ready&&!scene.loading.pointer);
+ CHECK(scene.ts.bytes==ts.bytes&&scene.ts_count==8&&control.ts_head2c==&scene.ts_rows[7]);
+ CHECK(gh_audio_token_complete(r,scene.bank2)&&gh_audio_bank_views(r,2,&prog,&sys,&samples,&afd)==GH_AUDIO_OK&&afd.size==304);
+ for(unsigned i=0;i<scene.ts_count;++i){
+  const gh_sound_ts_row *row=&scene.ts_rows[i];
+  CHECK(row->offset==0x10+i*0x50&&row->flags0c==1&&!row->volume10&&
+        !row->voice14&&!row->disabled12&&!row->state13);
+ }
  CHECK(gh_task_threads_destroy(t)==GH_THREAD_OK&&gh_heap_destroy(h)==GH_MEM_OK);free(pack);gh_audio_registry_destroy(r);gh_disc_close(d);
- puts("PASS soundscene realR020/DVD/fiber/ownedbank2/defaults and same-owner R100 external AFS reload");return 0;}
+ puts("PASS soundscene realR020/DVD/fiber/ownedbank2/defaults and same-owner R100/R102 external AFS reload plus authored R102 TS state");return 0;}

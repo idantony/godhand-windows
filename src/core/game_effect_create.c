@@ -759,7 +759,9 @@ int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *v)
  const unsigned stamp=w(v->actor->bytes+0x640)&0xffffu;
  const uint32_t dependency=w(v->actor->bytes+0x564);
  if((w(v->actor->bytes+0x2fc)>>16)!=0x202||
-    !((stamp==19&&dependency==0x203)||(stamp==20&&dependency==0x200)))return 0;
+    !((stamp==19&&dependency==0x203)||(stamp==20&&dependency==0x200)||
+      (program==0x002f0058u&&v->model->work&&v->model->work->room==0x100&&
+       stamp8_attack_actor(v->actor))))return 0;
  const unsigned part=v->record.bytes[0xbe];
  return part<v->model->part_count&&v->part==v->model->parts+part;
 }
@@ -771,6 +773,7 @@ int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *v)
         !v->payload[0x1ec]&&(w(v->actor->bytes+0x2fc)>>16)==0x202&&
         ((w(v->actor->bytes+0x564)==0x203&&(w(v->actor->bytes+0x640)&0xffff)==19)||
          (w(v->actor->bytes+0x564)==0x200&&(w(v->actor->bytes+0x640)&0xffff)==20)||
+         (v->model->work&&v->model->work->room==0x100&&stamp8_attack_actor(v->actor))||
          (w(v->actor->bytes+0x564)==0x20a&&!(w(v->actor->bytes+0x640)&0xffff)&&
           v->actor->size>0x1650&&v->actor->bytes[0x1650]==3))&&
         !v->record.bytes[0xbe]&&!v->record.bytes[0x128]&&!v->record.bytes[0x136];
@@ -1117,6 +1120,16 @@ int gh_effect_esp_type7_record_bound(const gh_game_effects *e,const gh_effect_es
     !v->record.bytes||v->record.size!=0x2f0||v->record.bytes[0x133]!=7)
     return 0;
  const uint32_t tag=w(v->payload+0x23a);
+ if(tag==0x00150006u){
+  gh_effect_view est;
+  const uint8_t *r=v->record.bytes;
+  /* EV04 cut20's authored screen distortion is row3 of ten. */
+  return e&&e->event_registered_41c&&!v->actor&&!v->selector&&
+     w(r)==0x1e3e0010u&&w(r+4)==0x00802000u&&w(r+0xbc)==0xffff0001u&&
+     w(r+0xc0)==0x00040003u&&w(r+0x130)==0x07000001u&&!w(r+0x134)&&
+     !gh_effect_est_at_00306030(e,6,21,&est)&&est.size>=16+10*0x2f0&&
+     w(est.bytes+4)==10&&r==est.bytes+16+3*0x2f0;
+ }
  if(tag==0x003f0058u)return gh_effect_devil_esp_is_bound(e,v);
  if(tag==0x00420000u||tag==0x00270058u||tag==0x00590058u||tag==0x00170000u)return gh_effect_player_attachment_esp_is_bound(e,v);
  if(tag==0x00130006u){
@@ -1124,6 +1137,7 @@ int gh_effect_esp_type7_record_bound(const gh_game_effects *e,const gh_effect_es
  }else if(v->actor||v->selector)return 0;
  switch(tag){
  case 0x00030000u: /* Player impact. */
+ case 0x00120058u: /* Positioned amplified enemy impact. */
  case 0x000d0006u: /* EV02 cuts 12, 13, 15, 16, 17 and 25. */
  case 0x000e0006u:
  case 0x00100006u:

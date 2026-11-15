@@ -64,10 +64,10 @@ gh_game_event_status gh_event_actor_quit_00001588(gh_event_actor_release *s,
 }
 
 static gh_game_event_status delete_actor(gh_event_actor_factory *actor, gh_sound_control *sound,
-    uint32_t *frontier) {
+    uint32_t vtable, uint32_t *frontier) {
     if (frontier) *frontier = 0x312778;
     if (!actor->bound || (!actor->handle && actor->normal_release_stage < 3) || !actor->object.view.bytes ||
-        actor->object.view.original_vtable214 != 0x44b528 || actor->model.external_borrowers ||
+        actor->object.view.original_vtable214 != vtable || actor->model.external_borrowers ||
         actor->model.external_owner || actor->model.external_parts || actor->model.sound_borrowers) {
         return GH_EVENT_ARGUMENT;
     }
@@ -121,7 +121,8 @@ static gh_game_event_status check_effect_borrows(const gh_event_actor_release *s
     return borrowed ? GH_EVENT_UNSUPPORTED : GH_EVENT_OK;
 }
 
-static gh_game_event_status release_associated(gh_event_actor_release *s, size_t index, uint32_t *frontier) {
+static gh_game_event_status release_associated(gh_event_actor_release *s, size_t index,
+    uint32_t source_kind, uint32_t *frontier) {
     gh_event_actor_extra *extra = s->bindings.extra;
     if (index == 0 && extra->retargeted) {
         if (frontier) *frontier = 0x100ed8;
@@ -144,13 +145,34 @@ static gh_game_event_status release_associated(gh_event_actor_release *s, size_t
         if (status) return status;
         if (frontier) *frontier = 0x312778;
         if (gh_actor_model_clear_external_parts(&extra->accessory_parts)) return GH_EVENT_CALLEE;
-        status = delete_actor(&extra->olivia_accessory, s->bindings.sound, frontier);
+        status = delete_actor(&extra->olivia_accessory, s->bindings.sound, 0x44b528, frontier);
         if (status) return status;
         extra->accessory_handle = 0;
     }
     // Original row deletion can leave soon-to-be-deleted children with a
     // stale guest parent. Remove only the matching native borrows before free.
     gh_actor_model *target = &s->bindings.roster->rows[index].model;
+    if (source_kind == 0x615 || source_kind == 0x625) {
+        // REL 2968 deletes the row+2C accessory before deleting its body.
+        // Both virtual destructors converge on 2A73C8 -> 14EA28 -> 14E5D0.
+        const int em57 = source_kind == 0x625;
+        gh_event_actor_factory *accessory = &extra->ev04_accessory[em57];
+        if (accessory->bound) {
+            if (frontier) *frontier = 0x312778;
+            if (s->bindings.creation->bindings.data->components->event_no != 4 ||
+                accessory->actor_index != index || accessory->kind != (em57 ? 0x628 : 0x253))
+                return GH_EVENT_ARGUMENT;
+            gh_game_event_status status = check_effect_borrows(s, accessory, frontier);
+            if (status) return status;
+            gh_actor_model *model = &accessory->model;
+            if (model->external_owner && (model->external_owner != accessory ||
+                model->external_parent != target || model->external_parent_index != (em57 ? 17u : 2u) ||
+                gh_actor_model_clear_external_parent(model, accessory))) return GH_EVENT_CALLEE;
+            status = delete_actor(accessory, s->bindings.sound, em57 ? 0x448028 : 0x447f70, frontier);
+            if (status) return status;
+            if (extra->ev04_el18_accessory == accessory) extra->ev04_el18_accessory = NULL;
+        }
+    }
     for (size_t i = 0; i < sizeof(extra->row_parts) / sizeof(*extra->row_parts); ++i) {
         gh_actor_external_parent_set *link = &extra->row_parts[i];
         if (link->count && (link->child == target || link->parent == target) &&
@@ -184,7 +206,7 @@ gh_game_event_status gh_event_actor_start_release_00297a88(gh_event_actor_releas
         }
         gh_game_event_status status = check_effect_borrows(s, actor, frontier);
         if (status) return status;
-        status = release_associated(s, s->row, frontier);
+        status = release_associated(s, s->row, word(row + 4), frontier);
         if (status) return status;
         if (word(row + 0x40) != actor->kind) return GH_EVENT_ARGUMENT;
         // Original setId before the virtual destructor, including costume variants.
@@ -192,7 +214,7 @@ gh_game_event_status gh_event_actor_start_release_00297a88(gh_event_actor_releas
         p[0x2fe] = (uint8_t)actor->kind;
         p[0x2ff] = (uint8_t)(actor->kind >> 8);
         put(p + 0x2d0, actor->kind == 0x367 ? 0x20000000 : 0x800000);
-        status = delete_actor(actor, s->bindings.sound, frontier);
+        status = delete_actor(actor, s->bindings.sound, 0x44b528, frontier);
         if (status) return status;
         creation->actor_handles[s->row] = 0;
         if (!s->row) creation->first_actor_handle = 0;

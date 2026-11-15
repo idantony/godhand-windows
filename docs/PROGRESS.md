@@ -4,6 +4,19 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Complete R002 Event 04 on Windows and enter R102 initialization
+
+The controlled Windows replay presents 3,390 consecutive frames in R002 and
+starts and completes all 24 shots of Event 04. It finishes the original
+event cleanup, presents the original save prompt, and selects Continue
+using D-pad Down and Cross. The game enters R102 initialization at tick 6823
+and reaches the original positional sound table. The renderer, effect layer,
+GPU, and window report zero errors.
+
+受控 Windows 回放在 R002 连续呈现了 3,390 帧，完整播放 EV04 的 24 个镜头并执行片尾清理。
+画面显示原版保存界面，回放用方向键下和叉键选择继续。第 6823 tick 进入 R102 初始化，推进到
+原版声音定位表。渲染、特效、GPU 和窗口均无报错，R102 的首帧游戏画面仍待验证。
+
 ## Four R002 cutscene shots presented on Windows
 
 A controlled Windows run takes the original R105 exit and presents 725

@@ -129,7 +129,8 @@ static gh_room_pool_status fail(uint32_t *frontier,uint32_t entry)
 gh_room_pool_status gh_om_retire_player_paper_borrow(gh_om_factory *factory,
  gh_actor_model *player,uint32_t *frontier)
 {
- if(!factory||!factory->bound||!factory->bindings.work||factory->bindings.work->room!=0x105||
+ if(!factory||!factory->bound||!factory->bindings.work||
+    (factory->bindings.work->room!=0x105&&factory->bindings.work->room!=2)||
     !player||!player->ready||player->native_identity!=player||player->pools!=factory->bindings.pools||
     !player->root.bytes||player->root.size<0x6ac||
     (word(player->root.bytes+0x250)&0xe0000000u)!=0xe0000000u)

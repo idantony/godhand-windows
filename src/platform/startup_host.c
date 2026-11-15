@@ -186,6 +186,7 @@ struct gh_startup_host {
     gh_event_actor_play event_actor_play;
     gh_actor_motion event_actor_motions[GH_EVENT_ACTOR_ROSTER_CAPACITY];
     gh_event_effect_play event_effect_play;
+    gh_effect_create_call enemy_light_effect;
     gh_event_effect_quit event_effect_quit;
     gh_event_light_filter event_light_filter;
     gh_event_additional_light event_additional_light;
@@ -1205,7 +1206,36 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     if(gh_game_services_get_scene_view(h->services,&s))return GH_SCENE_STEP_ARGUMENT;
     gh_game_pl_camera *camera=active_scene_camera(h,s.pl_camera);
     gh_scene_aux_status aux=GH_AUX_OK;
-    if(address==0x138f98){
+    if(address==0x306528&&argument==9&&h->work.room==0x100){
+        gh_effect_create_call *effect=&h->enemy_light_effect;
+        if(!effect->active||effect->complete){
+            const gh_effect_create_request request={.bank=0,.index=9,.mode=1,.selector=-1};
+            if(gh_effect_create_begin(effect,&request))return GH_SCENE_STEP_ARGUMENT;
+        }
+        const gh_effect_create_bindings bindings={
+            .storage={.effects=s.effects,.esp=s.scene_buffer_a,.esp_bytes=s.scene_buffer_a_size,
+                .emitters=s.scene_buffer_b,.emitter_bytes=s.scene_buffer_b_size,
+                .actor_match=gh_effect_create_actor_match,.context=s.effects},
+            .work=&h->work,.random=&h->game_init.random
+        };
+        gh_effect_status effect_status=gh_game_effect_create_00306528(effect,&bindings);
+        if(effect_status){
+            if(frontier)*frontier=effect->frontier?effect->frontier:address;
+            return effect_status==GH_EFFECT_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:GH_SCENE_STEP_CALLEE;
+        }
+        return effect->complete?GH_SCENE_STEP_OK:GH_SCENE_STEP_CALLEE;
+    }else if(address==0x2d8408&&argument==1&&h->work.room==0x100){
+        const gh_actor_model *model=s.player_model;
+        const void *parts[255];
+        if(!s.world_light||!model||!model->ready||!s.title_player||model->root.bytes!=s.title_player->view.bytes||
+           model->part_count>sizeof(parts)/sizeof(*parts))return GH_SCENE_STEP_ARGUMENT;
+        for(unsigned i=0;i<model->part_count;i++)parts[i]=model->parts[i].bytes;
+        const gh_light_player_parts player={.owner=model->root.bytes,.parts=parts,.count=model->part_count};
+        const gh_light_status light=gh_game_world_light_select_002d8408(s.world_light,1,&player);
+        if(light&&frontier)*frontier=s.world_light->frontier?s.world_light->frontier:address;
+        return light==GH_LIGHT_UNSUPPORTED?GH_SCENE_STEP_UNSUPPORTED:
+            light?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
+    }else if(address==0x138f98){
         gh_camera_projection_display display={&h->display.screen_width,&h->display.screen_height_bits,
             &h->display.pixel_aspect_bits,&h->display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
         gh_camera_status status=gh_game_motion_camera_move_00138600(&h->event_camera,&h->game_init,&h->work,&display,frontier);

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T11:25:42+00:00",
-  "stage": "native-windows-r002-ev04-four-shots",
+  "verified_utc": "2026-11-15T11:58:58+00:00",
+  "stage": "native-windows-r002-ev04-complete-r102-init",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1288,6 +1288,30 @@
     "exit_tick": 3522,
     "next_original_operation": {"module": "main ELF", "address": "002DF860"},
     "renderer_or_window_error_observed": false
+  },
+  "native_windows_r002_to_r102": {
+    "scope": "Controlled original R105 exit, complete R002 Event 04 presentation, and input-driven native room handoff",
+    "from_room": "0002",
+    "to_room": "0102",
+    "event_number": 4,
+    "completed_shots": 24,
+    "presented_r002_frames": 3390,
+    "presented_r002_scene_range": [
+      3299,
+      6688
+    ],
+    "original_save_prompt_presented": true,
+    "dpad_down_tick": 6788,
+    "cross_tick": 6790,
+    "continued_without_saving": true,
+    "r102_init_tick": 6823,
+    "r102_gameplay_frame_presented": false,
+    "next_operation_in_device_replay": {
+      "module": "main ELF",
+      "address": "002CB080"
+    },
+    "renderer_or_window_error_observed": false,
+    "effect_or_world_gpu_error_observed": false
   },
   "native_windows_r002_ev04_four_shots": {
     "scope": "Controlled original R105 exit and native Direct3D R002 presentation",

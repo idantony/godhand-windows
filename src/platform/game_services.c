@@ -119,7 +119,8 @@ struct gh_game_services {
  uint32_t player_grab_attacker;
  uint8_t player_grab_escape_stamp20;
  gh_event_player_reset event_player_reset;gh_event_clear_bindings event_player_prefix;
- gh_player_abort_bindings event_player_abort;gh_event_weapon_slot player_weapon;
+ gh_player_abort_bindings event_player_abort;gh_event_weapon_slot player_weapon,event_paper_slot;
+ gh_event_weapon_attachment event_paper_attachment;
  gh_om_factory om_factory;
  gh_om300_full_retirement om_retirement;gh_object_sound_binding om_retire_sound;
  gh_enemy_manager_remove enemy_removal;
@@ -799,7 +800,7 @@ static gh_soft_event_status room_soft_start_effects(void *context,uint32_t *fron
 
 static const gh_title_player_view *room_soft_player_weapon(gh_game_services *s)
 {
- if((s->b.work->room==0x105||s->b.work->room==2)&&s->r105_paper.stage==6){
+ if((s->b.work->room==0x105||s->b.work->room==2||s->b.work->room==0x102)&&s->r105_paper.stage==6){
   const gh_om_object *paper=s->r105_paper.create.object;
   const gh_title_player_view *player=&s->title_player.view;
   if(paper&&paper->registered&&paper->runtime_created&&paper->runtime_kind==0x376&&
@@ -808,6 +809,24 @@ static const gh_title_player_view *room_soft_player_weapon(gh_game_services *s)
  }
  return s->player_weapon.current?s->player_weapon.current->weapon:NULL;
 }
+
+/* EventEnv update and release use the same hand-held OM as the soft-event
+ * player path, including R002's room-local recreation from the paper flag. */
+static const gh_event_weapon_slot *room_event_weapon_slot(gh_game_services *s)
+{
+ if(!s->player_weapon.known||s->player_weapon.current)return &s->player_weapon;
+ gh_om_object *paper=s->r105_paper.create.object;
+ if(!paper||room_soft_player_weapon(s)!=&paper->view||!paper->initialization||
+    s->r105_paper.player!=&s->player_model)return &s->player_weapon;
+ gh_actor_model *model=&paper->initialization->model;
+ if(!model->ready||model->root.bytes!=paper->view.bytes||model->external_parent!=&s->player_model||
+    model->external_owner!=paper||model->external_parent_index!=2)return &s->player_weapon;
+ s->event_paper_attachment=(gh_event_weapon_attachment){.weapon=&paper->view,.weapon_model=model,
+   .parent=&s->title_player.view,.parent_model=&s->player_model,.parent_part=2};
+ s->event_paper_slot=(gh_event_weapon_slot){.known=1,.current=&s->event_paper_attachment};
+ return &s->event_paper_slot;
+}
+
 
 static gh_soft_event_status room_soft_start_player(void *context,uint32_t *frontier)
 {
@@ -1022,7 +1041,7 @@ static gh_player_init_status restore_player_paper(void *context,const gh_title_p
  uint32_t *frontier)
 {
  gh_game_services *s=context;
- if(!s||!frontier||(s->b.work->room!=0x105&&s->b.work->room!=2)||player!=&s->title_player.view||
+ if(!s||!frontier||(s->b.work->room!=0x105&&s->b.work->room!=2&&s->b.work->room!=0x102)||player!=&s->title_player.view||
     s->player_model.root.bytes!=player->bytes)return GH_PLAYER_INIT_UNSUPPORTED;
  /* Original 107F58 can create paper before the OMS placement loop. The
   * typed factory has to own that same object through the later loop. */
@@ -3316,7 +3335,7 @@ gh_game_services_status gh_game_services_get_scene_view(gh_game_services*s,gh_ga
   .module=&s->module,.sound_scene=s->b.sound_scene,.collision_pairs=&s->collision_pairs,
   .effects=&s->effects,.filters=&s->filters,.model_effect=&s->model_effect,
   .world_light=&s->world_light,.model_packets=&s->model_packets,
-  .work5f8=&s->work5f8,.event_weapon=&s->player_weapon,.player_model=&s->player_model,
+  .work5f8=&s->work5f8,.event_weapon=room_event_weapon_slot(s),.player_model=&s->player_model,
   .collision_solids=&s->collision_solids,.scene_tables=&s->scene_tables,.title_player=&s->title_player,
   .checkpoint=&s->checkpoint,.scene_ui=&s->scene_ui,.scene_at=&s->scene_at,.action_buttons=&s->action_buttons,
   .em_placements=&s->em_placements,.om_placements=&s->om_placements,.acd=&s->acd,.step=&s->step,.event=s->b.event,.display=s->b.display,.title=s->title,

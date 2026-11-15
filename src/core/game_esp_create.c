@@ -119,7 +119,8 @@ static gh_effect_status initial_transform(gh_esp_create_call*c,uint8_t*p,const g
  if(w(r+4)&0x200000u){
   const int collateral=part==-1&&scale==1.0f&&!emitter->actor&&!emitter->selector&&
      !emitter->model&&!emitter->part&&
-     gh_effect_core0c_radial_record_bound(c->b.storage.effects,emitter->record);
+     (gh_effect_core0c_radial_record_bound(c->b.storage.effects,emitter->record)||
+      gh_effect_ev04_radial_record_bound(c->b.storage.effects,emitter->record));
   uint32_t f=0;
   gh_effect_status status=(r[0x133]==9||r[0x133]==8||gh_effect_player_stun_row(emitter->record)||collateral)?
      gh_effect_position_init_scaled_00301c20(next,emitter->record,mirrored,scale,position,&f):
@@ -274,9 +275,17 @@ static gh_effect_status initialize_18(gh_esp_create_call*c,uint8_t*p,const uint8
     return fail(c,0x2f3f30,GH_EFFECT_UNSUPPORTED);
  if(horizontal<0||vertical<0){
     gh_effect_view impact;
-    if(horizontal!=-1||vertical!=0||gh_effect_est_at_00306030(c->b.storage.effects,0,3,&impact)||
-       !impact.bytes||impact.size<16+2*0x2f0||r!=impact.bytes+16+0x2f0)
-       return fail(c,0x2f3f30,GH_EFFECT_UNSUPPORTED);
+    int bound=0;
+    const gh_game_effects *effects=c->b.storage.effects;
+    if(horizontal==-1&&vertical==0){
+       if(!gh_effect_est_at_00306030(effects,0,3,&impact)&&impact.bytes&&
+          impact.size>=16+2*0x2f0&&r==impact.bytes+16+0x2f0)
+          bound=1;
+       if(!bound&&!gh_effect_est_at_00306030(effects,0x58,0x12,&impact)&&impact.bytes&&
+          impact.size>=16+4*0x2f0&&r==impact.bytes+16+0x2f0)
+          bound=1;
+    }
+    if(!bound)return fail(c,0x2f3f30,GH_EFFECT_UNSUPPORTED);
  }
  float radius=mul(floating(r+0x15c),1000.0f);
  if(!isfinite(radius)||radius<0.0f)return fail(c,0x2f3e68,GH_EFFECT_UNSUPPORTED);

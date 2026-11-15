@@ -122,7 +122,29 @@ gh_object_step_status gh_object_static_move_one(gh_game_object_step*s,gh_scene_m
   s->moved_objects_5caffc++;p[0x2b6]=255;s->move_object_stage=1;
  }
  if(info&0x80000u){frontier=0x2da468;goto unsupported;}
- if(flags&0x10000000u){frontier=0x150128;goto unsupported;}
+ if(s->move_object_stage==1){
+  if(flags&0x10000000u){
+   /* 3190A8 uses Work574 * 754C48 and updates XYZ only. Mode4 then
+    * refreshes the node-free model basis before its draw in this frame. */
+   if(p[0x2b4]){frontier=0x149eb8;goto unsupported;}
+   const float step=mul(rf(raw+0x574),rf((const uint8_t*)&s->ratio10_bits));
+   float angle[4],position[3],scale[3],matrix[16];
+   memcpy(angle,p+0x100,sizeof(angle));
+   for(unsigned i=0;i<3;i++)angle[i]=add(angle[i],mul(rf(p+0x340+4*i),step));
+   if(gh_actor_euler_adjust_001f7da0(angle,angle,GH_STATIC_BINARY32_REFERENCE,&frontier))goto unsupported;
+   const uint32_t model_flags=w(p+0x250);
+   if(!(model_flags&0x200000u)&&!(model_flags&0x800u)){
+    memcpy(position,p+0xb0,sizeof(position));
+    memcpy(scale,p+0x110,sizeof(scale));
+    if(gh_actor_matrix_compose_00147a48(position,angle,scale,4,matrix,GH_STATIC_BINARY32_REFERENCE,&frontier))goto unsupported;
+    memcpy(p+0x80,matrix,sizeof(matrix));
+    memcpy(p+0x120,scale,sizeof(scale));
+   }
+   memcpy(p+0x100,angle,sizeof(angle));p[0x140]=4;
+   if(!(model_flags&0x200000u))ww(p+0x250,(model_flags&~4u)|(rf(p+0x27c)>0.0f?4u:0));
+  }
+  s->move_object_stage=2;
+ }
  if(!(flags&0x40000000u)&&d[0x4a]&&d[0x4b]){
   float time=(float)w(raw+0x210);
   if(!(info&0x40u))time=mul(time,0.0625f);

@@ -98,13 +98,31 @@ static gh_scene_step_status enemies(gh_game_scene_step*s,const gh_game_scene_ste
   s->enemy_special_music=(uint8_t)(special&&!(room>=0x40&&room<0x46)&&!(room>=0x4c&&room<0x50));
   p32(e+0x548,0x3f800000);s->enemy_stage=3;
  }
- if(!b->save.bytes||b->save.size<GH_CORE_SAVE_BYTES)return fail(s,0x291d48,GH_SCENE_STEP_ARGUMENT,0);
- const uint32_t flags=w(b->save.bytes+0x14);
- /* Only original effect/BGM transition branches need further consumers. */
- if(flags&0x80000000u){if(!e[0x518])return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);}
- else if(flags&0x40000000u){if(e[0x518])return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);}
- else if(w(raw+0x5e4)&0x20000000u)e[0x518]=0;
- else if((e[0x518]!=0)!=(s->enemy_special_music!=0))return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);
+ if(s->enemy_stage==3){
+  if(!b->save.bytes||b->save.size<GH_CORE_SAVE_BYTES)return fail(s,0x291d48,GH_SCENE_STEP_ARGUMENT,0);
+  const uint32_t flags=w(b->save.bytes+0x14);
+  if(flags&0x80000000u){if(!e[0x518])return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);}
+  else if(flags&0x40000000u){if(e[0x518])return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);}
+  else if(w(raw+0x5e4)&0x20000000u)e[0x518]=0;
+  else if(!e[0x518]&&s->enemy_special_music&&b->work->room==0x100){
+   e[0x518]=1;
+   s->enemy_stage=4;
+  }else if((e[0x518]!=0)!=(s->enemy_special_music!=0))
+   return fail(s,0x291d48,GH_SCENE_STEP_UNSUPPORTED,0);
+ }
+ if(s->enemy_stage==4){
+  /* 291D48: start the authored stage effect before the side counter and light. */
+  gh_scene_step_status status=call(s,b,0x306528,9);
+  if(status)return status;
+  b->init->side_counter[4]=1;
+  p32(b->init->side_counter+8,0);
+  p32(b->init->side_counter+12,0);
+  s->enemy_stage=5;
+ }
+ if(s->enemy_stage==5){
+  gh_scene_step_status status=call(s,b,0x2d8408,1);
+  if(status)return status;
+ }
  s->enemy_stage=0;return GH_SCENE_STEP_OK;
 }
 static gh_scene_step_status object_pool(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){

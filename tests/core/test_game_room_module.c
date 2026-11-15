@@ -23,7 +23,8 @@ int main(int argc,char **argv)
 {
  static const struct {uint16_t room;size_t bytes;uint32_t init,move,end;} profiles[]={
   {0x20,24129,0x1a0,0x220,0x248},{0x100,25663,0x208,0x740,0},
-  {3,5005,0x1a0,0x228,0},{0x101,14284,0x1a0,0x520,0},{0x105,12628,0x1a8,0x398,0},
+  {3,5005,0x1a0,0x228,0},{0x101,14284,0x1a0,0x520,0},
+  {0x102,23217,0x1a8,0x670,0},{0x105,12628,0x1a8,0x398,0},
  };
  gh_disc *disc;
  gh_heap *heap;
@@ -61,7 +62,7 @@ int main(int argc,char **argv)
     CHECK(c.result==GH_ROOM_MODULE_OK&&module.bound&&module.room==profiles[i].room);
     CHECK(module.hook8.kind==GH_SCENE_HOOK_UNRESOLVED&&module.hook12.kind==GH_SCENE_HOOK_UNRESOLVED);
     CHECK(module.init_offset==profiles[i].init&&module.move_offset==profiles[i].move&&module.end_offset==profiles[i].end);
-    if(module.room==0x105){
+    if(module.room==0x102||module.room==0x105){
      const uint8_t *bytes=module.input.allocation.pointer;
      static const uint8_t original_preinit[]={0x08,0x00,0xe0,0x03,0,0,0,0};
      for(size_t j=0;j<sizeof(original_preinit);j++)CHECK(bytes[0x1a0+j]==original_preinit[j]);
@@ -78,6 +79,6 @@ int main(int argc,char **argv)
  }
  CHECK(gh_task_threads_destroy(threads)==GH_THREAD_OK&&gh_heap_destroy(heap)==GH_MEM_OK);
  gh_disc_close(disc);
- puts("PASS actual R020/R100/R003/R101/R105 module identity and release, corruption rejection, original R105 PreInit");
+ puts("PASS actual R020/R100/R003/R101/R102/R105 module identity and release, corruption rejection, original R102/R105 PreInit");
  return 0;
 }
