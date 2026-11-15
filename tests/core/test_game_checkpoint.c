@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fenv.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"line%d %s\n",__LINE__,#x);exit(1);}}while(0)
 static uint32_t u32(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}
 static void put(uint8_t*p,uint32_t n){memcpy(p,&n,4);}
@@ -20,4 +21,19 @@ int main(void){gh_game_checkpoint s={0};gh_boot_work w={.room=0x20};gh_checkpoin
  CHECK(s.tail.position[0]==0x3f800000&&s.tail.position[1]==0xc0000000&&s.tail.position[2]==0x40400000&&s.tail.rotation[0]==0x3e800000&&s.tail.heat==0x41a00000&&s.tail.heat_max==0x42f00000);
  CHECK(gh_game_title_player_release(&player)==GH_PLAYER_OK);profile=(gh_title_memory_profile){GH_TITLE_MEMORY_ZERO_REFERENCE,0,0};CHECK(gh_game_title_player_create_reference_0031c4e0(&player,h,&w,&profile)==GH_PLAYER_OK);w.flags598=0x08000000u;
  CHECK(gh_game_checkpoint_002bf8f8(&s,&b)==GH_CHECKPOINT_OK&&save[0x154]==13&&u32(save+0x80)==360&&u32(save+0x84)==1);
+ put(save+0x20,123);put(save+0x14,0x10000020);
+ save[0x12]=9;save[0x13]=0;save[0x14]=0x20;
+ save[0xbb8]=21;save[0xbb9]=0;
+ memset(save+0x1b0,0x3c,0xd8);save[0x288]=0x33;
+ memset(save+0xb0,0x2c,0x80);save[0x150]=0x33;
+ put(player.view.bytes+0x6a8,1);put(player.view.alias_f0,0x42c80000);
+ memset(prepare->fields+0x1660,0,sizeof(prepare->fields)-0x1660);
+ CHECK(!fesetround(FE_UPWARD)&&gh_game_checkpoint_restore_retry_002bf948(&s,&b)==GH_CHECKPOINT_OK&&
+   !s.frontier&&fegetround()==FE_UPWARD&&!fesetround(FE_TONEAREST));
+ CHECK(u32(save+0x84)==360&&u32(save+0x20)==123&&save[0x12]==9&&save[0x13]==0&&save[0xbb8]==21&&save[0xbb9]==0);
+ CHECK((u32(save+0x14)&0x10000000u)&&save[0x1b0]==0x3c&&save[0x287]==0x3c&&save[0x288]==0x9a&&save[0xb0]==0x2c&&save[0x12f]==0x2c&&save[0x150]==0x9a);
+ CHECK(save[0x157]==1&&!memcmp(prepare->fields+0x1660,dst+0x14a0,0x9c30));
+ CHECK(!memcmp(player.view.alias_f0,s.tail.position,12)&&!memcmp(player.view.bytes+0x490,s.tail.position,12)&&
+   !memcmp((uint8_t*)&w+0x5c0,s.tail.position,12)&&u32((uint8_t*)&w+0x5d0)==s.tail.rotation[1]);
+ CHECK(u32(init->heat)==0x43870000&&u32(init->heat+4)==0x41a00000&&u32(init->heat+0x14)==0);
  CHECK(gh_game_title_player_release(&player)==GH_PLAYER_OK&&gh_heap_destroy(h)==GH_MEM_OK);free(save);free(dst);free(prepare);free(init);puts("PASS actualcheckpoint full0 gates/canonicalcopies/suppliedHP1234/zero-referenceHP1/nohostgarbage");return 0;}

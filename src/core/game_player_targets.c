@@ -408,8 +408,8 @@ gh_player_target_status gh_player_check_attack_target_00124c30(const gh_player_t
  return keep_attack_target(b,init,&current,0,f);
 }
 
-gh_player_target_status gh_player_attack_target_00124540(const gh_player_target_bindings *b,
- const gh_game_init_state *init,gh_player_target *current,uint32_t *f)
+static gh_player_target_status attack_target_00124540(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,gh_player_target *current,int dodge,uint32_t *f)
 {
  if(f)*f=0;
  if(!b||!init||!current||!b->player||!b->player->bytes||b->player->size<0x649)
@@ -429,9 +429,12 @@ gh_player_target_status gh_player_attack_target_00124540(const gh_player_target_
    {3,0x3f860a92,1}};
   static const struct attack_probe special[]={
    {2,0x3f060a92,1},{4,0x3f060a92,1},{4,0x40490fdb,1}};
+  static const struct attack_probe lateral[]={
+   {2,0x3f060a92,0},{4,0x3f060a92,0},{4,0x4016cbe4,0}};
   const int alternate=w(b->player->bytes+0x5d8)==4;
-  const struct attack_probe *probes=alternate?special:ordinary;
-  const size_t count=alternate?sizeof(special)/sizeof(*special):sizeof(ordinary)/sizeof(*ordinary);
+  const struct attack_probe *probes=dodge?lateral:alternate?special:ordinary;
+  const size_t count=dodge?sizeof(lateral)/sizeof(*lateral):
+   alternate?sizeof(special)/sizeof(*special):sizeof(ordinary)/sizeof(*ordinary);
   for(size_t i=0;i<count&&!current->handle;i++){
    status=focus(b,init,probes[i].range,number(probes[i].cone),probes[i].fallback,NULL,current,f);
    if(status)return status;
@@ -442,4 +445,16 @@ gh_player_target_status gh_player_attack_target_00124540(const gh_player_target_
   b->player->bytes[0x648]=20;
  }
  return GH_PLAYER_TARGET_OK;
+}
+
+gh_player_target_status gh_player_attack_target_00124540(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,gh_player_target *current,uint32_t *f)
+{
+ return attack_target_00124540(b,init,current,0,f);
+}
+
+gh_player_target_status gh_player_dodge_target_00124540(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,gh_player_target *current,uint32_t *f)
+{
+ return attack_target_00124540(b,init,current,1,f);
 }

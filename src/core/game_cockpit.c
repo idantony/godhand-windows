@@ -40,6 +40,8 @@ struct gh_game_cockpit {
  float life_origin_y,life_shake;uint32_t life_origin_known;
  uint8_t life_level_counter,life_level_direction,action_rock_forward;unsigned heat_move_stage;
  unsigned widget_step;
+ unsigned game_over_step,game_over_entry,game_over_choice_step;
+ uint8_t game_over_accepted;
 };
 static uint32_t u32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w32(gh_game_cockpit *s,unsigned o,uint32_t n){for(unsigned i=0;i<4;i++)s->fields[o+i]=(uint8_t)(n>>(8*i));}
@@ -218,7 +220,7 @@ gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit*s,gh_core_save_v
  s->fields[0x1910+0x104]=0;
  o=0x1ae0;TRY(restart(s,o));if(u32(wr+0x594)&0x2000000)for(unsigned i=0;i<4;i++)save.bytes[0x20+i]=(uint8_t)(999999u>>(8*i));
  uint32_t money=u32(save.bytes+0x20);w32(s,o+0x90,money);TRY(cache(s,o,4,o+0x94,0));memset(s->fields+o+0x1b0,0,16);TRY(flag_entry(s,o,2,0x8000000,0));TRY(work(s,o,0,0,&e));e->seed=money;memset(save.bytes+0x24,0,4);s->fields[o+0x1c0]=0;
- s->fields[0x23bc]=0;for(unsigned i=0;i<11;i++){s->fields[registry[i].offset+0x76]=0;s->fields[registry[i].offset+0x75]=1;}
+ s->fields[0x23bc]=0;s->game_over_step=s->game_over_entry=s->game_over_choice_step=0;s->game_over_accepted=0;for(unsigned i=0;i<11;i++){s->fields[registry[i].offset+0x76]=0;s->fields[registry[i].offset+0x75]=1;}
  s->room_ready=1;return GH_ID_OK;
 }
 
@@ -694,10 +696,262 @@ static gh_id_error radar_draw_markers(gh_game_cockpit *s,const gh_cockpit_frame_
  return GH_ID_OK;
 }
 
+/* Original 13D400 and 13D698. The five anchored custom work records are
+ * initially inactive. 2D5DA8 caches four entry values, 2D6490 hides them,
+ * and 2D5DE0 changes nothing before the save-specific 13DB50 setup. */
+static gh_id_error game_over_panel_initialize(gh_game_cockpit *s,const gh_cockpit_frame_callbacks *c)
+{
+ if(s->game_over_step==0){
+  w16(s,0x92,0);
+  s->game_over_step=1;
+ }
+ if(s->game_over_step==1){
+  while(s->game_over_entry<11){
+   int id=(int)s->game_over_entry;
+   gh_id_entry *entry;
+   TRY(work(s,0,id,0x94+4*(unsigned)id,&entry));
+   TRY(gh_id_entry_restore_source_002aa2d0(base(s,0),entry));
+   TRY(reset_family(s,0,id,0));
+   ++s->game_over_entry;
+  }
+  TRY(restart(s,0));
+  gh_id_entry *grow;
+  TRY(work(s,0,4,0,&grow));
+  grow->scale_x=grow->f70[2]=0.0f;
+  s->fields[0x90]=1;
+  s->game_over_step=2;
+ }
+ if(s->game_over_step==2){
+  TRY(gameplay_move_base(s,0,c));
+  TRY(restart(s,0xd0));
+  s->game_over_step=3;
+ }
+ if(s->game_over_step==3){
+  for(unsigned i=0;i<5;i++){
+   unsigned off=0x120+0x7c*i;
+   gh_id_entry *entry;
+   TRY(work(s,0xd0,(int)i,off+4,&entry));
+   wf(s,off+0xc,entry->pos_x);
+   wf(s,off+0x10,entry->pos_y);
+   w32(s,off+0x4c,entry->color_base);
+   s->fields[off+0x78]=(uint8_t)entry->layer;
+   entry->flags|=0x20000000u;
+  }
+  s->game_over_step=4;
+ }
+ TRY(gameplay_move_base(s,0xd0,c));
+ s->fields[0x38c]=0;
+ s->game_over_step=s->game_over_entry=0;
+ return GH_ID_OK;
+}
+
+static gh_id_error game_over_panel_grow(gh_game_cockpit *s,const gh_cockpit_frame_callbacks *c)
+{
+ gh_id_entry *grow;
+ TRY(work(s,0,4,0,&grow));
+ if(!grow->source)return frame_stop(s,0x13d698);
+ if(s->game_over_step==1){
+  grow->scale_x=add(grow->scale_x,0.03f);
+  grow->f70[2]=add(grow->f70[2],0.0207f);
+  s->game_over_entry=0;
+  s->game_over_step=grow->scale_x>=1.0f?2:4;
+ }
+ if(s->game_over_step==2){
+  grow->scale_x=frame_number(grow->source+0x28);
+  grow->f70[2]=frame_number(grow->source+0x48);
+  base(s,0)->playing=1;
+  const int entries[]={7,1,2};
+  while(s->game_over_entry<3){
+   const int id=entries[s->game_over_entry];
+   gh_id_entry *entry;
+   TRY(work(s,0,id,0,&entry));
+   entry->flags&=~0x08000000u;
+   TRY(reset_family(s,0,id,0));
+   ++s->game_over_entry;
+  }
+  w16(s,0x92,1);
+  s->game_over_step=3;
+ }
+ if(s->game_over_step==3){
+  TRY(gameplay_move_base(s,0,c));
+  s->game_over_step=4;
+ }
+ if(s->game_over_step==4){
+  TRY(gameplay_move_base(s,0xd0,c));
+  s->game_over_step=5;
+ }
+ if(s->game_over_step==5){
+  TRY(gameplay_move_base(s,0,c));
+  s->game_over_step=6;
+ }
+ return GH_ID_OK;
+}
+
+static gh_id_error game_over_show_entry(gh_game_cockpit *s,int id)
+{
+ gh_id_entry *entry;
+ TRY(work(s,0,id,0,&entry));
+ entry->flags&=~0x08000000u;
+ return reset_family(s,0,id,0);
+}
+
+static gh_id_error game_over_sound(gh_game_cockpit *s,const gh_cockpit_frame_callbacks *c,unsigned program)
+{
+ if(!c->game_over_sound)return frame_stop(s,0x2cb8a0);
+ uint32_t pc=0;
+ gh_id_error result=c->game_over_sound(c->context,program,&pc);
+ if(result)s->frontier=pc?pc:0x2cb8a0;
+ return result;
+}
+
+/* Original 13D7B0. Sound callbacks suspend a single selection iteration;
+ * they cannot toggle the selection or increment continue statistics twice. */
+static gh_id_error game_over_choose(gh_game_cockpit *s,const uint8_t *w,const gh_cockpit_frame_callbacks *c)
+{
+ const uint32_t low=u32(w+0x1a0),high=u32(w+0x1a4);
+ if(s->game_over_choice_step==0){
+  int selection=s->fields[0x90],next=selection;
+  if(selection==1&&((low&0x04000000u)||(high&0x00080000u)))next=0;
+  else if(selection==0&&((low&0x08000000u)||(high&0x00040000u)))next=1;
+  s->game_over_accepted=(low&0x10000000u)!=0;
+  if(next!=selection){
+   TRY(game_over_show_entry(s,next?2:3));
+   TRY(flag_entry(s,0,next?3:2,0x08000000u,0));
+   s->fields[0x90]=(uint8_t)next;
+   s->game_over_choice_step=1;
+  }else s->game_over_choice_step=2;
+ }
+ if(s->game_over_choice_step==1){
+  TRY(game_over_sound(s,c,0x15f));
+  s->game_over_choice_step=2;
+ }
+ if(s->game_over_choice_step==2){
+  if(s->game_over_accepted){
+   base(s,0)->playing=1;
+   TRY(game_over_sound(s,c,0x15e));
+   s->game_over_choice_step=3;
+  }else s->game_over_choice_step=5;
+ }
+ if(s->game_over_choice_step==3){
+  const int retry=s->fields[0x90];
+  TRY(game_over_show_entry(s,retry?5:6));
+  TRY(flag_entry(s,0,retry?2:3,0x08000000u,0));
+  TRY(flag_entry(s,0,0,0,0x08000000u));
+  TRY(flag_entry(s,0,9,0,0x10000000u));
+  TRY(reset_family(s,0,9,0));
+  TRY(reset_family(s,0,0,0));
+  if(retry){
+   uint8_t *save=c->save.bytes;
+   const unsigned a=(save[0x12]|(unsigned)save[0x13]<<8)+1;
+   const unsigned b=(save[0xbb8]|(unsigned)save[0xbb9]<<8)+1;
+   save[0x12]=(uint8_t)a;save[0x13]=(uint8_t)(a>>8);
+   save[0xbb8]=(uint8_t)b;save[0xbb9]=(uint8_t)(b>>8);
+   ++s->gameplay.init->continue_count;
+  }
+  s->game_over_choice_step=4;
+ }
+ if(s->game_over_choice_step==4){
+  TRY(gameplay_move_base(s,0,c));
+  w16(s,0x92,2);
+  s->game_over_choice_step=5;
+ }
+ if(s->game_over_choice_step==5){
+  gh_id_entry *timer;
+  TRY(work(s,0,1,0,&timer));
+  if((uint16_t)timer->jitter[4]>15&&!(timer->flags&0x08000000u)){
+   TRY(flag_entry(s,0,8,0,0x08000000u));
+   TRY(gameplay_move_base(s,0,c));
+  }
+  s->game_over_choice_step=0;
+  s->game_over_step=4;
+ }
+ return GH_ID_OK;
+}
+
+static gh_id_error game_over_panel_wait(gh_game_cockpit *s,const gh_cockpit_frame_callbacks *c)
+{
+ if(s->game_over_step==1){
+  gh_id_entry *entry;
+  TRY(work(s,0,0,0,&entry));
+  if(entry->flags&0x400u){
+   TRY(gameplay_move_base(s,0,c));
+   w16(s,0x92,3);
+  }
+  s->game_over_step=4;
+ }
+ return GH_ID_OK;
+}
+
+static gh_id_error game_over_trans(gh_game_cockpit *s,const uint8_t *w,const gh_cockpit_frame_callbacks *c)
+{
+ if(s->fields[0x23bc]==0){
+  if(!c||!c->scenario_mode14||!s->gameplay_bound)return frame_stop(s,0x1410a8);
+  if(*c->scenario_mode14||(s->gameplay.init->cheat_00568240.flags00&8))
+   return frame_stop(s,0x307208);
+  TRY(game_over_panel_initialize(s,c));
+  w16(s,0x23be,150);
+  s->fields[0x23bc]=1;
+  return GH_ID_OK;
+ }
+ if(s->fields[0x23bc]==2){
+  /* Case2 sets Main5. On retry, 2BE980 initializes only a local view
+   * and 2BE998 is not taken. The chosen room and yaw remain unchanged. */
+  if(!s->fields[0x90]||!c||!c->game_over_retry)return frame_stop(s,0x2be980);
+  uint32_t f=0;
+  gh_id_error result=c->game_over_retry(c->context,&f);
+  if(result){s->frontier=f?f:0x2be980;return result;}
+  s->fields[0x23bc]=0;
+  return GH_ID_OK;
+ }
+ if(s->fields[0x23bc]!=1)return frame_stop(s,0x1410a8);
+ if(!c||!c->save.bytes||c->save.size<GH_CORE_SAVE_BYTES||!s->gameplay_bound)return frame_stop(s,0x13d540);
+ if(u32(c->save.bytes+0x14)&0x04000000u)return frame_stop(s,0x13db50);
+ if(!s->game_over_step){
+  const unsigned ticks=s->fields[0x23be]|(unsigned)s->fields[0x23bf]<<8;
+  if(!ticks||ticks>=0x8000)return frame_stop(s,0x31bd88);
+  w16(s,0x23be,ticks-1);
+  s->game_over_step=1;
+ }
+ if(s->game_over_step<4){
+  switch(s->fields[0x92]){
+   case 0:TRY(game_over_panel_grow(s,c));break;
+   case 1:TRY(game_over_choose(s,w,c));break;
+   case 2:TRY(game_over_panel_wait(s,c));break;
+   default:return frame_stop(s,0x13d540);
+  }
+ }
+ if(s->game_over_step==4){
+  TRY(gameplay_move_base(s,0xd0,c));
+  s->game_over_step=5;
+ }
+ if(s->game_over_step==5){
+  TRY(gameplay_move_base(s,0,c));
+  s->game_over_step=6;
+ }
+ if(s->game_over_step==6){
+  if(!(u32(w+0x5e4)&0x0a000000u))TRY(frame_trans(s,0,c));
+  s->game_over_step=7;
+ }
+ if(s->fields[0x92]==3){
+  if(!c->game_over_fade)return frame_stop(s,0x307208);
+  uint32_t f=0;
+  gh_id_error result=c->game_over_fade(c->context,&f);
+  if(result){s->frontier=f?f:0x307208;return result;}
+  s->fields[0x23bc]=2;
+ }
+ s->game_over_step=0;
+ return GH_ID_OK;
+}
+
 gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit*s,const gh_boot_work*work_state,const gh_cockpit_frame_callbacks*c){
  if(!s||!s->ready||!s->room_ready||!work_state)return GH_ID_ARGUMENT;const uint8_t*w=(const uint8_t*)work_state;s->frontier=0;
  if(!s->draw_stage){if(u32(w+0x58c)&0x80000000)return GH_ID_OK;
-  if((u32(w+0x584)&8)&&!(u32(w+0x594)&0x800))return frame_stop(s,0x1410a8);
+  if((u32(w+0x584)&8)&&!(u32(w+0x594)&0x800)){
+   fenv_t env;if(feholdexcept(&env))return GH_ID_UNSUPPORTED;
+   if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_ID_UNSUPPORTED;}
+   gh_id_error result=game_over_trans(s,w,c);
+   return fesetenv(&env)?GH_ID_UNSUPPORTED:result;
+  }
   if(u32(w+0x5e0)&0x2000000){if(u32(s->fields+0x15bc)!=0xffff)TRY(frame_trans(s,0x1520,c));return GH_ID_OK;}
   /* Four direct draw gates, in original order, before17registered slots. */
   if(u32(s->fields+0x1e54)&&u32(s->fields+0x1e5c))return frame_stop(s,0x13cf20);

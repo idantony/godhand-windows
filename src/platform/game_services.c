@@ -210,6 +210,7 @@ static gh_game_services_status finalize_room_lifetime(gh_game_services*s){
   const gh_scene_status status=gh_r105_room_release(&s->r105);
   if(status)return fail(s,GH_SERVICES_BUSY,0x2a94f0,status);
  }
+ if(gh_r100_init_release(&s->r100))return fail(s,GH_SERVICES_ASSET,0x208,0);
  s->r105_paper=(gh_om376_paper){0};
  {gh_tutorial_status e=gh_cockpit_tutorial_release(&s->tutorial);if(e)return fail(s,GH_SERVICES_ASSET,s->tutorial.frontier?s->tutorial.frontier:0x147188,e);}
  if(s->b.id->pool_used!=s->cockpit_pool_end||s->b.id->job_count!=s->cockpit_jobs_end)return fail(s,GH_SERVICES_BUSY,0x2aa078,0);
@@ -1532,7 +1533,8 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
      const gh_room_vector*om_registry=NULL;
      if(gh_room_registry_view(&s->pools,0x754c58,&om_registry))return fail(s,GH_SERVICES_ASSET,0x30fb70,GH_POOL_ARGUMENT);
      pe=gh_om_factory_bind(&s->om_factory,&ob,om_registry->capacity);if(pe)return fail(s,GH_SERVICES_ASSET,0x30fb70,pe);}
-    pe=gh_om_scene_bind_native_001c3cb8(&s->om_placements,&oms,&s->om_factory,&result);
+    pe=gh_om_scene_bind_native_with_collision_001c3cb8(&s->om_placements,&oms,&s->om_factory,
+       &s->scene_tables,&s->r100.collision,&result);
    }
    if(pe)return fail(s,pe==GH_PLACE_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET,s->om_placements.frontier?s->om_placements.frontier:0x1c3cb8,pe);
   }s->case3_stage=29;
@@ -1902,6 +1904,16 @@ static gh_player_frame_status player_damage_positioned_effect(void *context,cons
  return call->complete?GH_PLAYER_FRAME_OK:GH_PLAYER_FRAME_ARGUMENT;
 }
 
+static gh_player_frame_status player_death_bgm(void *context,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(!s->b.bgm_requests)return GH_PLAYER_FRAME_UNSUPPORTED;
+ const gh_bgm_status status=gh_bgm_requests_death_fade_002ca718(s->b.bgm_requests);
+ if(status)*frontier=gh_bgm_requests_frontier(s->b.bgm_requests);
+ return status==GH_BGM_OK?GH_PLAYER_FRAME_OK:status==GH_BGM_UNSUPPORTED?
+   GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+}
+
 static gh_player_frame_status player_grab_camera(void *context,const gh_actor_model *model,
     uint32_t *frontier)
 {
@@ -1939,6 +1951,15 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  else{
   *frontier=0x129718;
   return GH_ACTOR_MOTION_UNSUPPORTED;
+ }
+ if(em27&&s->b.voices){
+  const gh_voice_status voice=gh_se_voice_bind_external_adx(s->b.voices,s->b.assets->dvd->disc,
+      s->b.sound_control,s->b.boot_elf,s->b.boot_elf_bytes);
+  if(voice){
+   *frontier=gh_se_voice_frontier(s->b.voices);
+   if(!*frontier)*frontier=0x2ca34c;
+   return voice==GH_VOICE_UNSUPPORTED?GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_CALLEE;
+  }
  }
  p[0x2f4]=argument==0x1d?0:1;p[0x2f5]=(uint8_t)selector;p[0x2f6]=p[0x2f7]=0;
  gh_soft_event_status status=room_soft_player_abort(s,frontier);
@@ -2443,7 +2464,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
    .square_attack=player_square_attack,.square_context=s,
    .damage_sound=s->player_sound.bound?gh_actor_attached_sound_motion:NULL,.damage_sound_context=&s->player_sound,
    .damage_effect=player_damage_positioned_effect,.damage_abort=player_damage_abort,
-   .damage_camera_exit=player_square_camera_exit,.damage_context=s,.damage_vibration_rows=s->player_damage_vibration,
+   .damage_camera_exit=player_square_camera_exit,.death_fade=player_death_bgm,.damage_context=s,.damage_vibration_rows=s->player_damage_vibration,
    .paper_release=s->b.work->room==0x105?room_r105_release_paper:NULL,.paper_context=s};
  if(!s->player_frame.bound)s->player_idle_bindings=(gh_player_idle_input_bindings){.frame=b,
   .targets=gh_game_services_scene_targets(s),.action_buttons=&s->action_buttons};

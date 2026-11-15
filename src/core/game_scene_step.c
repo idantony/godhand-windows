@@ -153,7 +153,18 @@ static gh_scene_step_status action_empty(gh_game_scene_step*s,const gh_game_scen
  for(unsigned i=0;i<8;i++)if((a->entries[i].flags&0x201)==1)return fail(s,a->entries[i].kind==3?0x1f6f58:0x1f7228,GH_SCENE_STEP_UNSUPPORTED,(int)i);return GH_SCENE_STEP_OK;
 }
 static gh_scene_step_status death_gate(gh_game_scene_step*s,const gh_game_scene_step_bindings*b){int16_t vitality;uint32_t f=0;
- if(s->death_callback_pending){gh_scene_step_status e=call(s,b,0x2c4390,0x3c2f84);if(e)return e;s->death_callback_pending=0;uint8_t*r=(uint8_t*)b->work;p32(r+0x5e0,w(r+0x5e0)|0x100000);return GH_SCENE_STEP_OK;}
+ if(s->death_callback_pending){
+  /* 2C4390 returns immediately when the original room Init left +112
+   * at FFFF. An occupied message still belongs to its original owner. */
+  if(h(b->scenario.bytes+0x112)!=0xffffu){
+   gh_scene_step_status e=call(s,b,0x2c4390,0x3c2f84);
+   if(e)return e;
+  }
+  s->death_callback_pending=0;
+  uint8_t*r=(uint8_t*)b->work;
+  p32(r+0x5e0,w(r+0x5e0)|0x100000);
+  return GH_SCENE_STEP_OK;
+ }
  if(b->work->room==0x20)return GH_SCENE_STEP_OK;if(!b->title_player||!b->title_player->ready)return fail(s,0x2db6b0,GH_SCENE_STEP_UNSUPPORTED,0);
  if(gh_title_player_read_vitality(&b->title_player->view,&vitality,&f))return fail(s,f?f:0x2db6b0,GH_SCENE_STEP_UNSUPPORTED,0);
  if(!(b->scenario.manager->flags&2)&&vitality<1){b->scenario.manager->flags|=2;s->death_callback_pending=1;return death_gate(s,b);}

@@ -39,6 +39,9 @@ gh_player_target_status gh_player_enemy_target_excluding_00291010(const gh_playe
 /* Original ordinary 124540 mode0: retain/clear current640, then ordered probes. */
 gh_player_target_status gh_player_attack_target_00124540(const gh_player_target_bindings *,
  const gh_game_init_state *,gh_player_target *,uint32_t *frontier);
+/* Original 124540 argument5 uses three enemy-only lateral focus probes. */
+gh_player_target_status gh_player_dodge_target_00124540(const gh_player_target_bindings *,
+ const gh_game_init_state *,gh_player_target *,uint32_t *frontier);
 /* Player Move calls with flag zero: validate the current owner without distance or angle checks. */
 gh_player_target_status gh_player_check_attack_target_00124c30(const gh_player_target_bindings *,
  const gh_game_init_state *,uint32_t *frontier);

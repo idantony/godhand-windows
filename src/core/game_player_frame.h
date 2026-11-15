@@ -49,6 +49,7 @@ typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_wo
   * Current positive auxiliary callers remain strict; raw0 is not evidence. */
  const gh_title_player_view *grab_attacker;
  gh_object_view grab_resource;
+ gh_player_frame_status (*death_fade)(void *,uint32_t *);
  const gh_game_pl_camera *opacity_camera;
  gh_player_frame_status (*grab_camera)(void *,const gh_actor_model *,uint32_t *);
  const gh_title_player_view *aux_698,*aux_6a0;uint8_t auxiliary_bindings_known;

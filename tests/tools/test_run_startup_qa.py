@@ -205,6 +205,24 @@ class StartupRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(frontier.proof.ProofError, "SHA256 mismatch"):
             frontier.validate(self.snapshot, self.scratch, expected_frontier="00142060")
 
+    def test_frontier_record_pins_healthy_bounded_replay(self):
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                                control_probe="repeat-square", max_ticks=489)
+        qa = self.qa(playable_game_verified=False, exit_code=3, frontier="00000000",
+                     host_phase=0, host_error=0, subsystem_error=0, scene_frames_presented=31)
+        trace = b'QA_REPEAT_STATUS {"attempts":1,"defeat_scene":0}\n'
+        with patch.object(tool.subprocess, "run", self.fake_run(qa, trace)):
+            tool.run(prepared)
+        runner = self.snapshot / "tools/run-startup-qa.py"
+        runner.parent.mkdir()
+        runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+        result, _ = frontier.validate(self.snapshot, self.scratch, expected_tick_limit=489)
+        self.assertEqual(result["classification"], "tick-limit")
+        self.assertEqual(result["observation"]["scene_frames_presented"], 31)
+        self.assertFalse(result["playable_game_verified"])
+        with self.assertRaisesRegex(frontier.proof.ProofError, "tick limit differs"):
+            frontier.validate(self.snapshot, self.scratch, expected_tick_limit=490)
+
     def test_title_load_frontier_pins_its_own_run_scope_and_card_progress(self):
         (self.scratch / "profile-load").mkdir()
         prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, title_load=True)

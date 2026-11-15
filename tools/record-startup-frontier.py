@@ -1,7 +1,8 @@
 """Record an unfinished Windows startup observation without running the game.
 
-Pass the expected original frontier (module:address, or bare main ELF address)
-or an expected native error (for example world_gpu_error:2). Old process
+Pass the expected original frontier (module:address, or bare main ELF address),
+an expected native error (for example world_gpu_error:2), or the exact
+configured tick limit of a rendered replay. Old process
 receipts need previously recorded stdout/stderr digests. An optional process
 digest provides an independent anchor for the embedded output fingerprints.
 """
@@ -182,13 +183,14 @@ def presented_player_damage(control, captures):
 def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=None,
              expected_native_error=None, process_sha=None, stdout_sha=None, stderr_sha=None,
              capture_name=None, capture_sha=None, capture_series=False, title_load=False, build_scratch=None,
-             r003_controlled=False):
+             r003_controlled=False, expected_tick_limit=None):
     snapshot, scratch, project = (Path(p).resolve() for p in (snapshot_arg, scratch_arg, project))
     build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
     proof.require(proof.under(scratch, proof.SCRATCH_ROOT), "run scratch must be below project G scratch")
     stop = proof.expected_stop(expected_frontier)
     error = native_error(expected_native_error)
-    proof.require((stop is None) != (error is None), "provide exactly one expected stop or native error")
+    proof.require(sum(value is not None for value in (stop, error, expected_tick_limit)) == 1,
+                  "provide one expected frontier, native error, or tick limit")
     proof.require(capture_name is not None or capture_sha is None, "capture SHA256 needs a capture name")
     proof.require(not (title_load and r003_controlled), "controlled R003 requires its own title run")
     inputs, executable, exe_sha, source_fact, build_fact = proof.startup_build_inputs(snapshot, build_scratch, project)
@@ -255,6 +257,16 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
                       qa["frontier_module"].strip().casefold() == stop[0] and
                       proof.address(qa.get("frontier")) == stop[1], "unexpected original frontier")
         classification = "original-frontier"
+    elif expected_tick_limit is not None:
+        proof.require(type(expected_tick_limit) is int and expected_tick_limit > 0 and
+                      argument(command, "--max-ticks") == str(expected_tick_limit) and
+                      qa["ticks"] == expected_tick_limit, "QA tick limit differs from command or observation")
+        proof.require(code == 3 and qa.get("host_phase") == qa.get("host_error") == qa.get("subsystem_error") == 0
+                      and proof.address(qa.get("frontier")) == "00000000" and
+                      not any(qa.get(key, 0) for key in NATIVE_ERRORS), "bounded QA must exit cleanly at tick limit")
+        proof.require(type(qa.get("scene_frames_presented")) is int and qa["scene_frames_presented"] > 0,
+                      "bounded QA needs presented scene frames")
+        classification = "tick-limit"
     else:
         proof.require(qa.get(error[0]) == error[1], "unexpected native error")
         classification = "native-renderer-error"
@@ -316,6 +328,7 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
               "launch_reservation": lock_fact, "runner": runner, "stdout": stdout, "stderr": stderr,
               "artifacts": artifacts, "observation": observation,
               "expected_frontier": expected_frontier, "expected_native_error": expected_native_error,
+              "expected_tick_limit": expected_tick_limit,
               "limitations": ["Records matching local evidence, without running the game or certifying completion.",
                               "An external process SHA256 can anchor output fingerprints against coordinated edits."]}
     if capture_series:
@@ -337,6 +350,7 @@ def main():
     expected = parser.add_mutually_exclusive_group(required=True)
     expected.add_argument("--expected-frontier")
     expected.add_argument("--expected-native-error")
+    expected.add_argument("--expected-tick-limit", type=int)
     parser.add_argument("--process-sha256")
     parser.add_argument("--stdout-sha256")
     parser.add_argument("--stderr-sha256")
@@ -357,6 +371,7 @@ def main():
         receipt, inputs = validate(args.snapshot, args.scratch, project=args.project,
                                    expected_frontier=args.expected_frontier,
                                    expected_native_error=args.expected_native_error,
+                                   expected_tick_limit=args.expected_tick_limit,
                                    process_sha=args.process_sha256, stdout_sha=args.stdout_sha256,
                                    stderr_sha=args.stderr_sha256, capture_name=args.capture,
                                    capture_sha=args.capture_sha256,

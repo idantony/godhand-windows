@@ -80,6 +80,10 @@ typedef struct {
  gh_core_save_view save;
  gh_id_error (*fan)(void *,const gh_cockpit_fan *,uint32_t *frontier);
  gh_id_error (*radar)(void *,const gh_cockpit_radar_quad *,uint32_t *frontier);
+ const uint8_t *scenario_mode14;
+ gh_id_error (*game_over_sound)(void *,unsigned,uint32_t *frontier);
+ gh_id_error (*game_over_fade)(void *,uint32_t *frontier);
+ gh_id_error (*game_over_retry)(void *,uint32_t *frontier);
 } gh_cockpit_frame_callbacks;
 /* Loads original radar curves and mutable globals3BD6EC..F4/466440..447
  * from file-backed or zero-filled PT_LOAD. These persist across room reset. */

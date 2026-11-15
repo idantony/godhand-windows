@@ -238,6 +238,35 @@ static int register_task(void *,uint32_t,int32_t);
 static void movie_entry(void *,int32_t);
 static uint32_t scene_profile_clock(void *context)
 {(void)context;return GetTickCount();} /*native diagnostic timing, never world/game ticks*/
+static gh_id_error scene_game_over_sound(void *,unsigned,uint32_t *);
+static gh_id_error scene_game_over_retry(void *context,uint32_t *frontier)
+{
+ gh_startup_host *h=context;
+ if(!h||h->game_loop.work!=&h->work||h->game_loop.game_state[0]!=4||!(h->work.flags&8)){
+  if(frontier)*frontier=0x2be980;
+  return GH_ID_ARGUMENT;
+ }
+ h->game_loop.game_state[0]=5;
+ memset(h->game_loop.game_state+1,0,3);
+ h->work.flags|=0x04000000u;
+ h->work.flags598|=0x40u;
+ h->work.flags&=~8u;
+ return GH_ID_OK;
+}
+static gh_id_error scene_game_over_fade(void *context,uint32_t *frontier)
+{
+ gh_startup_host *h=context;
+ uint32_t shift,flags;
+ memcpy(&shift,(const uint8_t *)&h->work+0x564,4);
+ memcpy(&flags,(const uint8_t *)&h->work+0x5e0,4);
+ const gh_screen_fade_context c={h->display.screen_width,h->display.gs_y_origin,shift,flags};
+ if(gh_screen_fade_start_00307208(&h->fade,&c,0,10,0,0xff000000u,0xff000000u,1)){
+  if(frontier)*frontier=0x307208;
+  return GH_ID_UNSUPPORTED;
+ }
+ return GH_ID_OK;
+}
+
 static gh_r020_status scene_program_se(void *context,unsigned bank,unsigned program,uint32_t *frontier)
 {
     gh_startup_host *h=context;gh_game_services_scene_view scene;uint32_t handle=0;
@@ -246,6 +275,10 @@ static gh_r020_status scene_program_se(void *context,unsigned bank,unsigned prog
     if(!e)e=gh_se_voice_request_origin(h->voices,(int16_t)bank,(int16_t)program,-1,-1,0,0,&handle);
     if(e){if(frontier)*frontier=gh_se_voice_frontier(h->voices);return GH_R020_UNSUPPORTED;}
     return GH_R020_OK;
+}
+static gh_id_error scene_game_over_sound(void *context,unsigned program,uint32_t *frontier)
+{
+ return scene_program_se(context,0,program,frontier)==GH_R020_OK?GH_ID_OK:GH_ID_UNSUPPORTED;
 }
 static gh_r020_status scene_logo_se(void *context,uint32_t *frontier)
 {return scene_program_se(context,0,0x2d,frontier);}
@@ -1205,7 +1238,10 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         gh_id_error bound=gh_game_cockpit_bind_gameplay(s.cockpit,&gameplay);
         if(bound){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
         gh_cockpit_frame_callbacks callbacks={.context=h,.trans=scene_cockpit_trans,.set_draw_order=scene_cockpit_order,
-            .save={h->save_bytes,sizeof(h->save_bytes)},.fan=scene_cockpit_fan,.radar=scene_cockpit_radar};
+            .save={h->save_bytes,sizeof(h->save_bytes)},.fan=scene_cockpit_fan,.radar=scene_cockpit_radar,
+            .scenario_mode14=s.scenario_bytes_size>0x14?s.scenario_bytes+0x14:NULL,
+            .game_over_sound=scene_game_over_sound,.game_over_fade=scene_game_over_fade,
+            .game_over_retry=scene_game_over_retry};
         gh_id_error e=address==0x140e58?gh_game_cockpit_move_00140e58(s.cockpit,&h->work,&callbacks):gh_game_cockpit_trans_001410a8(s.cockpit,&h->work,&callbacks);
         if(e&&frontier)*frontier=gh_game_cockpit_frontier(s.cockpit);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -1654,6 +1690,15 @@ static int update_state4(void *context,gh_game_loop *loop)
 static gh_scene_exit_status scene_exit_consumer(void *context,uint32_t address,uint32_t argument,int *original_return,uint32_t *frontier)
 {
     gh_startup_host *h=context;(void)argument;gh_sound_exit_status e;
+    if(address==0x2bf948){
+        gh_game_services_scene_view scene;
+        if(gh_game_services_get_scene_view(h->services,&scene))return GH_SCENE_EXIT_ARGUMENT;
+        const gh_checkpoint_bindings b=scene_checkpoint_bindings(h,&scene);
+        const gh_checkpoint_status status=gh_game_checkpoint_restore_retry_002bf948(scene.checkpoint,&b);
+        if(frontier)*frontier=scene.checkpoint->frontier;
+        if(status==GH_CHECKPOINT_UNSUPPORTED)return GH_SCENE_EXIT_UNSUPPORTED;
+        return status?GH_SCENE_EXIT_CALLEE:GH_SCENE_EXIT_OK;
+    }
     if(address==0x30f8b0){
         uint32_t blocked_handle=0;
         const gh_game_services_status status=gh_game_services_scene_retire_objects_0030f8b0(h->services,frontier,&blocked_handle);

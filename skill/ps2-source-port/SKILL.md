@@ -143,6 +143,17 @@ VRAM. Verify address permutation, CLUT selection and consumer UVs before using
 a generic linear decoder. GPU upload/readback proves transfer correctness;
 it does not by itself verify original blending or a rendered game scene.
 
+For rendering failures, record the exact consumer, texture table and item,
+register state, and referenced vertices. Inspect the matching asset by table
+number against an indexed disc entry and log its header and fingerprint. Use
+that report to distinguish an unsupported texture profile from a failure
+in geometry preparation or sampling.
+
+Use CPU packet replays for rapid source iteration. Before calling a scene
+visually verified, capture it from a separate native device run. A bounded run
+can prove forward progress when the configured and observed tick limits agree,
+the host and renderer are healthy, and the intended frames were presented.
+
 Recover attribute signedness and scale from actual upload commands and math.
 Do not assume byte weights divide by255, sum normalization is required, or
 normals are renormalized merely because those are familiar graphics conventions.

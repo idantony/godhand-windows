@@ -40,6 +40,7 @@ typedef struct {gh_id_view source;uint16_t width,height;uint64_t tex0;} gh_id_te
 #define GH_ID_TIM2_128X64_PSMT4_TEX0 UINT64_C(0x19d408000)
 #define GH_ID_TIM2_64X64_PSMT4_TEX0 UINT64_C(0x199408000)
 #define GH_ID_TIM2_64X64_PSMT8_TEX0 UINT64_C(0x199308000)
+#define GH_ID_TIM2_32X32_PSMT8_TEX0 UINT64_C(0x155308000)
 /* Language TBL1 item49 used by the original memory-card list separators. */
 #define GH_ID_TIM2_128X128_PSMT4_TEX0 UINT64_C(0x1dd408000)
 /* Actual2ACDC8 TBL1 lookup, one-based. Restricted original T32/PSMT8 views,

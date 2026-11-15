@@ -93,11 +93,12 @@ static void qa_static_failure(const gh_object_static_command *command)
     qa_float_bits("fog_bits",command->packet.inputs.fog,2);
     std::fprintf(stderr,"}\n");
 }
-static void qa_actor_gpu_failure(const gh_actor_world_group &g,const gh_actor_world_packet &p,const gh_model_draw_state &s)
+template<class Packet>
+static void qa_model_gpu_packet(const Packet &p,const gh_model_draw_state &s)
 {
-    std::fprintf(stderr,"QA_ACTOR_GPU_INPUT {\"node_index\":%llu,\"program\":%u,\"bank\":%u,\"depth\":%u,\"triangles\":%llu,\"vertex_count\":%llu,\"tex0\":\"%016llX\",\"test\":\"%016llX\",\"alpha\":\"%016llX\",\"tex1\":\"%016llX\",\"clamp\":\"%016llX\",\"primitive\":%u,\"texture_function\":%u,\"offset_x\":%u,\"offset_y\":%u,\"fog_rgb\":%u,\"texture_width\":%u,\"texture_height\":%u,\"texture_psm\":%u,\"indices\":[",
-        (unsigned long long)g.command.node_index,g.command.selected_program,g.command.bank,g.command.depth,(unsigned long long)p.triangles,(unsigned long long)p.vertex_count,
-        (unsigned long long)p.tex0,(unsigned long long)s.test,(unsigned long long)s.alpha,(unsigned long long)s.tex1,(unsigned long long)s.clamp,s.primitive,s.texture_function,s.xy_offset_x16,s.xy_offset_y16,s.fog_rgb,
+    std::fprintf(stderr,",\"triangles\":%llu,\"vertex_count\":%llu,\"test\":\"%016llX\",\"alpha\":\"%016llX\",\"tex1\":\"%016llX\",\"clamp\":\"%016llX\",\"frame_mask\":\"%08X\",\"primitive\":%u,\"texture_function\":%u,\"offset_x\":%u,\"offset_y\":%u,\"fog_rgb\":%u,\"texture_width\":%u,\"texture_height\":%u,\"texture_psm\":%u,\"indices\":[",
+        (unsigned long long)p.triangles,(unsigned long long)p.vertex_count,
+        (unsigned long long)s.test,(unsigned long long)s.alpha,(unsigned long long)s.tex1,(unsigned long long)s.clamp,s.frame_mask,s.primitive,s.texture_function,s.xy_offset_x16,s.xy_offset_y16,s.fog_rgb,
         p.material?p.material->width:1,p.material?p.material->height:1,p.material?p.material->psm:0);
     for(size_t i=0;i<p.triangles*3;i++)std::fprintf(stderr,"%s%u",i?",":"",p.indices[i]);
     std::fprintf(stderr,"],\"vertices\":[");
@@ -107,6 +108,19 @@ static void qa_actor_gpu_failure(const gh_actor_world_group &g,const gh_actor_wo
             i?",":"",q[0],q[1],q[2],v.rgba[0],v.rgba[1],v.rgba[2],v.rgba[3],v.xyz_fixed4[0],v.xyz_fixed4[1],v.xyz_fixed4[2],v.fog_fixed4,v.raw_control,v.clip_flags,v.adc);
     }
     std::fprintf(stderr,"]}\n");
+}
+static void qa_actor_gpu_failure(const gh_actor_world_group &g,const gh_actor_world_packet &p,const gh_model_draw_state &s)
+{
+    std::fprintf(stderr,"QA_ACTOR_GPU_INPUT {\"node_index\":%llu,\"program\":%u,\"bank\":%u,\"depth\":%u,\"tex0\":\"%016llX\"",
+        (unsigned long long)g.command.node_index,g.command.selected_program,g.command.bank,g.command.depth,(unsigned long long)p.tex0);
+    qa_model_gpu_packet(p,s);
+}
+static void qa_static_gpu_failure(const gh_static_world_group &g,const gh_static_world_packet &p,const gh_model_draw_state &s)
+{
+    std::fprintf(stderr,"QA_STATIC_GPU_INPUT {\"object_index\":%llu,\"handle\":%u,\"program\":%u,\"bank\":%u,\"depth\":%u,\"substream\":%llu,\"batch\":%llu,\"material_index\":%u,\"samples_display_base0\":%u",
+        (unsigned long long)g.command.object_index,g.command.handle,g.command.selected_program,g.command.bank,g.command.depth,
+        (unsigned long long)p.substream,(unsigned long long)p.batch,p.material_index,p.samples_display_base0);
+    qa_model_gpu_packet(p,s);
 }
 #endif
 static gh_object_step_status queue_world(void *opaque,const gh_object_static_command *command,uint32_t *frontier)
@@ -717,7 +731,13 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
                     app.world_gpu_error=gh_model_renderer_draw(app.world_renderer,&state,texture,
                         packet.vertices,packet.vertex_count,packet.indices,packet.triangles*3);
                 }
-                if(app.world_gpu_error!=GH_MODEL_GPU_OK){app.world_frontier=0x14b810;return GH_ID_UNSUPPORTED;}
+                if(app.world_gpu_error!=GH_MODEL_GPU_OK){
+#ifdef GH_NATIVE_STARTUP_QA
+                    qa_static_gpu_failure(g,packet,state);
+#endif
+                    app.world_frontier=0x14b810;
+                    return GH_ID_UNSUPPORTED;
+                }
                 if(packet.triangles)++app.world_packets;
             }
         }

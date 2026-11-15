@@ -747,6 +747,25 @@ gh_bgm_status gh_bgm_requests_abort_pending(gh_bgm_requests*s){
 }
 void gh_bgm_requests_destroy(gh_bgm_requests*s){if(!own(s))return;for(unsigned i=0;i<16;i++)s->requests[i].linked=0;if(gh_bgm_requests_abort_pending(s)==GH_BGM_OK)free(s);}
 
+gh_bgm_status gh_bgm_requests_death_fade_002ca718(gh_bgm_requests *s)
+{
+ if(!own(s))return GH_BGM_ARGUMENT;
+ for(int i=s->head;i>=0;i=s->requests[i].next){
+  const request *q=&s->requests[i];
+  const float frames=(u32(q->scalar+0x98)&4u)?rf(q->scalar+0xc4):180;
+  if(!isfinite(frames)||frames<0)return fail(s,0x2cd4a8,GH_BGM_UNSUPPORTED);
+ }
+ for(int i=s->head;i>=0;i=s->requests[i].next){
+  request *q=&s->requests[i];
+  const uint32_t flags=u32(q->scalar+0x98);
+  w32(q->scalar+0x98,flags|0x10000u);
+  fade(q,0,(flags&4u)?rf(q->scalar+0xc4):180);
+ }
+ s->control->flags_b0|=0x100000u;
+ s->control->flags_ac|=0x100000u;
+ s->frontier=0;
+ return GH_BGM_OK;
+}
 gh_bgm_status gh_bgm_requests_scene_exit_begin(gh_bgm_requests*s){
  if(!own(s))return GH_BGM_ARGUMENT;if(gh_bgm_requests_pending(s))return fail(s,0x2caa00,GH_BGM_BUSY);
  for(int i=s->head;i>=0;i=s->requests[i].next){request*q=&s->requests[i];uint32_t flags=u32(q->scalar+0x98);

@@ -24,6 +24,9 @@ gh_checkpoint_status gh_game_checkpoint_full_002c05b0(gh_game_checkpoint *,
  * Unknownplayer54A returns precise1F9BEC AFTER originalCoreSaveprefixwrites;
  * destination remainsuntouched. Explicitmemoryprofilemustsupplythatinput. */
 gh_checkpoint_status gh_game_checkpoint_002bf8f8(gh_game_checkpoint *,const gh_checkpoint_bindings *);
+/* Original ordinary Game Over restore: 2BF948 -> 2C06D0(mode0).
+ * Stage checkpoint data is read-only. Keeps original post-capture statistics. */
+gh_checkpoint_status gh_game_checkpoint_restore_retry_002bf948(gh_game_checkpoint *,const gh_checkpoint_bindings *);
 #ifdef __cplusplus
 }
 #endif

@@ -83,6 +83,8 @@ gh_bgm_status gh_bgm_enemy_override_002d0cd0(const gh_game_init_state *,
  * .01 then pause after original20->...->-1 countdown. */
 int gh_bgm_requests_uses_owners(const gh_bgm_requests *,const gh_audio_registry *,const gh_sound_control *);
 gh_bgm_status gh_bgm_requests_scene_exit_begin(gh_bgm_requests *);
+/* Original player-death BGM fade and controller gate. */
+gh_bgm_status gh_bgm_requests_death_fade_002ca718(gh_bgm_requests *);
 gh_bgm_status gh_bgm_requests_scene_exit_ready(const gh_bgm_requests *,int *);
 gh_bgm_status gh_bgm_requests_scene_exit_finalize(gh_bgm_requests *);
 /* Original Event+38 reserve is a stable Main owner borrowed by 2D0D70. */

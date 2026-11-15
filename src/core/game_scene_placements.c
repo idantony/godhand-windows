@@ -54,15 +54,28 @@ gh_scene_placement_status gh_om_scene_record_at(const gh_om_scene_placements*s,u
  const uint8_t*p=s->entries.bytes+(size_t)index*64;uint32_t prefix=s->version>=2&&(p[0x2e]&0x80)?0x400:0x300;
  *out=(gh_om_placement_record){p,64,index,prefix|p[0x24],s->version>=2?qword(p+0x30):0,s->version>=2?qword(p+0x38):0,s->version};return GH_PLACE_OK;
 }
-gh_scene_placement_status gh_om_scene_bind_native_001c3cb8(gh_om_scene_placements*s,const gh_bundle_entry*e,gh_om_factory*f,int*out){
+gh_scene_placement_status gh_om_scene_bind_native_with_collision_001c3cb8(gh_om_scene_placements*s,
+ const gh_bundle_entry*e,gh_om_factory*f,gh_game_scene_tables*tables,gh_collision_scroll_mutation*mutation,int*out){
  if(!s||!f||!out)return GH_PLACE_ARGUMENT;*out=0;
  if(!s->native_bound){gh_scene_placement_status p=gh_om_scene_bind_001c3cb8(s,e,out);if(p!=GH_PLACE_UNSUPPORTED)return p;s->native_bound=1;}
  else if(!e||s->file.bytes!=e->bytes||s->file.size!=e->size)return GH_PLACE_BUSY;
  while(s->cursor<s->count){gh_om_placement_record record;gh_scene_placement_status p=gh_om_scene_record_at(s,s->cursor,&record);if(p)return p;int used=0;
   if(s->version>=2){p=gh_om_room_slot_used_002bed08(f->bindings.room_state,record.key,&used);if(p){s->frontier=0x2bed08;return p;}}
-  if(used){s->frontier=0x1331b8;return GH_PLACE_UNSUPPORTED;} /* real linkedcollisiondisable notyetrestored */
+  if(used){
+   s->frontier=0x1331b8;
+   if(!tables||!mutation)return GH_PLACE_UNSUPPORTED;
+   uint32_t changed;
+   const gh_scene_table_status status=gh_collision_scroll_set_key_enabled_001331b8(tables,mutation,record.extra_key,0,&changed);
+   if(status)return status==GH_TABLE_BOUNDS?GH_PLACE_BOUNDS:GH_PLACE_ARGUMENT;
+   s->skipped++;s->cursor++;
+   continue;
+  }
   int nonnull=0;p=gh_om_factory_create_record(f,&record,&nonnull);if(p){s->frontier=f->frontier;return p;}
   if(nonnull)s->created++;else s->skipped++;s->cursor++;
  }
  s->frontier=0;*out=1;return GH_PLACE_OK;
+}
+
+gh_scene_placement_status gh_om_scene_bind_native_001c3cb8(gh_om_scene_placements*s,const gh_bundle_entry*e,gh_om_factory*f,int*out){
+ return gh_om_scene_bind_native_with_collision_001c3cb8(s,e,f,NULL,NULL,out);
 }

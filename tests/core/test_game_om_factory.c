@@ -19,6 +19,18 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  gh_heap*heap;C(!gh_heap_create(16*1024*1024,&heap));gh_room_pools pools={0};C(!gh_game_room_pools_initialize_002a5d80(&pools,&bundle,heap));
  gh_stage_slots gs={0},rs={0};gh_game_objects *global,*local;C(!gh_game_objects_create(&gs,0,&global)&&!gh_game_objects_create(&rs,1,&local));C(!gh_stage_slots_reset(&gs,NULL)&&!gh_stage_slots_reset(&rs,heap));
  gh_boot_work work={0};work.room=0x100;uint8_t serial=255;gh_om_factory factory={0};gh_om_factory_bindings b={.pools=&pools,.work=&work,.room_state=&room,.objects=global,.room_objects=local,.factory_serial=&serial};C(!gh_om_factory_bind(&factory,&b,69));
+ /* A used save entry must advance without creating its actor. The collision
+  * key comes from the OMS second key, never the RoomSave lookup key. */
+ gh_game_scene_tables tables={0};gh_collision_scroll_mutation mutation={0};
+ C(!gh_scene_actors_0012e670(&tables,&bundle));
+ gh_om_scene_placements used_placement={0};
+ memcpy(room.active+0x610,&first.key,8);room.active[0x618]=1;
+ C(gh_om_scene_bind_native_001c3cb8(&used_placement,&oms,&factory,&original)==GH_PLACE_UNSUPPORTED&&used_placement.frontier==0x1331b8&&!used_placement.cursor&&serial==255);
+ C(gh_om_scene_bind_native_with_collision_001c3cb8(&used_placement,&oms,&factory,&tables,&mutation,&original)==GH_PLACE_UNSUPPORTED&&used_placement.cursor==1&&used_placement.skipped==1&&!used_placement.created&&used_placement.frontier==0x1fe8a0);
+ C(!gh_collision_scroll_mutation_release(&mutation));
+ C(!gh_om_factory_release(&factory));
+ serial=255;memset(room.active+0x610,0,0x1000);
+ C(!gh_om_factory_bind(&factory,&b,69));
  placement=(gh_om_scene_placements){0};C(gh_om_scene_bind_native_001c3cb8(&placement,&oms,&factory,&original)==GH_PLACE_UNSUPPORTED&&placement.frontier==0x1fe8a0&&!original&&!placement.cursor);
  gh_om_object*o=factory.objects;uint8_t*p=o->view.bytes;C(o->stage==2&&p&&o->allocation.original_global==0x754c10&&!o->registered&&!o->acquired&&serial==0);
  C(o->view.alias_d0==p+0x30&&o->view.alias_f0==p+0xb0&&word(p+0x214)==0x422f90&&word(p+0x4ac)==0x4289f0&&word(p+0x2d0)==0x20000000&&p[0x2ff]==3&&p[0x301]==3&&p[0x2fc]==255);

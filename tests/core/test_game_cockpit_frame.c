@@ -5,13 +5,20 @@
 #include <string.h>
 #include <fenv.h>
 #include "../../src/assets/tim2.h"
+#include "../../src/core/id_texture_polygon.h"
 #define C(x) do{if(!(x)){fprintf(stderr,"FAIL%d %s\n",__LINE__,#x);exit(1);}}while(0)
-typedef struct {gh_id_draw_job jobs[512];size_t count;int calls;int ids[12];gh_cockpit_fan fan;unsigned fan_count;int fail_id,fail_once;} queue;
+typedef struct {gh_id_draw_job jobs[512];size_t count;int calls;int ids[12];gh_cockpit_fan fan;unsigned fan_count,sound_count,sound_program,fade_count,retry_count;int fail_id,fail_once;} queue;
 static gh_id_error enqueue(void*p,gh_id_base*b,uint32_t*f){queue*q=p;gh_id_frontier frontier={0};size_t n=0;if(q->calls>=12)return GH_ID_CAPACITY;
  if(q->fail_once&&b->id==q->fail_id){q->fail_once=0;*f=0x2aac28;return GH_ID_CAPACITY;}
  gh_id_error e=gh_id_jobs_collect_visible(b,q->jobs+q->count,512-q->count,&n,&frontier);if(e){*f=frontier.address;return e;}q->count+=n;q->ids[q->calls++]=b->id;return GH_ID_OK;
 }
 static gh_id_error enqueue_fan(void*p,const gh_cockpit_fan*fan,uint32_t*f){queue*q=p;(void)f;if(q->fan_count)return GH_ID_CAPACITY;q->fan=*fan;q->fan_count++;return GH_ID_OK;}
+static gh_id_error game_over_sound(void *p,unsigned program,uint32_t *frontier)
+{queue*q=p;(void)frontier;++q->sound_count;q->sound_program=program;return GH_ID_OK;}
+static gh_id_error game_over_fade(void *p,uint32_t *frontier)
+{queue*q=p;(void)frontier;++q->fade_count;return GH_ID_OK;}
+static gh_id_error game_over_retry(void *p,uint32_t *frontier)
+{queue*q=p;(void)frontier;++q->retry_count;return GH_ID_OK;}
 static void put(uint8_t*p,uint32_t n){memcpy(p,&n,4);}
 static uint32_t word(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}
 int main(int argc,char**argv){
@@ -20,6 +27,14 @@ int main(int argc,char**argv){
  gh_bundle language;gh_bundle_entry idd;C(!gh_bundle_open(l,(size_t)de.size,&language)&&!gh_id_find_language_data(&language,&idd));gh_id_state*m=calloc(1,sizeof(*m));C(m&&!gh_id_system_init_002acc70(m,&idd));gh_id_runtime*r;C(!gh_id_runtime_create(m,1,&r)&&!gh_id_runtime_set_path_policy(r,GH_ID_PATH_REFERENCE_NEAREST));
  gh_id_texture fan_texture={0};C(gh_id_texture_open(m,1,0x21,&fan_texture)==GH_ID_UNSUPPORTED);
  {const gh_bundle_entry*t=&m->pair[1].texture_data;C(t->size>136);uint32_t o=word(t->bytes+132);C(o<t->size);gh_tim2_picture pic={0};C(!gh_tim2_first(t->bytes+o,t->size-o,&pic)&&pic.width==16&&pic.height==16&&pic.image_type==4&&pic.clut_type==3&&pic.colors==16&&pic.tex0==UINT64_C(0x111408000));}
+ gh_id_texture stripe={0};
+ C(!gh_id_polygon_texture_open(m,1,8,&stripe)&&stripe.width==32&&stripe.height==32&&
+   stripe.tex0==GH_ID_TIM2_32X32_PSMT8_TEX0);
+ uint8_t rgba[32*32*4];
+ C(!gh_id_polygon_texture_rgba(&stripe,rgba,sizeof(rgba)));
+ unsigned nonzero_alpha=0;
+ for(size_t i=3;i<sizeof(rgba);i+=4)nonzero_alpha+=rgba[i]!=0;
+ C(nonzero_alpha);
  uint8_t save[GH_CORE_SAVE_BYTES];gh_core_save_view sv={save,sizeof(save)};gh_boot_work work={0};C(!gh_core_save_system_init(sv)&&!gh_core_save_game_init(sv,&work));gh_game_mt random;gh_game_mt_seed_0030f2b0(&random,1);gh_game_cockpit*s;C(!gh_game_cockpit_create(r,m,&random,&s)&&!gh_game_cockpit_initialize_00140c88(s,sv));uint8_t heat[0x18]={0};C(!gh_game_cockpit_room_reset_00140de0(s,sv,&work,heat));C(!gh_game_cockpit_bind_frame_elf(s,elf,es));free(elf);
  size_t n;const uint8_t*raw=gh_game_cockpit_fields(s,&n);C(n==0x23c0);gh_id_base*b17,*b14;C(!gh_game_cockpit_base(s,0x1520,&b17)&&!gh_game_cockpit_base(s,0xbe0,&b14));uint16_t f17=b17->frame,f14=b14->frame;/* Global40000 regression starts a fresh invocation; positive gameplay now has its own real test. */put((uint8_t*)&work+0x5d8,0xf00c6000);
  gh_id_error e=gh_game_cockpit_move_00140e58(s,&work,NULL);if(e)fprintf(stderr,"move %d %08X\n",e,gh_game_cockpit_frontier(s));C(!e&&b17->frame!=f17&&b14->frame==f14);C(!raw[0x1ca0]&&!raw[0x1db4]);
@@ -38,6 +53,49 @@ int main(int argc,char**argv){
  q=(queue){.fail_id=rank->id,.fail_once=1};
  C(gh_game_cockpit_trans_001410a8(s,&work,&cb)==GH_ID_CAPACITY&&q.calls==6);
  C(!gh_game_cockpit_trans_001410a8(s,&work,&cb)&&q.calls==8&&q.ids[6]==rank->id&&q.ids[7]==19);
+ gh_game_init_state *init=calloc(1,sizeof(*init));gh_room_pools pools={0};
+ C(init);gh_game_init_state_initialize(init);
+ const gh_cockpit_gameplay_bindings gameplay={.init=init,.pools=&pools,.player_known=1};
+ C(!gh_game_cockpit_bind_gameplay(s,&gameplay));
+ uint8_t scenario_mode=0;cb.scenario_mode14=&scenario_mode;
+ put((uint8_t*)&work+0x584,8);put((uint8_t*)&work+0x5d8,0);
+ gh_id_base *death,*custom;
+ C(!gh_game_cockpit_base(s,0,&death)&&death->id==3&&!gh_game_cockpit_base(s,0xd0,&custom)&&custom->id==32);
+ q=(queue){0};
+ C(!gh_game_cockpit_trans_001410a8(s,&work,&cb)&&!q.calls&&raw[0x23bc]==1&&raw[0x23be]==150);
+ gh_id_entry *grow=NULL;int fallback;
+ C(!gh_id_base_get_work_002aa410(r,death,4,&grow,&fallback)&&!fallback&&grow->scale_x==0);
+ for(unsigned i=0;i<5;i++){
+  gh_id_entry *child;
+  C(!gh_id_base_get_work_002aa410(r,custom,(int)i,&child,&fallback)&&!fallback&&
+    (child->flags&0x20000000u));
+ }
+ C(!fesetround(FE_UPWARD));
+ for(unsigned i=0;i<34;i++){
+  q=(queue){0};
+  gh_id_error status=gh_game_cockpit_trans_001410a8(s,&work,&cb);
+  if(status)fprintf(stderr,"game-over grow frame%u status%d %08x\n",i,status,gh_game_cockpit_frontier(s));
+  C(!status&&q.calls==1&&q.ids[0]==3&&q.count);
+ }
+ C(fegetround()==FE_UPWARD&&!fesetround(FE_TONEAREST));
+ C(raw[0x92]==1&&raw[0x23be]==116);
+ cb.game_over_sound=game_over_sound;cb.game_over_fade=game_over_fade;
+ q=(queue){0};put((uint8_t*)&work+0x1a0,0x04000000);
+ C(!gh_game_cockpit_trans_001410a8(s,&work,&cb)&&!raw[0x90]&&q.sound_count==1&&q.sound_program==0x15f);
+ q=(queue){0};put((uint8_t*)&work+0x1a0,0x08000000);
+ C(!gh_game_cockpit_trans_001410a8(s,&work,&cb)&&raw[0x90]==1&&q.sound_count==1&&q.sound_program==0x15f);
+ q=(queue){0};put((uint8_t*)&work+0x1a0,0x10000000);
+ unsigned prev_save=save[0x12]|(unsigned)save[0x13]<<8,prev_total=save[0xbb8]|(unsigned)save[0xbb9]<<8;
+ C(!gh_game_cockpit_trans_001410a8(s,&work,&cb)&&raw[0x92]==2&&q.sound_count==1&&q.sound_program==0x15e);
+ C(init->continue_count==1&&(save[0x12]|(unsigned)save[0x13]<<8)==prev_save+1&&
+   (save[0xbb8]|(unsigned)save[0xbb9]<<8)==prev_total+1);
+ put((uint8_t*)&work+0x1a0,0);
+ for(unsigned i=0;i<40&&raw[0x23bc]==1;i++){q=(queue){0};C(!gh_game_cockpit_trans_001410a8(s,&work,&cb)&&!q.sound_count);}
+ C(raw[0x92]==3&&raw[0x23bc]==2&&q.fade_count==1&&init->continue_count==1);
+ C(gh_game_cockpit_trans_001410a8(s,&work,&cb)==GH_ID_UNSUPPORTED&&gh_game_cockpit_frontier(s)==0x2be980);
+ cb.game_over_retry=game_over_retry;
+ C(!gh_game_cockpit_trans_001410a8(s,&work,&cb)&&!raw[0x23bc]&&q.retry_count==1&&init->continue_count==1);
+ free(init);
  C(!gh_game_cockpit_destroy(s));gh_id_runtime_destroy(r);free(m);free(l);
  printf("PASS real language39runs/roomreset R020140E58 singleID17Move; all11widget drawbranches realqueue %zu jobs +33vertexfan; missingbindings frontiers, no replay/FEnv\n",jobs);return 0;
 }

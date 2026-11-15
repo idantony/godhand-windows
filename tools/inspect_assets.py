@@ -25,6 +25,28 @@ def cstr(data, offset):
     return data[offset:end].decode('ascii', 'strict')
 
 
+def bundle_bounds(raw, tag, occurrence=0):
+    bounds(0, 4, len(raw))
+    count = struct.unpack_from("<I", raw)[0]
+    if not count or count > (len(raw) - 4) // 8:
+        raise ValueError("invalid bundle directory")
+    offsets = list(struct.unpack_from(f"<{count}I", raw, 4))
+    if offsets != sorted(offsets) or offsets[0] < 4 + count * 8 or offsets[-1] > len(raw):
+        raise ValueError("invalid bundle offsets")
+    tags = [raw[4 + count * 4 + i * 4:8 + count * 4 + i * 4].split(b"\0")[0].decode("ascii") for i in range(count)]
+    matches = [i for i, value in enumerate(tags) if value == tag]
+    if not 0 <= occurrence < len(matches):
+        raise ValueError("matching bundle entry is missing")
+    index = matches[occurrence]
+    end = offsets[index + 1] if index + 1 < count else len(raw)
+    return offsets[index], end
+
+
+def bundle_entry(raw, tag, occurrence=0):
+    start, end = bundle_bounds(raw, tag, occurrence)
+    return raw[start:end]
+
+
 def parse_fst(data):
     bounds(0, 16, len(data))
     magic, version, strings, entries = struct.unpack_from('<4sIII', data)

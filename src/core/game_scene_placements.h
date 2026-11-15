@@ -1,6 +1,7 @@
 #ifndef GH_GAME_SCENE_PLACEMENTS_H
 #define GH_GAME_SCENE_PLACEMENTS_H
 #include "game_room_state.h"
+#include "game_collision_scroll.h"
 #include "../assets/core_bundle.h"
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +44,10 @@ gh_scene_placement_status gh_om_room_slot_used_002bed08(const gh_room_state *,ui
 gh_scene_placement_status gh_om_scene_record_at(const gh_om_scene_placements *,uint32_t,gh_om_placement_record *);
 /* Stateful positiveOMS original loop. Completedrecords never repeat onretry. */
 gh_scene_placement_status gh_om_scene_bind_native_001c3cb8(gh_om_scene_placements *,const gh_bundle_entry *,struct gh_om_factory *,int *original_return);
+/* Original used RoomSave records disable the OMS linked collision group
+ * before advancing the placement cursor. Both providers are room-owned. */
+gh_scene_placement_status gh_om_scene_bind_native_with_collision_001c3cb8(gh_om_scene_placements *,
+ const gh_bundle_entry *,struct gh_om_factory *,gh_game_scene_tables *,gh_collision_scroll_mutation *,int *original_return);
 /* Actual137AE8/137AA0, scalarheadercopy andboundednativeACDrecordview. */
 gh_scene_placement_status gh_acd_scene_bind_00137ae8(gh_acd_scene_binding *,const gh_bundle_entry *acd,int *original_return);
 #ifdef __cplusplus

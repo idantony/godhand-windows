@@ -1,4 +1,7 @@
 #include "game_effect_create.h"
+#include "game_esp14.h"
+#include "game_esp_update.h"
+#include "game_effects_frame.h"
 #include "game_camera_envelope.h"
 #include <math.h>
 #include "game_player_init_tail.h"
@@ -78,7 +81,37 @@ static void test_om324_break(const void *core,size_t core_size,const gh_bundle *
  const gh_game_mt after_collateral=random;
  C(!gh_game_effect_create_00306528(&collateral,&b)&&
    !memcmp(&after_collateral,&random,sizeof(random))&&w(emit+0x26000)==0xfe000000);
- puts("PASS actual CORE0:C paired counter four positioned emitters and idempotent retry");
+ gh_effects_frame_globals globals={0};
+ C(!gh_effects_frame_globals_from_elf(&globals,elf,elf_size));
+ gh_esp_create_bindings create={.storage=b.storage,.random=&random,.work=&work,
+  .policy=GH_STATIC_BINARY32_REFERENCE,.globals=&globals,.atan_coeff=camera.atan_coeff};
+ gh_esp_update_bindings update={.storage=b.storage,.work=&work,.policy=GH_STATIC_BINARY32_REFERENCE,
+  .globals=&globals,.atan_coeff=camera.atan_coeff};
+ for(unsigned i=0;i<4;++i){
+  C(!gh_effect_create_emitter_at(effects,i+3,&view));
+  C(gh_effect_core0c_radial_record_bound(effects,view.record)==(i==2));
+  uint8_t row_copy[0x2f0];memcpy(row_copy,view.record.bytes,sizeof(row_copy));
+  C(!gh_effect_core0c_radial_record_bound(effects,(gh_effect_view){row_copy,sizeof(row_copy)}));
+  gh_esp_create_call particle={0};
+  C(!gh_esp_create_begin_00300e30(&particle,i+3,view.serial));
+  const gh_effect_status status=gh_game_esp_create_00300e30(&particle,&create);
+  if(status)fprintf(stderr,"CORE0:C row%u Init status%u stage%u frontier%08X\n",i,status,particle.stage,particle.frontier);
+  C(!status&&particle.complete&&!particle.frontier);
+  gh_effect_esp_view child;
+  C(!gh_effect_create_esp_at(effects,particle.slot,&child)&&child.initialized&&child.type==0&&
+    child.record.bytes==view.record.bytes&&child.parent_emitter==(int)i+3&&child.parent_serial==view.serial&&
+    !memcmp(row_copy,view.record.bytes,sizeof(row_copy)));
+  if(i==2){
+   uint32_t prior[5];memcpy(prior,child.payload+0x260,sizeof(prior));
+   C(prior[0]==prior[1]&&prior[1]==prior[2]&&prior[3]&&prior[4]);
+   gh_esp_update_call move={0};
+   const gh_effect_status status=gh_game_esp_update_002fbed0(&move,&update,particle.slot,particle.serial);
+   if(status)fprintf(stderr,"CORE0:C radial Move status%u stage%u frontier%08X\n",status,move.stage,move.frontier);
+   C(!status&&move.complete&&!move.retired&&!move.frontier);
+   C(memcmp(prior,child.payload+0x260,sizeof(prior)));
+  }
+ }
+ puts("PASS actual CORE0:C paired counter four emitter/particle rows, radial In/Move and authentic resource identity");
  gh_effect_create_forget_on_owner_destroy(effects);
  free(effects);free(esp);free(emit);
 }

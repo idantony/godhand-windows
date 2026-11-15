@@ -1,6 +1,8 @@
 /* Actual2BF8F8/2C05B0/full0 snapshot path; MIT LICENSE.upstream. */
 #include "game_checkpoint.h"
 #include <stddef.h>
+#include <math.h>
+#include <fenv.h>
 #include <string.h>
 _Static_assert(sizeof(gh_checkpoint_tail32)==0x20,"originalrestarttail");
 _Static_assert(offsetof(gh_checkpoint_tail32,heat)==0x18,"originalcurrentheat");
@@ -46,4 +48,80 @@ gh_checkpoint_status gh_game_checkpoint_002bf8f8(gh_game_checkpoint*s,const gh_c
  if(!s||!b||!b->work)return GH_CHECKPOINT_ARGUMENT;s->frontier=0;s->last_skipped=0;
  if((b->work->flags598&0x800u)||(b->work->flags&0x08000000u)){s->last_skipped=1;return GH_CHECKPOINT_SKIPPED;}
  return gh_game_checkpoint_002c05b0(s,b);
+}
+
+typedef struct {
+ uint8_t counts[2],money[4],continues[2],total_continues[2],runtime_word[4],flags[4];
+ uint8_t learned[0xd8],inventory[0x80],stats[10],totals[10],selection[10],settings[12],other[2];
+} gh_retry_live_save;
+
+static void preserve_retry_save(gh_retry_live_save *live,const uint8_t *save)
+{
+ memcpy(live->counts,save+0x1c,2);memcpy(live->money,save+0x20,4);
+ memcpy(live->continues,save+0x12,2);memcpy(live->total_continues,save+0xbb8,2);
+ memcpy(live->runtime_word,save+0x130,4);memcpy(live->flags,save+0x14,4);
+ memcpy(live->learned,save+0x1b0,sizeof(live->learned));
+ memcpy(live->inventory,save+0xb0,sizeof(live->inventory));
+ memcpy(live->stats,save+0x8c,10);memcpy(live->totals,save+0xbac,10);
+ memcpy(live->selection,save+0x98,10);memcpy(live->settings,save+0x170,12);
+ memcpy(live->other,save+0xbba,2);
+}
+
+static void apply_retry_save(uint8_t *save,const gh_retry_live_save *live,const gh_boot_work *work)
+{
+ memcpy(save+0x1c,live->counts,2);
+ if(u32((const uint8_t *)work+0x594)&0x02000000u)w(save+0x20,999999);
+ else memcpy(save+0x20,live->money,4);
+ w(save+0x84,u32(save+0x80));
+ memcpy(save+0x12,live->continues,2);memcpy(save+0xbb8,live->total_continues,2);
+ memcpy(save+0x130,live->runtime_word,4);
+ w(save+0x14,(u32(save+0x14)&~0x10000000u)|(u32(live->flags)&0x10000000u));
+ unsigned count=save[0x156];if(count>6)count=6;
+ unsigned occupied=0;for(unsigned i=0;i<count;i++)occupied|=save[0xa8+i];
+ if(!occupied&&count)save[0xa8]=1;
+ memcpy(save+0x1b0,live->learned,sizeof(live->learned));
+ memcpy(save+0xb0,live->inventory,sizeof(live->inventory));
+ memcpy(save+0x8c,live->stats,10);memcpy(save+0xbac,live->totals,10);
+ memcpy(save+0x98,live->selection,10);memcpy(save+0x170,live->settings,12);
+ memcpy(save+0xbba,live->other,2);
+}
+
+gh_checkpoint_status gh_game_checkpoint_restore_retry_002bf948(gh_game_checkpoint *s,const gh_checkpoint_bindings *b)
+{
+ if(!s||!b||!b->work||!b->init||!b->prepare||!b->save.bytes||
+    !b->destination||!b->player||!b->player->bytes)return GH_CHECKPOINT_ARGUMENT;
+ s->frontier=0x2bf948;
+ if(!s->captured)return GH_CHECKPOINT_UNSUPPORTED;
+ if(b->save.size<GH_CORE_SAVE_BYTES||b->destination_size<GH_CHECKPOINT_BYTES||
+    b->player->size<0x6ac||b->player->alias_f0!=b->player->bytes+0xb0)return GH_CHECKPOINT_BOUNDS;
+ gh_checkpoint_tail32 tail;
+ memcpy(&tail,b->destination+0xb0d0,sizeof(tail));
+ float restored_heat;memcpy(&restored_heat,&tail.heat,4);
+ fenv_t env;
+ if(!isfinite(restored_heat)||feholdexcept(&env))return GH_CHECKPOINT_UNSUPPORTED;
+ if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_CHECKPOINT_UNSUPPORTED;}
+ const int force_heat=(b->work->flags598&0x08000000u)!=0;
+ const float maximum=(float)(120+30*(force_heat?5:b->destination[0x155]));
+ if(maximum<restored_heat)restored_heat=maximum;
+ volatile float ratio=restored_heat/maximum;
+ const uint32_t rank=ratio<0.5f?0u:ratio<=0.75f?1u:2u;
+ if(fesetenv(&env))return GH_CHECKPOINT_UNSUPPORTED;
+
+ uint8_t *save=b->save.bytes,*actor=b->player->bytes,*work=(uint8_t *)b->work;
+ const uint8_t had_item=u32(actor+0x6a8)!=0;
+ gh_retry_live_save live;
+ preserve_retry_save(&live,save);
+ memcpy(save,b->destination,GH_CORE_SAVE_BYTES);
+ memcpy(b->prepare->fields+0x1660,b->destination+0x14a0,0x9c30);
+ s->tail=tail;
+ memcpy(b->player->alias_f0,tail.position,12);memcpy(actor+0x490,tail.position,12);
+ memcpy(actor+0x100,tail.rotation,12);
+ if(force_heat)save[0x155]=5;
+ memcpy(b->init->heat,&maximum,4);memcpy(b->init->heat+4,&restored_heat,4);
+ w(b->init->heat+0x14,rank);
+ memcpy(work+0x5c0,tail.position,12);w(work+0x5d0,tail.rotation[1]);
+ save[0x157]=had_item;
+ apply_retry_save(save,&live,b->work);
+ s->frontier=0;
+ return GH_CHECKPOINT_OK;
 }

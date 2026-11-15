@@ -32,8 +32,10 @@ static gh_id_error color_step(gh_id_entry *e){
  if(!isfinite(sample))return GH_ID_UNSUPPORTED;
  for(c=0;c<4;c++){
   float value=add(mul((float)src[0x50+c],add(1,-sample)),mul((float)src[0x2dc+c],sample));
-  if(!isfinite(value)||value<0||value>=2147483648.0f)return GH_ID_UNSUPPORTED;
-  color|=((uint32_t)value&255)<<(8*c);
+  /* 2AC460..2AC514 convert to a signed EE word, then SB retains the low byte.
+   * Original color curves can overshoot a zero endpoint on the final tick. */
+  if(!isfinite(value)||value< -2147483648.0f||value>=2147483648.0f)return GH_ID_UNSUPPORTED;
+  color|=((uint32_t)(int32_t)value&255u)<<(8*c);
  }
  e->color=color;if(!(e->flags&0x20))tick=(uint16_t)(tick+1);e->jitter[4]=(int16_t)(tick<32768?(int)tick:(int)tick-65536);return GH_ID_OK;
 }

@@ -22,9 +22,10 @@ static gh_effect_status body(gh_game_effects*e,unsigned slot,uint32_t serial,con
  const uint32_t table=v.type==0x1a?0x44f270u:v.type==0x12?0x44eb70u:0x44fad0u;
  if(word(v.payload+0xf0)!=table)return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  const int em00_attack=gh_effect_attack_esp_is_bound(e,&v);
- if(v.type==0x12&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v))return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
+ const int player_attachment=gh_effect_player_attachment_esp_is_bound(e,&v);
+ if(v.type==0x12&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v)&&!player_attachment)return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  if((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&
-    !gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v)&&!gh_effect_player_attachment_esp_is_bound(e,&v)&&!gh_effect_devil_esp_is_bound(e,&v)&&!gh_effect_emad_esp_is_bound(e,&v))
+    !gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v)&&!player_attachment&&!gh_effect_devil_esp_is_bound(e,&v)&&!gh_effect_emad_esp_is_bound(e,&v))
     return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  uint8_t*p=v.payload;uint32_t flags=word(p+0x11c);float projection[16],view[16],transform[16],world[16];
  memcpy(projection,b->camera->fields+0x100,64);memcpy(view,b->camera->fields+0x140,64);

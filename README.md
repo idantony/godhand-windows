@@ -14,8 +14,9 @@ opening cuts and reaches two-way combat in R100. Four Triangle hits lower
 the first enemy's HP from 74 to 26. The hidden, muted run presents 2,606
 scene frames, including Gene's recovery prompt and an original grab with
 its left-stick escape prompt. A second input replay triggers the paired
-counter and registers its collision with the first enemy, whose HP falls
-from 26 to 16. The first encounter is still in progress.
+counter and registers collisions with two enemies, leaving them at 16 and
+24 HP. The Windows replay presents 2,752 scene frames. The first encounter
+is still in progress.
 
 In a Windows New Game replay, stick input reaches the first tutorial. Circle
 opens the original panel and Cross dismisses it. The game presents the original
@@ -24,9 +25,11 @@ text and right-stick icon while the room remains visible.
 A separate Windows title-load run restores an original-format test save and
 presents R100. A controlled Windows run presents all 28 original EV02 cuts
 in R003 over 2,785 frames and follows the original room exit into R105, where
-it presents 420 scene frames through Gene's first two damage reactions.
-The controlled run selects R003 at the title handoff. Completing the first
-encounter and following the same transition through normal play remain in progress.
+it presents 1,015 scene frames through Gene's defeat. The controlled run
+selects R003 at the title handoff. A separate actual-disc CPU replay accepts
+Continue from Game Over, restores the R100 checkpoint, and registers movement
+and a Square attack after the room reload. Completing the first encounter
+and following its exit through normal play remain in progress.
 
 ### Verified progress
 
@@ -181,14 +184,16 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 **仍处于早期开发。** Windows 新游戏回放播完原版开场十个镜头并进入 R100 双向战斗。
 四次三角攻击命中，把第一个敌人的 HP 从 74 打到 26。隐藏、静音的实跑共呈现
 2,606 个场景帧，包括 Gene 倒地后的恢复提示、原版抓技和左摇杆挣脱提示。另一轮输入回放触发了原版
-挣脱反击，被甩出的敌人撞到第一名对手，使其 HP 从 26 降至 16。首场战斗仍在移植中。
+挣脱反击，撞击后的两名敌人分别剩下 16 和 24 HP。这轮 Windows 回放共呈现 2,752 个场景帧。
+首场战斗仍在移植中。
 
 Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面板，再按叉键关闭。画面显示原版文字、
 右摇杆图标和教程背后的场景。
 
 独立的 Windows 标题读档实跑恢复了原版格式的测试档，并呈现 R100。受控实跑在标题交接处
 选入 R003，呈现 EV02 全部 28 个镜头，共 2,785 帧，随后沿原版房间切换进入 R105，
-并呈现 420 帧场景，包括 Gene 的前两次受击反应。正常打完首战并沿同一路径切换房间的连续流程仍在开发。
+并呈现 1,015 帧场景，推进到 Gene 战败。另一轮无画面的原盘回放在 Game Over 选择继续，恢复
+R100 检查点，重载后接收移动和方块攻击。正常打完首战并从出口进入下一场景的流程仍在开发。
 
 ### 已验证的进展
 

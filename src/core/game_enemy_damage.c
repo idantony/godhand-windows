@@ -31,8 +31,14 @@ static int r100_stamp20(const gh_enemy_actor *enemy, const uint8_t *actor) {
         enemy->entry.b.work && (uint16_t)enemy->entry.b.work->room == 0x100;
 }
 
+static int r100_stamp8(const gh_enemy_actor *enemy, const uint8_t *actor) {
+    return word(actor + 0x564) == 0x200 && half(actor + 0x640) == 8 &&
+        enemy->entry.b.work && (uint16_t)enemy->entry.b.work->room == 0x100;
+}
+
 static int opening_triangle(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
-    return effect == 0x12 && (r100_stamp19(enemy, actor) || r100_stamp20(enemy, actor));
+    return effect == 0x12 && (r100_stamp19(enemy, actor) || r100_stamp20(enemy, actor) ||
+        r100_stamp8(enemy, actor));
 }
 
 gh_actor_motion_status gh_enemy202_damage_0028fb88(
@@ -42,7 +48,7 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
     if (!enemy || !player || !player->bytes || player->size < 0x600)
         return GH_ACTOR_MOTION_ARGUMENT;
     gh_title_player_view *view = &enemy->entry.object.view;
-    if (!view->bytes || view->size < 0x623 || view->original_vtable214 != 0x4479c8 ||
+    if (!view->bytes || view->size < 0x642 || view->original_vtable214 != 0x4479c8 ||
         word(view->bytes + 0x214) != view->original_vtable214 ||
         half(view->bytes + 0x2fe) != 0x202 || !enemy->hitareas.created[0])
         return stop(frontier, 0x20a5dc);
@@ -375,7 +381,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
      * original 0203 behavior bytes controlling its reaction probes. */
     const uint32_t dependency = word(p + 0x564);
     const int opening_203 = r100_stamp19(enemy, p);
-    const int opening_200 = r100_stamp20(enemy, p);
+    const int opening_200 = r100_stamp20(enemy, p) || (triangle && r100_stamp8(enemy, p));
     const int opening_pair = opening_203 || opening_200;
 
     if (call->phase == 0) {
@@ -592,7 +598,7 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
     const int triangle = body->bytes && body->size >= 0x48 &&
         opening_triangle(enemy, p, half(body->bytes + 0x46));
-    if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p)) ||
+    if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) && !triangle) ||
         (half(p + 0x3ac) & 0x100u))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
@@ -642,7 +648,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
             return stop(frontier, 0x271df4);
     }
     if ((call->effect == 0x2e ? !scenery_reaction_dependency(dependency) :
-            dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p)) ||
+            dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
+            !(call->effect == 0x12 && r100_stamp8(enemy, p))) ||
         (half(p + 0x3ac) & 0x100u) || init->heat[0x10] || word(player->bytes + 0x5fc) ||
         (!paired_counter && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);

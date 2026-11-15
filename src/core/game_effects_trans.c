@@ -369,7 +369,8 @@ static gh_effect_status packet_type12(gh_game_effects_trans*s,const gh_effect_es
     p[0x24a]||half(p+0x276)||p[0x24c]||p[0x2e0])
     return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
  if(projected){
-    if(p[0x2e2]||!v->actor||!gh_effect_attack_esp_is_bound(s->b.storage.effects,v))
+    if(p[0x2e2]||!v->actor||(!gh_effect_attack_esp_is_bound(s->b.storage.effects,v)&&
+       !gh_effect_player_attachment_esp_is_bound(s->b.storage.effects,v)))
        return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
     if(!(flags&0x80u)&&(word(v->actor->bytes+0x250)&2u))return GH_EFFECT_OK;
     const gh_effect_sprite_camera camera={s->b.camera,s->b.init,d,s->b.policy,s->b.cvt_policy};

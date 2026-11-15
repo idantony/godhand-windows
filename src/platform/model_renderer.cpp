@@ -56,8 +56,14 @@ bool inclusive(int2 a,int2 b){int2 d=b-a;return d.y<0||(d.y==0&&d.x>0);}
 float interpolate(float a,float b,float c,float3 w){precise float x=(b-a)*w.y;precise float y=(c-a)*w.z;precise float v=a+x;v=v+y;return v;}
 int4 texel(int x,int y){return int4(image.Load(int3(x&int(dimensions.x-1),y&int(dimensions.y-1),0)));}
 int4 linear16(int4 a,int4 b,int f){return a+(((b-a)*f)>>4);}
-int4 filtered_texel(float s,float t){
- int u=int(s*float(dimensions.x)*65536.0),v=int(t*float(dimensions.y)*65536.0);
+float project_texel(float coordinate,float q,uint size){
+ // GS User's Manual 3.4.4: clamp projected texel coordinates before wrap.
+ if(coordinate==0.0&&q==0.0)return 0.0;
+ precise float texel_coordinate=(coordinate/q)*float(size);
+ return clamp(texel_coordinate,-2047.0,2047.0);
+}
+int4 filtered_texel(float u_texel,float v_texel){
+ int u=int(u_texel*65536.0),v=int(v_texel*65536.0);
  if(dimensions.z==0)return texel(u>>16,v>>16);
  u-=32768;v-=32768;int x=u>>16,y=v>>16,fu=(u>>12)&15,fv=(v>>12)&15;
  return linear16(linear16(texel(x,y),texel(x+1,y),fu),linear16(texel(x,y+1),texel(x+1,y+1),fu),fv);
@@ -87,9 +93,9 @@ int3 select_color(uint selector,int3 source,int3 destination){return selector==0
   if((state.x&65536)!=0&&(zmode==0||(zmode==2&&z<oldZ)||(zmode==3&&z<=oldZ)))continue;
   if((state.x&16384)!=0&&((destination.a>>7)&1)!=((state.x>>15)&1))continue;
   precise float q=interpolate(a.stq.z,b.stq.z,c.stq.z,w);
-  precise float s=interpolate(a.stq.x,b.stq.x,c.stq.x,w)/q;
-  precise float t=interpolate(a.stq.y,b.stq.y,c.stq.y,w)/q;
- int4 tex=filtered_texel(s,t),tint=int4(a.rgba);
+  precise float s=interpolate(a.stq.x,b.stq.x,c.stq.x,w);
+  precise float t=interpolate(a.stq.y,b.stq.y,c.stq.y,w);
+ int4 tex=filtered_texel(project_texel(s,q,dimensions.x),project_texel(t,q,dimensions.y)),tint=int4(a.rgba);
  if((surface.w&8)!=0){
   [unroll]for(uint channel=0;channel<4;channel++)tint[channel]=int(interpolate(float(a.rgba[channel]),float(b.rgba[channel]),float(c.rgba[channel]),w));
  }
@@ -197,7 +203,8 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
   out.xyzd[0]=(int32_t)((uint32_t)v.xyz_fixed4[0]&65535)-(int32_t)s->xy_offset_x16;out.xyzd[1]=(int32_t)((uint32_t)v.xyz_fixed4[1]&65535)-(int32_t)s->xy_offset_y16;
   uint32_t z=((uint32_t)v.xyz_fixed4[2]>>4)&0xffffff;
   out.xyzd[2]=(int32_t)z;out.xyzd[3]=(v.fog_fixed4>>4)&255;
-  if(!std::isfinite(v.stq[2])||v.stq[2]<0.000001f||v.stq[2]>1000000)return GH_MODEL_GPU_UNSUPPORTED;
+  const float q_magnitude=std::fabs(v.stq[2]);
+  if(!std::isfinite(q_magnitude)||q_magnitude<0.000001f||q_magnitude>1000000)return GH_MODEL_GPU_UNSUPPORTED;
   for(unsigned c=0;c<3;c++){if(!std::isfinite(v.stq[c])||(c<2&&std::fabs((double)v.stq[c]/v.stq[2])>16))return GH_MODEL_GPU_UNSUPPORTED;out.stq[c]=v.stq[c];}
   for(unsigned c=0;c<4;c++){if(v.rgba[c]>255)return GH_MODEL_GPU_UNSUPPORTED;out.rgba[c]=v.rgba[c];}
   min_x=(std::min)(min_x,out.xyzd[0]);min_y=(std::min)(min_y,out.xyzd[1]);

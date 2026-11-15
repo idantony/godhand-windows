@@ -66,11 +66,11 @@ extern "C" gh_ui_error gh_ui_polygon_create(unsigned w,unsigned h,gh_ui_polygon_
 }
 static gh_ui_error upload(gh_ui_polygon_renderer *r,const gh_id_texture *t,const unsigned char *rgba,size_t bytes,uint32_t *handle,unsigned width,unsigned height,unsigned allowed_psm){
  if(!r||!t||!rgba||!handle||GetCurrentThreadId()!=r->thread)return GH_UI_ARGUMENT;
- const unsigned tw=width==16?4:width==64?6:7;
- const unsigned th=height==16?4:height==64?6:7;
+ const unsigned texture_width=1u<<((t->tex0>>26)&15);
+ const unsigned texture_height=1u<<((t->tex0>>30)&15);
  const unsigned psm=(unsigned)((t->tex0>>20)&63);
  if(t->width!=width||t->height!=height||bytes!=(size_t)width*height*4||
-    (psm!=allowed_psm)||((t->tex0>>26)&15)!=tw||((t->tex0>>30)&15)!=th||
+    psm!=allowed_psm||texture_width!=width||texture_height!=height||
     ((t->tex0>>35)&3)||((t->tex0>>51)&63)||((t->tex0>>56)&31))return GH_UI_UNSUPPORTED;
  std::vector<unsigned char> raw;try{raw.assign(rgba,rgba+bytes);}catch(const std::bad_alloc&){return GH_UI_MEMORY;}
  for(size_t i=3;i<bytes;i+=4){if((raw[i]&1)&&raw[i]!=255)return GH_UI_UNSUPPORTED;raw[i]=raw[i]==255?128:(unsigned char)(raw[i]/2);}
@@ -81,6 +81,9 @@ static gh_ui_error upload(gh_ui_polygon_renderer *r,const gh_id_texture *t,const
  try{r->textures.push_back(std::move(texture));}catch(const std::bad_alloc&){return GH_UI_MEMORY;}*handle=(uint32_t)r->textures.size();return GH_UI_OK;
 }
 extern "C" gh_ui_error gh_ui_polygon_upload(gh_ui_polygon_renderer*r,const gh_id_texture*t,const unsigned char*p,size_t n,uint32_t*h){
+ // CORE language TBL1 item8 supplies the diagonal Game Over stripe.
+ if(t&&t->tex0==GH_ID_TIM2_32X32_PSMT8_TEX0)
+  return upload(r,t,p,n,h,32,32,19);
  // Actual ActionButton recovery arrow uses the rectangular PSMT8 atlas.
  if(t&&t->width==128&&t->height==64)
   return upload(r,t,p,n,h,128,64,19);
