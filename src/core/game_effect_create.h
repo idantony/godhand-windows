@@ -65,6 +65,8 @@ gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_c
 /* Original 109928 part4 impact, bank0/index3, unit scale and zero Euler. */
 /* Original grounded item sparkle, bank 0 and index 1B. */
 gh_effect_status gh_effect_create_om_sparkle_begin_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
+gh_effect_status gh_effect_create_om30a_break_begin_0018c580(gh_effect_create_call *,const uint32_t[3]);
+gh_effect_status gh_effect_create_devil_projectile_impact_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_om305_break_begin_001c2ce0(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_player_impact_begin_00306838(gh_effect_create_call *,
  const uint32_t world_xyz[3]);
@@ -98,6 +100,8 @@ gh_effect_status gh_effect_create_actor_match(void *effects,int emitter,unsigned
  const gh_title_player_view *,int *match,uint32_t *frontier);
 /* The admitted EV01 bank-6 sprites borrow an actor root.
  * The emitter retains the selected part through a separate typed binding. */
+int gh_effect_r101_door_break_part_is_bound(gh_effect_view,const gh_title_player_view *,
+ const gh_title_player_view *);
 int gh_effect_event_part_is_bound(gh_effect_view,const gh_title_player_view *,
  const gh_title_player_view *);
 /* Actual1024-slot ESP companion. Verified type6/type1A constructors are admitted;
@@ -184,7 +188,8 @@ gh_effect_status gh_effect_create_esp_finish_hidden_14(struct gh_esp14_instance 
  * Use the same canonical actor view until it reports no live references. */
 /* Native deletion state for the original unlinked CORE58:02 death sprite.
  * Other effect borrows still have to clear before the actor is freed. */
-gh_effect_status gh_effect_create_retain_dead_sprite(gh_game_effects *,const gh_title_player_view *);
+/* Release host attachments after their original effects stop reading the actor. */
+gh_effect_status gh_effect_create_prepare_actor_retirement(gh_game_effects *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_actor_has_live_refs(const gh_game_effects *,
  const gh_title_player_view *,int *borrowed);
 gh_effect_status gh_effect_create_esp_destroy_hidden_native(gh_game_effects *,unsigned,uint32_t,uint32_t *frontier);
@@ -192,7 +197,7 @@ gh_effect_status gh_effect_create_esp_destroy_hidden_native(gh_game_effects *,un
  * until their original destructor clears the active mask. */
 /* State5 no longer visits the effect frame. Preserve original packed slots
  * until its reset, while releasing validated inactive D7 host borrows. */
-gh_effect_status gh_effect_create_quiesce_emad_room_exit(gh_game_effects *,const gh_title_player_view *);
+gh_effect_status gh_effect_create_quiesce_actor_room_exit(gh_game_effects *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_source_has_live_refs(const gh_game_effects *,
  const void *source,size_t bytes,int *borrowed);
 #ifdef __cplusplus

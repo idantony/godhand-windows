@@ -52,6 +52,7 @@ static uint32_t class_vtable(const gh_om_object *actor)
  if(om_kind(actor)==0x30a)return 0x4238d8;
  if(om_kind(actor)==0x30e)return 0x423c70;
  if(om_kind(actor)==0x310)return 0x423e48;
+ if(om_kind(actor)==0x313)return 0x424128;
  if(om_kind(actor)==0x320)return 0x424c30;
  if(om_kind(actor)==0x322)return 0x424e18;
  if(om_kind(actor)==0x323)return 0x424f28;
@@ -71,6 +72,8 @@ static uint32_t class_vtable(const gh_om_object *actor)
  if(om_kind(actor)==0x356)return 0x427880;
  if(om_kind(actor)==0x41c)return 0x421bb8;
  if(weapon_destructor(om_kind(actor)))return 0x42aa98;
+ if(actor->runtime_created&&om_kind(actor)==0x3be)return 0x4290c8;
+ if(actor->runtime_created&&om_kind(actor)==0x3d6)return 0x429b88;
  if(actor->runtime_created&&om_kind(actor)==0x3eb)return 0x4296f0;
  return 0;
 }
@@ -87,9 +90,14 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
  if(!vtable||actor->view.original_vtable214!=vtable)return NULL;
  if(actor->runtime_created&&om_kind(actor)==0x353)
   return actor->view.size>=0x630&&actor->initialization->stage==4?actor:NULL;
- if(actor->runtime_created&&om_kind(actor)!=0x376)
+ if(actor->runtime_created&&om_kind(actor)==0x3be)
+  return actor->view.size==0x630&&((gh_om3be_state *)actor->initialization)->stage==9?actor:NULL;
+ if(actor->runtime_created&&om_kind(actor)!=0x376){
+  if(om_kind(actor)==0x3d6)
+   return actor->view.size>=0x690&&actor->initialization->stage==4?actor:NULL;
   return om_kind(actor)==0x3eb&&actor->view.size>=0x610&&
          actor->initialization->stage==3?actor:NULL;
+ }
  if(om_kind(actor)==0x300)
   return actor->view.size>=0x648&&actor->initialization->stage==7?actor:NULL;
  if(om_kind(actor)==0x333)
@@ -117,6 +125,8 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
  const gh_om_fragment_profile *fragment=gh_om_fragment_profile_for(om_kind(actor));
  if(fragment)
   return actor->view.size>=fragment->bytes&&((gh_om303_state *)actor->initialization)->stage==5?actor:NULL;
+ if(om_kind(actor)==0x313)
+  return actor->view.size>=0x8f0&&actor->initialization->stage==7?actor:NULL;
  size_t extent;
  switch(om_kind(actor)){
  case 0x303:extent=0x9e0;break;
@@ -179,6 +189,7 @@ uint32_t gh_om_retire_entry(uint32_t kind)
  case 0x305:return 0x188af0;
  case 0x307:return 0x189008;
  case 0x30a:return 0x18c120;
+ case 0x313:return 0x191dc0;
  case 0x30e:return 0x18ecd0;
  case 0x310:return 0x18f1a0;
  case 0x320:return 0x195ca8;
@@ -200,6 +211,8 @@ uint32_t gh_om_retire_entry(uint32_t kind)
  case 0x356:return 0x1a8730;
  case 0x41c:return 0x17b8f0;
  case 0x376:case 0x382:return 0x1c91b0;
+ case 0x3be:return 0x1b9030;
+ case 0x3d6:return 0x1c00c8;
  case 0x3eb:return 0x1bf4b8;
  default:return 0;
  }
@@ -314,11 +327,13 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
   case 0x303:put(actor+0x214,0x429c80);break;
   default:put(actor+0x214,class_vtable(object));break;
   }
+  if(om_kind(object)==0x313)put(actor+0x214,0x4292f0); /* 1BBF00 */
   size_t box_field=0x600;
   switch(om_kind(object)){
   case 0x304:box_field=0x604;break;
   case 0x30a:case 0x33f:case 0x309:case 0x331:box_field=0x650;break;
   case 0x310:box_field=0x654;break;
+  case 0x3d6:box_field=0x680;break;
   default:break;
   }
   if(om_kind(object)==0x41c){
@@ -326,6 +341,19 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
     * Its point/spring storage is inline; mode2 has no free call. */
    put(actor+0xd90,0);
    put(actor+0xd94,0);
+  }else if(om_kind(object)==0x3be){
+   /* Original 1B9030 releases the two A-pool HitAreas before cOm's base. */
+   gh_om3be_state *projectile=(gh_om3be_state *)init;
+   gh_hitarea_object *const areas[]={&projectile->attack,&projectile->contact};
+   uint8_t *const present[]={&projectile->attack_created,&projectile->contact_created};
+   for(unsigned i=0;i<2;i++){
+    if(!*present[i])continue;
+    if(release_hitarea(areas[i],&state->frontier))
+     return fail(&state->frontier,state->frontier?state->frontier:0x1fe148);
+    *present[i]=0;
+    *areas[i]=(gh_hitarea_object){0};
+    put(actor+0x604+8*i,UINT32_MAX);
+   }
   }else if(weapon_destructor(om_kind(object))){
    gh_om382_state *weapon=(gh_om382_state *)init;
    if(word(actor+0x650))return fail(&state->frontier,0x1fe148);
@@ -347,7 +375,7 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
   state->stage=2;
  }
  if(state->stage==2){
-  if(om_kind(object)==0x300||om_kind(object)==0x333||om_kind(object)==0x354){
+  if(om_kind(object)==0x300||om_kind(object)==0x313||om_kind(object)==0x333||om_kind(object)==0x354){
    if(gh_om_door_release_collision_001bd3f0(&init->geometry_state))
     return fail(&state->frontier,0x1bd3f0);
   }else if(om_kind(object)==0x355){
@@ -361,6 +389,10 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
        gh_scene_dynamic_box_abort(geometry->owner,geometry->box))
      return fail(&state->frontier,0x12ec58);
    }
+  }else if(om_kind(object)==0x3be){
+   unsigned slot;
+   if(gh_game_effect_release_00306200(&bindings->effects,&object->view,0,2,&state->frontier,&slot))
+    return fail(&state->frontier,state->frontier?state->frontier:0x306200);
   }else if(weapon_destructor(om_kind(object))){
    if(!state->weapon_effect_released){
     unsigned slot;
@@ -397,8 +429,8 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
    }
   }else if(om_kind(object)==0x356){
    /* 1A8730 reaches the base destructor without a derived HitArea. */
-  }else if(om_kind(object)==0x3eb){
-   /* 1BF4B8 enters 1B6F38 directly; +600 holds the tutorial ordinal. */
+  }else if(om_kind(object)==0x3eb||om_kind(object)==0x3d6){
+   /* 1BF4B8 and 1C00C8 continue into 1B6F38. The latter has no +680 unit for 3D6. */
   }else if(om_kind(object)==0x35d){
    if(word(actor+0x604))return fail(&state->frontier,0x1fe148);
   }else if(om_kind(object)==0x304||om_kind(object)==0x310){
@@ -564,7 +596,8 @@ gh_room_pool_status gh_om_destroy_detached_mode3(gh_om300_full_retirement *state
  gh_om_factory *factory=bindings->factory;
  if(!state->stage){
   gh_om_object *object=registered_om(factory,handle);
-  if(!object||(om_kind(object)!=0x305&&om_kind(object)!=0x324&&om_kind(object)!=0x376)||
+  if(!object||(om_kind(object)!=0x304&&om_kind(object)!=0x305&&om_kind(object)!=0x30a&&
+     om_kind(object)!=0x313&&om_kind(object)!=0x324&&om_kind(object)!=0x376&&om_kind(object)!=0x3be&&om_kind(object)!=0x3d6)||
      object->view.bytes!=actor->bytes||object->view.size!=actor->size||
      word(actor->bytes+0x214)!=class_vtable(object)||original!=gh_om_retire_entry(om_kind(object))||
      (word(actor->bytes+0x250)&0xa0000000u)!=0xa0000000u)

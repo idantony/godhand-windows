@@ -24,6 +24,8 @@
 #include "game_player_targets.h"
 #include "game_action_button_set.h"
 #include "id_layout_rotation.h"
+#include "sdk_rotation_trig.h"
+#include "game_hitarea_frame.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -39,10 +41,14 @@ uint32_t gh_om_half_bits_00156488(uint16_t n){uint32_t fraction=n&0x3ff,exponent
 static int tutorial(const gh_om_object*o){return o&&o->runtime_created&&o->runtime_kind==0x3eb&&!o->source.bytes;}
 static int mount(const gh_om_object *o){return o&&o->runtime_created&&o->runtime_kind==0x353&&!o->source.bytes;}
 static int paper(const gh_om_object*o){return o&&o->runtime_created&&o->runtime_kind==0x376&&!o->source.bytes;}
+static int devil_projectile(const gh_om_object *o)
+{
+ return o&&o->runtime_created&&o->runtime_kind==0x3be&&!o->source.bytes&&o->view.original_vtable214==0x4290c8;
+}
 static int weapon(const gh_om_object*o){return o&&(o->source.type==0x382||paper(o)||(o->runtime_created&&o->runtime_kind==0x363&&!o->source.bytes));}
 static int r101_item(const gh_om_object *o)
 {
- return o&&o->source.type>=0x3d3&&o->source.type<=0x3d5;
+ return o&&(o->runtime_created?o->runtime_kind==0x3d6:(o->source.type>=0x3d3&&o->source.type<=0x3d5));
 }
 static int fragment_cylinders(const gh_om_object *o)
 {
@@ -53,7 +59,7 @@ static int simple(const gh_om_object*o){return o&&(o->source.type==0x30a||o->sou
 static int plain(const gh_om_object*o){return o&&(o->source.type==0x30e||o->source.type==0x324);}
 static int segments(const gh_om_object*o){return o&&(o->source.type==0x322||o->source.type==0x323||o->source.type==0x346);}
 static int door(const gh_om_object*o){return o&&(o->source.type==0x300||o->source.type==0x313||o->source.type==0x330||o->source.type==0x333||o->source.type==0x354);}
-static gh_om_init_state*common(const gh_om_frame_state*s){gh_om_object*o=s->object;if(!o)return NULL;if(tutorial(o)||mount(o))return o->initialization;if(weapon(o))return &((gh_om382_state*)o->initialization)->common;if(door(o)||r101_item(o)||o->source.type==0x351||o->source.type==0x355||o->source.type==0x356)return o->initialization;if(o->source.type==0x41c||o->source.type==0x357)return &((gh_om041c_state*)o->initialization)->common;if(o->source.type==0x35d)return &((gh_om35d_state*)o->initialization)->common;if(o->source.type==0x307)return &((gh_om307_state*)o->initialization)->common;if(o->source.type==0x311)return &((gh_om311_state*)o->initialization)->common;if(o->source.type==0x310)return &((gh_om310_state*)o->initialization)->base.common;if(o->source.type==0x322)return &((gh_om322_state*)o->initialization)->common;if(o->source.type==0x323)return &((gh_om323_state*)o->initialization)->common;if(o->source.type==0x346)return &((gh_om346_state*)o->initialization)->common;return fragments(o)||simple(o)||plain(o)||fragment_cylinders(o)?&((gh_om303_state*)o->initialization)->common:NULL;}
+static gh_om_init_state*common(const gh_om_frame_state*s){gh_om_object*o=s->object;if(!o)return NULL;if(tutorial(o)||mount(o))return o->initialization;if(devil_projectile(o))return &((gh_om3be_state *)o->initialization)->common;if(weapon(o))return &((gh_om382_state*)o->initialization)->common;if(door(o)||r101_item(o)||o->source.type==0x351||o->source.type==0x355||o->source.type==0x356)return o->initialization;if(o->source.type==0x41c||o->source.type==0x357)return &((gh_om041c_state*)o->initialization)->common;if(o->source.type==0x35d)return &((gh_om35d_state*)o->initialization)->common;if(o->source.type==0x307)return &((gh_om307_state*)o->initialization)->common;if(o->source.type==0x311)return &((gh_om311_state*)o->initialization)->common;if(o->source.type==0x310)return &((gh_om310_state*)o->initialization)->base.common;if(o->source.type==0x322)return &((gh_om322_state*)o->initialization)->common;if(o->source.type==0x323)return &((gh_om323_state*)o->initialization)->common;if(o->source.type==0x346)return &((gh_om346_state*)o->initialization)->common;return fragments(o)||simple(o)||plain(o)||fragment_cylinders(o)?&((gh_om303_state*)o->initialization)->common:NULL;}
 static uint32_t state_entry(uint32_t kind,unsigned index){
  static const uint32_t entries[][5]={{0x307,0x1896e0,0x1897b8,0x189818,0x18a110},{0x30a,0x18c4a8,0x18c520,0x18c580,0x18c8a8},{0x310,0x18f5d0,0x18f618,0x18f858,0x18fbf0},{0x33f,0x19f4b0,0x19f528,0x19f588,0x19f8b0},{0x309,0x18b6a0,0x18b718,0x18b778,0x18baa0},{0x30e,0x1bfc88,0x1bfce0,0x1bfd28,0x1bff48},{0x324,0x1bfc88,0x1bfce0,0x1bfd28,0x1bff48},{0x322,0x1968a0,0x196978,0x1969d8,0x197188},{0x323,0x197ec8,0x197fa0,0x198000,0x1987b0},{0x346,0x1a1690,0x1a1768,0x1a17c8,0x1a20a8}};
  for(unsigned i=0;i<sizeof(entries)/sizeof(entries[0]);i++)if(entries[i][0]==kind)return index<4?entries[i][index+1]:0;return 0;
@@ -80,7 +86,7 @@ static gh_object_step_status bind(gh_om_frame_state*s,const gh_om_factory*f,cons
  void*registered=NULL;if(!o||!o->registered||!o->initialization||!o->view.bytes||o->view.size<0x600||q->actor.bytes!=o->view.bytes||q->actor.size!=o->view.size||q->this_delta||gh_room_object_lookup(f->bindings.pools,q->handle,GH_ROOM_OBJECT_OM,f,&registered)||registered!=o)return fail(s,0x30f15c,pc,GH_OBJSTEP_ARGUMENT);
  if(s->bound)return s->factory==f&&s->object==o&&s->handle==q->handle&&s->entry==q->original_entry?GH_OBJSTEP_OK:fail(s,0x30f15c,pc,GH_OBJSTEP_ARGUMENT);
  const gh_om_fragment_profile *fragment=gh_om_fragment_profile_for(o->source.type);
- uint32_t expected=fragment?fragment->move:o->source.type==0x300?0x186928:o->source.type==0x313?0x191f30:o->source.type==0x330?0x19c518:o->source.type==0x331?0x19c848:o->source.type==0x333?0x19d538:o->source.type==0x355?0x1a85b8:o->source.type==0x356?0x1a8778:o->source.type==0x351?0x1a6188:o->source.type==0x354?0x1a82d8:o->source.type==0x303?0x187c18:o->source.type==0x304?0x187fe8:o->source.type==0x305?0x188c88:o->source.type==0x317?0x192ef8:o->source.type==0x318?0x193180:o->source.type==0x31a?0x1933f8:o->source.type==0x320?0x195e58:o->source.type==0x307?0x1895d8:o->source.type==0x30a?0x18c370:o->source.type==0x310?0x18f488:o->source.type==0x311?0x190948:o->source.type==0x338?0x19e150:o->source.type==0x339?0x19e3d8:o->source.type==0x33f?0x19f378:o->source.type==0x309?0x18b568:o->source.type==0x308?0x18a870:o->source.type==0x30b?0x18d160:o->source.type==0x30c?0x18df18:o->source.type==0x30e?0x18ee38:o->source.type==0x324?0x198f48:o->source.type==0x322?0x1965f8:o->source.type==0x323?0x197c20:o->source.type==0x346?0x1a13e8:r101_item(o)?0x1c0378:weapon(o)?0x1c9860:o->source.type==0x35d?0x1aedb0:o->source.type==0x41c?0x17ba28:o->source.type==0x357?0x1a8a70:tutorial(o)?0x1bf518:mount(o)?0x1a7880:0;
+ uint32_t expected=fragment?fragment->move:o->source.type==0x300?0x186928:o->source.type==0x313?0x191f30:o->source.type==0x330?0x19c518:o->source.type==0x331?0x19c848:o->source.type==0x333?0x19d538:o->source.type==0x355?0x1a85b8:o->source.type==0x356?0x1a8778:o->source.type==0x351?0x1a6188:o->source.type==0x354?0x1a82d8:o->source.type==0x303?0x187c18:o->source.type==0x304?0x187fe8:o->source.type==0x305?0x188c88:o->source.type==0x317?0x192ef8:o->source.type==0x318?0x193180:o->source.type==0x31a?0x1933f8:o->source.type==0x320?0x195e58:o->source.type==0x307?0x1895d8:o->source.type==0x30a?0x18c370:o->source.type==0x310?0x18f488:o->source.type==0x311?0x190948:o->source.type==0x338?0x19e150:o->source.type==0x339?0x19e3d8:o->source.type==0x33f?0x19f378:o->source.type==0x309?0x18b568:o->source.type==0x308?0x18a870:o->source.type==0x30b?0x18d160:o->source.type==0x30c?0x18df18:o->source.type==0x30e?0x18ee38:o->source.type==0x324?0x198f48:o->source.type==0x322?0x1965f8:o->source.type==0x323?0x197c20:o->source.type==0x346?0x1a13e8:r101_item(o)?0x1c0378:weapon(o)?0x1c9860:o->source.type==0x35d?0x1aedb0:o->source.type==0x41c?0x17ba28:o->source.type==0x357?0x1a8a70:tutorial(o)?0x1bf518:mount(o)?0x1a7880:devil_projectile(o)?0x1b92f0:0;
  if(!expected||q->original_entry!=expected)return fail(s,q->original_entry,pc,GH_OBJSTEP_UNSUPPORTED);
  /* Bind before first original Move; constructor1BBEB8 established these.
   * A nonzero guest pointer can never be silently adopted as host634. */
@@ -386,22 +392,21 @@ static gh_object_step_status fragment305_spawn_001c3540(gh_om_frame_state *state
  return GH_OBJSTEP_OK;
 }
 
-static gh_object_step_status fragment305_tick(gh_om_frame_state *s,const gh_boot_work *work,uint32_t *f)
+static gh_object_step_status fragment_tick_records(gh_om_frame_state *s,const gh_boot_work *work,
+ gh_actor_model *model,uint8_t *segments,unsigned first,unsigned maximum,uint32_t *f)
 {
- gh_om303_state *fragment=(gh_om303_state*)s->object->initialization;
- gh_actor_model *model=&fragment->common.model;
  uint8_t *actor=s->object->view.bytes;
- const unsigned count=model->part_count<6?model->part_count:6;
+ const unsigned count=model->part_count<maximum?model->part_count:maximum;
  const float rate=mul(number(s->runtime.init->enemies+0x548),number((const uint8_t *)work+0x574));
- if(actor[0x60c]!=6||actor[0x2b4]!=model->part_count||fragment->segments!=actor+0x620||!isfinite(rate))
+ if(actor[0x2b4]!=model->part_count||!isfinite(rate))
   return fail(s,0x292f50,f,GH_OBJSTEP_UNSUPPORTED);
- uint8_t records[6][0x60];
- float matrices[6][16];
+ uint8_t records[9][0x60];
+ float matrices[9][16];
  memset(matrices,0,sizeof(matrices));
  uint32_t frontier=0;
- for(unsigned i=0;i<count;i++){
+ for(unsigned i=first;i<count;i++){
   uint8_t *record=records[i];
-  memcpy(record,fragment->segments+i*0x60,0x60);
+  memcpy(record,segments+i*0x60,0x60);
   if(record[0x54]!=1)continue;
   for(unsigned j=0;j<16;j+=4){
    const float position=add(number(record+j),mul(number(record+0x20+j),rate));
@@ -419,13 +424,20 @@ static gh_object_step_status fragment305_tick(gh_om_frame_state *s,const gh_boot
   memcpy(record+0x24,&y,4);
   if(y< -1000.0f)record[0x54]=0;
  }
- for(unsigned i=0;i<count;i++){
-  uint8_t *live=fragment->segments+i*0x60;
+ for(unsigned i=first;i<count;i++){
+  uint8_t *live=segments+i*0x60;
   if(live[0x54]!=1)continue;
   memcpy(live,records[i],0x60);
   memcpy(model->parts[i].bytes+0x80,matrices[i],sizeof(matrices[i]));
  }
  return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status fragment_tick(gh_om_frame_state *s,const gh_boot_work *work,
+ unsigned first,unsigned maximum,uint32_t *f)
+{
+ gh_om303_state *fragment=(gh_om303_state *)s->object->initialization;
+ return fragment_tick_records(s,work,&fragment->common.model,fragment->segments,first,maximum,f);
 }
 
 static gh_object_step_status fragment305_break(gh_om_frame_state *s,const gh_boot_work *work,
@@ -518,7 +530,226 @@ static gh_object_step_status fragment305_break(gh_om_frame_state *s,const gh_boo
   }
   s->special_phase=8;
  }
- return fragment305_tick(s,work,f);
+ gh_om303_state *fragment=(gh_om303_state*)s->object->initialization;
+ if(actor[0x60c]!=6||fragment->segments!=actor+0x620)
+  return fail(s,0x292f50,f,GH_OBJSTEP_UNSUPPORTED);
+ return fragment_tick(s,work,0,6,f);
+}
+
+static gh_object_step_status box_fragments_spawn(gh_om_frame_state *s,uint32_t *f)
+{
+ gh_om303_state *fragment=(gh_om303_state*)s->object->initialization;
+ gh_actor_model *model=&fragment->common.model;
+ uint8_t *actor=s->object->view.bytes;
+ uint32_t pc=0;
+ const int kind304=s->object->source.type==0x304;
+ const unsigned first=kind304?0:1, limit=kind304?6:9;
+ const uint32_t entry=kind304?0x188798:0x18cb18;
+ const unsigned count=model->part_count<limit?model->part_count:limit;
+ /* 188798/18CB18 share the mesh/part changes but have different
+  * starting indices and record storage. */
+ if(!model->part_count||model->part_count!=actor[0x2b4]||
+    model->script.mesh_count<2||!s->runtime.fragment_atan_coeff||
+    fragment->segments!=actor+(kind304?0x610:0x660)||
+    word(actor+(kind304?0x604:0x650)))
+  return fail(s,entry,f,GH_OBJSTEP_UNSUPPORTED);
+ if(fragment->common.hitarea_created&&
+    gh_hitarea_object_set_active_001fd668(&fragment->common.hitarea,0,&pc))
+  return fail(s,pc?pc:0x1fd668,f,GH_OBJSTEP_CALLEE);
+ if(gh_actor_model_node_mask_flags(model,1,0x380,UINT32_MAX,0x2001u)||
+    gh_actor_model_node_mask_flags(model,0,0x380,~1u,0x2000u))
+  return fail(s,0x14b6f8,f,GH_OBJSTEP_CALLEE);
+ put(actor+0x250,word(actor+0x250)|0x10000u);
+ for(unsigned i=1;i<count;i++){
+  uint8_t *part=model->parts[i].bytes;
+  put(part+0x154,word(part+0x154)&~0x18u);
+ }
+ if(gh_actor_model_update_hierarchy_00149eb8(model,GH_STATIC_BINARY32_REFERENCE))
+  return fail(s,model->frontier?model->frontier:0x149eb8,f,GH_OBJSTEP_CALLEE);
+ float position[9][3],angles[9][3];
+ for(unsigned i=first;i<count;i++){
+  float matrix[16];
+  memcpy(matrix,model->parts[i].bytes+0x80,sizeof(matrix));
+  memcpy(position[i],matrix+12,sizeof(position[i]));
+  if(gh_actor_matrix_extract_euler_00147c88(matrix,s->runtime.fragment_atan_coeff,
+      angles[i],GH_STATIC_BINARY32_REFERENCE,&pc))
+   return fail(s,pc?pc:0x147c88,f,GH_OBJSTEP_UNSUPPORTED);
+ }
+ gh_game_mt *random=&s->runtime.init->random;
+ if(random->index>624)return fail(s,0x31cfe0,f,GH_OBJSTEP_ARGUMENT);
+ const float kick[3]={mul(number(actor+0x5c0),.01f),
+     add(mul(number(actor+0x5c4),.01f),.099999994f),mul(number(actor+0x5c8),.01f)};
+ for(unsigned i=first;i<count;i++){
+  uint8_t *part=model->parts[i].bytes,*record=fragment->segments+(size_t)i*0x60;
+  float velocity[3],spin[3];
+  velocity[0]=add(kick[0],mul(fragment_random(random,0),.2f));
+  velocity[1]=add(kick[1],mul(fragment_random(random,1),.4f));
+  velocity[2]=add(kick[2],mul(fragment_random(random,0),.2f));
+  for(unsigned j=0;j<3;j++)spin[j]=mul(fragment_random(random,0),.1f);
+  memcpy(record,position[i],12);
+  memcpy(record+0x10,angles[i],12);
+  memcpy(record+0x20,velocity,12);
+  memcpy(record+0x30,spin,12);
+  for(unsigned j=0;j<4;j++)put(record+0x40+j*4,0x3f800000u);
+  put(record+0x50,0); /* Original part destination retains its typed identity. */
+  record[0x54]=1;
+  put(record+0x58,0xbca3d70au);
+  put(part+0x154,word(part+0x154)|0x18u);
+ }
+ return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status fragment30a_drop_002923e8(gh_om_frame_state *s,uint32_t *f)
+{
+ const gh_om_initializer_bindings *initializer=s->factory->bindings.initializer;
+ gh_game_init_state *init=s->runtime.init;
+ if(!initializer||!initializer->save.bytes||initializer->save.size<GH_CORE_SAVE_BYTES)
+  return fail(s,0x1fa010,f,GH_OBJSTEP_UNSUPPORTED);
+ /* 3BF160 is the immutable 1FA010 rank table in the reference ELF.
+  * Current rank is derived from the same active save record every call. */
+ const int16_t score=(int16_t)half(initializer->save.bytes+0x1c);
+ const unsigned rank=score<1000?1:score<3000?2:score<4000?3:5;
+ const unsigned difficulty=initializer->save.bytes[0x1f];
+ const uint32_t modulus=difficulty!=2&&(!difficulty||init->continue_count>=4)?40u:50u;
+ const uint32_t pity=word(init->enemies+0x534);
+ if(pity>INT32_MAX/10u)return fail(s,0x292498,f,GH_OBJSTEP_UNSUPPORTED);
+ static const float factor[]={0,1,.9f,.8f,.8f,.65f};
+ const float threshold=mul((float)(pity*10u),factor[rank]);
+ if(!isfinite(threshold)||threshold>=2147483648.0f||init->random.index>624)
+  return fail(s,0x292498,f,GH_OBJSTEP_UNSUPPORTED);
+ uint32_t draw;
+ if(gh_game_mt_next_0030f348(&init->random,&draw))
+  return fail(s,0x31cfe0,f,GH_OBJSTEP_CALLEE);
+ if((uint32_t)threshold<draw%modulus){
+  put(init->enemies+0x534,pity+1);
+  if(gh_game_mt_next_0030f348(&init->random,&draw))
+   return fail(s,0x31cfe0,f,GH_OBJSTEP_CALLEE);
+  if(draw&3u)return GH_OBJSTEP_OK;
+  /* Original param4=0 selects runtime item 3D6 on this branch. */
+  s->special_phase=7;
+  return GH_OBJSTEP_OK;
+ }
+ put(init->enemies+0x534,0);
+ s->special_phase=9;
+ return fail(s,0x31d000,f,GH_OBJSTEP_UNSUPPORTED);
+}
+
+static gh_object_step_status box_break(gh_om_frame_state *s,
+ const gh_boot_work *work,gh_static_transform_policy policy,uint32_t *f)
+{
+ gh_om_object *object=s->object;
+ gh_om303_state *fragment=(gh_om303_state*)object->initialization;
+ gh_om_init_state *owner=&fragment->common;
+ uint8_t *actor=object->view.bytes;
+ uint32_t pc=0;
+ const int kind304=object->source.type==0x304;
+ const uint32_t entry=kind304?0x1881f0:0x18c580;
+ uint8_t *timer=actor+(kind304?0x600:0x654);
+ if(work->room!=0x101||policy!=GH_STATIC_BINARY32_REFERENCE||!s->runtime_bound||
+    !s->runtime.init||fragment->segments!=actor+(kind304?0x610:0x660)||!object->view.alias_f0)
+  return fail(s,entry,f,GH_OBJSTEP_UNSUPPORTED);
+ if(!actor[0x2f5]&&s->special_phase!=8){
+  if(!s->special_phase){
+   if(!s->runtime.break_effect)return fail(s,0x306838,f,GH_OBJSTEP_UNSUPPORTED);
+   uint32_t position[3];
+   memcpy(position,object->view.alias_f0,sizeof(position));
+   gh_object_step_status status=s->runtime.break_effect(s->runtime.context,&owner->model,position,0,&pc);
+   if(status)return fail(s,pc?pc:0x306838,f,status);
+   s->special_phase=1;
+  }
+  if(s->special_phase==1){
+   if(!s->runtime.break_sound)return fail(s,0x2cba48,f,GH_OBJSTEP_UNSUPPORTED);
+   s->break_sound=(gh_motion_sound_request){.model=&owner->model,.actor=&object->view,.bank=2,.program=0};
+   uint32_t handle=0;
+   gh_actor_motion_status status=s->runtime.break_sound(s->runtime.context,&s->break_sound,&handle,&pc);
+   if(status)return fail(s,pc?pc:0x2cba48,f,
+       status==GH_ACTOR_MOTION_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);
+   s->special_phase=2;
+  }
+  if(s->special_phase==2){
+   gh_object_step_status status=box_fragments_spawn(s,f);
+   if(status)return status;
+   s->special_phase=3;
+  }
+  if(s->special_phase==3){
+   if(!(word(actor+0x5b8)&0x200u)&&!(word((const uint8_t *)work+0x5e4)&0x1000000u))
+    put(actor+0x5b8,word(actor+0x5b8)&~0x40u);
+   const uint64_t key=(uint64_t)word(actor+0x53c)<<32|word(actor+0x538);
+   if(gh_room_state_mark_object_broken_002becb0(s->factory->bindings.room_state,key))
+    return fail(s,0x2becb0,f,GH_OBJSTEP_CALLEE);
+   s->special_phase=4;
+  }
+  if(s->special_phase==4){
+   if(!s->runtime.break_collision)return fail(s,0x1331b8,f,GH_OBJSTEP_UNSUPPORTED);
+   const uint64_t key=(uint64_t)word(actor+0x544)<<32|word(actor+0x540);
+   gh_object_step_status status=s->runtime.break_collision(s->runtime.context,key,&pc);
+   if(status)return fail(s,pc?pc:0x1331b8,f,status);
+   s->special_phase=5;
+  }
+  if(s->special_phase==5){
+   if(gh_collision_solid_release_unit_001347e8(s->runtime.solids,&object->view,&pc))
+    return fail(s,pc?pc:0x1347e8,f,GH_OBJSTEP_CALLEE);
+   s->special_phase=6;
+  }
+  if(s->special_phase==6){
+   const uint32_t flags=word(actor+0x5b0);
+   const uint32_t item=word(actor+0x560);
+   if(!(flags&0x12u)&&item!=0x9c3u){
+    put(actor+0x5b0,flags|0x10u);
+    if(item!=0xffffu){s->special_phase=10;return fail(s,0x292048,f,GH_OBJSTEP_UNSUPPORTED);}
+    /* 1B7A78 leaves an unconfigured 304 without random loot. */
+    if(!kind304){
+     gh_object_step_status status=fragment30a_drop_002923e8(s,f);
+     if(status)return status;
+    }
+   }
+   if(s->special_phase==6)s->special_phase=11;
+  }
+  if(s->special_phase==7){
+   if(!s->runtime.drop_item)return fail(s,0x30fa98,f,GH_OBJSTEP_UNSUPPORTED);
+   gh_object_step_status status=s->runtime.drop_item(s->runtime.context,&s->box_item_drop,&object->view,&pc);
+   if(status)return fail(s,pc?pc:0x30fa98,f,status);
+   s->special_phase=11;
+  }
+  if(s->special_phase==11){
+   put(actor+0x5b0,(word(actor+0x5b0)&~8u)|0x12u);
+   if(kind304){
+    if(word(actor+0x608))return fail(s,0x1fd718,f,GH_OBJSTEP_UNSUPPORTED);
+    if(fragment->sphere_created&&
+       gh_hitarea_object_set_active_timed_001fd718(&fragment->sphere_unit,1,1,&pc))
+     return fail(s,pc?pc:0x1fd718,f,GH_OBJSTEP_CALLEE);
+   }
+   actor[0x2f5]=1;
+   actor[0x2f6]=actor[0x2f7]=0;
+   sh(timer,30);
+  }
+  if(s->special_phase==9)return fail(s,0x31d000,f,GH_OBJSTEP_UNSUPPORTED);
+  if(s->special_phase==10)return fail(s,0x292048,f,GH_OBJSTEP_UNSUPPORTED);
+ }
+ if(s->special_phase!=8){
+  switch(actor[0x2f5]){
+  case 1:case 2:{
+   const uint16_t bits=(uint16_t)(half(timer)-1u);
+   const int remaining=(int16_t)bits;
+   sh(timer,bits);
+   if(actor[0x2f5]==2){
+    const volatile float opacity=(float)remaining/15.0f;
+    const float value=opacity;
+    memcpy(actor+0x24c,&value,4);
+   }
+   if(remaining<=0){
+    if(actor[0x2f5]==1)sh(timer,15);
+    actor[0x2f5]++;
+    actor[0x2f6]=actor[0x2f7]=0;
+   }
+   break;
+  }
+  case 3:actor[0x2f4]=3;actor[0x2f5]=actor[0x2f6]=actor[0x2f7]=0;break;
+  default:return fail(s,entry,f,GH_OBJSTEP_UNSUPPORTED);
+  }
+  s->special_phase=8;
+ }
+ return fragment_tick(s,work,kind304?0:1,kind304?6:9,f);
 }
 
 static gh_object_step_status flag_move(gh_om_frame_state *s,gh_static_transform_policy policy,uint32_t *f)
@@ -551,6 +782,146 @@ static gh_object_step_status door_wait_contact(gh_om_frame_state *s,gh_om_init_s
     if(gh_om_door_set_open_001bcfb0(&c->geometry_state,turn<0.0f,0))
         return fail(s,0x1bcfb0,frontier,GH_OBJSTEP_UNSUPPORTED);
     return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status door_break_spawn_001bcd70(gh_om_frame_state *s,
+ gh_om_init_state *c,uint32_t *frontier)
+{
+ uint8_t *p=s->object->view.bytes;
+ gh_actor_model *model=&c->model;
+ uint32_t pc=0;
+ const unsigned count=model->part_count<p[0x624]?model->part_count:p[0x624];
+ if(!s->runtime.init||!s->runtime.fragment_atan_coeff||c->door_segments!=p+0x650||
+    p[0x624]>7||!count||model->part_count!=p[0x2b4]||model->script.mesh_count<2||
+    word(p+0x600)||word(p+0x628))
+  return fail(s,0x1bcd70,frontier,GH_OBJSTEP_UNSUPPORTED);
+ if(c->hitarea_created&&gh_hitarea_object_set_active_001fd668(&c->hitarea,0,&pc))
+  return fail(s,pc?pc:0x1fd668,frontier,GH_OBJSTEP_CALLEE);
+ if(gh_actor_model_node_mask_flags(model,1,0x380,UINT32_MAX,0x2001u)||
+    gh_actor_model_node_mask_flags(model,0,0x380,~1u,0x2000u))
+  return fail(s,0x14b6f8,frontier,GH_OBJSTEP_CALLEE);
+ put(p+0x250,word(p+0x250)|0x10000u);
+ for(unsigned i=1;i<count;i++){
+  uint8_t *part=model->parts[i].bytes;
+  put(part+0x154,word(part+0x154)&~0x18u);
+ }
+ if(gh_actor_model_update_hierarchy_00149eb8(model,GH_STATIC_BINARY32_REFERENCE))
+  return fail(s,model->frontier?model->frontier:0x149eb8,frontier,GH_OBJSTEP_CALLEE);
+ float position[7][3],angles[7][3];
+ for(unsigned i=1;i<count;i++){
+  float world[16];
+  memcpy(world,model->parts[i].bytes+0x80,sizeof(world));
+  memcpy(position[i],world+12,sizeof(position[i]));
+  if(gh_actor_matrix_extract_euler_00147c88(world,s->runtime.fragment_atan_coeff,
+      angles[i],GH_STATIC_BINARY32_REFERENCE,&pc))
+   return fail(s,pc?pc:0x147c88,frontier,GH_OBJSTEP_UNSUPPORTED);
+ }
+ gh_game_mt *random=&s->runtime.init->random;
+ if(random->index>624)return fail(s,0x31cfe0,frontier,GH_OBJSTEP_ARGUMENT);
+ const float kick[3]={mul(number(p+0x5c0),.01f),add(mul(number(p+0x5c4),.01f),.02f),
+     mul(number(p+0x5c8),.01f)};
+ for(unsigned i=1;i<count;i++){
+  uint8_t *part=model->parts[i].bytes,*record=c->door_segments+(size_t)i*0x60;
+  float velocity[3],spin[3];
+  velocity[0]=add(kick[0],mul(fragment_random(random,0),.2f));
+  velocity[1]=add(kick[1],mul(fragment_random(random,1),.3f));
+  velocity[2]=add(kick[2],mul(fragment_random(random,0),.2f));
+  for(unsigned j=0;j<3;j++)spin[j]=mul(fragment_random(random,0),.2f);
+  memcpy(record,position[i],12);memcpy(record+0x10,angles[i],12);
+  memcpy(record+0x20,velocity,12);memcpy(record+0x30,spin,12);
+  for(unsigned j=0;j<4;j++)put(record+0x40+j*4,0x3f800000u);
+  put(record+0x50,0);
+  record[0x54]=1;
+  put(record+0x58,0xbca3d70au);
+  put(part+0x154,word(part+0x154)|0x18u);
+ }
+ return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status door_break_001bc748(gh_om_frame_state *s,gh_om_init_state *c,
+ const gh_boot_work *work,gh_static_transform_policy policy,uint32_t *frontier)
+{
+ uint8_t *p=s->object->view.bytes;
+ if(!s->runtime_bound||!s->runtime.init||policy!=GH_STATIC_BINARY32_REFERENCE||
+    work->room!=0x101||p[0x624]>7||c->door_segments!=p+0x650||p[0x2f5]>3)
+  return fail(s,0x1bc748,frontier,GH_OBJSTEP_UNSUPPORTED);
+ uint32_t pc=0;
+ if(!p[0x2f5]){
+  if(!s->special_phase){
+   if(!s->runtime.break_effect||!s->object->view.alias_f0)
+    return fail(s,0x306528,frontier,GH_OBJSTEP_UNSUPPORTED);
+   uint32_t position[3];memcpy(position,s->object->view.alias_f0,sizeof(position));
+   const gh_object_step_status status=s->runtime.break_effect(
+       s->runtime.context,&c->model,position,0,&pc);
+   if(status)return fail(s,pc?pc:0x306528,frontier,status);
+   s->special_phase=1;
+  }
+  if(s->special_phase==1){
+   if(!s->runtime.break_sound)return fail(s,0x2cba48,frontier,GH_OBJSTEP_UNSUPPORTED);
+   s->break_sound=(gh_motion_sound_request){.model=&c->model,.actor=&s->object->view,.bank=2,.program=0};
+   uint32_t handle=0;
+   const gh_actor_motion_status status=s->runtime.break_sound(
+       s->runtime.context,&s->break_sound,&handle,&pc);
+   if(status)return fail(s,pc?pc:0x2cba48,frontier,
+       status==GH_ACTOR_MOTION_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);
+   s->special_phase=2;
+  }
+  if(s->special_phase==2){
+   const gh_object_step_status status=door_break_spawn_001bcd70(s,c,frontier);
+   if(status)return status;
+   s->special_phase=3;
+  }
+  if(s->special_phase==3){
+   if(!(word(p+0x5b8)&0x200u)&&!(word((const uint8_t *)work+0x5e4)&0x1000000u))
+    put(p+0x5b8,word(p+0x5b8)&~0x40u);
+   const uint64_t key=(uint64_t)word(p+0x53c)<<32|word(p+0x538);
+   if(gh_room_state_mark_object_broken_002becb0(s->factory->bindings.room_state,key))
+    return fail(s,0x2becb0,frontier,GH_OBJSTEP_CALLEE);
+   s->special_phase=4;
+  }
+  if(s->special_phase==4){
+   if(!s->runtime.break_collision)return fail(s,0x1331b8,frontier,GH_OBJSTEP_UNSUPPORTED);
+   const uint64_t key=(uint64_t)word(p+0x544)<<32|word(p+0x540);
+   const gh_object_step_status status=s->runtime.break_collision(s->runtime.context,key,&pc);
+   if(status)return fail(s,pc?pc:0x1331b8,frontier,status);
+   s->special_phase=5;
+  }
+  if(s->special_phase==5){
+   if(gh_collision_solid_release_unit_001347e8(s->runtime.solids,&s->object->view,&pc))
+    return fail(s,pc?pc:0x1347e8,frontier,GH_OBJSTEP_CALLEE);
+   s->special_phase=6;
+  }
+  if(s->special_phase==6){
+   const uint32_t flags=word(p+0x5b0);
+   const uint32_t item=word(p+0x560);
+   if(!(flags&0x10u)&&item!=0xffffu&&item!=0x9c3u)
+    return fail(s,0x2923e8,frontier,GH_OBJSTEP_UNSUPPORTED);
+   /* 1B7A78 does not select a default drop for the 0313 class. */
+   put(p+0x5b0,(flags&~8u)|0x12u);
+   s->special_phase=7;
+  }
+  if(gh_om_door_release_collision_001bd3f0(&c->geometry_state))
+   return fail(s,0x12ec58,frontier,GH_OBJSTEP_UNSUPPORTED);
+  p[0x2f5]=1;p[0x2f6]=p[0x2f7]=0;sh(p+0x62c,30);
+ }
+ if(s->special_phase!=8){
+  if(p[0x2f5]==3){
+   p[0x2f4]=3;p[0x2f5]=p[0x2f6]=p[0x2f7]=0;
+  }else{
+   const int16_t remaining=(int16_t)(uint16_t)(half(p+0x62c)-1u);
+   sh(p+0x62c,(uint16_t)remaining);
+   if(p[0x2f5]==2){
+    const volatile float opacity=(float)remaining/15.0f;
+    const float value=opacity;memcpy(p+0x24c,&value,4);
+   }
+   if(remaining<=0){
+    if(p[0x2f5]==1)sh(p+0x62c,15);
+    ++p[0x2f5];p[0x2f6]=p[0x2f7]=0;
+   }
+  }
+  s->special_phase=8;
+ }
+ return fragment_tick_records(s,work,&c->model,c->door_segments,1,p[0x624],frontier);
 }
 
 static gh_object_step_status door_turn_step(gh_om_frame_state *s,gh_om_init_state *c,
@@ -700,8 +1071,50 @@ static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_w
  uint8_t *p=actor->bytes;
  if(!actor->alias_f0||actor->size<0x680||!s->runtime.scene_tables||!s->runtime.init)
   return fail(s,0x1c0678,f,GH_OBJSTEP_ARGUMENT);
- if(p[0x2f4])return fail(s,s->entry,f,GH_OBJSTEP_UNSUPPORTED);
+ if(p[0x2f4]){
+  if(p[0x2f4]==1&&s->object->runtime_created&&s->object->runtime_kind==0x3d6)
+   return remove_object(s,f); /* Original PMF[1] 1C2260 -> 1B79B0. */
+  return fail(s,s->entry,f,GH_OBJSTEP_UNSUPPORTED);
+ }
  if(s->special_phase)return GH_OBJSTEP_OK;
+ if(s->object->runtime_created&&s->object->runtime_kind==0x3d6&&
+    (p[0x2f6]==4||p[0x2f6]==5)){
+  if(p[0x2f6]==4){
+   if(!s->runtime.award_item)return fail(s,0x1c2408,f,GH_OBJSTEP_UNSUPPORTED);
+   if(!s->pickup.stage){
+    sh(p+0x568,30);
+    p[0x660]=p[0x675]=1;
+   }
+   uint32_t pc=0;
+   gh_object_step_status status=s->runtime.award_item(s->runtime.context,&s->pickup,actor,&pc);
+   if(status)return fail(s,pc?pc:0x1c2408,f,status);
+   sh(p+0x568,5);
+   p[0x2f6]=5;
+  }
+  float yaw=add(number(p+0x104),0.5235988f);
+  if(gh_id_angle_reference_001f7d48(yaw,&yaw))return fail(s,0x1f7d48,f,GH_OBJSTEP_UNSUPPORTED);
+  memcpy(p+0x104,&yaw,4);
+  const uint16_t remaining=half(p+0x568);
+  if(remaining){
+   sh(p+0x568,remaining-1);
+   const float height=add(number(actor->alias_f0+4),0.2f);
+   memcpy(actor->alias_f0+4,&height,4);
+  }
+  float alpha=number(p+0x24c);
+  if(alpha>1.0f)alpha=1.0f;
+  alpha=add(alpha,-0.02f);
+  const uint32_t flags=word(p+0x250);
+  if(alpha<=0.15f){
+   p[0x2f4]=1;p[0x2f5]=p[0x2f6]=p[0x2f7]=0;
+   put(p+0x250,(flags|0x12u)&~0x10u);
+   put(p+0x24c,0);
+  }else{
+   put(p+0x250,flags|0x10u);
+   memcpy(p+0x24c,&alpha,4);
+  }
+  s->special_phase=1;
+  return GH_OBJSTEP_OK;
+ }
  if(word(p+0x630))return fail(s,0x1c2378,f,GH_OBJSTEP_UNSUPPORTED);
  if(p[0x2f6]==0){
   if(p[0x676]&2u){
@@ -765,17 +1178,45 @@ static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_w
     const int alive=(int16_t)half(player->bytes+0x54a)>0;
     if(alive&&half((const uint8_t *)work+0x610)==0xffff){
      if(!player->alias_f0)return fail(s,0x1c20d8,f,GH_OBJSTEP_UNSUPPORTED);
-     float distance=0;
+     float origin[4],distance=0;
+     memcpy(origin,player->alias_f0,sizeof(origin));
+     origin[1]=add(origin[1],0.5f);
      for(unsigned i=0;i<3;i++){
-      const float origin=add(number(player->alias_f0+4u*i),i==1?0.5f:0);
-      const float delta=add(next[i],-origin);
+      const float delta=add(next[i],-origin[i]);
       distance=add(distance,mul(delta,delta));
      }
-     if(distance<((p[0x676]&4u)?16.0f:4.0f))
-      return fail(s,0x1c20d8,f,GH_OBJSTEP_UNSUPPORTED);
+     if(distance<((p[0x676]&4u)?16.0f:4.0f)){
+      if(!s->object->runtime_created||s->object->runtime_kind!=0x3d6||word(p+0x670)!=0x31)
+       return fail(s,0x1c20d8,f,GH_OBJSTEP_UNSUPPORTED);
+      int blocked=0;
+      if(p[0x676]&1u){
+       gh_scene_ray_request ray={.mask=7,.flags=0x204,.segmented=1};
+       memcpy(ray.from,next,sizeof(ray.from));
+       memcpy(ray.to,origin,sizeof(ray.to));
+       uint32_t pc=0;
+       if(gh_scene_ray_query_00131e10(s->runtime.scene_tables,&ray,&blocked,&pc))
+        return fail(s,pc?pc:0x131e10,f,GH_OBJSTEP_UNSUPPORTED);
+      }
+      if(!blocked){
+       gh_om_init_state *init=s->object->initialization;
+       if(gh_om_r101_item_collect_001c24e8(init))
+        return fail(s,init->frontier?init->frontier:0x1c24e8,f,GH_OBJSTEP_UNSUPPORTED);
+       next_phase=4;
+      }
+     }
     }
-    if(alive&&(int16_t)(half(p+0x56a)-1u)<1)return fail(s,0x306838,f,GH_OBJSTEP_UNSUPPORTED);
-    if(alive)sh(p+0x56a,(uint16_t)(half(p+0x56a)-1u));
+    if(alive){
+     const uint16_t remaining=(uint16_t)(half(p+0x56a)-1u);
+     if((int16_t)remaining<1){
+      if(!s->runtime.break_effect)return fail(s,0x306838,f,GH_OBJSTEP_UNSUPPORTED);
+      uint32_t position_bits[3],pc=0;
+      memcpy(position_bits,next,sizeof(position_bits));
+      gh_object_step_status status=s->runtime.break_effect(s->runtime.context,
+          &s->object->initialization->model,position_bits,0,&pc);
+      if(status)return fail(s,pc?pc:0x306838,f,status);
+      sh(p+0x56a,60);
+     }else sh(p+0x56a,remaining);
+    }
     if(!(p[0x676]&2u)){
      float yaw=add(number(p+0x104),0.08726646f);
      if(gh_id_angle_reference_001f7d48(yaw,&yaw))return fail(s,0x1f7d48,f,GH_OBJSTEP_UNSUPPORTED);
@@ -861,11 +1302,135 @@ static gh_object_step_status om311_move(gh_om_frame_state *s,gh_static_transform
  return GH_OBJSTEP_OK;
 }
 
+/* Type 3 in 1B93E8 follows the stored velocity and performs a finite
+ * world segment query before enabling the authored attack/contact shapes. */
+static gh_object_step_status devil_projectile_move(gh_om_frame_state *frame,
+ const gh_boot_work *work,gh_static_transform_policy policy,uint32_t *frontier)
+{
+ gh_om3be_state *state=(gh_om3be_state *)frame->object->initialization;
+ uint8_t *p=frame->object->view.bytes,*position=frame->object->view.alias_f0;
+ if(!frame->runtime_bound||work->room!=0x100||!position||state->stage!=9||
+    word(p+0x610)!=3||policy!=GH_STATIC_BINARY32_REFERENCE)
+  return fail(frame,0x1b92f0,frontier,GH_OBJSTEP_UNSUPPORTED);
+ if(p[0x2f4]>1)return fail(frame,0x1b92f0,frontier,GH_OBJSTEP_UNSUPPORTED);
+ uint32_t pc=0;
+ if(frame->special_phase==0){
+  const gh_hitarea_object *const areas[]={&state->attack,&state->contact};
+  const uint8_t present[]={state->attack_created,state->contact_created};
+  for(unsigned i=0;i<2;i++){
+   if(!present[i])continue;
+   if(gh_hitarea_object_set_active_001fd668(areas[i],0,&pc))
+    return fail(frame,pc?pc:0x1fd668,frontier,GH_OBJSTEP_UNSUPPORTED);
+  }
+  const float rate=mul(number(frame->runtime.init->enemies+0x548),*frame->runtime.canonical_rate);
+  if(!isfinite(rate)||rate<0)return fail(frame,0x292f50,frontier,GH_OBJSTEP_UNSUPPORTED);
+  frame->runtime_rate=rate;
+  memcpy(p+0x5a8,&rate,4);
+  p[0x531]=2;
+  frame->special_phase=1;
+ }
+ if(frame->special_phase==1&&p[0x2f4]==1){
+  p[0x531]=0xff;
+  if(!frame->runtime.release_effect)return fail(frame,0x306200,frontier,GH_OBJSTEP_UNSUPPORTED);
+  if(frame->runtime.release_effect(frame->runtime.context,&frame->object->view,0,2,&pc))
+   return fail(frame,pc?pc:0x306200,frontier,GH_OBJSTEP_UNSUPPORTED);
+  frame->special_phase=6;
+ }
+ if(frame->special_phase==6){
+  gh_object_step_status status=remove_object(frame,frontier);
+  if(status)return status;
+  frame->special_phase=7;
+ }
+ if(frame->special_phase==1&&state->attack_created){
+  const gh_title_player_view *hit_actor=NULL;
+  if(!state->attack.fallback&&gh_hitarea_object_last_hit_actor(&state->attack,&hit_actor))
+   return fail(frame,0x1fcf20,frontier,GH_OBJSTEP_UNSUPPORTED);
+  if(!hit_actor&&word(state->attack.bytes+0x34))
+   return fail(frame,0x1fcf20,frontier,GH_OBJSTEP_UNSUPPORTED);
+  if(hit_actor){
+   memcpy(frame->projectile_impact,position,12);
+   frame->special_phase=5;
+  }
+ }
+ if(frame->special_phase==1){
+  float next[3];
+  for(unsigned i=0;i<3;i++){
+   next[i]=add(number(position+4*i),mul(number(p+0x580+4*i),frame->runtime_rate));
+   if(!isfinite(next[i]))return fail(frame,0x1ba018,frontier,GH_OBJSTEP_UNSUPPORTED);
+  }
+  memcpy(position,next,12);
+  frame->special_phase=2;
+ }
+ if(frame->special_phase==2){
+  if(!frame->runtime.scene_tables)return fail(frame,0x131e10,frontier,GH_OBJSTEP_UNSUPPORTED);
+  float impact[4];
+  gh_scene_ray_request ray={.mask=1,.flags=0x13c,.hit_position=impact};
+  memcpy(ray.from,p+0x490,12);
+  memcpy(ray.to,position,12);
+  ray.from[3]=ray.to[3]=1;
+  int hit=0;
+  if(gh_scene_ray_query_00131e10(frame->runtime.scene_tables,&ray,&hit,&pc))
+   return fail(frame,pc?pc:0x131e10,frontier,GH_OBJSTEP_UNSUPPORTED);
+  if(hit){
+   memcpy(frame->projectile_impact,impact,12);
+   frame->special_phase=5;
+  }else frame->special_phase=3;
+ }
+ if(frame->special_phase==5){
+  if(!frame->runtime.break_effect)return fail(frame,0x306838,frontier,GH_OBJSTEP_UNSUPPORTED);
+  gh_object_step_status status=frame->runtime.break_effect(frame->runtime.context,&state->common.model,
+       frame->projectile_impact,0,&pc);
+  if(status)return fail(frame,pc?pc:0x306838,frontier,status);
+  p[0x2f4]=1;
+  frame->special_phase=4;
+ }
+ if(frame->special_phase==3){
+  if(state->attack_created){
+   if(gh_hitarea_object_set_active_001fd668(&state->attack,1,&pc))
+    return fail(frame,pc?pc:0x1fd668,frontier,GH_OBJSTEP_UNSUPPORTED);
+   if(gh_hitarea_object_set_mode_001fd988(&state->attack,1,&pc))
+    return fail(frame,pc?pc:0x1fd988,frontier,GH_OBJSTEP_UNSUPPORTED);
+   if(number(p+0x100)||number(p+0x108))return fail(frame,0x1fd338,frontier,GH_OBJSTEP_UNSUPPORTED);
+   float sine,cosine;
+   if(gh_sdk_rotation_sincos_reference_0030a5d0(number(p+0x104),&sine,&cosine,policy,&pc))
+    return fail(frame,pc?pc:0x1fd338,frontier,GH_OBJSTEP_UNSUPPORTED);
+   const float direction[3]={sine,0,cosine};
+   memcpy(state->attack.bytes+0x10,direction,12);
+   put(state->attack.bytes+0x4c,30);
+   sh(state->attack.bytes+0x46,0x41);
+   if(state->contact_created&&gh_hitarea_object_set_active_001fd668(&state->contact,1,&pc))
+    return fail(frame,pc?pc:0x1fd668,frontier,GH_OBJSTEP_UNSUPPORTED);
+   if(!state->attack.fallback&&state->attack_index>=0){
+    const uint8_t *node;
+    gh_collision_pair_shape shape;
+    if(gh_hitarea_node_at(&state->attack,0,&node,&shape))
+     return fail(frame,0x1fd888,frontier,GH_OBJSTEP_UNSUPPORTED);
+    const float offset[3]={0,-.3f,0},size[3]={.3f,.6f,.3f};
+    if(gh_collision_pair_shape_offset_002bb258(&shape,offset,&pc))
+     return fail(frame,pc?pc:0x1fd888,frontier,GH_OBJSTEP_UNSUPPORTED);
+    if(gh_collision_pair_box_size_002baaa8(&shape,size,&pc))
+     return fail(frame,pc?pc:0x1fd820,frontier,GH_OBJSTEP_UNSUPPORTED);
+   }
+  }
+  const float life=add(number(p+0x624),-frame->runtime_rate);
+  if(!isfinite(life))return fail(frame,0x1bb4c8,frontier,GH_OBJSTEP_UNSUPPORTED);
+  memcpy(p+0x624,&life,4);
+  if(life<=0)p[0x2f4]=1;
+  frame->special_phase=4;
+ }
+ return GH_OBJSTEP_OK;
+}
+
 static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_static_transform_policy policy,uint32_t*f){
  uint8_t*p=s->object->view.bytes;gh_om_init_state*c=common(s);
  if(!s->phase){if(word((const uint8_t*)w+0x5d8)&0x20000000u){s->complete=1;return GH_OBJSTEP_OK;}put(p+0x5b4,0);s->phase=1;}
  if(s->phase==1&&s->object->source.type==0x311){
   gh_object_step_status status=om311_move(s,policy,f);
+  if(status)return status;
+  s->phase=4;
+ }
+ if(s->phase==1&&devil_projectile(s->object)){
+  gh_object_step_status status=devil_projectile_move(s,w,policy,f);
   if(status)return status;
   s->phase=4;
  }
@@ -979,6 +1544,13 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
    else if (p[0x2f4] == 3) status = remove_object(s, f);
    if (status) return status;
    s->phase = 4;
+  } else if((s->object->source.type==0x30a||s->object->source.type==0x304)&&
+       (p[0x2f4]==2||p[0x2f4]==3||s->special_phase==8)){
+   /* 18C8A8 and 188528 share 1B79B0 -> 312708, VT+4C empty. */
+   gh_object_step_status status=(p[0x2f4]==2||s->special_phase==8)?
+       box_break(s,w,policy,f):remove_object(s,f);
+   if(status)return status;
+   s->phase=4;
   } else if(s->object->source.type==0x305&&(p[0x2f4]==2||p[0x2f4]==3||s->special_phase==8)){
    gh_object_step_status status=(p[0x2f4]==2||s->special_phase==8)?fragment305_break(s,w,policy,f):remove_object(s,f);
    if(status)return status;
@@ -994,6 +1566,12 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
   }
   else if(simple(s->object)||plain(s->object)||segments(s->object)||s->object->source.type==0x307){if(p[0x2f4]){uint32_t pc=state_entry(s->object->source.type,p[0x2f4]);return fail(s,pc?pc:s->entry,f,GH_OBJSTEP_UNSUPPORTED);}}
   else{
+   if(s->object->source.type==0x313&&(p[0x2f4]==2||p[0x2f4]==3||s->special_phase==8)){
+    gh_object_step_status status=(p[0x2f4]==2||s->special_phase==8)?
+      door_break_001bc748(s,c,w,policy,f):remove_object(s,f);
+    if(status)return status;
+    s->phase=4;
+   }else{
    if(p[0x2f4])return fail(s,p[0x2f4]==1?0x1bc6e8:p[0x2f4]==2?0x1bc748:p[0x2f4]==3?0x1bcb18:0x1bc0a0,f,GH_OBJSTEP_UNSUPPORTED);
    if(p[0x2f5]==1||p[0x2f5]==2){
     gh_object_step_status status=door_turn_step(s,c,p[0x2f5]==2,policy,f);
@@ -1011,6 +1589,7 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
     }
     }
    }
+  }
   }
   if (s->phase == 2) s->phase = 3;
  }
@@ -1122,7 +1701,8 @@ gh_object_step_status gh_om_frame_bind_runtime(gh_om_frame_state*s,const gh_om_f
    old->context==b->context&&old->break_effect==b->break_effect&&old->break_sound==b->break_sound&&
    old->break_collision==b->break_collision&&old->remove_sound==b->remove_sound&&old->ik_globals==b->ik_globals&&
    old->release_effect==b->release_effect&&old->fragment_atan_coeff==b->fragment_atan_coeff&&
-   old->action_buttons==b->action_buttons&&old->resolve_actor==b->resolve_actor&&old->scene_tables==b->scene_tables?
+   old->action_buttons==b->action_buttons&&old->resolve_actor==b->resolve_actor&&
+   old->scene_tables==b->scene_tables&&old->drop_item==b->drop_item&&old->award_item==b->award_item?
    GH_OBJSTEP_OK:GH_OBJSTEP_ARGUMENT;
  }
  s->runtime=*b;s->runtime_bound=1;return GH_OBJSTEP_OK;

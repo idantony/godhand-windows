@@ -20,6 +20,8 @@ gh_hitarea_status gh_hitarea_object_create_001fe0e8(gh_game_init_state *,gh_titl
  *1FD580 frontier, never wholepoolreset. Updates callerdescriptorserial. */
 gh_hitarea_status gh_hitarea_object_release_empty_001fe278(gh_hitarea_object *,uint32_t *frontier);
 gh_hitarea_status gh_hitarea_object_actor(const gh_hitarea_object *,gh_title_player_view **);
+/* Native relation for cHitArea +38, read by 1FCF20 along with the owner. */
+gh_hitarea_status gh_hitarea_object_set_excluded_actor(const gh_hitarea_object *,const gh_title_player_view *);
 gh_hitarea_status gh_hitarea_object_set_mode_001fd988(const gh_hitarea_object *,uint8_t mode,uint32_t *frontier);
 /* Host metadata only, invoked AFTER originalpool reset/release actually
  * succeeded. Does not release originaldamage nodes or change rawoccupancy. */

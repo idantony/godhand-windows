@@ -951,7 +951,7 @@ def main():
             arguments.append(baseline["source_iso"]["path"])
         if inputs in wave_inputs:
             arguments.append(wave_inputs[inputs].resolve())
-        if name in ("enemy-se-banks", "game-object-sounds", "game-enemy-resources", "game-event-audio") and args.hardware_audio:
+        if name in ("enemy-se-banks", "game-object-sounds", "game-enemy-resources", "game-event-audio", "sound-spatial-step") and args.hardware_audio:
             arguments.append("--hardware-audio")
         return arguments
 

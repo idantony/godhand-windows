@@ -15,7 +15,7 @@ gh_sound_scene_status gh_sound_listener_update_002cc150(gh_sound_control *,const
 /* Actual2CA518: listener→2D22F0 unconditionalmask/ratiohistory→BMHgate→
  * 2CB128 TS list update and the original 2CB200 return. TS sphere and
  * cylinder tests use the authored record, player position, and list order. */
-gh_sound_scene_status gh_sound_spatial_step_002ca518(gh_sound_scene *,const gh_boot_work *,
+gh_sound_scene_status gh_sound_spatial_step_002ca518(gh_sound_scene *,gh_se_voice_engine *,const gh_boot_work *,
  const gh_game_init_state *,const gh_game_pl_camera *,const gh_title_player_view *,gh_camera_numeric_policy,uint32_t *frontier);
 #ifdef __cplusplus
 }

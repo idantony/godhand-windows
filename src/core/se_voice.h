@@ -52,6 +52,13 @@ void gh_se_voice_destroy(gh_se_voice_engine *);
  * Unsupported data returns exact first_unported; no command is queued. */
 gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *,int16_t bank,int16_t program,
  int16_t arg3,int16_t arg4,uint32_t flags,int32_t delay,uint32_t *original_handle);
+/* TS mode 3 starts at the authored source, then updates position and
+ * uses the trigger's distance. The borrowed environment stays live until
+ * these scene voices have stopped. */
+gh_voice_status gh_se_voice_request_ts_002cb968(gh_se_voice_engine *,int16_t bank,int16_t program,
+ const float position[4],const gh_se_attached_environment *,uint32_t *original_handle);
+gh_voice_status gh_se_voice_update_ts_002cbf48(gh_se_voice_engine *,uint32_t original_handle,
+ const float position[4],uint16_t distance,int *found);
 /* Actual2CBA48/2CDD18 actor binding into SAME64EEpool. request_key identifies
  * ONLY an unfinished invocation; completion releaseskey, sameaddressreuse is
  * a NEWoriginalcall. owner/probecontext must live untilabort orallvoicesEOS.

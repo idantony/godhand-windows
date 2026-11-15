@@ -9,6 +9,7 @@ extern "C" {
  * canonicalHeat/typedtuning, sampledrootdelta; no nativecontroller velocity.
  * Positiveaux and destinationmode4 remain strict at originalcallees. */
 gh_player_frame_status gh_game_player_run_0010c5a8(gh_player_run_call *,const gh_player_frame_bindings *);
+gh_player_frame_status gh_game_player_run_backwards_0010c930(gh_player_run_call *,const gh_player_frame_bindings *);
 gh_player_frame_status gh_player_run_begin(gh_player_run_call *);
 #ifdef __cplusplus
 }

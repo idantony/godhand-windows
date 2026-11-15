@@ -532,26 +532,6 @@ gh_actor_motion_status gh_enemy_ems_spawn_devil_002905d0(gh_enemy_ems *owner,
 static uint32_t object_word(const uint8_t *);
 static void retire_put_word(uint8_t *,uint32_t);
 
-/* 2705D8 rank-independent far decision for EM20 in R100.
- * The three room-specific selectors ahead of the range test return zero. */
-static gh_actor_motion_status devil_choose_far_002705d8(uint8_t *p,
-    const gh_boot_work *work,uint32_t *frontier)
-{
-    *frontier=0x2705d8;
-    if(object_word(p+0x738)){*frontier=0x1d0408;return GH_ACTOR_MOTION_UNSUPPORTED;}
-    if(work->room!=0x100||p[0x1864])return GH_ACTOR_MOTION_UNSUPPORTED;
-    float escape,override,distance;
-    memcpy(&escape,p+0x16c0,4);
-    memcpy(&override,p+0x1734,4);
-    memcpy(&distance,p+0x618,4);
-    if(!isfinite(escape)||!isfinite(override)||!isfinite(distance)||
-       escape>0.0f||override>0.0f||distance<9.0f)return GH_ACTOR_MOTION_UNSUPPORTED;
-    memset(p+0x2f4,0,4);
-    p[0x616]=0;
-    *frontier=0;
-    return GH_ACTOR_MOTION_OK;
-}
-
 gh_actor_motion_status gh_enemy_ems_devil_move_00212c08(gh_enemy_ems *owner,uint32_t handle,
     gh_game_devil_camera *camera,gh_camera_follow *follow,uint32_t *frontier)
 {
@@ -616,8 +596,9 @@ gh_actor_motion_status gh_enemy_ems_devil_move_00212c08(gh_enemy_ems *owner,uint
         devil->rise_stage=5;
     }
     if(devil->rise_stage==5){
-        const gh_actor_motion_status status=devil_choose_far_002705d8(p,b->entry.work,frontier);
+        const gh_actor_motion_status status=gh_enemy_devil_choose_far_002705d8(&entry->object.view,b->entry.work,frontier);
         if(status)return status;
+        p[0x616]=0;
         devil->rise_stage=2;
     }
     if(devil->rise_stage==2){
@@ -675,9 +656,17 @@ gh_actor_motion_status gh_enemy_ems_devil_step_00208be0(gh_enemy_ems *owner,uint
         &devil->finish.nodes,&devil->finish.hitareas,&devil->initialize.motion.motion,&devil->finish.timers};
     gh_enemy202_move *move=&devil->move;
     if(move->original_returned)*move=(gh_enemy202_move){0};
+    move->projectile_factory=owner->bindings->projectile_factory;
     move->impact_bindings=*effects;
     move->opacity=opacity;
     move->navigation=navigation;
+    /* PL00 construction publishes a NULL auxiliary actor at +698.
+     * Nonzero references require the original typed owner. */
+    if(!move->stage&&player&&player->bytes&&player->size>=0x69c&&
+       !object_word(player->bytes+0x698)){
+        const gh_actor_motion_status status=gh_enemy202_move_bind_player_aux_698(move,NULL);
+        if(status)return status;
+    }
     devil_move_context context={owner,handle,camera,follow,opacity};
     move->devil_selector=devil_selector;
     move->devil_selector_context=&context;
@@ -758,6 +747,10 @@ gh_scene_placement_status gh_enemy_ems_live_at(gh_enemy_ems *owner,uint32_t hand
         out->shadow=&devil->pose.shadow.shadow;
         out->marker_id=&devil->initialize.tail.base.cockpit_base;
         out->devil=1;
+        out->devil_motion=&devil->initialize.motion.motion;
+        out->devil_hitareas=&devil->finish.hitareas;
+        out->devil_solids=&devil->pose.solids;
+        out->init=devil->factory.entry.b.init;
         out->physical_row=EMS_ROWS;
         return GH_PLACE_OK;
     }
@@ -1588,9 +1581,18 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
         return GH_ACTOR_MOTION_ARGUMENT;
     if(call->stage==7)return GH_ACTOR_MOTION_OK;
     ems_entry *entry=retire_find(owner,handle);
+    ems_devil *devil=owner->devil;
+    if(devil&&devil->factory.entry.handle!=handle)devil=NULL;
     if(entry&&entry->enemy2ad&&detached)return retire_stop(frontier,0x28e068);
-    gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
-    if(!actor||!actor_registered(owner,entry)||(detached&&actor->published))
+    gh_enemy_entry *actor=devil?&devil->factory.entry:entry?retire_entry(entry):NULL;
+    if(devil){
+        void *registered=NULL;
+        if(detached||!devil->live||(!actor->published&&call->stage<5)||
+           gh_room_object_lookup(actor->b.pools,handle,GH_ROOM_OBJECT_ENEMY,actor,&registered)||
+           registered!=&actor->object)
+            return retire_stop(frontier,0x290770);
+    }
+    if(!actor||(!devil&&!actor_registered(owner,entry))||(detached&&actor->published))
         return retire_stop(frontier,0x290770);
     if(actor->published&&(!actor->b.init||!unlink_slot(actor->b.init,actor,0)))
         return retire_stop(frontier,0x290988);
@@ -1598,7 +1600,8 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
        (detached->bytes!=actor->object.view.bytes||detached->size!=actor->object.view.size))
         return GH_ACTOR_MOTION_ARGUMENT;
     gh_room_pools *pools=actor->b.pools;
-    gh_actor_model *model=entry->enemy202?&entry->enemy202->entry.initialize.model.model:
+    gh_actor_model *model=devil?&actor->initialize.model.model:
+        entry->enemy202?&entry->enemy202->entry.initialize.model.model:
         entry->enemy2a2?&entry->enemy2a2->init.prefix.model.model:&entry->enemy2ad->init.model.model;
     if(!call->stage){
         const gh_room_vector *primary,*secondary;
@@ -1611,7 +1614,7 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
         if(model->external_owner||model->external_parts||model->external_borrowers||model->sound_borrowers)
             return retire_stop(frontier,0x1496c0);
         int borrowed;
-        if(gh_effect_create_retain_dead_sprite(b->effects,&actor->object.view)||
+        if(gh_effect_create_prepare_actor_retirement(b->effects,&actor->object.view)||
            gh_effect_create_actor_has_live_refs(b->effects,&actor->object.view,&borrowed)||borrowed)
             return retire_stop(frontier,0x305b90);
         unsigned primary_matches=0,secondary_matches=0,at=0;
@@ -1860,6 +1863,17 @@ gh_actor_motion_status gh_enemy_ems_retire_0030f8b0(gh_enemy_ems *owner,gh_enemy
 {
     gh_actor_motion_status status=retire_mode3(owner,call,handle,NULL,bindings,frontier);
     if(status||call->stage==7)return status;
+    ems_devil *devil=owner->devil;
+    if(devil&&devil->factory.entry.handle==handle){
+        gh_enemy_entry *actor=&devil->factory.entry;
+        if(call->stage!=6||actor->published||
+           gh_room_object_unregister(actor->b.pools,handle,actor))
+            return retire_stop(frontier,0x30f7d0);
+        free(devil);
+        owner->devil=NULL;
+        call->stage=7;
+        return GH_ACTOR_MOTION_OK;
+    }
     ems_entry *entry=retire_find(owner,handle);
     return gh_enemy_ems_finish_detached_mode3(owner,call,handle,entry?entry->registry_owner:NULL,frontier);
 }

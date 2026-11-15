@@ -11,6 +11,7 @@
 #include "game_terrain_sphere.h"
 #include "game_enemy_route_graph.h"
 #include "game_room_state.h"
+#include "game_om_factory.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,12 +39,16 @@ typedef struct {
     gh_enemy_timers *timers;
 } gh_enemy_move_actor;
 typedef gh_actor_motion_status (*gh_enemy_devil_selector)(void *,uint32_t *);
+gh_actor_motion_status gh_enemy_devil_choose_far_002705d8(const gh_title_player_view *,
+    const gh_boot_work *,uint32_t *frontier);
 
 typedef struct {
     gh_enemy_actor *enemy;
     gh_enemy_move_actor runtime;
     gh_enemy_devil_selector devil_selector;
     void *devil_selector_context;
+    gh_om_factory *projectile_factory;
+    gh_om_runtime_create projectile_create[2];
     const gh_title_player_view *player;
     const void *elf;
     size_t elf_bytes;

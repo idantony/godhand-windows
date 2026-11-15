@@ -13,6 +13,8 @@ gh_hitarea_status gh_hitarea_add_sphere_001fdaf0(const gh_hitarea_object *,const
 gh_hitarea_status gh_hitarea_add_cylinder_001fdc00(const gh_hitarea_object *,const gh_hitarea_shape_bindings *,const uint8_t matrix[64],const uint32_t offset_xyz[3],const uint32_t rotation_xyz[3],uint32_t height_f12_bits,uint32_t radius_f13_bits,int *original_index,uint32_t *frontier);
 gh_hitarea_status gh_hitarea_add_box_001fd9d8(const gh_hitarea_object *,const gh_hitarea_shape_bindings *,const uint8_t matrix[64],const uint32_t offset_xyz[3],const uint32_t rotation_xyz[3],const uint32_t full_size_xyz[3],int *original_index,uint32_t *frontier);
 gh_hitarea_status gh_hitarea_object_set_active_001fd668(const gh_hitarea_object *,int enabled,uint32_t *frontier);
+gh_hitarea_status gh_hitarea_object_set_active_timed_001fd718(const gh_hitarea_object *,
+ int enabled,uint16_t timer,uint32_t *frontier);
 /* Original selected-node bit2 enable and virtual+1C scalar setter. Sphere
  * radius110; kind2 radius114 +height110 bound; box base2BA468 is genuineempty.
  * Missing original signed index is a no-op, never a pointer conversion. */

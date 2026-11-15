@@ -21,6 +21,7 @@ typedef struct {
     const gh_enemy2a2_node_names *names_2a2;
     gh_effect_create_bindings effects_2ad;
     gh_game_action_buttons *action_buttons;
+    gh_om_factory *projectile_factory;
 } gh_enemy_ems_bindings;
 
 /* The prefix already owns the stop gate, DVD/SE preload, and spawn cursor.
@@ -57,6 +58,9 @@ typedef struct {
     gh_enemy_other_move *other_move;
     gh_id_base **marker_id;
     struct gh_enemy2ad_init_tail *enemy2ad;
+    gh_actor_motion *devil_motion;
+    gh_enemy_hitareas *devil_hitareas;
+    gh_enemy_solids *devil_solids;
     gh_game_init_state *init;
     gh_game_collision_solids *solids;
 } gh_enemy_ems_live;

@@ -20,10 +20,54 @@ static gh_hitarea_status add(const gh_hitarea_object*o,const gh_hitarea_shape_bi
 gh_hitarea_status gh_hitarea_add_sphere_001fdaf0(const gh_hitarea_object*o,const gh_hitarea_shape_bindings*b,const uint8_t*m,const uint32_t*x,uint32_t radius,int*original,uint32_t*f){return add(o,b,m,x,NULL,radius,0,0,NULL,original,f);}
 gh_hitarea_status gh_hitarea_add_cylinder_001fdc00(const gh_hitarea_object*o,const gh_hitarea_shape_bindings*b,const uint8_t*m,const uint32_t*x,const uint32_t*r,uint32_t radius,uint32_t height,int*original,uint32_t*f){return add(o,b,m,x,r,radius,height,2,NULL,original,f);}
 gh_hitarea_status gh_hitarea_add_box_001fd9d8(const gh_hitarea_object*o,const gh_hitarea_shape_bindings*b,const uint8_t*m,const uint32_t*x,const uint32_t*r,const uint32_t*size,int*original,uint32_t*f){if(!size)return GH_HITAREA_ARGUMENT;return add(o,b,m,x,r,0,0,4,size,original,f);}
-gh_hitarea_status gh_hitarea_object_set_active_001fd668(const gh_hitarea_object*o,int enabled,uint32_t*f){
- if(f)*f=0;if(!o)return GH_HITAREA_ARGUMENT;gh_title_player_view*actor=NULL;if(gh_hitarea_object_actor(o,&actor))return GH_HITAREA_ARGUMENT;if(o->fallback)return GH_HITAREA_OK;gh_game_init_state*s=o->state;if(w(o->bytes+0x3c)&&!s->object_links[o->index])return fail(f,0x1fd668,GH_HITAREA_UNSUPPORTED);size_t guard=0;for(gh_game_damage_link*n=s->object_links[o->index];n;n=n->next){if(++guard>672)return fail(f,0x1fd668,GH_HITAREA_UNSUPPORTED);int known=0;for(unsigned j=0;j<672;j++){gh_native_hitarea_node*p=&s->hitarea_native->nodes[j];if(p->associated && &p->link==n&&p->object.index==o->index&&p->object.serial==o->serial){known=1;break;}}if(!known)return fail(f,0x1fd668,GH_HITAREA_UNSUPPORTED);}
- for(gh_game_damage_link*n=s->object_links[o->index];n;n=n->next)for(unsigned j=0;j<672;j++){gh_native_hitarea_node*p=&s->hitarea_native->nodes[j];if(p->associated && &p->link==n){uint8_t*r=p->shape.record;ww(r,enabled==1?w(r)|2u:w(r)&~2u);break;}}return GH_HITAREA_OK;
+static gh_hitarea_status set_active(const gh_hitarea_object *object,int enabled,
+                                  const uint16_t *timer,uint32_t entry,uint32_t *frontier)
+{
+ if(frontier)*frontier=0;
+ gh_title_player_view *actor=NULL;
+ if(!object||gh_hitarea_object_actor(object,&actor))return GH_HITAREA_ARGUMENT;
+ if(object->fallback)return GH_HITAREA_OK;
+ gh_game_init_state *state=object->state;
+ if(w(object->bytes+0x3c)&&!state->object_links[object->index])
+  return fail(frontier,entry,GH_HITAREA_UNSUPPORTED);
+
+ /* Check the chain before touching the shape or its original expiry timer. */
+ size_t guard=0;
+ for(gh_game_damage_link *link=state->object_links[object->index];link;link=link->next){
+  if(++guard>672)return fail(frontier,entry,GH_HITAREA_UNSUPPORTED);
+  int known=0;
+  for(unsigned i=0;i<672;i++){
+   const gh_native_hitarea_node *node=state->hitarea_native->nodes+i;
+   if(node->associated&&&node->link==link&&node->object.index==object->index&&
+      node->object.serial==object->serial){known=1;break;}
+  }
+  if(!known)return fail(frontier,entry,GH_HITAREA_UNSUPPORTED);
+ }
+ for(gh_game_damage_link *link=state->object_links[object->index];link;link=link->next){
+  for(unsigned i=0;i<672;i++){
+   gh_native_hitarea_node *node=state->hitarea_native->nodes+i;
+   if(!node->associated||&node->link!=link)continue;
+   uint8_t *shape=node->shape.record;
+   ww(shape,enabled==1?w(shape)|2u:w(shape)&~2u);
+   if(timer)memcpy(node->record+0x30,timer,sizeof(*timer));
+   break;
+  }
+ }
+ return GH_HITAREA_OK;
 }
+
+gh_hitarea_status gh_hitarea_object_set_active_001fd668(const gh_hitarea_object *object,
+ int enabled,uint32_t *frontier)
+{
+ return set_active(object,enabled,NULL,0x1fd668,frontier);
+}
+
+gh_hitarea_status gh_hitarea_object_set_active_timed_001fd718(const gh_hitarea_object *object,
+ int enabled,uint16_t timer,uint32_t *frontier)
+{
+ return set_active(object,enabled,&timer,0x1fd718,frontier);
+}
+
 gh_hitarea_status gh_hitarea_node_at(const gh_hitarea_object*o,unsigned ordinal,const uint8_t**record,gh_collision_pair_shape*shape){if(!o||!record||!shape)return GH_HITAREA_ARGUMENT;gh_title_player_view*actor=NULL;if(gh_hitarea_object_actor(o,&actor))return GH_HITAREA_ARGUMENT;if(o->fallback)return GH_HITAREA_BOUNDS;gh_game_damage_link*n=o->state->object_links[o->index];for(unsigned i=0;n&&i<ordinal;i++)n=n->next;if(!n)return GH_HITAREA_BOUNDS;for(unsigned i=0;i<672;i++){gh_native_hitarea_node*p=&o->state->hitarea_native->nodes[i];if(p->associated && &p->link==n){*record=p->record;*shape=p->shape;return GH_HITAREA_OK;}}return GH_HITAREA_UNSUPPORTED;}
 gh_hitarea_status gh_hitarea_shapes_abort_object(gh_hitarea_object*o,uint32_t*f){
  if(f)*f=0;if(!o)return GH_HITAREA_ARGUMENT;gh_title_player_view*actor=NULL;if(gh_hitarea_object_actor(o,&actor))return GH_HITAREA_ARGUMENT;if(o->fallback)return GH_HITAREA_OK;gh_game_init_state*s=o->state;if(!s->hitarea_native)return GH_HITAREA_OK;if(w(o->bytes+0x3c)&&!s->object_links[o->index])return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);

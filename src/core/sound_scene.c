@@ -96,7 +96,7 @@ gh_sound_scene_status gh_sound_scene_initialize_002cabe8(gh_sound_scene*s,
  s->control->room_heaps[1].closed=0;
  /* 2CB080 adds rows at the head, so traversal starts from the last.
   * The first source word is a nonzero continuation, never a host pointer. */
- s->ts=ts;s->ts_count=ts_count;
+ s->ts=ts;s->ts_count=ts_count;s->ts_update_remaining=0;
  memcpy(s->ts_rows,ts_rows,(size_t)ts_count*sizeof(*ts_rows));
  s->control->ts_head2c=ts_count?&s->ts_rows[ts_count-1]:NULL;
  {uint32_t v;memcpy(&v,(uint8_t*)w+0x5e4,4);v&=~0x800u;memcpy((uint8_t*)w+0x5e4,&v,4);}

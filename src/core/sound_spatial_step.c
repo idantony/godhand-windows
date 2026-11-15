@@ -71,72 +71,128 @@ static gh_sound_scene_status ts_proximity(const uint8_t *record,const float play
     return GH_SOUND_SCENE_OK;
 }
 
-static gh_sound_scene_status update_ts_rows(gh_sound_scene *scene,const gh_boot_work *work,
-    const gh_title_player_view *player,uint32_t *frontier)
+static gh_sound_scene_status ts_voice_error(const gh_se_voice_engine *voices,
+    uint32_t entry,uint32_t *frontier,gh_voice_status status)
+{
+    const uint32_t child=gh_se_voice_frontier(voices);
+    return fail(frontier,child?child:entry,
+        status==GH_VOICE_UNSUPPORTED?GH_SOUND_SCENE_UNSUPPORTED:GH_SOUND_SCENE_ASSET);
+}
+
+static gh_sound_scene_status update_ts_row(gh_sound_ts_row *row,const uint8_t *record,
+    gh_se_voice_engine *voices,const gh_se_attached_environment *environment,int suspend,
+    const float position[3],uint32_t *frontier)
+{
+    const int sound_effect=half(record+0x2a)==0;
+    if(suspend||!(row->flags0c&1u)){
+        if(row->voice14){
+            if(sound_effect){
+                if(!voices)return fail(frontier,0x2cbc20,GH_SOUND_SCENE_UNSUPPORTED);
+                int accepted;
+                const gh_voice_status status=gh_se_voice_request_stop_00375050(voices,row->voice14,10,&accepted);
+                if(status)return ts_voice_error(voices,0x2cbc20,frontier,status);
+            }
+            row->state13=4;
+            row->voice14=0;
+        }
+        return GH_SOUND_SCENE_OK;
+    }
+    if(row->disabled12)return GH_SOUND_SCENE_OK;
+    const gh_sound_scene_status proximity=ts_proximity(record,position,row,frontier);
+    if(proximity)return proximity;
+    float source[4];
+    memcpy(source,record+0x30,sizeof(source));
+    switch(row->state13){
+    case 0:
+        if(row->flags0c&2u)row->state13=1;
+        break;
+    case 1:
+        if(sound_effect){
+            if(!voices)return fail(frontier,0x2cb968,GH_SOUND_SCENE_UNSUPPORTED);
+            const gh_voice_status status=gh_se_voice_request_ts_002cb968(voices,
+                (int16_t)half(record+0x2c),(int16_t)half(record+0x2e),source,environment,&row->voice14);
+            if(status)return ts_voice_error(voices,0x2cb968,frontier,status);
+            if(!row->voice14){row->flags0c=0;break;}
+        }
+        row->state13=2;
+        break;
+    case 2:
+        if(!(row->flags0c&2u))row->state13=3;
+        else if(sound_effect){
+            if(!voices)return fail(frontier,0x2cbf48,GH_SOUND_SCENE_UNSUPPORTED);
+            int found;
+            source[3]=1.0f;
+            const gh_voice_status status=gh_se_voice_update_ts_002cbf48(voices,row->voice14,source,row->volume10,&found);
+            if(status)return ts_voice_error(voices,0x2cbf48,frontier,status);
+            if(!found)row->state13=4;
+        }
+        break;
+    case 3:
+        if(sound_effect&&row->voice14){
+            if(!voices)return fail(frontier,0x2cbc20,GH_SOUND_SCENE_UNSUPPORTED);
+            int accepted;
+            const gh_voice_status status=gh_se_voice_request_stop_00375050(voices,row->voice14,30,&accepted);
+            if(status)return ts_voice_error(voices,0x2cbc20,frontier,status);
+        }
+        /* Original state 3 falls through to state 4's reset. */
+        row->state13=0;
+        row->voice14=0;
+        break;
+    case 4:
+        row->state13=0;
+        row->voice14=0;
+        break;
+    }
+    return GH_SOUND_SCENE_OK;
+}
+
+static gh_sound_scene_status update_ts_rows(gh_sound_scene *scene,gh_se_voice_engine *voices,
+    const gh_boot_work *work,const gh_title_player_view *player,uint32_t *frontier)
 {
     if(!scene->ts_count||scene->ts_count>GH_SOUND_TS_ROWS||!player->alias_f0||
        scene->control->ts_head2c!=&scene->ts_rows[scene->ts_count-1])
         return fail(frontier,0x2c8ad8,GH_SOUND_SCENE_UNSUPPORTED);
+    if(voices&&!gh_se_voice_uses_registry(voices,scene->registry))return GH_SOUND_SCENE_ARGUMENT;
 
     const uint8_t *fields=(const uint8_t *)work;
     const int suspend=(word(fields+0x5e4)&0x20000880u)||
         (word(fields+0x584)&8u)||(work->system_flags&0x01000000u);
     float position[3];
     memcpy(position,player->alias_f0,sizeof(position));
-    gh_sound_ts_row next[GH_SOUND_TS_ROWS];
-    memcpy(next,scene->ts_rows,(size_t)scene->ts_count*sizeof(*next));
-    for(unsigned i=scene->ts_count;i>0;--i){
-        gh_sound_ts_row *row=&next[i-1];
+    if(!scene->ts_update_remaining)scene->ts_update_remaining=scene->ts_count;
+    while(scene->ts_update_remaining){
+        gh_sound_ts_row *row=&scene->ts_rows[scene->ts_update_remaining-1];
         if(row->offset>scene->ts.size||scene->ts.size-row->offset<0x40)
             return fail(frontier,0x2c8ad8,GH_SOUND_SCENE_ASSET);
-        const uint8_t *record=scene->ts.bytes+row->offset;
-        const int sound_effect=half(record+0x2a)==0;
-        if(suspend||!(row->flags0c&1u)){
-            if(row->voice14){
-                if(sound_effect)return fail(frontier,0x2cbc20,GH_SOUND_SCENE_UNSUPPORTED);
-                row->state13=4;
-                row->voice14=0;
-            }
-            continue;
-        }
-        if(row->disabled12)continue;
-        gh_sound_scene_status status=ts_proximity(record,position,row,frontier);
+        gh_sound_ts_row next=*row;
+        const gh_sound_scene_status status=update_ts_row(&next,scene->ts.bytes+row->offset,
+            voices,&scene->ts_environment,suspend,position,frontier);
         if(status)return status;
-        switch(row->state13){
-        case 0:
-            if(row->flags0c&2u)row->state13=1;
-            break;
-        case 1:
-            if(sound_effect)return fail(frontier,0x2cb968,GH_SOUND_SCENE_UNSUPPORTED);
-            row->state13=2;
-            break;
-        case 2:
-            if(!(row->flags0c&2u))row->state13=3;
-            else if(sound_effect)return fail(frontier,0x2cbf48,GH_SOUND_SCENE_UNSUPPORTED);
-            break;
-        case 3:
-            if(sound_effect&&row->voice14)return fail(frontier,0x2cbc20,GH_SOUND_SCENE_UNSUPPORTED);
-            /* Original state 3 falls through to state 4's reset. */
-            row->state13=0;
-            row->voice14=0;
-            break;
-        case 4:
-            row->state13=0;
-            row->voice14=0;
-            break;
-        }
+        *row=next;
+        --scene->ts_update_remaining;
     }
-    memcpy(scene->ts_rows,next,(size_t)scene->ts_count*sizeof(*next));
     return GH_SOUND_SCENE_OK;
 }
 
-gh_sound_scene_status gh_sound_spatial_step_002ca518(gh_sound_scene*s,const gh_boot_work*w,const gh_game_init_state*init,const gh_game_pl_camera*camera,const gh_title_player_view*player,gh_camera_numeric_policy policy,uint32_t*f){
+gh_sound_scene_status gh_sound_spatial_step_002ca518(gh_sound_scene*s,gh_se_voice_engine *voices,const gh_boot_work*w,const gh_game_init_state*init,const gh_game_pl_camera*camera,const gh_title_player_view*player,gh_camera_numeric_policy policy,uint32_t*f){
  if(f)*f=0;if(!s||!s->startup_bound||!s->control||!s->control->initialized||!w)return GH_SOUND_SCENE_ARGUMENT;
  gh_sound_scene_status e=gh_sound_listener_update_002cc150(s->control,w,init,camera,player,policy,f);if(e)return e;
  gh_sound_control*c=s->control;
  c->previous_mask54=c->event_mask50;c->flags_ac=c->flags_b0;c->event_mask50=c->event_mask58;
  s->ratios74[0]=s->fade_ratio_bits;s->ratios88[0]=s->default_ratio_bits;
  if(s->bmh.bytes)return fail(f,0x2d22f0,GH_SOUND_SCENE_UNSUPPORTED);
+ if(s->ts_count){
+  gh_se_attached_environment *environment=&s->ts_environment;
+  environment->system_flags_5e4=word((const uint8_t *)w+0x5e4);
+  environment->game_flags_5d8=word((const uint8_t *)w+0x5d8);
+  environment->debug58c=(int32_t)w->system_flags;
+  environment->gain64_bits=s->ratios60[1];
+  environment->se_level_q8=0x5a00;
+  environment->output_mode=c->output_mode;
+  environment->listener_mode110=c->listener_mode110;
+  memcpy(environment->listener_position_c0,c->listener_position_c0,sizeof(environment->listener_position_c0));
+  memcpy(environment->listener_matrix_d0,c->listener_matrix_d0,sizeof(environment->listener_matrix_d0));
+ }
  if(!(w->system_flags&0x80000000u)&&s->ts.bytes&&c->ts_head2c&&player){
   fenv_t env;
   if(feholdexcept(&env))return fail(f,0x2c8cf8,GH_SOUND_SCENE_UNSUPPORTED);
@@ -144,7 +200,7 @@ gh_sound_scene_status gh_sound_spatial_step_002ca518(gh_sound_scene*s,const gh_b
    (void)fesetenv(&env);
    return fail(f,0x2c8cf8,GH_SOUND_SCENE_UNSUPPORTED);
   }
-  e=update_ts_rows(s,w,player,f);
+  e=update_ts_rows(s,voices,w,player,f);
   if(fesetenv(&env))return fail(f,0x2c8cf8,GH_SOUND_SCENE_UNSUPPORTED);
   if(e)return e;
  }

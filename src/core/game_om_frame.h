@@ -18,6 +18,19 @@ typedef gh_object_step_status (*gh_om_break_effect)(void *, const gh_actor_model
 typedef gh_object_step_status (*gh_om_break_collision)(void *, uint64_t key, uint32_t *frontier);
 typedef gh_object_step_status (*gh_om_remove_sound)(void *, gh_actor_model *, uint32_t *frontier);
 typedef struct {
+ gh_om_runtime_create create;
+ gh_motion_sound_request sound;
+ uint8_t stage;
+} gh_om_box_item_drop;
+typedef struct {
+ gh_motion_sound_request sound;
+ uint8_t stage;
+} gh_om_item_pickup;
+typedef gh_object_step_status (*gh_om_pickup_award)(void *,gh_om_item_pickup *,
+    const gh_title_player_view *,uint32_t *frontier);
+typedef gh_object_step_status (*gh_om_box_drop_item)(void *,gh_om_box_item_drop *,
+ const gh_title_player_view *,uint32_t *frontier);
+typedef struct {
  gh_game_init_state *init;
  const float *canonical_rate;
  gh_game_collision_solids *solids;
@@ -32,6 +45,8 @@ typedef struct {
  gh_game_action_buttons *action_buttons;
  gh_object_move_resolve resolve_actor;
  gh_game_scene_tables *scene_tables;
+ gh_om_box_drop_item drop_item;
+ gh_om_pickup_award award_item;
 } gh_om_frame_runtime;
 typedef struct {const gh_om_factory *factory;gh_om_object *object;
  const gh_title_player_view *contact634;uint32_t handle,entry,frontier;
@@ -40,6 +55,9 @@ typedef struct {const gh_om_factory *factory;gh_om_object *object;
  gh_om_damage_call damage_calls[4];unsigned hit_index;
  gh_om_frame_runtime runtime;gh_collision_solid_frame solid_frame;float runtime_rate;
  gh_motion_sound_request break_sound;
+ uint32_t projectile_impact[3];
+ gh_om_box_item_drop box_item_drop;
+ gh_om_item_pickup pickup;
  uint8_t runtime_bound,special_phase;} gh_om_frame_state;
 gh_object_step_status gh_om_frame_move(gh_om_frame_state *,const gh_om_factory *,const gh_object_move_request *,const gh_boot_work *,gh_static_transform_policy,uint32_t *frontier);
 /* Borrow same canonical init/PlCamera/Work5F4 publisher for original2A87E8. */

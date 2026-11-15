@@ -854,6 +854,7 @@ gh_effect_status gh_effect_actor_sprite_alpha_002fec38(const gh_game_effects *ow
         !isfinite(alpha) || !isfinite(fade)) return GH_EFFECT_ARGUMENT;
     if (!gh_esp14_nested_sprite_is_bound(v->record, v->actor, v->selector) &&
         !gh_effect_event_part_is_bound(v->record, v->actor, v->selector) &&
+        !gh_effect_r101_door_break_part_is_bound(v->record,v->actor,v->selector) &&
         !gh_effect_attack_esp_is_bound(owner,v) &&
         !gh_effect_knockdown_esp_is_bound(owner,v) &&
         !gh_effect_player_attachment_esp_is_bound(owner,v)&&!gh_effect_devil_esp_is_bound(owner,v)&&

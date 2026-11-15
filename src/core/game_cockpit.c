@@ -31,6 +31,8 @@ struct gh_game_cockpit {
  gh_id_view gauge_texture[5],icon_texture;uint32_t frontier;int begun,ready,room_begun,room_ready;
  float radar_curve[5][2],radar_uv[7][4];uint8_t radar_color_curve[5][5],radar_pulse,frame_bound;
  unsigned update_stage,draw_stage,radar_stage,heat_stage;
+ unsigned money_draw_index;
+ uint8_t money_draw_moved;
  unsigned radar_draw_pass,radar_draw_index;uint8_t radar_arrow_moved;gh_cockpit_fan heat_fan;
  gh_cockpit_gameplay_bindings gameplay;const gh_title_player_view *radar_player;
  uint8_t gameplay_bound,hud_cold_known;unsigned gameplay_index,radar_move_stage,radar_move_index,radar_marker_count;
@@ -776,16 +778,62 @@ static gh_id_error gameplay_widget_body(gh_game_cockpit*s,unsigned index,const g
   }
   s->widget_step=0;
   return GH_ID_OK;
- case 10:/*143670 no pendingmoney particles. Original display stillticks. */
-  if(!s->widget_step){if(!c||!c->save.bytes||c->save.size<GH_CORE_SAVE_BYTES)return frame_stop(s,0x1fa710);uint8_t*save=c->save.bytes;
-   for(unsigned i=0;i<16;i++)if(s->fields[o+0x1b0+i]==1)return frame_stop(s,0x143670);
-   uint32_t money=u32(save+0x20);if(u32(w+0x594)&0x2000000)money=999999;
-   if((money!=u32(s->fields+o+0x90)&&u32(save+0x24))||((s->fields[o+0x1c0]&3)==1))return frame_stop(s,0x143670);
-   TRY(gh_game_cockpit_entry_at(s,o+0x9c,&e));e->flags|=0x8000000;TRY(gh_game_cockpit_entry_at(s,o+0x94,&e));
-   uint32_t target=u32(s->fields+o+0x90),seed=e->seed;if(seed+1000u<target)seed+=1000;else if(seed+100u<target)seed+=100;else if(seed+10u<target)seed+=10;else seed++;if(target<seed)seed=target;e->seed=seed;
-   /*1FA710 actualcheat write;1FA820 clears rewardcount after loop. */
-   memcpy(save+0x20,&money,4);w32(s,o+0x90,money);memset(save+0x24,0,4);s->fields[o+0x1c0]&=0xfc;
-  }list[0]=o;return widget_moves(s,c,list,1,0);
+ case 10:/* 143670 stages the canonical reward queue before the widget Move. */
+  if(!s->widget_step){
+   if(!c||!c->save.bytes||c->save.size<GH_CORE_SAVE_BYTES)return frame_stop(s,0x1fa710);
+   uint8_t *save=c->save.bytes;
+   uint32_t money=u32(save+0x20),count=u32(save+0x24),target=u32(s->fields+o+0x90);
+   if(u32(w+0x594)&0x2000000u)money=999999;
+   gh_id_entry *caption,*total,*gain,*label;
+   TRY(gh_game_cockpit_entry_at(s,o+0x9c,&caption));
+   TRY(gh_game_cockpit_entry_at(s,o+0x94,&total));
+   TRY(gh_game_cockpit_entry_at(s,o+0x98,&gain));
+   TRY(gh_game_cockpit_entry_at(s,o+0xa0,&label));
+   if((s->fields[o+0x1c0]&3)==1&&!c->scenario_mode14)return frame_stop(s,0x143670);
+   if(money!=target&&count){
+    gh_id_frontier frontier={0};
+    const gh_id_error status=gh_id_entry_reset_family_reference(base(s,o),gain,0,&room_animation_profile,&frontier);
+    if(status){s->frontier=frontier.address;return status;}
+    gain->flags&=~0x8000000u;
+   }
+   caption->flags|=0x8000000u;
+   uint32_t seed=total->seed;
+   if(seed+1000u<target)seed+=1000;else if(seed+100u<target)seed+=100;
+   else if(seed+10u<target)seed+=10;else seed++;
+   total->seed=target<seed?target:seed;
+   if(money!=target){
+    unsigned row=0;
+    for(unsigned i=0;i<16&&row<count;i++){
+     if(s->fields[o+0x1b0+i])continue;
+     s->fields[o+0x1b0+i]=1;
+     wf(s,o+0x100+4*i,(float)((i+1)*20));
+     s->fields[o+0x1a0+i]=128;
+     w32(s,o+0x140+4*i,u32(save+0x28+4*row++));
+     w16(s,o+0x180+2*i,20);
+    }
+   }
+   memcpy(save+0x20,&money,4);
+   for(unsigned i=0;i<16;i++){
+    if(s->fields[o+0x1b0+i]!=1)continue;
+    const unsigned timer=o+0x180+2*i,y=o+0x100+4*i;
+    const uint16_t ticks=(uint16_t)((s->fields[timer]|(unsigned)s->fields[timer+1]<<8)-1u);
+    w16(s,timer,ticks);
+    if((int16_t)ticks<=0){
+     const volatile float next=frame_number(s->fields+y)*0.5f;
+     wf(s,y,next);
+     if(next<0.1f)s->fields[o+0x1b0+i]=0;
+     const volatile float alpha=(float)s->fields[o+0x1a0+i]*0.8f;
+     s->fields[o+0x1a0+i]=(uint8_t)(int)alpha;
+    }else money-=u32(s->fields+o+0x140+4*i);
+   }
+   w32(s,o+0x90,money);memset(save+0x24,0,4);
+   if((s->fields[o+0x1c0]&3)==1&&!*c->scenario_mode14){
+    caption->flags&=~0x8000000u;
+    caption->message=label->message=0x3010;
+   }
+   s->fields[o+0x1c0]&=0xfc;
+  }
+  list[0]=o;return widget_moves(s,c,list,1,0);
  default:return GH_ID_ARGUMENT;
  }
 }
@@ -1103,8 +1151,14 @@ static gh_id_error game_over_trans(gh_game_cockpit *s,const uint8_t *w,const gh_
  if(u32(c->save.bytes+0x14)&0x04000000u)return frame_stop(s,0x13db50);
  if(!s->game_over_step){
   const unsigned ticks=s->fields[0x23be]|(unsigned)s->fields[0x23bf]<<8;
-  if(!ticks||ticks>=0x8000)return frame_stop(s,0x31bd88);
-  w16(s,0x23be,ticks-1);
+  if(ticks&&ticks<0x8000)w16(s,0x23be,ticks-1);
+  else{
+   /* 1410A8 keeps drawing the selection after the 150-frame gameplay delay. */
+   if(!c->game_over_timeout)return frame_stop(s,0x31bd88);
+   uint32_t frontier=0;
+   gh_id_error result=c->game_over_timeout(c->context,&frontier);
+   if(result){s->frontier=frontier?frontier:0x31bd88;return result;}
+  }
   s->game_over_step=1;
  }
  if(s->game_over_step<4){
@@ -1192,7 +1246,30 @@ gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit*s,const gh_boot_work*
  }
  if(s->draw_stage==11){if(u32(s->fields+0x19a0))TRY(frame_trans(s,0x19c0,c));s->draw_stage=12;}
  if(s->draw_stage==12){if(!s->fields[0x1ae0+0x78]){TRY(frame_trans(s,0x1ae0,c));s->draw_stage=13;}else s->draw_stage=14;}
- if(s->draw_stage==13){gh_id_entry*e;TRY(work(s,0x1b90,0,0,&e));(void)e;for(unsigned i=0;i<16;i++)if(s->fields[0x1c90+i]==1)return frame_stop(s,0x143998);s->draw_stage=14;}
+ if(s->draw_stage==13){
+  const unsigned o=0x1ae0,particle=o+0xb0;
+  gh_id_entry *entry;
+  TRY(work(s,particle,0,0,&entry));
+  while(s->money_draw_index<16){
+   const unsigned i=s->money_draw_index;
+   if(s->fields[o+0x1b0+i]==1){
+    if(!s->money_draw_moved){
+     if(!entry->source)return frame_stop(s,0x143998);
+     const volatile float y=frame_number(entry->source+0xc)+frame_number(s->fields+o+0x100+4*i);
+     if(!isfinite(y))return frame_stop(s,0x143998);
+     entry->pos_y=y;
+     entry->color_base=(entry->color_base&0xffffffu)|(uint32_t)s->fields[o+0x1a0+i]<<24;
+     entry->seed=u32(s->fields+o+0x140+4*i);
+     TRY(frame_move_base(s,particle,c));
+     s->money_draw_moved=1;
+    }
+    TRY(frame_trans(s,particle,c));
+    s->money_draw_moved=0;
+   }
+   ++s->money_draw_index;
+  }
+  s->money_draw_index=0;s->draw_stage=14;
+ }
  if(s->draw_stage!=14)return frame_stop(s,0x1410a8);s->draw_stage=0;return GH_ID_OK;
 }
 

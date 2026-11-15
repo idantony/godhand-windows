@@ -29,7 +29,10 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
  C(!gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)&&!frame.active&&!frontier&&fegetround()==modes[m]&&fetestexcept(FE_ALL_EXCEPT)==ex&&w(player.view.bytes+0x54c)==0x3fc00000);}
  C(!w(tail.give_objects[0].bytes+0x34)&&w(tail.take_object.bytes+0x40)==0xffffffff&&!tail.take_object.bytes[0x44]&&w(tail.take_object.bytes+0x60)==0xfffffc40&&!(w(give.record)&2)&&!tn[0x30]&&!(w(take.record)&2));
  const uint8_t*position;C(!gh_collision_pair_shape_position(&give,&position)&&!memcmp(gn,position,12)&&!memcmp(gn,gn+0x10,12));
- put(give.record,w(give.record)|3);put(give.record+0xd8,1);gn[0x30]=2;put(player.view.bytes+0x54c,0x40000000);
+ put(give.record,w(give.record)|1);
+ C(!gh_hitarea_object_set_active_timed_001fd718(&tail.give_objects[0],1,2,&frontier));
+ C((w(give.record)&3)==3&&gn[0x30]==2&&gn[0x31]==0);
+ put(give.record+0xd8,1);put(player.view.bytes+0x54c,0x40000000);
  C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&frame,&frontier)==GH_HITAREA_ARGUMENT&&frontier==0x1fc810&&frame.phase==2&&frame.slot==0&&frame.active);
  C(w(player.view.bytes+0x54c)==0x3fc00000&&gn[0x30]==2);
  gh_hitarea_frame copy=frame;C(gh_hitarea_frame_resume_001fdfd8(init,&work,1,GH_STATIC_BINARY32_REFERENCE,&copy,&frontier)==GH_HITAREA_ARGUMENT);

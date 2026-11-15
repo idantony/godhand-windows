@@ -19,18 +19,28 @@ static gh_hitarea_status create(gh_game_init_state*s,gh_title_player_view*actor,
   /* Validate unknownlive-chain before touching pointer/occupancy; nativeerror
    * does not falselycomplete original1FD988's requiredupdates. */
   gh_game_damage_link*head=s->object_links[slot];if(w(b+0x3c)&&!head)return fail(f,0x1fd988,GH_HITAREA_UNSUPPORTED);size_t guard=0;for(gh_game_damage_link*n=head;n;n=n->next)if(!n->target_mask||++guard>4096)return fail(f,0x1fd988,GH_HITAREA_UNSUPPORTED);
-  if(s->hitarea_native->serials[slot]==UINT32_MAX)return fail(f,0x1fd530,GH_HITAREA_UNSUPPORTED);out->serial=++s->hitarea_native->serials[slot];s->hitarea_native->actors[slot]=actor;s->hitarea_native->last_hit_actors[slot]=NULL;ww(b+0x30,0);if(group==2)b[0x4a]=1;else ww(b+0x34,0);gh_hitarea_status e=gh_hitarea_object_set_mode_001fd988(out,mode,f);if(e)return e;if(group==2)ww(b+0x34,0);else b[0x4a]=1;
+  if(s->hitarea_native->serials[slot]==UINT32_MAX)return fail(f,0x1fd530,GH_HITAREA_UNSUPPORTED);out->serial=++s->hitarea_native->serials[slot];s->hitarea_native->actors[slot]=actor;s->hitarea_native->last_hit_actors[slot]=NULL;s->hitarea_native->excluded_actors[slot]=NULL;ww(b+0x30,0);if(group==2)b[0x4a]=1;else ww(b+0x34,0);gh_hitarea_status e=gh_hitarea_object_set_mode_001fd988(out,mode,f);if(e)return e;if(group==2)ww(b+0x34,0);else b[0x4a]=1;
  }
  *original=1;return GH_HITAREA_OK;
 }
 gh_hitarea_status gh_hitarea_object_create_001fe218(gh_game_init_state*s,gh_title_player_view*a,uint8_t mode,gh_hitarea_object*out,int*original,uint32_t*f){return create(s,a,mode,2,out,original,f);}
 gh_hitarea_status gh_hitarea_object_create_001fe0e8(gh_game_init_state*s,gh_title_player_view*a,uint8_t mode,gh_hitarea_object*out,int*original,uint32_t*f){return create(s,a,mode,1,out,original,f);}
 gh_hitarea_status gh_hitarea_object_actor(const gh_hitarea_object*v,gh_title_player_view**out){if(!out||!valid(v))return GH_HITAREA_ARGUMENT;*out=NULL;if(!v->fallback&&v->bytes[0x49]){if(!v->state->hitarea_native)return GH_HITAREA_ARGUMENT;*out=v->state->hitarea_native->actors[v->index];}return GH_HITAREA_OK;}
+gh_hitarea_status gh_hitarea_object_set_excluded_actor(const gh_hitarea_object *object,
+ const gh_title_player_view *excluded)
+{
+ if(!valid(object)||object->group!=1||(excluded&&!excluded->bytes))return GH_HITAREA_ARGUMENT;
+ if(object->fallback)return GH_HITAREA_OK;
+ if(!object->state->hitarea_native||w(object->bytes+0x38))return GH_HITAREA_UNSUPPORTED;
+ object->state->hitarea_native->excluded_actors[object->index]=excluded;
+ return GH_HITAREA_OK;
+}
+
 gh_hitarea_status gh_hitarea_object_release_empty_001fe278(gh_hitarea_object*v,uint32_t*f){
  if(f)*f=0;if(!valid(v))return GH_HITAREA_ARGUMENT;gh_game_init_state*s=v->state;if((!v->fallback&&s->object_links[v->index])||w(v->bytes+0x3c))return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);
  if(s->hitarea_native&&!v->fallback){for(unsigned i=0;i<672;i++)if(s->hitarea_native->nodes[i].associated&&s->hitarea_native->nodes[i].object.index==v->index&&s->hitarea_native->nodes[i].object.generation==v->generation)return fail(f,0x1fd580,GH_HITAREA_UNSUPPORTED);if(s->hitarea_native->serials[v->index]==UINT32_MAX)return fail(f,0x1fe278,GH_HITAREA_UNSUPPORTED);}
  gh_game_damage_link*unused=NULL;gh_init_status e=gh_hitarea_clear_record_bytes(v->bytes,v->fallback?&unused:&s->object_links[v->index],v->group);if(e)return fail(f,0x1fcde8,GH_HITAREA_UNSUPPORTED);
- if(!v->fallback&&s->hitarea_native){s->hitarea_native->actors[v->index]=NULL;s->hitarea_native->last_hit_actors[v->index]=NULL;v->serial=++s->hitarea_native->serials[v->index];}return GH_HITAREA_OK;
+ if(!v->fallback&&s->hitarea_native){s->hitarea_native->actors[v->index]=NULL;s->hitarea_native->last_hit_actors[v->index]=NULL;s->hitarea_native->excluded_actors[v->index]=NULL;v->serial=++s->hitarea_native->serials[v->index];}return GH_HITAREA_OK;
 }
 void gh_hitarea_detach_after_pool_reset(gh_game_init_state*s){if(!s)return;if(s->hitarea_native&&s->hitarea_native->owner!=s)return;free(s->hitarea_native);s->hitarea_native=NULL;s->hitarea_generation++;}
 
@@ -44,6 +54,7 @@ gh_hitarea_status gh_hitarea_forget_actor_native(gh_game_init_state *state,const
  for(unsigned i=0;i<416;++i){
   if(native->actors[i]==actor)native->actors[i]=NULL;
   if(native->last_hit_actors[i]==actor)native->last_hit_actors[i]=NULL;
+  if(native->excluded_actors[i]==actor)native->excluded_actors[i]=NULL;
  }
  return GH_HITAREA_OK;
 }

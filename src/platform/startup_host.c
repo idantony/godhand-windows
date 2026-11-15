@@ -237,12 +237,39 @@ struct gh_startup_host {
     gh_game_scene_exit scene_exit;
     gh_sound_scene_exit sound_exit;
     uint8_t factory_serial;int factory_serial_ready;
+    uint8_t game_over_timeout_bank;
 };
 static int register_task(void *,uint32_t,int32_t);
 static void movie_entry(void *,int32_t);
 static uint32_t scene_profile_clock(void *context)
 {(void)context;return GetTickCount();} /*native diagnostic timing, never world/game ticks*/
 static gh_id_error scene_game_over_sound(void *,unsigned,uint32_t *);
+static gh_id_error scene_game_over_timeout(void *context,uint32_t *frontier)
+{
+ gh_startup_host *host=context;
+ if(!host||!frontier||!host->services||!host->voices)return GH_ID_ARGUMENT;
+ *frontier=0;
+ if(!host->game_over_timeout_bank){
+  uint8_t *field=(uint8_t *)&host->work+0x5d8;
+  uint32_t flags;
+  memcpy(&flags,field,4);
+  flags|=0xf4020000u;
+  memcpy(field,&flags,4);
+  gh_game_services_clear_player_vibration_0031bd88(host->services);
+ }
+ while(host->game_over_timeout_bank<52){
+  const gh_voice_status status=gh_se_voice_stop_bank_002cbc58(host->voices,host->game_over_timeout_bank,10);
+  if(status){
+   *frontier=gh_se_voice_frontier(host->voices);
+   if(!*frontier)*frontier=0x2cbc58;
+   return GH_ID_UNSUPPORTED;
+  }
+  host->game_over_timeout_bank++;
+ }
+ host->game_over_timeout_bank=0;
+ return GH_ID_OK;
+}
+
 static gh_id_error scene_game_over_retry(void *context,uint32_t *frontier)
 {
  gh_startup_host *h=context;
@@ -1318,7 +1345,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         if(e&&frontier)*frontier=s.world_light->frontier?s.world_light->frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2ca518){
-        gh_sound_scene_status e=gh_sound_spatial_step_002ca518(s.sound_scene,&h->work,&h->game_init,
+        gh_sound_scene_status e=gh_sound_spatial_step_002ca518(s.sound_scene,h->voices,&h->work,&h->game_init,
             camera,&s.title_player->view,GH_CAMERA_NATIVE_BINARY32_REFERENCE,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x140e58||address==0x1410a8){
@@ -1330,7 +1357,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
             .save={h->save_bytes,sizeof(h->save_bytes)},.fan=scene_cockpit_fan,.radar=scene_cockpit_radar,
             .scenario_mode14=s.scenario_bytes_size>0x14?s.scenario_bytes+0x14:NULL,
             .game_over_sound=scene_game_over_sound,.game_over_fade=scene_game_over_fade,
-            .game_over_retry=scene_game_over_retry,.rank_sound=scene_cockpit_rank_sound};
+            .game_over_timeout=scene_game_over_timeout,.game_over_retry=scene_game_over_retry,.rank_sound=scene_cockpit_rank_sound};
         gh_id_error e=address==0x140e58?gh_game_cockpit_move_00140e58(s.cockpit,&h->work,&callbacks):gh_game_cockpit_trans_001410a8(s.cockpit,&h->work,&callbacks);
         if(e&&frontier)*frontier=gh_game_cockpit_frontier(s.cockpit);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
@@ -1739,6 +1766,14 @@ static gh_scene_step_status scene_scenario_status(void *context,uint32_t *fronti
     }
     return gh_game_services_task_status(h->services,frontier);
 }
+static gh_action_step_status room_r101_action(void *context,uint32_t entry,void *argument,
+    uint32_t *frontier)
+{
+    gh_startup_host *h=context;
+    if(entry==0x2dc1d0)return gh_game_services_player_interact_action_002dc1d0(h->services,argument,frontier);
+    *frontier=entry;
+    return GH_ACTION_STEP_UNSUPPORTED;
+}
 static gh_action_step_status room_r100_action(void *context,uint32_t entry,void *argument,
     uint32_t *frontier)
 {
@@ -1760,7 +1795,8 @@ static int update_state4(void *context,gh_game_loop *loop)
         .init=&h->game_init,.auxiliary_binding_known=1,
         .callback=h->work.room==0x100?room_r100_action:
                   h->work.room==0x105?gh_game_services_r105_scenery_action:
-                  h->work.room==0x102?gh_game_services_r102_ticket_action:NULL,
+                  h->work.room==0x102?gh_game_services_r102_ticket_action:
+                  h->work.room==0x101?room_r101_action:NULL,
         .context=h->work.room==0x105||h->work.room==0x102?(void *)h->services:(void *)h};
     gh_game_scene_step_bindings b={.work=&h->work,.init=&h->game_init,.prepare=s.prepare,
         .save={h->save_bytes,sizeof(h->save_bytes)},.collision=s.collision_pairs,.actors=s.scene_tables,

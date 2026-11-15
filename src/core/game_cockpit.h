@@ -94,6 +94,7 @@ typedef struct {
  const uint8_t *scenario_mode14;
  gh_id_error (*game_over_sound)(void *,unsigned,uint32_t *frontier);
  gh_id_error (*game_over_fade)(void *,uint32_t *frontier);
+ gh_id_error (*game_over_timeout)(void *,uint32_t *frontier);
  gh_id_error (*game_over_retry)(void *,uint32_t *frontier);
  gh_id_error (*rank_sound)(void *,unsigned program,uint32_t *frontier);
 } gh_cockpit_frame_callbacks;

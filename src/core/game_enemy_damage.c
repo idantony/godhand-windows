@@ -181,8 +181,14 @@ static gh_actor_motion_status first_punch_wall(gh_enemy_actor *enemy, uint32_t *
     return GH_ACTOR_MOTION_OK;
 }
 
-static int scenery_reaction_dependency(uint32_t dependency) {
-    return dependency == 0x200 || dependency == 0x202 || dependency == 0x203;
+static int scenery_reaction_enemy(const gh_enemy_actor *enemy, const uint8_t *actor) {
+    const uint32_t dependency = word(actor + 0x564);
+    /* Original 20A178 accepts effect 2E from scenery and maps the live
+     * receiver to selector 11, including the exchanged R101 actor. */
+    return dependency == 0x200 || dependency == 0x202 || dependency == 0x203 ||
+           (dependency == 0x227 && half(actor + 0x640) == 9 &&
+            actor[0x1650] == 4 && enemy->entry.b.work &&
+            enemy->entry.b.work->room == 0x101);
 }
 
 static uint32_t scenery_hit_vtable(unsigned kind)
@@ -216,7 +222,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     if (!source_vtable || source->original_vtable214 != source_vtable ||
         word(source->bytes + 0x214) != source_vtable ||
         actor->original_vtable214 != 0x4479c8 || word(p + 0x214) != 0x4479c8 ||
-        half(p + 0x2fe) != 0x202 || !scenery_reaction_dependency(word(p + 0x564)) ||
+        half(p + 0x2fe) != 0x202 || !scenery_reaction_enemy(enemy,p) ||
         word(body->bytes + 0x40) != UINT32_MAX)
         return stop(frontier, 0x20a178);
     if (source_kind == 0x202) {
@@ -366,6 +372,95 @@ static unsigned triangle_counter(uint8_t *p,const gh_title_player_view *player,
     return 0;
 }
 
+static gh_actor_motion_status r101_box_reaction(gh_enemy202_hit_call *call,
+ gh_enemy_actor *enemy, unsigned rank, uint32_t *frontier)
+{
+ uint8_t *p=enemy->entry.object.view.bytes;
+ const uint32_t f0=word(p+0x16d0),f4=word(p+0x16d4);
+ const uint16_t sequence=half(p+0x3ac);
+ if((int16_t)half(p+0x54a)<1||(f0&0x806020u)||(f4&0x180040u)||
+    (sequence&0x2cu)||(p[0x2f4]==1&&p[0x2f5]==0x16&&p[0x2f6]<4))
+  return stop(frontier,0x20b394);
+
+ /* 26EE40(0,0) resets only this actor's attack lock, at every rank. */
+ put(p+0x16dc,0);
+ const unsigned rage=p[0x17bd];
+ if((rage==1&&rank>=3)||(rage==2&&rank>=2)){
+  const int32_t old=(int32_t)word(p+0x16e8);
+  const uint32_t increment=(int32_t)word(p+0x16ec)<1?20:0;
+  if((int64_t)old+increment>200)return stop(frontier,0x26ecd0);
+  put(p+0x16e8,(uint32_t)old+increment);
+ }
+
+ /* 20D138 returns zero. The four counter probes exclude effect36.
+  * 20CAC8's initial mode1 RNG draw precedes the effect test. */
+ if(p[0x17bc]==1){
+  uint32_t draw;
+  if(gh_game_mt_next_0030f348(&enemy->entry.b.init->random,&draw))
+   return stop(frontier,0x31cfe0);
+ }
+ p[0x2f4]=1;
+ p[0x2f5]=1;
+ p[0x2f6]=0;
+ p[0x2f7]=0;
+ call->phase=5;
+ call->reacted=1;
+ return GH_ACTOR_MOTION_OK;
+}
+
+/* 20A178 kind36 from the live R101 Wood Box. For source kind030A
+ * and flags4/5 both zero, 28FB88 neither scales damage nor shares HP. */
+static gh_actor_motion_status r101_box_hit(gh_enemy202_hit_call *call,
+ gh_enemy_actor *enemy,const gh_title_player_view *source,unsigned rank,uint32_t *frontier)
+{
+ enum { BOX_DAMAGE_COMMITTED=32 };
+ uint8_t *p=enemy->entry.object.view.bytes;
+ const gh_hitarea_object *body=&enemy->hitareas.units[0];
+ if(!source||!source->bytes||source->size<0x648||source->original_vtable214!=0x4238d8||
+    word(source->bytes+0x214)!=0x4238d8||half(source->bytes+0x2fe)!=0x30a||
+    half(source->bytes+0x2f4)!=0x0100||!enemy->entry.b.work||
+    enemy->entry.b.work->room!=0x101||word(p+0x564)!=0x227||half(p+0x640)!=9||
+    enemy->entry.object.view.original_vtable214!=0x4479c8)
+  return stop(frontier,0x20a178);
+ if(call->effect==0x36&&call->phase==BOX_DAMAGE_COMMITTED)
+  return r101_box_reaction(call,enemy,rank,frontier);
+ if(call->effect==0x36&&call->phase>=5&&call->reacted)
+  return GH_ACTOR_MOTION_OK;
+ if(call->phase)return stop(frontier,0x20a178);
+
+ const float drain=number(p+0x770),cooldown=number(p+0x54c);
+ const float block=number(p+0x1740),armor=number(p+0x1734);
+ const int16_t previous=(int16_t)half(p+0x54a);
+ if(!isfinite(drain)||drain>0||!isfinite(cooldown)||cooldown>0||
+    !isfinite(block)||!isfinite(armor)||previous<=0)
+  return stop(frontier,0x20a178);
+ uint32_t power=word(body->bytes+0x4c);
+ if(power>16000)return stop(frontier,0x28fb88);
+ uint16_t flags=half(p+0x3ac);
+ if(half(p+0x17ca))flags&=0xfeffu;
+ if((word(p+0x16d0)&0x40000u)||block>0||armor>0){
+  flags|=0x100u;
+  put(p+0x16d4,word(p+0x16d4)|0x8000u);
+ }
+ put_half(p+0x3ac,flags);
+ put_half(p+0x17ca,10);
+ /* This effect's Heat value is zero, even with armor active. */
+ put(p+0x17ac,(uint32_t)previous);
+ if(flags&0x100u){
+  power<<=1;
+  put(p+0x16d0,word(p+0x16d0)&~0x800000u);
+ }
+ put_half(p+0x54a,power>=(uint32_t)previous?0:(uint16_t)((uint32_t)previous-power));
+ put(p+0x17a4,word(p+0x17a4)+power);
+ put(p+0x17a8,word(p+0x17a8)+power);
+ put(p+0x17b4,power);
+ put(p+0x1940,0xbd4ccccdu);
+ put(p+0x54c,0x40400000u);
+ call->effect=0x36;
+ call->phase=BOX_DAMAGE_COMMITTED;
+ return r101_box_reaction(call,enemy,rank,frontier);
+}
+
 gh_actor_motion_status gh_enemy202_hit_0020a178(
     gh_enemy202_hit_call *call, gh_enemy_actor *enemy, const gh_title_player_view *player,
     unsigned rank, uint32_t *frontier) {
@@ -388,6 +483,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     if (half(body->bytes + 0x46) == 0x2e)
         return environment_hit(call, enemy, source, rank, frontier);
     const uint16_t effect = half(body->bytes + 0x46);
+    if(effect==0x36)return r101_box_hit(call,enemy,source,rank,frontier);
     const int triangle = opening_triangle(enemy, p, effect);
     if (source != player || half(player->bytes + 0x2fe) != 0x100 || (effect != 7 && !triangle))
         return stop(frontier, 0x20a178);
@@ -670,9 +766,11 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         return stop(frontier, 0x271810);
     const uint32_t dependency = word(p + 0x564);
     const int manager_active = (int32_t)word(init->enemies + 0x514) > 0;
+    const int thrown_box=call->effect==0x36&&dependency==0x227&&half(p+0x640)==9&&
+        enemy->entry.b.work&&enemy->entry.b.work->room==0x101;
     if (manager_active) {
         const gh_title_player_view *source = NULL;
-        if (call->effect != 0x2e ||
+        if ((call->effect != 0x2e && !thrown_box) ||
             gh_hitarea_object_last_hit_actor(body,&source) || !source || !source->bytes || source->size < 0x300)
             return stop(frontier, 0x271810);
         const uint32_t power = word(body->bytes + 0x4c);
@@ -681,7 +779,9 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
             word(source->bytes + 0x214) == vtable && !power && word(body->bytes + 0x40) == UINT32_MAX;
         /* 271CA8 branches on the enemy manager, including when a scene prop
          * supplied the already validated Take. */
-        if (!scenery && !r100_counter_collateral(enemy,p,source,power))
+        const int box=thrown_box&&half(source->bytes+0x2fe)==0x30a&&
+            source->original_vtable214==0x4238d8&&word(source->bytes+0x214)==0x4238d8;
+        if (!scenery && !box && !r100_counter_collateral(enemy,p,source,power))
             return stop(frontier, 0x271810);
         /* The positive manager arm always creates CORE0:C. Only active
          * Heat or original 12C748 (player+5FC != 0) adds attached CORE121. */
@@ -695,9 +795,9 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     if (amplified && ((word((const uint8_t *)enemy->entry.b.work + 0x590) & 0x800u) ||
                       (word(p + 0x16d4) & 0x8000u)))
         return stop(frontier, 0x271d7c);
-    if ((call->effect == 0x2e ? !scenery_reaction_dependency(dependency) :
+    if ((!thrown_box && (call->effect == 0x2e ? !scenery_reaction_enemy(enemy,p) :
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
-            !(call->effect == 0x12 && r100_stamp8(enemy, p))) ||
+            !(call->effect == 0x12 && r100_stamp8(enemy, p)))) ||
         init->heat[0x10] || word(player->bytes + 0x5fc) ||
         (!manager_active && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);

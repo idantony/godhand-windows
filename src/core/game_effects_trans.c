@@ -298,7 +298,7 @@ static gh_effect_status packet_type7(gh_game_effects_trans *s,const gh_effect_es
     s->b.work->mode!=0||s->b.policy!=GH_STATIC_BINARY32_REFERENCE||
     s->b.cvt_policy!=GH_FRAME_CHOP_REFERENCE||
     !gh_effect_esp_type7_record_bound(s->b.storage.effects,v)||!v->target120_known_null||
-    word(p+0x120)||p[0x2ce]>(word(p+0x23a)==0x00090000u&&v->record.bytes[0x170]==5?6:5)||number(p+0x2c8)!=0.0f||p[0x247]>10||
+    word(p+0x120)||p[0x2ce]>(word(p+0x23a)==0x00090000u&&v->record.bytes[0x170]==5?6:5)||p[0x247]>10||
     (flags&0x01000000u)||cls<-2||cls>4)
     return fail(s,0x2e9d48,GH_EFFECT_UNSUPPORTED);
 
@@ -341,16 +341,21 @@ static gh_effect_status packet_type7(gh_game_effects_trans *s,const gh_effect_es
        rgba|=(uint32_t)channel<<(j*8);
     }
     const float center_x=number(p+0x2c0),center_y=number(p+0x2c4),radius=number(p+0x2b4);
-    if(!isfinite(center_x)||!isfinite(center_y)||!isfinite(radius)||
-       center_x<0||center_x>=512||center_y<0||center_y>=448)
+    /* 2E9D48 uses constant vertex Z even when Move has written a depth
+     * into +2C8. The GS scissor clips centers outside the view rectangle. */
+    const float fixed_x=multiply(center_x,16),fixed_y=multiply(center_y,16);
+    if(!isfinite(fixed_x)||!isfinite(fixed_y)||!isfinite(radius)||
+       fixed_x<=-65536||fixed_x>=65536||fixed_y<=-65536||fixed_y>=65536)
        return fail(s,0x2e9d48,GH_EFFECT_UNSUPPORTED);
     const int x=1792*16,y=1824*16;
+    const int32_t cx=x+(int32_t)fixed_x,cy=y+(int32_t)fixed_y;
+    if((uint32_t)cx>UINT16_MAX||(uint32_t)cy>UINT16_MAX)
+       return fail(s,0x2e9d48,GH_EFFECT_UNSUPPORTED);
     gh_effect_trans_quad *fan=packet.quads;
     fan->vertex_count=6;
-    const int32_t cx=(int32_t)multiply(center_x,16),cy=(int32_t)multiply(center_y,16);
-    vertex(fan->vertices,x+cx,y+cy,0,0,rgba,0xfff0);
-    fan->vertices[0].s=add(divide((float)(cx/16),512),0.001953125f);
-    fan->vertices[0].t=add(divide((float)(cy/16),512),0.001953125f);
+    vertex(fan->vertices,cx,cy,0,0,rgba,0xfff0);
+    fan->vertices[0].s=add(divide((float)(cx/16-x/16),512),0.001953125f);
+    fan->vertices[0].t=add(divide((float)(cy/16-y/16),512),0.001953125f);
     static const unsigned corners[]={0,1,3,2,0};
     for(unsigned i=0;i<5;++i){
        const unsigned k=corners[i];
@@ -466,7 +471,7 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
  if(!s||!b||!b->work)return GH_EFFECT_ARGUMENT;if(s->identity&&s->identity!=s)return GH_EFFECT_ARGUMENT;if(s->bound&&!same(&s->b,b))return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);if(s->bound&&!s->b.emit&&b->emit){s->b.emit=b->emit;s->b.context=b->context;}if(s->bound){if(!s->b.camera)s->b.camera=b->camera;if(!s->b.init)s->b.init=b->init;if(!s->b.textures)s->b.textures=b->textures;}s->frontier=0;if(s->complete)return GH_EFFECT_OK;if(!s->bound){s->identity=s;s->b=*b;s->bound=1;}if(!s->entered){s->gate_10000=word((const uint8_t*)b->work+0x5e4)&0x10000u;if((word((const uint8_t*)b->work+0x5e0)&0x10000000u)||(word((const uint8_t*)b->work+0x58c)&0x400u)){s->complete=1;return GH_EFFECT_OK;}s->entered=1;}
  if(!b->storage.effects||!b->storage.effects->ready||!b->storage.esp||b->storage.esp_bytes<0x100180||!b->globals||!b->globals->initialized)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);uint8_t*base=b->storage.esp;
  for(;s->esp_index<1024;s->esp_index++){unsigned index=s->esp_index,offset=(index>>5)*4;uint32_t mask=0x80000000u>>(index&31);if(!(word(base+0x100000+offset)&mask)||(word(base+0x100080+offset)&mask)||(word(base+0x100100+offset)&mask)){if(s->serial)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);continue;}gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,index,&v)||!v.initialized||v.payload!=base+(size_t)index*0x400||v.globals!=b->globals)return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);if(s->serial&&s->serial!=v.serial)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&
-    !gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&
+    !(gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector))&&
     !gh_effect_attack_esp_is_bound(b->storage.effects,&v)&&
     !gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_attachment_esp_is_bound(b->storage.effects,&v)&&!gh_effect_devil_esp_is_bound(b->storage.effects,&v)&&
     !gh_effect_enemy_light_esp_is_bound(b->storage.effects,&v)&&!gh_effect_emad_esp_is_bound(b->storage.effects,&v))||

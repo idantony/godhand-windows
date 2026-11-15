@@ -4,6 +4,32 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R102 save, reload and movement on Windows
+
+The original Event 04 save prompt writes the R102 checkpoint to a fresh
+native card profile and reads it back through the original verification
+phase. A separate Direct3D process selects the saved slot at the title
+screen and confirms Continue. It presents 36 consecutive R102 frames and
+records 27 frames with position changes around 24 forward stick samples.
+The player remains at 100 HP. The renderer, GPU, effects and window report
+zero errors.
+
+EV04 结尾的原版保存菜单将 R102 存档写入空白记忆卡目录，并经过原版回读校验。
+独立启动的 Direct3D 回放在标题菜单选择存档，再确认继续。R102 连续呈现 36 帧，
+其中 27 帧的玩家位置发生变化，回放共输入 24 次向前摇杆。角色生命值保持 100。
+渲染、GPU、特效和窗口均无报错。
+
+The same production source passes the original R100 Retry and R101 box replays
+in the CPU scheduler. R100 accepts Cross from the original Game Over menu,
+reloads Gene with 100 HP and advances another 120 frames. In R101, Circle
+lifts the box and Square throws it. The native game shatters the box, awards
+200 G when Gene collects the drop, plays its pickup sound, and releases the
+box and item.
+
+同一份生产源码也通过了 R100 重试和 R101 箱子的 CPU 回放。R100 在原版 Game Over 菜单
+接受叉键，重载 Gene 的 100 点生命值，再推进 120 帧。R101 以圆圈键举箱、方块键投掷，
+游戏处理箱子碎裂、掉落与拾取，增加 200 金币，播放拾取音效并释放箱子和掉落物。
+
 ## First R102 frames presented on Windows
 
 The controlled original-disc replay selects Continue after R002 Event 04.

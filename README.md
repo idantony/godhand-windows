@@ -51,7 +51,16 @@ original transition loads R002. Direct3D presents 3,390 consecutive R002
 frames through all 24 shots of Event 04 and the original save prompt. The
 replay selects Continue with the original pad input. A follow-up replay
 presents the first 16 consecutive R102 frames with the original stage, Gene,
-enemies and HUD. R102 movement and combat still need verification.
+enemies and HUD.
+
+The original save menu at the end of Event 04 writes a valid R102 checkpoint.
+A fresh launch loads that checkpoint through the original title and save-map
+flow. Direct3D presents 36 consecutive R102 frames while a controlled stick
+input moves Gene. Full R102 combat remains in development.
+
+Native CPU replays also verify R100's original Game Over and Retry flow and
+R101's box throw and 200 G pickup. R100 reloads with 100 HP and continues
+for 120 gameplay frames. The R101 replay verifies the box and item releases.
 
 ### Verified progress
 
@@ -183,6 +192,11 @@ For the R102 presentation replay, run the `startup-qa` executable with
 `--hidden --muted --max-ticks 7300 --qa-r102-capture` and add
 `--qa-capture FILE --qa-capture-count 16`. Give this replay a fresh profile.
 This option enables the test-only R105 gate and exit setup.
+To reproduce the saved route, create a checkpoint with the CPU QA executable
+using its usual arguments, a fresh empty card directory and `--r102-save`.
+Pass a copy of that profile to `startup-qa` with `--qa-load --qa-r102-walk`
+and `--qa-capture FILE --qa-capture-count 36`. The game reads the checkpoint
+through its original title menu.
 
 | Directory | Purpose |
 |---|---|
@@ -234,7 +248,13 @@ R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染�
 一轮受控的 Windows 回放从 R105 已开门的存档状态开始，并把 Gene 放在原版出口。原生音频
 播放开门声，原版房间切换载入 R002。Direct3D 连续呈现了 R002 的 3,390 帧，完整播放 EV04 的
 24 个镜头并显示原版保存界面。回放用原版按键选择继续。后续回放连续呈现了 R102 的前 16 帧，
-显示原版场景、Gene、敌人与 HUD。R102 的移动与战斗仍待验证。
+显示原版场景、Gene、敌人与 HUD。
+
+EV04 结尾的原版保存菜单已写出有效的 R102 存档。重新启动后，通过原版标题菜单和存档地图
+读入该存档。测试用摇杆让 Gene 移动，Direct3D 连续呈现 R102 的 36 帧。R102 的完整战斗仍待验证。
+
+原生 CPU 回放验证了 R100 的原版 Game Over 和重试，以及 R101 的投箱和拾取 200 金币。
+R100 重载后以 100 点生命值开始并继续运行 120 帧。R101 回放也经过了箱子与掉落物的释放流程。
 
 ### 已验证的进展
 
@@ -293,6 +313,9 @@ FFmpeg、一个不存在的存档目录和正整数 tick 上限。该工具复�
 `--hidden --muted --max-ticks 7300 --qa-r102-capture`，并用
 `--qa-capture FILE --qa-capture-count 16` 保存画面。请使用新的存档目录。
 该选项启用测试用的 R105 门与出口起始状态。
+要复现读档路线，用空白存档目录运行 CPU QA，并在参数末尾加 `--r102-save` 写出存档。
+将这个存档目录的副本传给 `startup-qa`，使用 `--qa-load --qa-r102-walk` 和
+`--qa-capture FILE --qa-capture-count 36`。游戏会经原版标题菜单读取存档。
 
 构建、缓存和日志默认保存在项目内由 Git 忽略的 `.work/` 目录。原镜像始终只读，
 原始反汇编等私有恢复证据及外部工具二进制保存在本地。

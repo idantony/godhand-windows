@@ -6,6 +6,7 @@
 #include "game_hitarea_shapes.h"
 #include "game_om_door_geometry.h"
 #include "game_collision_solid_units.h"
+#include "game_effect_create.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,8 +29,24 @@ gh_scene_placement_status gh_om_door_initialize_001b7118(gh_om_init_state *,gh_o
 gh_scene_placement_status gh_om_r101_item_construct_001c0068(void *,size_t,gh_title_player_view *);
 gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *,gh_om_object *,
  const gh_om_initializer_bindings *,int *);
+gh_scene_placement_status gh_om_r101_item_collect_001c24e8(gh_om_init_state *);
 gh_scene_placement_status gh_om_r101_item_position_001c2630(gh_om_init_state *,const uint8_t *);
 gh_scene_placement_status gh_om_initialize_abort(gh_om_init_state *);
+
+typedef struct {
+ gh_om_init_state common;
+ gh_hitarea_object attack,contact;
+ gh_effect_create_call launch_effect;
+ int attack_index,contact_index;
+ uint8_t stage,attack_created,contact_created;
+} gh_om3be_state;
+gh_scene_placement_status gh_om3be_construct_001b8ff8(void *,size_t,gh_title_player_view *);
+gh_scene_placement_status gh_om3be_initialize_001b90d0(gh_om3be_state *,gh_om_object *,
+ const gh_om_initializer_bindings *);
+gh_scene_placement_status gh_om3be_launch_001bb548(gh_om3be_state *,
+ const gh_title_player_view *shooter,const float origin[3],const float velocity[3],
+ unsigned heat,const gh_effect_create_bindings *);
+gh_scene_placement_status gh_om3be_abort(gh_om3be_state *);
 #ifdef __cplusplus
 }
 #endif

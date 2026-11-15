@@ -194,8 +194,9 @@ static gh_actor_motion_status heavy_root_matrix_0014a2b0(gh_enemy_other_move *s,
     return GH_ACTOR_MOTION_OK;
 }
 
-/* State1 descriptor 3C03E8 -> 288570, substate1 descriptor
- * 448C70 -> 2887D0. R100 stamp6's 288F00 hit enters variant1. */
+/* State 1 descriptor 3C03E8 -> 288570, substate 1 descriptor
+ * 448C70 -> 2887D0. The 288F00 hit enters variant 1 for the
+ * R100 stamp 6 and R102 stamp 14 EMA2 placements. */
 static gh_actor_motion_status heavy_reaction_002887d0(gh_enemy_other_move *s,
     gh_enemy2a2_virtual_init *actor)
 {
@@ -204,8 +205,11 @@ static gh_actor_motion_status heavy_reaction_002887d0(gh_enemy_other_move *s,
     uint8_t *p=root->bytes;
     uint32_t pc=0;
     if(s->stage==5){
-        if(prefix->bindings.work->room!=0x100||word(p+0x564)!=0x2a2||
-            half(p+0x640)!=6||p[0x2f5]!=1)
+        const uint16_t room=prefix->bindings.work->room,stamp=half(p+0x640);
+        const int opening_reaction=room==0x100&&stamp==6;
+        const int r102_reaction=room==0x102&&stamp==14&&
+            gh_enemy2a2_is_r102_entry(&prefix->request);
+        if(word(p+0x564)!=0x2a2||p[0x2f5]!=1||(!opening_reaction&&!r102_reaction))
             return stop(s,0x288570,GH_ACTOR_MOTION_UNSUPPORTED);
         s->stage=HEAVY_REACTION_SOLID;
     }

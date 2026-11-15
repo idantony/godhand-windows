@@ -235,7 +235,7 @@ int main(int argc,char **argv){
  uint32_t retiring=word(flags250)|0xe0000002u;
  memcpy(flags250,&retiring,4);
  gh_effect_emitter_view retained;
- C(gh_effect_create_quiesce_emad_room_exit(effects,&entry.object.view)==GH_EFFECT_UNSUPPORTED);
+ C(gh_effect_create_quiesce_actor_room_exit(effects,&entry.object.view)==GH_EFFECT_UNSUPPORTED);
  C(!gh_effect_create_emitter_at(effects,0,&retained));
  /* These are the actual State5 stop requests, with active masks still set. */
  for(unsigned i=0;i<3;i++){
@@ -243,15 +243,15 @@ int main(int argc,char **argv){
     uint32_t value=word(stop)|0x40000000u;
     memcpy(stop,&value,4);
  }
- C(gh_effect_create_quiesce_emad_room_exit(effects,&entry.object.view)==GH_EFFECT_UNSUPPORTED);
+ C(gh_effect_create_quiesce_actor_room_exit(effects,&entry.object.view)==GH_EFFECT_UNSUPPORTED);
  C(!gh_effect_create_emitter_at(effects,0,&retained));
  for(unsigned i=0;i<5;i++){
     gh_effect_esp_view sprite;
     C(!gh_effect_create_esp_at(effects,i,&sprite));
     C(!gh_effect_create_esp_pause_002fbe50(effects,i,sprite.serial,&pc));
  }
- C(!gh_effect_create_quiesce_emad_room_exit(effects,&entry.object.view));
- C(!gh_effect_create_quiesce_emad_room_exit(effects,&entry.object.view));
+ C(!gh_effect_create_quiesce_actor_room_exit(effects,&entry.object.view));
+ C(!gh_effect_create_quiesce_actor_room_exit(effects,&entry.object.view));
  int borrowed=1;
  C(!gh_effect_create_actor_has_live_refs(effects,&entry.object.view,&borrowed)&&!borrowed);
  C(!gh_effect_create_source_has_live_refs(effects,effect.bytes,effect.size,&borrowed)&&!borrowed);

@@ -10,9 +10,9 @@ static int r101_armed_sequence_remap(const gh_actor_motion *s,unsigned program)
  const gh_title_player_view *weapon=s->sequence_held_weapon;
  const gh_title_player_view *actor=&s->b.model->root;
  const uint8_t *p=actor->bytes;
- /* Actual strcmp operands 44C408 and the cEm02 ctor token 42C7F0 both
-  * name cEm00. The typed 0361 +6EC arm takes the default 113 branch. */
- return program==0x113&&s->pending_sound.bank==0&&s->b.work&&s->b.work->room==0x101&&
+ /* The cEm00 name matches both strcmp operands. The 0361 table row
+  * returns 113 at 2C8604 or 111 at 2C8678 for the two requested cues. */
+ return (program==0x113||program==0x111)&&s->pending_sound.bank==0&&s->b.work&&s->b.work->room==0x101&&
         actor->size>0x1650&&w(p+0x4ac)==0x42c7f0&&w(p+0x564)==0x203&&
         h(p+0x640)==13&&!p[0x1650]&&weapon&&weapon->bytes&&weapon->size>=0x300&&
         h(weapon->bytes+0x2fe)==0x361;

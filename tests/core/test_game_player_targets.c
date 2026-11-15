@@ -133,6 +133,27 @@ static void test_enemy_focus(const gh_player_target_bindings *b,item *om)
  b->player->bytes[0x648]=0;
  put(b->player->bytes+0x640,0);
 
+ /* Throw mode4 accepts the later radius with a shallow elevated angle;
+  * its original option bit also excludes zero-HP actors with +3AC bit2. */
+ put(om->bytes+0x250,0x8000);
+ enemy_bytes[0][0x617]=0;
+ sh(enemy_bytes[0]+0x54a,1);
+ const float high_far[3]={1000000,1.25f,1000006};
+ memcpy(enemies[0].view.alias_f0,high_far,12);
+ target=(gh_player_target){0};
+ C(!gh_player_throw_target_00124540(b,init,&target,&pc)&&!pc&&
+   target.handle==handles[0]&&w(b->player->bytes+0x640)==handles[0]);
+ b->player->bytes[0x648]=0;
+ sh(enemy_bytes[0]+0x54a,0);
+ C(!gh_player_throw_target_00124540(b,init,&target,&pc)&&!target.handle);
+ sh(enemy_bytes[0]+0x54a,1);
+ const float high_near[3]={1000000,1.25f,1000002};
+ memcpy(enemies[0].view.alias_f0,high_near,12);
+ C(!gh_player_throw_target_00124540(b,init,&target,&pc)&&!target.handle);
+ memcpy(enemies[0].view.alias_f0,straight,12);
+ put(om->bytes+0x250,0);
+ puts("PASS throw mode4 repeated radius, elevation cutoff and dead target exclusion");
+
  gh_hitarea_object give[5];
  int result;
  C(!gh_hitarea_objects_construct_001fde00(init,&pc));

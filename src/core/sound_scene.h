@@ -25,7 +25,8 @@ typedef struct {gh_sound_control *control;gh_audio_registry *registry;
  gh_r207_allocation loading;uint32_t job;size_t file_bytes;
  uint32_t frontier;int detail;
  gh_sound_ts_row ts_rows[GH_SOUND_TS_ROWS];
- uint8_t ts_count;
+ gh_se_attached_environment ts_environment;
+ uint8_t ts_count,ts_update_remaining;
 } gh_sound_scene;
 typedef enum {GH_SOUND_SCENE_OK,GH_SOUND_SCENE_ARGUMENT,GH_SOUND_SCENE_BUSY,
  GH_SOUND_SCENE_ASSET,GH_SOUND_SCENE_UNSUPPORTED} gh_sound_scene_status;

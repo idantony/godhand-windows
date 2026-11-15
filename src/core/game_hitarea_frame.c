@@ -84,6 +84,7 @@ static gh_hitarea_status query(gh_game_init_state*s,gh_hitarea_frame*c,gh_native
   if(t){if(!t->bytes||t->size<0x550)return fail(f,0x1fcf20,GH_HITAREA_BOUNDS);float cooldown=fl(t->bytes+0x54c);if(!isfinite(cooldown))return fail(f,0x1fcf20,GH_HITAREA_UNSUPPORTED);
    if(!(cooldown<=0)||same_actor(t,a))continue;
    if(w(source+0x38))return fail(f,0x1fcf20,GH_HITAREA_UNSUPPORTED);
+   if(same_actor(t,s->hitarea_native->excluded_actors[c->slot]))continue;
    if(w(t->bytes+0x250)&0x8000)continue;
    if(!(w(owner.bytes)&1)&&!(w(source)&1)&&a){
     if(!b||!b->tables)return fail(f,0x131e10,GH_HITAREA_UNSUPPORTED);

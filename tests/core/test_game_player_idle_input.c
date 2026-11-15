@@ -12,4 +12,37 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  C(!fesetround(FE_TONEAREST));gh_player_idle_input persistent={0};persistent.pickup.handle=77;C(!gh_player_idle_input_begin(&persistent)&&persistent.pickup.handle==77);put(raw+0x15f4,0x10);put(init->heat+4,0x41200000);put(init->heat+8,0x41200000);put(init->heat+12,0x40400000);init->heat[0x10]=1;gh_player_idle_input depleted={0};int result=17;C(!gh_game_player_idle_input_00123938(&depleted,&b,&result)&&result==1&&!init->heat[0x10]&&w(init->heat+8)==0x40e00000&&raw[0x2f5]==9&&w(raw+0x54c)==0x40400000);memset(raw+0x2f4,0,4);put(raw+0x15f4,0x20);put(init->heat+4,0x42c80000);put(init->heat+12,0x42480000);put(wb+8,2);gh_player_idle_input activate={0};C(!gh_game_player_idle_input_00123938(&activate,&b,&result)&&result==1&&raw[0x2f5]==8&&w(init->heat+0x14)==1);put(wb+8,0);memset(raw+0x2f4,0,4);raw[0x627]=1;gh_player_idle_input dodge={0};C(!gh_game_player_idle_input_00123938(&dodge,&b,&result)&&result==1&&raw[0x2f5]==6&&!raw[0x2f7]);raw[0x627]=0;memset(raw+0x2f4,0,4);raw[0x2f5]=1;put(wb+0x5d8,0x2000000);uint16_t hp=1;memcpy(raw+0x54a,&hp,2);gh_player_idle_input modal={0};result=17;C(gh_game_player_idle_input_00123938(&modal,&b,&result)==GH_PLAYER_FRAME_UNSUPPORTED&&modal.frontier==0x2c2b58&&result==17&&raw[0x2f5]==1);put(init->enemies+0x514,1);C(!gh_game_player_idle_input_00123938(&modal,&b,&result)&&result==1&&!raw[0x2f5]&&(w(raw+0x15f4)&0x100));/* A bounded caller continuation fixture starts AFTER real Step/rootdelta;
   * it tests ordering, not a claim that the full108AB0 frame completed. */
  put(wb+0x5d8,0);put(init->enemies+0x514,0);memset(raw+0x2f4,0,4);memset(raw+0x54a,0,2);put(raw+0x15f4,0x20);gh_player_idle_input input_owner={0};b.frame.idle_input=&input_owner;b.frame.idle_input_bindings=&b;b.frame.take_binding_known=1;gh_game_player_frame caller={.b=b.frame,.stage=15,.state_entry=0x10be18,.idle_phase=9,.bound=1};C(gh_game_player_frame_00108ab0(&caller,&b.frame)==GH_PLAYER_FRAME_UNSUPPORTED&&caller.frontier==0x1236e8&&caller.idle_phase==12&&input_owner.phase==100&&!caller.input_result&&(w(raw+0x15f4)&0x100));C(gh_game_player_frame_00108ab0(&caller,&b.frame)==GH_PLAYER_FRAME_UNSUPPORTED&&caller.frontier==0x1236e8&&input_owner.phase==100);
+ /* Verified 2DC108 prompt fields and no publication while battle-gated. */
+ gh_game_action_buttons buttons={0};
+ gh_game_action_buttons_reset_001f72c0(&buttons);
+ b.action_buttons=&buttons;work.room=0x101;
+ const float actor_pos[4]={1,0,1,1};
+ float target_pos[4]={1.25f,999,1,1};
+ memcpy(player.view.alias_f0,actor_pos,12);
+ gh_player_target prompt={.handle=8,.view={.alias_f0=(uint8_t *)target_pos}};
+ uint32_t pc=99;
+ C(!gh_game_player_interact_prompt_002dc108(&b,&prompt,&pc)&&!pc&&!buttons.entries[0].callback_id10);
+ memcpy(raw+0x54a,&hp,2);
+ C(!gh_game_player_interact_prompt_002dc108(&b,&prompt,&pc)&&!pc);
+ C(buttons.entries[0].priority==8&&buttons.entries[0].life==7&&
+   buttons.entries[0].callback_id10==0x2dc1d0&&!buttons.entries[0].callback_argument);
+ target_pos[0]=3;
+ C(!gh_game_player_interact_prompt_002dc108(&b,&prompt,&pc)&&!pc);
+ C(buttons.entries[1].priority==7&&buttons.entries[1].life==7&&
+   buttons.entries[1].callback_id10==0x2dc1d0);
+ put(init->enemies+0x514,1);prompt.view.alias_f0=NULL;
+ C(!gh_game_player_interact_prompt_002dc108(&b,&prompt,&pc)&&!pc&&!buttons.entries[2].callback_id10);
+ /* Original 1FAC58 reads CoreSave+0xA8 on Circle's local skill gate. */
+ uint8_t save[0xa9]={0};
+ b.frame.save=(gh_core_save_view){save,sizeof(save)};
+ raw[0x624]=1;
+ raw[0x2f4]=raw[0x2f5]=raw[0x2f6]=raw[0x2f7]=0;
+ save[0xa8]=1;
+ gh_player_idle_input circle={.b=b,.source_bindings=&b,.phase=4,.bound=1};
+ result=17;
+ C(!gh_game_player_idle_input_00123938(&circle,&b,&result)&&result==1&&raw[0x2f5]==0x2b);
+ save[0xa8]=0;raw[0x2f5]=0;put(init->enemies+0x514,0);
+ circle=(gh_player_idle_input){.b=b,.source_bindings=&b,.phase=4,.bound=1};
+ result=17;
+ C(!gh_game_player_idle_input_00123938(&circle,&b,&result)&&!result&&raw[0x2f5]==0);
  C(!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(init);free(data);puts("PASS R100 same registry idle-input: pending2E retry,4FEnv, Heat minimum/state9,ready8,dodge6,modal preciseDoorquery then originalskipgate");return 0;}

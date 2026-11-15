@@ -1,3 +1,4 @@
+#include "game_action_button_set.h"
 #include "game_player_idle_input.h"
 #include "game_player_idle_target.h"
 #include "game_player_square_input.h"
@@ -11,7 +12,87 @@ static float num(const void*p){float n;memcpy(&n,p,4);return n;}
 static gh_player_frame_status fail(gh_player_idle_input*s,uint32_t pc,gh_player_frame_status e){s->frontier=pc;return e;}
 static gh_player_frame_status done(gh_player_idle_input*s,int*out,int value){s->phase=100;s->frontier=0;*out=value;return GH_PLAYER_FRAME_OK;}
 static gh_player_frame_status transition(gh_player_idle_input*s,int*out,unsigned sub,unsigned select){uint8_t*p=s->b.frame.player->view.bytes;p[0x2f4]=0;p[0x2f5]=(uint8_t)sub;p[0x2f6]=0;p[0x2f7]=(uint8_t)select;return done(s,out,1);}
-static gh_player_frame_status cleanup(gh_player_idle_input*s){const gh_player_frame_bindings*b=&s->b.frame;uint8_t*p=b->player->view.bytes;if(!b->auxiliary_bindings_known)return fail(s,0x12bfb8,GH_PLAYER_FRAME_UNSUPPORTED);if(b->aux_6a0||w(p+0x6a0))return GH_PLAYER_FRAME_OK;/*2DC920 and2DCAD8 share these exact original gates. */if(!b->current_player||b->current_player->bytes!=p)return fail(s,0x2db6b0,GH_PLAYER_FRAME_UNSUPPORTED);int16_t hp;uint16_t bits=(uint16_t)h(p+0x54a);memcpy(&hp,&bits,2);if(hp>0&&!(w(p+0x15f4)&0x400000)&&(int32_t)w(b->init->enemies+0x514)<1&&!b->init->enemies[0x53c]){if(!b->door_probe)return fail(s,0x2c2b58,GH_PLAYER_FRAME_UNSUPPORTED);uint32_t pc=0;gh_player_frame_status e=b->door_probe(b->door_context,&b->player->view,&pc);if(e)return fail(s,pc?pc:0x2c2b58,e);}put(p+0x15f4,w(p+0x15f4)|0x100);return GH_PLAYER_FRAME_OK;}
+gh_player_frame_status gh_game_player_input_cleanup_0012bfb8(const gh_player_frame_bindings *b,
+ uint32_t *frontier)
+{
+ if(!b||!b->player||!b->player->view.bytes||!b->init||!frontier)return GH_PLAYER_FRAME_ARGUMENT;
+ uint8_t *p=b->player->view.bytes;
+ *frontier=0;
+ if(!b->auxiliary_bindings_known){*frontier=0x12bfb8;return GH_PLAYER_FRAME_UNSUPPORTED;}
+ if(b->aux_6a0||w(p+0x6a0))return GH_PLAYER_FRAME_OK;
+ /* 2DC920 and 2DCAD8 use the same live-player and battle gates. */
+ if(!b->current_player||b->current_player->bytes!=p){
+  *frontier=0x2db6b0;return GH_PLAYER_FRAME_UNSUPPORTED;
+ }
+ int16_t hp;
+ const uint16_t bits=(uint16_t)h(p+0x54a);
+ memcpy(&hp,&bits,2);
+ if(hp>0&&!(w(p+0x15f4)&0x400000)&&(int32_t)w(b->init->enemies+0x514)<1&&!b->init->enemies[0x53c]){
+  if(!b->door_probe){*frontier=0x2c2b58;return GH_PLAYER_FRAME_UNSUPPORTED;}
+  const gh_player_frame_status status=b->door_probe(b->door_context,&b->player->view,frontier);
+  if(status){if(!*frontier)*frontier=0x2c2b58;return status;}
+ }
+ put(p+0x15f4,w(p+0x15f4)|0x100);
+ return GH_PLAYER_FRAME_OK;
+}
+
+/* Original 2DC108 checks battle eligibility before reading the target point.
+ * 2DB7E0 picks the short-angle prompt using XZ squared distance. */
+gh_player_frame_status gh_game_player_interact_prompt_002dc108(
+ const gh_player_idle_input_bindings *bindings,const gh_player_target *target,uint32_t *frontier)
+{
+ if(!bindings||!target||!frontier)return GH_PLAYER_FRAME_ARGUMENT;
+ *frontier=0;
+ if(!target->handle)return GH_PLAYER_FRAME_OK;
+ const gh_player_frame_bindings *b=&bindings->frame;
+ if(!b->work||b->work->room!=0x101){*frontier=0x2dc108;return GH_PLAYER_FRAME_UNSUPPORTED;}
+ const gh_title_player_view *player=b->current_player;
+ if(!player||!b->player||player->bytes!=b->player->view.bytes||
+    !player->bytes||player->size<0x15f8||!b->init){
+  *frontier=0x2db6b0;return GH_PLAYER_FRAME_ARGUMENT;
+ }
+ if((int16_t)h(player->bytes+0x54a)<=0||(w(player->bytes+0x15f4)&0x400000u)||
+    (int32_t)w(b->init->enemies+0x514)>0||b->init->enemies[0x53c])
+  return GH_PLAYER_FRAME_OK;
+ if(!player->alias_f0||!target->view.alias_f0||!bindings->action_buttons){
+  *frontier=0x2dc108;return GH_PLAYER_FRAME_ARGUMENT;
+ }
+ float from[3],to[3];
+ memcpy(from,player->alias_f0,12);memcpy(to,target->view.alias_f0,12);
+ fenv_t env;
+ if(feholdexcept(&env)){*frontier=0x1f7eb0;return GH_PLAYER_FRAME_NUMERIC;}
+ if(fesetround(FE_TONEAREST)){
+  (void)fesetenv(&env);*frontier=0x1f7eb0;return GH_PLAYER_FRAME_NUMERIC;
+ }
+ volatile float dx=to[0]-from[0],dz=to[2]-from[2];
+ volatile float xx=dx*dx,zz=dz*dz;
+ const float squared=xx+zz;
+ if(fesetenv(&env)||!isfinite(squared)){
+  *frontier=0x1f7eb0;return GH_PLAYER_FRAME_NUMERIC;
+ }
+ int near=squared<=2;
+ if(near&&squared>=0.5f){
+  float turn;
+  const gh_player_target_status status=gh_player_target_angle_002da038(b->elf,b->elf_bytes,
+     from,to,num(player->bytes+0x104),3.1415927f,&turn,frontier);
+  if(status)return status==GH_PLAYER_TARGET_NUMERIC?GH_PLAYER_FRAME_NUMERIC:GH_PLAYER_FRAME_UNSUPPORTED;
+  near=fabsf(turn)<0.2617994f;
+ }
+ const gh_action_set_request request={.priority=near?8:7,.life=7,.callback_id=0x2dc1d0};
+ int emitted;
+ unsigned index;
+ const gh_action_set_status status=gh_action_button_set_001f7858(
+    bindings->action_buttons,&request,&emitted,&index,frontier);
+ return status==GH_ACTION_SET_OK?GH_PLAYER_FRAME_OK:status==GH_ACTION_SET_UNSUPPORTED?
+        GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
+}
+
+static gh_player_frame_status cleanup(gh_player_idle_input *s)
+{
+ uint32_t frontier=0;
+ const gh_player_frame_status status=gh_game_player_input_cleanup_0012bfb8(&s->b.frame,&frontier);
+ return status?fail(s,frontier,status):GH_PLAYER_FRAME_OK;
+}
 static gh_player_frame_status target_status(gh_player_idle_input*s,gh_player_target_status e,uint32_t pc){return fail(s,pc,e==GH_PLAYER_TARGET_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:e==GH_PLAYER_TARGET_NUMERIC?GH_PLAYER_FRAME_NUMERIC:GH_PLAYER_FRAME_CALLEE);}
 enum player_input_mode { IDLE_INPUT, REACTION_INPUT, DODGE_INPUT };
 static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_input_mode mode){gh_player_frame_bindings*b=&s->b.frame;uint8_t*p=b->player->view.bytes,*heat=b->init->heat;const uint8_t*work=(const uint8_t*)b->work;uint32_t pc=0,flags;
@@ -77,8 +158,12 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
    if(ready)return transition(s,out,8,0);
   }
   if(!b->auxiliary_bindings_known)return fail(s,0x123b14,GH_PLAYER_FRAME_UNSUPPORTED);
-  if(p[0x624]&&!b->aux_6a0&&!w(p+0x6a0))return fail(s,0x1fac58,GH_PLAYER_FRAME_UNSUPPORTED);
-  if(b->aux_698||w(p+0x698)||b->aux_6a0||w(p+0x6a0))return fail(s,0x123b14,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(p[0x624]&&!b->aux_6a0&&!w(p+0x6a0)){
+   if(!b->save.bytes||b->save.size<=0xa8)return fail(s,0x1fac58,GH_PLAYER_FRAME_UNSUPPORTED);
+   if(b->save.bytes[0xa8])return transition(s,out,0x2b,0);
+  }
+  if(b->aux_698||w(p+0x698)||w(p+0x6a0))return fail(s,0x123b14,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(b->aux_6a0&&(p[0x621]||p[0x622]||p[0x623]))return transition(s,out,0x16,0);
   s->phase=13;
  }
  if(s->phase==13){
@@ -136,7 +221,11 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  if(s->phase==7){if(p[0x623]||p[0x621]){if(p[0x61f]&&num(p+0x608)>2.3561945f)return fail(s,0x12c000,GH_PLAYER_FRAME_UNSUPPORTED);if(w(p+0x15f4)&0x8000)return transition(s,out,12,p[0x623]?2:0);return fail(s,0x12c000,GH_PLAYER_FRAME_UNSUPPORTED);}if(w(work+8)&1){if(!p[0x2f4]&&p[0x2f5]==10)return done(s,out,0);return transition(s,out,10,0);}put(p+0x15f4,w(p+0x15f4)|0x400);if(p[0x627])return transition(s,out,6,0);if(p[0x61e]){if(!b->camera||!b->camera->constructed||!b->camera->identity)return fail(s,0x138f88,GH_PLAYER_FRAME_UNSUPPORTED);if(((uint32_t)b->camera->identity->mode&1u)&&w(b->camera->fields+0x520))return done(s,out,0);float angle=num(p+0x614),signed_angle=num(p+0x610);if(!isfinite(angle)||!isfinite(signed_angle))return fail(s,0x1240f8,GH_PLAYER_FRAME_NUMERIC);if(angle<.7853982f){p[0x1603]=2;return transition(s,out,7,0);}put(p+0x54c,0x40a00000);return transition(s,out,6,angle>2.3561945f?1:signed_angle>0?2:3);}if(w(work+8)&4){if(!p[0x2f4]&&p[0x2f5]==4)return done(s,out,0);return transition(s,out,4,0);}put(p+0x15f4,w(p+0x15f4)|0x500);s->phase=8;}
  if(s->phase==8){if(w(p+0x15f4)&0x20){gh_player_target_status e=gh_player_pickup_target_0012a610(&s->b.targets,&s->pickup,&pc);if(e)return target_status(s,e,pc);/* Typed companion is original69C; nohostpointer truncation. */put(p+0x69c,0);s->phase=9;}else s->phase=12;}
  if(s->phase==9){if(s->pickup.handle)return fail(s,s->pickup.view.bytes[0x665]?0x2dbfb0:0x2dbd40,GH_PLAYER_FRAME_UNSUPPORTED);gh_player_target_status e=gh_player_interact_target_0012b328(&s->b.targets,&s->interaction,&pc);if(e)return target_status(s,e,pc);put(p+0x6a4,0);s->phase=10;}
- if(s->phase==10){if(s->interaction.handle)return fail(s,0x2dc108,GH_PLAYER_FRAME_UNSUPPORTED);s->phase=11;}
+ if(s->phase==10){
+  gh_player_frame_status e=gh_game_player_interact_prompt_002dc108(&s->b,&s->interaction,&pc);
+  if(e)return fail(s,pc?pc:0x2dc108,e);
+  s->phase=11;
+ }
  if(s->phase==11){if(h(work+0x5b0)==0x608)return fail(s,0x2c2568,GH_PLAYER_FRAME_UNSUPPORTED);s->phase=12;}
  if(s->phase==12){if(!p[0x61f]){if(mode==DODGE_INPUT)return done(s,out,0);if((int8_t)p[0x1601]>0||(int8_t)p[0x1602]>0)return done(s,out,0);if(!p[0x2f4]&&!p[0x2f5])return done(s,out,0);gh_player_frame_status e=cleanup(s);if(e)return e;return transition(s,out,0,0);}float angle=num(p+0x608),magnitude=num(p+0x60c);if(!isfinite(angle)||!isfinite(magnitude))return fail(s,0x1243a0,GH_PLAYER_FRAME_NUMERIC);unsigned next=angle<1.2217305f?(magnitude>=10000?2:1):angle>2.0943952f?3:0;if(!p[0x2f4]&&p[0x2f5]==next)return done(s,out,0);gh_player_frame_status e=cleanup(s);if(e)return e;return transition(s,out,next,next==2&&(w(p+0x15f4)&0x4000)?1:0);}
  return fail(s,0x123938,GH_PLAYER_FRAME_ARGUMENT);

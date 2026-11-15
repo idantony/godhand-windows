@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T14:38:27+00:00",
-  "stage": "native-windows-r102-first-gameplay-presentation",
+  "verified_utc": "2026-11-15T15:23:17+00:00",
+  "stage": "native-windows-r102-checkpoint-reload-and-movement",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1330,6 +1330,47 @@
     "exit_tick": 6890,
     "next_original_operation": {"module": "main ELF", "address": "002CBF78"},
     "room_input_or_combat_verified_in_this_replay": false
+  },
+  "native_windows_r102_checkpoint_reload": {
+    "scope": "Controlled original Event 04 Save Map and independent Windows title Load",
+    "destination_room": "0102",
+    "blank_profile_used_for_save": true,
+    "original_write_and_readback_verified": true,
+    "native_save_record_bytes": 46080,
+    "fresh_process_loaded_written_record": true,
+    "original_continue_selected": true,
+    "presented_room_frames": 36,
+    "presented_scene_range": [467, 502],
+    "forward_input_samples": 24,
+    "frames_with_player_position_change": 27,
+    "player_xz_before": [16.064100, 24.092453],
+    "player_xz_after": [16.048227, 21.016619],
+    "player_hp_before": 100,
+    "player_hp_after": 100,
+    "read_did_not_modify_checkpoint": true,
+    "renderer_or_window_error_observed": false,
+    "effect_or_world_gpu_error_observed": false,
+    "full_room_combat_verified": false
+  },
+  "native_cpu_r100_retry_after_defeat": {
+    "room": "0100",
+    "original_menu_retry_confirmed": true,
+    "confirm_tick": 4379,
+    "reload_tick": 4462,
+    "continue_count": 1,
+    "reloaded_player_hp": 100,
+    "frames_after_reload": 120,
+    "frontier_at_bounded_exit": "00000000"
+  },
+  "native_cpu_r101_box_throw_and_pickup": {
+    "room": "0101",
+    "circle_pickup_tick": 994,
+    "square_throw_tick": 1036,
+    "room_packet_frames": 1145,
+    "collected_money": 200,
+    "pickup_sound_triggered": true,
+    "box_and_item_release_verified": true,
+    "next_original_operation": {"module": "main ELF", "address": "002147D0"}
   },
   "native_windows_r002_ev04_four_shots": {
     "scope": "Controlled original R105 exit and native Direct3D R002 presentation",

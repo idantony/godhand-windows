@@ -5,6 +5,7 @@
 #include "game_enemy_route_graph.h"
 #include "game_player_targets.h"
 #include "game_enemy_move.h"
+#include "game_om_initialize.h"
 #include "game_enemy_request.h"
 #include "game_model_texture_scroll.h"
 #include "game_ray_query.h"
@@ -131,6 +132,16 @@ static float distance_xz(const float a[3],const float b[3])
 {
     float x=sub(a[0],b[0]),z=sub(a[2],b[2]);
     return add(mul(x,x),mul(z,z));
+}
+
+static int r102_em00_appearance5(const gh_boot_work *work,const uint8_t *actor)
+{
+    return work->room==0x102&&word(actor+0x564)==0x200&&half(actor+0x640)==11&&actor[0x1650]==5;
+}
+
+static int r101_scenery_enemy(const gh_boot_work *work,const uint8_t *actor)
+{
+    return work->room==0x101&&word(actor+0x564)==0x227&&half(actor+0x640)==9&&actor[0x1650]==4;
 }
 
 static int r105_exchanged_enemy(const gh_boot_work *work,const uint8_t *actor)
@@ -1029,11 +1040,12 @@ static gh_actor_motion_status advance_sequence_effects_0014fb48(gh_enemy202_move
 {
     const uint32_t dependency=word(p+0x564);
     const int devil=s->pending_ai_pc==0x212c08&&dependency==0x220;
+    const int devil_ranged=s->pending_ai_pc==0x2269f0&&dependency==0x220&&p[0x2f7]==2;
     const gh_boot_work *work=s->runtime.entry->b.work;
     const int r105=s->pending_ai_pc==0x21a538&&r105_opening_enemy(work,p);
     const int escape=s->pending_ai_pc==0x25bcc0&&dependency==0x200&&half(p+0x640)==20;
     const int em0a=s->pending_ai_pc==0x21a538&&dependency==0x20a&&!half(p+0x640)&&p[0x1650]==3;
-    if(!r105&&((!devil&&!escape&&!em0a&&(s->pending_ai_pc!=0x21a538||
+    if(!r105&&((!devil&&!devil_ranged&&!escape&&!em0a&&(s->pending_ai_pc!=0x21a538||
        (dependency!=0x200&&(dependency!=0x203||half(p+0x640)!=19))))||work->room!=0x100))
         return stop(s,0x14fb48,GH_ACTOR_MOTION_UNSUPPORTED);
     const unsigned count=half(p+0x3ae);
@@ -1064,6 +1076,8 @@ static gh_actor_motion_status advance_sequence_effects_0014fb48(gh_enemy202_move
         if(em0a&&(entry[0]!=0x58||entry[1]!=0x1e||mode||flags!=7u))
             return stop(s,0x14fb48,GH_ACTOR_MOTION_UNSUPPORTED);
         if(devil&&(entry[0]!=0x58||entry[1]!=0x3f||mode||flags!=7u))
+            return stop(s,0x14fb48,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(devil_ranged&&(entry[0]!=0x58||entry[1]<0x42||entry[1]>0x45||mode||flags!=5u))
             return stop(s,0x14fb48,GH_ACTOR_MOTION_UNSUPPORTED);
         if((half(p+0x434)&2u)||!bindings.storage.effects)
             return stop(s,0x306528,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -1286,8 +1300,10 @@ static gh_actor_motion_status choose_after_substate_002705d8(gh_enemy202_move *s
     gh_boot_work *work=enemy->b.entry.work;
     if(word(p+0x738))return stop(s,0x1d0408,GH_ACTOR_MOTION_UNSUPPORTED);
     uint32_t dependency=word(p+0x564);
+    const int r101_box=r101_scenery_enemy(work,p)&&
+        ((p[0x2f4]==1&&p[0x2f5]==0x11)||(p[0x2f4]==0&&(p[0x2f5]==5||p[0x2f5]==6)));
     if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a&&
-        !r105_exchanged_enemy(work,p))
+        !r101_box&&!r105_exchanged_enemy(work,p))
         return stop(s,0x2705d8,GH_ACTOR_MOTION_UNSUPPORTED);
     float escape=number(word(p+0x16c0)),override=number(word(p+0x1734));
     if(!isfinite(escape)||!isfinite(override))return stop(s,0x27069c,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -1709,15 +1725,21 @@ static gh_actor_motion_status enemy_periodic_pickup_00272588(gh_enemy202_move *s
     return GH_ACTOR_MOTION_OK;
 }
 
-static gh_actor_motion_status commit_attack_0026ee40(gh_enemy202_move *s,uint8_t *p,
-    gh_game_mt random,unsigned heat,unsigned substate,unsigned lock,unsigned delay,int *chosen)
+static void set_attack_timers_0026ee40(gh_game_init_state *init,uint8_t *p,
+    unsigned heat,unsigned lock)
 {
-    gh_game_init_state *init=s->enemy->b.entry.init;
     uint8_t *manager=init->enemies;
     const unsigned divisor=heat==5?0:heat>=3?4:2;
     const unsigned shared=divisor?30/divisor:0;
     if(shared&&(int32_t)word(manager+0x510)<(int32_t)shared)put(manager+0x510,shared);
     put(p+0x16dc,divisor?lock/divisor:0);
+}
+
+static gh_actor_motion_status commit_attack_0026ee40(gh_enemy202_move *s,uint8_t *p,
+    gh_game_mt random,unsigned heat,unsigned substate,unsigned lock,unsigned delay,int *chosen)
+{
+    gh_game_init_state *init=s->enemy->b.entry.init;
+    set_attack_timers_0026ee40(init,p,heat,lock);
     if(delay)put(p+0x16e0,delay);
     init->random=random;
     enemy_decision(p,0,(uint8_t)substate,0);
@@ -2045,9 +2067,14 @@ static gh_actor_motion_status attack_choice_00262aa8(gh_enemy202_move *s,uint8_t
     *chosen=0;
     const int ordinary=word(p+0x564)==0x200&&enemy->b.entry.work->room==0x100&&
         (distance<=144.0f||!(word(p+0x16d0)&0x200000u));
+    /* 26E588 can select the original mode 6 return before 26314C's
+     * attack-permission check. This EM00 placement reaches that far path. */
+    const int r102_home=r102_em00_appearance5(enemy->b.entry.work,p)&&
+        distance>144.0f&&!(word(p+0x16d0)&0x200000u);
+    const int r101_box=r101_scenery_enemy(enemy->b.entry.work,p);
     /* The gate actors keep their approach route after the override timer
      * expires. 262AA8 then proceeds to the ordinary attack checks. */
-    if(em03_approach_range(s,p,distance)||ordinary||r100_stamp18_armed_approach(enemy,p)||
+    if(em03_approach_range(s,p,distance)||ordinary||r102_home||r101_box||r100_stamp18_armed_approach(enemy,p)||
        r105_opening_enemy(enemy->b.entry.work,p)||r105_gate_approach(enemy->b.entry.work,p)){
         if(!isfinite(distance)||distance<0||!isfinite(face))
             return stop(s,0x262aa8,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -2212,6 +2239,92 @@ static gh_actor_motion_status continue_ordinary_00212670(gh_enemy202_move *s,uin
     return GH_ACTOR_MOTION_OK;
 }
 
+/* Devil 0220 within the rank >= 3 idle radius. 262AA8 consumes the
+ * original rear reaction and ranged draws before the idle timer. */
+static gh_actor_motion_status devil_near_choice_00262aa8(gh_enemy202_move *s,uint8_t *p,
+    int *chosen)
+{
+    *chosen=0;
+    const gh_enemy_entry *entry=s->runtime.entry;
+    const gh_boot_work *work=entry->b.work;
+    gh_game_init_state *init=entry->b.init;
+    const uint8_t *manager=init->enemies;
+    const float distance=number(word(p+0x618));
+    const uint32_t route=word(p+0x16d4),behavior=word(p+0x16d0);
+    const float behind=number(word(p+0x760)),face=number(word(p+0x768));
+    const float guard=number(word(p+0x17cc));
+    if(work->room!=0x100||word(p+0x564)!=0x220||
+        !(distance>=9&&distance<=64)||!isfinite(behind)||!isfinite(face)||!isfinite(guard)||
+        word(p+0x6ec)||word(p+0x16c0)||word(p+0x1734)||word(p+0x770)||
+        manager[0x53b]||manager[0x53c]||manager[0x53d]||manager[0x5a5]||manager[0x5b5]||
+        (int32_t)word(manager+0x530)>0||(word((const uint8_t*)work+0x5e4)&0x01000000u)||
+        s->player->size<0x69c||!s->player_aux_698_known||s->player_aux_698||word(s->player->bytes+0x698))
+        return stop(s,0x262aa8,GH_ACTOR_MOTION_UNSUPPORTED);
+    if(guard>0)return stop(s,0x270c78,GH_ACTOR_MOTION_UNSUPPORTED);
+    /* 212670's rank >= 3 branch yields a 64 or 144 squared approach
+     * radius. Its retreat threshold is at most 9 in this distance band. */
+    if(word(p+0x16d8)<3)
+        return stop(s,0x212670,GH_ACTOR_MOTION_UNSUPPORTED);
+
+    gh_game_mt random=init->random;
+    uint32_t draw,delay=0,next_route=route;
+    if((behavior&0x200000u)&&!p[0x1864]&&!word(p+0x16dc)&&
+        (int32_t)word(manager+0x514)<=0&&(word(p+0x16ec)||(int32_t)word(manager+0x510)<=0)){
+        float actor[3],player[3],target[3],turn;
+        if(!position(&entry->object.view,actor)||!position(s->player,player))
+            return stop(s,0x2db6b0,GH_ACTOR_MOTION_BOUNDS);
+        fenv_t env;
+        if(!set_round(&env,FE_TOWARDZERO))
+            return stop(s,0x2630f0,GH_ACTOR_MOTION_CALLEE);
+        const float height=ordered_abs(sub(actor[1],player[1]));
+        if(fesetenv(&env)||!isfinite(height))
+            return stop(s,0x2630f0,GH_ACTOR_MOTION_CALLEE);
+
+        if(height<=1.5f){
+            const unsigned category=heat_category(s);
+            if(!category)return stop(s,0x1fa010,GH_ACTOR_MOTION_UNSUPPORTED);
+            memcpy(target,p+0x1690,12);
+            uint32_t pc=0;
+            if(gh_player_target_angle_002da038(s->elf,s->elf_bytes,actor,target,
+                number(word(p+0x104)),number(0x40490fdb),&turn,&pc))
+                return stop(s,pc?pc:0x2da038,GH_ACTOR_MOTION_UNSUPPORTED);
+
+            /* The optional 268068 draw cannot select a reaction here.
+             * Both results are outside the Devil's 4-unit squared limit. */
+            if((route&0x08000000u)&&behind>=1.3089969f&&category<5&&
+                gh_game_mt_next_0030f348(&random,&draw))
+                return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
+
+            static const float actor_limit[]={0,0.5235988f,1.0471976f,1.2217305f,1.5707964f,2.3561945f};
+            if(distance>16&&!word(p+0x16e0)&&ordered_abs(turn)<=actor_limit[category]){
+                if(gh_game_mt_next_0030f348(&random,&draw))
+                    return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
+                if(!(draw&3u)||(route&0x800u)){
+                    next_route=route&~0x800u;
+                    if(category!=1){
+                        init->random=random;
+                        put(p+0x16d4,next_route);
+                        enemy_decision(p,0,0x23,2);
+                        set_attack_timers_0026ee40(init,p,category,100);
+                        *chosen=1;
+                        return GH_ACTOR_MOTION_OK;
+                    }
+                }
+                delay=30;
+            }
+        }
+    }
+    if(gh_game_mt_next_0030f348(&random,&draw))
+        return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
+    init->random=random;
+    if(delay)put(p+0x16e0,delay);
+    if(next_route!=route)put(p+0x16d4,next_route);
+    int32_t signed_draw;
+    memcpy(&signed_draw,&draw,sizeof(signed_draw));
+    put(p+0x5f4,60+20*(signed_draw%10));
+    return GH_ACTOR_MOTION_OK;
+}
+
 /* 262AA8's original early decisions for dependency 0220 on the R100
  * far path. 212670 chooses the Devil's approach selector after a zero return. */
 static gh_actor_motion_status devil_far_idle_00262aa8(gh_enemy202_move *s,uint8_t *p)
@@ -2314,9 +2427,10 @@ static gh_actor_motion_status advance_substate0_00211c08(gh_enemy202_move *s,uin
         size_t offset;
         switch(dependency){
         case 0x227:
-            if(!r105_exchanged_enemy(actor_state->entry->b.work,p))
+            if(!r105_exchanged_enemy(actor_state->entry->b.work,p)&&
+               !r101_scenery_enemy(actor_state->entry->b.work,p))
                 return stop(s,0x211c08,GH_ACTOR_MOTION_UNSUPPORTED);
-            /* The original exchange uses the default EM00 clip pair. */
+            /* EM27 uses the default original clip pair. */
             /* fall through */
         case 0x200:offset=0x98;break;
         case 0x202:case 0x203:offset=0x648;break;
@@ -2445,12 +2559,26 @@ static gh_actor_motion_status advance_substate0_00211c08(gh_enemy202_move *s,uin
     if(!s->enemy&&(s->substate67_stage==46||s->substate67_stage==52)){
         const uint8_t *manager=actor_state->entry->b.init->enemies;
         if(player_alive&&!manager[0x5b5]&&!manager[0x53c]){
-            gh_actor_motion_status status=devil_far_idle_00262aa8(s,p);
-            if(status)return status;
+            const float distance=number(word(p+0x618));
+            if(distance>=9&&distance<=64){
+                int chosen;
+                gh_actor_motion_status status=devil_near_choice_00262aa8(s,p,&chosen);
+                if(status)return status;
+                if(!chosen)s->substate67_stage=54;
+            }else{
+                gh_actor_motion_status status=devil_far_idle_00262aa8(s,p);
+                if(status)return status;
+            }
         }
-        s->substate67_stage=5;
-        return advance_state0_tail(s,p);
+        if(s->substate67_stage!=54)s->substate67_stage=5;
     }
+    if(!s->enemy&&s->substate67_stage==54){
+        gh_actor_motion_status status=enemy_door_ray_0024bb68(s,p);
+        if(status)return status;
+        /* 24BDA0's original room=100 exclusion follows the ray. */
+        s->substate67_stage=5;
+    }
+    if(!s->enemy&&s->substate67_stage==5)return advance_state0_tail(s,p);
     if(s->substate67_stage==46||s->substate67_stage==52){
         const uint8_t *manager=actor_state->entry->b.init->enemies;
         if(player_alive&&!manager[0x5b5]&&!manager[0x53c]){
@@ -2463,6 +2591,7 @@ static gh_actor_motion_status advance_substate0_00211c08(gh_enemy202_move *s,uin
                 const int r100_em0a=dependency==0x20a&&!half(p+0x640)&&p[0x1650]==3&&
                     actor_state->entry->b.work->room==0x100;
                 if(r100_em0a||r100_stamp18_armed_approach(s->enemy,p)||em03_approach_range(s,p,distance)||
+                    r101_scenery_enemy(actor_state->entry->b.work,p)||
                     r105_opening_enemy(actor_state->entry->b.work,p)||
                     r105_gate_approach(actor_state->entry->b.work,p)||
                     (dependency==0x200&&actor_state->entry->b.work->room==0x100&&distance<=144.0f)){
@@ -3367,9 +3496,12 @@ static gh_actor_motion_status advance_substate71_0023f028(gh_enemy202_move *s,ui
 
 static gh_actor_motion_status enemy_door_ray_0024bb68(gh_enemy202_move *s,uint8_t *p)
 {
-    gh_enemy_actor *enemy=s->enemy;
-    const gh_boot_work *work=enemy->b.entry.work;
-    if(((word((const uint8_t *)work+0x210)^word(p+0x17d0))&7u)!=0)
+    const gh_enemy_move_actor *actor=&s->runtime;
+    const gh_boot_work *work=actor->entry->b.work;
+    const uint32_t dependency=word(p+0x564);
+    /* 24BB68 excludes Devil variants from the staggered ray schedule. */
+    if((dependency<0x220||dependency>0x222)&&
+       ((word((const uint8_t *)work+0x210)^word(p+0x17d0))&7u)!=0)
         return GH_ACTOR_MOTION_OK;
     float origin[3],target[3],turn;
     memcpy(origin,p+0x490,12);
@@ -3389,7 +3521,7 @@ static gh_actor_motion_status enemy_door_ray_0024bb68(gh_enemy202_move *s,uint8_
         gh_scene_at_apply_world_001508d8(matrix,to,ray.to))
         return stop(s,0x30a2b0,GH_ACTOR_MOTION_UNSUPPORTED);
     int hit;
-    if(!enemy->b.actors||gh_scene_ray_query_00131e10(enemy->b.actors,&ray,&hit,&pc))
+    if(!actor->bindings->actors||gh_scene_ray_query_00131e10(actor->bindings->actors,&ray,&hit,&pc))
         return stop(s,pc?pc:0x131e10,GH_ACTOR_MOTION_UNSUPPORTED);
     if(!hit)return GH_ACTOR_MOTION_OK;
     if(!report.attributes||report.attribute_bytes<8)
@@ -3412,8 +3544,13 @@ static gh_actor_motion_status advance_substate5_002130c8(gh_enemy202_move *s,uin
     const float distance=number(word(p+0x618));
     uint32_t pc=0;
     const int r105=r105_opening_enemy(work,p);
+    const gh_enemy_weapon_init *held=gh_enemy_timers_held_weapon(&enemy->timers);
+    const int r101_armed=work->room==0x101&&dependency==0x203&&half(p+0x640)==13&&
+        !p[0x1650]&&!word(p+0x6ec)&&held&&held->weapon&&held->weapon->kind==0x361;
+    const int r101_scenery=r101_scenery_enemy(work,p);
     const int em0a=work->room==0x100&&dependency==0x20a&&!half(p+0x640)&&p[0x1650]==3;
-    if((!r105&&!em0a&&((dependency!=0x200&&dependency!=0x203)||work->room!=0x100))||!isfinite(distance)||distance<0)
+    if((!r105&&!em0a&&!r101_armed&&!r101_scenery&&((dependency!=0x200&&dependency!=0x203)||work->room!=0x100))||
+       !isfinite(distance)||distance<0)
         return stop(s,0x2130c8,GH_ACTOR_MOTION_UNSUPPORTED);
     if(!s->substate67_stage){
         put(p+0x16d0,word(p+0x16d0)|0x400u);
@@ -3423,15 +3560,15 @@ static gh_actor_motion_status advance_substate5_002130c8(gh_enemy202_move *s,uin
         gh_actor_motion_call *call=&s->substate67_motion;
         if(!call->active){
             const gh_object_view *resource=&enemy->entry.resource;
-            const size_t row=em0a?0x830:dependency==0x203?0x650:0xb0;
-            if(word(p+0x6ec)||gh_enemy_timers_held_weapon(&enemy->timers))
+            const size_t row=r101_armed?0x454:em0a?0x830:dependency==0x203?0x650:0xb0;
+            if(!r101_armed&&(word(p+0x6ec)||held))
                 return stop(s,0x2133a4,GH_ACTOR_MOTION_UNSUPPORTED);
             if(!resource->bytes||!resource->file_extent_known||resource->file_extent<row+8||
                 resource->file_extent>resource->size||motion->b.resource!=resource->bytes)
                 return stop(s,0x213390,GH_ACTOR_MOTION_BOUNDS);
             gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(call,
                 motion,&motion->b,word(resource->bytes+row),word(resource->bytes+row+4),
-                0,10,p[0x17c3]?2:0,!r105&&!em0a);
+                0,10,p[0x17c3]?2:0,!r105&&!em0a&&!r101_armed);
             if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
         }
         gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(call);
@@ -3517,7 +3654,7 @@ static gh_actor_motion_status advance_substate5_002130c8(gh_enemy202_move *s,uin
         }else{
             gh_actor_motion_status status=enemy_door_ray_0024bb68(s,p);
             if(status)return status;
-            s->substate67_stage=r105?CHECK_JUMP:5;
+            s->substate67_stage=(r105||r101_scenery)?CHECK_JUMP:5;
         }
     }
     if(s->substate67_stage==CHECK_JUMP){
@@ -3647,7 +3784,10 @@ static gh_actor_motion_status advance_substate6_00213710(gh_enemy202_move *s,uin
     const int em0a=dependency==0x20a&&!half(p+0x640)&&p[0x1650]==3;
     const int r105=r105_opening_enemy(work,p)||r105_battle_enemy(work,p);
     const int r101=work->room==0x101&&dependency==0x203&&half(p+0x640)==13&&!p[0x1650];
-    if((!r101&&!r105&&((dependency!=0x200&&!stamp19&&!em0a)||work->room!=0x100))||!isfinite(distance)||distance<0)
+    const int r102=r102_em00_appearance5(work,p);
+    const int r101_scenery=r101_scenery_enemy(work,p);
+    if((!r101&&!r101_scenery&&!r102&&!r105&&((dependency!=0x200&&!stamp19&&!em0a)||work->room!=0x100))||
+       !isfinite(distance)||distance<0)
         return stop(s,0x213710,GH_ACTOR_MOTION_UNSUPPORTED);
     if(!s->substate67_stage){
         put(p+0x16d0,word(p+0x16d0)|0x400u);
@@ -3749,8 +3889,8 @@ static gh_actor_motion_status advance_substate6_00213710(gh_enemy202_move *s,uin
     if(s->substate67_stage==80){
         gh_actor_motion_status status=enemy_door_ray_0024bb68(s,p);
         if(status)return status;
-        /* 24BDA0's periodic Jump probe is enabled outside R100. */
-        s->substate67_stage=r105?81:5;
+        /* The admitted R102 and R105 actors have the room's original Jump table. */
+        s->substate67_stage=(r102||r105||r101_scenery)?81:5;
     }
     if(s->substate67_stage==81){
         gh_actor_motion_status status=enemy_door_jump_0024bda0(s,p);
@@ -3775,7 +3915,8 @@ static gh_actor_motion_status advance_substate13_00218c48(gh_enemy202_move *s,ui
     const int em02_home=dependency==0x202&&stamp==4&&p[0x1650]==2;
     const int em0a=dependency==0x20a&&stamp==0&&p[0x1650]==3;
     const int em0a_formation=em0a&&mode==9;
-    if(!r105&&(work->room!=0x100||
+    const int r102_home=mode==6&&r102_em00_appearance5(work,p);
+    if(!r105&&!r102_home&&(work->room!=0x100||
        (!em0a_formation&&(mode!=6||(dependency!=0x203&&!em00&&!em02_home&&!em0a)))))
         return stop(s,0x218c48,GH_ACTOR_MOTION_UNSUPPORTED);
     if(!s->substate67_stage){
@@ -4287,7 +4428,7 @@ static gh_actor_motion_status advance_substate6b_or_6c(gh_enemy202_move *s,uint8
     /* Original 6C dispatch uses default 23C6A4 for the R105 trio:
      * EM00 unsigned underflow, EM03 entry 43AEE4, EM27 entry 43AF74. */
     const int r105=r105_opening_enemy(work,p);
-    const int r101_held=!substate6c&&work->room==0x101&&dependency==0x203&&stamp==13&&!p[0x1650];
+    const int r101_held=work->room==0x101&&dependency==0x203&&stamp==13&&!p[0x1650];
     const gh_enemy_weapon_init *held=gh_enemy_timers_held_weapon(&enemy->timers);
     if(r101_held&&(!held||!held->weapon||held->weapon->kind!=0x361||word(p+0x6ec)))
         return stop(s,0x23c308,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -4310,7 +4451,7 @@ static gh_actor_motion_status advance_substate6b_or_6c(gh_enemy202_move *s,uint8
         static const uint16_t rows_6b[]={0x3c4,0x3cc,0x3d4,0x3dc,0x3ec};
         if(substate6c){
             s->reaction_resource_offset=(uint16_t)(0x3c4+8*(random%6u));
-            if(p[0x2f7])s->reaction_resource_offset=0x3e4;
+            if(p[0x2f7]||r101_held)s->reaction_resource_offset=0x3e4;
         }else{
             /* 23C308 overrides the default MT-selected resource when the
              * actor has a weapon. The default dispatch still draws once. */
@@ -4418,7 +4559,8 @@ static gh_actor_motion_status enemy_attack_area_00260b30(gh_enemy202_move *s,uin
     const unsigned params=hit_flags&2u?0x1884:0x1870;
     const unsigned profile=word(p+params);
     gh_enemy_actor *enemy=s->enemy;
-    const int weapon_swing=profile==0x12&&s->pending_ai_pc==0x233738&&
+    const int weapon_swing=(profile==0x12||profile==0x13)&&
+        (s->pending_ai_pc==0x233738||s->pending_ai_pc==0x21fd50)&&
         enemy->b.entry.work->room==0x101&&word(p+0x564)==0x203&&half(p+0x640)==13;
     const int long_kick=profile==12&&enemy->b.entry.work->room==0x100&&
         word(p+0x564)==0x20a&&!half(p+0x640)&&p[0x1650]==3&&
@@ -4458,7 +4600,7 @@ static gh_actor_motion_status enemy_attack_area_00260b30(gh_enemy202_move *s,uin
     if(word(p+0x16ec))power+=power/2;
     const float scaled_power=mul((float)power,power_rate);
     volatile float reciprocal=profile==1?1.0f:1.0f/scale;
-    const float height_scale=weapon_swing?0.5f:reverse_kick?0.0f:long_kick?0.6f:
+    const float height_scale=profile==0x12?0.5f:reverse_kick?0.0f:long_kick?0.6f:
         profile==2?0.7f:1.0f;
     const float height=mul(reciprocal,height_scale);
     const uint8_t *work=(const uint8_t *)enemy->b.entry.work;
@@ -4492,8 +4634,8 @@ static gh_actor_motion_status enemy_attack_area_00260b30(gh_enemy202_move *s,uin
     }else memcpy(give[3].bytes+0x10,rotation+8,12);
     const int short_box=profile==1||long_kick;
     const float size[]={
-        weapon_swing?0.3f:reverse_kick?0.5f:short_box?1.0f:0.7f,
-        reverse_kick?2.0f:short_box?0.5f:1.0f,
+        profile==0x13?2.0f:weapon_swing?0.3f:reverse_kick?0.5f:short_box?1.0f:0.7f,
+        profile==0x13?0.3f:reverse_kick?2.0f:short_box?0.5f:1.0f,
         (reverse_kick||weapon_swing)?2.0f:1.0f
     };
     if(gh_collision_pair_box_size_002baaa8(&shapes[3],size,&pc))
@@ -4636,21 +4778,24 @@ static gh_actor_motion_status advance_r105_unarmed16_0021fd50(gh_enemy202_move *
     return advance_state0_tail(s,p);
 }
 
-static gh_actor_motion_status advance_r101_armed47_00233738(gh_enemy202_move *s,uint8_t *p)
+static gh_actor_motion_status advance_r101_armed_attack(gh_enemy202_move *s,uint8_t *p)
 {
     enum { ARMED_MOTION=180, ARMED_EFFECT, ARMED_TRACK, ARMED_STEP,
         ARMED_ROTATION, ARMED_TRANSLATION, ARMED_FINISH };
     gh_enemy_actor *enemy=s->enemy;
     gh_actor_motion *motion=&enemy->motion.motion;
     const gh_enemy_weapon_init *held=gh_enemy_timers_held_weapon(&enemy->timers);
+    const int combination=s->pending_ai_pc==0x21fd50;
+    const unsigned phase=p[0x2f6];
     if(enemy->b.entry.work->room!=0x101||word(p+0x564)!=0x203||half(p+0x640)!=13||
-       p[0x1650]||word(p+0x6ec)||!held||!held->weapon||held->weapon->kind!=0x361||
-       p[0x2f6]>1||p[0x2f7])
-        return stop(s,0x233738,GH_ACTOR_MOTION_UNSUPPORTED);
+       p[0x1650]||word(p+0x6ec)||!held||!held->weapon||held->weapon->kind!=0x361||p[0x2f7]||
+       (combination?(phase==1||phase>7):phase>1))
+        return stop(s,s->pending_ai_pc,GH_ACTOR_MOTION_UNSUPPORTED);
     uint32_t pc=0;
     if(!s->substate67_stage){
         p[0x186a]=2;
         put(p+0x16d4,word(p+0x16d4)|0x400u);
+        if(combination&&!phase)p[0x2f6]=2;
         for(unsigned i=1;i<5;i++){
             const gh_hitarea_object *give=&enemy->hitareas.units[i];
             const gh_title_player_view *hit=NULL;
@@ -4662,7 +4807,25 @@ static gh_actor_motion_status advance_r101_armed47_00233738(gh_enemy202_move *s,
                 break;
             }
         }
-        if(p[0x2f6])s->substate67_stage=ARMED_TRACK;
+        if(combination&&p[0x2f6]==2){
+            p[0x1864]=0;
+            put(p+0x604,0);
+            put(p+0x5f4,1);
+            /* 221E94 writes independent Give books before the motion call. */
+            put(p+0x1870,0x13);put(p+0x1874,20);put(p+0x1878,0x3a);
+            put(p+0x187c,0);put_half(p+0x1880,0x111);
+            put(p+0x1884,0x12);put(p+0x1888,40);put(p+0x188c,0x3b);
+            put(p+0x1890,0);put_half(p+0x1894,0x111);
+            put(p+0x5fc,0);
+            s->reaction_resource_offset=0x4c0;
+            s->substate67_stage=ARMED_MOTION;
+        }else if(combination&&p[0x2f6]==4){
+            s->reaction_resource_offset=0x4cc;
+            s->substate67_stage=ARMED_MOTION;
+        }else if(combination&&p[0x2f6]==6){
+            s->reaction_resource_offset=0x4e0;
+            s->substate67_stage=ARMED_MOTION;
+        }else if(p[0x2f6])s->substate67_stage=ARMED_TRACK;
         else{
             p[0x1864]=0;
             put(p+0x5f0,20);
@@ -4678,25 +4841,35 @@ static gh_actor_motion_status advance_r101_armed47_00233738(gh_enemy202_move *s,
         gh_actor_motion_call *call=&s->substate67_motion;
         const size_t row=s->reaction_resource_offset;
         if(!call->active){
-            if(!resource->bytes||!resource->file_extent_known||resource->file_extent<row+8||
+            const unsigned heat=heat_category(s);
+            if(combination&&!heat)return stop(s,0x1fa010,GH_ACTOR_MOTION_UNSUPPORTED);
+            const size_t seq=row+(row==0x4c0&&heat==5?8:4);
+            if(!resource->bytes||!resource->file_extent_known||resource->file_extent<seq+4||
                 resource->file_extent>resource->size||motion->b.resource!=resource->bytes)
-                return stop(s,0x23380c,GH_ACTOR_MOTION_BOUNDS);
+                return stop(s,combination?0x221f04:0x23380c,GH_ACTOR_MOTION_BOUNDS);
             gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(call,
-                motion,&motion->b,word(resource->bytes+row),word(resource->bytes+row+4),
-                0,3,p[0x17c3]?2:0,0);
+                motion,&motion->b,word(resource->bytes+row),word(resource->bytes+seq),
+                0,(row==0x4cc||row==0x4e0)?2:combination?5:3,p[0x17c3]?2:0,0);
             if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
         }
         gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(call);
         if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
-        put(p+0x5f0,20);
-        for(unsigned offset=0x1870;offset<=0x1884;offset+=0x14){
-            put(p+offset,0x12);
-            put(p+offset+4,row==0x474?60:40);
-            put(p+offset+8,row==0x474?0x3b:0x3a);
-            put(p+offset+12,0);
-            put_half(p+offset+16,0x140);
+        if(row==0x4c0){
+            put(p+0x600,word(p+0x104));
+            p[0x2f6]=3;
+            s->substate67_stage=ARMED_TRACK;
+        }else if(row==0x4cc||row==0x4e0)s->substate67_stage=ARMED_EFFECT;
+        else{
+            put(p+0x5f0,20);
+            for(unsigned offset=0x1870;offset<=0x1884;offset+=0x14){
+                put(p+offset,0x12);
+                put(p+offset+4,row==0x474?60:40);
+                put(p+offset+8,row==0x474?0x3b:0x3a);
+                put(p+offset+12,0);
+                put_half(p+offset+16,0x140);
+            }
+            s->substate67_stage=ARMED_EFFECT;
         }
-        s->substate67_stage=ARMED_EFFECT;
     }
     if(s->substate67_stage==ARMED_EFFECT){
         gh_effect_create_bindings bindings=s->impact_bindings;
@@ -4709,7 +4882,9 @@ static gh_actor_motion_status advance_r101_armed47_00233738(gh_enemy202_move *s,
         if(!heat)return stop(s,0x1fa010,GH_ACTOR_MOTION_UNSUPPORTED);
         if(!effect->active){
             const int sweep=s->reaction_resource_offset==0x474;
-            const uint32_t index=heat==5?(sweep?0x80:0x7f):(sweep?0x7b:0x7a);
+            const uint32_t index=combination?
+                (s->reaction_resource_offset==0x4e0?(heat==5?0x82:0x7d):(heat==5?0x81:0x7c)):
+                heat==5?(sweep?0x80:0x7f):(sweep?0x7b:0x7a);
             put(p+0x574,2);
             put_half(p+0x570,0);
             if(gh_effect_create_r101_weapon_002a8608(effect,&held->weapon->object.view,
@@ -4718,15 +4893,32 @@ static gh_actor_motion_status advance_r101_armed47_00233738(gh_enemy202_move *s,
         }
         if(gh_game_effect_create_00306528(effect,&bindings)||!effect->complete)
             return stop(s,effect->frontier?effect->frontier:0x306528,GH_ACTOR_MOTION_UNSUPPORTED);
-        static const uint8_t tracking_ticks[]={0,15,16,18,18,20};
-        put(p+0x5f0,tracking_ticks[heat]);
-        put(p+0x5fc,0);
+        if(combination&&s->reaction_resource_offset==0x4e0){
+            put(p+0x5f0,10);
+            p[0x1864]=0;
+        }else if(combination){
+            unsigned repetitions=1;
+            if(heat>=3){
+                uint32_t draw;
+                if(gh_game_mt_next_0030f348(&enemy->entry.b.init->random,&draw))
+                    return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
+                repetitions+=draw&1u;
+            }
+            put_half(p+0x568,(uint16_t)repetitions);
+        }else{
+            static const uint8_t tracking_ticks[]={0,15,16,18,18,20};
+            put(p+0x5f0,tracking_ticks[heat]);
+            put(p+0x5fc,0);
+        }
         ++p[0x2f6];
         s->substate67_stage=ARMED_TRACK;
     }
     if(s->substate67_stage==ARMED_TRACK){
         const uint32_t tracking=word(p+0x5f0);
-        if(tracking){
+        const int final_combination=combination&&p[0x2f6]==7;
+        if(combination&&!final_combination&&word(p+0x604))
+            return stop(s,0x221f9c,GH_ACTOR_MOTION_UNSUPPORTED);
+        if((combination&&!final_combination)||tracking){
             float from[3],to[3],turn;
             const float yaw=number(word(p+0x104)),rate=number(word(p+0x5a8));
             const float frame_rate=number(word((const uint8_t *)enemy->entry.b.work+0x55c));
@@ -4734,14 +4926,18 @@ static gh_actor_motion_status advance_r101_armed47_00233738(gh_enemy202_move *s,
             if(!position(&enemy->entry.object.view,from)||!position(s->player,to)||
                !isfinite(rate)||!isfinite(frame_rate)||!set_round(&env,FE_TOWARDZERO))
                 return stop(s,0x2a7498,GH_ACTOR_MOTION_UNSUPPORTED);
-            const float cap=mul(mul(rate,number(0x3e490fdb)),frame_rate);
+            const float previous=combination?number(word(p+0x600)):yaw;
+            const float cap=combination?mul(rate,number(0x3dc90fdb)):
+                mul(mul(rate,number(0x3e490fdb)),frame_rate);
             const gh_player_target_status status=gh_player_target_angle_002da038(s->elf,s->elf_bytes,
-                from,to,yaw,cap,&turn,&pc);
-            float next=status?0:add(yaw,turn);
+                from,to,previous,cap,&turn,&pc);
+            float next=status?0:add(yaw,turn),track=status?0:add(previous,turn);
             if(fesetenv(&env)||status)return stop(s,pc?pc:0x2da038,GH_ACTOR_MOTION_UNSUPPORTED);
-            if(gh_id_angle_reference_001f7d48(next,&next))
+            if(gh_id_angle_reference_001f7d48(next,&next)||
+               (combination&&gh_id_angle_reference_001f7d48(track,&track)))
                 return stop(s,0x1f7d48,GH_ACTOR_MOTION_UNSUPPORTED);
-            put(p+0x5f0,tracking-1);
+            if(combination)put(p+0x600,bits(track));
+            if(!combination||final_combination)put(p+0x5f0,tracking-1);
             put(p+0x104,bits(next));
         }
         s->substate67_stage=ARMED_STEP;
@@ -4758,10 +4954,22 @@ static gh_actor_motion_status advance_r101_armed47_00233738(gh_enemy202_move *s,
         s->substate67_stage=ARMED_ROTATION;
     }
     if(s->substate67_stage==ARMED_ROTATION){
-        if(gh_player_root_rotation_0014f9f0(&enemy->entry.object.view,enemy->entry.b.work,
+        if(combination&&p[0x2f6]!=7&&s->state71_exit){
+            const uint8_t *manager=enemy->entry.b.init->enemies;
+            const int no_followup=manager[0x53d]||manager[0x53c];
+            if(p[0x2f6]==3)p[0x2f6]=(uint8_t)(no_followup?6:4);
+            else{
+                const uint16_t repetitions=(uint16_t)(half(p+0x568)-1u);
+                put_half(p+0x568,repetitions);
+                if((int16_t)repetitions<1||number(word(p+0x618))>16.0f||p[0x1864]||no_followup)
+                    p[0x2f6]=6;
+            }
+            if(p[0x2f6]==6&&phase==3&&no_followup)s->substate67_stage=ARMED_FINISH;
+        }
+        if(s->substate67_stage==ARMED_ROTATION&&gh_player_root_rotation_0014f9f0(&enemy->entry.object.view,enemy->entry.b.work,
             GH_STATIC_BINARY32_REFERENCE,&pc))
             return stop(s,pc?pc:0x14f9f0,GH_ACTOR_MOTION_UNSUPPORTED);
-        s->substate67_stage=ARMED_TRANSLATION;
+        if(s->substate67_stage==ARMED_ROTATION)s->substate67_stage=ARMED_TRANSLATION;
     }
     if(s->substate67_stage==ARMED_TRANSLATION){
         if(gh_player_root_translation_0014f928(&enemy->entry.object.view,enemy->entry.b.work,
@@ -4770,13 +4978,16 @@ static gh_actor_motion_status advance_r101_armed47_00233738(gh_enemy202_move *s,
         s->substate67_stage=ARMED_FINISH;
     }
     if(s->substate67_stage==ARMED_FINISH){
-        if(s->state71_exit){
+        if(s->state71_exit&&(!combination||p[0x2f6]==7)){
             gh_actor_motion_status status=choose_after_substate_002705d8(s,p);
             if(status)return status;
         }else{
             const unsigned hit_flags=half(p+0x3ac);
-            gh_actor_motion_status status=enemy_attack_area_00260b30(s,p);
-            if(status)return status;
+            if(combination&&p[0x2f6]==7&&p[0x1864])put(p+0x5f4,0);
+            if(!combination||word(p+0x5f4)){
+                gh_actor_motion_status status=enemy_attack_area_00260b30(s,p);
+                if(status)return status;
+            }
             if(heat_category(s)>=3)return stop(s,0x26f1d8,GH_ACTOR_MOTION_UNSUPPORTED);
             if(hit_flags&3u)put(p+0x5fc,1);
             if(word(p+0x5fc))put(p+0x16d4,word(p+0x16d4)&~0x400u);
@@ -5647,6 +5858,211 @@ static gh_actor_motion_status advance_r100_substate4e_002363e8(gh_enemy202_move 
     return advance_state0_tail(s,p);
 }
 
+/* Original launch selectors 2 and 3 choose the mirrored hand and aim
+ * within 45 degrees of the actor. Heat 5 adds the original lateral speed. */
+static gh_actor_motion_status launch_devil_projectile_0026bef0(gh_enemy202_move *s,
+    const uint8_t *actor_bytes,unsigned side,gh_om_object *projectile)
+{
+    gh_actor_model *model=&s->runtime.entry->initialize.model.model;
+    const gh_title_player_view *actor=&s->runtime.entry->object.view;
+    const unsigned hand=(side^(actor_bytes[0x17c3]!=0))?16:10;
+    const unsigned heat=heat_category(s);
+    float origin[3],target[3];
+    if(!heat||!position(s->player,target))return stop(s,0x26bef0,GH_ACTOR_MOTION_UNSUPPORTED);
+    const gh_actor_part *part=NULL;
+    if(hand<model->part_count&&gh_actor_model_part_at(model,hand,&part))
+        return stop(s,0x26c060,GH_ACTOR_MOTION_BOUNDS);
+    if(part&&part->alias_f0)memcpy(origin,part->alias_f0,12);
+    else{
+        float matrix[16],world[4];
+        const float local[3]={0,1.3f,1.2f};
+        memcpy(matrix,actor_bytes+0x80,sizeof(matrix));
+        if(gh_scene_at_apply_world_001508d8(matrix,local,world))
+            return stop(s,0x30a2b0,GH_ACTOR_MOTION_UNSUPPORTED);
+        memcpy(origin,world,12);
+    }
+    for(unsigned i=0;i<3;i++)if(!isfinite(origin[i]))return stop(s,0x26bef0,GH_ACTOR_MOTION_UNSUPPORTED);
+    const float base=number(word(actor_bytes+0x104));
+    const float pi=number(0x40490fdb),limit=number(0x3f490fdb);
+    uint32_t pc=0;
+    float aim;
+    if(gh_game_angle_001f8180(sub(target[0],origin[0]),sub(target[2],origin[2]),
+        &aim,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&pc))
+        return stop(s,pc?pc:0x1f8180,GH_ACTOR_MOTION_UNSUPPORTED);
+    float delta=sub(aim,base);
+    if(delta>pi)delta=sub(delta,2*pi);
+    if(delta<-pi)delta=add(delta,2*pi);
+    if(delta>limit)delta=limit;
+    if(delta<-limit)delta=-limit;
+    float yaw;
+    if(gh_id_angle_reference_001f7d48(add(base,delta),&yaw))
+        return stop(s,0x1f7d48,GH_ACTOR_MOTION_UNSUPPORTED);
+    float sine,cosine;
+    if(gh_sdk_rotation_sincos_reference_0030a5d0(yaw,&sine,&cosine,GH_STATIC_BINARY32_REFERENCE,&pc))
+        return stop(s,pc?pc:0x147988,GH_ACTOR_MOTION_UNSUPPORTED);
+    const float lateral=heat==5?.8f:0;
+    const float velocity[3]={add(mul(cosine,lateral),mul(sine,.5f)),
+        0,sub(mul(cosine,.5f),mul(sine,lateral))};
+    gh_om3be_state *state=(gh_om3be_state *)projectile->initialization;
+    const gh_scene_placement_status status=gh_om3be_launch_001bb548(state,actor,origin,velocity,heat,&s->impact_bindings);
+    return status?stop(s,state->common.frontier?state->common.frontier:0x1bb548,GH_ACTOR_MOTION_UNSUPPORTED):GH_ACTOR_MOTION_OK;
+}
+
+/* 2705D8 rank-independent far decision for EM20 in R100.
+ * The three room-specific selectors preceding the range check return zero. */
+gh_actor_motion_status gh_enemy_devil_choose_far_002705d8(const gh_title_player_view *actor,
+    const gh_boot_work *work,uint32_t *frontier)
+{
+    if(!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x2705d8;
+    if(!actor||!actor->bytes||actor->size<=0x1864||!work||
+       actor->original_vtable214!=0x4479c8||word(actor->bytes+0x564)!=0x220)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    uint8_t *p=actor->bytes;
+    if(word(p+0x738)){*frontier=0x1d0408;return GH_ACTOR_MOTION_UNSUPPORTED;}
+    const float escape=number(word(p+0x16c0)),override=number(word(p+0x1734));
+    const float distance=number(word(p+0x618));
+    if(work->room!=0x100||p[0x1864]||!isfinite(escape)||!isfinite(override)||
+       !isfinite(distance)||escape>0.0f||override>0.0f||distance<9.0f)
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    memset(p+0x2f4,0,4);
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
+/* Selector 23 variant 2 is the two-handed EM20 projectile sequence. */
+static gh_actor_motion_status advance_devil_ranged_002269f0(gh_enemy202_move *s,uint8_t *p)
+{
+    enum { BIND=200, TURN, SAMPLE, CHOOSE, ROTATE, TRANSLATE, MARKERS };
+    const gh_enemy_move_actor *runtime=&s->runtime;
+    const gh_enemy_entry *entry=runtime->entry;
+    const gh_boot_work *work=entry->b.work;
+    const gh_title_player_view *actor=&entry->object.view;
+    gh_actor_motion *motion=runtime->motion;
+    uint32_t pc=0;
+
+    if(work->room!=0x100||word(p+0x564)!=0x220||p[0x2f7]!=2||
+       !runtime->bindings->canonical_rate)
+        return stop(s,0x2269f0,GH_ACTOR_MOTION_UNSUPPORTED);
+    if(!s->substate67_stage){
+        p[0x186a]=2;
+        put(p+0x16d4,word(p+0x16d4)|0x400u);
+        s->substate67_stage=p[0x2f6]==0?BIND:p[0x2f6]==1?TURN:MARKERS;
+    }
+    if(s->substate67_stage==BIND){
+        gh_actor_motion_call *call=&s->substate67_motion;
+        const gh_object_view *resource=&entry->resource;
+        const unsigned heat=heat_category(s);
+        if(!heat)return stop(s,0x1fa010,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(!call->active){
+            const int maximum=(int16_t)half(p+0x548);
+            const int current=(int16_t)half(p+0x54a);
+            const size_t row=current>maximum/2?0x1cd0:0x1cdc;
+            const size_t sequence=row+(heat==5?8u:4u);
+            if(!resource->bytes||!resource->file_extent_known||resource->file_extent<sequence+4||
+               resource->file_extent>resource->size||motion->b.resource!=resource->bytes)
+                return stop(s,0x226b10,GH_ACTOR_MOTION_BOUNDS);
+
+            p[0x1864]=0;
+            put(p+0x5f4,0);
+            put(p+0x5f0,25);
+            gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(call,
+                motion,&motion->b,word(resource->bytes+row),word(resource->bytes+sequence),
+                0,10,p[0x17c3]?2:0,0);
+            if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
+        }
+        const gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(call);
+        if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
+        static const uint32_t turns[]={0,18,20,22,22,25};
+        put(p+0x5f0,turns[heat]);
+        put(p+0x5f8,1);
+        put(p+0x600,word(p+0x104));
+        p[0x2f6]=1;
+        put(p+0x5fc,0);
+        put(p+0x604,0);
+        put_half(p+0x568,0);
+        s->substate67_stage=TURN;
+    }
+    if(s->substate67_stage==TURN){
+        const uint32_t remaining=word(p+0x5f0);
+        if(remaining){
+            float origin[3],target[3],turn;
+            const float rate=number(word(p+0x5a8)),base=number(word(p+0x600));
+            const float yaw=number(word(p+0x104));
+            fenv_t env;
+            if(!position(actor,origin)||!position(s->player,target)||
+               !isfinite(rate)||!isfinite(base)||!isfinite(yaw)||!set_round(&env,FE_TOWARDZERO))
+                return stop(s,0x227014,GH_ACTOR_MOTION_UNSUPPORTED);
+            const gh_player_target_status status=gh_player_target_angle_002da038(
+                s->elf,s->elf_bytes,origin,target,base,mul(rate,number(0x3e490fdb)),&turn,&pc);
+            float next_base=status?base:add(base,turn);
+            float next_yaw=status?yaw:add(yaw,turn);
+            if(fesetenv(&env)||status)
+                return stop(s,pc?pc:0x2da038,GH_ACTOR_MOTION_UNSUPPORTED);
+            if(gh_id_angle_reference_001f7d48(next_base,&next_base)||
+               gh_id_angle_reference_001f7d48(next_yaw,&next_yaw))
+                return stop(s,0x1f7d48,GH_ACTOR_MOTION_UNSUPPORTED);
+            put(p+0x5f0,remaining-1);
+            put(p+0x600,bits(next_base));
+            put(p+0x104,bits(next_yaw));
+        }
+        uint32_t counter=word(p+0x5f4);
+        if((half(p+0x3ac)&1u)&&(int32_t)counter>=11)counter=10;
+        if(counter){
+            put(p+0x5f4,counter-1);
+            put(p+0x16d0,word(p+0x16d0)|0x800000u);
+        }
+        s->substate67_stage=SAMPLE;
+    }
+    if(s->substate67_stage==SAMPLE){
+        int ended;
+        const gh_actor_motion_status status=gh_actor_motion_step_00157c18(motion,
+            *runtime->bindings->canonical_rate,GH_STATIC_BINARY32_REFERENCE,&ended,&pc);
+        if(status)return stop(s,pc?pc:0x157c18,status);
+        s->substate67_stage=ended?CHOOSE:ROTATE;
+    }
+    if(s->substate67_stage==CHOOSE){
+        const gh_actor_motion_status status=gh_enemy_devil_choose_far_002705d8(actor,work,&pc);
+        if(status)return stop(s,pc?pc:0x2705d8,status);
+        s->substate67_stage=5;
+    }
+    if(s->substate67_stage==ROTATE){
+        if(gh_player_root_rotation_0014f9f0(actor,work,GH_STATIC_BINARY32_REFERENCE,&pc))
+            return stop(s,pc?pc:0x14f9f0,GH_ACTOR_MOTION_UNSUPPORTED);
+        s->substate67_stage=TRANSLATE;
+    }
+    if(s->substate67_stage==TRANSLATE){
+        if(gh_player_root_translation_0014f928(actor,work,GH_STATIC_BINARY32_REFERENCE,&pc))
+            return stop(s,pc?pc:0x14f928,GH_ACTOR_MOTION_UNSUPPORTED);
+        s->substate67_stage=MARKERS;
+    }
+    if(s->substate67_stage==MARKERS){
+        const unsigned marks=half(p+0x3ac)&3u;
+        if(marks&&word(p+0x5f8)){
+            gh_om_factory *factory=s->projectile_factory;
+            if(!factory)return stop(s,0x26bef0,GH_ACTOR_MOTION_UNSUPPORTED);
+            for(unsigned side=0;side<2;side++){
+                if(!(marks&(1u<<side)))continue;
+                gh_om_object *projectile=NULL;
+                gh_scene_placement_status status=gh_om_factory_create_0030fa98(factory,
+                    &s->projectile_create[side],0x3be,0xffff,&projectile);
+                if(status)return stop(s,factory->frontier?factory->frontier:0x30fa98,GH_ACTOR_MOTION_UNSUPPORTED);
+                if(projectile){
+                    status=gh_om_factory_initialize_runtime_3be(factory,projectile);
+                    if(status)return stop(s,factory->frontier?factory->frontier:0x1b90d0,GH_ACTOR_MOTION_UNSUPPORTED);
+                    gh_actor_motion_status launch=launch_devil_projectile_0026bef0(s,p,side,projectile);
+                    if(launch)return launch;
+                }
+            }
+            put(p+0x5f8,0);
+        }else put(p+0x5f8,1);
+        if(marks)put(p+0x5fc,1);
+        if(word(p+0x5fc))put(p+0x16d4,word(p+0x16d4)&~0x400u);
+        s->substate67_stage=5;
+    }
+    return advance_state0_tail(s,p);
+}
+
 static gh_actor_motion_status advance_target(gh_enemy202_move *s,uint8_t *p,
     const float actor[3],const float player[3])
 {
@@ -5675,6 +6091,8 @@ static gh_actor_motion_status advance_target(gh_enemy202_move *s,uint8_t *p,
     if(!s->enemy){
         if(s->pending_ai_pc==0x211c08)
             return advance_substate0_00211c08(s,p);
+        if(s->pending_ai_pc==0x2269f0)
+            return advance_devil_ranged_002269f0(s,p);
         if(s->pending_ai_pc!=0x212c08)return stop(s,s->pending_ai_pc,GH_ACTOR_MOTION_UNSUPPORTED);
         if(!s->substate67_stage){
             uint32_t frontier=0;
@@ -5700,7 +6118,8 @@ static gh_actor_motion_status advance_target(gh_enemy202_move *s,uint8_t *p,
     if(s->pending_ai_pc==0x23afd8)return advance_substate69_0023afd8(s,p);
     if(s->pending_ai_pc==0x23b968||s->pending_ai_pc==0x23c620)
         return advance_substate6b_or_6c(s,p);
-    if(s->pending_ai_pc==0x233738)return advance_r101_armed47_00233738(s,p);
+    if(s->pending_ai_pc==0x233738||(s->pending_ai_pc==0x21fd50&&s->enemy->b.entry.work->room==0x101))
+        return advance_r101_armed_attack(s,p);
     if(s->pending_ai_pc==0x21fd50)return advance_r105_unarmed16_0021fd50(s,p);
     if(s->pending_ai_pc==0x234d30)return advance_substate4b_00234d30(s,p);
     if(s->pending_ai_pc==0x235db8)return advance_em0a_substate4c_00235db8(s,p);
@@ -5856,7 +6275,7 @@ static gh_actor_motion_status advance_first_reaction_0024c3c8(gh_enemy202_move *
                 return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
             /* 24C3C8 selects 2D0/2D8 for dependency 0200. */
             if(triangle) {
-                const uint32_t offset=word(p+0x564)==0x200?0x2e0u:0x784u;
+                const uint32_t offset=(dependency==0x200||dependency==0x227)?0x2e0u:0x784u;
                 s->reaction_resource_offset=offset+(random&1u)*8u;
             }else if(word(p+0x564)==0x200)s->reaction_resource_offset=(random&1u)?0x2d0:0x2d8;
             else s->reaction_resource_offset=(random&1u)?0x774:0x77c;
@@ -5868,7 +6287,7 @@ static gh_actor_motion_status advance_first_reaction_0024c3c8(gh_enemy202_move *
         if(!call->active){
             const uint8_t *row=enemy->entry.resource.bytes+s->reaction_resource_offset;
             gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(call,
-                motion,&motion->b,word(row),word(row+4),0,2,p[0x17c3]?2:0,1);
+                motion,&motion->b,word(row),word(row+4),0,2,p[0x17c3]?2:0,dependency==0x227?0:1);
             if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
         }
         gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(call);
@@ -6532,7 +6951,9 @@ static gh_actor_motion_status advance_state1_0024c0f0(gh_enemy202_move *s,uint8_
             (uint16_t)s->enemy->b.entry.work->room==0x100;
         const int stamp8=dependency==0x200&&half(p+0x640)==8&&
             (uint16_t)s->enemy->b.entry.work->room==0x100;
-        if(!(((dependency==0x20a||stamp19||stamp20)&&p[0x2f5]==0)||
+        const int r101_box=dependency==0x227&&half(p+0x640)==9&&s->enemy->b.entry.work->room==0x101&&p[0x2f5]==1;
+        const int r101_scenery=r101_scenery_enemy(s->enemy->b.entry.work,p)&&p[0x2f5]==0x11;
+        if(!(r101_box||r101_scenery||((dependency==0x20a||stamp19||stamp20)&&p[0x2f5]==0)||
             (stamp8&&(p[0x2f5]==1||(p[0x2f5]==7&&!positive_hp(p))))||
             ((stamp19||stamp20)&&(p[0x2f5]==1||(p[0x2f5]==7&&!positive_hp(p))))||
             (stamp20&&(p[0x2f5]==0x1d||p[0x2f5]==0xd))||
@@ -7225,12 +7646,12 @@ static gh_actor_motion_status enemy_move(gh_enemy202_move *s,gh_enemy_actor *ene
                 if(s->damage.phase==7){
                     const uint8_t *thresholds=elf_span(elf,elf_bytes,0x3bf160,20);
                     if(!thresholds)return stop(s,0x1fa280,GH_ACTOR_MOTION_UNSUPPORTED);
-                    status=gh_enemy202_hit_rank_points_001fa280(enemy,thresholds,(s->damage.effect==0x2e||s->damage.effect==0x12)?16u:4u,&pc);
+                    status=gh_enemy202_hit_rank_points_001fa280(enemy,thresholds,(s->damage.effect==0x2e||s->damage.effect==0x12||s->damage.effect==0x36)?16u:4u,&pc);
                     if(status)return stop(s,pc?pc:0x1fa280,status);
                     s->damage.phase=8;
                 }
                 if(s->damage.phase==8){
-                    if(s->damage.effect!=0x2e){
+                    if(s->damage.effect!=0x2e&&s->damage.effect!=0x36){
                         status=gh_enemy202_hit_stun_0028ed28(enemy,&pc);
                         if(status)return stop(s,pc?pc:0x28ed28,status);
                     }

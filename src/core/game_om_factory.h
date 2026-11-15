@@ -30,12 +30,14 @@ typedef struct {gh_om_factory *factory;gh_om_object *object;uint16_t kind,resour
 /* One original30FA98 invocation, initially zero companion. A repeated call
  * retries/completes the SAME invocation; a new original call uses a fresh
  * companion. Returns constructed+registered object BEFORE virtualInit44.
- * Bounded to observed 3EB and R105 376 with idFFFF; unsupported kinds never become NULL success.
+ * Supports observed runtime 3EB, 376, 3BE and 3D6 calls with idFFFF.
  * Factory storage must already reserve native capacity for runtime objects. */
 gh_scene_placement_status gh_om_factory_initialize_runtime_mount_001a7820(gh_om_factory *,gh_om_object *);
 gh_scene_placement_status gh_om_factory_create_0030fa98(gh_om_factory *,gh_om_runtime_create *,uint16_t kind,uint16_t resource_id,gh_om_object **original_object);
 gh_scene_placement_status gh_om_factory_initialize_runtime_3eb(gh_om_factory *,gh_om_object *,int *original_return);
 gh_scene_placement_status gh_om_factory_initialize_runtime_376(gh_om_factory *,gh_om_object *);
+gh_scene_placement_status gh_om_factory_initialize_runtime_3be(gh_om_factory *,gh_om_object *);
+gh_scene_placement_status gh_om_factory_initialize_runtime_3d6(gh_om_factory *,gh_om_object *,int *original_return);
 gh_scene_placement_status gh_om_factory_object_view(const gh_om_factory *,uint32_t handle,gh_title_player_view *);
 /* Native abort of this constructor-only prefix. No originalvirtualInit ran;
  * releases acquiredreference and SAMEarena, unregistering ONLYownhandles. */

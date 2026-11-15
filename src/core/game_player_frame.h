@@ -31,6 +31,10 @@ typedef gh_player_frame_status (*gh_player_frame_motion_step)(void *,const gh_pl
 /* Both real12BFB8 Door probes must complete before its caller flag write. */
 typedef gh_player_frame_status (*gh_player_frame_door_probe)(void *,const gh_title_player_view *,uint32_t *frontier);
 struct gh_player_frame_bindings;
+typedef gh_player_frame_status (*gh_player_throw_prop)(void *,
+ const struct gh_player_frame_bindings *,uint32_t target_handle,uint32_t *);
+typedef gh_player_frame_status (*gh_player_interact_prop)(void *,uint32_t,
+ const gh_title_player_view *,const struct gh_player_frame_bindings *,size_t,size_t,uint32_t *);
 typedef gh_player_frame_status (*gh_player_square_frame_consumer)(void *,const struct gh_player_frame_bindings *,uint32_t *);
 typedef gh_player_frame_status (*gh_player_damage_positioned_effect)(void *,const uint32_t position[3],uint32_t *);
 typedef gh_player_frame_status (*gh_player_damage_callee)(void *,const struct gh_player_frame_bindings *,uint32_t *);
@@ -69,6 +73,8 @@ typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_wo
  uint8_t (*damage_vibration_rows)[16];
  gh_player_paper_release paper_release;
  void *paper_context;
+ gh_player_interact_prop interact_prop;
+ gh_player_throw_prop throw_prop;
 } gh_player_frame_bindings;
 /* Native continuation only; all actual mutable fields live in borrowed owners.
  * Each source-prefix stage commits once. Error retry requires same bindings;

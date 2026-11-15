@@ -17,7 +17,7 @@ static gh_room_pool_status fail(gh_room_death_dispatch *state,uint32_t handle,ui
 
 static int enemy_kind(uint32_t kind)
 {
- return kind==0x202||kind==0x2a2||kind==0x2ad;
+ return kind==0x202||kind==0x220||kind==0x2a2||kind==0x2ad;
 }
 
 static gh_room_pool_status retire(gh_room_death_dispatch *state,const gh_room_death_bindings *b)
@@ -45,7 +45,7 @@ static gh_room_pool_status retire(gh_room_death_dispatch *state,const gh_room_de
  case 0x300:case 0x303:case 0x304:case 0x305:case 0x307:case 0x30a:case 0x30e:case 0x310:
  case 0x320:case 0x322:case 0x323:case 0x324:
  case 0x33f:case 0x346:case 0x354:case 0x35d:case 0x309:case 0x3eb:
- case 0x31a:case 0x338:case 0x339:case 0x355:case 0x376:case 0x382:case 0x41c:
+ case 0x31a:case 0x338:case 0x339:case 0x355:case 0x376:case 0x382:case 0x3be:case 0x41c:
   status=gh_om_retire_0030f8b0(&state->door,&b->door,handle);
   entry=state->door.frontier?state->door.frontier:gh_om_retire_entry(state->retiring_kind);
   if(!status)state->door=(gh_om300_full_retirement){0};
@@ -100,7 +100,7 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
    if(gh_enemy_ems_live_at(b->enemies,handle,&live))return fail(state,handle,0x312708);
    if(live.actor){
     actor=&live.actor->view;
-    kind=live.held_weapon?0x363:live.enemy202?0x202:live.enemy2a2?0x2a2:live.enemy2ad?0x2ad:0;
+    kind=live.held_weapon?0x363:live.devil?0x220:live.enemy202?0x202:live.enemy2a2?0x2a2:live.enemy2ad?0x2ad:0;
    }
   }
   if(!actor||!actor->bytes||actor->size<0x254)return fail(state,handle,0x312708);
@@ -132,11 +132,14 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
    continue;
   }
   int borrowed;
-  if(gh_effect_create_retain_dead_sprite(b->effects,actor)||
+  if(gh_effect_create_prepare_actor_retirement(b->effects,actor)||
      gh_effect_create_actor_has_live_refs(b->effects,actor,&borrowed))
    return fail(state,handle,0x305b90);
-  if(borrowed&&(kind!=0x2ad||b->enemy.effects!=b->effects||
-     gh_effect_create_quiesce_emad_room_exit(b->enemy.effects,actor)))
+  /* State5 phase1 stops these effects before the 30F8B0 retirement
+   * passes. Either phase2 or the final phase5 owner release can reach
+   * the last destruction bit, depending on the disk request's timing. */
+  if(borrowed&&((kind!=0x2ad&&kind!=0x202&&kind!=0x220)||b->enemy.effects!=b->effects||
+     gh_effect_create_quiesce_actor_room_exit(b->enemy.effects,actor)))
    return fail(state,handle,0x305b90);
   if(kind==0x100&&b->player.model&&b->player.attachment&&
      b->player.model->external_borrowers==(unsigned)b->player.attachment->attached+1u){
