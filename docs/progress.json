@@ -1182,7 +1182,7 @@
     "replay_packet_serial": 3721,
     "defeated_enemy_stamps": [19, 20],
     "room_save_death_mask": 3,
-    "opening_encounter_scenario_flag": "01000000",
+    "ev01_started_scenario_flag": "01000000",
     "player_hp": 1,
     "windows_victory_presentation_verified": false,
     "normal_room_exit_verified": false

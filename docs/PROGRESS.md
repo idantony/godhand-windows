@@ -15,17 +15,16 @@ successfully at tick 4612. A separate native CPU replay completes 60 game frames
 after the reload.
 
 A recorded original pad route defeats both opening R100 enemies with Gene at
-1 HP on the native CPU replay. The original state records both deaths and the
-opening encounter flag. The later room-exit gate and Windows victory presentation
-are separate verification steps.
+1 HP on the native CPU replay. The original room save records both deaths.
+The later room-exit gate and Windows victory presentation remain in verification.
 
 隐藏、静音的 Windows 回放在标题交接处选入 R003，呈现 EV02 全部 28 个镜头，随后沿原版出口
 进入 R105。第 4399 帧呈现原版 Game Over 菜单。按叉键确认继续，继续次数由 0 增至 1，原版
 GameMain State 5 重载 R105。重载后的第一帧为 4491，Gene 恢复到 100 HP。回放在第 4612 tick
 正常退出。另一次无画面的原盘回放在重载后完成了 60 帧。
 
-无画面的 R100 手柄回放击败了开场的两名敌人，Gene 剩 1 HP。原版状态记录两名敌人的死亡和
-首战完成标记。后续房间出口和 Windows 胜利画面仍需分别验证。
+无画面的 R100 手柄回放击败了开场的两名敌人，Gene 剩 1 HP。原版房间存档记录两名敌人的死亡。
+后续房间出口和 Windows 胜利画面仍需验证。
 
 ## First tutorial presented and dismissed on Windows
 

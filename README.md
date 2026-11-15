@@ -17,8 +17,8 @@ its left-stick escape prompt. A second input replay triggers the paired
 counter and registers collisions with two enemies, leaving them at 16 and
 24 HP. A Windows replay reaches 3,131 presented scene frames. A recorded
 pad route on the native CPU replay defeats both opening enemies with Gene at
-1 HP. The game records both deaths and sets the original first-encounter
-flag. Windows presentation of the winning route is being verified.
+1 HP. The original room save records both deaths. Windows presentation of the
+winning route is being verified.
 
 In a Windows New Game replay, stick input reaches the first tutorial. Circle
 opens the original panel and Cross dismisses it. The game presents the original
@@ -188,8 +188,8 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 四次三角攻击命中，把第一个敌人的 HP 从 74 打到 26。隐藏、静音的实跑共呈现
 2,606 个场景帧，包括 Gene 倒地后的恢复提示、原版抓技和左摇杆挣脱提示。另一轮输入回放触发了原版
 挣脱反击，撞击后的两名敌人分别剩下 16 和 24 HP。一轮 Windows 回放已呈现 3,131 个场景帧。
-另一轮无画面回放用录制的手柄输入打赢首战，Gene 剩 1 HP。原版流程记录了两名敌人的死亡，
-并设置首战完成标记。完整胜利过程的 Windows 画面仍在验证。
+另一轮无画面回放用录制的手柄输入打赢首战，Gene 剩 1 HP。原版房间存档记录了两名敌人的死亡。
+完整胜利过程的 Windows 画面仍在验证。
 
 Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面板，再按叉键关闭。画面显示原版文字、
 右摇杆图标和教程背后的场景。

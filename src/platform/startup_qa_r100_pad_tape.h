@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <string_view>
@@ -63,6 +64,7 @@ struct QAR100PadTape {
         if(last_sample!=move){
             ++sampled_moves;
             last_sample=move;
+            trace(snapshot,pad);
         }
         return pad;
     }
@@ -108,6 +110,33 @@ private:
     uint64_t last_sample=UINT64_MAX,sampled_moves=0,deaths[2]={};
     uint32_t handles[2]={},room_flags=0;
     unsigned death_mask=0,player_hp=0;
+
+    static uint32_t word(const void *field)
+    {
+        uint32_t value;
+        std::memcpy(&value,field,sizeof(value));
+        return value;
+    }
+
+    static void trace(const gh_startup_snapshot &snapshot,const gh_native_gamepad_sample &pad)
+    {
+        const auto &position=snapshot.player_world_position;
+        const auto &first=snapshot.r100_first_enemy_position;
+        const auto &second=snapshot.r100_second_enemy_position;
+        std::fprintf(stderr,"QA_R100_PAD_STATE {\"move\":%llu,\"tick\":%llu,\"scene\":%llu,"
+            "\"pad\":[%u,%d,%d,%d,%d,%u],\"hp\":[%u,%u,%u],\"state\":[%u,%u,%u],"
+            "\"position_bits\":[%u,%u,%u,%u,%u,%u,%u,%u,%u],\"yaw_bits\":%u,"
+            "\"scenario\":%u,\"dead\":%u,\"target\":%u,\"skill\":%u}\n",
+            (unsigned long long)snapshot.player_updates_completed,(unsigned long long)snapshot.ticks,
+            (unsigned long long)snapshot.scene_frame_serial,
+            unsigned(pad.buttons),int(pad.left_x),int(pad.left_y),int(pad.right_x),int(pad.right_y),unsigned(pad.connected),
+            unsigned(snapshot.player_hp),unsigned(snapshot.r100_first_enemy_hp),unsigned(snapshot.r100_second_enemy_hp),
+            word(snapshot.player_state),word(snapshot.r100_first_enemy_state),word(snapshot.r100_second_enemy_state),
+            word(position),word(position+1),word(position+2),word(first),word(first+1),word(first+2),
+            word(second),word(second+1),word(second+2),word(&snapshot.player_yaw),
+            snapshot.r100_scenario_flags,unsigned(snapshot.r100_placement_dead),
+            snapshot.player_attack_target,snapshot.player_attack_skill);
+    }
 
     static bool parse(std::string_view line,std::array<int64_t,8> &row)
     {

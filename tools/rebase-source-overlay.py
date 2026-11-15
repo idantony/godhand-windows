@@ -191,7 +191,7 @@ def load_overlay(receipt, sha256, source_base=None):
         "schema", "files", "base_receipt", "base_receipt_sha256", "supersedes",
         "dependency_files", "requires_overlay_receipt", "requires_overlay_receipt_sha256",
         "input_overlay_receipt", "input_overlay_receipt_sha256", "rebase_results", "verification", "scope",
-        "dependencies", "merge", "bounds", "patches", "rebased_overlay_receipts",
+        "dependencies", "merge", "bounds", "patches", "rebased_overlay_receipts", "replay_dependencies",
     }
     if record.get("schema") != 1 or set(record) - supported:
         raise RebaseError(f"Unsupported overlay receipt format: {receipt}")
@@ -202,6 +202,11 @@ def load_overlay(receipt, sha256, source_base=None):
     checked_dependencies(record, receipt)
     checked_dependencies(record, receipt, "patches")
     checked_dependencies(record, receipt, "rebased_overlay_receipts")
+    replay_dependencies = record.get("replay_dependencies", {})
+    if not isinstance(replay_dependencies, dict):
+        raise RebaseError(f"Invalid pinned replay dependencies in {receipt}")
+    checked_dependencies({"dependencies": [{"path": path, "sha256": pin}
+                                            for path, pin in replay_dependencies.items()]}, receipt)
     old_receipt = Path(record["base_receipt"]).resolve()
     base, manifest = load_snapshot(old_receipt, record["base_receipt_sha256"])
     files = {}
@@ -302,7 +307,7 @@ def rebase(overlay_receipt, overlay_sha256, target_receipt, target_sha256, outpu
         "rebase_results": {},
     }
     for key in ("dependencies", "patches", "dependency_files", "requires_overlay_receipt",
-                "requires_overlay_receipt_sha256", "rebased_overlay_receipts"):
+                "requires_overlay_receipt_sha256", "rebased_overlay_receipts", "replay_dependencies"):
         if key in record:
             result[key] = record[key]
     if source_base is not None:
