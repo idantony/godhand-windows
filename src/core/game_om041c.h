@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-enum {GH_OM041C_BYTES=0x1db0};
+enum {GH_OM041C_BYTES=0x1db0,GH_OM357_BYTES=0x1e70};
 typedef struct {
     gh_om_init_state common;
     const uint8_t *part_bases,*point_setup,*spring_setup;
@@ -17,6 +17,7 @@ typedef struct {
     uint8_t initialized;
 } gh_om041c_state;
 
+gh_scene_placement_status gh_om357_construct_001a88b0(void *,size_t,gh_title_player_view *);
 gh_scene_placement_status gh_om041c_construct_0017b870(void *,size_t,gh_title_player_view *);
 gh_scene_placement_status gh_om041c_initialize_0017b940(gh_om041c_state *,gh_om_object *,
     const gh_om_initializer_bindings *,int *);

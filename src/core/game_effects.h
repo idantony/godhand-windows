@@ -33,6 +33,8 @@ gh_effect_status gh_game_effects_register_event_002fa0b0(gh_game_effects *, cons
 /* Original 305758 for EMAD's embedded D7 resource. Same room effect owner. */
 gh_effect_status gh_game_effects_register_2ad_00305758(gh_game_effects *,gh_effect_view);
 /* Host shutdown only, after native effects have relinquished actor borrows. */
+/* Live caller must validate the D7 bundle has no outstanding consumers. */
+gh_effect_status gh_game_effects_release_2ad_00305778(gh_game_effects *,gh_effect_view);
 gh_effect_status gh_game_effects_release_2ad_native(gh_game_effects *,gh_effect_view);
 #ifdef __cplusplus
 }

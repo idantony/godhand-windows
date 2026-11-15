@@ -67,11 +67,34 @@ gh_scene_placement_status gh_om041c_construct_0017b870(void *data,size_t size,gh
     return GH_PLACE_OK;
 }
 
+gh_scene_placement_status gh_om357_construct_001a88b0(void *data,size_t size,gh_title_player_view *out)
+{
+    if(!data||!out)return GH_PLACE_ARGUMENT;
+    if(size<GH_OM357_BYTES)return GH_PLACE_BOUNDS;
+    gh_scene_placement_status status=gh_om_base_construct_001b6e90(data,size,out);
+    if(status)return status;
+    uint8_t *root=data,*cloth=root+0xe40;
+    put(root+0x214,0x427a58);
+    out->original_vtable214=0x427a58;
+    for(unsigned i=0;i<POINT_COUNT;++i)for(unsigned j=0;j<4;++j)vf0(point(root,i)+16*j);
+    put(cloth,2);put(cloth+4,4);put(cloth+8,38);
+    memset(cloth+12,0,12);
+    for(unsigned i=0;i<128;++i)vf0(cloth+0x30+i*0x20);
+    return GH_PLACE_OK;
+}
+
+static int is_r101_canopy(const gh_om041c_state *s)
+{
+    return s->common.object->source.type==0x357;
+}
+
 static gh_scene_placement_status bind_tables(gh_om041c_state *s,const gh_om_initializer_bindings *b)
 {
-    const uint8_t *part_bases=elf_span(b->elf,b->elf_bytes,0x421ad0,2);
-    const uint8_t *points=elf_span(b->elf,b->elf_bytes,0x421ae0,4*POINT_COUNT);
-    const uint8_t *springs=elf_span(b->elf,b->elf_bytes,0x421b20,5*SPRING_COUNT);
+    const int canopy=is_r101_canopy(s);
+    const unsigned spring_count=canopy?38:SPRING_COUNT;
+    const uint8_t *part_bases=elf_span(b->elf,b->elf_bytes,canopy?0x427948:0x421ad0,2);
+    const uint8_t *points=elf_span(b->elf,b->elf_bytes,canopy?0x427958:0x421ae0,4*POINT_COUNT);
+    const uint8_t *springs=elf_span(b->elf,b->elf_bytes,canopy?0x427998:0x421b20,5*spring_count);
     const uint8_t *coefficients=elf_span(b->elf,b->elf_bytes,0x3c238c,24);
     const uint8_t *reset=elf_span(b->elf,b->elf_bytes,0x3bda50,1);
     if(!part_bases||!points||!springs||!coefficients||!reset)return fail(s,0x2ad2b8,GH_PLACE_BOUNDS);
@@ -84,7 +107,7 @@ static gh_scene_placement_status bind_tables(gh_om041c_state *s,const gh_om_init
         if(seen&(1u<<index))return fail(s,0x2ad2b8,GH_PLACE_BOUNDS);
         seen|=1u<<index;
     }
-    for(unsigned i=0;i<SPRING_COUNT;i++){
+    for(unsigned i=0;i<spring_count;i++){
         const uint8_t *p=springs+5*i;
         if(p[0]>2||p[1]>4||p[2]>2||p[3]>4||p[4]>1)
             return fail(s,0x2ad2b8,GH_PLACE_BOUNDS);
@@ -106,7 +129,9 @@ static gh_scene_placement_status bind_tables(gh_om041c_state *s,const gh_om_init
  * Pair endpoints remain indices into the same embedded points. */
 static void reset_cloth(gh_om041c_state *s,uint8_t *root)
 {
-    const float total_per_weight=divide(5.0f,62.0f);
+    const int canopy=is_r101_canopy(s);
+    const unsigned spring_count=canopy?38:SPRING_COUNT;
+    const float total_per_weight=divide(5.0f,canopy?76.0f:62.0f);
     for(unsigned i=0;i<POINT_COUNT;i++){
         const uint8_t *p=s->point_setup+4*i;
         uint8_t *out=point(root,3*p[1]+p[0]);
@@ -116,7 +141,7 @@ static void reset_cloth(gh_om041c_state *s,uint8_t *root)
         out[0x48]=p[3];
         for(unsigned j=1;j<=3;j++)memset(out+16*j,0,12);
     }
-    for(unsigned i=0;i<SPRING_COUNT;i++){
+    for(unsigned i=0;i<spring_count;i++){
         const uint8_t *p=s->spring_setup+5*i;
         uint8_t *out=spring(root,i);
         const uint8_t *a=point(root,3*p[1]+p[0]),*b=point(root,3*p[3]+p[2]);
@@ -134,14 +159,15 @@ static gh_scene_placement_status pose(gh_om041c_state *s)
     gh_actor_model *model=&s->common.model;
     uint8_t *root=model->root.bytes;
     const gh_static_transform_policy policy=GH_STATIC_BINARY32_REFERENCE;
+    const uint32_t pose_entry=is_r101_canopy(s)?0x1a9210:0x17c028;
     uint32_t pc=0,flags=word(root+0x250);
     if(!model->ready||!model->root.alias_f0||model->external_parts||model->external_owner)
-        return fail(s,0x17c028,GH_PLACE_BOUNDS);
+        return fail(s,pose_entry,GH_PLACE_BOUNDS);
     for(unsigned column=0;column<2;column++)
-        if((unsigned)s->part_bases[column]+4>=model->part_count)return fail(s,0x17c028,GH_PLACE_BOUNDS);
+        if((unsigned)s->part_bases[column]+4>=model->part_count)return fail(s,pose_entry,GH_PLACE_BOUNDS);
     fenv_t saved;
-    if(fegetenv(&saved))return fail(s,0x17c028,GH_PLACE_UNSUPPORTED);
-    if(fesetround(FE_TONEAREST))return fail(s,0x17c028,GH_PLACE_UNSUPPORTED);
+    if(fegetenv(&saved))return fail(s,pose_entry,GH_PLACE_UNSUPPORTED);
+    if(fesetround(FE_TONEAREST))return fail(s,pose_entry,GH_PLACE_UNSUPPORTED);
     if(!(flags&0x800u)){
         float position[3],angles[3],scale[3],world[16];
         memcpy(position,model->root.alias_f0,12);
@@ -185,14 +211,14 @@ static gh_scene_placement_status pose(gh_om041c_state *s)
     }
     reset_cloth(s,root);
 finish:
-    if(fesetenv(&saved)&&!pc)pc=0x17c028;
+    if(fesetenv(&saved)&&!pc)pc=pose_entry;
     return pc?fail(s,pc,GH_PLACE_UNSUPPORTED):GH_PLACE_OK;
 }
 
 gh_scene_placement_status gh_om041c_initialize_0017b940(gh_om041c_state *s,gh_om_object *object,
     const gh_om_initializer_bindings *b,int *out)
 {
-    if(!s||!object||object->source.type!=0x41c||!b||!out)return GH_PLACE_ARGUMENT;
+    if(!s||!object||(object->source.type!=0x41c&&object->source.type!=0x357)||!b||!out)return GH_PLACE_ARGUMENT;
     *out=0;
     s->frontier=0;
     int initialized=0;
@@ -207,6 +233,10 @@ gh_scene_placement_status gh_om041c_initialize_0017b940(gh_om041c_state *s,gh_om
         for(unsigned column=0;column<2;column++)for(unsigned row=0;row<4;row++){
             uint8_t *part=s->common.model.parts[s->part_bases[column]+row].bytes;
             put(part+0x154,word(part+0x154)|0x18u);
+        }
+        if(is_r101_canopy(s)){
+            uint8_t *root=object->view.bytes;
+            put(root+0x5a0,word(root+0x5a0)|0x10u);
         }
         s->initialized=1;
     }

@@ -13,7 +13,7 @@ typedef struct gh_om_initializer_bindings {gh_boot_work *work;gh_heap *packet_he
  gh_game_init_state *init;const gh_hitarea_shape_bindings *shapes;
  gh_scene_dynamic_owner *dynamic;const gh_om_door_shared *door_shared;
  const gh_title_player_view *player;gh_game_collision_solids *solids;
- const void *elf;size_t elf_bytes;} gh_om_initializer_bindings;
+ const void *elf;size_t elf_bytes;gh_core_save_view save;} gh_om_initializer_bindings;
 typedef struct gh_om_init_state {gh_actor_model model;gh_bundle_entry geometry,texture;
  gh_hitarea_object hitarea;gh_om_door_geometry geometry_state;uint8_t *door_segments;gh_om_object *object;const gh_om_initializer_bindings *bindings;
  uint32_t stage,texture_mode,frontier;int model_return;uint8_t hitarea_created;} gh_om_init_state;
@@ -25,6 +25,10 @@ typedef struct gh_om_init_state {gh_actor_model model;gh_bundle_entry geometry,t
  * placement-action selection. No synthetic zero-filled OMS is supplied. */
 gh_scene_placement_status gh_om_common_initialize_001b6fb8(gh_om_init_state *,gh_om_object *,const gh_om_initializer_bindings *,int *original_return);
 gh_scene_placement_status gh_om_door_initialize_001b7118(gh_om_init_state *,gh_om_object *,const gh_om_initializer_bindings *,int *original_return);
+gh_scene_placement_status gh_om_r101_item_construct_001c0068(void *,size_t,gh_title_player_view *);
+gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *,gh_om_object *,
+ const gh_om_initializer_bindings *,int *);
+gh_scene_placement_status gh_om_r101_item_position_001c2630(gh_om_init_state *,const uint8_t *);
 gh_scene_placement_status gh_om_initialize_abort(gh_om_init_state *);
 #ifdef __cplusplus
 }

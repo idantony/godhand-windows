@@ -41,7 +41,7 @@ gh_actor_model_status gh_enemy2ad_init_prefix_0028e0e0(gh_enemy2ad_init *,
     const gh_title_player_view *,const gh_enemy_request *,const gh_object_view *,
     gh_boot_work *,gh_core_save_view,gh_game_effects *,gh_room_pools *,gh_heap *,
     const void *,gh_game_cockpit *,gh_game_mt *,gh_static_transform_policy,int *);
-typedef struct {
+typedef struct gh_enemy2ad_init_tail {
     const gh_enemy2ad_init *prefix;
     gh_actor_motion motion;
     gh_motion_solve solve;

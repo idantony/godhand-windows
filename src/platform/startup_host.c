@@ -1432,6 +1432,11 @@ static int initialize_native_bgm(gh_startup_host *h)
     if(corner_status)return failure(h,GH_HOST_ASSET,corner_status);
     if(templates_status)return failure(h,GH_HOST_ASSET,templates_status);
     if(cloth_status)return failure(h,GH_HOST_ASSET,cloth_status);
+    /* CORE is loaded at sound startup. Its attached ADX clips can be
+     * requested in the first room before any room-specific SE cue. */
+    gh_voice_status voice=gh_se_voice_bind_external_adx(h->voices,h->disc,&h->sound_control,
+        elf,(size_t)bytes);
+    if(voice)return failure(h,GH_HOST_AUDIO,voice);
     status=gh_bgm_requests_create(h->audio,&h->sound_control,h->disc,h->heap,&h->bgm);
     if(!status)status=gh_bgm_requests_enable_native(h->bgm,&key,h->continuation.muted,GH_BGM_GAIN_NATIVE_DB_REFERENCE);
     if(status)return failure(h,GH_HOST_AUDIO,status);

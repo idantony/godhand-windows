@@ -109,6 +109,7 @@ gh_actor_model_status gh_actor_model_retire_001496c0(gh_actor_model *model,
      model->root.original_vtable214!=0x425000&&
      model->root.original_vtable214!=0x4479c8&&
      model->root.original_vtable214!=0x448ca0&&
+     model->root.original_vtable214!=0x44a528&&
      model->root.original_vtable214!=0x4267f8&&
      model->root.original_vtable214!=0x426e78&&
      model->root.original_vtable214!=0x427690&&

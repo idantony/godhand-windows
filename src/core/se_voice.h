@@ -86,6 +86,8 @@ gh_voice_status gh_se_voice_pcm_view(const gh_se_voice_engine *,uint32_t handle,
  * consume at ordinary update, never at request time. Native busy detection
  * uses real SamplesPlayed; integer ramp matches37D8B8/378020/378070/37CC78.
  * Native source gain replaces SPU volume/keyoff timing, not hardware DSP. */
+/* Snd's five-tick immediate stop and its eight-handle next-pass retry. */
+gh_voice_status gh_se_voice_stop_actor_002cbba0(gh_se_voice_engine *,uint32_t);
 gh_voice_status gh_se_voice_request_stop_00375050(gh_se_voice_engine *,uint32_t original_handle,int16_t ticks,int *accepted);
 /* Original2CBC58 matches EE node+08 BANK, not node+0A program. Active
  * voices queue real375050 stops; unissued pending nodes are removed now.

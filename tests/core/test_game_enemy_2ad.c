@@ -231,8 +231,34 @@ int main(int argc,char **argv){
        sprite.record.bytes[0x12e]==(index<2?14:index<4?43:54)&&
        gh_effect_emad_esp_is_bound(effects,&sprite));
  }
+ uint8_t *flags250=entry.object.view.bytes+0x250;
+ uint32_t retiring=word(flags250)|0xe0000002u;
+ memcpy(flags250,&retiring,4);
+ gh_effect_emitter_view retained;
+ C(gh_effect_create_quiesce_emad_room_exit(effects,&entry.object.view)==GH_EFFECT_UNSUPPORTED);
+ C(!gh_effect_create_emitter_at(effects,0,&retained));
+ /* These are the actual State5 stop requests, with active masks still set. */
+ for(unsigned i=0;i<3;i++){
+    uint8_t *stop=emit+0x260*i+0x114;
+    uint32_t value=word(stop)|0x40000000u;
+    memcpy(stop,&value,4);
+ }
+ C(gh_effect_create_quiesce_emad_room_exit(effects,&entry.object.view)==GH_EFFECT_UNSUPPORTED);
+ C(!gh_effect_create_emitter_at(effects,0,&retained));
+ for(unsigned i=0;i<5;i++){
+    gh_effect_esp_view sprite;
+    C(!gh_effect_create_esp_at(effects,i,&sprite));
+    C(!gh_effect_create_esp_pause_002fbe50(effects,i,sprite.serial,&pc));
+ }
+ C(!gh_effect_create_quiesce_emad_room_exit(effects,&entry.object.view));
+ C(!gh_effect_create_quiesce_emad_room_exit(effects,&entry.object.view));
+ int borrowed=1;
+ C(!gh_effect_create_actor_has_live_refs(effects,&entry.object.view,&borrowed)&&!borrowed);
+ C(!gh_effect_create_source_has_live_refs(effects,effect.bytes,effect.size,&borrowed)&&!borrowed);
+ C(gh_effect_create_emitter_at(effects,0,&retained)==GH_EFFECT_UNSUPPORTED);
+ C(word(emit+0x26000)==0xe0000000u&&word(esp+0x100000)==0xf8000000u);
+ C(!gh_game_effects_release_2ad_00305778(effects,effect)&&effects->emd_tables[0xd7].bytes);
  gh_effect_create_forget_on_owner_destroy(effects);
- C(!gh_game_effects_release_2ad_native(effects,effect));
  C(!gh_game_effects_release_2ad_native(effects,effect));
  C(!gh_game_effects_release_2ad_native(effects,effect)&&!effects->emd_tables[0xd7].bytes);
  C(!memcmp(prior_entries,effects->emitter_entries,sizeof(prior_entries)));

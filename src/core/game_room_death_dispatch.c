@@ -17,7 +17,7 @@ static gh_room_pool_status fail(gh_room_death_dispatch *state,uint32_t handle,ui
 
 static int enemy_kind(uint32_t kind)
 {
- return kind==0x202||kind==0x2a2;
+ return kind==0x202||kind==0x2a2||kind==0x2ad;
 }
 
 static gh_room_pool_status retire(gh_room_death_dispatch *state,const gh_room_death_bindings *b)
@@ -100,7 +100,7 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
    if(gh_enemy_ems_live_at(b->enemies,handle,&live))return fail(state,handle,0x312708);
    if(live.actor){
     actor=&live.actor->view;
-    kind=live.held_weapon?0x363:live.enemy202?0x202:live.enemy2a2?0x2a2:0;
+    kind=live.held_weapon?0x363:live.enemy202?0x202:live.enemy2a2?0x2a2:live.enemy2ad?0x2ad:0;
    }
   }
   if(!actor||!actor->bytes||actor->size<0x254)return fail(state,handle,0x312708);
@@ -132,8 +132,16 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
    continue;
   }
   int borrowed;
-  if(gh_effect_create_actor_has_live_refs(b->effects,actor,&borrowed)||borrowed)
+  if(gh_effect_create_actor_has_live_refs(b->effects,actor,&borrowed))
    return fail(state,handle,0x305b90);
+  if(borrowed&&(kind!=0x2ad||b->enemy.effects!=b->effects||
+     gh_effect_create_quiesce_emad_room_exit(b->enemy.effects,actor)))
+   return fail(state,handle,0x305b90);
+  if(kind==0x100&&b->player.model&&b->player.attachment&&
+     b->player.model->external_borrowers==(unsigned)b->player.attachment->attached+1u){
+   status=gh_om_retire_player_paper_borrow(b->door.factory,b->player.model,&frontier);
+   if(status)return fail(state,handle,frontier?frontier:0x100ed8);
+  }
   if(!enemy_kind(kind)&&!gh_om_retire_entry(kind))gh_scene_dynamic_forget_sphere_actor(b->dynamic,actor);
   state->retiring_kind=kind;
   state->retiring_handle=handle;

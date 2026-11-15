@@ -1,4 +1,5 @@
 #include "game_collision_pair_shapes.h"
+#include "game_actor_external_parent.h"
 #include "game_hitarea_objects.h"
 #include "game_om300_retire.h"
 #include "game_om303.h"
@@ -123,6 +124,28 @@ static gh_room_pool_status fail(uint32_t *frontier,uint32_t entry)
 {
  if(frontier)*frontier=entry;
  return GH_POOL_UNSUPPORTED;
+}
+
+gh_room_pool_status gh_om_retire_player_paper_borrow(gh_om_factory *factory,
+ gh_actor_model *player,uint32_t *frontier)
+{
+ if(!factory||!factory->bound||!factory->bindings.work||factory->bindings.work->room!=0x105||
+    !player||!player->ready||player->native_identity!=player||player->pools!=factory->bindings.pools||
+    !player->root.bytes||player->root.size<0x6ac||
+    (word(player->root.bytes+0x250)&0xe0000000u)!=0xe0000000u)
+  return fail(frontier,0x100ed8);
+ gh_om_object *paper=registered_om(factory,word(player->root.bytes+0x6a8));
+ if(!paper||!paper->runtime_created||om_kind(paper)!=0x376||
+    (word(paper->view.bytes+0x250)&0xe0000000u)!=0xe0000000u)
+  return fail(frontier,0x100ed8);
+ gh_actor_model *model=&paper->initialization->model;
+ /* Both actors are already inert. The original part pointed into PL00.
+    Drop the host lifetime reference without running the gameplay throw. */
+ if(model->external_owner!=paper||model->external_parent!=player||
+    model->external_parent_index!=2||word(paper->view.bytes+0x604)!=2||
+    gh_actor_model_clear_external_parent(model,paper))
+  return fail(frontier,0x100ed8);
+ return GH_POOL_OK;
 }
 
 uint32_t gh_om_retire_entry(uint32_t kind)

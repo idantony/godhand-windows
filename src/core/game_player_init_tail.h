@@ -30,6 +30,7 @@ typedef struct {gh_game_player_init *prefix;gh_actor_model *parent_model;
  gh_object_resource_bindings resources;gh_player_child_initialize initialize_child;void *child_context;
  gh_game_init_state *init;gh_collision_pairs *pairs;const gh_game_math_globals *math_globals;gh_static_transform_policy shape_policy;const gh_player_node_names *node_names;
  gh_player_motion_call initialize_motion,advance_motion;void *motion_context;const float *rate;gh_player_motion_call solve_motion;
+ gh_player_restore_paper restore_paper;void *paper_context;
 } gh_player_init_tail_bindings;
 typedef struct {gh_player_init_tail_bindings b;gh_game_title_player *player;
  gh_player_shadow shadow;gh_collision_solid_unit *solid_unit;gh_collision_native_sphere *sphere;

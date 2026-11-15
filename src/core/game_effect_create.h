@@ -172,6 +172,9 @@ gh_effect_status gh_effect_create_actor_has_live_refs(const gh_game_effects *,
 gh_effect_status gh_effect_create_esp_destroy_hidden_native(gh_game_effects *,unsigned,uint32_t,uint32_t *frontier);
 /* Check a backing allocation before freeing it. Includes paused/hidden slots
  * until their original destructor clears the active mask. */
+/* State5 no longer visits the effect frame. Preserve original packed slots
+ * until its reset, while releasing validated inactive D7 host borrows. */
+gh_effect_status gh_effect_create_quiesce_emad_room_exit(gh_game_effects *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_source_has_live_refs(const gh_game_effects *,
  const void *source,size_t bytes,int *borrowed);
 #ifdef __cplusplus

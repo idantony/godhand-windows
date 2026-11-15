@@ -38,7 +38,7 @@ typedef struct {
 /* Original 202058 / 284A90 mode3 through 28EB88, stopping at resource
  * manager selection 1FE9B8. Registry/lifetime retirement remains with caller. */
 gh_actor_motion_status gh_enemy_destroy_prefix_mode3(gh_enemy_destructor *,gh_enemy_ems *,
-    uint32_t handle,gh_motion_effect_consumer,void *effect_context,uint32_t *frontier);
+    uint32_t handle,gh_motion_effect_consumer,void *effect_context,gh_se_voice_engine *,uint32_t *frontier);
 typedef struct {
     gh_enemy_death_mark mark;
     const gh_enemy_ems *owner;
@@ -55,6 +55,7 @@ typedef struct {
     void *effect_context;
     gh_object_slot_release release_sound_slot;
     void *sound_context;
+    gh_se_voice_engine *voices;
 } gh_enemy_retire_bindings;
 typedef struct {
     gh_enemy_destructor destructor;

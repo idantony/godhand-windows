@@ -777,6 +777,9 @@ gh_scene_placement_status gh_enemy_ems_live_at(gh_enemy_ems *owner,uint32_t hand
             out->marker_id=&entry->enemy2a2->init.prefix.base.cockpit_base;
             out->other_move=&entry->other_move;
         }else if(entry->enemy2ad){
+            out->enemy2ad=&entry->enemy2ad->tail;
+            out->init=entry->enemy2ad->entry.b.init;
+            out->solids=owner->bindings->actor.solids;
             out->model=&entry->enemy2ad->init.model.model;
             out->shadow=&entry->enemy2ad->tail.shadow;
             out->marker_id=&entry->enemy2ad->init.base.cockpit_base;
@@ -1318,13 +1321,34 @@ gh_actor_motion_status gh_enemy_ems_2ad_dtor_motion_0028e068(gh_enemy_ems *owner
 
 static gh_enemy_entry *retire_entry(ems_entry *entry)
 {
-    return entry->enemy202?&entry->enemy202->entry:entry->enemy2a2?&entry->enemy2a2->entry:NULL;
+    return entry->enemy202?&entry->enemy202->entry:entry->enemy2a2?&entry->enemy2a2->entry:
+        entry->enemy2ad?&entry->enemy2ad->entry:NULL;
 }
 
 static gh_actor_motion_status retire_stop(uint32_t *frontier,uint32_t pc)
 {
     *frontier=pc;
     return GH_ACTOR_MOTION_UNSUPPORTED;
+}
+
+gh_actor_motion_status gh_enemy_ems_2ad_dtor_bank_00305778(gh_enemy_ems *owner,
+    uint32_t handle,uint32_t *frontier)
+{
+    if(!owner||owner->running||owner->closing||!handle||!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    ems_entry *slot=retire_find(owner,handle);
+    if(!slot||!slot->enemy2ad||!actor_registered(owner,slot))return GH_ACTOR_MOTION_ARGUMENT;
+    ems_2ad *scenery=slot->enemy2ad;
+    if(scenery->bank_released)return GH_ACTOR_MOTION_OK;
+    gh_game_effects *effects=owner->bindings->effects_2ad.storage.effects;
+    gh_effect_view source;
+    int borrowed;
+    if(!effects||effects!=scenery->init.effects_owner||
+       gh_enemy2ad_effect_data(&scenery->entry.resource,&source)||
+       gh_effect_create_source_has_live_refs(effects,source.bytes,source.size,&borrowed)||borrowed||
+       gh_game_effects_release_2ad_00305778(effects,source))
+        return retire_stop(frontier,0x305778);
+    scenery->bank_released=1;
+    return GH_ACTOR_MOTION_OK;
 }
 
 static int slot_index(const gh_game_init_state *manager,const void *slot)
@@ -1457,7 +1481,7 @@ static int same_retire_bindings(const gh_enemy_retire_bindings *a,const gh_enemy
 {
     return a->effects==b->effects&&a->dynamic==b->dynamic&&a->release_effect==b->release_effect&&
         a->effect_context==b->effect_context&&a->release_sound_slot==b->release_sound_slot&&
-        a->sound_context==b->sound_context;
+        a->sound_context==b->sound_context&&a->voices==b->voices;
 }
 
 static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_retirement *call,
@@ -1470,7 +1494,7 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
         return GH_ACTOR_MOTION_ARGUMENT;
     if(call->stage==7)return GH_ACTOR_MOTION_OK;
     ems_entry *entry=retire_find(owner,handle);
-    if(entry&&entry->enemy2ad)return retire_stop(frontier,0x28e068);
+    if(entry&&entry->enemy2ad&&detached)return retire_stop(frontier,0x28e068);
     gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
     if(!actor||!actor_registered(owner,entry)||(detached&&actor->published))
         return retire_stop(frontier,0x290770);
@@ -1481,7 +1505,7 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
         return GH_ACTOR_MOTION_ARGUMENT;
     gh_room_pools *pools=actor->b.pools;
     gh_actor_model *model=entry->enemy202?&entry->enemy202->entry.initialize.model.model:
-        &entry->enemy2a2->init.prefix.model.model;
+        entry->enemy2a2?&entry->enemy2a2->init.prefix.model.model:&entry->enemy2ad->init.model.model;
     if(!call->stage){
         const gh_room_vector *primary,*secondary;
         if(!actor->object.view.bytes||actor->object.view.size<0x300||
@@ -1513,7 +1537,7 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
     }
     if(call->stage==1){
         gh_actor_motion_status status=gh_enemy_destroy_prefix_mode3(&call->destructor,owner,handle,
-            b->release_effect,b->effect_context,frontier);
+            b->release_effect,b->effect_context,b->voices,frontier);
         if(status!=GH_ACTOR_MOTION_UNSUPPORTED||*frontier!=0x1fe9b8||call->destructor.stage!=6)
             return status?status:retire_stop(frontier,0x14e5d0);
         call->stage=2;
@@ -1560,13 +1584,13 @@ gh_actor_motion_status gh_enemy_ems_finish_detached_mode3(gh_enemy_ems *owner,
     if(!frontier||!owner||!call||call->stage!=6||call->owner!=owner||call->handle!=handle)
         return GH_ACTOR_MOTION_ARGUMENT;
     ems_entry *entry=retire_find(owner,handle);
-    if(entry&&entry->enemy2ad)return retire_stop(frontier,0x28e068);
     gh_enemy_entry *actor=entry?retire_entry(entry):NULL;
     if(!actor||actor->published||!registry_owner||entry->registry_owner!=registry_owner||
        gh_room_object_unregister(actor->b.pools,handle,registry_owner))
         return retire_stop(frontier,0x30f7d0);
     free(entry->enemy202);
     free(entry->enemy2a2);
+    free(entry->enemy2ad);
     gh_enemy_timers retiring_weapon=entry->retiring_weapon;
     *entry=(ems_entry){.retiring_weapon=retiring_weapon};
     call->stage=7;

@@ -16,22 +16,23 @@ scene frames, including Gene's recovery prompt and an original grab with
 its left-stick escape prompt. A second input replay triggers the paired
 counter and registers collisions with two enemies, leaving them at 16 and
 24 HP. A Windows replay reaches 3,131 presented scene frames. A recorded
-pad route on the native CPU replay wins the first battle with Gene at
-1 HP. The game records both enemy deaths and sets its original room-clear
-flag. Windows presentation of the full winning route is being verified.
+pad route on the native CPU replay defeats both opening enemies with Gene at
+1 HP. The game records both deaths and sets the original first-encounter
+flag. Windows presentation of the winning route is being verified.
 
 In a Windows New Game replay, stick input reaches the first tutorial. Circle
 opens the original panel and Cross dismisses it. The game presents the original
 text and right-stick icon while the room remains visible.
 
 A separate Windows title-load run restores an original-format test save and
-presents R100. A controlled Windows run presents all 28 original EV02 cuts
-in R003 over 2,785 frames and follows the original room exit into R105, where
-it presents 1,015 scene frames through Gene's defeat. The controlled run
-selects R003 at the title handoff. A separate actual-disc CPU replay accepts
-Continue from Game Over, restores the R100 checkpoint, and registers movement
-and a Square attack after the room reload. The normal exit after the first
-battle is still in progress.
+presents R100. A controlled Windows run selects R003 at the title handoff,
+presents all 28 original EV02 cuts over 2,785 frames, then follows the original
+room exit to R105. After Gene's defeat, Cross confirms Continue in the original
+Game Over menu. Windows presents the reloaded R105 with Gene at 100 HP. A
+separate native CPU replay continues for 60 game frames after that reload.
+Another actual-disc CPU replay restores the R100 checkpoint from Game Over and
+registers movement and a Square attack after the reload. The normal R100 exit
+after the opening encounter is still in development.
 
 ### Verified progress
 
@@ -194,9 +195,10 @@ Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面
 右摇杆图标和教程背后的场景。
 
 独立的 Windows 标题读档实跑恢复了原版格式的测试档，并呈现 R100。受控实跑在标题交接处
-选入 R003，呈现 EV02 全部 28 个镜头，共 2,785 帧，随后沿原版房间切换进入 R105，
-并呈现 1,015 帧场景，推进到 Gene 战败。另一轮无画面的原盘回放在 Game Over 选择继续，恢复
-R100 检查点，重载后接收移动和方块攻击。首战结束后从原版出口进入下一场景的流程仍在开发。
+选入 R003，呈现 EV02 全部 28 个镜头，共 2,785 帧，随后沿原版房间切换进入 R105。
+Gene 战败后，按叉键在原版 Game Over 菜单中选择继续。Windows 呈现重载后的 R105，Gene
+恢复到 100 HP。单独的无画面原盘回放在这次重载后又完成 60 帧。另一轮无画面原盘回放恢复了
+R100 检查点，重载后接收移动和方块攻击。R100 首战结束后从原版出口前往下一场景的流程仍在开发。
 
 ### 已验证的进展
 

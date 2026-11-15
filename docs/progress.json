@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T07:00:48.588489+00:00",
-  "stage": "native-windows-r100-tutorial-and-r105-combat",
+  "verified_utc": "2026-11-15T08:25:40+00:00",
+  "stage": "native-windows-r105-continue-and-r100-cpu-victory",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1156,6 +1156,36 @@
     "first_scene_frame_completed": true,
     "world_commands": 258,
     "actor_commands": 75
+  },
+  "native_windows_r105_continue": {
+    "scope": "Controlled R003 title handoff, original EV02 and R105 transition, battle defeat, original Continue and R105 GPU presentation",
+    "room": "0105",
+    "game_over_scene_serial": 4399,
+    "continue_input_tick": 4519,
+    "continue_count_before": 0,
+    "continue_count_after": 1,
+    "state5_tick": 4551,
+    "reloaded_scene_serial": 4491,
+    "resource_epoch_before": 2,
+    "resource_epoch_after": 3,
+    "player_hp_after_reload": 100,
+    "exit_tick": 4612,
+    "exit_code": 0,
+    "runtime_or_render_error_observed": false,
+    "independent_no_device_frames_after_reload": 60
+  },
+  "native_cpu_r100_opening_victory": {
+    "scope": "Actual input disc and recorded original pad samples indexed by completed player movement",
+    "room": "0100",
+    "exit_tick": 3872,
+    "completed_input_samples": 2125,
+    "replay_packet_serial": 3721,
+    "defeated_enemy_stamps": [19, 20],
+    "room_save_death_mask": 3,
+    "opening_encounter_scenario_flag": "01000000",
+    "player_hp": 1,
+    "windows_victory_presentation_verified": false,
+    "normal_room_exit_verified": false
   },
   "native_windows_r100_tutorial": {
     "scope": "Tutorial 1, actual controller approach, Circle open and Cross close",

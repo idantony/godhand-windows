@@ -4,6 +4,29 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R105 Game Over and same-room Continue on Windows
+
+A hidden, muted Windows replay selects R003 at the title handoff. It presents
+all 28 original EV02 cuts and follows the room exit into R105. The original
+Game Over menu is presented at scene 4399. Cross confirms Continue and advances
+the continue counter from 0 to 1. Original GameMain State 5 reloads R105.
+The first reloaded scene, 4491, is presented with Gene at 100 HP. The run exits
+successfully at tick 4612. A separate native CPU replay completes 60 game frames
+after the reload.
+
+A recorded original pad route defeats both opening R100 enemies with Gene at
+1 HP on the native CPU replay. The original state records both deaths and the
+opening encounter flag. The later room-exit gate and Windows victory presentation
+are separate verification steps.
+
+隐藏、静音的 Windows 回放在标题交接处选入 R003，呈现 EV02 全部 28 个镜头，随后沿原版出口
+进入 R105。第 4399 帧呈现原版 Game Over 菜单。按叉键确认继续，继续次数由 0 增至 1，原版
+GameMain State 5 重载 R105。重载后的第一帧为 4491，Gene 恢复到 100 HP。回放在第 4612 tick
+正常退出。另一次无画面的原盘回放在重载后完成了 60 帧。
+
+无画面的 R100 手柄回放击败了开场的两名敌人，Gene 剩 1 HP。原版状态记录两名敌人的死亡和
+首战完成标记。后续房间出口和 Windows 胜利画面仍需分别验证。
+
 ## First tutorial presented and dismissed on Windows
 
 A Windows New Game replay approaches the first R100 tutorial using the

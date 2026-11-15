@@ -135,8 +135,14 @@ gh_effect_status gh_game_effects_register_2ad_00305758(gh_game_effects *s,gh_eff
 
 gh_effect_status gh_game_effects_release_2ad_native(gh_game_effects *s,gh_effect_view data)
 {
-    if(!s||!s->ready||!data.bytes)return GH_EFFECT_ARGUMENT;
+    if(!s)return GH_EFFECT_ARGUMENT;
     if(s->native)return GH_EFFECT_UNSUPPORTED;
+    return gh_game_effects_release_2ad_00305778(s,data);
+}
+
+gh_effect_status gh_game_effects_release_2ad_00305778(gh_game_effects *s,gh_effect_view data)
+{
+    if(!s||!s->ready||!data.bytes)return GH_EFFECT_ARGUMENT;
     gh_bundle bundle;
     gh_bundle_entry table0,table1,emitters;
     if(gh_bundle_open(data.bytes,data.size,&bundle)||

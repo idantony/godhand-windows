@@ -47,6 +47,8 @@ gh_room_pool_status gh_om300_retire_0030f8b0(gh_om300_full_retirement *,
  const gh_om300_retire_bindings *,uint32_t handle);
 /* Verified shared R100 OM class dispatch. The class-specific prefixes retain
  * their original differences before calling the common OM/base destructor. */
+/* Release the native cross-model part borrow during ordered State5 teardown. */
+gh_room_pool_status gh_om_retire_player_paper_borrow(gh_om_factory *,gh_actor_model *,uint32_t *);
 uint32_t gh_om_retire_entry(uint32_t kind);
 gh_room_pool_status gh_om_retire_mark_00312708(gh_om_factory *,uint32_t,gh_se_voice_engine *,uint32_t *);
 /* Ordinary 30F650 removes 754C58 before dispatching the verified mode 3

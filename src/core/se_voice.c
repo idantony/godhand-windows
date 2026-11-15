@@ -25,7 +25,7 @@ typedef struct {
  gh_adx_key key;
  int16_t decibels[128];
 } sequence_audio;
-struct gh_se_voice_engine {const gh_audio_registry *registry;gh_audio_output *output;gh_se_mix mix;struct voice voices[64];int channels[51],head;uint32_t serial,frontier;const void *origin_seh;size_t origin_seh_size;uint8_t origin_scene_bound;struct {uint32_t handle;int16_t ticks;} stops[48];unsigned stop_count;gh_se_pitch_reference pitch;sequence_audio sequence;gh_se_attached_failure attached_failure;};
+struct gh_se_voice_engine {const gh_audio_registry *registry;gh_audio_output *output;gh_se_mix mix;struct voice voices[64];int channels[51],head;uint32_t serial,frontier;const void *origin_seh;size_t origin_seh_size;uint8_t origin_scene_bound;struct {uint32_t handle;int16_t ticks;} stops[48];unsigned stop_count;uint32_t actor_stop_retry[8];gh_se_pitch_reference pitch;sequence_audio sequence;gh_se_attached_failure attached_failure;};
 static unsigned h(const uint8_t *p){return (unsigned)p[0]|(unsigned)p[1]<<8;}
 static uint32_t w(const uint8_t *p){return (uint32_t)h(p)|(uint32_t)h(p+2)<<16;}
 static float sound_float(uint32_t bits){float value;memcpy(&value,&bits,4);return value;}
@@ -1367,7 +1367,9 @@ static gh_voice_status sound_occluded(gh_se_voice_engine *s,const struct voice *
  const gh_se_attached_environment *env,int *blocked)
 {
  gh_game_scene_tables *tables=env->scene_tables;
- if(!tables||!tables->actors_ready)return unsupported(s,0x308da8);
+ /* 12ED60 tests manager+0 before accessing geometry. The original
+  * 12E800 room reset leaves detached voices with a valid empty owner. */
+ if(!tables||(tables->akg.bytes&&!tables->actors_ready))return unsupported(s,0x308da8);
  gh_scene_ray_report reports[8]={0};
  gh_scene_ray_request request={.mask=7,.flags=0x12c,.report_limit=8,.native_reports=reports};
  memcpy(request.from,v->info.source_position,sizeof(request.from));
@@ -1679,7 +1681,27 @@ static gh_voice_status voice_update_body(gh_se_voice_engine *s)
  }
  return GH_VOICE_OK;
 }
-gh_voice_status gh_se_voice_update(gh_se_voice_engine*s){if(!s)return GH_VOICE_ARGUMENT;fenv_t env;if(feholdexcept(&env))return GH_VOICE_PLATFORM;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_VOICE_PLATFORM;}gh_voice_status e=voice_update_body(s);if(fesetenv(&env))return GH_VOICE_PLATFORM;return e;}
+gh_voice_status gh_se_voice_update(gh_se_voice_engine*s)
+{
+ if(!s)return GH_VOICE_ARGUMENT;
+ fenv_t env;
+ if(feholdexcept(&env))return GH_VOICE_PLATFORM;
+ if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_VOICE_PLATFORM;}
+ gh_voice_status status=voice_update_body(s);
+ if(fesetenv(&env))return GH_VOICE_PLATFORM;
+ if(status)return status;
+ /* 2CA4D0 sends another stop after 375380/375500 consume the
+  * current commands. The new command is therefore for the next update. */
+ for(unsigned i=0;i<8;i++){
+  uint32_t handle=s->actor_stop_retry[i];
+  if(!handle)continue;
+  int accepted;
+  status=gh_se_voice_request_stop_00375050(s,handle,5,&accepted);
+  if(status)return status;
+  s->actor_stop_retry[i]=0;
+ }
+ return GH_VOICE_OK;
+}
 gh_voice_status gh_se_voice_query(const gh_se_voice_engine *s,uint32_t handle,gh_se_voice_info *out)
 {if(!s || !handle || !out)return GH_VOICE_ARGUMENT;for(unsigned i=0;i<64;++i)if(s->voices[i].used && s->voices[i].info.original_handle==handle){*out=s->voices[i].info;out->attached_model=s->voices[i].model;out->attached=s->voices[i].model!=NULL;out->attached_part=s->voices[i].model?s->voices[i].part_index:-1;return GH_VOICE_OK;}return GH_VOICE_BOUNDS;}
 uint32_t gh_se_voice_frontier(const gh_se_voice_engine *s){return s?s->frontier:0;}
@@ -1716,6 +1738,22 @@ gh_voice_status gh_se_voice_request_stop_00375050(gh_se_voice_engine*s,uint32_t 
  if(s->stop_count==48)return GH_VOICE_OK;
  s->stops[s->stop_count].handle=handle;s->stops[s->stop_count].ticks=ticks;s->stop_count++;*accepted=1;return GH_VOICE_OK;
 }
+gh_voice_status gh_se_voice_stop_actor_002cbba0(gh_se_voice_engine *s,uint32_t handle)
+{
+ if(!s)return GH_VOICE_ARGUMENT;
+ if(!handle)return GH_VOICE_OK;
+ int accepted;
+ gh_voice_status status=gh_se_voice_request_stop_00375050(s,handle,5,&accepted);
+ if(status)return status;
+ /* Original retries even if the SDK command slot was exhausted. */
+ for(unsigned i=0;i<8;i++){
+  if(s->actor_stop_retry[i])continue;
+  s->actor_stop_retry[i]=handle;
+  break;
+ }
+ return GH_VOICE_OK;
+}
+
 gh_voice_status gh_se_voice_stop_bank_002cbc58(gh_se_voice_engine*s,int16_t bank,int16_t ticks){
  if(!s||bank<0||bank>=52)return GH_VOICE_ARGUMENT;if(ticks < -1)return unsupported(s,0x378020);s->frontier=0;
  /* Check before dropping pending nodes or publishing any stop commands. */

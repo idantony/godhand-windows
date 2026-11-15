@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 typedef struct gh_enemy_ems gh_enemy_ems;
+struct gh_enemy2ad_init_tail;
 
 typedef struct {
     gh_enemy_actor_bindings actor;
@@ -55,6 +56,9 @@ typedef struct {
     gh_enemy_weapon_init *weapon;
     gh_enemy_other_move *other_move;
     gh_id_base **marker_id;
+    struct gh_enemy2ad_init_tail *enemy2ad;
+    gh_game_init_state *init;
+    gh_game_collision_solids *solids;
 } gh_enemy_ems_live;
 /* Borrow registered runtime storage; use one Move cursor per physical row. */
 gh_scene_placement_status gh_enemy_ems_live_at(gh_enemy_ems *,uint32_t handle,gh_enemy_ems_live *);
@@ -62,6 +66,7 @@ gh_actor_motion_status gh_enemy_ems_move_2ad_0028e420(gh_enemy_ems *,uint32_t,
     const gh_object_opacity_environment *,const void *,size_t,const gh_se_voice_engine *,
     gh_motion_sound_consumer,void *,uint32_t *);
 gh_actor_motion_status gh_enemy_ems_2ad_dtor_motion_0028e068(gh_enemy_ems *,uint32_t,uint32_t *);
+gh_actor_motion_status gh_enemy_ems_2ad_dtor_bank_00305778(gh_enemy_ems *,uint32_t,uint32_t *);
 /* R100 forced 0220 entry from stamp8's 25FE30. Stable pending owner
  * survives a suspended virtual Init and becomes visible after return1. */
 gh_actor_motion_status gh_enemy_ems_spawn_devil_002905d0(gh_enemy_ems *,

@@ -23,7 +23,16 @@ gh_player_init_status gh_game_player_post_initialize_00107f58(gh_game_player_pos
  if(!s->stage){gh_player_init_status e=model_finish(s,policy);if(e)return e;s->stage=1;}
  if(s->stage==1){uint32_t pc=0;gh_player_init_status e=gh_game_heat_clear_mode_002a9cc8(init,policy,&pc);if(e)return fail(s,pc?pc:0x2a9cc8,e);s->stage=2;}
  if(s->stage==2){ww(raw+0x5ec,0x72);ww(raw+0x5e8,0x72);if(!p->view.alias_f0)return GH_PLAYER_INIT_ARGUMENT;memcpy(raw+0x490,p->view.alias_f0,12);memcpy(raw+0x630,raw+0x490,12);s->stage=3;}
- if(s->stage==3){if(save.bytes&&save.bytes[0x157]){s->pending_object_id=0x376;return fail(s,0x12c8d8,GH_PLAYER_INIT_UNSUPPORTED);}s->pending_object_id=0;s->stage=4;}
+ if(s->stage==3){
+  if(save.bytes&&save.bytes[0x157]){
+   s->pending_object_id=0x376;
+   if(!s->restore_paper)return fail(s,0x12c8d8,GH_PLAYER_INIT_UNSUPPORTED);
+   uint32_t frontier=0;
+   gh_player_init_status status=s->restore_paper(s->paper_context,&p->view,&frontier);
+   if(status)return fail(s,frontier?frontier:0x12c8d8,status);
+  }
+  s->pending_object_id=0;s->stage=4;
+ }
  if(s->stage==4){static const uint32_t multipliers[]={0x3f800000,0x3f800000,0x3f99999a,0x3fb33333,0x3fcccccd,0x3fe66666,0x40000000,0x400ccccd,0x4019999a};unsigned stage=((const uint8_t*)work)[0x5b1];ww(raw+0x600,stage<9?multipliers[stage]:0x3f800000);ww(raw+0x690,0);memset(raw+0x650,0,12);ww(raw+0x674,0);s->stage=5;}
  s->complete=1;s->frontier=0;*original=1;return GH_PLAYER_INIT_OK;
 }
