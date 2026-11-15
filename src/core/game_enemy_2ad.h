@@ -9,6 +9,9 @@
 #include "game_actor_motion_call.h"
 #include "game_effect_create.h"
 #include "game_player_shadow.h"
+#include "game_object_opacity.h"
+#include "game_room_state.h"
+#include "se_voice.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -53,6 +56,33 @@ typedef struct {
 gh_actor_model_status gh_enemy2ad_init_tail_0028e320(gh_enemy2ad_init_tail *,gh_enemy2ad_init *,
     gh_title_player_view *,const gh_object_view *,const gh_enemy2ad_tail_bindings *,
     gh_static_transform_policy,int *);
+typedef struct {
+    gh_actor_motion_call begin;
+    gh_motion_solve solve;
+    gh_actor_finish_model_call finish;
+    gh_motion_sound_request sound;
+    uint8_t stage;
+} gh_enemy2ad_move;
+typedef struct {
+    const gh_room_state *room;
+    const uint8_t *scenario14;
+    const void *elf;
+    size_t elf_bytes;
+    const gh_object_opacity_environment *opacity;
+    gh_motion_solve_bindings solve;
+    gh_motion_effect_consumer release_effect;
+    void *effect_context;
+    const float *rate;
+    const gh_se_voice_engine *voices;
+    gh_motion_sound_consumer play_sound;
+    void *sound_context;
+} gh_enemy2ad_move_bindings;
+/* A single original update. Retries resume after the last completed callee. */
+gh_actor_motion_status gh_enemy2ad_move_0028e420(gh_enemy2ad_move *,gh_enemy2ad_init_tail *,
+    gh_game_title_player *,const gh_enemy2ad_move_bindings *,uint32_t *frontier);
+/* Original derived-destructor motion release only. D7 bank stop follows. */
+gh_actor_motion_status gh_enemy2ad_dtor_motion_0028e068(gh_actor_motion_call *,
+    gh_enemy2ad_init_tail *,gh_motion_effect_consumer,void *,uint32_t *frontier);
 #ifdef __cplusplus
 }
 #endif

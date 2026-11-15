@@ -134,7 +134,7 @@ def run(prepared):
     if r003_controlled:
         proof.require(qa.get("effect_post_error") == 0, "controlled R003 reported effect_post_error")
         log = (scratch / "startup-newgame.stderr.log").read_text(encoding="utf-8-sig")
-        summary["controlled_r003"] = proof.controlled_r003_status(log, qa)
+        summary.update(proof.controlled_room_observations(log, qa))
     if repeated_attack:
         marker = "QA_REPEAT_STATUS "
         with (scratch / "startup-newgame.stderr.log").open(encoding="utf-8", errors="replace") as stream:

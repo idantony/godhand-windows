@@ -18,7 +18,7 @@ struct voice {gh_se_voice_info info;gh_adpcm_pcm pcm;uint32_t age,ee_age;uint16_
  gh_actor_model *model;int32_t part_index;const void *source_owner,*request_key;
  gh_se_attached_probe probe;void *probe_context;gh_se_attached_random random;void *random_context;
  uint8_t descriptor[48],setup_stage,variants;int16_t requested_bank,requested_program;
- uint32_t flags18,flags1c;uint16_t selected_pitch,submitted_pitch;int16_t selected_offset;uint8_t pitch_setup,spatial_slow,combat_profile,external_channels,door_spatial;uint16_t spatial_gain;};
+ uint32_t flags18,flags1c;uint16_t selected_pitch,submitted_pitch;int16_t selected_offset;uint8_t pitch_setup,spatial_slow,combat_profile,external_channels,door_spatial,emad_loop,emad_occluded;uint16_t spatial_gain;};
 typedef struct {
  gh_disc *disc;
  const gh_sound_control *control;
@@ -48,21 +48,41 @@ static void drop(gh_se_voice_engine *s,int i,int stop)
 /* Actual 80FF with 5FC0 or 5FCB shares the key-on envelope. The renderer
  * ends at the one-shot sample end. The release rate only applies at key-off.
  * Native linear resampling uses the existing pinned envelope reference. */
+typedef struct {uint32_t level,counter,phase;} keyon_envelope;
+
+static uint32_t keyon_envelope_step(keyon_envelope *e)
+{
+ if(e->phase==1){
+  e->counter+=e->level>0x6000?8192:32768;
+  if(e->counter>=32768){
+   e->counter=0;
+   e->level+=14336;
+   if(e->level>=32767){e->level=32767;e->phase=2;}
+  }
+ }else if(e->phase==2){
+  e->counter+=2048;
+  if(e->counter>=32768){e->counter=0;e->level-=(e->level*8+32767)/32768;}
+  e->phase=3;
+ }else if(++e->counter>=32768){
+  e->counter=0;
+  e->level=e->level>=5?e->level-5:0;
+ }
+ return e->level;
+}
+
 static gh_voice_status render(gh_adpcm_pcm *pcm,uint16_t pitch)
 {
  uint64_t count;int16_t *out;
- uint32_t env=0,counter=0,phase=1;
+ keyon_envelope env={.phase=1};
  if(pcm->frames>(UINT64_MAX-pitch+1)/4096)return GH_VOICE_BOUNDS;
  count=((uint64_t)pcm->frames*4096+pitch-1)/pitch;
  if(count>SIZE_MAX/sizeof(*out))return GH_VOICE_BOUNDS;
  out=malloc((size_t)count*sizeof(*out));if(!out)return GH_VOICE_MEMORY;
  for(uint64_t i=0;i<count;++i){
   uint64_t pos=i*pitch;size_t index=(size_t)(pos>>12);unsigned fraction=(unsigned)(pos&4095);int32_t a=pcm->samples[index],b=index+1<pcm->frames?pcm->samples[index+1]:0,value;
-  if(phase==1){counter+=env>0x6000?8192:32768;if(counter>=32768){counter=0;env+=14336;if(env>=32767){env=32767;phase=2;}}}
-  else if(phase==2){counter+=2048;if(counter>=32768){counter=0;env-=(env*8+32767)/32768;}phase=3;}
-  else {++counter;if(counter>=32768){counter=0;env=env>=5?env-5:0;}}
+  const uint32_t level=keyon_envelope_step(&env);
   value=floor_shift((int64_t)a*(4096-fraction)+(int64_t)b*fraction,12);
-  out[i]=(int16_t)floor_shift((int64_t)value*env,15);
+  out[i]=(int16_t)floor_shift((int64_t)value*level,15);
  }
  free(pcm->samples);pcm->samples=out;pcm->frames=(size_t)count;return GH_VOICE_OK;
 }
@@ -454,6 +474,22 @@ static int r100_death_profile(const struct voice *v,int16_t bank,int16_t program
     (w(sample+4)==11025&&w(sample+8)==0x5fcb80ff&&!w(sample+12)));
 }
 
+/* Actual EMAD.SES loop, selected by the R105 cEmAD instance. */
+static int r105_emad_loop(const struct voice *v,int16_t bank,int16_t program,const uint8_t *p)
+{
+ const gh_actor_model *model=v->model;
+ if(!v->source_owner||bank<1||bank==2||bank==3||program!=0x12||v->requested_program!=0x12||
+    v->part_index!=-1||!model||!model->work||model->work->room!=0x105||
+    model->root.original_vtable214!=0x44a528||!model->root.bytes||model->root.size<0x1554)
+  return 0;
+ const uint8_t *actor=model->root.bytes;
+ return h(actor+0x2fe)==0x2ad&&w(actor+0x564)==0x2ad&&h(actor+0x640)==63&&
+    h(p)==(unsigned)bank&&h(p+2)==0x12&&w(p+4)==0x04140000&&w(p+8)==0x278&&
+    w(p+0xc)==0x00200000&&w(p+0x10)==0x00370037&&w(p+0x14)==0x005a0040&&
+    !w(p+0x18)&&w(p+0x1c)==0x00050000&&w(p+0x20)==0x00030004&&w(p+0x24)==0x302&&
+    w(p+0x28)==0xffff&&!w(p+0x2c);
+}
+
 static int r100_door_open_profile(const struct voice *v);
 static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,int16_t program,const uint8_t*p,struct voice*candidate,uint16_t selected_pitch){
  gh_audio_pcm_release(&candidate->pcm);
@@ -513,6 +549,37 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  int timed_voice=adsr2==0x5fcb&&em0a_timed_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==0x5be0&&w(descriptor.data+4)==16000;
  const int ema2_timer_voice=adsr2==0x5fcb&&ema2_timer_cue_profile(candidate,bank,program,p,descriptor.data);
+ /* The loop bit also requires the physical ADPCM repeat markers and stable
+  * predictor history validated by the decoder. */
+ if(r105_emad_loop(candidate,bank,program,p)){
+  if(w(descriptor.data)||w(descriptor.data+4)!=16000||adsr1!=0x80ff||adsr2!=0x5fcb||
+     w(descriptor.data+12)!=1||tail.size!=12736)return unsupported(s,0x35fc);
+  result=gh_audio_decode_ps_adpcm_loop(tail.data,tail.size,&candidate->pcm);
+  if(result){s->frontier=0x35fc;return result;}
+  /* Bake key-on in source sample time. The repeating tail uses the
+   * sustain level at loop entry in this native DSP reference. */
+  const uint16_t pitch=selected_pitch?selected_pitch:1365;
+  keyon_envelope env={.phase=1};
+  uint64_t next_sample=0;
+  for(uint64_t i=0;next_sample<candidate->pcm.loop_first;i++){
+   const uint32_t level=keyon_envelope_step(&env);
+   if(((i*pitch)>>12)>=next_sample){
+    int16_t *value=&candidate->pcm.samples[next_sample++];
+    *value=(int16_t)floor_shift((int64_t)*value*level,15);
+   }
+  }
+  for(size_t i=candidate->pcm.loop_first;i<candidate->pcm.frames;i++)
+   candidate->pcm.samples[i]=(int16_t)floor_shift((int64_t)candidate->pcm.samples[i]*env.level,15);
+  candidate->emad_loop=1;
+  candidate->info.pitch_q12=selected_pitch?selected_pitch:1365;
+  candidate->info.stop_current=0x7f00;candidate->info.level_q14=0;
+  candidate->info.rate=16000;candidate->info.sample_slot=0;
+  candidate->info.frames=(uint32_t)candidate->pcm.frames;
+  candidate->info.adsr1=adsr1;candidate->info.adsr2=adsr2;
+  candidate->info.program=program;candidate->info.bank=bank;
+  candidate->info.pending=1;candidate->info.channel=NONE;
+  return GH_VOICE_OK;
+ }
  if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!ema2_timer_voice&&!square_voice&&!triangle_voice&&!player_cd&&!hurt_voice&&!fall_grunt&&!impact_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!local_cue_voice&&!attack_voice&&!death_voice)||w(descriptor.data+12))return unsupported(s,0x35fc);
  static const uint32_t ema2_impact_offsets[]={0x553c0,0x56490,0x54300};
  int ema2_voice=adsr2==0x5fc0&&core_ema2_impact_profile(candidate,bank,program,p)&&
@@ -649,7 +716,7 @@ static gh_voice_status sequence_prepare(gh_se_voice_engine *s,struct voice *v)
   free(samples);
   return unsupported(s,0x32bb48);
  }
- v->pcm=(gh_adpcm_pcm){samples,clip->frames,(size_t)bytes};
+ v->pcm=(gh_adpcm_pcm){.samples=samples,.frames=clip->frames,.source_bytes=(size_t)bytes};
  v->info.frames=clip->frames;
  /* 37C6A0 scales descriptor level 127 by the authored AFD weight.
   * 37D3C8 uses the existing SE mixer before the separate 373FF0 gain. */
@@ -793,7 +860,8 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
  *suppressed=0;
  if(!candidate->descriptor[0x22])return GH_VOICE_OK;
  if((candidate->info.bank!=2||candidate->info.program!=10||candidate->descriptor[0x22]!=3)&&
-    !r100_door_open_profile(candidate)){
+    !r100_door_open_profile(candidate)&&
+    !r105_emad_loop(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)){
   if(!enemy_reaction_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_state71_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_local_cue_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
@@ -856,7 +924,8 @@ static gh_voice_status attached_request_body(gh_se_voice_engine*s,const void*own
  }
  if(v->setup_stage==4){uint8_t*p=v->descriptor;gh_se_attached_environment env={0};gh_voice_status e=v->probe(v->probe_context,v->info.source_position,0,&env,&s->frontier);if(e)return e;v->info.position_mode=2;if(env.output_mode&&p[9]!=2){if(p[9]==3)v->info.position_mode=1;else if(p[9]<2)v->info.position_mode=0;}v->flags18=flags|p[0x20]|((uint32_t)p[0x24]<<8);v->flags1c=(unsigned)p[0x25]|(unsigned)p[0x26]<<8;if(v->flags1c&6)v->flags1c|=1;v->setup_stage=5;}
  if(v->setup_stage==5){gh_voice_status e=attached_profile(s,v->descriptor,core_enemy_footstep_profile(v,
-    v->info.bank,v->info.program,v->descriptor,NULL),r100_devil_spawn_cue(v,v->descriptor)?0:65535);if(e)return e;e=prepare_pcm(s,v->info.bank,v->info.program,v->descriptor,v);if(e)return e;v->priority=v->descriptor[8];v->group_first=v->descriptor[6];v->group_count=v->descriptor[7]+1;v->replace_equal=(v->descriptor[0xe]&0x20)!=0;/* Range is sampled later by actual37C2E0, never expose this intermediate PCM as finalpitch. */if(h(v->descriptor+0x18)||h(v->descriptor+0x1a))v->info.pitch_q12=0;v->setup_stage=6;}
+    v->info.bank,v->info.program,v->descriptor,NULL),r100_devil_spawn_cue(v,v->descriptor)?0:65535);
+ if(e)return e;e=prepare_pcm(s,v->info.bank,v->info.program,v->descriptor,v);if(e)return e;v->priority=v->descriptor[8];v->group_first=v->descriptor[6];v->group_count=v->descriptor[7]+1;v->replace_equal=(v->descriptor[0xe]&0x20)!=0;/* Range is sampled later by actual37C2E0, never expose this intermediate PCM as finalpitch. */if(h(v->descriptor+0x18)||h(v->descriptor+0x1a))v->info.pitch_q12=0;v->setup_stage=6;}
  if(v->setup_stage==6){if(!++s->serial)++s->serial;v->info.original_handle=s->serial;v->request_key=NULL;v->setup_stage=0;v->random=NULL;v->random_context=NULL;v->used=1;v->next=s->head;s->head=(int)index;*handle=v->info.original_handle;}
  return GH_VOICE_OK;
 }
@@ -910,7 +979,7 @@ static int combat_voice_profile(const struct voice *v)
 }
 static int voice_uses_ee_mix(const struct voice *v)
 {
- return r100_spatial_profile(v)||combat_voice_profile(v);
+ return r100_spatial_profile(v)||combat_voice_profile(v)||v->emad_loop;
 }
 static int signed_half(const uint8_t *p){unsigned u=h(p);return u<0x8000?(int)u:(int)u-0x10000;}
 
@@ -1016,6 +1085,11 @@ static void apply_spatial_mix(const gh_se_voice_engine *s,struct voice *v)
  unsigned pan=v->info.pan;
  v->info.left_q14=(uint16_t)(pan>64?level*(127-pan)/64:level);
  v->info.right_q14=(uint16_t)(pan<64?level*pan/64:level);
+ /* Original flag0200 applies the 0.3 factor after left/right calculation. */
+ if(v->emad_occluded){
+  v->info.left_q14=(uint16_t)(v->info.left_q14*3u/10u);
+  v->info.right_q14=(uint16_t)(v->info.right_q14*3u/10u);
+ }
 }
 
 /* 37C2E0 preserves the SDK random offset. 37D728 adds the current
@@ -1088,7 +1162,7 @@ static gh_voice_status spatial_update(gh_se_voice_engine *s,struct voice *v,
  uint32_t entry=v->info.pending?0x2ce588:0x2cea00;
  if(env->output_mode!=1||env->se_level_q8!=s->mix.se_level_q8)return unsupported(s,0x375630);
  int combat=combat_voice_profile(v);
- if((!combat&&(v->flags18!=4||v->flags1c!=3))||env->reverb||
+ if((!combat&&!v->emad_loop&&(v->flags18!=4||v->flags1c!=3))||env->reverb||
     (env->system_flags_5e4&0x08000000u)||(env->game_flags_5d8&0x40u))
   return unsupported(s,entry);
  if(v->flags18&0x40u){
@@ -1101,6 +1175,11 @@ static gh_voice_status spatial_update(gh_se_voice_engine *s,struct voice *v,
   gh_voice_status occlusion=sound_occluded(s,v,env,&blocked);
   if(occlusion)return occlusion;
   if(blocked){v->info.pending=0;return GH_VOICE_OK;}
+ }
+ int occluded=0;
+ if(v->emad_loop){
+  gh_voice_status status=sound_occluded(s,v,env,&occluded);
+  if(status)return status;
  }
  unsigned distance=0,angle=0;
  int gain=(int)h(v->descriptor+0x10),pitch=0;
@@ -1140,7 +1219,7 @@ static gh_voice_status spatial_update(gh_se_voice_engine *s,struct voice *v,
   pan=approach(v->info.pan,pan,3);
  }
  /* Keep all visible parameters transactional if the native endpoint fails. */
- struct voice mixed={.info=v->info,.spatial_gain=(uint16_t)gain};
+ struct voice mixed={.info=v->info,.spatial_gain=(uint16_t)gain,.emad_occluded=(uint8_t)occluded};
  mixed.info.pan=(uint16_t)pan;
  apply_spatial_mix(s,&mixed);
  if(!v->info.pending&&v->info.native_voice){
@@ -1164,6 +1243,7 @@ static gh_voice_status spatial_update(gh_se_voice_engine *s,struct voice *v,
  mixed.info.azimuth=(uint16_t)angle;
  v->spatial_slow=(uint8_t)slow;
  v->spatial_gain=(uint16_t)gain;
+ v->emad_occluded=(uint8_t)occluded;
  v->base_gain=mixed.base_gain;
  v->info=mixed.info;
  return GH_VOICE_OK;
@@ -1306,7 +1386,9 @@ static gh_voice_status voice_update_body(gh_se_voice_engine *s)
      drop(s,replaced,0);
     }
    }
-   gh_voice_status error=v->external_channels==2?
+   gh_voice_status error=v->emad_loop?
+      gh_audio_output_play_q12(s->output,&v->pcm,v->info.pitch_q12,left_gain,right_gain,&v->info.native_voice):
+      v->external_channels==2?
       gh_audio_output_play_stereo(s->output,&v->pcm,48000,left_gain,right_gain,&v->info.native_voice):
       gh_audio_output_play(s->output,&v->pcm,48000,left_gain,right_gain,&v->info.native_voice);
    if(error){s->frontier=0x374df8;return error;}

@@ -2562,11 +2562,15 @@ static gh_actor_motion_status advance_substate1_0020fbb8(gh_enemy202_move *s,uin
     const float distance=number(word(p+0x618));
     uint32_t pc=0;
     const int r105_exchange=r105_exchanged_enemy(work,p);
+    const unsigned stamp=half(p+0x640);
+    const int r105_em0a=work->room==0x105&&dependency==0x20a&&appearance==0&&(stamp==3||stamp==5);
+    const int r105_em03=work->room==0x105&&dependency==0x203&&appearance==1&&stamp==6;
+    const int r105_entry=r105_exchange||r105_em0a||r105_em03;
     if(!s->substate67_stage){
-        if(r105_exchange&&(p[0x2f6]>1||held))
+        if(r105_entry&&(p[0x2f6]>1||held))
             return stop(s,p[0x2f6]>1?0x210a58:0x210590,GH_ACTOR_MOTION_UNSUPPORTED);
         if(!(((appearance==0||appearance==5)&&(dependency==0x200||dependency==0x203))||
-            (appearance==9&&dependency==0x202)||r105_exchange))
+            (appearance==9&&dependency==0x202)||r105_entry))
             return stop(s,0x20fbb8,GH_ACTOR_MOTION_UNSUPPORTED);
         put(p+0x16d0,word(p+0x16d0)|0x400u);
         switch(p[0x2f6]){
@@ -2606,6 +2610,14 @@ static gh_actor_motion_status advance_substate1_0020fbb8(gh_enemy202_move *s,uin
             }else if(appearance==5){
                 offset=0x424;
                 sequence=0x428;
+            }else if(r105_em0a){
+                /* Dependency 20A dispatches to 20FD18. */
+                offset=0x828;
+                sequence=0x82c;
+            }else if(r105_em03){
+                /* Appearance 1 and dependency 203 dispatch to 21038C. */
+                offset=0x3fc;
+                sequence=0x400;
             }else{
                 /* Original 227 uses 20FCA8's ordinary entry pair as well. */
                 offset=dependency==0x200||r105_exchange?0x98:0x648;

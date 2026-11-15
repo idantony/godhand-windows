@@ -791,6 +791,7 @@ def main():
         ("r105-room-init", "tests/core/test_r105_room.c", "iso"),
         ("r105-paper", "tests/core/test_r105_paper.c", "iso"),
         ("r105-gate", "tests/core/test_r105_gate.c", "both"),
+        ("r105-room", "tests/core/test_r105_room.c", "iso"),
         ("r003-om31a", "tests/core/test_r003_om31a.c", "both"),
         ("r100-init", "tests/rooms/test_r100_init.c", "iso"),
         ("r100-exit", "tests/rooms/test_r100_exit.c", "iso"),

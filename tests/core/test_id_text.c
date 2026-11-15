@@ -78,6 +78,23 @@ int main(int argc,char**argv){
  C(result.frontier_address==0x2b04c0&&result.opcode==0xb602&&!result.glyph_count);
  body[2]=4;
  puts("PASS actual R020 empty and difficulty rows: original B602/B301 palette commands");
+ /* Original recovery prompt life19 publishes Menu texture-data message3024.
+  * The Scene queue intentionally carries no packed MSD for this ID base. */
+ gh_id_base recovery_base={0};
+ C(!gh_id_base_initialize_002a9ea0(runtime,&recovery_base,1,4,NULL,NULL,&original));
+ gh_id_entry *recovery;
+ for(int id=7;id<=8;id++){
+  C(!gh_id_base_get_work_002aa410(runtime,&recovery_base,id,&recovery,NULL)&&recovery->kind==2);
+  recovery->message=0x3024;
+  recovery->draw_x=230;recovery->draw_y=290;
+  recovery->draw_scale_x=recovery->draw_scale_y=1;
+  C(!gh_id_text_prepare(&recovery_base,recovery,&menu,NULL,&font,&context,glyphs,512,&result));
+  C(result.glyph_count==1&&result.icon_count==0&&result.line_count==1&&glyphs[0].code==0x7d);
+  recovery->message=0x2006;
+  C(gh_id_text_prepare(&recovery_base,recovery,&menu,NULL,&font,&context,glyphs,512,&result)==GH_ID_ARGUMENT);
+ }
+ C(!gh_id_base_release_002aa078(runtime,&recovery_base,&original,&reclaimed));
+ puts("PASS actual ActionButton recovery menu 3024 without packed MSD");
  /* Real title DispInit(1) prompts. Source24 is original ID9. */
  gh_id_entry *prompt;
  C(!gh_id_base_get_work_002aa410(runtime,&object,9,&prompt,NULL)&&prompt->source_index==24);

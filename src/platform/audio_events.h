@@ -6,11 +6,14 @@
 extern "C" {
 #endif
 typedef enum gh_voice_status {GH_VOICE_OK,GH_VOICE_ARGUMENT,GH_VOICE_BOUNDS,GH_VOICE_UNSUPPORTED,GH_VOICE_MEMORY,GH_VOICE_PLATFORM,GH_VOICE_CAPACITY} gh_voice_status;
-typedef struct gh_adpcm_pcm {int16_t *samples;size_t frames,source_bytes;} gh_adpcm_pcm;
+typedef struct gh_adpcm_pcm {int16_t *samples;size_t frames,source_bytes,loop_first,loop_frames;} gh_adpcm_pcm;
 /* One bounded mono PS2 ADPCM one-shot, zero predictor history. Stops after
  * END block. Loop/repeat/unknown coefficients/flags return UNSUPPORTED, not a
  * shortened successful voice. Caller owns returned memory; release below. */
 gh_voice_status gh_audio_decode_ps_adpcm(const void *,size_t,gh_adpcm_pcm *);
+/* A bounded repeat sample. Output contains intro plus a complete first
+ * pass and a predictor-stable repeat segment. Unsupported histories fail. */
+gh_voice_status gh_audio_decode_ps_adpcm_loop(const void *,size_t,gh_adpcm_pcm *);
 void gh_audio_pcm_release(gh_adpcm_pcm *);
 typedef struct gh_audio_output gh_audio_output;
 /* Real XAudio2.9 device, one owner thread. No device => PLATFORM, never a dummy

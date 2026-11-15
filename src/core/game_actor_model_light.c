@@ -14,6 +14,18 @@ static float mul(float a,float b){volatile float n=a*b;return n;}
 static float divide(float a,float b){volatile float n=a/b;return n;}
 static gh_actor_model_status stop(uint32_t *pc,uint32_t n,gh_actor_model_status e){*pc=n;return e;}
 static int normal_or_zero(float n){return isfinite(n)&&(n==0||fpclassify(n)==FP_NORMAL);}
+
+/* EE Core User's Manual 8.5-8.7. DIV.S by signed zero yields +/-Fmax.
+ * Its extra exponent is kept in the light rank until the directional
+ * coefficient is clamped. The following ADD.S aligns the bias without
+ * guard bits, at the spacing of EE exponent 128. */
+static double saturated_attenuation(float denominator,float bias)
+{
+ const double ee_max=0x1.fffffep128, spacing=0x1p105;
+ const double aligned_bias=trunc((double)bias/spacing)*spacing;
+ double value=copysign(ee_max,denominator)+aligned_bias;
+ return fmax(-ee_max,fmin(ee_max,value));
+}
 /* 1F7E28: VMUL.xyz, VADDY.x, VADDZ.x, no square root. The separate
  * 101E28 ->1F7DF8 path returns SQRT of this same ordered sum. */
 static gh_actor_model_status distance_squared(const float xyz[3],float *out,uint32_t *pc){
@@ -37,7 +49,7 @@ static const uint8_t *record(const gh_game_world_light *s,int index){
 }
 
 static gh_actor_model_status directional(const gh_actor_model *model,const uint8_t *r,const gh_actor_light_bindings *b,const gh_game_world_light *s,unsigned area,
- const float source_position[3],float strength,float direction[3],float color[3],uint32_t *pc){
+ const float source_position[3],double strength,float direction[3],float color[3],uint32_t *pc){
  uint32_t flags=word(r+0x58);
  if(flags&0x100000)return stop(pc,0x1f7ef0,GH_ACTOR_MODEL_UNSUPPORTED);
 
@@ -66,7 +78,7 @@ static gh_actor_model_status directional(const gh_actor_model *model,const uint8
   float d=number(r+0x20+4*k),c=number(r+0x30+4*k),p=number(b->pivot_owner->bytes+4*k);
   if(!isfinite(p)||(kind<=2&&(!isfinite(c)||(kind!=1&&!isfinite(d)))))return stop(pc,0x14dfd8,GH_ACTOR_MODEL_UNSUPPORTED);
   direction[k]=kind==1?point_direction[k]:(kind>2?p:d);color[k]=kind>2?p:sub(c,p);
-  if(kind<2){float t=strength<0?0:(strength<1?strength:1);volatile float result=color[k]*t;color[k]=result;}
+  if(kind<2){float t=strength<0?0:(strength<1?(float)strength:1);volatile float result=color[k]*t;color[k]=result;}
   if(!isfinite(color[k]))return stop(pc,0x14dfd8,GH_ACTOR_MODEL_UNSUPPORTED);
  }
  if(flags&0x2000000){
@@ -89,7 +101,7 @@ static gh_actor_model_status run(gh_actor_model *m,gh_game_world_light *s,
  uint32_t count=word(s->scalar+0x78);
  if(count>256)return stop(pc,0x2d8ff8,GH_ACTOR_MODEL_BOUNDS);
  int selected[3]={-1,-1,-1},least=0,reflection=-1,shadow=-1;
- float strength[3]={0,0,0},least_strength=-1,reflect_strength=-1,shadow_strength=-1;
+ double strength[3]={0,0,0},least_strength=-1,reflect_strength=-1,shadow_strength=-1;
  float positions[3][3]={{0}},reflection_position[3]={0},shadow_position[3]={0},camera_matrix[16];
  int camera_written=0;
  /* Preserve ordered source distance and attenuation, then rank candidates.
@@ -110,7 +122,7 @@ static gh_actor_model_status run(gh_actor_model *m,gh_game_world_light *s,
    if(written){memcpy(camera_matrix,scratch,64);camera_written=1;}
   }
   /* Actual read-only 41EA88 is FLT_MAX (verified in evidence). */
-  float value=0;const uint32_t maximum=0x7f7fffff;
+  double value=0;
   if(kind<2){
    if(!m->root.alias_f0)return stop(pc,0x14daa4,GH_ACTOR_MODEL_UNSUPPORTED);
    float delta[3],squared;
@@ -120,11 +132,14 @@ static gh_actor_model_status run(gh_actor_model *m,gh_game_world_light *s,
    if(!normal_or_zero(a)||!normal_or_zero(bcoef)||!normal_or_zero(c))return stop(pc,0x14dad8,GH_ACTOR_MODEL_UNSUPPORTED);
    float radius=sqrtf(squared),quadratic=mul(a,squared),linear=mul(bcoef,radius),denominator=add(quadratic,linear);
    if(!normal_or_zero(radius)||!normal_or_zero(quadratic)||!normal_or_zero(linear)||!normal_or_zero(denominator))return stop(pc,0x14daf0,GH_ACTOR_MODEL_UNSUPPORTED);
-   if(denominator==0)return stop(pc,0x14daf4,GH_ACTOR_MODEL_UNSUPPORTED);
-   value=add(divide(1,denominator),c);
-   if(!normal_or_zero(value))return stop(pc,0x14dafc,GH_ACTOR_MODEL_UNSUPPORTED);
+   if(denominator==0)value=saturated_attenuation(denominator,c);
+   else{
+    const float finite=add(divide(1,denominator),c);
+    if(!normal_or_zero(finite))return stop(pc,0x14dafc,GH_ACTOR_MODEL_UNSUPPORTED);
+    value=finite;
+   }
   }
-  if(kind==2||(flags&0x8000000))memcpy(&value,&maximum,4);
+  if(kind==2||(flags&0x8000000))value=0x1.fffffep127;
   if(flags&0x400000){if((word(root+0x254)&0x20000000)&&reflect_strength<value){reflection=(int)i;reflect_strength=value;memcpy(reflection_position,source_position,12);}}
   else if(flags&0x200000){if(shadow_strength<value){shadow=(int)i;shadow_strength=value;memcpy(shadow_position,source_position,12);}}
   else if(least_strength<value){
@@ -142,7 +157,7 @@ static gh_actor_model_status run(gh_actor_model *m,gh_game_world_light *s,
  }
  int has_reflection=(word(root+0x254)&0x20000000)!=0;
  if(has_reflection){
-  if(reflection<0){int best=0;float best_value=-1;for(unsigned k=0;k<3;k++)if(strength[k]>best_value){best_value=strength[k];best=(int)k;}reflection=selected[best];reflect_strength=strength[best];memcpy(reflection_position,positions[best],12);}
+  if(reflection<0){int best=0;double best_value=-1;for(unsigned k=0;k<3;k++)if(strength[k]>best_value){best_value=strength[k];best=(int)k;}reflection=selected[best];reflect_strength=strength[best];memcpy(reflection_position,positions[best],12);}
   gh_actor_model_status e=directional(m,record(s,reflection),b,s,root[0x2cc],reflection_position,reflect_strength,reflect_dir,reflect_color,pc);if(e)return e;
  }
  if(shadow>=0){gh_actor_model_status e=directional(m,record(s,shadow),b,s,root[0x2cc],shadow_position,shadow_strength,shadow_dir,shadow_color,pc);if(e)return e;}

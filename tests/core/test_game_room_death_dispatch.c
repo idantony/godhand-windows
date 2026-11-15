@@ -43,8 +43,8 @@ static gh_object_step_status live_destroy(void *opaque,const gh_object_trans_req
     request->original_entry!=0x198ce0||request->original_vtable!=0x425000||
     request->this_delta||request->argument!=3)return GH_OBJSTEP_ARGUMENT;
  ++fixture->invoked;
- gh_room_pool_status status=gh_om324_destroy_detached_00198ce0(&fixture->state,
-   &fixture->bindings,request->handle,&request->actor);
+ gh_room_pool_status status=gh_om_destroy_detached_mode3(&fixture->state,
+   &fixture->bindings,request->handle,&request->actor,request->original_entry);
  *frontier=fixture->state.frontier;
  return status?GH_OBJSTEP_CALLEE:GH_OBJSTEP_OK;
 }

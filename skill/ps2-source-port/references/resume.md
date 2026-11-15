@@ -5,6 +5,34 @@ history was compacted; private receipts and Git preserve old checkpoints.
 
 ## Current verified checkpoints
 
+- Exact267 `room-transition-267-r105-emad-alpha` completes 34 original
+  R105 scene packets in the controlled CPU replay. It stops at room tick3361
+  on stamp0 EM00 selector6B `0023B968`. Proof
+  `analysis/room-transition-267-r105-cpu-private.json`. The separate hidden,
+  muted Windows run presents 31 R105 frames (serials 3195–3225), first at
+  tick3315, after 2,785 R003 frames and all 28 EV02 cuts. It stops at the
+  same original call at tick3346 with all renderer/window errors zero.
+  Eight R105 captures are presentation-correlated. Proof
+  `analysis/room-transition-267-r105-windows-private.json`.
+  The snapshot recovers
+  the EMAD looping voice, attached D7:1 emitter and its five first-update
+  sprites, the player's LI3 light attenuation, and the EMAD model Trans.
+  The R105 capture runner tracks the actual State4 presentation separately
+  from room 003 and verifies frame captures against both presented ranges.
+- Exact266 `room-transition-266-r100-om305` presents 2,537 R100 scenes in
+  the ordinary New Game route. The original OM305 break advances to the
+  positive original EM03 grab reach check `00270DB0` at tick2678. The
+  earlier simulation-only grab handoff and player placement are verified
+  in an independent original-disc replay. Proof
+  `analysis/room-transition-266-r100-windows-private.json`.
+- Exact263 presents Gene's recovery prompt and 2,528 R100 scenes. The
+  original rotated 128x64 indexed graphic and Menu bank3 glyph render in
+  the native queue. Proof `analysis/room-transition-263-r100-windows-private.json`.
+  The adjacent controlled R105 Windows run advances through the first PL00
+  Draw to EMAD Trans. Quick isolated actual-disc checks verified the original
+  R105 LI3 selectors 9,255,10 on the certified numeric slice. EE signed-zero
+  attenuation follows the COP1 Fmax behavior in the
+  [EE Core User's Manual, sections 8.5–8.7](https://docs.alexrp.com/mips/ee.pdf).
 - Exact256 `room-transition-256-r105-em203-spawn` passes the R105 room
   initialization and starts original scene updates (State4, stage13, tick3327)
   after 2,785 controlled R003 CPU frames. EM227 and EM20A use their original

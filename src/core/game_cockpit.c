@@ -38,7 +38,7 @@ struct gh_game_cockpit {
  /* Original mutable function statics, initialized from PT_LOAD (including
   * its zero-fill), retained across room resets, never inferred from calloc. */
  float life_origin_y,life_shake;uint32_t life_origin_known;
- uint8_t life_level_counter,life_level_direction;unsigned heat_move_stage;
+ uint8_t life_level_counter,life_level_direction,action_rock_forward;unsigned heat_move_stage;
  unsigned widget_step;
 };
 static uint32_t u32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
@@ -257,13 +257,15 @@ static int frame_elf_value(const uint8_t*e,size_t z,uint32_t va,void*out,size_t 
 gh_id_error gh_game_cockpit_bind_frame_elf(gh_game_cockpit*s,const void*data,size_t z){
  if(!s||!data)return GH_ID_ARGUMENT;if(s->frame_bound)return GH_ID_BUSY;const uint8_t*e=data;
  const uint8_t*a=frame_elf(e,z,0x41e780,40),*b=frame_elf(e,z,0x41e7a8,25),*p=frame_elf(e,z,0x3bd6f4,1);
+ const uint8_t *action_direction=frame_elf(e,z,0x3bd6e0,1);
  const uint8_t *uv=frame_elf(e,z,0x41e710,sizeof(s->radar_uv));
- if(!a||!b||!p||!uv)return GH_ID_BOUNDS;
+ if(!a||!b||!p||!uv||!action_direction)return GH_ID_BOUNDS;
  uint8_t life[8],origin[8];if(!frame_elf_value(e,z,0x3bd6ec,life,8)||!frame_elf_value(e,z,0x466440,origin,8))return GH_ID_BOUNDS;
  float curve[5][2];memcpy(curve,a,40);
  for(unsigned i=0;i<5;i++)if(!isfinite(curve[i][0])||!isfinite(curve[i][1])||(i&&curve[i][0]<=curve[i-1][0])||(i&&b[i*5]<=b[(i-1)*5]))return GH_ID_FORMAT;
  if(curve[0][0]!=0||curve[4][0]!=16||b[0]!=0||b[20]!=16)return GH_ID_UNSUPPORTED;
  float shake,origin_y;memcpy(&shake,life,4);memcpy(&origin_y,origin,4);if(!isfinite(shake)||!isfinite(origin_y))return GH_ID_FORMAT;
+ s->action_rock_forward=*action_direction;
  s->life_shake=shake;s->life_origin_y=origin_y;s->life_origin_known=u32(origin+4);s->life_level_counter=life[4];s->life_level_direction=life[5];
  memcpy(s->radar_uv,uv,sizeof(s->radar_uv));
  memcpy(s->radar_curve,curve,40);memcpy(s->radar_color_curve,b,25);s->radar_pulse=*p;s->frame_bound=1;return GH_ID_OK;
@@ -505,6 +507,49 @@ static gh_id_error widget_moves(gh_game_cockpit*s,const gh_cockpit_frame_callbac
  while(s->widget_step<=count){unsigned o=list[s->widget_step-1];if(tick){gh_id_error e=gh_id_tick_entries_002aaba0(base(s,o));if(e){s->frontier=0x2aaba0;return e;}}else TRY(gameplay_move_base(s,o,c));s->widget_step++;}
  s->widget_step=0;return GH_ID_OK;
 }
+/* Positive 13BD40 for the ordinary buttons and the icon4 recovery prompt.
+ * Inputs remain the original ActionButton-owned Cockpit fields. */
+static gh_id_error action_prompt_move(gh_game_cockpit *s,unsigned o,const gh_cockpit_frame_callbacks *c)
+{
+ if(!(s->fields[o+0x94]&1))return GH_ID_OK;
+ const unsigned icon=s->fields[o+0x95];
+ if(!s->frame_bound||icon==5||icon==6)return frame_stop(s,0x13bd40);
+ gh_id_entry *entry[13];
+ for(unsigned i=0;i<13;i++)TRY(gh_game_cockpit_entry_at(s,o+0xb0+i*4,&entry[i]));
+ const uint32_t hidden=0x8000000u,message=u32(s->fields+o+0xe4);
+ entry[0]->pos_x=frame_number(s->fields+o+0xa0);
+ entry[0]->pos_y=frame_number(s->fields+o+0xa4);
+ for(unsigned i=1;i<=6;i++)entry[i]->flags|=hidden;
+ entry[9]->flags|=8u;
+ for(unsigned i=10;i<=12;i++)entry[i]->flags|=hidden;
+ for(unsigned i=7;i<=8;i++){
+  if(message==UINT32_MAX)entry[i]->flags|=hidden;
+  else{
+   entry[i]->flags&=~hidden;
+   entry[i]->message=(uint16_t)message;
+  }
+ }
+ if(icon<4){
+  entry[5]->flags&=~hidden;
+  entry[6]->flags&=~hidden;
+  entry[1+icon]->flags&=~hidden;
+ }else if(icon==4){
+  entry[9]->flags&=~8u;
+  gh_id_entry *rock=entry[10];
+  rock->flags&=~hidden;
+  const int forward=s->action_rock_forward==1;
+  const float step=0x1.0c152cp-1f,limit=0x1.0c1520p-1f;
+  rock->rotation_speed=add(rock->rotation_speed,forward?step:-step);
+  rock->pos_x=add(rock->pos_x,forward?5.0f:-5.0f);
+  if(forward?rock->rotation_speed>limit:rock->rotation_speed < -limit){
+   rock->rotation_speed=forward?limit:-limit;
+   rock->pos_x=forward?5.0f:-5.0f;
+   s->action_rock_forward=(uint8_t)!forward;
+  }
+ }
+ return gameplay_move_base(s,o,c);
+}
+
 static gh_id_error gameplay_widget_body(gh_game_cockpit*s,unsigned index,const gh_boot_work*work_state,const gh_cockpit_frame_callbacks*c){
  const unsigned o=registry[index].offset;const uint8_t*w=(const uint8_t*)work_state;gh_id_entry*e;unsigned list[5];
  if(s->gameplay_error){s->frontier=s->gameplay_error_frontier;return s->gameplay_error;}
@@ -517,8 +562,7 @@ static gh_id_error gameplay_widget_body(gh_game_cockpit*s,unsigned index,const g
  }
  case 3:/*13D100: five originalcounter advances, no wholeIDMove. */
   list[0]=o;list[1]=o+0x140;list[2]=o+0x190;list[3]=o+0xa0;list[4]=o+0xf0;return widget_moves(s,c,list,5,1);
- case 4:/*13BD40 explicitly disabled by bit0; no IDMove in this branch. */
-  return (s->fields[o+0x94]&1)?frame_stop(s,0x13bd40):GH_ID_OK;
+ case 4:return action_prompt_move(s,o,c);
  case 5:/*13C318 four one-frame high-bit indicators, then clear requests. */
   if(!s->widget_step){uint32_t request=u32(s->fields+o+0x94);for(unsigned i=0;i<4;i++){TRY(gh_game_cockpit_entry_at(s,o+0x98+i*4,&e));if(request&(UINT32_C(0x80000000)>>i))e->flags&=~0x8000000u;else e->flags|=0x8000000;}w32(s,o+0x94,request&0xfffffff);}
   list[0]=o;return widget_moves(s,c,list,1,0);

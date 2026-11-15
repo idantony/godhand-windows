@@ -2,8 +2,10 @@
 #include "game_actor_motion_ik.h"
 #include "game_camera_envelope.h"
 #include "game_enemy_2ad.h"
+#include "game_actor_model_trans.h"
 #include "game_scene_placements.h"
 #include "game_enemy_ems.h"
+#include "game_effects_frame.h"
 #include "disc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +19,22 @@ static uint8_t *load(gh_disc *disc,const char *name,size_t *n){
  return p;
 }
 static uint32_t word(const uint8_t *p){uint32_t x;memcpy(&x,p,4);return x;}
+static uint32_t effect_clock(void *context){return ++*(uint32_t *)context;}
+static gh_voice_status emad_probe(void *ctx,const float *position,int seh,
+ gh_se_attached_environment *out,uint32_t *frontier){
+ (void)ctx;(void)position;(void)seh;(void)frontier;
+ *out=(gh_se_attached_environment){.output_mode=1,.se_level_q8=0x5a00};
+ return GH_VOICE_OK;
+}
+static uint64_t pcm_hash(const int16_t *samples,size_t frames){
+ uint64_t hash=UINT64_C(14695981039346656037);
+ for(size_t i=0;i<frames;i++){
+  uint16_t value=(uint16_t)samples[i];
+  hash=(hash^(value&255u))*UINT64_C(1099511628211);
+  hash=(hash^(value>>8))*UINT64_C(1099511628211);
+ }
+ return hash;
+}
 int main(int argc,char **argv){
  C(argc==2);gh_disc *disc=NULL;C(!gh_disc_open(argv[1],&disc));
  size_t room_size,resource_size;
@@ -151,11 +169,36 @@ int main(int argc,char **argv){
  for(unsigned index=0;index<3;index++){
     gh_effect_emitter_view emitter;
     C(!gh_effect_create_emitter_at(effects,index,&emitter)&&emitter.actor==&entry.object.view&&
-       emitter.selector==&entry.object.view&&emitter.model==&live.model.model);
+       emitter.selector==&entry.object.view&&emitter.model==&live.model.model&&
+       gh_effect_emad_emitter_is_bound(effects,&emitter));
     printf("D7:1 emitter %u part %u class %u\n",index,emitter.record.bytes[0xbe],emitter.record.bytes[0x133]);
  }
  C(!gh_enemy2ad_init_tail_0028e320(&tail,&live,&entry.object.view,&entry.resource,
     &tail_bindings,GH_STATIC_BINARY32_REFERENCE,&original)&&original&&word(emit+0x26000)==0xe0000000u);
+ gh_effects_frame_globals effect_globals={0};
+ C(!gh_effects_frame_globals_from_elf(&effect_globals,elf,elf_size));
+ effect_globals.factor_741dc0=0x3f800000u;
+ gh_boot_work fx_work=work;
+ fx_work.canonical_rate574=1;
+ gh_game_scene_aux effect_profile={0};
+ uint32_t effect_time=0;
+ gh_effects_frame_bindings effect_frame={.storage=tail_bindings.effect.storage,.work=&fx_work,
+     .init=init,.current_player=&actor.view,.globals=&effect_globals,.profile=&effect_profile,
+     .clock=effect_clock,.clock_context=&effect_time,.atan_coeff=camera.atan_coeff,
+     .policy=GH_STATIC_BINARY32_REFERENCE,.actors=&tables};
+ gh_game_effects_frame effect_move={0};
+ gh_effect_status frame_status=gh_game_effects_frame_update_0030f228(&effect_move,&effect_frame);
+ printf("R105 D7 first update status%d pc%08x emitter%u ESP%u\n",
+        frame_status,effect_move.frontier,effect_move.emitter_index,effect_move.esp_index);
+ C(!frame_status&&!effect_move.stage);
+ C(word(emit+0x114)&0x800000u);
+ C(word(esp+0x100000)==0xf8000000u);
+ for(unsigned index=0;index<5;index++){
+    gh_effect_esp_view sprite;
+    C(!gh_effect_create_esp_at(effects,index,&sprite)&&sprite.initialized&&sprite.type==0&&
+       sprite.record.bytes[0x12e]==(index<2?14:index<4?43:54)&&
+       gh_effect_emad_esp_is_bound(effects,&sprite));
+ }
  gh_effect_create_forget_on_owner_destroy(effects);
  C(!gh_game_effects_release_2ad_native(effects,effect));
  C(!gh_game_effects_release_2ad_native(effects,effect));
@@ -186,6 +229,87 @@ int main(int argc,char **argv){
  C(!gh_enemy_ems_live_at(owner,handle,&actor_live)&&actor_live.actor&&actor_live.model->ready&&
      actor_live.physical_row==8&&actor_live.actor->view.bytes[0x640]==63&&actor_live.shadow->initialized);
  C(!gh_enemy_ems_spawn_00294ca0(&owner,&prefix,&room,&ems_bindings,&pc,&detail)&&serial==9);
+ uint8_t *const trans_root=actor_live.actor->view.bytes;
+ const uint32_t original_flags=word(trans_root+0x250);
+ const uint32_t original_hidden=word(trans_root+0x5a0);
+ const uint32_t trans_global=word((const uint8_t *)&work+0x5e0);
+ const uint32_t trans_debug=word((const uint8_t *)&work+0x58c);
+ /* Explicit in-view profile: test each original predicate before the
+  * actual next unresolved draw consumer of the neutral fixture. */
+ memcpy(trans_root+0x250,&(uint32_t){original_flags|0x10000u},4);
+ gh_actor_trans_bindings trans={.work=&work,.elf=elf,.elf_bytes=elf_size,.shadow=actor_live.shadow,
+    .numeric_policy=GH_STATIC_BINARY32_REFERENCE};
+ gh_game_pl_camera trans_camera={.constructed=1};
+ for(unsigned i=0;i<4;i++)memcpy(trans_camera.fields+i*20,&(float){1},4);
+ uint8_t depth_shift=0;
+ trans.camera=&trans_camera;
+ trans.depth_shift=&depth_shift;
+ gh_actor_trans_call draw={0};
+ memcpy((uint8_t *)&work+0x5e0,&(uint32_t){trans_global|0x40000000u},4);
+ C(!gh_actor_model_trans_0014a3e8(&draw,actor_live.model,&trans,&pc)&&!pc&&draw.complete&&draw.phase==1);
+ memcpy((uint8_t *)&work+0x5e0,&trans_global,4);
+ memcpy(trans_root+0x5a0,&(uint32_t){original_hidden|2u},4);
+ draw=(gh_actor_trans_call){0};
+ C(!gh_actor_model_trans_0014a3e8(&draw,actor_live.model,&trans,&pc)&&!pc&&draw.complete&&draw.phase==1);
+ memcpy(trans_root+0x5a0,&original_hidden,4);
+ memcpy((uint8_t *)&work+0x58c,&(uint32_t){trans_debug|0x400000u},4);
+ draw=(gh_actor_trans_call){0};
+ C(!gh_actor_model_trans_0014a3e8(&draw,actor_live.model,&trans,&pc)&&!pc&&draw.complete&&draw.phase==1);
+ memcpy((uint8_t *)&work+0x58c,&trans_debug,4);
+ draw=(gh_actor_trans_call){0};
+ C(gh_actor_model_trans_0014a3e8(&draw,actor_live.model,&trans,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&
+    pc==0x14d828&&draw.phase==2&&!draw.complete);
+ memcpy(trans_root+0x250,&original_flags,4);
+ const gh_object_opacity_environment opacity={.init=init,.current_player=&actor.view,.player_binding_known=1};
+ uint8_t *const live_bytes=actor_live.actor->view.bytes;
+ memcpy((uint8_t *)&work+0x5d8,&(uint32_t){0x40000000},4);
+ C(!gh_enemy_ems_move_2ad_0028e420(owner,handle,&opacity,elf,elf_size,NULL,NULL,NULL,&pc)&&!pc&&!live_bytes[0x2f6]);
+ memset((uint8_t *)&work+0x5d8,0,4);
+ memcpy((uint8_t *)&work+0x55c,&(float){1.0f},4);
+ float distant[3]={100,100,100};
+ memcpy(actor.view.alias_f0,distant,sizeof(distant));
+ gh_actor_motion_status moved=gh_enemy_ems_move_2ad_0028e420(owner,handle,&opacity,elf,elf_size,NULL,NULL,NULL,&pc);
+ printf("R105 02AD Move status%d pc%08x phase%u\n",moved,pc,live_bytes[0x2f6]);
+ C(moved==GH_ACTOR_MOTION_UNSUPPORTED&&pc==0x2cba48&&live_bytes[0x2f6]==1);
+ C(gh_enemy_ems_move_2ad_0028e420(owner,handle,&opacity,elf,elf_size,NULL,NULL,NULL,&pc)==GH_ACTOR_MOTION_UNSUPPORTED&&
+    pc==0x2cba48&&live_bytes[0x2f6]==1);
+ size_t ses_size;
+ uint8_t *ses=load(disc,"se/emad.ses",&ses_size);
+ C(ses&&ses_size==14496);
+ gh_audio_registry *audio;
+ gh_audio_token ses_token;
+ C(!gh_audio_registry_create(&audio)&&
+   !gh_audio_commit_se_with_external_index(audio,11,ses,ses_size,disc,&ses_token));
+ gh_sound_span sample,adpcm;
+ C(!gh_audio_sample_at(audio,11,0,&sample,&adpcm)&&adpcm.size==12736);
+ gh_adpcm_pcm decoded={0};
+ C(gh_audio_decode_ps_adpcm(adpcm.data,adpcm.size,&decoded)==GH_VOICE_UNSUPPORTED&&!decoded.samples);
+ C(!gh_audio_decode_ps_adpcm_loop(adpcm.data,adpcm.size,&decoded)&&decoded.loop_first==22288&&
+   decoded.loop_frames==22260&&decoded.frames==44548&&decoded.source_bytes==12736);
+ C(pcm_hash(decoded.samples,decoded.frames)==UINT64_C(0x2dca0358eae6c5e7));
+ gh_se_voice_engine *se;
+ gh_se_mix mix;
+ C(!gh_se_mix_boot_defaults_002c9e78(&mix,0,GH_SE_DSP_NATIVE_LINEAR_REFERENCE));
+ /* Pending admission and explicit pre-transport frontier never call this opaque endpoint. */
+ C(!gh_se_voice_create(audio,(gh_audio_output *)&mix,&mix,&se));
+ uint32_t voice=0;
+ gh_voice_status admission=gh_se_voice_request_attached(se,owner,&prefix,actor_live.model,-1,11,0x12,
+   0,0,emad_probe,NULL,NULL,NULL,&voice);
+ printf("R105 EMAD 12 admission status%d pc%08x handle%u\n",admission,gh_se_voice_frontier(se),voice);
+ C(!admission&&voice);
+ const int16_t *pending;
+ size_t frames;
+ C(!gh_se_voice_pcm_view(se,voice,&pending,&frames)&&frames==decoded.frames&&
+    memcmp(pending,decoded.samples,frames*sizeof(*pending)));
+ C(gh_se_voice_update(se)==GH_VOICE_UNSUPPORTED&&gh_se_voice_frontier(se)==0x308da8);
+ gh_se_voice_info pending_voice;
+ C(!gh_se_voice_query(se,voice,&pending_voice)&&pending_voice.pending&&!pending_voice.native_voice);
+ gh_se_voice_destroy(se);
+ gh_audio_pcm_release(&decoded);
+ gh_audio_registry_destroy(audio);
+ free(ses);
+ C(gh_enemy_ems_2ad_dtor_motion_0028e068(owner,handle,&pc)==GH_ACTOR_MOTION_UNSUPPORTED&&pc==0x305778);
+ C(gh_enemy_ems_2ad_dtor_motion_0028e068(owner,handle,&pc)==GH_ACTOR_MOTION_UNSUPPORTED&&pc==0x305778);
  C(gh_enemy_ems_release_native(&owner,&pc)==GH_ACTOR_MOTION_UNSUPPORTED&&pc==0x28e068&&owner);
  gh_effect_create_forget_on_owner_destroy(effects);
  C(!gh_enemy_ems_release_native(&owner,&pc)&&!pc&&!owner);

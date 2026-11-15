@@ -20,6 +20,8 @@ typedef struct {
     gh_enemy_entry entry;
     gh_enemy2ad_init init;
     gh_enemy2ad_init_tail tail;
+    gh_enemy2ad_move move;
+    gh_actor_motion_call original_release;
     uint8_t bank_released;
 } ems_2ad;
 
@@ -1280,6 +1282,38 @@ static ems_entry *retire_find(gh_enemy_ems *owner,uint32_t handle)
     for(unsigned i=0;i<EMS_ROWS;i++)
         if(owner->entries[i].entered&&owner->entries[i].handle==handle)return &owner->entries[i];
     return NULL;
+}
+
+gh_actor_motion_status gh_enemy_ems_move_2ad_0028e420(gh_enemy_ems *owner,uint32_t handle,
+    const gh_object_opacity_environment *opacity,const void *elf,size_t elf_bytes,const gh_se_voice_engine *voices,
+    gh_motion_sound_consumer sound,void *sound_context,uint32_t *frontier)
+{
+    if(!owner||owner->running||owner->closing||!handle||!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x28e420;
+    ems_entry *slot=retire_find(owner,handle);
+    if(!slot||!slot->enemy2ad||!actor_registered(owner,slot))return GH_ACTOR_MOTION_ARGUMENT;
+    ems_2ad *scenery=slot->enemy2ad;
+    const gh_enemy_actor_bindings *actor=&owner->bindings->actor;
+    const gh_enemy2ad_move_bindings bindings={
+        .room=owner->room,.scenario14=actor->entry.scenario14,.elf=elf,.elf_bytes=elf_bytes,.opacity=opacity,
+        .solve={.model=&scenery->init.model.model,.work=actor->entry.work,.actors=actor->actors,.ray=actor->ray,
+            .context=actor->ray_context,.ik_globals=actor->ik,.atan_coeff=actor->atan_coeff},
+        .release_effect=actor->effect,.effect_context=actor->effect_context,.rate=actor->canonical_rate,
+        .voices=voices,.play_sound=sound,.sound_context=sound_context
+    };
+    return gh_enemy2ad_move_0028e420(&scenery->move,&scenery->tail,slot->actor,&bindings,frontier);
+}
+
+gh_actor_motion_status gh_enemy_ems_2ad_dtor_motion_0028e068(gh_enemy_ems *owner,uint32_t handle,
+    uint32_t *frontier)
+{
+    if(!owner||owner->running||owner->closing||!handle||!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x28e068;
+    ems_entry *slot=retire_find(owner,handle);
+    if(!slot||!slot->enemy2ad||!actor_registered(owner,slot))return GH_ACTOR_MOTION_ARGUMENT;
+    ems_2ad *scenery=slot->enemy2ad;
+    return gh_enemy2ad_dtor_motion_0028e068(&scenery->original_release,&scenery->tail,
+        owner->bindings->actor.effect,owner->bindings->actor.effect_context,frontier);
 }
 
 static gh_enemy_entry *retire_entry(ems_entry *entry)

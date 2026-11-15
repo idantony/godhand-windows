@@ -26,6 +26,7 @@ typedef struct {
     gh_scene_room_hook paper_0012c8d8;
     gh_scene_status (*omsub_000005f8)(void *,uint8_t *room_work,uint32_t *frontier);
     gh_scene_room_hook tutorial_000003b8;
+    gh_scene_status (*goto_player_00295f80)(void *,uint8_t stamp,const float position[3],uint32_t *frontier);
     void *context;
 } gh_r105_room_bindings;
 

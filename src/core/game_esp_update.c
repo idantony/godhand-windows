@@ -2,6 +2,7 @@
 #include "game_esp14.h"
 #include "game_effects_frame.h"
 #include "game_actor_matrix.h"
+#include "id_layout_rotation.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -24,6 +25,49 @@ static int same(const gh_esp_update_bindings*a,const gh_esp_update_bindings*b){r
 static int scaled(const gh_esp_update_call*c,const uint8_t*p,const uint8_t*r){return (!(w(r+4)&0x2000u)&&(w(p+0x11c)&0x100u))||(w((const uint8_t*)c->b.work+0x5e4)&0x20000u);}
 static int advance(gh_esp_update_call*c,float old,int scale,float*out){if(!isfinite(old))return 0;if(!scale){*out=add(old,1);return isfinite(*out);}float hundred=mul(old,100);if(!isfinite(hundred)||hundred < -2147483648.0f||hundred>=2147483648.0f)return 0;int whole;if(!integer(hundred,&whole))return 0;float speed=mul(mul(rf(&c->b.globals->factor_741dc0),rf((const uint8_t*)c->b.work+0x574)),100);int delta;if(!integer(speed,&delta))return 0;int64_t total=(int64_t)whole+delta;if(total<INT32_MIN||total>INT32_MAX)return 0;*out=divide((float)(int32_t)total,100);return isfinite(*out);}
 static gh_effect_status retire(gh_esp_update_call*c){uint32_t f;gh_effect_status s=gh_effect_create_esp_pause_002fbe50(c->b.storage.effects,c->slot,c->serial,&f);if(s)return stop(c,f?f:0x2fbe50,s);c->retired=1;c->stage=15;return GH_EFFECT_OK;}
+
+/* 2FD378 keeps the integrated scale and the sinusoid's output separate. */
+static gh_effect_status move_scale_mode2(gh_esp_update_call *call, uint8_t *payload,
+ const uint8_t *record)
+{
+ const unsigned axes=(record[1]&0x80u)?1:2;
+ float scale[3]={0,0,rf(payload+0x28)}, integrated[2], velocity[2];
+ int phase[2];
+ for(unsigned axis=0;axis<axes;axis++){
+    const unsigned field=axis*4, halfword=axis*2;
+    const float previous_velocity=rf(payload+0x14c+field);
+    integrated[axis]=add(rf(payload+0x144+field),previous_velocity);
+    velocity[axis]=mul(previous_velocity,rf(payload+0x154+field));
+    scale[axis]=integrated[axis];
+    phase[axis]=sh(payload+0x164+halfword);
+    const int increment=sh(payload+0x160+halfword);
+    if(increment){
+        const uint16_t phase_bits=(uint16_t)(phase[axis]+increment);
+        int16_t signed_phase;
+        memcpy(&signed_phase,&phase_bits,sizeof(signed_phase));
+        phase[axis]=signed_phase;
+        if(phase[axis]>0x400)phase[axis]-=0x800;
+        if(phase[axis]<-0x400)phase[axis]+=0x800;
+        float sine, cosine;
+        if(gh_id_sincos_reference(mul((float)phase[axis],0x1.921fb6p-9f),&sine,&cosine))
+            return stop(call,0x1f7ef0,GH_EFFECT_UNSUPPORTED);
+        const float amplitude=mul((float)sh(payload+0x15c+halfword),0x1.47ae14p-7f);
+        scale[axis]=add(scale[axis],mul(amplitude,sine));
+    }
+    if(!isfinite(velocity[axis]))return stop(call,0x2fd078,GH_EFFECT_UNSUPPORTED);
+ }
+ if(axes==1)scale[1]=scale[0];
+ uint32_t frontier;
+ gh_effect_status status=gh_effect_node_set_scale_native(call->b.storage.effects,0,call->slot,
+    call->serial,scale,&frontier);
+ if(status)return stop(call,frontier,status);
+ for(unsigned axis=0;axis<axes;axis++){
+    sf(payload+0x144+axis*4,integrated[axis]);
+    sf(payload+0x14c+axis*4,velocity[axis]);
+    half(payload+0x164+axis*2,phase[axis]);
+ }
+ return GH_EFFECT_OK;
+}
 static int key_curve(const uint8_t*p,unsigned base,unsigned channels,int length,float threshold_bias,float *out){
  float time=rf(p+0x234);
  if(!length||!isfinite(time)||time<0.0f||time>=2147483648.0f)return 0;
@@ -149,7 +193,7 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
   c->identity=c;c->b=*b;c->slot=slot;c->serial=serial;c->stage=1;
  }
  if(c->stage==1){
-  if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&!gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&!gh_effect_attack_esp_is_bound(b->storage.effects,&v)&&!gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_attachment_esp_is_bound(b->storage.effects,&v)&&!gh_effect_devil_esp_is_bound(b->storage.effects,&v))||w(p+0x114))
+  if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&!gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&!gh_effect_attack_esp_is_bound(b->storage.effects,&v)&&!gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_attachment_esp_is_bound(b->storage.effects,&v)&&!gh_effect_devil_esp_is_bound(b->storage.effects,&v)&&!gh_effect_emad_esp_is_bound(b->storage.effects,&v))||w(p+0x114))
     return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);
   if(v.parent_emitter>=0&&v.actor&&(w(v.actor->bytes+0x250)&0x80000000u)){
    uint32_t f=0;gh_effect_status status=gh_effect_create_esp_pause_002fbe50(b->storage.effects,slot,serial,&f);
@@ -181,7 +225,14 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
   if(status)return stop(c,frontier?frontier:0x2fd078,status);
   c->stage=10;
  }
- if(c->stage==9){if(p[0x140]!=2||(w(p+0x11c)&0x400000u))return stop(c,0x2fd078,GH_EFFECT_UNSUPPORTED);if(scaled(c,p,r)&&sh(p+0x22e)==sh(p+0x230))c->stage=10;else {if(sh(p+0x160)||(!(r[1]&0x80u)&&sh(p+0x162)))return stop(c,0x1f7ef0,GH_EFFECT_UNSUPPORTED);float scale[3]={rf(p+0x144),rf(p+0x148),rf(p+0x28)},dx=rf(p+0x14c),dy=rf(p+0x150);scale[0]=add(scale[0],dx);if(r[1]&0x80u)scale[1]=scale[0];else scale[1]=add(scale[1],dy);float ndx=mul(dx,rf(p+0x154)),ndy=mul(dy,rf(p+0x158));if(!isfinite(ndx)||!isfinite(ndy))return stop(c,0x2fd078,GH_EFFECT_UNSUPPORTED);uint32_t f;gh_effect_status status=gh_effect_node_set_scale_native(b->storage.effects,0,slot,serial,scale,&f);if(status)return stop(c,f,status);sf(p+0x144,scale[0]);sf(p+0x14c,ndx);if(!(r[1]&0x80u)){sf(p+0x148,scale[1]);sf(p+0x150,ndy);}c->stage=10;}}
+ if(c->stage==9){
+  if(p[0x140]!=2||(w(p+0x11c)&0x400000u))return stop(c,0x2fd078,GH_EFFECT_UNSUPPORTED);
+  if(!scaled(c,p,r)||sh(p+0x22e)!=sh(p+0x230)){
+   gh_effect_status status=move_scale_mode2(c,p,r);
+   if(status)return status;
+  }
+  c->stage=10;
+ }
  if(c->stage==10){float angle[4]={rf(p+0x30),rf(p+0x34),rf(p+0x38),1},out[4]={0,0,0,1};float factor=scaled(c,p,r)?mul(rf(&b->globals->factor_741dc0),rf((const uint8_t*)b->work+0x574)):1;for(unsigned j=0;j<3;j++)angle[j]=add(angle[j],mul(rf(p+0x178+j*4),factor));uint32_t f;if(gh_actor_euler_adjust_001f7da0(angle,out,b->policy,&f))return stop(c,f?f:0x1f7da0,GH_EFFECT_UNSUPPORTED);gh_effect_status status=gh_effect_node_set_euler_native(b->storage.effects,0,slot,serial,out,&f);if(status)return stop(c,f,status);c->stage=11;}
  if(c->stage==11){float factor=scaled(c,p,r)?mul(rf(&b->globals->factor_741dc0),rf((const uint8_t*)b->work+0x574)):1;
   if(w(r+4)&0x200000u){uint32_t f=0;gh_effect_status status=gh_esp14_position_move_002fd610(b->storage.effects,slot,&v,scaled(c,p,r),factor,b->policy,&f);if(status)return stop(c,f?f:0x2fd610,status);c->stage=12;}

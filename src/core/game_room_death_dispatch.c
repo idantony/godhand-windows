@@ -45,7 +45,7 @@ static gh_room_pool_status retire(gh_room_death_dispatch *state,const gh_room_de
  case 0x300:case 0x303:case 0x304:case 0x305:case 0x307:case 0x30a:case 0x30e:case 0x310:
  case 0x320:case 0x322:case 0x323:case 0x324:
  case 0x33f:case 0x346:case 0x354:case 0x35d:case 0x309:case 0x3eb:
- case 0x31a:case 0x339:case 0x355:case 0x382:case 0x41c:
+ case 0x31a:case 0x339:case 0x355:case 0x376:case 0x382:case 0x41c:
   status=gh_om_retire_0030f8b0(&state->door,&b->door,handle);
   entry=state->door.frontier?state->door.frontier:gh_om_retire_entry(state->retiring_kind);
   if(!status)state->door=(gh_om300_full_retirement){0};

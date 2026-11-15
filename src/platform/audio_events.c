@@ -9,27 +9,75 @@
 #include <string.h>
 static int32_t floor_pow2(int32_t n,unsigned shift)
 {int32_t d=(int32_t)(UINT32_C(1)<<shift);return n>=0?n/d:-((-(int64_t)n+d-1)/d);}
-gh_voice_status gh_audio_decode_ps_adpcm(const void *data,size_t size,gh_adpcm_pcm *out)
+static void decode_blocks(const uint8_t *p,size_t blocks,int16_t *samples,int32_t *last1,int32_t *last2)
 {
- const uint8_t *p=data;size_t blocks=0,i,j;int32_t h1=0,h2=0;int16_t *samples;
  static const int coefficient[5][2]={{0,0},{60,0},{115,-52},{98,-55},{122,-60}};
- if(!p || !out)return GH_VOICE_ARGUMENT;memset(out,0,sizeof(*out));
- for(i=0;i+16<=size;i+=16){
-  if((p[i]>>4)>4 || (p[i]&15)>12 || (p[i+1]&~1))return GH_VOICE_UNSUPPORTED;
-  ++blocks;if(p[i+1]&1)break;
- }
- if(!blocks || !(p[(blocks-1)*16+1]&1))return GH_VOICE_BOUNDS;
- if(blocks>SIZE_MAX/28/sizeof(*samples))return GH_VOICE_BOUNDS;
- samples=malloc(blocks*28*sizeof(*samples));if(!samples)return GH_VOICE_MEMORY;
- for(i=0;i<blocks;++i){unsigned shift=p[i*16]&15,filter=p[i*16]>>4;
-  for(j=0;j<28;++j){unsigned nibble=(p[i*16+2+j/2]>>((j&1)*4))&15;int32_t signed_nibble=nibble<8?(int32_t)nibble:(int32_t)nibble-16;
-   int32_t value=floor_pow2(signed_nibble*4096,shift)+floor_pow2(coefficient[filter][0]*h1+coefficient[filter][1]*h2+32,6);
-   if(value>32767)value=32767;else if(value< -32768)value=-32768;
-   samples[i*28+j]=(int16_t)value;h2=h1;h1=value;
+ int32_t h1=*last1,h2=*last2;
+ for(size_t i=0;i<blocks;i++){
+  const unsigned shift=p[i*16]&15,filter=p[i*16]>>4;
+  for(unsigned j=0;j<28;j++){
+   const unsigned nibble=(p[i*16+2+j/2]>>((j&1)*4))&15;
+   const int32_t signed_nibble=nibble<8?(int32_t)nibble:(int32_t)nibble-16;
+   int32_t value=floor_pow2(signed_nibble*4096,shift)+
+      floor_pow2(coefficient[filter][0]*h1+coefficient[filter][1]*h2+32,6);
+   if(value>32767)value=32767;
+   else if(value< -32768)value=-32768;
+   samples[i*28+j]=(int16_t)value;
+   h2=h1;
+   h1=value;
   }
  }
- out->samples=samples;out->frames=blocks*28;out->source_bytes=blocks*16;return GH_VOICE_OK;
+ *last1=h1;
+ *last2=h2;
 }
+
+static gh_voice_status decode(const void *data,size_t size,gh_adpcm_pcm *out,int repeat)
+{
+ const uint8_t *p=data;
+ size_t blocks=0,loop_start=SIZE_MAX;
+ if(!p||!out)return GH_VOICE_ARGUMENT;
+ *out=(gh_adpcm_pcm){0};
+ unsigned flags=0;
+ for(size_t i=0;i<size/16;i++){
+  const unsigned format=p[i*16];
+  flags=p[i*16+1];
+  if((format>>4)>4||(format&15)>12)return GH_VOICE_UNSUPPORTED;
+  if(repeat){
+   if(flags==6&&loop_start==SIZE_MAX)loop_start=i;
+   else if(flags!=2&&flags!=3&&(flags!=0||loop_start!=SIZE_MAX))return GH_VOICE_UNSUPPORTED;
+  }else if(flags&~1u)return GH_VOICE_UNSUPPORTED;
+  ++blocks;
+  if(flags&1)break;
+ }
+ if(!blocks||!(flags&1))return GH_VOICE_BOUNDS;
+ if(repeat&&(flags!=3||loop_start==SIZE_MAX||loop_start>=blocks))return GH_VOICE_UNSUPPORTED;
+ const size_t limit=SIZE_MAX/28/sizeof(int16_t);
+ const size_t loop_blocks=repeat?blocks-loop_start:0;
+ if(blocks>limit||loop_blocks>limit-blocks)return GH_VOICE_BOUNDS;
+ const size_t frames=(blocks+loop_blocks)*28;
+ int16_t *samples=malloc(frames*sizeof(*samples));
+ if(!samples)return GH_VOICE_MEMORY;
+ int32_t h1=0,h2=0;
+ decode_blocks(p,blocks,samples,&h1,&h2);
+ if(repeat){
+  const int32_t repeat_h1=h1,repeat_h2=h2;
+  decode_blocks(p+loop_start*16,loop_blocks,samples+blocks*28,&h1,&h2);
+  if(h1!=repeat_h1||h2!=repeat_h2){
+   free(samples);
+   return GH_VOICE_UNSUPPORTED;
+  }
+ }
+ *out=(gh_adpcm_pcm){.samples=samples,.frames=frames,.source_bytes=blocks*16,
+     .loop_first=repeat?blocks*28:0,.loop_frames=loop_blocks*28};
+ return GH_VOICE_OK;
+}
+
+gh_voice_status gh_audio_decode_ps_adpcm(const void *data,size_t size,gh_adpcm_pcm *out)
+{return decode(data,size,out,0);}
+
+gh_voice_status gh_audio_decode_ps_adpcm_loop(const void *data,size_t size,gh_adpcm_pcm *out)
+{return decode(data,size,out,1);}
+
 void gh_audio_pcm_release(gh_adpcm_pcm *p){if(p){free(p->samples);memset(p,0,sizeof(*p));}}
 typedef HRESULT (WINAPI *create_engine)(IXAudio2 **,UINT32,XAUDIO2_PROCESSOR);
 typedef HRESULT (WINAPI *com_init)(LPVOID,DWORD);
@@ -84,6 +132,9 @@ static gh_voice_status play(gh_audio_output *s,const gh_adpcm_pcm *p,uint32_t ra
     !(left>=0 && left<=1 && right>=0 && right<=1))return GH_VOICE_ARGUMENT;
  const uint16_t block_align=(uint16_t)(channels*sizeof(int16_t));
  if(p->frames>UINT32_MAX/block_align)return GH_VOICE_BOUNDS;
+ if((!p->loop_frames&&p->loop_first)||p->loop_first>p->frames||
+    p->loop_frames>p->frames-p->loop_first|| (p->loop_frames&&channels!=1))
+     return GH_VOICE_ARGUMENT;
  const size_t bytes=p->frames*block_align;
  gh_audio_output_reap(s);
  unsigned i;
@@ -108,6 +159,11 @@ static gh_voice_status play(gh_audio_output *s,const gh_adpcm_pcm *p,uint32_t ra
  buffer.Flags=XAUDIO2_END_OF_STREAM;
  buffer.AudioBytes=(UINT32)bytes;
  buffer.pAudioData=(const BYTE *)v->samples;
+ if(p->loop_frames){
+  buffer.LoopBegin=(UINT32)p->loop_first;
+  buffer.LoopLength=(UINT32)p->loop_frames;
+  buffer.LoopCount=XAUDIO2_LOOP_INFINITE;
+ }
  if(SUCCEEDED(hr))hr=IXAudio2SourceVoice_SubmitSourceBuffer(v->source,&buffer,0);
  if(SUCCEEDED(hr))hr=IXAudio2SourceVoice_Start(v->source,0,0);
  if(FAILED(hr)){

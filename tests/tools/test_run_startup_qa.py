@@ -113,12 +113,47 @@ class StartupRunnerTests(unittest.TestCase):
                     recorded, _ = frontier.validate(self.snapshot, scratch, r003_controlled=True, **options)
                     self.assertEqual(recorded["observation"]["controlled_r003"], status)
                 else:
-                    with self.assertRaisesRegex(tool.proof.ProofError, "capture presented outside controlled R003"):
+                    with self.assertRaisesRegex(tool.proof.ProofError, "capture presented outside controlled rooms"):
                         tool.run(prepared)
 
         with self.assertRaisesRegex(tool.proof.ProofError, "controlled R003 requires its own title run"):
             tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
                          title_load=True, r003_controlled=True)
+
+    def test_controlled_r105_requires_a_first_presentation_after_r003(self):
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                                build_scratch=self.scratch, r003_controlled=True)
+        r003 = dict(handoff_tick=383, first_scene=400, last_scene=466, frames=67, last_ev02_cut=0)
+        r105 = dict(first_scene=470, last_scene=472, frames=3)
+        prior = f"QA_R003_PRESENTED cut=0 scene=451\nQA_R003_STATUS {json.dumps(r003)}\n"
+        arrival = (f"QA_R105_PRESENTED scene=470 tick=488\nQA_CAPTURE_PRESENTED 470\n"
+                   f"QA_R105_STATUS {json.dumps(r105)}\n")
+        qa = self.qa(playable_game_verified=False, frontier_module="main ELF",
+                     scene_frames_presented=472, effect_post_error=0)
+        with patch.object(tool.subprocess, "run", self.fake_run(qa, (prior + arrival).encode("utf-8"))):
+            summary = tool.run(prepared)
+        self.assertEqual(summary["controlled_r003"], r003)
+        expected = dict(r105, first_tick=488)
+        self.assertEqual(summary["controlled_r105"], expected)
+        runner = self.snapshot / "tools/run-startup-qa.py"
+        runner.parent.mkdir()
+        runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+        recorded, _ = frontier.validate(self.snapshot, self.scratch, r003_controlled=True,
+            expected_frontier="00142060", build_scratch=self.scratch)
+        self.assertEqual(recorded["observation"]["controlled_r105"], expected)
+        in_gap = (prior + arrival).replace("QA_CAPTURE_PRESENTED 470", "QA_CAPTURE_PRESENTED 469")
+        with self.assertRaisesRegex(tool.proof.ProofError, "capture presented outside controlled rooms"):
+            tool.proof.controlled_room_observations(in_gap, qa)
+        for bad in (arrival.replace("scene=470", "scene=471"),
+                    arrival.replace("tick=488", "tick=500"),
+                    arrival.replace('"frames": 3', '"frames": 4'),
+                    arrival.replace('"first_scene": 470', '"first_scene": 466'),
+                    arrival.split("\n", 1)[1],
+                    arrival.split("\n", 1)[0] + "\n" + arrival):
+            with self.subTest(trace=bad), self.assertRaises(tool.proof.ProofError):
+                tool.proof.controlled_r105_status(prior + bad, qa, r003)
+        zero = 'QA_R105_STATUS {"first_scene":0,"last_scene":0,"frames":0}\n'
+        self.assertIsNone(tool.proof.controlled_r105_status(prior + zero, qa, r003))
 
     def test_repeat_triangle_pair_requires_two_presented_deaths_and_room_save(self):
         successful = {"defeat_scene": 77, "stamp19_scene": 62, "stamp20_scene": 75,

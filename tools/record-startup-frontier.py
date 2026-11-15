@@ -278,7 +278,7 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
     log = Path(stderr["path"]).read_text(encoding="utf-8-sig", errors="replace")
     trace = log.splitlines()
     if r003_controlled:
-        observation["controlled_r003"] = proof.controlled_r003_status(log, qa)
+        observation.update(proof.controlled_room_observations(log, qa))
     control = control_observation(command, trace)
     if control is not None:
         observation["control_probe"] = control

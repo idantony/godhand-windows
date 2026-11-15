@@ -1,5 +1,10 @@
 #include "game_actor_motion_step.h"
 #include "game_enemy_2ad.h"
+#include "game_player_targets.h"
+#include "id_layout_rotation.h"
+#include "../rooms/r100_counter_task.h"
+#include <fenv.h>
+#include <math.h>
 #include <string.h>
 
 static uint32_t read_word(const uint8_t *p)
@@ -252,4 +257,221 @@ gh_actor_model_status gh_enemy2ad_init_tail_0028e320(gh_enemy2ad_init_tail *call
     call->frontier=0;
     *original=1;
     return GH_ACTOR_MODEL_OK;
+}
+
+static gh_actor_motion_status move_stop(uint32_t *frontier,uint32_t pc)
+{
+    *frontier=pc;
+    return GH_ACTOR_MOTION_UNSUPPORTED;
+}
+
+static int load_position(const gh_title_player_view *actor,float xyz[4])
+{
+    if(!actor||!actor->bytes||!actor->alias_f0)return 0;
+    const uintptr_t start=(uintptr_t)actor->bytes,point=(uintptr_t)actor->alias_f0;
+    if(point<start||point-start>actor->size||actor->size-(point-start)<16)return 0;
+    memcpy(xyz,actor->alias_f0,16);
+    return isfinite(xyz[0])&&isfinite(xyz[1])&&isfinite(xyz[2]);
+}
+
+static float scalar(const void *p)
+{
+    float value;
+    memcpy(&value,p,4);
+    return value;
+}
+
+static int nearest(fenv_t *saved)
+{
+    if(feholdexcept(saved))return 0;
+    if(!fesetround(FE_TONEAREST))return 1;
+    (void)fesetenv(saved);
+    return 0;
+}
+
+static gh_actor_motion_status try_scene_task(const gh_game_title_player *actor,
+    const gh_enemy2ad_move_bindings *bindings,uint32_t *frontier)
+{
+    if(!bindings->scenario14)return move_stop(frontier,0x28e5a4);
+    if(*bindings->scenario14==1)return GH_ACTOR_MOTION_OK;
+    int dead;
+    if(gh_r100_enemy_dead_0028fb38(bindings->room,actor,&dead))
+        return move_stop(frontier,0x28fb38);
+    if(dead)return GH_ACTOR_MOTION_OK;
+    const gh_title_player_view *player=bindings->opacity?bindings->opacity->current_player:NULL;
+    float from[4],to[4];
+    if(!load_position(player,from)||!load_position(&actor->view,to))
+        return move_stop(frontier,0x2db6b0);
+    fenv_t saved;
+    if(!nearest(&saved))return move_stop(frontier,0x1f7e28);
+    volatile float x=from[0]-to[0],y=from[1]-to[1],z=from[2]-to[2];
+    volatile float xx=x*x,yy=y*y,zz=z*z,xy=xx+yy,total=xy+zz;
+    const int in_range=fabsf(y)<2.0f&&total<9.0f;
+    if(fesetenv(&saved)||!isfinite(total))return move_stop(frontier,0x1f7e28);
+    if(!in_range)return GH_ACTOR_MOTION_OK;
+    if(player->size<0x108)return move_stop(frontier,0x2da2d0);
+    const float yaw=scalar(player->bytes+0x104),limit=0x1.eb7c16p+0f;
+    float delta;
+    uint32_t pc=0;
+    if(from[0]==to[0]&&from[2]==to[2]){
+        /* The bool path uses the non-positive X branch at coincident XZ. */
+        float angle;
+        if(!nearest(&saved))return move_stop(frontier,0x2da2d0);
+        volatile float raw=-0x1.921fb6p+0f-yaw;
+        const int wrapped=!gh_id_angle_reference_001f7d48(raw,&angle);
+        if(fesetenv(&saved)||!wrapped)return move_stop(frontier,0x2da2d0);
+        delta=angle;
+    }else if(gh_player_target_angle_002da038(bindings->elf,bindings->elf_bytes,from,to,yaw,limit,&delta,&pc)){
+        return move_stop(frontier,pc?pc:0x2da2d0);
+    }
+    if(!(fabsf(delta)<limit))return GH_ACTOR_MOTION_OK;
+    gh_scene_ray_request ray={.mask=7,.segmented=1};
+    memcpy(ray.from,from,16);
+    memcpy(ray.to,to,16);
+    int hit;
+    if(!bindings->solve.actors||gh_scene_ray_query_00131e10(bindings->solve.actors,&ray,&hit,&pc))
+        return move_stop(frontier,pc?pc:0x131e10);
+    return hit?GH_ACTOR_MOTION_OK:move_stop(frontier,0x28e7c8);
+}
+
+static gh_actor_motion_status turn_to_player(gh_title_player_view *actor,const gh_enemy2ad_move_bindings *bindings,
+    uint32_t *frontier)
+{
+    float from[4],to[4];
+    if(!bindings->opacity||!load_position(bindings->opacity->current_player,to))
+        return move_stop(frontier,0x2db6b0);
+    if(!load_position(actor,from))return move_stop(frontier,0x2a7498);
+    const float heading=scalar(actor->bytes+0x104);
+    fenv_t saved;
+    if(!nearest(&saved))return move_stop(frontier,0x2a7498);
+    volatile float speed=scalar(actor->bytes+0x5a8)*0x1.921fb6p-4f;
+    volatile float limit=speed*scalar((const uint8_t *)bindings->solve.work+0x55c);
+    float delta;
+    uint32_t pc=0;
+    const gh_player_target_status status=gh_player_target_angle_002da038(
+        bindings->elf,bindings->elf_bytes,from,to,heading,limit,&delta,&pc);
+    float result;
+    int wrapped=0;
+    if(!status){
+        volatile float next=heading+delta;
+        wrapped=!gh_id_angle_reference_001f7d48(next,&result);
+    }
+    if(fesetenv(&saved)||status||!wrapped)return move_stop(frontier,pc?pc:0x2a7498);
+    memcpy(actor->bytes+0x104,&result,4);
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy2ad_move_0028e420(gh_enemy2ad_move *state,gh_enemy2ad_init_tail *init,
+    gh_game_title_player *actor,const gh_enemy2ad_move_bindings *bindings,uint32_t *frontier)
+{
+    if(!state||!init||!actor||!bindings||!frontier||!bindings->solve.work||init->stage!=7||
+       !init->prefix||init->prefix->actor!=&actor->view||!actor->view.bytes||
+       actor->view.size<GH_EM2AD_BYTES||bindings->solve.model!=&init->prefix->model.model)
+        return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0;
+    uint8_t *p=actor->view.bytes;
+    gh_actor_model *model=bindings->solve.model;
+    uint32_t pc=0;
+    if(!state->stage){
+        if(read_word((const uint8_t *)bindings->solve.work+0x5d8)&0x40000000u)
+            return GH_ACTOR_MOTION_OK;
+        gh_actor_motion_status status=try_scene_task(actor,bindings,frontier);
+        if(status)return status;
+        state->stage=p[0x2f6]==0?1:p[0x2f6]==1?2:4;
+    }
+    if(state->stage==1){
+        gh_actor_motion_status status=GH_ACTOR_MOTION_OK;
+        if(!state->begin.active){
+            gh_actor_motion_bindings next=init->motion.b;
+            next.effect=bindings->release_effect;
+            next.context=bindings->effect_context;
+            status=gh_actor_motion_call_open_002a8578(&state->begin,&init->motion,&next,
+                read_word(next.resource+0xc),SIZE_MAX,0);
+        }
+        if(!status)status=gh_actor_motion_call_step_002a8578(&state->begin);
+        if(status)return move_stop(frontier,state->begin.frontier?state->begin.frontier:0x2a8578);
+        p[0x2f6]++;
+        state->stage=2;
+    }
+    if(state->stage==2){
+        gh_actor_motion_status status=turn_to_player(&actor->view,bindings,frontier);
+        if(status)return status;
+        state->stage=3;
+    }
+    if(state->stage==3){
+        int ended;
+        if(!bindings->rate||gh_actor_motion_step_00157c18(&init->motion,*bindings->rate,
+            GH_STATIC_BINARY32_REFERENCE,&ended,&pc))
+            return move_stop(frontier,pc?pc:0x157c18);
+        state->stage=4;
+    }
+    if(state->stage==4){
+        if(p[0x3ae]||p[0x3af])return move_stop(frontier,0x14fb48);
+        state->stage=5;
+    }
+    if(state->stage==5){
+        if(gh_actor_model_update_hierarchy_00149eb8(model,GH_STATIC_BINARY32_REFERENCE))
+            return move_stop(frontier,model->frontier?model->frontier:0x149eb8);
+        state->stage=6;
+    }
+    if(state->stage==6){
+        if(gh_actor_motion_solve_00152a20(&state->solve,&bindings->solve,GH_STATIC_BINARY32_REFERENCE,&pc))
+            return move_stop(frontier,pc?pc:0x152a20);
+        state->stage=7;
+    }
+    if(state->stage==7){
+        if(gh_actor_finish_model_resume_0014a038(&state->finish,model,GH_STATIC_BINARY32_REFERENCE))
+            return move_stop(frontier,model->frontier?model->frontier:0x14a038);
+        state->stage=8;
+    }
+    if(state->stage==8){
+        if(gh_game_object_opacity_002a87e8(&actor->view,NULL,bindings->solve.work,bindings->opacity,
+            GH_CAMERA_NATIVE_BINARY32_REFERENCE,&pc))
+            return move_stop(frontier,pc?pc:0x2a87e8);
+        state->stage=9;
+    }
+    if(state->stage==9){
+        const uint32_t handle=read_word(p+0x1550);
+        gh_se_voice_info voice;
+        gh_voice_status exists=GH_VOICE_BOUNDS;
+        if(handle){
+            if(!bindings->voices)return move_stop(frontier,0x2cbcf0);
+            exists=gh_se_voice_query(bindings->voices,handle,&voice);
+            if(exists!=GH_VOICE_OK&&exists!=GH_VOICE_BOUNDS)return move_stop(frontier,0x2cbcf0);
+        }
+        if(exists==GH_VOICE_BOUNDS){
+            state->sound=(gh_motion_sound_request){.model=model,.actor=&actor->view,.bank=1,.program=0x12};
+            state->stage=10;
+        }else state->stage=11;
+    }
+    if(state->stage==10){
+        uint32_t handle;
+        if(!bindings->play_sound)return move_stop(frontier,0x2cba48);
+        gh_actor_motion_status status=bindings->play_sound(bindings->sound_context,&state->sound,&handle,&pc);
+        if(status)return move_stop(frontier,pc?pc:0x2cba48);
+        put_word(p+0x1550,handle);
+        state->stage=11;
+    }
+    float pos[4];
+    if(!load_position(&actor->view,pos))return move_stop(frontier,0x28e540);
+    if(actor->view.alias_f0!=p+0x490)memcpy(p+0x490,pos,12);
+    *state=(gh_enemy2ad_move){0};
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy2ad_dtor_motion_0028e068(gh_actor_motion_call *release,
+    gh_enemy2ad_init_tail *init,gh_motion_effect_consumer effect,void *context,uint32_t *frontier)
+{
+    if(!release||!init||!frontier||init->stage!=7||!init->prefix||
+       !init->prefix->actor||!init->prefix->actor->bytes||
+       init->prefix->actor->size<GH_EM2AD_BYTES)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0;
+    put_word(init->prefix->actor->bytes+0x214,0x44a528);
+    gh_actor_motion_status status=GH_ACTOR_MOTION_OK;
+    if(!release->active)
+        status=gh_actor_motion_call_open_release_002a84a8(release,&init->motion,effect,context);
+    if(!status)status=gh_actor_motion_call_release_step_002a84a8(release);
+    if(status)*frontier=release->frontier?release->frontier:0x2a84a8;
+    else *frontier=0x305778;
+    return status?status:GH_ACTOR_MOTION_UNSUPPORTED;
 }

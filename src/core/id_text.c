@@ -62,13 +62,16 @@ gh_id_error gh_id_text_prepare_with_chapter(const gh_id_base *object,const gh_id
  gh_id_view table,body,chapter={0};gh_id_error error;uint16_t message;unsigned bank,index,color_group,color_index,align;
  float sx,sy,spacing,line_gap,line_width=0,line_height=0,page_width=0,page_height=0,startx,starty,x,y;
  size_t offset,glyphs=0,lines=1,icons=0,chapter_count=0;float chapter_width=0,chapter_height=0;uint32_t default_color,color;int ended=0;
- if(!object||!entry||!menu||!packed||!font||!ctx||!result||(!output&&capacity))return GH_ID_ARGUMENT;
+ if(!object||!entry||!menu||!font||!ctx||!result||(!output&&capacity))return GH_ID_ARGUMENT;
  memset(result,0,sizeof(*result));
  if(entry->kind!=2||ctx->language<1||ctx->language>6)return fail(result,0,0,0x2ab0b8);
  message=entry->message?entry->message:0x3000;bank=message>>12;index=message&4095;
  if(bank==0){table.bytes=menu->data.bytes;table.size=menu->data.size;table.offset=menu->data.offset;}
  else if(bank==3){table.bytes=menu->texture_data.bytes;table.size=menu->texture_data.size;table.offset=menu->texture_data.offset;}
- else if(bank==2)table=packed->cursor;else return fail(result,0,0,0x2aead0);
+ else if(bank==2){
+  if(!packed)return GH_ID_ARGUMENT;
+  table=packed->cursor;
+ }else return fail(result,0,0,0x2aead0);
  error=message_view(&table,index,&body);if(error)return error;
  color_group=entry->b8b%10;color_group=color_group>=1&&color_group<=7?color_group+2:2;color_index=entry->b8b/10;
  if(!ctx->palette.bytes||color_index>=5||(size_t)color_group*20+color_index*4+4>ctx->palette.size)return GH_ID_BOUNDS;

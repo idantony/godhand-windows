@@ -71,6 +71,7 @@ typedef struct {gh_effect_view record;const gh_title_player_view *actor,*selecto
   * duplicate work buffer; consumers also validate payload against storage. */
  uint8_t *payload;size_t payload_size;int32_t first_esp_child;} gh_effect_emitter_view;
 int gh_effect_devil_emitter_is_bound(const gh_game_effects *,const gh_effect_emitter_view *);
+int gh_effect_emad_emitter_is_bound(const gh_game_effects *,const gh_effect_emitter_view *);
 int gh_effect_player_stun_row(gh_effect_view);
 int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
@@ -99,6 +100,7 @@ gh_effect_status gh_effect_create_esp_devil_trail_init_002f5788(gh_game_effects 
 gh_effect_status gh_effect_create_esp_devil_trail_move_002f5bf8(gh_game_effects *,unsigned,uint32_t,
  const gh_boot_work *,gh_static_transform_policy,uint32_t *);
 int gh_effect_devil_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
+int gh_effect_emad_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_player_attachment_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_knockdown_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_esp_trail_is_bound(const gh_game_effects *,const gh_effect_esp_view *);

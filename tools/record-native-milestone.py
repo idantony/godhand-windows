@@ -73,9 +73,46 @@ def controlled_r003_status(log, qa):
                 "controlled R003 cut markers disagree with presented range")
         previous_scene = serial
     require(cut == len(cuts) - 1, "controlled R003 cut markers disagree with presented range")
-    captures = [int(serial) for serial in re.findall(r"^QA_CAPTURE_PRESENTED (\d+)$", log, re.M)]
-    require(all(first <= serial <= last for serial in captures), "capture presented outside controlled R003")
     return status
+
+
+def controlled_r105_status(log, qa, r003):
+    status_marker, first_marker = "QA_R105_STATUS ", "QA_R105_PRESENTED "
+    lines = log.splitlines()
+    records = [line[len(status_marker):] for line in lines if line.startswith(status_marker)]
+    observed = [line[len(first_marker):] for line in lines if line.startswith(first_marker)]
+    if not records and not observed:
+        return None  # A controlled R003 cohort can predate R105 telemetry.
+    require(len(records) == 1, "missing or duplicate controlled R105 status")
+    status = json.loads(records[0])
+    fields = ("first_scene", "last_scene", "frames")
+    require(isinstance(status, dict) and all(type(status.get(key)) is int for key in fields),
+            "invalid controlled R105 status")
+    first, last, count = (status[key] for key in fields)
+    if (first, last, count) == (0, 0, 0):
+        require(not observed, "controlled R105 marker without presented frames")
+        return None
+    require(r003["last_scene"] < first <= last <= qa["scene_frames_presented"] and
+            count == last - first + 1, "controlled R105 has no verified presented range")
+    require(len(observed) == 1, "missing or duplicate controlled R105 first presentation")
+    marker = re.fullmatch(r"scene=([0-9]+) tick=([0-9]+)", observed[0])
+    require(marker and int(marker[1]) == first and r003["handoff_tick"] < int(marker[2]) <= qa["ticks"],
+            "controlled R105 first presentation disagrees with its range")
+    return {**status, "first_tick": int(marker[2])}
+
+
+def controlled_room_observations(log, qa):
+    r003 = controlled_r003_status(log, qa)
+    r105 = controlled_r105_status(log, qa, r003)
+    observations = {"controlled_r003": r003}
+    ranges = [r003]
+    if r105 is not None:
+        observations["controlled_r105"] = r105
+        ranges.append(r105)
+    captures = [int(serial) for serial in re.findall(r"^QA_CAPTURE_PRESENTED (\d+)$", log, re.M)]
+    require(all(any(room["first_scene"] <= serial <= room["last_scene"] for room in ranges)
+                for serial in captures), "capture presented outside controlled rooms")
+    return observations
 
 
 class Inputs:

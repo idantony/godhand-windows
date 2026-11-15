@@ -64,12 +64,14 @@ extern "C" gh_ui_error gh_ui_polygon_create(unsigned w,unsigned h,gh_ui_polygon_
  for(unsigned i=0;i<2;i++){SGPU(r->device.p->CreateTexture2D(&td,nullptr,r->frame[i].out()));SGPU(r->device.p->CreateShaderResourceView(r->frame[i].p,nullptr,r->frameview[i].out()));SGPU(r->device.p->CreateUnorderedAccessView(r->frame[i].p,nullptr,r->target[i].out()));}
  td.Usage=D3D11_USAGE_STAGING;td.BindFlags=0;td.CPUAccessFlags=D3D11_CPU_ACCESS_READ;SGPU(r->device.p->CreateTexture2D(&td,nullptr,r->readback.out()));*out=r.release();return GH_UI_OK;
 }
-static gh_ui_error upload(gh_ui_polygon_renderer *r,const gh_id_texture *t,const unsigned char *rgba,size_t bytes,uint32_t *handle,unsigned width){
+static gh_ui_error upload(gh_ui_polygon_renderer *r,const gh_id_texture *t,const unsigned char *rgba,size_t bytes,uint32_t *handle,unsigned width,unsigned height,unsigned allowed_psm){
  if(!r||!t||!rgba||!handle||GetCurrentThreadId()!=r->thread)return GH_UI_ARGUMENT;
- // Actual64x64 indexed4 HUD icon; templateTCC overridden by15BCF0.
- unsigned power=width==16?4:width==64?6:7;
- unsigned psm=(unsigned)((t->tex0>>20)&63);
- if(t->width!=width||t->height!=width||bytes!=(size_t)width*width*4||(psm!=20&&!(width==128&&psm==19))||((t->tex0>>26)&15)!=power||((t->tex0>>30)&15)!=power||((t->tex0>>35)&3)||((t->tex0>>51)&63)||((t->tex0>>56)&31))return GH_UI_UNSUPPORTED;
+ const unsigned tw=width==16?4:width==64?6:7;
+ const unsigned th=height==16?4:height==64?6:7;
+ const unsigned psm=(unsigned)((t->tex0>>20)&63);
+ if(t->width!=width||t->height!=height||bytes!=(size_t)width*height*4||
+    (psm!=allowed_psm)||((t->tex0>>26)&15)!=tw||((t->tex0>>30)&15)!=th||
+    ((t->tex0>>35)&3)||((t->tex0>>51)&63)||((t->tex0>>56)&31))return GH_UI_UNSUPPORTED;
  std::vector<unsigned char> raw;try{raw.assign(rgba,rgba+bytes);}catch(const std::bad_alloc&){return GH_UI_MEMORY;}
  for(size_t i=3;i<bytes;i+=4){if((raw[i]&1)&&raw[i]!=255)return GH_UI_UNSUPPORTED;raw[i]=raw[i]==255?128:(unsigned char)(raw[i]/2);}
  std::unique_ptr<PolygonTexture> texture(new(std::nothrow)PolygonTexture);if(!texture)return GH_UI_MEMORY;texture->width=t->width;texture->height=t->height;
@@ -78,9 +80,14 @@ static gh_ui_error upload(gh_ui_polygon_renderer *r,const gh_id_texture *t,const
  if(r->textures.size()>=1024)return GH_UI_MEMORY;
  try{r->textures.push_back(std::move(texture));}catch(const std::bad_alloc&){return GH_UI_MEMORY;}*handle=(uint32_t)r->textures.size();return GH_UI_OK;
 }
-extern "C" gh_ui_error gh_ui_polygon_upload(gh_ui_polygon_renderer*r,const gh_id_texture*t,const unsigned char*p,size_t n,uint32_t*h){return upload(r,t,p,n,h,64);}
-extern "C" gh_ui_error gh_ui_polygon_upload_fan16(gh_ui_polygon_renderer*r,const gh_id_texture*t,const unsigned char*p,size_t n,uint32_t*h){return upload(r,t,p,n,h,16);}
-extern "C" gh_ui_error gh_ui_polygon_upload_number128(gh_ui_polygon_renderer*r,const gh_id_texture*t,const unsigned char*p,size_t n,uint32_t*h){return upload(r,t,p,n,h,128);}
+extern "C" gh_ui_error gh_ui_polygon_upload(gh_ui_polygon_renderer*r,const gh_id_texture*t,const unsigned char*p,size_t n,uint32_t*h){
+ // Actual ActionButton recovery arrow uses the rectangular PSMT8 atlas.
+ if(t&&t->width==128&&t->height==64)
+  return upload(r,t,p,n,h,128,64,19);
+ return upload(r,t,p,n,h,64,64,20);
+}
+extern "C" gh_ui_error gh_ui_polygon_upload_fan16(gh_ui_polygon_renderer*r,const gh_id_texture*t,const unsigned char*p,size_t n,uint32_t*h){return upload(r,t,p,n,h,16,16,20);}
+extern "C" gh_ui_error gh_ui_polygon_upload_number128(gh_ui_polygon_renderer*r,const gh_id_texture*t,const unsigned char*p,size_t n,uint32_t*h){return upload(r,t,p,n,h,128,128,t&&((t->tex0>>20)&63)==19?19:20);}
 static gh_ui_error parameters(const gh_ui_polygon_renderer*r,const gh_ui_polygon_item&item,PolygonParams*p){
  const auto&q=item.polygon;if(!item.texture||item.texture>r->textures.size())return GH_UI_ARGUMENT;const auto&t=*r->textures[item.texture-1];
  if(q.color_mode!=6||q.font_mode!=5||q.clip||(q.alignment!=0&&q.alignment!=3))return GH_UI_UNSUPPORTED;

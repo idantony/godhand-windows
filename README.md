@@ -10,16 +10,17 @@ This follows OpenGOAL's source recovery/platform adaptation method. God Hand was
 not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
 **Early development.** The Windows New Game replay plays all ten original
-opening cuts and reaches two-way combat in R100. Two Triangle hits lower the
-enemy's HP from 74 to 50. Enemy attacks lower Gene's HP from 100 to 78, with
-a hit reaction and knockdown in presented frames. The hidden, muted run
-presents 1,995 scene frames before reaching the next enemy behavior.
+opening cuts and reaches two-way combat in R100. Four Triangle hits lower
+the first enemy's HP from 74 to 26. The hidden, muted run presents a
+knockdown, Gene's recovery prompt and 2,528 scene frames before reaching
+the next breakable-object update.
 
 A separate Windows title-load run restores an original-format test save and
 presents R100. A controlled Windows run presents all 28 original EV02 cuts
-in R003 over 2,785 frames, then reaches the original room exit toward R105.
-Completing the first encounter, entering R003 through normal play, and loading
-R105 through that exit remain in progress.
+in R003 over 2,785 frames and follows the original room exit into R105, where
+it presents 31 scene frames. The controlled run selects R003 at the title
+handoff. Completing the first encounter and following the same transition
+through normal play remain in progress.
 
 ### Verified progress
 
@@ -172,13 +173,12 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 使用 Jak 专用反编译器。
 
 **仍处于早期开发。** Windows 新游戏回放播完原版开场十个镜头并进入 R100 双向战斗。
-两次三角攻击把敌人 HP 从 74 打到 50。Gene 的 HP 三次受击后从 100 降到 78，
-受击和击倒画面均已呈现。隐藏、静音的实跑共呈现 1,995 个场景帧，随后停在下一个敌人行为。
+四次三角攻击命中，把第一个敌人的 HP 从 74 打到 26。隐藏、静音的实跑共呈现
+2,528 个场景帧，包括 Gene 倒地后的恢复按键提示，随后停在一个可破坏物件的更新。
 
-独立的 Windows 标题读档实跑恢复了原版格式的测试档，并呈现 R100。受控的原生绘制指令测试
-走完原版 Door Continue 和旧房间清理，进入 R003。Windows 受控实跑呈现了 EV02 全部 28 个镜头，
-共 2,785 帧，随后进入通往 R105 的原版退出流程。正常打完首战进入 R003、从此处加载 R105
-的连续流程仍在验证中。
+独立的 Windows 标题读档实跑恢复了原版格式的测试档，并呈现 R100。受控实跑在标题交接处
+选入 R003，呈现 EV02 全部 28 个镜头，共 2,785 帧，随后沿原版房间切换进入 R105，
+并呈现 31 帧场景。正常打完首战并沿同一路径切换房间的连续流程仍在开发。
 
 ### 已验证的进展
 

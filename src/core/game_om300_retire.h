@@ -49,10 +49,11 @@ gh_room_pool_status gh_om300_retire_0030f8b0(gh_om300_full_retirement *,
  * their original differences before calling the common OM/base destructor. */
 uint32_t gh_om_retire_entry(uint32_t kind);
 gh_room_pool_status gh_om_retire_mark_00312708(gh_om_factory *,uint32_t,gh_se_voice_engine *,uint32_t *);
-/* Ordinary 30F650 already removed 754C58 and retains ownership of the
- * primary registry compaction after original 198CE0 mode 3 returns. */
-gh_room_pool_status gh_om324_destroy_detached_00198ce0(gh_om300_full_retirement *,
- const gh_om300_retire_bindings *,uint32_t handle,const gh_title_player_view *);
+/* Ordinary 30F650 removes 754C58 before dispatching the verified mode 3
+ * destructor. The Trans owner compacts the primary registry after return. */
+gh_room_pool_status gh_om_destroy_detached_mode3(gh_om300_full_retirement *,
+ const gh_om300_retire_bindings *,uint32_t handle,const gh_title_player_view *,
+ uint32_t original_entry);
 gh_room_pool_status gh_om_retire_0030f8b0(gh_om300_full_retirement *,const gh_om300_retire_bindings *,uint32_t);
 #ifdef __cplusplus
 }

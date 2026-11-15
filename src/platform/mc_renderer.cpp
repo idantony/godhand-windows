@@ -209,7 +209,7 @@ static gh_id_error draw_view(gh_mc_renderer *r,const gh_id_render_view *s,const 
     if(null_texture(s,job->entry)){r->status.id_error=GH_ID_OK;r->status.gpu_error=0;return GH_ID_OK;}
     try {
         if(job->entry->kind==2){
-            if(!s->font||!s->menu||!s->messages)return GH_ID_ARGUMENT;
+            if(!s->font||!s->menu)return GH_ID_ARGUMENT;
             gh_id_text_result result={};
             gh_id_text_context context={r->language,512,448,1824,{r->palette.data(),r->palette.size(),0}};
             error=gh_id_text_prepare(s->base,job->entry,s->menu,s->messages,s->font,&context,r->glyphs.data(),r->glyphs.size(),&result);

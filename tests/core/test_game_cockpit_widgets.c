@@ -40,8 +40,22 @@ int main(int argc,char**argv){
   draw_fixture draw={0};cb.context=&draw;cb.trans=trans_fixture;cb.fan=fan_fixture;C(!gh_game_cockpit_trans_001410a8(s,&work,&cb));static const int draw_order[]={13,15,1,0,12,20,10,19};C(draw.count==8&&draw.fans==1&&draw.visible);for(unsigned j=0;j<8;j++)C(draw.ids[j]==draw_order[j]);
   /* A real active Seven branch must stop, after earlierwidgets once. A
    * retry retains cursors and cannot increment Circle/Four again. */
-  fields[0x1380+0x94]=1;C(gh_game_cockpit_move_00140e58(s,&work,&cb)==GH_ID_UNSUPPORTED&&gh_game_cockpit_frontier(s)==0x13bd40);uint16_t retained=circle[0]->frame;int16_t tick=four[0]->entries[0].jitter[0];C(gh_game_cockpit_move_00140e58(s,&work,&cb)==GH_ID_UNSUPPORTED&&gh_game_cockpit_frontier(s)==0x13bd40&&circle[0]->frame==retained&&four[0]->entries[0].jitter[0]==tick);fields[0x1380+0x94]=0;C(!gh_game_cockpit_move_00140e58(s,&work,&cb)&&circle[0]->frame==retained);
+  fields[0x1380+0x94]=1;fields[0x1380+0x95]=5;C(gh_game_cockpit_move_00140e58(s,&work,&cb)==GH_ID_UNSUPPORTED&&gh_game_cockpit_frontier(s)==0x13bd40);uint16_t retained=circle[0]->frame;int16_t tick=four[0]->entries[0].jitter[0];C(gh_game_cockpit_move_00140e58(s,&work,&cb)==GH_ID_UNSUPPORTED&&gh_game_cockpit_frontier(s)==0x13bd40&&circle[0]->frame==retained&&four[0]->entries[0].jitter[0]==tick);gh_cockpit_action_view prompt;
+  C(!gh_game_cockpit_action_view_001f7680(s,&prompt)&&*prompt.flags==1);
+  *prompt.icon=4;put(prompt.screen_x,0x43660000);put(prompt.screen_y,0x43910000);put(prompt.message,0x3024);
+  gh_id_entry*rock=cached(s,0x1458);
+  C(!gh_game_cockpit_move_00140e58(s,&work,&cb)&&circle[0]->frame==retained);
+  C(rock->rotation_speed==0x1.0c1520p-1f&&rock->pos_x==5&&!(rock->flags&0x8000000u));
+  C(!(cached(s,0x1454)->flags&8)&&cached(s,0x144c)->message==0x3024&&cached(s,0x1450)->message==0x3024);
+  C(cached(s,0x1430)->pos_x==230&&cached(s,0x1430)->pos_y==290);
+  C(!gh_game_cockpit_move_00140e58(s,&work,&cb)&&rock->pos_x==0&&rock->rotation_speed<0);
+  C(fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);
+  fenv_t draw_env;C(!feholdexcept(&draw_env));
+  draw=(draw_fixture){0};C(!gh_game_cockpit_trans_001410a8(s,&work,&cb));
+  unsigned prompt_draws=0;for(unsigned j=0;j<draw.count;j++)prompt_draws+=draw.ids[j]==base(s,0x1380)->id;
+  C(prompt_draws==1&&draw.count==9);
+  C(!fesetenv(&draw_env));
   C(fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);C(!fesetround(FE_TONEAREST)&&!gh_game_cockpit_destroy(s)&&!gh_id_runtime_destroy(r));free(init);free(m);
  }
- C(!memcmp(copy,language,ln));C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));free(room_bytes);free(copy);free(elf);free(language);puts("PASS actualUSA405ID all11 cold registered HUDMoves; exact fiveMoves/fiveTicks/disabledgates/requestbits/keycounts/money; resumable activeSeven frontier; fourFEnv/immutable assets");return 0;
+ C(!memcmp(copy,language,ln));C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));free(room_bytes);free(copy);free(elf);free(language);puts("PASS actualUSA405ID all11 cold registered HUDMoves; exact fiveMoves/fiveTicks/disabledgates/requestbits/keycounts/money; resumable activeSeven frontier and native ActionButton ID jobs; fourFEnv/immutable assets");return 0;
 }

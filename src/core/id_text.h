@@ -18,7 +18,8 @@ gh_id_error gh_id_text_palette_from_elf(const void *,size_t,gh_id_view *);
  * Low button codes emit separate original FT4 icon primitives. Other
  * control/dynamic-number opcodes report exact frontier; never skip
  * them to claim the message drew. Output is original order glyph primitives,
- * not fullMC Trans/render success. Source buffers/font must outlive result. */
+ * not fullMC Trans/render success. Source buffers/font must outlive result.
+ * The packed owner is required for bank 2. Banks 0 and 3 use Menu tables. */
 gh_id_error gh_id_text_prepare(const gh_id_base *,const gh_id_entry *,const gh_menu_state *,
  const gh_packed_message_state *,const gh_font_state *,const gh_id_text_context *,
  gh_id_text_glyph *,size_t capacity,gh_id_text_result *);

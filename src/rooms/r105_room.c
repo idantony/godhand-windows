@@ -198,6 +198,7 @@ static int enemy_dead(gh_r105_room *state,uint8_t stamp,int *dead)
 static void watch_at0(void *context,int32_t argument)
 {
     gh_r105_room *state=context;
+    const gh_r105_room_bindings *b=&state->bindings;
     (void)argument;
     for(;;){
         if(gh_task_threads_sleep(state->bindings.threads,1)){
@@ -209,11 +210,22 @@ static void watch_at0(void *context,int32_t argument)
             state->watcher_frontier[0]=0x2c2a98;
             return;
         }
-        if(hit){
-            state->watcher_frontier[0]=0x295f80;
+        if(hit)break;
+    }
+    if(!b->goto_player_00295f80||!b->player->alias_f0){
+        state->watcher_frontier[0]=!b->player->alias_f0?0x2db6b0:0x295f80;
+        return;
+    }
+    for(uint8_t stamp=3;stamp<=5;stamp+=2){
+        float position[3];
+        uint32_t frontier=0;
+        memcpy(position,b->player->alias_f0,sizeof(position));
+        if(b->goto_player_00295f80(b->context,stamp,position,&frontier)){
+            state->watcher_frontier[0]=frontier?frontier:0x295f80;
             return;
         }
     }
+    state->watcher_slot[0]=-1;
 }
 
 static void watch_battle(void *context,int32_t argument)

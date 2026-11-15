@@ -34,6 +34,8 @@ struct gh_player_frame_bindings;
 typedef gh_player_frame_status (*gh_player_square_frame_consumer)(void *,const struct gh_player_frame_bindings *,uint32_t *);
 typedef gh_player_frame_status (*gh_player_damage_positioned_effect)(void *,const uint32_t position[3],uint32_t *);
 typedef gh_player_frame_status (*gh_player_damage_callee)(void *,const struct gh_player_frame_bindings *,uint32_t *);
+typedef gh_player_frame_status (*gh_player_paper_release)(void *,
+    const gh_title_player_view *,gh_core_save_view,uint32_t *);
 typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_work *work;gh_game_init_state *init;gh_game_pl_camera *camera;
  gh_core_save_view save;gh_scene_scenario_view scenario;const gh_effect_release_bindings *effects;
  const gh_title_player_view *current_player;const void *elf;size_t elf_bytes;gh_camera_numeric_policy numeric_policy;gh_player_frame_effect_create effect_create;void *effect_context;
@@ -59,6 +61,8 @@ typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_wo
  gh_player_damage_callee damage_abort,damage_camera_exit;
  void *damage_context;
  uint8_t (*damage_vibration_rows)[16];
+ gh_player_paper_release paper_release;
+ void *paper_context;
 } gh_player_frame_bindings;
 /* Native continuation only; all actual mutable fields live in borrowed owners.
  * Each source-prefix stage commits once. Error retry requires same bindings;

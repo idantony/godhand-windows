@@ -13,7 +13,8 @@ static void putf(void*p,float n){memcpy(p,&n,4);}
 static float value(const void*p){float n;memcpy(&n,p,4);return n;}
 static unsigned char* load(gh_disc*d,const char*name,size_t*n){size_t i;gh_disc_entry e;C(!gh_disc_find(d,name,&i)&&!gh_disc_entry_at(d,i,&e));*n=(size_t)e.size;unsigned char*p=malloc(*n);C(p&&!gh_disc_read(d,i,0,p,*n));return p;}
 int main(int argc,char**argv){
- C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t n;unsigned char*room=load(d,"st1/r100.dat",&n);size_t plsize;unsigned char*pl=load(d,"pl/pl00.dat",&plsize);gh_disc_close(d);
+ C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t n;unsigned char*room=load(d,"st1/r100.dat",&n);size_t plsize;unsigned char*pl=load(d,"pl/pl00.dat",&plsize);
+ size_t r105_size;uint8_t *r105=load(d,"st1/r105.dat",&r105_size);gh_disc_close(d);
  gh_bundle bundle;C(!gh_bundle_open(room,n,&bundle));gh_heap*heap;C(!gh_heap_create(32*1024*1024,&heap));
  gh_game_world_light*s=calloc(1,sizeof(*s));C(s&&!gh_game_world_light_construct_002d6d80(s)&&!gh_game_world_light_initialize_with_heap_002d6f40(s,&bundle,heap));
  gh_light_player_parts no_parts={.owner=&bundle};C(!gh_game_world_light_select_002d8408(s,0,&no_parts));
@@ -99,8 +100,8 @@ int main(int argc,char**argv){
  C(!gh_actor_model_light_0014d828(&m,s,&b,GH_STATIC_BINARY32_REFERENCE,&pc)&&value(s->scalar+0x161d0)==2.25f);
  s->table.size=15;memcpy(saved,s,sizeof(*s));C(gh_actor_model_light_0014d828(&m,s,&b,GH_STATIC_BINARY32_REFERENCE,&pc)==GH_ACTOR_MODEL_BOUNDS&&pc==0x2d9360&&!memcmp(saved,s,sizeof(*s)));
  s->table=oldtable;bytes[0x2cc]=0;for(unsigned i=0;i<4;i++)put(s->scalar+0x80+i*0x70+0x4c,0);
- memcpy(saved,s,sizeof(*s));uint8_t oldselectors[3];memcpy(oldselectors,bytes+0x2cd,3);s->scalar[0x80]=1;
- gh_game_world_light*before=malloc(sizeof(*s));C(before);memcpy(before,s,sizeof(*s));C(gh_actor_model_light_0014d828(&m,s,&b,GH_STATIC_BINARY32_REFERENCE,&pc)==GH_ACTOR_MODEL_UNSUPPORTED&&pc==0x14daf4&&!memcmp(s,before,sizeof(*s))&&!memcmp(bytes+0x2cd,oldselectors,3));
+ memcpy(saved,s,sizeof(*s));s->scalar[0x80]=1;
+ C(!gh_actor_model_light_0014d828(&m,s,&b,GH_STATIC_BINARY32_REFERENCE,&pc)&&!pc&&bytes[0x2cd]==0);
  /* Controlled point light proves quadratic+linear denominator, then
   * constant OUTSIDE reciprocal, full XYZ normalization and part0 source. */
  memcpy(s,saved,sizeof(*s));put(s->scalar+0x78,1);uint8_t*pr=s->scalar+0x80;memset(pr,0,0x70);pr[0]=1;put(pr+0x58,1);put(bytes+0x2d0,1);put(bytes+0x254,0);bytes[0x2cc]=0;memset(pivot.bytes,0,12);
@@ -112,8 +113,25 @@ int main(int argc,char**argv){
  C(!gh_actor_model_light_0014d828(&m,s,&b,GH_STATIC_BINARY32_REFERENCE,&pc)&&value(s->scalar+0x161a0)==0&&value(s->scalar+0x161a4)==0&&value(s->scalar+0x161a8)==1);
  C(fabsl(value(s->scalar+0x161d0)-factor)<2e-7L); /* selection uses actor, not part, position */
  pr[0]=0;put(pr+0x58,1);putf(pr+0x20,-3);putf(pr+0x24,7);putf(pr+0x28,9);C(!gh_actor_model_light_0014d828(&m,s,&b,GH_STATIC_BINARY32_REFERENCE,&pc)&&value(s->scalar+0x161a0)==-3&&value(s->scalar+0x161a4)==7);
+ gh_bundle r105_bundle;
+ gh_game_world_light *r105_light=calloc(1,sizeof(*r105_light));
+ C(r105_light&&!gh_bundle_open(r105,r105_size,&r105_bundle)&&
+   !gh_game_world_light_construct_002d6d80(r105_light)&&
+   !gh_game_world_light_initialize_with_heap_002d6f40(r105_light,&r105_bundle,heap));
+ const gh_light_player_parts actor_parts={.owner=&v};
+ C(!gh_game_world_light_select_002d8408(r105_light,0,&actor_parts)&&
+   word(r105_light->scalar+0x78)==12);
+ const uint8_t *light9=r105_light->scalar+0x80+9*0x70;
+ C(light9[0]==1&&!word(light9+0x40)&&!word(light9+0x44)&&word(light9+0x48)==0x3f7ffffdu);
+ put(bytes+0x2d0,0x10000000u);
+ actual=gh_actor_model_light_0014d828(&m,r105_light,&b,GH_STATIC_BINARY32_REFERENCE,&pc);
+ printf("actual R105 light status=%d frontier=%08x selectors=%u,%u,%u\n",
+        actual,pc,bytes[0x2cd],bytes[0x2ce],bytes[0x2cf]);
+ C(!actual&&!pc&&bytes[0x2cd]==9&&bytes[0x2ce]==0xff&&bytes[0x2cf]==10);
+ C(!gh_game_world_light_release_presets(r105_light));
+ free(r105_light);free(r105);
  /* Root bit2 genuinely returns before invalid records or bindings. */
  put(bytes+0x250,2);put(s->scalar+0x78,999);C(!gh_actor_model_light_0014d828(&m,s,NULL,GH_STATIC_BINARY32_REFERENCE,&pc));
- C(!gh_actor_model_release(&m)&&!gh_game_room_pools_release(&pools)&&!gh_game_world_light_release_presets(s)&&!gh_heap_destroy(heap));free(pl);free(before);free(saved);free(s);free(room);
+ C(!gh_actor_model_release(&m)&&!gh_game_room_pools_release(&pools)&&!gh_game_world_light_release_presets(s)&&!gh_heap_destroy(heap));free(pl);free(saved);free(s);free(room);
  puts("PASS actual R100 LI3 input, signed alias fallback, constant lights, original selector order, XYZ/W boundaries, FEnv and atomic failures");return 0;
 }

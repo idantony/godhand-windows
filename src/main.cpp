@@ -531,8 +531,22 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
 static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
 {
     try {
+#ifdef GH_NATIVE_STARTUP_QA
+    auto failure=[&](const char *step,gh_id_error code,size_t index=0,size_t limit=0){
+        gh_mc_render_status status={};
+        gh_mc_renderer_inspect(app.renderer,&status);
+        std::fprintf(stderr,"QA_OT_FAILURE scene=%llu tick=%llu step=%s error=%u index=%zu limit=%zu groups=%zu actor=%zu static=%zu shadow=%zu effect=%zu building=%u sceneBuilding=%u consumer=%08X frontier=%08X gpu=%u jobs=%zu\n",
+            (unsigned long long)app.snapshot.scene_frame_serial,(unsigned long long)app.snapshot.ticks,step,(unsigned)code,index,limit,
+            app.groups.size(),gh_actor_world_queue_count(app.actor_queue),gh_static_world_queue_count(app.world_queue),
+            app.shadow_queue.size(),app.effect_queue.size(),(unsigned)app.frame_building,(unsigned)app.building_scene,
+            status.consumer,status.frontier,status.gpu_error,(size_t)status.jobs);
+        return code;
+    };
+#else
+    auto failure=[](const char *,gh_id_error code,size_t=0,size_t=0){return code;};
+#endif
     size_t written=0,omitted=0;uint32_t clear=0;
-    if(!app.snapshot.work||!app.frame_building)return GH_ID_ARGUMENT;
+    if(!app.snapshot.work||!app.frame_building)return failure("frame",GH_ID_ARGUMENT);
     std::vector<size_t> order(app.groups.size());
     if(gh_ui_order_indices(app.groups.data(),app.groups.size(),app.snapshot.flags,(uint32_t)app.snapshot.work->mode,
         order.data(),order.size(),&written,&omitted)!=GH_UI_ORDER_OK||omitted||written!=order.size())return GH_ID_UNSUPPORTED;
@@ -553,21 +567,21 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
         }
         else {ui_started=true;ui_order.push_back((size_t)g.identity);}}
     if(world_order.size()!=gh_static_world_queue_count(app.world_queue)+app.shadow_queue.size()+
-       gh_actor_world_queue_count(app.actor_queue)+app.effect_queue.size())return GH_ID_ARGUMENT;
+       gh_actor_world_queue_count(app.actor_queue)+app.effect_queue.size())return failure("world-count",GH_ID_ARGUMENT,world_order.size(),app.groups.size());
     // ONEOT determines both domains. This bounded native path requires world
     // and effects to precede UI; mixed UI/sprite depths remain strict.
     std::vector<unsigned char> world_seen(gh_static_world_queue_count(app.world_queue),0),shadow_seen(app.shadow_queue.size(),0),
         actor_seen(gh_actor_world_queue_count(app.actor_queue),0),effect_seen(app.effect_queue.size(),0),ui_seen(ui_order.size(),0);
     for(size_t encoded:world_order){
         bool shadow=(encoded&shadow_identity)!=0,actor=(encoded&actor_identity)!=0,effect=(encoded&effect_identity)!=0;
-        if((unsigned)shadow+(unsigned)actor+(unsigned)effect>1)return GH_ID_ARGUMENT;
+        if((unsigned)shadow+(unsigned)actor+(unsigned)effect>1)return failure("world-kind",GH_ID_ARGUMENT,encoded);
         size_t i=encoded&~(shadow_identity|actor_identity|effect_identity);
         auto &seen=shadow?shadow_seen:actor?actor_seen:effect?effect_seen:world_seen;
-        if(i>=seen.size()||seen[i])return GH_ID_ARGUMENT;seen[i]=1;}
-    for(size_t i:ui_order){if(i>=ui_seen.size()||ui_seen[i])return GH_ID_ARGUMENT;ui_seen[i]=1;}
+        if(i>=seen.size()||seen[i])return failure("world-index",GH_ID_ARGUMENT,encoded,seen.size());seen[i]=1;}
+    for(size_t i:ui_order){if(i>=ui_seen.size()||ui_seen[i])return failure("ui-index",GH_ID_ARGUMENT,i,ui_seen.size());ui_seen[i]=1;}
     int message_depth=0;
     gh_id_error depth_status=gh_mc_renderer_queued_message_depth(app.renderer,ui_order.data(),ui_order.size(),&message_depth);
-    if(depth_status!=GH_ID_OK)return depth_status;
+    if(depth_status!=GH_ID_OK)return failure("ui-depth",depth_status,ui_order.size());
     const bool world_surface=!world_order.empty()||message_depth;
     if(world_surface){
         const gh_display_state *display=app.snapshot.display;
@@ -587,7 +601,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
             if(encoded&effect_identity){
                 const auto &packet=app.effect_queue[encoded&~effect_identity];
                 auto e=consume_effect(app,packet,sampler,post,x,y,frame_mask);
-                if(e)return e;
+                if(e)return failure("world-effect",e,encoded);
                 if(packet.restores_scene_target)frame_mask=packet.restore_frame_mask;
                 if(packet.kind!=GH_EFFECT_PASS_SCENE_CAPTURE){
                     gs_test=packet.test;gs_alpha=packet.alpha;tests_known=true;
@@ -614,7 +628,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
             }
             if(encoded&actor_identity){
                 size_t i=encoded&~actor_identity;gh_actor_world_group g={};
-                if(gh_actor_world_queue_group_at(app.actor_queue,i,&g)!=GH_ACTOR_WORLD_OK)return GH_ID_ARGUMENT;
+                if(gh_actor_world_queue_group_at(app.actor_queue,i,&g)!=GH_ACTOR_WORLD_OK)return failure("actor-group",GH_ID_ARGUMENT,i);
                 const auto &command=g.command;
                 // The original OT prepends the mask and secondary geometry,
                 // then the FRAME unmask, ahead of the normal actor draw.
@@ -646,7 +660,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
                 }
                 for(size_t j=0;j<g.packets;j++){
                     gh_actor_world_packet packet={};
-                    if(gh_actor_world_queue_packet_at(app.actor_queue,i,j,&packet)!=GH_ACTOR_WORLD_OK)return GH_ID_ARGUMENT;
+                    if(gh_actor_world_queue_packet_at(app.actor_queue,i,j,&packet)!=GH_ACTOR_WORLD_OK)return failure("actor-packet",GH_ID_ARGUMENT,i,j);
                     if(frame_mask!=UINT32_MAX&&(packet.primitive&32)&&!fog_known){app.world_frontier=0x14c5a0;return GH_ID_UNSUPPORTED;}
                     gh_model_draw_state state={};state.test=gs_test;state.alpha=gs_alpha;
                     state.tex1=sampler.tex1;state.clamp=sampler.clamp;state.primitive=packet.primitive;
@@ -674,7 +688,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
                 continue;
             }
             size_t i=encoded;gh_static_world_group g={};
-            if(gh_static_world_queue_group_at(app.world_queue,i,&g)!=GH_WORLD_OK)return GH_ID_ARGUMENT;
+            if(gh_static_world_queue_group_at(app.world_queue,i,&g)!=GH_WORLD_OK)return failure("static-group",GH_ID_ARGUMENT,i);
             if(g.command.kind==GH_OBJECT_SETUP){
                 setup=g;has_setup=true;fog_rgb=g.captured_fog_rgb;fog_known=true;
                 gs_test=g.command.test;gs_alpha=g.command.alpha;tests_known=true;
@@ -683,7 +697,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
             if(!has_setup||setup.command.handle!=g.command.handle||setup.command.object!=g.command.object){app.world_frontier=0x14c6b8;return GH_ID_UNSUPPORTED;}
             sampler.write(g.command.tex1,g.command.clamp);
             for(size_t j=0;j<g.packets;j++){gh_static_world_packet packet={};
-                if(gh_static_world_queue_packet_at(app.world_queue,i,j,&packet)!=GH_WORLD_OK)return GH_ID_ARGUMENT;
+                if(gh_static_world_queue_packet_at(app.world_queue,i,j,&packet)!=GH_WORLD_OK)return failure("static-packet",GH_ID_ARGUMENT,i,j);
                 gh_model_draw_state state={};state.test=gs_test;state.alpha=gs_alpha;
                 state.tex1=sampler.tex1;state.clamp=sampler.clamp;state.primitive=packet.primitive;
                 state.frame_mask=frame_mask;
@@ -725,7 +739,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
             (unsigned long long)app.snapshot.scene_frame_serial,(unsigned)(app.snapshot.fade?app.snapshot.fade->state:0),
             (unsigned long long)app.frame_fade.test,(unsigned long long)ui_order.size(),(unsigned long long)world_depth.size(),(unsigned)error);
 #endif
-    if(error!=GH_ID_OK)return error;
+    if(error!=GH_ID_OK)return failure("ui-flush",error,ui_order.size(),world_depth.size());
     size_t bytes=0;const unsigned char *base=gh_mc_renderer_pixels(app.renderer,&bytes);
     if(!base||bytes!=512*448*4)return GH_ID_UNSUPPORTED;
     app.queued_pixels.assign(base,base+bytes);app.display_pending=true;
@@ -891,6 +905,7 @@ int main(int argc,char **argv)
     bool qa_r003=false;
     uint64_t qa_r003_handoff=0,qa_r003_first=0,qa_r003_last=0,qa_r003_frames=0;
     int qa_r003_cut=-1;
+    uint64_t qa_r105_first=0,qa_r105_last=0,qa_r105_frames=0;
     QAStartupTitleProbe qa_title;
     QAControlProbe qa_control;
     QARepeatSquareProbe qa_repeat_square;
@@ -1037,6 +1052,15 @@ int main(int argc,char **argv)
                                 (unsigned long long)qa_r003_last);
                         }
                     }
+                    if(qa_r003_last&&app.snapshot.current_room==0x105&&app.snapshot.game_state==4){
+                        qa_r105_last=app.prepared_scene_serial;
+                        if(!qa_r105_first){
+                            qa_r105_first=qa_r105_last;
+                            std::fprintf(stderr,"QA_R105_PRESENTED scene=%llu tick=%llu\n",
+                                (unsigned long long)qa_r105_first,(unsigned long long)app.snapshot.ticks);
+                        }
+                        ++qa_r105_frames;
+                    }
                     qa_control.presented(app.prepared_scene_serial);
                     qa_repeat_square.presented(app.prepared_scene_serial);
                     if(app.prepared_scene_serial>=qa_capture_frame&&app.prepared_scene_serial<=qa_last_capture_scene)
@@ -1090,8 +1114,10 @@ int main(int argc,char **argv)
                 gh_id_error error=prepare_ui_display(app,true);
                 if(error!=GH_ID_OK){std::fprintf(stderr,"Native scene OT preparation failed: %u\n",(unsigned)error);break;}
 #ifdef GH_NATIVE_STARTUP_QA
+                const bool controlled_scene=qa_r003_handoff&&app.snapshot.game_state==4&&
+                    (app.snapshot.current_room==3||(qa_r003_last&&app.snapshot.current_room==0x105));
                 if(qa_capture&&qa_captured<qa_capture_count&&app.snapshot.scene_frame_serial>=qa_capture_frame&&
-                   (!qa_r003||(qa_r003_handoff&&app.snapshot.current_room==3))){
+                   (!qa_r003||controlled_scene)){
                     if(qa_capture_count>1&&app.world_pixels.empty()){
                         std::fprintf(stderr,"QA capture range requires the matching pre-UI world frame\n");break;
                     }
@@ -1173,11 +1199,14 @@ int main(int argc,char **argv)
         app.snapshot.hitarea_hit_distance_bits[0],app.snapshot.hitarea_hit_distance_bits[1],app.snapshot.hitarea_hit_distance_bits[2],app.snapshot.hitarea_hit_distance_bits[3]);
 #ifdef GH_NATIVE_STARTUP_QA
     qa_repeat_square.report();
-    if(qa_r003)
+    if(qa_r003){
         std::fprintf(stderr,"QA_R003_STATUS {\"handoff_tick\":%llu,\"first_scene\":%llu,\"last_scene\":%llu,"
             "\"frames\":%llu,\"last_ev02_cut\":%d}\n",(unsigned long long)qa_r003_handoff,
             (unsigned long long)qa_r003_first,(unsigned long long)qa_r003_last,
             (unsigned long long)qa_r003_frames,qa_r003_cut);
+        std::fprintf(stderr,"QA_R105_STATUS {\"first_scene\":%llu,\"last_scene\":%llu,\"frames\":%llu}\n",
+            (unsigned long long)qa_r105_first,(unsigned long long)qa_r105_last,(unsigned long long)qa_r105_frames);
+    }
     if(qa_control.mode)
         std::fprintf(stderr,"QA_CONTROL_STATUS mode=%s saw_event=%u pressed=%u motion_presented=%u\n",
             qa_control.mode,(unsigned)qa_control.saw_event,(unsigned)qa_control.pressed,(unsigned)qa_control.reported_motion);

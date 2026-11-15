@@ -36,6 +36,8 @@ typedef struct {
 gh_scene_placement_status gh_om376_set_paper_0012c8d8(gh_om376_paper *,gh_om_factory *,
     gh_actor_model *player,gh_core_save_view,gh_game_scene_tables *,
     gh_collision_scroll_mutation *,uint32_t *frontier);
+gh_scene_placement_status gh_om376_release_paper_001cf6e0(gh_om376_paper *,
+    const gh_title_player_view *player,gh_core_save_view,uint32_t *frontier);
 
 gh_object_step_status gh_om382_move_prefix_001c9860(gh_om382_state *,const gh_om_frame_runtime *,
     const gh_object_opacity_environment *,uint8_t *phase,float *rate,
