@@ -4,6 +4,45 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## New Game Retry and original arena combat
+
+On the east route from New Game, the recorded controller input wins the
+opening fight, breaks the original door and reaches an armed enemy. Its
+OM363 hit drops Gene from 1 HP to zero. The Game Over menu accepts Cross
+at tick 5063. Continue advances from zero to one and R100 reloads with
+Gene at 100 HP. A Windows Direct3D replay presents the original menu
+and the reloaded arena. A west route separately reaches the original
+reinforcement area with the Devil encounter active.
+
+An unchanged zero-defeat R102 card yields the first of the six qualifying
+defeats at tick 2804. Original effect retirement clears the defeated actor.
+The same replay damages a second enemy, escapes an EM0A grab and continues
+to 2,920 native R102 room frames. The remaining gate condition is five
+further qualifying defeats.
+
+A controller replay through the original R102 door uses the gate-ready
+fixture and reaches 1,800 R103 room frames. Ten face-button edges drive
+the original escape counter and Gene returns to neutral. The direct
+R103 fight replay drops the first attacker on its second successful
+counter. The original second wave enters and lands a hit on Gene. Direct3D presents 1,623
+consecutive R103 frames on the original door route. The escape counter
+appears at scene 2743, followed by 0.167230 m of observed movement after
+stick input at scene 2921. The renderer, world GPU, effects and window
+report zero errors.
+
+从新游戏开始的东侧回放赢下开场战斗、打破原版门，随后 Gene 被持械敌人击倒。在第 5063 tick
+按叉确认重试，原版继续次数从零增加到一，Gene 以 100 HP 回到 R100。Windows Direct3D 回放
+呈现了原版重试菜单和重载后的关卡。另一条西侧路线触发了原版恶魔遭遇，并抵达增援区域。
+
+R102 从零击败存档开始，于第 2804 tick 记录六个所需击败中的第一个。原版流程清理已击败的敌人。
+同一回放打伤第二个敌人、挣脱 EM0A 擒抱并运行到 2,920 个 R102 原生房间帧。开门还需五个有效击败。
+
+预置开门条件的测试存档可用手柄走过 R102 原版门，进入 R103 并跑到第 1,800 个房间帧。
+十次按键触发原版挣脱反击，Gene 随后回到待机。直接进入 R103 的战斗回放验证第二次反击击倒敌人，
+原版第二波入场并命中 Gene。Direct3D 在原版门路线连续呈现 1,623 个 R103 帧，涵盖第 2743
+场景帧的挣脱反击和第 2921 场景帧由摇杆输入带来的 0.167230 米位移。渲染器、场景 GPU、
+特效和窗口无报错。
+
 ## Later R102 combat and mid-room gate
 
 An original save and mapped controller input reach a later R102 encounter.

@@ -73,7 +73,8 @@ static void hud_texture(gh_id_state *manager,unsigned char *rgba)
  C(quad.color_mode==6&&quad.font_mode==5&&!quad.clip);
  C(quad.texture.source.offset==0x19200&&quad.texture.source.size==9280);
  gh_id_texture t;
- C(gh_id_texture_open(manager,1,20,&t)==GH_ID_UNSUPPORTED);
+ C(!gh_id_texture_open(manager,1,20,&t)&&t.width==64&&t.height==32&&
+   t.tex0==GH_ID_TIM2_64X32_PSMT8_TEX0);
  for(unsigned item=12;item<=13;++item){
   gh_tim2_picture picture;
   C(!gh_id_texture_open(manager,1,item,&t));

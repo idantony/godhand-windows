@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T18:40:52+00:00",
-  "stage": "native-windows-r102-later-combat-and-midroom-gate",
+  "verified_utc": "2026-11-15T21:29:57+00:00",
+  "stage": "native-windows-new-game-retry-and-r103-second-wave",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1482,5 +1482,61 @@
     "world_gpu_error": 0,
     "window_error": 0,
     "muted": true
+  },
+  "native_combat_replays": {
+    "r100_east": {
+      "start": "New Game",
+      "door_broken": true,
+      "lethal_enemy_stamp": 18,
+      "player_hp_before": 1,
+      "player_hp_after": 0,
+      "retry_confirm_tick": 5063,
+      "continue_before": 0,
+      "continue_after": 1,
+      "reload_tick": 5166,
+      "reloaded_hp": 100,
+      "direct3d_presents_menu_and_reload": true
+    },
+    "r100_west": {
+      "start": "New Game",
+      "reinforcement_area": 2,
+      "entry_tick": 4094,
+      "player_hp": 11
+    },
+    "r102_gate": {
+      "start": "unchanged zero-defeat checkpoint",
+      "first_defeat_tick": 2804,
+      "counted_defeats": 1,
+      "required_defeats": 6,
+      "first_defeated_stamp": 16,
+      "second_enemy_stamp": 11,
+      "second_enemy_hp_before": 74,
+      "second_enemy_hp_after": 50,
+      "recovered_after_grab": true,
+      "room_frames": 2920
+    },
+    "r103_gate_route": {
+      "start": "R102 gate-ready fixture",
+      "room_frames": 1800,
+      "escape_presses": 10,
+      "escape_counter": true,
+      "returned_to_neutral": true,
+      "d3d_room_frames": 1623,
+      "d3d_escape_scene": 2743,
+      "d3d_walk_scene": 2921,
+      "d3d_walk_distance_m": 0.16723,
+      "d3d_renderer_error": 0,
+      "d3d_world_gpu_error": 0,
+      "d3d_effect_post_error": 0,
+      "d3d_window_error": 0
+    },
+    "r103_direct": {
+      "start": "directly loaded R103 fixture",
+      "lethal_counter_tick": 3094,
+      "defeated_enemy_stamp": 2,
+      "second_wave_activated": true,
+      "second_wave_attacker_stamp": 6,
+      "player_hp_after_hit": 24
+    }
   }
 }

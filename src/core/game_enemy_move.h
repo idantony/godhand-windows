@@ -97,7 +97,7 @@ typedef struct {
     void *death_release_context;
     uint16_t death_item;
     uint8_t death_fade_phase;
-    gh_effect_create_call death_effect_create, ambient_light_effect;
+    gh_effect_create_call death_effect_create, ambient_light_effect, stun_effect_create;
     gh_scene_at_manager *scene_jump_at;
     gh_bundle scene_jump_room;
     gh_cloth_step_bindings spring_bindings;

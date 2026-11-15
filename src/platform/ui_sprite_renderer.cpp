@@ -85,7 +85,8 @@ extern "C" gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *r,const gh_id_
  bool cursor=t->width==32&&t->height==32&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==5&&((t->tex0>>30)&15)==5&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  bool loading=t->width==32&&t->height==16&&t->tex0==UINT64_C(0x115408000);
  bool hud8=(t->width==128&&t->height==64&&t->tex0==GH_ID_TIM2_128X64_PSMT8_TEX0)||
-     (t->width==32&&t->height==32&&t->tex0==GH_ID_TIM2_32X32_PSMT8_TEX0);
+     (t->width==32&&t->height==32&&t->tex0==GH_ID_TIM2_32X32_PSMT8_TEX0)||
+     (t->width==64&&t->height==32&&t->tex0==GH_ID_TIM2_64X32_PSMT8_TEX0);
  bool tutorial=t->height==64&&
     ((t->width==128&&t->tex0==GH_ID_TIM2_128X64_PSMT4_TEX0)||
      (t->width==64&&(t->tex0==GH_ID_TIM2_64X64_PSMT4_TEX0||t->tex0==GH_ID_TIM2_64X64_PSMT8_TEX0)));

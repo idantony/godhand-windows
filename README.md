@@ -96,6 +96,17 @@ for 120 gameplay frames. A longer R101 replay runs for 4,494 native CPU
 frames and verifies the box and item releases, the original DIE marker
 and enemy audio. R101's later combat presentation remains in development.
 
+The new-game east route now breaks the original door, continues into the
+armed encounter, and reaches the original Game Over menu after a lethal
+hit. Confirming Retry restores Gene to 100 HP in R100. A separate west
+route reaches the original reinforcement area with its Devil encounter
+active. A controller replay from a zero-defeat R102 checkpoint records the
+first of six qualifying defeats and plays the following enemy grab and
+escape. A direct R103 replay drops the first attacker with its second
+escape counter and wakes the original second wave. Direct3D presents the
+escape counter and the movement that follows it during the original door
+route from an R102 gate-ready checkpoint.
+
 ### Verified progress
 
 - Read-only access to 1445 resources and 81 overlays from the user's patched
@@ -308,6 +319,12 @@ Gene 仍带着从 R102 拿到的纸片，随后第一下敌方命中将他的生
 原生 CPU 回放验证了 R100 的原版 Game Over 和重试，以及 R101 的投箱和拾取 200 金币。
 R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101 回放运行了 4,494 个原生 CPU 帧，
 验证了箱子与掉落物释放、原版 DIE 标记和敌人音效。R101 后续战斗的画面仍待验收。
+
+从新游戏开始的东侧回放打破原版木门，在后续持械战斗中被击倒，并在原版 Game Over 界面
+确认重试，以 100 HP 回到 R100。独立的西侧路线触发原版恶魔遭遇并抵达增援区域。R102
+从零击败存档开始，用手柄打出六个所需击败中的第一个，并运行后续敌人的抓取与挣脱。
+直接进入 R103 的回放用第二次挣脱反击击倒第一波敌人，触发原版第二波。从预置开门条件的
+R102 检查点出发，Direct3D 连续呈现进入 R103 后的挣脱反击和恢复摇杆移动。
 
 ### 已验证的进展
 

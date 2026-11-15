@@ -101,8 +101,9 @@ static gh_id_error zero_texture(gh_mc_renderer*r,const gh_id_render_view*s,const
 {
     /* Current canonical finite geometry only. No inference from guest heap
      * initialization and no substitute visibility/color policy. */
-    // All five original alignments preserve a zero width or height.
-    if(e->kind||e->f80!=1||e->texture.bytes||e->b89>4||e->draw_rotation!=0||
+    // The original rotated quad paths collapse coincident corners before rasterization.
+    if(e->kind||e->f80!=1||e->texture.bytes||e->b89>4||!std::isfinite(e->draw_rotation)||
+       (e->draw_rotation!=0&&e->b89!=0&&e->b89!=3)||
        !std::isfinite(e->f68)||!std::isfinite(e->f6c)||!std::isfinite(e->draw_scale_x)||!std::isfinite(e->draw_scale_y)||!std::isfinite(e->draw_x)||!std::isfinite(e->draw_y))return GH_ID_UNSUPPORTED;
     float w=e->f68*e->draw_scale_x,h=e->f6c*e->draw_scale_y;if(!std::isfinite(w)||!std::isfinite(h)||(w!=0&&h!=0))return GH_ID_UNSUPPORTED;
     if((s->base->mode==6?e->b8d:s->base->mode)!=6||e->h8e!=5)return GH_ID_UNSUPPORTED;

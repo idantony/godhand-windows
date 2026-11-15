@@ -35,6 +35,14 @@ int main(int argc,char**argv){
  unsigned nonzero_alpha=0;
  for(size_t i=3;i<sizeof(rgba);i+=4)nonzero_alpha+=rgba[i]!=0;
  C(nonzero_alpha);
+ gh_id_texture radar_arrow={0};
+ C(!gh_id_polygon_texture_open(m,1,20,&radar_arrow)&&radar_arrow.width==64&&
+   radar_arrow.height==32&&radar_arrow.tex0==GH_ID_TIM2_64X32_PSMT8_TEX0);
+ uint8_t radar_rgba[64*32*4];
+ C(!gh_id_polygon_texture_rgba(&radar_arrow,radar_rgba,sizeof(radar_rgba)));
+ nonzero_alpha=0;
+ for(size_t i=3;i<sizeof(radar_rgba);i+=4)nonzero_alpha+=radar_rgba[i]!=0;
+ C(nonzero_alpha&&nonzero_alpha<64*32);
  uint8_t save[GH_CORE_SAVE_BYTES];gh_core_save_view sv={save,sizeof(save)};gh_boot_work work={0};C(!gh_core_save_system_init(sv)&&!gh_core_save_game_init(sv,&work));gh_game_mt random;gh_game_mt_seed_0030f2b0(&random,1);gh_game_cockpit*s;C(!gh_game_cockpit_create(r,m,&random,&s)&&!gh_game_cockpit_initialize_00140c88(s,sv));uint8_t heat[0x18]={0};C(!gh_game_cockpit_room_reset_00140de0(s,sv,&work,heat));C(!gh_game_cockpit_bind_frame_elf(s,elf,es));free(elf);
  size_t n;const uint8_t*raw=gh_game_cockpit_fields(s,&n);C(n==0x23c0);gh_id_base*b17,*b14;C(!gh_game_cockpit_base(s,0x1520,&b17)&&!gh_game_cockpit_base(s,0xbe0,&b14));uint16_t f17=b17->frame,f14=b14->frame;/* Global40000 regression starts a fresh invocation; positive gameplay now has its own real test. */put((uint8_t*)&work+0x5d8,0xf00c6000);
  gh_id_error e=gh_game_cockpit_move_00140e58(s,&work,NULL);if(e)fprintf(stderr,"move %d %08X\n",e,gh_game_cockpit_frontier(s));C(!e&&b17->frame!=f17&&b14->frame==f14);C(!raw[0x1ca0]&&!raw[0x1db4]);

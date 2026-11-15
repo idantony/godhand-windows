@@ -84,6 +84,12 @@ extern "C" gh_ui_error gh_ui_polygon_upload(gh_ui_polygon_renderer*r,const gh_id
  // CORE language TBL1 item8 supplies the diagonal Game Over stripe.
  if(t&&t->tex0==GH_ID_TIM2_32X32_PSMT8_TEX0)
   return upload(r,t,p,n,h,32,32,19);
+ // The cockpit's rotated radar may also use the original T32 atlas.
+ if(t&&t->tex0==GH_ID_RADAR_TEX0)
+  return upload(r,t,p,n,h,128,256,19);
+ // Cockpit radar arrows use language TBL1 item20 on this shared path.
+ if(t&&t->tex0==GH_ID_TIM2_64X32_PSMT8_TEX0)
+  return upload(r,t,p,n,h,64,32,19);
  // Actual ActionButton recovery arrow uses the rectangular PSMT8 atlas.
  if(t&&t->width==128&&t->height==64)
   return upload(r,t,p,n,h,128,64,19);

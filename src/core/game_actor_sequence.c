@@ -17,8 +17,12 @@ static int normalize_weapon_swing_program(gh_actor_motion *s,unsigned program)
  const uint32_t dependency=w(p+0x564);
  /* Original 2C85BC compares the cEm00 names and branches on +6EC.
   * The 0363 entries of 44C970 and 44CAD0 select CORE 113 and 11D. */
- if(s->b.work->room==0x102&&kind==0x363&&dependency==0x200&&
-    (p[0x2f5]==0x16||p[0x2f5]==0x47)&&h(p+0x640)==3&&p[0x1650]==1){
+ const unsigned stamp=h(p+0x640);
+ const int r100=s->b.work->room==0x100&&dependency==0x202&&stamp==18&&
+    p[0x1650]==9&&(p[0x2f5]==0x16||p[0x2f5]==0x47);
+ const int r102=s->b.work->room==0x102&&dependency==0x200&&stamp==3&&
+    p[0x1650]==1&&(p[0x2f5]==0x16||p[0x2f5]==0x47);
+ if(kind==0x363&&(r100||r102)){
   s->pending_sound.program=(int16_t)((program==0x113||program==0x114)?0x113:0x11d);
   return 1;
  }

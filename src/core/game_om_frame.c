@@ -648,7 +648,9 @@ static gh_object_step_status box_break(gh_om_frame_state *s,
  const int kind304=object->source.type==0x304;
  const uint32_t entry=kind304?0x1881f0:0x18c580;
  uint8_t *timer=actor+(kind304?0x600:0x654);
- if(work->room!=0x101||policy!=GH_STATIC_BINARY32_REFERENCE||!s->runtime_bound||
+ const int arena_box=work->room==0x103&&object->source.type==0x30a&&
+    object->view.original_vtable214==0x4238d8;
+ if((work->room!=0x101&&!arena_box)||policy!=GH_STATIC_BINARY32_REFERENCE||!s->runtime_bound||
     !s->runtime.init||fragment->segments!=actor+(kind304?0x610:0x660)||!object->view.alias_f0)
   return fail(s,entry,f,GH_OBJSTEP_UNSUPPORTED);
  if(!actor[0x2f5]&&s->special_phase!=8){
@@ -846,7 +848,8 @@ static gh_object_step_status door_break_001bc748(gh_om_frame_state *s,gh_om_init
 {
  uint8_t *p=s->object->view.bytes;
  if(!s->runtime_bound||!s->runtime.init||policy!=GH_STATIC_BINARY32_REFERENCE||
-    work->room!=0x101||p[0x624]>7||c->door_segments!=p+0x650||p[0x2f5]>3)
+    (work->room!=0x100&&work->room!=0x101)||p[0x624]>7||
+    c->door_segments!=p+0x650||p[0x2f5]>3)
   return fail(s,0x1bc748,frontier,GH_OBJSTEP_UNSUPPORTED);
  uint32_t pc=0;
  if(!p[0x2f5]){
@@ -1699,7 +1702,9 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
   }
   else if(simple(s->object)||plain(s->object)||segments(s->object)||s->object->source.type==0x307){if(p[0x2f4]){uint32_t pc=state_entry(s->object->source.type,p[0x2f4]);return fail(s,pc?pc:s->entry,f,GH_OBJSTEP_UNSUPPORTED);}}
   else{
-   if(s->object->source.type==0x313&&(p[0x2f4]==2||p[0x2f4]==3||s->special_phase==8)){
+   if(((s->object->source.type==0x300&&w->room==0x100)||
+       (s->object->source.type==0x313&&w->room==0x101))&&
+      (p[0x2f4]==2||p[0x2f4]==3||s->special_phase==8)){
     gh_object_step_status status=(p[0x2f4]==2||s->special_phase==8)?
       door_break_001bc748(s,c,w,policy,f):remove_object(s,f);
     if(status)return status;

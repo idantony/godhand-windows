@@ -49,6 +49,7 @@
 #include "../core/game_player_abort.h"
 #include "../core/game_om3eb.h"
 #include "../core/game_enemy_request.h"
+#include "../core/game_enemy_row2.h"
 #include "../core/game_enemy_resources.h"
 #include "../core/game_enemy_ems.h"
 #include "../core/game_enemy_retire.h"
@@ -130,7 +131,7 @@ struct gh_game_services {
  gh_om_runtime_create tutorial_create[4];gh_om_object *tutorial_objects[4];
  gh_game_player_abort soft_player_abort;
  uint32_t player_grab_attacker;
- uint8_t player_grab_escape_stamp20;
+ uint8_t player_grab_escape_stamp;
  gh_event_player_reset event_player_reset;gh_event_clear_bindings event_player_prefix;
  gh_player_abort_bindings event_player_abort;gh_event_weapon_slot player_weapon,event_paper_slot;
  gh_event_weapon_attachment event_paper_attachment;
@@ -664,6 +665,22 @@ static int r102_em00_grab_attacker(const gh_game_services *s,const gh_enemy_acto
     u32(actor+0x564)==0x200&&(u32(actor+0x640)&0xffffu)==11&&actor[0x1650]==5;
 }
 
+static int r103_em00_grab_attacker(const gh_game_services *s,const gh_enemy_actor *enemy)
+{
+ return enemy&&enemy->entry.published&&enemy->entry.b.init==s->b.init&&
+    enemy->entry.request.dependency_kind==0x200&&
+    gh_enemy204_is_r103_entry(&enemy->entry.request,s->b.work->room);
+}
+
+static int r102_gate_em0a_grab_attacker(const gh_game_services *s,const gh_enemy_actor *enemy)
+{
+ if(s->b.work->room!=0x102||!enemy||!enemy->entry.published||enemy->entry.b.init!=s->b.init)return 0;
+ const gh_title_player_view *view=&enemy->entry.object.view;
+ const uint8_t *p=view->bytes;
+ return p&&view->size>=0x16c8&&view->original_vtable214==0x4479c8&&u32(p+0x564)==0x20a&&
+    (u32(p+0x640)&0xffffu)==2&&p[0x1650]==5&&!u32(p+0x16c4);
+}
+
 static int r102_area11_grab_attacker(const gh_game_services *s,const gh_enemy_actor *enemy)
 {
  if(s->b.work->room!=0x102||!enemy)return 0;
@@ -683,17 +700,20 @@ static int player_motion_request_matches(gh_game_services*s,const gh_player_moti
     gh_enemy_ems_live_at(s->enemies,s->player_grab_attacker,&live)||!live.enemy202)return 0;
  const unsigned selector=p[0x2f5],phase=p[0x2f6];
  const int area11=selector==0xb&&r102_area11_grab_attacker(s,live.enemy202);
+ const int arena=r103_em00_grab_attacker(s,live.enemy202);
  const int short_grab=selector==0xa&&
-     (r105_grab_attacker(s,live.enemy202)||r102_em00_grab_attacker(s,live.enemy202));
- if(s->b.work->room!=0x100&&!area11&&!short_grab)return 0;
+     (r105_grab_attacker(s,live.enemy202)||r102_em00_grab_attacker(s,live.enemy202)||arena);
+ const int gate_grab=selector==8&&r102_gate_em0a_grab_attacker(s,live.enemy202);
  const int counter=p[0x2f4]==0&&selector==0x39&&phase==0;
- if(p[0x2f4]==1&&selector==8&&(phase==0||phase==2||phase==4)&&s->b.work->room==0x100){
+ if(s->b.work->room!=0x100&&!area11&&!short_grab&&!gate_grab&&!(arena&&counter))return 0;
+ if(p[0x2f4]==1&&selector==8&&(phase==0||phase==2||phase==4)){
   const size_t row=0xc80u+4u*phase;
   const gh_title_player_view *attacker=&live.enemy202->entry.object.view;
   const gh_object_view *resource=&live.enemy202->entry.resource;
   return attacker->bytes&&attacker->size>0x1650&&attacker->original_vtable214==0x4479c8&&
-     u32(attacker->bytes+0x564)==0x20a&&!attacker->bytes[0x640]&&!attacker->bytes[0x641]&&
-     attacker->bytes[0x1650]==3&&resource->bytes&&resource->file_extent_known&&
+     u32(attacker->bytes+0x564)==0x20a&&
+     (gate_grab||(!attacker->bytes[0x640]&&!attacker->bytes[0x641]&&attacker->bytes[0x1650]==3))&&
+     resource->bytes&&resource->file_extent_known&&
      resource->file_extent>=row+8&&resource->file_extent<=resource->size&&
      r->resource==resource->bytes&&r->resource_bytes==resource->size&&
      r->motion_offset==u32(resource->bytes+row)&&
@@ -711,7 +731,7 @@ static int player_motion_request_matches(gh_game_services*s,const gh_player_moti
   r->motion_offset==u32(resource->bytes+row)&&
   r->sequence_candidate_offset==u32(resource->bytes+row+4)&&
   !r->start_frame_bits&&r->blend_frames==(phase==6?3u:0u)&&!r->flags&&
-  r->release_previous_sequence==(s->b.work->room==0x100||area11);
+  r->release_previous_sequence==(s->b.work->room==0x100||area11||counter);
 }
 static gh_player_init_status actor_sound_prepare(gh_game_services*s,gh_actor_attached_sound*sound,uint32_t*frontier){
  if(!s->b.voices)return GH_PLAYER_INIT_OK; /*unbound legacy fixture stays strict on real sound*/
@@ -4138,8 +4158,10 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  uint8_t*p=s->title_player.view.bytes;
  const int em27=r105_grab_attacker(s,enemy);
  const int r102_em00=r102_em00_grab_attacker(s,enemy);
+ const int arena=r103_em00_grab_attacker(s,enemy);
  const int area11=r102_area11_grab_attacker(s,enemy);
- if(!p||s->title_player.view.size<0x1660||(s->b.work->room!=0x100&&!em27&&!r102_em00&&!area11)||
+ const int gate_grab=r102_gate_em0a_grab_attacker(s,enemy);
+ if(!p||s->title_player.view.size<0x1660||(s->b.work->room!=0x100&&!em27&&!r102_em00&&!area11&&!gate_grab&&!arena)||
     !enemy||enemy->entry.b.init!=s->b.init||!enemy->entry.published){
   *frontier=0x129718;
   return GH_ACTOR_MOTION_UNSUPPORTED;
@@ -4151,16 +4173,15 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  }
  unsigned selector;
  const uint32_t dependency=u32(attacker+0x564);
- if(argument==0&&dependency==0x20a&&!attacker[0x640]&&
-    enemy->entry.object.view.size>0x1650&&attacker[0x1650]==3&&!attacker[0x2f4]&&
-    attacker[0x2f5]==0x4c)selector=8;
- else if(argument==2&&((dependency==0x200&&attacker[0x640]==20)||r102_em00||em27)&&attacker[0x2f5]==0x4d)selector=0xa;
+ if(argument==0&&dependency==0x20a&&enemy->entry.object.view.size>0x1650&&
+    (gate_grab||(!attacker[0x640]&&attacker[0x1650]==3))&&
+    !attacker[0x2f4]&&attacker[0x2f5]==0x4c)selector=8;
+ else if(argument==2&&((dependency==0x200&&attacker[0x640]==20)||r102_em00||em27||arena)&&attacker[0x2f5]==0x4d)selector=0xa;
  else if(argument==3&&((dependency==0x203&&attacker[0x640]==19)||(area11&&!attacker[0x2f4]))&&
          attacker[0x2f5]==0x4e)selector=0xb;
- else if(argument==0x1d&&dependency==0x200&&attacker[0x640]==20&&attacker[0x2f4]==1&&
-         attacker[0x2f5]==0x1d&&p[0x2f4]==1&&p[0x2f5]==0xa)selector=0x39;
- else if(argument==0x1d&&dependency==0x200&&attacker[0x640]==20&&attacker[0x2f4]==1&&
-         attacker[0x2f5]==0x1d&&s->soft_player_abort.active&&p[0x2f4]==0&&p[0x2f5]==0x39)selector=0x39;
+ else if(argument==0x1d&&dependency==0x200&&(arena||attacker[0x640]==20)&&attacker[0x2f4]==1&&
+         attacker[0x2f5]==0x1d&&((p[0x2f4]==1&&p[0x2f5]==0xa)||
+         (s->soft_player_abort.active&&p[0x2f4]==0&&p[0x2f5]==0x39)))selector=0x39;
  else{
   *frontier=0x129718;
   return GH_ACTOR_MOTION_UNSUPPORTED;
@@ -4187,7 +4208,7 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  memcpy(&count,manager+0x514,4);
  if(count<minimum)memcpy(manager+0x514,&minimum,4);
  s->player_grab_attacker=enemy->entry.handle;
- s->player_grab_escape_stamp20=(selector==0x39);
+ s->player_grab_escape_stamp=selector==0x39?attacker[0x640]:0xff;
  return GH_ACTOR_MOTION_OK;
 }
 
@@ -4287,7 +4308,7 @@ static gh_object_step_status om_break_effect(void *context,const gh_actor_model 
   uint16_t kind;
   memcpy(&kind,model->root.bytes+0x2fe,sizeof(kind));
   gh_effect_status opened;
-  if(kind==0x313){
+  if(kind==0x313||(kind==0x300&&s->b.work->room==0x100)){
    const gh_effect_create_request door={.bank=0,.index=0x1a,.actor=&model->root,.mode=-1,.selector=-1};
    opened=gh_effect_create_begin(call,&door);
   }else if(kind==0x30a||kind==0x304)opened=gh_effect_create_om30a_break_begin_0018c580(call,position);
@@ -4716,7 +4737,7 @@ static gh_object_step_status om_box_drop_item_002923e8(void *context,gh_om_box_i
 {
  gh_game_services *s=context;
  if(!s||!drop||!box||!box->alias_f0||box->original_vtable214!=0x4238d8||
-    !s->b.work||s->b.work->room!=0x101||!s->b.init||!frontier)
+    !s->b.work||(s->b.work->room!=0x101&&s->b.work->room!=0x103)||!s->b.init||!frontier)
   return GH_OBJSTEP_ARGUMENT;
  *frontier=0;
  if(drop->stage==4){*frontier=0x31d000;return GH_OBJSTEP_UNSUPPORTED;}
@@ -4781,7 +4802,7 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
 {
  gh_game_services *s=context;
  if(!s||!pickup||!item||!item->bytes||item->size<0x690||!frontier||
-    !s->b.work||s->b.work->room!=0x101||!s->om_factory.bindings.initializer||
+    !s->b.work||(s->b.work->room!=0x101&&s->b.work->room!=0x103)||!s->om_factory.bindings.initializer||
     item->original_vtable214!=0x429b88||(u32(item->bytes+0x2fc)>>16)!=0x3d6)
   return GH_OBJSTEP_ARGUMENT;
  *frontier=0;
@@ -5281,13 +5302,16 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
    grab_resource=grab.enemy202->entry.resource;
   }else{
    const gh_room_state *room=&s->room_state;
-   if(!lookup&&!grab.actor&&s->player_grab_escape_stamp20&&s->b.work->room==0x100&&
+   const unsigned stamp=s->player_grab_escape_stamp;
+   const int16_t room_id=s->b.work->room;
+   const int authored=(room_id==0x100&&stamp==20)||(room_id==0x103&&(stamp==2||stamp==3));
+   if(!lookup&&!grab.actor&&authored&&
       v->bytes[0x2f4]==0&&v->bytes[0x2f5]==0x39&&v->bytes[0x2f6]==1&&
-      room->record&&room->record->room==0x100&&room->active&&room->size>=12&&
+      room->record&&room->record->room==room_id&&room->active&&room->size>=12&&
       room->active[8]<=64&&12+(size_t)room->active[8]*24<=room->size){
     for(unsigned i=0;i<room->active[8];++i){
      const uint8_t *row=room->active+12+i*24;
-     if(row[0x13]!=20)continue;
+     if(row[0x13]!=stamp)continue;
      grab_attacker_retired=(row[0x14]==1);
      break;
     }
@@ -5569,7 +5593,8 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh
  const gh_boot_work*work,const gh_game_actor_render_provider*provider,uint32_t*f){
  if(f)*f=0;if(!s||!q||!provider||!f||work!=s->b.work)return GH_SERVICES_ARGUMENT;
  if(q->kind==GH_OBJECT_TRANS_DESTROY&&q->argument==3&&!q->this_delta&&
-    ((q->original_entry==0x1c00c8&&q->original_vtable==0x429b88)||
+    ((q->original_entry==0x1867c0&&q->original_vtable==0x422f90)||
+     (q->original_entry==0x1c00c8&&q->original_vtable==0x429b88)||
      (q->original_entry==0x187d10&&q->original_vtable==0x423338)||
      (q->original_entry==0x188af0&&q->original_vtable==0x423400)||
      (q->original_entry==0x18c120&&q->original_vtable==0x4238d8)||

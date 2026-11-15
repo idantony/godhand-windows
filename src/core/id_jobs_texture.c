@@ -27,7 +27,9 @@ static int tim2_hud8(const gh_tim2_picture *picture)
     (picture->tex0==GH_ID_TIM2_64X64_PSMT8_TEX0&&picture->width==64);
  const int game_over_stripe=picture->tex0==GH_ID_TIM2_32X32_PSMT8_TEX0&&
     picture->width==32&&picture->height==32;
- return ((profile&&picture->height==64)||game_over_stripe)&&
+ const int radar_arrow=picture->tex0==GH_ID_TIM2_64X32_PSMT8_TEX0&&
+    picture->width==64&&picture->height==32;
+ return ((profile&&picture->height==64)||game_over_stripe||radar_arrow)&&
         picture->image_type==5&&picture->clut_type==3&&picture->colors==256;
 }
 static int tim2_number4(const gh_tim2_picture *picture)

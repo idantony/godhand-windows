@@ -12,7 +12,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
   gh_effect_status e=b->actor_match(b->context,emitter,i,actor,&match,f);if(e)return e;
   if(!match)continue;
   const uint32_t profile=rd(p+(emitter?0x18c:0x23a));
-  const int attached=kind==4||(kind==0&&(profile==0x00590058u||
+  const int attached=kind==4||(kind==3&&profile==0x00040000u)||(kind==0&&(profile==0x00590058u||
       profile==0x005d0058u||(emitter&&profile==0x00420000u)));
   if(emitter){
    gh_effect_emitter_view view;

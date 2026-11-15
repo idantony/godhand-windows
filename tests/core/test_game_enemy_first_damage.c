@@ -3871,7 +3871,7 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             word(rise+0x2f4)==0x00001200&&word(rise+0x430)==0x3f800000&&paused_rise>0);
         CHECK(gh_enemy_ems_devil_step_00208be0(owner,child_handle,&camera,&restore,&opacity,
             navigation,&spawn,&player.view,elf,elf_size,&rise_pc)==GH_ACTOR_MOTION_UNSUPPORTED&&
-            rise_pc==0x217980&&word(rise+0x2f4)==0x00001200);
+            rise_pc==0x217aa4&&word(rise+0x2f4)==0x00001200); /* Original selector12 phase 0, approach variant. */
         puts("PASS actual Devil selector00 after rise, live effect pause, first EM20 idle sample and approach selector12");
         puts("PASS 220 actual Devil Move, Effects Update, camera and Draw frames through 124F60");
         gh_game_devil_camera_detach(&camera,init);

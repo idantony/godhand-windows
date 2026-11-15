@@ -26,7 +26,7 @@ typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_req
  uint32_t configuration_nested_scale,configuration_nested_flags;
  const float *configuration_positioned_atan_coeff;
  uint32_t configuration_positioned_position[3],configuration_positioned_yaw;
- uint8_t configuration_positioned,configuration_player_stun,configuration_death_part_zero,configuration_05288;} gh_effect_create_call;
+ uint8_t configuration_positioned,configuration_part4_stun,configuration_death_part_zero,configuration_05288;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
 gh_effect_status gh_effect_create_r101_weapon_002a8608(gh_effect_create_call *,
@@ -44,6 +44,7 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
 /* Original 14FB48 -> 306900, attached 58:02 with explicit part0
  * and otherwise identity configuration. */
 gh_effect_status gh_effect_create_player_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
+gh_effect_status gh_effect_create_gate_guard_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_enemy_death_part0_00306900(gh_effect_create_call *,
  const gh_title_player_view *,int32_t mode);
 /* 2A8608's original 58:2F/30 mode0, selector self, explicit part0. */

@@ -95,6 +95,10 @@ int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_
    return start_bits==rd((const uint8_t *)&start);
   }
  }
+ if(kind==0x220&&dependency==0x220&&b->work&&b->work->room==0x100&&
+    b->model->root.size>=0x642&&half(p+0x640)==0xff&&!p[0x2f4]&&
+    p[0x2f5]==0x12&&!p[0x2f6]&&blend_frames==2&&!flags)
+  return start_bits==0x40000000u; /* 21821C starts the original retreat at frame 2. */
  if(kind!=0x202)return 0;
  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a)return 0;
  if(!p[0x2f4]&&p[0x2f5]==0x71&&!p[0x2f6]&&blend_frames==10&&!flags)
