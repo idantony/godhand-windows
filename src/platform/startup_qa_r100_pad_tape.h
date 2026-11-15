@@ -23,7 +23,7 @@ struct QAR100PadTape {
         std::string line;
         if(!std::getline(input,line)||
            line!="tick,move,buttons,left_x,left_y,right_x,right_y,connected")return false;
-        uint64_t last_tick=0;
+        uint64_t last_tick=0,tick_at_move=0;
         while(std::getline(input,line)){
             std::array<int64_t,8> row={};
             if(!parse(line,row)||row[0]<=0||uint64_t(row[0])<=last_tick||
@@ -35,10 +35,10 @@ struct QAR100PadTape {
             if(!samples.empty()&&move<samples.back().move)return false;
             const std::array<int64_t,6> fields={row[2],row[3],row[4],row[5],row[6],row[7]};
             if(!samples.empty()&&move==samples.back().move){
-                if(fields!=samples.back().fields)return false;
-                continue;
-            }
-            samples.push_back({move,fields});
+                ++tick_at_move;
+                if(fields==samples.back().fields)continue;
+            }else tick_at_move=0;
+            samples.push_back({move,tick_at_move,fields});
         }
         enabled=input.eof()&&!samples.empty();
         return enabled;
@@ -48,12 +48,18 @@ struct QAR100PadTape {
     {
         gh_native_gamepad_sample pad={};
         pad.connected=1;
+        if(snapshot.player_updates_completed<4)trace_startup_random(snapshot);
         if(snapshot.current_room!=0x100||snapshot.game_state!=4)return pad;
         if(snapshot.event_number==1&&snapshot.event_state)saw_ev01=true;
         if(!saw_ev01||snapshot.event_state)return pad;
         const uint64_t move=snapshot.player_updates_completed;
+        if(last_sample!=move)ticks_at_move=0;
         while(next<samples.size()&&samples[next].move<move)++next;
         if(next==samples.size()||samples[next].move!=move)return pad;
+        // A soft event can pause Player Move while the input task keeps sampling.
+        while(next+1<samples.size()&&samples[next+1].move==move&&
+              samples[next+1].tick_at_move<=ticks_at_move)++next;
+        ++ticks_at_move;
         const auto &fields=samples[next].fields;
         pad.buttons=uint16_t(fields[0]);
         pad.left_x=int16_t(fields[1]);
@@ -71,7 +77,7 @@ struct QAR100PadTape {
 
     bool presented(const gh_startup_snapshot &snapshot,uint64_t scene)
     {
-        if(!enabled||!saw_ev01||!sampled_moves||snapshot.current_room!=0x100||
+        if(victory_scene||!enabled||!saw_ev01||!sampled_moves||snapshot.current_room!=0x100||
            snapshot.game_state!=4||snapshot.event_state)return false;
         const uint32_t observed[]={snapshot.r100_first_enemy_handle,snapshot.r100_second_enemy_handle};
         const unsigned known_dead=snapshot.r100_placement_known&snapshot.r100_placement_dead&3u;
@@ -101,12 +107,13 @@ struct QAR100PadTape {
 
 private:
     struct Sample {
-        uint64_t move;
+        uint64_t move,tick_at_move;
         std::array<int64_t,6> fields;
     };
     std::vector<Sample> samples;
     size_t next=0;
     bool saw_ev01=false;
+    uint64_t ticks_at_move=0;
     uint64_t last_sample=UINT64_MAX,sampled_moves=0,deaths[2]={};
     uint32_t handles[2]={},room_flags=0;
     unsigned death_mask=0,player_hp=0;
@@ -136,6 +143,20 @@ private:
             word(second),word(second+1),word(second+2),word(&snapshot.player_yaw),
             snapshot.r100_scenario_flags,unsigned(snapshot.r100_placement_dead),
             snapshot.player_attack_target,snapshot.player_attack_skill);
+    }
+
+    static void trace_startup_random(const gh_startup_snapshot &snapshot)
+    {
+        std::fprintf(stderr,"QA_R100_STARTUP_MT {\"tick\":%llu,\"room\":%u,\"main\":%u,"
+            "\"title_move\":%llu,\"movie_frames\":%llu,\"movie_complete\":%u,"
+            "\"event\":%d,\"event_state\":%u,\"cut\":%d,\"cut_frame_bits\":%u,"
+            "\"scene\":%llu,\"move\":%llu,\"rng_index\":%u,\"rng_block_word\":%u}\n",
+            (unsigned long long)snapshot.ticks,unsigned(snapshot.current_room),unsigned(snapshot.game_state),
+            (unsigned long long)snapshot.title_move_serial,(unsigned long long)snapshot.movie_video.frames_presented,
+            unsigned(snapshot.movie_video.complete),snapshot.event_number,unsigned(snapshot.event_state),
+            snapshot.event_cut,word(&snapshot.event_cut_frame),(unsigned long long)snapshot.scene_frame_serial,
+            (unsigned long long)snapshot.player_updates_completed,
+            snapshot.gameplay_random_index,snapshot.gameplay_random_block_word);
     }
 
     static bool parse(std::string_view line,std::array<int64_t,8> &row)

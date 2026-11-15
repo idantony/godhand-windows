@@ -516,6 +516,24 @@ static int scenery_contact(const gh_bundle *room_bundle,unsigned kind,
         !memcmp(&expected,&b->entry.init->random,sizeof(expected)));
     CHECK(!gh_enemy202_hit_0020a178(&call,waiting,player,1,&frontier) &&
         !memcmp(&expected,&b->entry.init->random,sizeof(expected)));
+    if (active_scenery) {
+        /* Original 271CA8 tests the manager for a positive value after
+         * positioning the actual stamp11/OM303 contact. */
+        uint8_t *manager_counter=b->entry.init->enemies+0x514;
+        const uint32_t prior_counter=word(manager_counter);
+        memcpy(manager_counter,&(uint32_t){2},4);
+        call.phase=9;
+        gh_game_mt impact_rng=expected;
+        for (unsigned draw=0;draw<3;++draw)
+            CHECK(!gh_game_mt_next_0030f348(&impact_rng,&ignored));
+        CHECK(!gh_enemy202_impact_00271810(&call,waiting,player,&frontier) &&
+            !frontier && call.phase==10 && call.impact.bank==0 && call.impact.index==0xc &&
+            (word(actor+0x548)>>16)==74 && !memcmp(&impact_rng,&b->entry.init->random,sizeof(impact_rng)));
+        CHECK(!gh_enemy202_impact_00271810(&call,waiting,player,&frontier) &&
+            !memcmp(&impact_rng,&b->entry.init->random,sizeof(impact_rng)));
+        memcpy(manager_counter,&prior_counter,4);
+        puts("PASS actual R100 stamp11/OM303 CORE0:C during positive enemy manager count");
+    }
     memcpy(actor,actor_before,sizeof(actor_before));
     b->entry.init->random=rng;
     if(kind==0x303&&actor[0x640]==8){

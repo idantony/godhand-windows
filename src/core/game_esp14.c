@@ -838,17 +838,21 @@ gh_effect_status gh_effect_actor_sprite_alpha_002fec38(const gh_game_effects *ow
         !gh_effect_knockdown_esp_is_bound(owner,v) &&
         !gh_effect_player_attachment_esp_is_bound(owner,v)&&!gh_effect_devil_esp_is_bound(owner,v)&&
         !gh_effect_emad_esp_is_bound(owner,v)) return GH_EFFECT_UNSUPPORTED;
-    const uint8_t *p = v->actor->bytes;
+    const uint8_t *p=v->actor?v->actor->bytes:NULL;
+    if(!p&&!v->retired_actor.valid)return GH_EFFECT_ARGUMENT;
+    const uint32_t actor_flags=p?word(p+0x250):v->retired_actor.flags;
     float result;
     if (v->payload[0x11c] & 0x80u) {
         result = multiply(alpha, fade);
-    } else if (word(p + 0x250) & 2u) {
+    } else if (actor_flags & 2u) {
         result = 0;
     } else {
-        result = multiply(alpha, number(word(p + 0x24c)));
+        const float tint=p?number(word(p+0x24c)):v->retired_actor.tint_alpha;
+        result = multiply(alpha,tint);
         static const unsigned offsets[] = {0x2b6, 0x2b7, 0x2bc};
         for (unsigned i = 0; i < 3; ++i) {
-            volatile float factor = (float)p[offsets[i]] / 255.0f;
+            const unsigned opacity=p?p[offsets[i]]:v->retired_actor.opacity[i];
+            volatile float factor = (float)opacity / 255.0f;
             result = multiply(result, factor);
         }
     }

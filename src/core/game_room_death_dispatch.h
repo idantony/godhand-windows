@@ -17,7 +17,7 @@ typedef struct {
  gh_game_init_state *hitarea;
  gh_collision_pairs *pairs;
  gh_scene_dynamic_owner *dynamic;
- const gh_game_effects *effects;
+ gh_game_effects *effects;
  gh_se_voice_engine *voices;
  gh_enemy_ems *enemies;
  gh_enemy_retire_bindings enemy;

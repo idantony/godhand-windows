@@ -777,6 +777,7 @@ static void usage()
     std::fprintf(stderr,"usage: godhand-windows --iso ISO --profile DIRECTORY [--ffmpeg EXE] [--show|--hidden] [--muted] [--prefix] [--max-ticks N]\n");
 #ifdef GH_NATIVE_STARTUP_QA
     std::fprintf(stderr,"       --qa-game-over-retry --qa-capture FILE [--qa-r003-controlled]\n");
+    std::fprintf(stderr,"       --qa-pad-tape CSV [--qa-level-confirm-tick N]\n");
 #endif
 }
 #ifdef GH_NATIVE_STARTUP_QA
@@ -948,6 +949,12 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-load")){qa_load=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-r003-controlled")){qa_r003=true;qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-pad-tape")&&i+1<argc){qa_pad_tape_path=argv[++i];qa_new_game=qa_confirm=true;}
+        else if(!std::strcmp(argv[i],"--qa-level-confirm-tick")&&i+1<argc){
+            const char *value=argv[++i];
+            char *end=nullptr;
+            qa_title.level_confirm_tick=std::strtoull(value,&end,10);
+            if(value[0]<'1'||value[0]>'9'||*end||qa_title.level_confirm_tick>100000){usage();return 2;}
+        }
         else if(!std::strcmp(argv[i],"--qa-game-over-retry")){qa_retry.enabled=true;qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-control")&&i+1<argc){
             const char *mode=argv[++i];
@@ -992,6 +999,10 @@ int main(int argc,char **argv)
     if(qa_pad_tape_path&&(qa_r003||qa_retry.enabled||prefix||!qa_capture||
                         qa_control.mode||qa_repeat_square.enabled||!qa_pad_tape.load(qa_pad_tape_path))){
         std::fprintf(stderr,"Pad tape QA requires a valid tape and standalone New Game capture.\n");
+        return 2;
+    }
+    if(qa_title.level_confirm_tick&&(!qa_pad_tape_path||qa_title.level_confirm_tick>=max_ticks)){
+        std::fprintf(stderr,"Timed level confirmation requires a pad tape and a later tick cap.\n");
         return 2;
     }
     if(qa_retry.enabled&&(prefix||!qa_capture)){

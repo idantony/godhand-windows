@@ -70,9 +70,12 @@ static gh_scene_placement_status item_save_values(gh_om_init_state *s,const uint
    return fail(s,frontier,GH_PLACE_UNSUPPORTED);
   xyz[i]=(uint16_t)(int32_t)tenths;
  }
- /* First placement and its position setter run before the Euler write. */
- if(w(actor+0x104)&0x7fffffffu)return fail(s,frontier,GH_PLACE_UNSUPPORTED);
- record[4]=actor[0x676];record[5]=0;
+ float yaw;memcpy(&yaw,actor+0x104,4);
+ /* 1FB1C0 packs yaw in signed two-degree units. */
+ const double encoded=(double)yaw*57.2957763671875*0.5;
+ if(!isfinite(encoded)||encoded<=-129||encoded>=128)
+  return fail(s,frontier,GH_PLACE_UNSUPPORTED);
+ record[4]=actor[0x676];record[5]=(uint8_t)(int32_t)encoded;
  for(unsigned i=0;i<3;++i)item_put_half(record+8+2*i,xyz[i]);
  item_put_half(record+14,(uint16_t)w(actor+0x560));
  return GH_PLACE_OK;

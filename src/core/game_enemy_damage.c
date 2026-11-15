@@ -185,6 +185,11 @@ static int scenery_reaction_dependency(uint32_t dependency) {
     return dependency == 0x200 || dependency == 0x202 || dependency == 0x203;
 }
 
+static uint32_t scenery_hit_vtable(unsigned kind)
+{
+    return kind == 0x303 ? 0x423230u : kind == 0x304 ? 0x423338u : 0;
+}
+
 static int r100_counter_collateral(const gh_enemy_actor *enemy,const uint8_t *actor,
     const gh_title_player_view *source, uint32_t power)
 {
@@ -206,8 +211,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     if (!source || !source->bytes || source->size < 0x300)
         return stop(frontier, 0x20a178);
     const unsigned source_kind = half(source->bytes + 0x2fe);
-    const uint32_t source_vtable = source_kind == 0x303 ? 0x423230u :
-        source_kind == 0x304 ? 0x423338u : source_kind == 0x202 ? 0x4479c8u : 0;
+    const uint32_t source_vtable = source_kind == 0x202 ? 0x4479c8u : scenery_hit_vtable(source_kind);
     const uint32_t power = word(body->bytes + 0x4c);
     if (!source_vtable || source->original_vtable214 != source_vtable ||
         word(source->bytes + 0x214) != source_vtable ||
@@ -664,12 +668,19 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     if (actor->size < 0x1944 || !actor->alias_f0 || !body->bytes || body->size < 0x50)
         return stop(frontier, 0x271810);
     const uint32_t dependency = word(p + 0x564);
-    const int paired_counter = (int32_t)word(init->enemies + 0x514) > 0;
-    if (paired_counter) {
+    const int manager_active = (int32_t)word(init->enemies + 0x514) > 0;
+    if (manager_active) {
         const gh_title_player_view *source = NULL;
         if (call->effect != 0x2e ||
-            gh_hitarea_object_last_hit_actor(body,&source) ||
-            !r100_counter_collateral(enemy,p,source,word(body->bytes+0x4c)))
+            gh_hitarea_object_last_hit_actor(body,&source) || !source || !source->bytes || source->size < 0x300)
+            return stop(frontier, 0x271810);
+        const uint32_t power = word(body->bytes + 0x4c);
+        const uint32_t vtable = scenery_hit_vtable(half(source->bytes + 0x2fe));
+        const int scenery = vtable && source->original_vtable214 == vtable &&
+            word(source->bytes + 0x214) == vtable && !power && word(body->bytes + 0x40) == UINT32_MAX;
+        /* 271CA8 branches on the enemy manager, including when a scene prop
+         * supplied the already validated Take. */
+        if (!scenery && !r100_counter_collateral(enemy,p,source,power))
             return stop(frontier, 0x271810);
         /* The positive manager arm always creates CORE0:C. Only active
          * Heat or original 12C748 (player+5FC != 0) adds attached CORE121. */
@@ -677,7 +688,7 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
             return stop(frontier, 0x271df4);
     }
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
-    if (amplified && (call->effect != 0x12 || !r100_stamp20(enemy, p) || paired_counter))
+    if (amplified && (call->effect != 0x12 || !r100_stamp20(enemy, p) || manager_active))
         return stop(frontier, 0x271cf8);
     if (amplified && ((word((const uint8_t *)enemy->entry.b.work + 0x590) & 0x800u) ||
                       (word(p + 0x16d4) & 0x8000u)))
@@ -686,9 +697,9 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
             !(call->effect == 0x12 && r100_stamp8(enemy, p))) ||
         init->heat[0x10] || word(player->bytes + 0x5fc) ||
-        (!paired_counter && (!save.bytes || save.size < 0xaf)))
+        (!manager_active && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);
-    const unsigned costume = paired_counter ? 0 : gh_core_save_costume(save);
+    const unsigned costume = manager_active ? 0 : gh_core_save_costume(save);
     if (costume == 1 || costume == 3 || costume == 5 || costume == 7)
         return stop(frontier, 0x271e58);
     const uintptr_t base = (uintptr_t)p, origin = (uintptr_t)actor->alias_f0;
@@ -742,8 +753,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         return stop(frontier, 0x30a2b0);
     call->impact = (gh_enemy202_impact_request){
         .position = {out_x, hit_y, out_z, 1.0f},
-        .bank = paired_counter ? 0 : 0x58,
-        .index = paired_counter ? 0xc : amplified ? 0x12 : 0x10,
+        .bank = manager_active ? 0 : 0x58,
+        .index = manager_active ? 0xc : amplified ? 0x12 : 0x10,
         .scale = 1.0f, .mode = -1,
     };
     /* 292F08 tests the original actor byte before the unbound effect. */

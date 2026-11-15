@@ -2,6 +2,7 @@
 #define GH_GAME_OM041C_H
 
 #include "game_om_initialize.h"
+#include "game_object_step.h"
 #include "game_actor_motion_ik.h"
 
 #ifdef __cplusplus
@@ -28,6 +29,8 @@ gh_scene_placement_status gh_om041c_add_wind_002ae218(gh_om041c_state *,const fl
 /* The caller owns the invocation phase. Phase 1 resumes bone publication
  * after the once-per-frame original cloth integration has committed. */
 gh_scene_placement_status gh_om041c_move_0017baf0(gh_om041c_state *,const gh_motion_ik_globals *,uint8_t *phase);
+gh_scene_placement_status gh_om357_move_001a8b38(gh_om041c_state *,const gh_motion_ik_globals *,
+    const gh_room_pools *,gh_object_move_resolve,void *,uint8_t *);
 gh_scene_placement_status gh_om041c_abort(gh_om041c_state *);
 
 #ifdef __cplusplus

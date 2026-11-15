@@ -70,7 +70,9 @@ static gh_effect_status project_screen_sprite(gh_game_effects_trans*s,const gh_e
 static gh_effect_status packet_sprite(gh_game_effects_trans*s,const gh_effect_esp_view*v){
  const uint8_t*p=v->payload;uint32_t flags=word(p+0x11c);if(word(p+0xf0)!=(v->type?0x44f270u:0x44fad0u))return fail(s,0x2feb18,GH_EFFECT_UNSUPPORTED);
  if(!s->call_stage){
-  if(v->actor&&(word(v->actor->bytes+0x250)&2u)&&!(flags&0x80u)){
+  const uint32_t actor_flags=v->retired_actor.valid?v->retired_actor.flags:
+      v->actor?word(v->actor->bytes+0x250):0;
+  if((actor_flags&2u)&&!(flags&0x80u)){
    s->call_stage=3;return GH_EFFECT_OK;
   }
   if(number(p+0x194)<0.001f){s->call_stage=3;return GH_EFFECT_OK;}if(!v->target120_known_null||word(p+0x120))return fail(s,0x2fec38,GH_EFFECT_UNSUPPORTED);gh_effect_status status;
@@ -79,7 +81,7 @@ static gh_effect_status packet_sprite(gh_game_effects_trans*s,const gh_effect_es
  if(!s->sprite.visible){s->call_stage=3;return GH_EFFECT_OK;}int depth=s->sprite.original_depth;unsigned near=p[0x24a],fade=p[0x24b],far=half(p+0x276);float factor=1;if(near){if(depth<(int)(near*2)){s->call_stage=3;return GH_EFFECT_OK;}if(depth<(int)((near+fade)*2)){if(!fade)return fail(s,0x2fee20,GH_EFFECT_UNSUPPORTED);factor=divide((float)(depth-(int)(near*2)),(float)(fade*2));}}if(far){if((int)(far*2)<depth){s->call_stage=3;return GH_EFFECT_OK;}if((int)((int)far-(int)fade)*2<depth){if(!fade)return fail(s,0x2fee70,GH_EFFECT_UNSUPPORTED);factor=divide(fabsf((float)(depth-(int)(far*2))),(float)(fade*2));}}if(p[0x24c]){if(p[0x24d]>p[0x24c])return fail(s,0x2feea0,GH_EFFECT_UNSUPPORTED);factor=multiply(factor,divide((float)(p[0x24c]-p[0x24d]),(float)p[0x24c]));}if(!isfinite(factor))return fail(s,0x2fec38,GH_EFFECT_UNSUPPORTED);s->sprite_fade=factor;s->call_stage=1;}
  if(s->call_stage==1){unsigned mode=(int8_t)p[0x101]<3?1:2;uint32_t f=0;gh_effect_status status=gh_effect_sprite_material_00151398(s->b.textures,v->texture,mode,&s->sprite_material,&f);if(status)return fail(s,f,status);s->call_stage=2;}
  if(s->call_stage==2&&!s->pending){const gh_stage_material*m=s->sprite_material;unsigned columns=p[0x245],rows=p[0x246];if(!columns||!rows||!m||!m->width||!m->height)return fail(s,0x2fef78,GH_EFFECT_UNSUPPORTED);float du=divide((float)(m->width/columns),(float)m->width),dv=divide((float)(m->height/rows),(float)m->height);int frame=(int8_t)p[0x244];float u=multiply((float)(frame%(int)columns),du),t=multiply((float)(frame/(int)columns),dv);if(flags&0x10000000u){u=add(u,du);du=-du;}if(flags&0x8000000u){t=add(t,dv);dv=-dv;}if(s->b.cvt_policy!=GH_FRAME_CHOP_REFERENCE)return fail(s,0x2ff1f0,GH_EFFECT_UNSUPPORTED);uint32_t rgba=0;for(unsigned j=0;j<4;j++){float colour=multiply(number(p+0x188+j*4),128);if(!isfinite(colour))return fail(s,0x2ff1f0,GH_EFFECT_UNSUPPORTED);if(colour<0)colour=0;if(colour>255)colour=255;if(j==3){
-  if(v->actor){uint32_t frontier=0;gh_effect_status status=gh_effect_actor_sprite_alpha_002fec38(s->b.storage.effects,v,
+  if(v->actor||v->retired_actor.valid){uint32_t frontier=0;gh_effect_status status=gh_effect_actor_sprite_alpha_002fec38(s->b.storage.effects,v,
      colour,s->sprite_fade,&colour,&frontier);if(status)return fail(s,frontier?frontier:0x2fec38,status);}
   else colour=multiply(colour,s->sprite_fade);
  }uint8_t value;if(!cvt_byte(colour,&value))return fail(s,0x2ff1f0,GH_EFFECT_UNSUPPORTED);rgba|=(uint32_t)value<<(j*8);}
@@ -461,7 +463,7 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
     !gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_attachment_esp_is_bound(b->storage.effects,&v)&&!gh_effect_devil_esp_is_bound(b->storage.effects,&v)&&
     !gh_effect_emad_esp_is_bound(b->storage.effects,&v))||
     word(v.payload+0x114))return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);
- if(!s->serial&&v.actor&&(word(v.actor->bytes+0x250)&0x8000u))continue;uint32_t flags=word((const uint8_t*)b->work+0x5e4),config=word(v.payload+0x104);if(!s->serial&&s->gate_10000&&!(config&2u)&&!((config&0x40u)?(flags&0x4000000u)!=0:v.actor!=NULL))continue;if(!s->serial)s->serial=v.serial;
+ if(!s->serial&&v.actor&&(word(v.actor->bytes+0x250)&0x8000u))continue;uint32_t flags=word((const uint8_t*)b->work+0x5e4),config=word(v.payload+0x104);if(!s->serial&&s->gate_10000&&!(config&2u)&&!((config&0x40u)?(flags&0x4000000u)!=0:(v.actor!=NULL||v.retired_actor.valid)))continue;if(!s->serial)s->serial=v.serial;
  if(!s->call_stage&&!s->pending&&(word(v.payload+0x11c)&0x800000u)){s->serial=s->call_stage=0;continue;}if(v.type==0x14){
    const gh_esp14_provider *provider=b->model_effect;
    if(!provider||!provider->trans)return fail(s,0x2f2758,GH_EFFECT_UNSUPPORTED);

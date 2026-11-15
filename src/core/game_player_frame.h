@@ -48,6 +48,7 @@ typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_wo
  /* Explicit original NULL identities only after publishers were audited.
   * Current positive auxiliary callers remain strict; raw0 is not evidence. */
  const gh_title_player_view *grab_attacker;
+ uint8_t grab_attacker_retired;
  gh_object_view grab_resource;
  gh_player_frame_status (*death_fade)(void *,uint32_t *);
  const gh_game_pl_camera *opacity_camera;

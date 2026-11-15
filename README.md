@@ -15,10 +15,11 @@ the first enemy's HP from 74 to 26. The hidden, muted run presents 2,606
 scene frames, including Gene's recovery prompt and an original grab with
 its left-stick escape prompt. A second input replay triggers the paired
 counter and registers collisions with two enemies, leaving them at 16 and
-24 HP. A Windows replay reaches 3,131 presented scene frames. A recorded
-pad route on the native CPU replay defeats both opening enemies with Gene at
-1 HP. The original room save records both deaths. Windows presentation of the
-winning route is being verified.
+24 HP. A recorded pad route in a full Windows New Game replay defeats both
+opening enemies with Gene at 1 HP. The original room save records both deaths
+and Windows presents scene 3732. The replay schedules the original difficulty
+confirmation to reproduce the startup timing. The same 2,125 gameplay inputs
+match the native CPU replay, which continues for 500 frames after the victory.
 
 In a Windows New Game replay, stick input reaches the first tutorial. Circle
 opens the original panel and Cross dismisses it. The game presents the original
@@ -33,6 +34,10 @@ separate native CPU replay continues for 60 game frames after that reload.
 Another actual-disc CPU replay restores the R100 checkpoint from Game Over and
 registers movement and a Square attack after the reload. The normal R100 exit
 after the opening encounter is still in development.
+
+A separate native CPU title-load replay uses an original-format R101 test save
+and confirms the original chapter map. It completes 175 consecutive R101 scene
+frames through packet collection. R101 Windows presentation remains in verification.
 
 ### Verified progress
 
@@ -187,9 +192,10 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 **仍处于早期开发。** Windows 新游戏回放播完原版开场十个镜头并进入 R100 双向战斗。
 四次三角攻击命中，把第一个敌人的 HP 从 74 打到 26。隐藏、静音的实跑共呈现
 2,606 个场景帧，包括 Gene 倒地后的恢复提示、原版抓技和左摇杆挣脱提示。另一轮输入回放触发了原版
-挣脱反击，撞击后的两名敌人分别剩下 16 和 24 HP。一轮 Windows 回放已呈现 3,131 个场景帧。
-另一轮无画面回放用录制的手柄输入打赢首战，Gene 剩 1 HP。原版房间存档记录了两名敌人的死亡。
-完整胜利过程的 Windows 画面仍在验证。
+挣脱反击，撞击后的两名敌人分别剩下 16 和 24 HP。Windows 新游戏回放用录制的手柄输入击败了
+开场的两名敌人，Gene 剩 1 HP。原版房间存档记录两名敌人的死亡，Windows 呈现了第 3732 帧。
+回放通过安排原版难度确认的时机复现启动流程。同样的 2,125 次玩家更新与无画面回放逐项对齐，
+无画面回放在首战后又完成了 500 帧。
 
 Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面板，再按叉键关闭。画面显示原版文字、
 右摇杆图标和教程背后的场景。
@@ -199,6 +205,9 @@ Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面
 Gene 战败后，按叉键在原版 Game Over 菜单中选择继续。Windows 呈现重载后的 R105，Gene
 恢复到 100 HP。单独的无画面原盘回放在这次重载后又完成 60 帧。另一轮无画面原盘回放恢复了
 R100 检查点，重载后接收移动和方块攻击。R100 首战结束后从原版出口前往下一场景的流程仍在开发。
+
+另一轮无画面回放从标题读取 R101 的原版格式测试档，在原版章节地图中确认后，连续完成了 175 帧
+R101 场景的绘制指令。R101 的 Windows 画面正在验证。
 
 ### 已验证的进展
 

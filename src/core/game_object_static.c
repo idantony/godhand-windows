@@ -3,6 +3,7 @@
 #include "game_object_step.h"
 #include "game_object_live_trans.h"
 #include "game_actor_matrix.h"
+#include "id_layout_rotation.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -122,7 +123,22 @@ gh_object_step_status gh_object_static_move_one(gh_game_object_step*s,gh_scene_m
  }
  if(info&0x80000u){frontier=0x2da468;goto unsupported;}
  if(flags&0x10000000u){frontier=0x150128;goto unsupported;}
- if(d[0x4a]&&d[0x4b]){frontier=0x1f7fb8;goto unsupported;}
+ if(!(flags&0x40000000u)&&d[0x4a]&&d[0x4b]){
+  float time=(float)w(raw+0x210);
+  if(!(info&0x40u))time=mul(time,0.0625f);
+  const float pi=0x1.921fb6p+1f;
+  const float frequency=mul((float)d[0x4a],0.00390625f);
+  const float amplitude=mul(divf((float)d[0x4b],255.0f),0.5f);
+  const float phase=mul(add(mul(add(frequency,frequency),pi),-pi),time);
+  float angle,cosine;
+  if(gh_id_angle_reference_001f7d48(phase,&angle)){frontier=0x1f7d48;goto unsupported;}
+  if(gh_id_cos_reference_001f7fb8(angle,&cosine)){frontier=0x1f7fb8;goto unsupported;}
+  float intensity=add(mul(cosine,amplitude),amplitude);
+  if(intensity<0)intensity=0;
+  if(intensity>1)intensity=1;
+  if(info&0x80u)intensity=intensity>=0.5f?1.0f:0.0f;
+  for(unsigned i=0;i<3;++i)wf(p+0x310+4*i,intensity);
+ }
  unsigned blend=(w(d+0x3c)>>4)&15;if(blend){if(blend>=8){frontier=0x148f28;goto unsupported;}o->alpha=s->alpha_presets[blend];}
  p[0x2be]=14;
  unsigned program=14;

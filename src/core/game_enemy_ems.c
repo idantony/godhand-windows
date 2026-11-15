@@ -1517,7 +1517,8 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
         if(model->external_owner||model->external_parts||model->external_borrowers||model->sound_borrowers)
             return retire_stop(frontier,0x1496c0);
         int borrowed;
-        if(gh_effect_create_actor_has_live_refs(b->effects,&actor->object.view,&borrowed)||borrowed)
+        if(gh_effect_create_retain_dead_sprite(b->effects,&actor->object.view)||
+           gh_effect_create_actor_has_live_refs(b->effects,&actor->object.view,&borrowed)||borrowed)
             return retire_stop(frontier,0x305b90);
         unsigned primary_matches=0,secondary_matches=0,at=0;
         for(unsigned i=0;i<primary->count;i++)

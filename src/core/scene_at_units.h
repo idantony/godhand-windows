@@ -12,6 +12,12 @@ gh_scene_at_status gh_scene_at_initialize_units_002c0f90(gh_scene_at_manager *,c
 gh_scene_at_status gh_scene_at_get_jump_002c2ae0(gh_scene_at_manager *,uint32_t,gh_at_native_unit *);
 gh_scene_at_status gh_scene_at_set_enabled(gh_scene_at_manager *,gh_at_native_unit,int enabled,int *original_return);
 gh_scene_at_status gh_scene_at_set_jump_info_002c2750(gh_scene_at_manager *,gh_at_native_unit,uint8_t state,uint32_t function_id,uint32_t arg,uint8_t trigger);
+/* Original 2C2728 writes only the type-1 unit's door callback and argument.
+ * A native module-relative ID is kept in the canonical unit's sidecar. */
+gh_scene_at_status gh_scene_at_set_door_func_002c2728(gh_scene_at_manager *,gh_at_native_unit,
+ uint32_t relative_entry,uint32_t argument);
+gh_scene_at_status gh_scene_at_door_func(gh_scene_at_manager *,gh_at_native_unit,
+ uint32_t *relative_entry,uint32_t *argument);
 /* Originalslot15 (owner+5C) and taggednext traversal, preserving sourceunit
  * handles/identity. Invalid links are errors, never an empty-list success. */
 gh_scene_at_status gh_scene_at_first_unit_002c30c0(gh_scene_at_manager *,gh_at_native_unit *);

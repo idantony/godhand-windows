@@ -7,12 +7,12 @@
 extern "C" {
 #endif
 /* Borrow the SAME manager+FF4 ACD owner bound by137AE8 during room setup.
- * No duplicate path owner or guest pointer is created. field30 is only an
- * opaque diagnostic token; positive regions need a recovered typed selection. */
+ * No duplicate path owner or guest pointer is created. field30 is zero or
+ * the one-based index of the selected original ACD record. */
 void gh_game_camera_path_construct_00137a48(gh_acd_scene_binding *);
 gh_camera_status gh_game_camera_path_select_00137bb8(gh_acd_scene_binding *,
  const gh_title_player_view *,int *original_return,uint32_t *frontier);
-/* Recovered zero-region path blend, exact operation order with explicit
+/* Recovered empty and fixed-angle region path blends, exact operation order with explicit
  * existing CAMERA_NATIVE_BINARY32_REFERENCE policy. Not EE/VU bit identity. */
 gh_camera_status gh_game_camera_path_step_00137f38(gh_game_pl_camera *,
  gh_acd_scene_binding *,const gh_title_player_view *,uint32_t *frontier);

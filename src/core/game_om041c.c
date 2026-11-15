@@ -341,7 +341,8 @@ static uint32_t solve_forces(const gh_om041c_state *s,const uint8_t *root,
         }
         memcpy(p+0x30,force,12);
     }
-    for(unsigned i=0;i<SPRING_COUNT;i++){
+    const unsigned spring_count=is_r101_canopy(s)?38:SPRING_COUNT;
+    for(unsigned i=0;i<spring_count;i++){
         const uint8_t *cfg=s->spring_setup+5*i;
         const uint8_t *link=spring((uint8_t *)root,i);
         uint8_t *a=points[3*cfg[1]+cfg[0]],*b=points[3*cfg[3]+cfg[2]];
@@ -492,7 +493,7 @@ static uint32_t solve_bones(gh_om041c_state *s,const gh_motion_ik_globals *globa
         float local[16]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
         memcpy(local+12,part->alias_d0,12);
         uint32_t pc=0;
-        if(row<4){
+        if(row<4||is_r101_canopy(s)){
             float delta[3],parent_world[16],quaternion[4],rotation[16],adjusted[16];
             const uint8_t *a=point(root,3*row+2*column),*b=point(root,3*(row+1)+2*column);
             for(unsigned axis=0;axis<3;axis++)delta[axis]=add(value(b+4*axis),-value(a+4*axis));
@@ -508,6 +509,18 @@ static uint32_t solve_bones(gh_om041c_state *s,const gh_motion_ik_globals *globa
          * pass before any later consumer, and no bone inherits the tip. */
         memcpy(part->bytes,local,64);
         if(gh_actor_part_world_001501d0(part,parent,flags,policy,&pc))return pc?pc:0x1501d0;
+    }
+    if(is_r101_canopy(s)){
+        for(unsigned column=0;column<2;column++){
+            const unsigned index=s->part_bases[column]+4;
+            gh_actor_part *tip=model->parts+index;
+            float translation[16]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+            memcpy(translation+12,tip->alias_d0,12);
+            memcpy(tip->bytes,translation,sizeof(translation));
+            uint32_t pc;
+            if(gh_actor_part_world_001501d0(tip,model->parts[index-1].bytes,flags,policy,&pc))
+                return pc?pc:0x1501d0;
+        }
     }
     return 0;
 }
@@ -536,6 +549,60 @@ gh_scene_placement_status gh_om041c_move_0017baf0(gh_om041c_state *s,
         *phase=1;
     }
     pc=solve_bones(s,globals,policy);
+    if(pc)return fail(s,pc,GH_PLACE_UNSUPPORTED);
+    *phase=2;
+    return GH_PLACE_OK;
+}
+
+/* The 0357 canopy scans original registry 754C58 before advancing cloth.
+ * Contacts are required when an eligible actor is within the authored radius. */
+gh_scene_placement_status gh_om357_move_001a8b38(gh_om041c_state *s,
+    const gh_motion_ik_globals *globals,const gh_room_pools *pools,
+    gh_object_move_resolve resolve,void *context,uint8_t *phase)
+{
+    if(!s||!s->initialized||!pools||!resolve||!phase||*phase>2||!is_r101_canopy(s))
+        return GH_PLACE_ARGUMENT;
+    s->frontier=0;
+    if(*phase==2)return GH_PLACE_OK;
+    if(!globals||!globals->initialized)return fail(s,0x15a190,GH_PLACE_UNSUPPORTED);
+    gh_actor_model *model=&s->common.model;
+    uint8_t *root=model->root.bytes;
+    const gh_static_transform_policy policy=GH_STATIC_BINARY32_REFERENCE;
+    if(model->part_count<10||s->part_bases[0]!=0||s->part_bases[1]!=5||
+       !model->root.alias_f0)
+        return fail(s,0x1a8b38,GH_PLACE_UNSUPPORTED);
+    for(unsigned i=0;i<10;i++){
+        const gh_actor_part *part=model->parts+i;
+        if(!part->bytes||!part->alias_d0||
+           (i%5?part->parent_is_model||part->parent!=(int)i-1:!part->parent_is_model))
+            return fail(s,0x1501d0,GH_PLACE_UNSUPPORTED);
+    }
+    if(!*phase){
+        const gh_room_vector *actors;
+        if(gh_room_registry_view(pools,0x754c58,&actors)||(!actors->allocation.pointer&&actors->count))
+            return fail(s,0x1a8bc0,GH_PLACE_UNSUPPORTED);
+        for(unsigned i=0;i<actors->count;i++){
+            const uint32_t handle=word((const uint8_t *)actors->allocation.pointer+4u*i);
+            gh_title_player_view actor;
+            uint32_t pc=0;
+            if(resolve(context,handle,&actor,&pc)||!actor.bytes||actor.size<0x300)
+                return fail(s,0x1a8bc0,GH_PLACE_UNSUPPORTED);
+            const unsigned kind=half(actor.bytes+0x2fe);
+            const int person=(kind>=0x100&&kind<0x1ff)||(kind>=0x200&&kind<0x300);
+            if(!person&&!(kind>=0x300&&kind<0x500&&kind!=0x357))continue;
+            if(!actor.alias_f0)return fail(s,0x1a8bc0,GH_PLACE_UNSUPPORTED);
+            float dx=add(value(actor.alias_f0),-value(model->root.alias_f0));
+            float dz=add(value(actor.alias_f0+8),-value(model->root.alias_f0+8));
+            const float distance=add(mul(dx,dx),mul(dz,dz));
+            if(!isfinite(distance)||distance<2.25f)
+                return fail(s,person?0x2adc70:0x2adf50,GH_PLACE_UNSUPPORTED);
+        }
+        uint32_t pc=seed_anchors(s,policy);
+        if(!pc)pc=integrate_cloth(s,root);
+        if(pc)return fail(s,pc,GH_PLACE_UNSUPPORTED);
+        *phase=1;
+    }
+    uint32_t pc=solve_bones(s,globals,policy);
     if(pc)return fail(s,pc,GH_PLACE_UNSUPPORTED);
     *phase=2;
     return GH_PLACE_OK;

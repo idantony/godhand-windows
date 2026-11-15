@@ -35,10 +35,9 @@ int main(int argc,char**argv){
  work.flags=0x00800000;C(gh_game_camera_step_00138fc8(&camera,&init,&path,&player,&work,&frontier)==GH_CAMERA_UNSUPPORTED&&frontier==0x13ad90);
  put((uint8_t*)&work+0x5d8,0xf00c6000);C(gh_game_camera_step_00138fc8(&camera,&init,&path,&player,&work,&frontier)==GH_CAMERA_UNSUPPORTED&&frontier==0x138740);
  camera.fields[0x264]=1;C(gh_game_camera_step_00138fc8(&camera,&init,&path,&player,&work,&frontier)==GH_CAMERA_UNSUPPORTED&&frontier==0x138558);camera.fields[0x264]=0;
- /* Positive region cannot be silently treated as no region. No persistent
-  * scalar/selection mutation occurs before the unported geometry consumer. */
+ /* A declared region outside the ACD extent cannot mutate camera state. */
  put(path.scalar04+8,1);memcpy(before,camera.fields,sizeof(before));
- C(gh_game_camera_path_step_00137f38(&camera,&path,&player,&frontier)==GH_CAMERA_UNSUPPORTED&&frontier==0x1f83e8&&!memcmp(before,camera.fields,sizeof(before)));
+ C(gh_game_camera_path_step_00137f38(&camera,&path,&player,&frontier)==GH_CAMERA_ARGUMENT&&frontier==0x137bb8&&!memcmp(before,camera.fields,sizeof(before)));
  put(path.scalar04+8,0);path.records=NULL;path.field30=123;
  C(gh_game_camera_path_select_00137bb8(&path,&player,&original,&frontier)==GH_CAMERA_OK&&!original&&path.field30==123);
  C(gh_game_camera_path_step_00137f38(&camera,&path,&player,&frontier)==GH_CAMERA_UNSUPPORTED&&frontier==0x137f38);

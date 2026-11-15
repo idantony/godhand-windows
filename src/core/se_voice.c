@@ -329,7 +329,17 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
  return !sample||(w(sample)==(alternate?563952u:562304u)&&w(sample+4)==14000&&
     w(sample+8)==0x5fc080ff&&!w(sample+12));
 }
-/* EM00 and EM03 turn SEQ cue, original logical CORE 8D. */
+static int r100_em0a_formation_source(const struct voice *v)
+{
+ const gh_actor_model *model=v->model;
+ if(!model||!model->work||model->work->room!=0x100)return 0;
+ const gh_title_player_view *root=&model->root;
+ return root->bytes&&root->size>0x1650&&root->original_vtable214==0x4479c8&&
+    h(root->bytes+0x2fe)==0x202&&w(root->bytes+0x564)==0x20a&&
+    !h(root->bytes+0x640)&&root->bytes[0x1650]==3;
+}
+
+/* Original CORE 8D turn cue, also in EM0A's R100 formation SEQ. */
 static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
@@ -340,7 +350,8 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
      h(root->bytes+0x2fe)!=0x202)return 0;
   const uint32_t dependency=w(root->bytes+0x564);
-  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&!r105_em27_voice_source(v))return 0;
+  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&
+     !r105_em27_voice_source(v)&&!r100_em0a_formation_source(v))return 0;
  }else if(!v->combat_profile)return 0;
  if(h(p+4)!=92||w(p+6)!=0x0246020bu||w(p+0xa)||h(p+0xe)!=0x20||
     w(p+0x10)!=0x00500050||w(p+0x14)!=0x005a0040||w(p+0x18)!=0x00800080||
@@ -382,7 +393,7 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
     w(sample+8)==0x5fc080ffu&&!w(sample+12));
 }
 
-/* CORE B4 is the attached impact in the R100 pair's knockdown clip. */
+/* CORE B4 is the attached impact in the R100 knockdown and EM0A formation clips. */
 static int core_r100_knockdown_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
@@ -394,7 +405,8 @@ static int core_r100_knockdown_profile(const struct voice *v,int16_t bank,int16_
      h(root->bytes+0x2fe)!=0x202)return 0;
   const uint32_t dep=w(root->bytes+0x564);
   const unsigned stamp=h(root->bytes+0x640);
-  if(!((dep==0x203&&stamp==19)||(dep==0x200&&stamp==20)))return 0;
+  if(!((dep==0x203&&stamp==19)||(dep==0x200&&stamp==20)||
+       r100_em0a_formation_source(v)))return 0;
  }else if(!v->combat_profile)return 0;
  if(w(p+4)!=0x0420006cu||w(p+8)!=0x25a||w(p+12)!=0x00200000u||
     w(p+16)!=0x00640064u||w(p+20)!=0x005a0040u||w(p+24)!=0x0080ff80u||

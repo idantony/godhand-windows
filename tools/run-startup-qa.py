@@ -43,7 +43,7 @@ def launch_project(snapshot):
 
 def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370,
             capture_count=1, control_probe=None, title_load=False, build_scratch=None, r003_controlled=False,
-            game_over_retry=False, pad_tape=None):
+            game_over_retry=False, pad_tape=None, level_confirm_tick=None):
     """Read-only preflight. No launch or output creation occurs on rejection."""
     snapshot, scratch = Path(snapshot_arg).resolve(), Path(scratch_arg).resolve()
     build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
@@ -60,6 +60,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
     proof.require(not (game_over_retry and title_load), "Game Over retry requires New Game")
     proof.require(pad_tape is None or not (title_load or r003_controlled or game_over_retry or control_probe),
                   "pad tape requires standalone New Game")
+    proof.require(level_confirm_tick is None or (pad_tape is not None and type(level_confirm_tick) is int
+                  and 1 <= level_confirm_tick < max_ticks), "level confirmation needs a pad tape and a later tick cap")
     if pad_tape is not None:
         pad_tape = Path(pad_tape).resolve()
         proof.require(pad_tape.is_file(), "pad tape must be an existing file")
@@ -94,6 +96,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
         command.append("--qa-game-over-retry")
     if pad_tape:
         command.extend(("--qa-pad-tape", str(pad_tape)))
+    if level_confirm_tick is not None:
+        command.extend(("--qa-level-confirm-tick", str(level_confirm_tick)))
     return {"command": command, "scratch": scratch, "build_scratch": build_scratch, "executable": executable,
             "executable_sha256": exe_sha, "source_snapshot": receipt_fact, "windows_build": report_fact,
             "control_probe": control_probe, "r003_controlled": r003_controlled, "game_over_retry": game_over_retry,
@@ -281,11 +285,13 @@ def main():
     parser.add_argument("--r003-controlled", action="store_true", help="isolate R003 using the original A38 destination at title handoff")
     parser.add_argument("--game-over-retry", action="store_true", help="confirm the presented Game Over panel and capture the reloaded room")
     parser.add_argument("--pad-tape", type=Path, help="replay recorded R100 gamepad samples by completed player Move")
+    parser.add_argument("--level-confirm-tick", type=int,
+                        help="delay the original New Game difficulty confirmation to this replay tick")
     args = parser.parse_args()
     try:
         prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame,
                            args.capture_count, args.control_probe, args.title_load, args.build_scratch, args.r003_controlled,
-                           args.game_over_retry, args.pad_tape)
+                           args.game_over_retry, args.pad_tape, args.level_confirm_tick)
         require_frozen_runner(args.snapshot)
         print(json.dumps(run(prepared)), flush=True)
     except (proof.ProofError, OSError, ValueError) as error:

@@ -4,6 +4,31 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Both R100 opening enemies defeated on Windows
+
+The hidden, muted Windows New Game replay uses a recorded pad route and sends
+the original difficulty confirmation on tick 312. This aligns startup timing
+with the native CPU replay, including the original per-frame random draws.
+The 2,125 shared player updates match for raw pad input, actor state, HP, and
+positions. Both authored enemy deaths are recorded in the original room save,
+and Gene has 1 HP. Windows presents scene 3732 and exits at tick 3872 with zero
+renderer or runtime errors. The CPU replay continues for 500 game frames.
+The normal exit from R100 is still in development.
+
+An independent native CPU title-load replay confirms the map in an original-format
+R101 test save. It completes 175 consecutive R101 scene frames through native
+packet collection. A second replay uses original left-stick movement and a
+Square attack. R101 Windows presentation remains in verification.
+
+隐藏、静音的 Windows 新游戏回放通过录制的原版手柄输入打赢首战。回放在第 312 tick
+发送原版难度确认，与无画面回放对齐启动时机和原版随机数推进。两条回放的 2,125 次
+玩家更新在输入、角色状态、血量和位置上一致。原版房间存档记录两名敌人的死亡，Gene
+剩 1 HP。Windows 呈现第 3732 帧，在第 3872 tick 正常退出，运行和渲染均无报错。
+无画面回放在胜利后又运行 500 帧，R100 原版房间出口仍在开发。
+
+独立的无画面回放在原版章节地图确认 R101 测试档，连续完成了 175 帧原版场景的绘制指令。
+另一轮验证了原版左摇杆移动和方块攻击。R101 的 Windows 画面正在验证。
+
 ## R105 Game Over and same-room Continue on Windows
 
 A hidden, muted Windows replay selects R003 at the title handoff. It presents
@@ -16,7 +41,7 @@ after the reload.
 
 A recorded original pad route defeats both opening R100 enemies with Gene at
 1 HP on the native CPU replay. The original room save records both deaths.
-The later room-exit gate and Windows victory presentation remain in verification.
+The later room-exit gate and Windows victory presentation were pending at this checkpoint.
 
 隐藏、静音的 Windows 回放在标题交接处选入 R003，呈现 EV02 全部 28 个镜头，随后沿原版出口
 进入 R105。第 4399 帧呈现原版 Game Over 菜单。按叉键确认继续，继续次数由 0 增至 1，原版
@@ -24,7 +49,7 @@ GameMain State 5 重载 R105。重载后的第一帧为 4491，Gene 恢复到 10
 正常退出。另一次无画面的原盘回放在重载后完成了 60 帧。
 
 无画面的 R100 手柄回放击败了开场的两名敌人，Gene 剩 1 HP。原版房间存档记录两名敌人的死亡。
-后续房间出口和 Windows 胜利画面仍需验证。
+这个节点当时仍待验证后续房间出口和 Windows 胜利画面。
 
 ## First tutorial presented and dismissed on Windows
 

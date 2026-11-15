@@ -11,7 +11,7 @@
 #include <fenv.h>
 typedef struct {const gh_title_player_view *actor,*selector;const gh_actor_model *model;uint32_t part_index,part_handle;
  const uint8_t *record;uint32_t serial;uint8_t associated,initialized,quiesced;int32_t first_esp_child;} emitter_metadata;
-typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t associated,initialized,type,quiesced;int32_t parent_emitter,previous,next;uint32_t parent_serial;uint8_t target120_known_null,knockdown,player_attachment;gh_room_pools *trail_pools;gh_room_arena_allocation trail[4];} esp_metadata;
+typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t associated,initialized,type,quiesced;int32_t parent_emitter,previous,next;uint32_t parent_serial;uint8_t target120_known_null,knockdown,player_attachment;gh_effect_retired_actor retired_actor;gh_room_pools *trail_pools;gh_room_arena_allocation trail[4];} esp_metadata;
 struct gh_effect_native {gh_game_effects *owner;uint8_t *esp,*emitters;uint32_t serial;gh_room_pools *trail_pools;
  emitter_metadata slots[256];esp_metadata esps[1024];struct gh_effects_frame_globals *frame_globals;gh_game_scene_tables *frame_actors;};
 static uint32_t w(const uint8_t*p){uint32_t v;memcpy(&v,p,4);return v;}
@@ -649,7 +649,9 @@ int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *v)
         v->record.bytes&&v->record.size==0x2f0&&v->payload&&v->payload_size==0x260&&w(v->payload+0x18c)==0x00020058u&&
         !v->payload[0x1ec]&&(w(v->actor->bytes+0x2fc)>>16)==0x202&&
         ((w(v->actor->bytes+0x564)==0x203&&(w(v->actor->bytes+0x640)&0xffff)==19)||
-         (w(v->actor->bytes+0x564)==0x200&&(w(v->actor->bytes+0x640)&0xffff)==20))&&
+         (w(v->actor->bytes+0x564)==0x200&&(w(v->actor->bytes+0x640)&0xffff)==20)||
+         (w(v->actor->bytes+0x564)==0x20a&&!(w(v->actor->bytes+0x640)&0xffff)&&
+          v->actor->size>0x1650&&v->actor->bytes[0x1650]==3))&&
         !v->record.bytes[0xbe]&&!v->record.bytes[0x128]&&!v->record.bytes[0x136];
 }
 gh_effect_status gh_effect_create_emitter_at(const gh_game_effects*s,unsigned slot,gh_effect_emitter_view*out){
@@ -893,7 +895,7 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
 }
 gh_effect_status gh_effect_create_esp_at(const gh_game_effects*e,unsigned slot,gh_effect_esp_view*out){
  if(!e||!out||slot>=1024||!e->native||e->native->owner!=e)return GH_EFFECT_ARGUMENT;const esp_metadata*m=&e->native->esps[slot];if(!m->associated||m->quiesced||!(w(e->native->esp+0x100000+(slot>>5)*4)&(UINT32_C(0x80000000)>>(slot&31))))return GH_EFFECT_UNSUPPORTED;
- *out=(gh_effect_esp_view){.record=m->record,.texture=m->texture,.secondary_texture=m->secondary_texture,.actor=m->actor,.selector=m->selector,.payload=e->native->esp+(size_t)slot*0x400,.payload_size=0x400,.serial=m->serial,.emitter_serial=m->emitter_serial,.emitter_slot=m->emitter_slot,.initialized=m->initialized,.type=m->type,.globals=e->native->frame_globals,.scene_actors=e->native->frame_actors,.parent_emitter=m->parent_emitter,.previous=m->previous,.next=m->next,.parent_serial=m->parent_serial,.target120_known_null=m->target120_known_null};return GH_EFFECT_OK;
+ *out=(gh_effect_esp_view){.record=m->record,.texture=m->texture,.secondary_texture=m->secondary_texture,.actor=m->actor,.selector=m->selector,.payload=e->native->esp+(size_t)slot*0x400,.payload_size=0x400,.serial=m->serial,.emitter_serial=m->emitter_serial,.emitter_slot=m->emitter_slot,.initialized=m->initialized,.type=m->type,.globals=e->native->frame_globals,.scene_actors=e->native->frame_actors,.parent_emitter=m->parent_emitter,.previous=m->previous,.next=m->next,.parent_serial=m->parent_serial,.target120_known_null=m->target120_known_null,.retired_actor=m->retired_actor};return GH_EFFECT_OK;
 }
 gh_effect_status gh_effect_create_esp_bind_textures(gh_game_effects*e,unsigned slot,uint32_t serial,gh_effect_view texture,gh_effect_view secondary){gh_effect_esp_view v;gh_effect_status status=gh_effect_create_esp_at(e,slot,&v);if(status||v.serial!=serial)return GH_EFFECT_ARGUMENT;e->native->esps[slot].texture=texture;e->native->esps[slot].secondary_texture=secondary;return GH_EFFECT_OK;}
 
@@ -1437,6 +1439,54 @@ gh_effect_status gh_effect_create_quiesce_emad_room_exit(gh_game_effects *effect
   esp_metadata *m=native->esps+particles[j];
   *m=(esp_metadata){.serial=m->serial,.associated=1,.quiesced=1,
       .parent_emitter=-1,.previous=-1,.next=-1};
+ }
+ return GH_EFFECT_OK;
+}
+
+
+gh_effect_status gh_effect_create_retain_dead_sprite(gh_game_effects *e,
+ const gh_title_player_view *actor)
+{
+ if(!e||!actor||!actor->bytes)return GH_EFFECT_ARGUMENT;
+ if(actor->size<0x644||actor->original_vtable214!=0x4479c8||
+    (w(actor->bytes+0x2fc)>>16)!=0x202||w(actor->bytes+0x564)!=0x203||
+    (w(actor->bytes+0x640)&0xffffu)!=19||
+    (w(actor->bytes+0x250)&0xa0008000u)!=0xa0000000u)return GH_EFFECT_OK;
+ if(!e->native)return GH_EFFECT_OK;
+ struct gh_effect_native *n=e->native;
+ if(n->owner!=e)return GH_EFFECT_ARGUMENT;
+ gh_effect_view est={0};
+ unsigned rows=0;
+ for(unsigned i=0;i<1024;i++){
+  esp_metadata *m=n->esps+i;
+  const uint32_t bit=UINT32_C(0x80000000)>>(i&31);
+  if(!(w(n->esp+0x100000+(i>>5)*4)&bit)||!m->associated||!m->initialized||
+     m->actor!=actor||m->selector!=actor||m->type!=0x1a||!m->knockdown||
+     m->parent_emitter!=-1||m->previous!=-1||m->next!=-1)continue;
+  const uint8_t *payload=n->esp+(size_t)i*0x400;
+  if(w(payload+0x23a)!=0x00020058u||w(payload+0x10c)!=UINT32_MAX||
+     (w(payload+0x11c)&0x80u)||w(payload+0x120))continue;
+  if(!est.bytes){
+   if(gh_effect_est_at_00306030(e,0x58,2,&est)||!est.bytes||est.size<16||w(est.bytes)!=0x545345u)
+    return GH_EFFECT_UNSUPPORTED;
+   rows=w(est.bytes+4);
+   if(rows>(est.size-16)/0x2f0)return GH_EFFECT_BOUNDS;
+  }
+  for(unsigned row=0;row<rows;row++){
+   if(m->record.bytes!=est.bytes+16+(size_t)row*0x2f0)continue;
+   /* The unlinked texture particle continues its authored timer.
+    * Copy the last 2FB0E8/2FEC38 actor inputs before 30F5A0 frees them. */
+   const uint8_t *p=actor->bytes;
+   float tint;
+   memcpy(&tint,p+0x24c,4);
+   if(!isfinite(tint))return GH_EFFECT_UNSUPPORTED;
+   m->retired_actor=(gh_effect_retired_actor){
+    .flags=w(p+0x250),.tint_alpha=tint,
+    .opacity={p[0x2b6],p[0x2b7],p[0x2bc]},.valid=1};
+
+   m->actor=m->selector=NULL;
+   break;
+  }
  }
  return GH_EFFECT_OK;
 }

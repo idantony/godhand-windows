@@ -132,7 +132,8 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
    continue;
   }
   int borrowed;
-  if(gh_effect_create_actor_has_live_refs(b->effects,actor,&borrowed))
+  if(gh_effect_create_retain_dead_sprite(b->effects,actor)||
+     gh_effect_create_actor_has_live_refs(b->effects,actor,&borrowed))
    return fail(state,handle,0x305b90);
   if(borrowed&&(kind!=0x2ad||b->enemy.effects!=b->effects||
      gh_effect_create_quiesce_emad_room_exit(b->enemy.effects,actor)))

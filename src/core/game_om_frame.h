@@ -30,6 +30,8 @@ typedef struct {
  gh_motion_effect_consumer release_effect;
  const float *fragment_atan_coeff;
  gh_game_action_buttons *action_buttons;
+ gh_object_move_resolve resolve_actor;
+ gh_game_scene_tables *scene_tables;
 } gh_om_frame_runtime;
 typedef struct {const gh_om_factory *factory;gh_om_object *object;
  const gh_title_player_view *contact634;uint32_t handle,entry,frontier;

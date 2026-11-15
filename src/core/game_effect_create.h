@@ -97,8 +97,13 @@ int gh_effect_event_part_is_bound(gh_effect_view,const gh_title_player_view *,
  * unknown actor domains remain strict before allocation. Serial binds the SAME
  * payload and source; initialized stays false until real virtualInit returns. */
 struct gh_effects_frame_globals;
+typedef struct {
+ uint32_t flags;
+ float tint_alpha;
+ uint8_t opacity[3],valid;
+} gh_effect_retired_actor;
 typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;
- uint8_t *payload;size_t payload_size;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t initialized,type;struct gh_effects_frame_globals *globals;gh_game_scene_tables *scene_actors;int32_t parent_emitter,previous,next;uint32_t parent_serial;/* Snapshot of known300458-zeroed source218, not a removedtoken test. */uint8_t target120_known_null;} gh_effect_esp_view;
+ uint8_t *payload;size_t payload_size;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t initialized,type;struct gh_effects_frame_globals *globals;gh_game_scene_tables *scene_actors;int32_t parent_emitter,previous,next;uint32_t parent_serial;/* Snapshot of known300458-zeroed source218, not a removedtoken test. */uint8_t target120_known_null;gh_effect_retired_actor retired_actor;} gh_effect_esp_view;
 int gh_effect_attack_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 gh_effect_status gh_effect_create_esp_devil_trail_init_002f5788(gh_game_effects *,unsigned,uint32_t,
@@ -167,6 +172,9 @@ gh_effect_status gh_effect_create_esp_check_hidden_14(gh_game_effects *,unsigned
 gh_effect_status gh_effect_create_esp_finish_hidden_14(struct gh_esp14_instance *,uint32_t *frontier);
 /* Queries only the current active metadata, including paused/hidden slots.
  * Use the same canonical actor view until it reports no live references. */
+/* Native deletion state for the original unlinked CORE58:02 death sprite.
+ * Other effect borrows still have to clear before the actor is freed. */
+gh_effect_status gh_effect_create_retain_dead_sprite(gh_game_effects *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_actor_has_live_refs(const gh_game_effects *,
  const gh_title_player_view *,int *borrowed);
 gh_effect_status gh_effect_create_esp_destroy_hidden_native(gh_game_effects *,unsigned,uint32_t,uint32_t *frontier);

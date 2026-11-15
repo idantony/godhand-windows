@@ -2587,6 +2587,10 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
     out->startup_returned=h->startup_returned;out->font=&h->font;out->menu=&h->menu;
     out->id=h->id_global;out->audio=h->audio;out->game_state=h->game_loop.game_state[0];
     out->game_assets_loaded=h->game_assets_loaded;out->game_rate=h->game_rate;
+#ifdef GH_NATIVE_STARTUP_QA
+    out->gameplay_random_index=h->game_init.random.index;
+    out->gameplay_random_block_word=h->game_init.random.words[0];
+#endif
     out->frontier_module=h->frontier_module;
     const gh_mc_task_state *mc=h->mc_save_active?&h->mc_save_task.common:&h->mc;
     out->mc_ui=mc->ui_initialized?&mc->id_base:0;

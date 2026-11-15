@@ -258,7 +258,7 @@ static gh_effect_status esps(gh_game_effects_frame*s){uint8_t*base=s->b.storage.
     return fail(s,0x2fb0e8,GH_EFFECT_UNSUPPORTED);
  if(v.actor&&(w(v.actor->bytes+0x250)&0x8000u))continue;
  uint32_t work_flags=w((const uint8_t*)s->b.work+0x5e4),config=w(v.payload+0x104);
- if((work_flags&0x10000u)&&!(config&2u)&&!((config&0x40u)?(work_flags&0x4000000u)!=0:v.actor!=NULL))continue;
+ if((work_flags&0x10000u)&&!(config&2u)&&!((config&0x40u)?(work_flags&0x4000000u)!=0:(v.actor!=NULL||v.retired_actor.valid)))continue;
  s->esp_count++;s->esp_stage=1;}
  /* Original wrapper2FBE88 counts the call but skips virtualUpdate whenfrozen. */
  if(!s->esp_update.identity&&(w(v.payload+0x11c)&0x10000u)){s->esp_stage=0;continue;}gh_esp_update_bindings b={.storage=s->b.storage,.work=s->b.work,.globals=s->b.globals,.atan_coeff=s->b.atan_coeff,.policy=s->b.policy,.camera=s->b.camera,.display=s->b.display,

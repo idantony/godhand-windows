@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T08:25:40+00:00",
-  "stage": "native-windows-r105-continue-and-r100-cpu-victory",
+  "verified_utc": "2026-11-15T09:02:56.884153+00:00",
+  "stage": "native-windows-r100-opening-victory-and-r101-saved-scene-packets",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1174,18 +1174,48 @@
     "runtime_or_render_error_observed": false,
     "independent_no_device_frames_after_reload": 60
   },
+  "native_windows_r100_opening_victory": {
+    "scope": "Full original New Game, mapped difficulty confirmation at tick 312 and recorded R100 pad inputs",
+    "room": "0100",
+    "exit_tick": 3872,
+    "exit_code": 0,
+    "victory_scene_serial": 3732,
+    "first_enemy_death_scene_serial": 3709,
+    "second_enemy_death_scene_serial": 3732,
+    "compared_player_updates_with_cpu": 2125,
+    "observed_state_differences_for_compared_updates": 0,
+    "defeated_enemy_stamps": [19, 20],
+    "room_save_death_mask": 3,
+    "player_hp": 1,
+    "renderer_error": 0,
+    "world_gpu_error": 0,
+    "window_error": 0,
+    "normal_room_exit_verified": false
+  },
   "native_cpu_r100_opening_victory": {
     "scope": "Actual input disc and recorded original pad samples indexed by completed player movement",
     "room": "0100",
-    "exit_tick": 3872,
+    "victory_tick": 3872,
+    "exit_tick": 4372,
     "completed_input_samples": 2125,
-    "replay_packet_serial": 3721,
+    "replay_packet_serial": 3724,
     "defeated_enemy_stamps": [19, 20],
     "room_save_death_mask": 3,
     "ev01_started_scenario_flag": "01000000",
     "player_hp": 1,
-    "windows_victory_presentation_verified": false,
+    "completed_packet_frames_after_victory": 500,
     "normal_room_exit_verified": false
+  },
+  "native_cpu_r101_saved_room": {
+    "scope": "Fresh title load from a test save, original chapter map confirmation and native packet collection",
+    "room": "0101",
+    "first_packet_scene_serial": 461,
+    "last_packet_scene_serial": 635,
+    "consecutive_packet_frames": 175,
+    "exit_tick": 800,
+    "exit_code": 0,
+    "first_missing_original_operation": null,
+    "windows_presentation_verified": false
   },
   "native_windows_r100_tutorial": {
     "scope": "Tutorial 1, actual controller approach, Circle open and Cross close",

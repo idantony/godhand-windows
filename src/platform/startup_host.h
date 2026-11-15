@@ -103,6 +103,7 @@ typedef struct gh_startup_snapshot {
     uint64_t player_updates_completed,child_updates_completed,om_updates_completed;
     uint32_t last_move_handle,last_move_entry,player_update_stage,child_update_stage;
     uint32_t player_handle,player_state_entry,player_update_frontier,player_attack_target,player_attack_skill;
+    uint32_t gameplay_random_index,gameplay_random_block_word;
     float player_world_position[3],player_motion_sample;
     uint16_t player_hp;
     uint8_t player_pose_ready,player_state[4],player_square_buffer;

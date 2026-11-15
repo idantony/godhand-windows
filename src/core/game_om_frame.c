@@ -18,6 +18,7 @@
 #include "game_actor_external_parent.h"
 #include "frame_state.h"
 #include "game_om_reaction.h"
+#include "game_ray_query.h"
 #include "game_player_targets.h"
 #include "game_action_button_set.h"
 #include "id_layout_rotation.h"
@@ -36,12 +37,20 @@ uint32_t gh_om_half_bits_00156488(uint16_t n){uint32_t fraction=n&0x3ff,exponent
 static int tutorial(const gh_om_object*o){return o&&o->runtime_created&&o->runtime_kind==0x3eb&&!o->source.bytes;}
 static int paper(const gh_om_object*o){return o&&o->runtime_created&&o->runtime_kind==0x376&&!o->source.bytes;}
 static int weapon(const gh_om_object*o){return o&&(o->source.type==0x382||paper(o));}
-static int fragments(const gh_om_object*o){return o&&(o->source.type==0x303||o->source.type==0x304||o->source.type==0x305||o->source.type==0x31a||o->source.type==0x320||o->source.type==0x339);}
+static int r101_item(const gh_om_object *o)
+{
+ return o&&o->source.type>=0x3d3&&o->source.type<=0x3d5;
+}
+static int r101_cylinders(const gh_om_object *o)
+{
+ return o&&(o->source.type==0x308||o->source.type==0x30b||o->source.type==0x30c);
+}
+static int fragments(const gh_om_object*o){return o&&(o->source.type==0x303||o->source.type==0x304||o->source.type==0x305||o->source.type==0x317||o->source.type==0x318||o->source.type==0x31a||o->source.type==0x320||o->source.type==0x339);}
 static int simple(const gh_om_object*o){return o&&(o->source.type==0x30a||o->source.type==0x310||o->source.type==0x33f||o->source.type==0x309);}
 static int plain(const gh_om_object*o){return o&&(o->source.type==0x30e||o->source.type==0x324);}
 static int segments(const gh_om_object*o){return o&&(o->source.type==0x322||o->source.type==0x323||o->source.type==0x346);}
-static int door(const gh_om_object*o){return o&&(o->source.type==0x300||o->source.type==0x354);}
-static gh_om_init_state*common(const gh_om_frame_state*s){gh_om_object*o=s->object;if(!o)return NULL;if(tutorial(o))return o->initialization;if(weapon(o))return &((gh_om382_state*)o->initialization)->common;if(door(o)||o->source.type==0x355)return o->initialization;if(o->source.type==0x41c)return &((gh_om041c_state*)o->initialization)->common;if(o->source.type==0x35d)return &((gh_om35d_state*)o->initialization)->common;if(o->source.type==0x307)return &((gh_om307_state*)o->initialization)->common;if(o->source.type==0x310)return &((gh_om310_state*)o->initialization)->base.common;if(o->source.type==0x322)return &((gh_om322_state*)o->initialization)->common;if(o->source.type==0x323)return &((gh_om323_state*)o->initialization)->common;if(o->source.type==0x346)return &((gh_om346_state*)o->initialization)->common;return fragments(o)||simple(o)||plain(o)?&((gh_om303_state*)o->initialization)->common:NULL;}
+static int door(const gh_om_object*o){return o&&(o->source.type==0x300||o->source.type==0x313||o->source.type==0x330||o->source.type==0x354);}
+static gh_om_init_state*common(const gh_om_frame_state*s){gh_om_object*o=s->object;if(!o)return NULL;if(tutorial(o))return o->initialization;if(weapon(o))return &((gh_om382_state*)o->initialization)->common;if(door(o)||r101_item(o)||o->source.type==0x351||o->source.type==0x355)return o->initialization;if(o->source.type==0x41c||o->source.type==0x357)return &((gh_om041c_state*)o->initialization)->common;if(o->source.type==0x35d)return &((gh_om35d_state*)o->initialization)->common;if(o->source.type==0x307)return &((gh_om307_state*)o->initialization)->common;if(o->source.type==0x310)return &((gh_om310_state*)o->initialization)->base.common;if(o->source.type==0x322)return &((gh_om322_state*)o->initialization)->common;if(o->source.type==0x323)return &((gh_om323_state*)o->initialization)->common;if(o->source.type==0x346)return &((gh_om346_state*)o->initialization)->common;return fragments(o)||simple(o)||plain(o)||r101_cylinders(o)?&((gh_om303_state*)o->initialization)->common:NULL;}
 static uint32_t state_entry(uint32_t kind,unsigned index){
  static const uint32_t entries[][5]={{0x307,0x1896e0,0x1897b8,0x189818,0x18a110},{0x30a,0x18c4a8,0x18c520,0x18c580,0x18c8a8},{0x310,0x18f5d0,0x18f618,0x18f858,0x18fbf0},{0x33f,0x19f4b0,0x19f528,0x19f588,0x19f8b0},{0x309,0x18b6a0,0x18b718,0x18b778,0x18baa0},{0x30e,0x1bfc88,0x1bfce0,0x1bfd28,0x1bff48},{0x324,0x1bfc88,0x1bfce0,0x1bfd28,0x1bff48},{0x322,0x1968a0,0x196978,0x1969d8,0x197188},{0x323,0x197ec8,0x197fa0,0x198000,0x1987b0},{0x346,0x1a1690,0x1a1768,0x1a17c8,0x1a20a8}};
  for(unsigned i=0;i<sizeof(entries)/sizeof(entries[0]);i++)if(entries[i][0]==kind)return index<4?entries[i][index+1]:0;return 0;
@@ -67,7 +76,7 @@ static gh_object_step_status bind(gh_om_frame_state*s,const gh_om_factory*f,cons
  gh_om_object*o=NULL;for(size_t i=0;i<f->count;i++)if(f->objects[i].handle==q->handle){o=f->objects+i;break;}
  void*registered=NULL;if(!o||!o->registered||!o->initialization||!o->view.bytes||o->view.size<0x600||q->actor.bytes!=o->view.bytes||q->actor.size!=o->view.size||q->this_delta||gh_room_object_lookup(f->bindings.pools,q->handle,GH_ROOM_OBJECT_OM,f,&registered)||registered!=o)return fail(s,0x30f15c,pc,GH_OBJSTEP_ARGUMENT);
  if(s->bound)return s->factory==f&&s->object==o&&s->handle==q->handle&&s->entry==q->original_entry?GH_OBJSTEP_OK:fail(s,0x30f15c,pc,GH_OBJSTEP_ARGUMENT);
- uint32_t expected=o->source.type==0x300?0x186928:o->source.type==0x355?0x1a85b8:o->source.type==0x354?0x1a82d8:o->source.type==0x303?0x187c18:o->source.type==0x304?0x187fe8:o->source.type==0x305?0x188c88:o->source.type==0x31a?0x1933f8:o->source.type==0x320?0x195e58:o->source.type==0x307?0x1895d8:o->source.type==0x30a?0x18c370:o->source.type==0x310?0x18f488:o->source.type==0x339?0x19e3d8:o->source.type==0x33f?0x19f378:o->source.type==0x309?0x18b568:o->source.type==0x30e?0x18ee38:o->source.type==0x324?0x198f48:o->source.type==0x322?0x1965f8:o->source.type==0x323?0x197c20:o->source.type==0x346?0x1a13e8:weapon(o)?0x1c9860:o->source.type==0x35d?0x1aedb0:o->source.type==0x41c?0x17ba28:tutorial(o)?0x1bf518:0;
+ uint32_t expected=o->source.type==0x300?0x186928:o->source.type==0x313?0x191f30:o->source.type==0x330?0x19c518:o->source.type==0x355?0x1a85b8:o->source.type==0x351?0x1a6188:o->source.type==0x354?0x1a82d8:o->source.type==0x303?0x187c18:o->source.type==0x304?0x187fe8:o->source.type==0x305?0x188c88:o->source.type==0x317?0x192ef8:o->source.type==0x318?0x193180:o->source.type==0x31a?0x1933f8:o->source.type==0x320?0x195e58:o->source.type==0x307?0x1895d8:o->source.type==0x30a?0x18c370:o->source.type==0x310?0x18f488:o->source.type==0x339?0x19e3d8:o->source.type==0x33f?0x19f378:o->source.type==0x309?0x18b568:o->source.type==0x308?0x18a870:o->source.type==0x30b?0x18d160:o->source.type==0x30c?0x18df18:o->source.type==0x30e?0x18ee38:o->source.type==0x324?0x198f48:o->source.type==0x322?0x1965f8:o->source.type==0x323?0x197c20:o->source.type==0x346?0x1a13e8:r101_item(o)?0x1c0378:weapon(o)?0x1c9860:o->source.type==0x35d?0x1aedb0:o->source.type==0x41c?0x17ba28:o->source.type==0x357?0x1a8a70:tutorial(o)?0x1bf518:0;
  if(!expected||q->original_entry!=expected)return fail(s,q->original_entry,pc,GH_OBJSTEP_UNSUPPORTED);
  /* Bind before first original Move; constructor1BBEB8 established these.
   * A nonzero guest pointer can never be silently adopted as host634. */
@@ -647,9 +656,170 @@ static gh_object_step_status door_wait_open(gh_om_frame_state *s,const gh_om_ini
     return GH_OBJSTEP_OK;
 }
 
+/* Original 2C51E8 selects a named object from canonical 754C58 and
+ * returns its room retirement marker or object inactive bit. */
+static gh_object_step_status r101_item_wait_gate(gh_om_frame_state *s,
+ uint64_t key,int *can_settle,uint32_t *frontier)
+{
+ *can_settle=1;
+ if(!key)return GH_OBJSTEP_OK;
+ const gh_room_vector *actors;
+ if(!s->runtime.resolve_actor||
+    gh_room_registry_view(s->factory->bindings.pools,0x754c58,&actors)||
+    (!actors->allocation.pointer&&actors->count))
+  return fail(s,0x14fd98,frontier,GH_OBJSTEP_UNSUPPORTED);
+ for(uint32_t i=0;i<actors->count;i++){
+  const uint32_t handle=word((const uint8_t *)actors->allocation.pointer+4u*i);
+  gh_title_player_view actor;
+  uint32_t pc=0;
+  if(s->runtime.resolve_actor(s->runtime.context,handle,&actor,&pc)||!actor.bytes||actor.size<0x300)
+   return fail(s,0x14fd98,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const unsigned kind=half(actor.bytes+0x2fe);
+  if(kind<0x300||kind>=0x500)continue;
+  if(actor.size<0x5b4)return fail(s,0x14fd98,frontier,GH_OBJSTEP_UNSUPPORTED);
+  uint64_t name;
+  memcpy(&name,actor.bytes+0x538,sizeof(name));
+  if(name!=key)continue;
+  int retired;
+  if(gh_om_room_slot_used_002bed08(s->factory->bindings.room_state,key,&retired))
+   return fail(s,0x2bed08,frontier,GH_OBJSTEP_UNSUPPORTED);
+  *can_settle=retired||((word(actor.bytes+0x5b0)&2u)!=0);
+  break;
+ }
+ return GH_OBJSTEP_OK;
+}
+/* 1C0678's ordinary unattached idle/fall states. Unknown pickup
+ * dispatch and active effect requests retain their original boundaries. */
+static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_work *work,uint32_t *f)
+{
+ gh_title_player_view *actor=&s->object->view;
+ uint8_t *p=actor->bytes;
+ if(!actor->alias_f0||actor->size<0x680||!s->runtime.scene_tables||!s->runtime.init)
+  return fail(s,0x1c0678,f,GH_OBJSTEP_ARGUMENT);
+ if(p[0x2f4])return fail(s,s->entry,f,GH_OBJSTEP_UNSUPPORTED);
+ if(s->special_phase)return GH_OBJSTEP_OK;
+ if(word(p+0x630))return fail(s,0x1c2378,f,GH_OBJSTEP_UNSUPPORTED);
+ if(p[0x2f6]==0){
+  if(p[0x676]&2u){
+   p[0x2f6]=2;
+   s->special_phase=1;
+   return GH_OBJSTEP_OK;
+  }
+  uint32_t draw;
+  if(gh_game_mt_next_0030f348(&s->runtime.init->random,&draw))
+   return fail(s,0x31cfe0,f,GH_OBJSTEP_UNSUPPORTED);
+  sh(p+0x56a,(uint16_t)((int32_t)draw%30+30));
+  put(p+0x620,word(actor->alias_f0+4));
+  p[0x2f6]=1;
+ }
+ if(p[0x2f6]==2){
+  uint64_t parent_key;
+  memcpy(&parent_key,p+0x668,sizeof(parent_key));
+  int can_settle;
+  gh_object_step_status status=r101_item_wait_gate(s,parent_key,&can_settle,f);
+  if(status)return status;
+  put(p+0x610,0);put(p+0x618,0);
+  put(p+0x614,word(p+0x600)^0x80000000u);
+  if(can_settle)p[0x2f6]=3;
+ }else if(p[0x2f6]==1||p[0x2f6]==3){
+  const int settled=p[0x2f6]==3;
+  const gh_title_player_view *player=s->environment.current_player;
+  if(settled&&(!s->environment_bound||!player||!player->bytes||player->size<0x54c))
+   return fail(s,0x2db6b0,f,GH_OBJSTEP_UNSUPPORTED);
+  float position[4],next[4],hit[4];
+  memcpy(position,actor->alias_f0,sizeof(position));
+  memcpy(next,position,sizeof(next));
+  float speed=number(p+0x614);
+  unsigned next_phase=p[0x2f6];
+  if(!(settled&&(p[0x676]&2u))){
+   for(unsigned i=0;i<3;i++)next[i]=add(position[i],number(p+0x610+4u*i));
+   speed=add(speed,-number(p+0x600));
+   const int up=!settled&&(speed>=0||number(p+0x620)<next[1]);
+   if(!settled||speed<=0){
+    gh_scene_ray_request q={.mask=up?7u:2u,.flags=0x400,.hit_position=hit,.segmented=1};
+    memcpy(q.from,position,sizeof(position));memcpy(q.to,next,sizeof(next));
+    q.from[1]=add(q.from[1],up?-0.5f:0.5f);
+    q.to[1]=add(q.to[1],up?1.0f:-1.0f);
+    uint32_t pc=0;
+    int did_hit;
+    if(gh_scene_ray_query_00131e10(s->runtime.scene_tables,&q,&did_hit,&pc))
+     return fail(s,pc?pc:0x131e10,f,GH_OBJSTEP_UNSUPPORTED);
+    if(did_hit){
+     const float boundary=add(hit[1],up?-0.5f:0.5f);
+     if((up&&boundary<next[1])||(!up&&next[1]<boundary)){
+      next[1]=boundary;
+      if(settled)speed=-number(p+0x600);
+      else if(!up)next_phase=2;
+     }
+    }
+   }
+  }
+  if(!settled&&next[1]<-900.0f){
+   p[0x2f4]=1;p[0x2f5]=p[0x2f6]=p[0x2f7]=0;
+  }else{
+   if(settled){
+    const int alive=(int16_t)half(player->bytes+0x54a)>0;
+    if(alive&&half((const uint8_t *)work+0x610)==0xffff){
+     if(!player->alias_f0)return fail(s,0x1c20d8,f,GH_OBJSTEP_UNSUPPORTED);
+     float distance=0;
+     for(unsigned i=0;i<3;i++){
+      const float origin=add(number(player->alias_f0+4u*i),i==1?0.5f:0);
+      const float delta=add(next[i],-origin);
+      distance=add(distance,mul(delta,delta));
+     }
+     if(distance<((p[0x676]&4u)?16.0f:4.0f))
+      return fail(s,0x1c20d8,f,GH_OBJSTEP_UNSUPPORTED);
+    }
+    if(alive&&(int16_t)(half(p+0x56a)-1u)<1)return fail(s,0x306838,f,GH_OBJSTEP_UNSUPPORTED);
+    if(alive)sh(p+0x56a,(uint16_t)(half(p+0x56a)-1u));
+    if(!(p[0x676]&2u)){
+     float yaw=add(number(p+0x104),0.08726646f);
+     if(gh_id_angle_reference_001f7d48(yaw,&yaw))return fail(s,0x1f7d48,f,GH_OBJSTEP_UNSUPPORTED);
+     memcpy(p+0x104,&yaw,4);
+    }
+   }
+   p[0x2f6]=(uint8_t)next_phase;
+  }
+  memcpy(actor->alias_f0,next,sizeof(next));
+  memcpy(p+0x614,&speed,4);
+ }else return fail(s,0x1c0678,f,GH_OBJSTEP_UNSUPPORTED);
+ s->special_phase=1;
+ return GH_OBJSTEP_OK;
+}
+static gh_object_step_status r101_item_save_position(gh_om_frame_state *s,uint32_t *f)
+{
+ gh_title_player_view *actor=&s->object->view;
+ uint8_t *p=actor->bytes;
+ if(word(p+0x5b0)&0x20u)return GH_OBJSTEP_OK;
+ if(word(p+0x560)!=word(p+0x67c)||p[0x676]!=p[0x677]||(p[0x676]&2u))
+  return fail(s,0x1c0450,f,GH_OBJSTEP_UNSUPPORTED);
+ if(!memcmp(p+0x490,actor->alias_f0,16))return GH_OBJSTEP_OK;
+ uint8_t previous[12];
+ memcpy(previous,p+0x490,12);
+ const uint32_t flags=word(p+0x5b8);
+ gh_om_init_state *init=common(s);
+ if(gh_om_r101_item_position_001c2630(init,actor->alias_f0))
+  return fail(s,init->frontier?init->frontier:0x1fb1c0,f,GH_OBJSTEP_UNSUPPORTED);
+ memcpy(p+0x490,previous,12);
+ put(p+0x5b8,flags);
+ return GH_OBJSTEP_OK;
+}
 static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_static_transform_policy policy,uint32_t*f){
  uint8_t*p=s->object->view.bytes;gh_om_init_state*c=common(s);
  if(!s->phase){if(word((const uint8_t*)w+0x5d8)&0x20000000u){s->complete=1;return GH_OBJSTEP_OK;}put(p+0x5b4,0);s->phase=1;}
+ if(s->phase==1&&r101_item(s->object)){
+  gh_object_step_status status=r101_item_move(s,w,f);
+  if(status)return status;
+  s->phase=4;
+ }
+ if(s->phase==1&&s->object->source.type==0x357){
+  if(p[0x2f4])return fail(s,s->entry,f,GH_OBJSTEP_UNSUPPORTED);
+  gh_om041c_state *canopy=(gh_om041c_state *)s->object->initialization;
+  gh_scene_placement_status status=gh_om357_move_001a8b38(canopy,s->runtime.ik_globals,
+   s->factory->bindings.pools,s->runtime.resolve_actor,s->runtime.context,&s->special_phase);
+  if(status)return fail(s,canopy->frontier?canopy->frontier:0x1a8b38,f,GH_OBJSTEP_UNSUPPORTED);
+  s->phase=4;
+ }
  if(s->phase==1&&s->object->source.type==0x41c){gh_object_step_status e=flag_move(s,policy,f);if(e)return e;s->phase=4;}
  if(s->phase==1&&weapon(s->object)){
   uint32_t pc=0;
@@ -669,7 +839,25 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
  if(s->phase==1&&s->object->source.type==0x35d){gh_object_step_status e=special35d(s,policy,f);if(e)return e;s->phase=4;}
  if(s->phase==1){if(fragments(s->object)){size_t timer_offset=s->object->source.type==0x304?0x602:0x610;unsigned timer=half(p+timer_offset);if(timer)sh(p+timer_offset,(uint16_t)(timer-1));}else if(door(s->object)&&!(word(p+0x5b0)&2)){gh_object_step_status e=gh_om_frame_contacts_001bd430(s,f);if(e)return e;}if(simple(s->object)&&(word(p+0x5b0)&4))return fail(s,0x1c7e30,f,GH_OBJSTEP_UNSUPPORTED);s->phase=2;}
  if(s->phase==2){
-  if (p[0x2f4] == 1 && (fragments(s->object) || segments(s->object))) {
+  if(s->object->source.type==0x351){
+   const unsigned state=p[0x2f4];
+   static const uint32_t methods[]={0x1a62b8,0x1a6310,0x1a6550,0x1a6cd8};
+   if(state)return fail(s,state<4?methods[state]:s->entry,f,GH_OBJSTEP_UNSUPPORTED);
+   s->phase=3;
+  }else if(r101_cylinders(s->object)){
+   const unsigned kind=s->object->source.type;
+   const unsigned phase=p[0x2f4];
+   static const uint32_t methods[][4]={
+    {0x18a988,0x18aa00,0x18aa60,0x18ad88},
+    {0x18d298,0x18d310,0x18d370,0x18d698},
+    {0x18e050,0x18e0c8,0x18e128,0x18e450},
+   };
+   const unsigned index=kind==0x308?0:kind==0x30b?1:2;
+   if(kind!=0x308&&(word(p+0x5b0)&4u))
+    return fail(s,0x1c7e30,f,GH_OBJSTEP_UNSUPPORTED);
+   if(phase)return fail(s,phase<4?methods[index][phase]:s->entry,f,GH_OBJSTEP_UNSUPPORTED);
+   s->phase=3;
+  }else if (p[0x2f4] == 1 && (fragments(s->object) || segments(s->object))) {
    uint32_t entry = state_entry(s->object->source.type, 1);
    uint32_t pc = 0;
    gh_object_step_status status;
@@ -733,11 +921,31 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
    if(present&&(hit->state!=c->bindings->init))return fail(s,0x1b7380,f,GH_OBJSTEP_ARGUMENT);
    const uint8_t*mode=present?hit->state->heat+0x10:NULL;int original_hit=0;uint32_t pc=0;gh_om_damage_status e=gh_om_check_damage_001b7380(&s->damage_calls[i],&s->object->view,present?hit:NULL,mode,policy,&original_hit,&pc);
    if(e)return fail(s,pc?pc:0x1b7380,f,e==GH_OM_DAMAGE_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);
-   if(original_hit)hit_transition(s,i,hit);s->hit_index++;
+   if(original_hit){
+    if(s->object->source.type==0x351){
+     if((int16_t)half(p+0x54a)<1)p[0x605]=1;
+     p[0x2f4]=1;
+     p[0x2f5]=p[0x2f6]=p[0x2f7]=0;
+    }else hit_transition(s,i,hit);
+   }
+   s->hit_index++;
   }s->phase=4;
  }
+ if(s->phase==4&&s->object->source.type==0x351&&!s->special_phase){
+  switch(p[0x604]){
+  case 0:p[0x605]=0;p[0x604]=1;p[0x606]=0;break;
+  case 1:if(p[0x605]==1)p[0x604]=3;break;
+  case 2:case 3:case 4:return fail(s,0x1a6558,f,GH_OBJSTEP_UNSUPPORTED);
+  }
+  s->special_phase=1;
+ }
  if(s->phase==4){if(segments(s->object)){unsigned count=p[0x2b4],limit=s->object->source.type==0x346?20:10;if(count!=c->model.part_count)return fail(s,0x14bfe0,f,GH_OBJSTEP_UNSUPPORTED);if(count>limit)count=limit;for(unsigned i=0;i<count;i++){size_t offset=0x610+(size_t)i*0x60;if(offset>s->object->view.size||0x55>s->object->view.size-offset)return fail(s,0x173900,f,GH_OBJSTEP_ARGUMENT);if(p[offset+0x54]==1)return fail(s,0x292f50,f,GH_OBJSTEP_UNSUPPORTED);}}
- if((fragments(s->object)||simple(s->object)||s->object->source.type==0x355||s->object->source.type==0x35d||s->object->source.type==0x41c||tutorial(s->object))&&!(s->object->source.type==0x310&&(word(p+0x5b0)&2))&&!s->opacity_complete){uint32_t pc=0;gh_camera_status e=gh_game_object_opacity_002a87e8(&s->object->view,NULL,w,s->environment_bound?&s->environment:NULL,policy==GH_STATIC_BINARY32_REFERENCE?GH_CAMERA_NATIVE_BINARY32_REFERENCE:GH_CAMERA_EXACT_UNAVAILABLE,&pc);if(e)return fail(s,pc?pc:0x2a87e8,f,e==GH_CAMERA_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);s->opacity_complete=1;}if((word(p+0x5b0)&1)&&!(word(p+0x5b8)&0x200)&&!(word((const uint8_t*)w+0x5e4)&0x1000000))put(p+0x5b8,word(p+0x5b8)&~0x40u);s->phase=5;}
+ if((fragments(s->object)||r101_cylinders(s->object)||(s->object->source.type==0x351&&!(word(p+0x5b0)&2u))||simple(s->object)||s->object->source.type==0x355||s->object->source.type==0x35d||s->object->source.type==0x41c||s->object->source.type==0x357||(r101_item(s->object)&&!p[0x675])||tutorial(s->object))&&!(s->object->source.type==0x310&&(word(p+0x5b0)&2))&&!s->opacity_complete){uint32_t pc=0;gh_camera_status e=gh_game_object_opacity_002a87e8(&s->object->view,NULL,w,s->environment_bound?&s->environment:NULL,policy==GH_STATIC_BINARY32_REFERENCE?GH_CAMERA_NATIVE_BINARY32_REFERENCE:GH_CAMERA_EXACT_UNAVAILABLE,&pc);if(e)return fail(s,pc?pc:0x2a87e8,f,e==GH_CAMERA_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);s->opacity_complete=1;}
+ if(r101_item(s->object)){
+  gh_object_step_status status=r101_item_save_position(s,f);
+  if(status)return status;
+ }
+ if((word(p+0x5b0)&1)&&!(word(p+0x5b8)&0x200)&&!(word((const uint8_t*)w+0x5e4)&0x1000000))put(p+0x5b8,word(p+0x5b8)&~0x40u);s->phase=5;}
  if(s->phase==5){if(policy!=GH_STATIC_BINARY32_REFERENCE)return fail(s,0x149220,f,GH_OBJSTEP_UNSUPPORTED);gh_object_step_status e=model_rate(s,weapon(s->object)?s->runtime_rate:1,f);if(e)return e;s->phase=6;}
  if(s->phase==6){const int weapon_model=weapon(s->object);
   if(weapon_model&&word(p+0x600))return fail(s,0x1cf3a8,f,GH_OBJSTEP_UNSUPPORTED);
@@ -815,7 +1023,7 @@ gh_object_step_status gh_om_frame_bind_runtime(gh_om_frame_state*s,const gh_om_f
    old->context==b->context&&old->break_effect==b->break_effect&&old->break_sound==b->break_sound&&
    old->break_collision==b->break_collision&&old->remove_sound==b->remove_sound&&old->ik_globals==b->ik_globals&&
    old->release_effect==b->release_effect&&old->fragment_atan_coeff==b->fragment_atan_coeff&&
-   old->action_buttons==b->action_buttons?
+   old->action_buttons==b->action_buttons&&old->resolve_actor==b->resolve_actor&&old->scene_tables==b->scene_tables?
    GH_OBJSTEP_OK:GH_OBJSTEP_ARGUMENT;
  }
  s->runtime=*b;s->runtime_bound=1;return GH_OBJSTEP_OK;

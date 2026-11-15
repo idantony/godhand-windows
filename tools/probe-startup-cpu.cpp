@@ -30,7 +30,7 @@ static bool load_input_map(const char *iso,std::vector<uint8_t> &elf,gh_native_i
 }
 
 static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh_native_input &input,
-    uint64_t max_ticks,bool controlled_r003,QAR100PadTape &tape)
+    uint64_t max_ticks,bool controlled_r003,QAR100PadTape &tape,uint64_t after_victory)
 {
     if(!configure_cpu_sink(host,&sink,ffmpeg))return fail("consumer setup");
     QAStartupTitleProbe title;
@@ -42,8 +42,10 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
     if(gh_startup_host_snapshot(host,&snapshot)!=GH_HOST_OK)return fail("initial snapshot");
     const auto started=std::chrono::steady_clock::now();
     uint64_t completed_frames=0,r003_handoff=0,r003_frames=0;
+    uint64_t post_victory_frames=0;
+    bool pad_complete=false;
     int r003_cut=-1;
-    while(snapshot.ticks<max_ticks&&snapshot.phase==GH_HOST_RUNNING&&!combat.complete()&&!tape.victory_scene){
+    while(snapshot.ticks<max_ticks&&snapshot.phase==GH_HOST_RUNNING&&!combat.complete()&&!pad_complete){
         title.sample(snapshot,input,true,false);
         const gh_native_gamepad_sample pad=tape.enabled?tape.sample(snapshot):combat.sample(snapshot);
         gh_native_input_snapshot controls={};
@@ -60,7 +62,9 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
         if(snapshot.phase==GH_HOST_RUNNING&&snapshot.scene_frame_ready&&snapshot.scene_frame_serial!=completed_frames){
             completed_frames=snapshot.scene_frame_serial;
             combat.presented(completed_frames);
+            if(tape.victory_scene)++post_victory_frames;
             tape.presented(snapshot,completed_frames);
+            pad_complete=tape.victory_scene&&post_victory_frames>=after_victory;
             if(r003_handoff&&snapshot.current_room==3&&snapshot.game_state==4){
                 ++r003_frames;
                 if(snapshot.event_number==2&&snapshot.event_cut>=0&&snapshot.event_cut!=r003_cut){
@@ -107,23 +111,26 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
         "\"last_move\":\"%08X\",\"actor_stamp\":%u,\"actor_dependency\":%u,"
         "\"packet_frame_serial\":%llu,\"world_commands\":%u,\"actor_commands\":%u,\"effect_commands\":%u,"
         "\"r003_controlled_handoff_tick\":%llu,\"r003_packet_frames\":%llu,\"r003_last_ev02_cut\":%d,"
-        "\"movie_frames_decoded\":%u,\"probe_complete\":%s}\n",
+        "\"movie_frames_decoded\":%u,\"post_victory_packet_frames\":%llu,"
+        "\"probe_complete\":%s}\n",
         (unsigned long long)snapshot.ticks,seconds,(unsigned)snapshot.current_room,(unsigned)snapshot.next_room,
         (unsigned)snapshot.game_state,snapshot.scene_stage,(unsigned)snapshot.phase,snapshot.unavailable_entry,
         snapshot.last_move_entry,snapshot.current_enemy_stamp,snapshot.current_enemy_dependency,
         (unsigned long long)completed_frames,sink.world,sink.actor,sink.effects,
         (unsigned long long)r003_handoff,(unsigned long long)r003_frames,r003_cut,sink.movie,
-        combat.complete()||tape.victory_scene?"true":"false");
-    if(combat.complete()||tape.victory_scene)return 0;
+        (unsigned long long)post_victory_frames,combat.complete()||pad_complete?"true":"false");
+    if(combat.complete()||pad_complete)return 0;
     return snapshot.phase==GH_HOST_FRONTIER?4:snapshot.phase==GH_HOST_RUNNING?3:1;
 }
 
 int main(int argc,char **argv)
 {
     const bool controlled_r003=argc==6&&!std::strcmp(argv[5],"--r003-controlled");
-    const bool pad_tape=argc==7&&!std::strcmp(argv[5],"--pad-tape");
+    const bool post_victory=argc==9&&!std::strcmp(argv[7],"--after-victory-frames");
+    const bool pad_tape=(argc==7||post_victory)&&!std::strcmp(argv[5],"--pad-tape");
     if(argc!=5&&!controlled_r003&&!pad_tape){
-        std::fprintf(stderr,"Usage: probe-startup-cpu <ISO> <FFmpeg> <absent profile path> <max ticks> [--r003-controlled | --pad-tape CSV]\n");
+        std::fprintf(stderr,"Usage: probe-startup-cpu <ISO> <FFmpeg> <absent profile path> <max ticks> "
+            "[--r003-controlled | --pad-tape CSV [--after-victory-frames N]]\n");
         return 2;
     }
     QAR100PadTape tape;
@@ -132,6 +139,13 @@ int main(int argc,char **argv)
     errno=0;
     const uint64_t max_ticks=std::strtoull(argv[4],&end,10);
     if(argv[4][0]<'1'||argv[4][0]>'9'||errno||*end)return fail("tick-limit parsing");
+    uint64_t after_victory=0;
+    if(post_victory){
+        errno=0;
+        after_victory=std::strtoull(argv[8],&end,10);
+        if(argv[8][0]<'1'||argv[8][0]>'9'||errno||*end||after_victory>=max_ticks)
+            return fail("after-victory frame count parsing");
+    }
     if(GetFileAttributesA(argv[3])!=INVALID_FILE_ATTRIBUTES)return fail("absent profile check");
     const DWORD profile_error=GetLastError();
     if(profile_error!=ERROR_FILE_NOT_FOUND&&profile_error!=ERROR_PATH_NOT_FOUND)return fail("profile path lookup");
@@ -148,7 +162,7 @@ int main(int argc,char **argv)
     if(gh_startup_host_create_with_profile(argv[1],argv[3],1,0,64*1024*1024,&host)!=GH_HOST_OK)
         return fail("native startup creation");
     fixture_sink sink={};
-    const int result=replay(host,sink,argv[2],input,max_ticks,controlled_r003,tape);
+    const int result=replay(host,sink,argv[2],input,max_ticks,controlled_r003,tape,after_victory);
     if(gh_startup_host_destroy(host)!=GH_HOST_OK){
         std::fprintf(stderr,"CPU replay host cleanup failed\n");
         if(result==0)return 1;

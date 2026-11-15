@@ -17,4 +17,21 @@ int main(int argc,char**argv){gh_disc*d;size_t index;gh_disc_entry entry;C(argc=
   C(!gh_scene_at_set_jump_info_002c2750(&s,zero,0xff,0xa38,0,0)&&zero.bytes[0x44]==0xff&&zero.bytes[0x3c]==0x38&&zero.bytes[0x3d]==0xa&&!zero.bytes[0x40]);
   C(!memcmp(copy,p,(size_t)entry.size)&&!gh_scene_at_units_release(&s)&&!s.native_units&&!s.ready&&!gh_heap_used(heap)&&!gh_heap_destroy(heap));feclearexcept(FE_ALL_EXCEPT);
  }
- fesetround(FE_TONEAREST);free(copy);free(p);gh_disc_close(d);puts("PASS actualR10024sourceunits/JMP4 typedlinks, self-target isolatedallocation, strictfrontier/resume, explicitreferenceFEnv, nativeget/set ownership and realrelease");return 0;}
+ fesetround(FE_TONEAREST);free(copy);free(p);
+ C(!gh_disc_find(d,"st1/r101.dat",&index)&&!gh_disc_entry_at(d,index,&entry));
+ p=malloc((size_t)entry.size);
+ C(p&&!gh_disc_read(d,index,0,p,(size_t)entry.size)&&!gh_bundle_open(p,(size_t)entry.size,&b));
+ gh_heap *r101_heap;gh_scene_at_manager r101={0};
+ C(!gh_heap_create(4096,&r101_heap)&&!gh_scene_at_initialize_units_002c0f90(&r101,&b,r101_heap,0x101,1));
+ for(uint32_t i=2;i<=3;++i){
+  gh_at_native_unit jump;
+  C(!gh_scene_at_get_jump_002c2ae0(&r101,i,&jump)&&jump.bytes&&jump.bytes[0x35]==1);
+  uint8_t raw[0x9c];memcpy(raw,jump.bytes,sizeof(raw));
+  uint32_t fn,argument;
+  C(!gh_scene_at_door_func(&r101,jump,&fn,&argument)&&!fn&&!argument);
+  C(!gh_scene_at_set_door_func_002c2728(&r101,jump,0x1490,i)&&
+     !gh_scene_at_door_func(&r101,jump,&fn,&argument)&&fn==0x1490&&argument==i);
+  C(!memcmp(raw,jump.bytes,sizeof(raw)));
+ }
+ C(!gh_scene_at_units_release(&r101)&&!gh_heap_destroy(r101_heap));
+ free(p);gh_disc_close(d);puts("PASS actualR10024sourceunits/JMP4 typedlinks, self-target isolatedallocation, strictfrontier/resume, explicitreferenceFEnv, nativeget/set ownership and realrelease");return 0;}

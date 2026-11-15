@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fenv.h>
-typedef struct {gh_at_native_unit view;gh_at_link next;gh_r207_allocation owned;uint8_t linked;} node;
+typedef struct {gh_at_native_unit view;gh_at_link next;gh_r207_allocation owned;uint32_t door_entry,door_argument;uint8_t linked;} node;
 struct gh_scene_at_units {gh_heap*heap;const void*source;node*nodes;size_t count,capacity;uint8_t*copies[4];uint32_t phase,jump_index,jump_slot,pending_handle;uint16_t room;uint8_t reference;};
 static uint16_t h(const uint8_t*p){return (uint16_t)(p[0]|(unsigned)p[1]<<8);}
 static uint32_t w(const uint8_t*p){return (uint32_t)h(p)|(uint32_t)h(p+2)<<16;}
@@ -59,6 +59,29 @@ gh_scene_at_status gh_scene_at_initialize_units_002c0f90(gh_scene_at_manager*s,c
 }
 gh_scene_at_status gh_scene_at_set_enabled(gh_scene_at_manager*s,gh_at_native_unit v,int enabled,int*original){if(!s||!original)return GH_AT_ARGUMENT;*original=0;if(!s->headers[0].bytes||!v.bytes)return GH_AT_OK;if(!own(s,v))return GH_AT_ARGUMENT;if(v.bytes[0x35]==9)return fail(s,enabled?0x2c0e20:0x2c0e60,0,GH_AT_UNSUPPORTED);if(enabled)v.bytes[0x34]|=1;else v.bytes[0x34]&=0xfe;*original=1;return GH_AT_OK;}
 gh_scene_at_status gh_scene_at_set_jump_info_002c2750(gh_scene_at_manager*s,gh_at_native_unit v,uint8_t state,uint32_t fn,uint32_t arg,uint8_t trigger){if(!s)return GH_AT_ARGUMENT;if(!v.bytes)return GH_AT_OK;if(!own(s,v))return GH_AT_ARGUMENT;uint8_t*p=v.bytes;if(trigger){if(!p[0x4e])p[0x4e]=p[0x3b];p[0x3b]=trigger;}ww(p+0x40,arg);p[0x44]=state;ww(p+0x3c,fn);return GH_AT_OK;}
+gh_scene_at_status gh_scene_at_set_door_func_002c2728(gh_scene_at_manager *s,gh_at_native_unit unit,
+ uint32_t entry,uint32_t argument)
+{
+ if(!s)return GH_AT_ARGUMENT;
+ if(!unit.bytes)return GH_AT_OK;
+ if(!own(s,unit))return GH_AT_ARGUMENT;
+ if(unit.bytes[0x35]==1){
+  node *n=resolve(s->native_units,unit.handle);
+  n->door_entry=entry;n->door_argument=argument;
+ }
+ return GH_AT_OK;
+}
+
+gh_scene_at_status gh_scene_at_door_func(gh_scene_at_manager *s,gh_at_native_unit unit,
+ uint32_t *entry,uint32_t *argument)
+{
+ if(!s||!entry||!argument)return GH_AT_ARGUMENT;
+ if(unit.bytes&&!own(s,unit))return GH_AT_ARGUMENT;
+ const node *n=unit.bytes?resolve(s->native_units,unit.handle):NULL;
+ *entry=n?n->door_entry:0;*argument=n?n->door_argument:0;
+ return GH_AT_OK;
+}
+
 gh_scene_at_status gh_scene_at_units_release(gh_scene_at_manager*s){if(!s)return GH_AT_ARGUMENT;struct gh_scene_at_units*t=s->native_units;if(!t)return GH_AT_OK;for(size_t i=0;i<t->count;i++){
  if(t->nodes[i].owned.pointer&&gh_heap_release(t->heap,t->nodes[i].owned))return GH_AT_BOUNDS;
  t->nodes[i].owned=(gh_r207_allocation){0};
