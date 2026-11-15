@@ -92,9 +92,108 @@ static int code_at(const gh_scene_message_sources *source, size_t offset, uint16
     return 1;
 }
 
+static gh_scene_ui_status advance_scenery(uint8_t *p,gh_scene_message_sources *source,
+    const gh_game_scene_ui *ui,const gh_boot_work *work,uint32_t *frontier)
+{
+    *frontier=0x2b3338;
+    if(!work->language||work->room!=0x105||half(p+0x64-0xc)!=0x3004||
+       (source->cursor_7c!=4&&source->cursor_7c!=46)||
+       source->cursor_8c<source->cursor_7c||source->cursor_8c>source->primary.size||
+       word(p+0x1c-0xc)||word(p+0x6c-0xc)!=0x3f800000u||p[1]>1)
+        return GH_SCENE_UI_UNSUPPORTED;
+    p[1]=1;
+    uint32_t flags=word(p+0x14-0xc);
+    if(word((const uint8_t *)work+0x1a0)&0x10000000u)flags|=1u;
+    put(p+0x14-0xc,flags);
+    uint32_t increment=(uint32_t)ui->root->timer;
+    if(!word(p+0x34-0xc)&&((flags&1u)||native_confirm(work)))increment*=10;
+    uint8_t *budget=p+0x68-0xc,*time=p+0x90-0xc;
+    put(budget,word(budget)+increment);
+    while(signed_word(budget)>=signed_word(time)){
+        uint16_t code;
+        if(!code_at(source,source->cursor_8c,&code))return GH_SCENE_UI_BOUNDS;
+        if(code==0xa001){
+            *frontier=0x2b3a38;
+            /* 2B43B0 stops scanning at the timed glyph after A001. With
+             * no voice/actor, 2B4428(0,0) takes its equality return. */
+            uint16_t marker,selector,first;
+            if(source->cursor_7c!=4||source->cursor_8c!=44||
+               !code_at(source,46,&marker)||marker!=0xa804||
+               !code_at(source,48,&selector)||selector||
+               !code_at(source,54,&first)||first<14||first>=0x1000||
+               word(p+0xb4-0xc)||word(p+0x40-0xc))
+                return GH_SCENE_UI_UNSUPPORTED;
+            source->cursor_8c+=2;
+            source->cursor_7c=source->cursor_8c;
+            put(p+0x84-0xc,word(time));
+            put(budget,word(time));
+            ++p[0x30-0xc];
+            put(p+0x14-0xc,word(p+0x14-0xc)&~6u);
+            continue;
+        }
+        if(code==0xa804){
+            *frontier=0x2b3b40;
+            uint16_t selector,hi,lo;
+            const size_t offset=source->cursor_8c;
+            if(source->cursor_7c!=46||
+               !code_at(source,offset+2,&selector)||selector>1||
+               !code_at(source,offset+4,&hi)||!code_at(source,offset+6,&lo)||
+               hi!=UINT16_MAX||lo!=UINT16_MAX)return GH_SCENE_UI_UNSUPPORTED;
+            if(half(p+0x96-0xc)<selector+1)
+                put_half(p+0x96-0xc,(uint16_t)(selector+1));
+            source->cursor_8c+=8;
+            continue;
+        }
+        if(code==0xa301&&source->cursor_7c==46){
+            *frontier=0x2b3ad0;
+            uint16_t end;
+            if(half(p+0x96-0xc)!=2||
+               !code_at(source,source->cursor_8c+2,&end)||end!=0x8001)
+                return GH_SCENE_UI_UNSUPPORTED;
+            put(budget,word(time));
+            p[0]=4;
+            p[1]=p[2]=p[3]=0;
+            return GH_SCENE_UI_OK;
+        }
+        if(code<14||code>=0x1000)return GH_SCENE_UI_UNSUPPORTED;
+        source->cursor_8c+=2;
+        put(time,word(time)+30);
+    }
+    return GH_SCENE_UI_OK;
+}
+
+static gh_scene_ui_status wait_scenery_choice(uint8_t *p,const gh_boot_work *work,
+    uint32_t *frontier)
+{
+    *frontier=0x2b3ec8;
+    if(work->room!=0x105||!work->language||half(p+0x64-0xc)!=0x3004||
+       half(p+0x96-0xc)!=2||half(p+0x94-0xc)>1)
+        return GH_SCENE_UI_UNSUPPORTED;
+    const uint8_t *raw=(const uint8_t *)work;
+    if(word(raw+0x5e4)&0x08000000u)return GH_SCENE_UI_OK;
+    const uint64_t pressed=doubleword(raw+0x1a0);
+    const unsigned current=half(p+0x94-0xc);
+    int next=(int)current;
+    next-=(pressed&UINT64_C(0x4000008000000))!=0;
+    next+=(pressed&UINT64_C(0x8000004000000))!=0;
+    if(next<0)next=0;
+    else if(next>1)next=1;
+    if((unsigned)next!=current){
+        *frontier=0x2b46f0; /* Original option-move SE, before confirm. */
+        return GH_SCENE_UI_UNSUPPORTED;
+    }
+    if(pressed&0x10000000u){
+        *frontier=0x2b3fc8; /* Original selected result and confirm SE. */
+        return GH_SCENE_UI_UNSUPPORTED;
+    }
+    put(p+0x14-0xc,word(p+0x14-0xc)|0x20u);
+    return GH_SCENE_UI_OK;
+}
+
 static gh_scene_ui_status advance_english(uint8_t *p, gh_scene_message_sources *source,
     const gh_game_scene_ui *ui, const gh_boot_work *work, uint32_t *frontier)
 {
+    if(p[0xa4-0xc]==4)return advance_scenery(p,source,ui,work,frontier);
     *frontier = 0x2b3240;
     if (!work->language || p[0xa4 - 0xc] || word(p + 0x1c - 0xc) ||
         word(p + 0x6c - 0xc) != 0x3f800000u || p[1] > 1)
@@ -202,6 +301,35 @@ static gh_scene_ui_status recycle_window(gh_game_scene_ui *ui, unsigned slot, ui
     return GH_SCENE_UI_OK;
 }
 
+gh_scene_ui_status gh_scene_message_find_002aed40(const gh_game_scene_ui *ui,
+    uint16_t message_id,int *slot,uint32_t *frontier)
+{
+    if(!ui||!slot||!frontier)return GH_SCENE_UI_ARGUMENT;
+    *frontier=0x2aed40;
+    unsigned slots[16], count;
+    gh_scene_ui_status status=active_slots(ui,slots,&count);
+    if(status)return status;
+    *slot=-1;
+    for(unsigned i=0;i<count;i++){
+        if(half(ui->blocks[slots[i]].payload+0x64-0x0c)!=message_id)continue;
+        *slot=(int)slots[i];
+        break;
+    }
+    *frontier=0;
+    return GH_SCENE_UI_OK;
+}
+
+gh_scene_ui_status gh_scene_message_delete_by_id_002aec40(gh_game_scene_ui *ui,
+    uint16_t message_id,uint32_t *frontier)
+{
+    int slot;
+    gh_scene_ui_status status=gh_scene_message_find_002aed40(ui,message_id,&slot,frontier);
+    if(status||slot<0)return status;
+    status=recycle_window(ui,(unsigned)slot,frontier);
+    if(!status)*frontier=0;
+    return status;
+}
+
 gh_scene_ui_status gh_scene_message_delete_002aebf8(gh_game_scene_ui *ui,
     uint16_t work_id, int *original_found, uint32_t *frontier)
 {
@@ -269,17 +397,19 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
     const unsigned state = p[0], phase = p[1];
     *frontier = 0x2b2438;
     if (!source->bound) return GH_SCENE_UI_UNSUPPORTED;
-    if (source->confirm_pending || state == 2 || state == 3 || state == 6) {
+    if (source->confirm_pending || state == 2 || state == 3 || state == 4 || state == 6) {
         gh_scene_ui_status status = source->confirm_pending ? clear_event_cut(source, timing, frontier) :
             state == 2 ? advance_english(p, source, ui, work, frontier) :
             state == 3 ? wait_english(p, source, ui, work, timing, frontier) :
+            state == 4 ? wait_scenery_choice(p,work,frontier) :
             close_window(p, source, frontier);
         if (status) return status;
         goto finish;
     }
     if (state == 7) goto finish;
     if (state > 1) return GH_SCENE_UI_UNSUPPORTED;
-    if (p[0xa4 - 0xc] || word(p + 0x18 - 0xc) || word(p + 0x1c - 0xc)) {
+    if ((p[0xa4 - 0xc] && p[0xa4 - 0xc] != 4) ||
+        word(p + 0x18 - 0xc) || word(p + 0x1c - 0xc)) {
         *frontier = state == 0 ? 0x2b2e80 : 0x2b3078;
         return GH_SCENE_UI_UNSUPPORTED;
     }
@@ -292,7 +422,21 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
             same_group += ui->blocks[slots[i]].payload[0x2c - 0xc] == p[0x2c - 0xc];
         p[1] = 1; /* 2B2580 is the original empty phase-0 initializer. */
         if (same_group >= 2) goto finish;
-        if (half(source->primary.bytes + source->cursor_8c) & 0x8000u) {
+        uint16_t command=half(source->primary.bytes+source->cursor_8c);
+        if (command==0xa602) {
+            *frontier=0x2b2b78;
+            if (source->primary.size-source->cursor_8c<6) return GH_SCENE_UI_BOUNDS;
+            p[0xa4-0xc]=4;
+            p[0x70-0xc]=2;
+            p[0x3c-0xc]=0;
+            put(p+0x18-0xc,0);
+            put_half(p+0x94-0xc,half(source->primary.bytes+source->cursor_8c+2));
+            put_half(p+0x96-0xc,0);
+            /* A602 encodes two halfwords and 2AF218 returns offset zero. */
+            source->cursor_8c+=4;
+            command=half(source->primary.bytes+source->cursor_8c);
+        }
+        if (command & 0x8000u) {
             *frontier = 0x2b2638;
             return GH_SCENE_UI_UNSUPPORTED;
         }
@@ -379,16 +523,17 @@ gh_scene_ui_status gh_scene_message_prepare_draw_002af028(gh_game_scene_ui *ui,
     for (unsigned i = 0; i < count; ++i) {
         const unsigned slot = slots[i];
         uint8_t *p = ui->blocks[slot].payload;
-        if (!ui->sources[slot].bound || p[0xa4 - 0xc]) {
+        const unsigned mode=p[0xa4-0xc];
+        if (!ui->sources[slot].bound || (mode && mode!=4)) {
             if (frontier) *frontier = 0x2b16f0;
             return GH_SCENE_UI_UNSUPPORTED;
         }
         put_half(p + 0xa6 - 0xc, 0x100);
-        put_half(p + 0xa8 - 0xc, 0x182);
+        put_half(p + 0xa8 - 0xc, mode==4?0x170:0x182);
         put_half(p + 0xaa - 0xc, 0x1e0);
-        put_half(p + 0xac - 0xc, 0x88);
+        put_half(p + 0xac - 0xc, mode==4?0x78:0x88);
         put_half(p + 0xae - 0xc, 0x100);
-        put_half(p + 0xb0 - 0xc, 0x182);
+        put_half(p + 0xb0 - 0xc, mode==4?0x170:0x182);
         if (word(p + 0x14 - 0xc) & 0x10u) {
             if (frontier) *frontier = 0x2b1c80;
             return GH_SCENE_UI_UNSUPPORTED;

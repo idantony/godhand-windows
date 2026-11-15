@@ -331,7 +331,17 @@ static gh_actor_motion_status try_scene_task(const gh_game_title_player *actor,
     int hit;
     if(!bindings->solve.actors||gh_scene_ray_query_00131e10(bindings->solve.actors,&ray,&hit,&pc))
         return move_stop(frontier,pc?pc:0x131e10);
-    return hit?GH_ACTOR_MOTION_OK:move_stop(frontier,0x28e7c8);
+    if(hit)return GH_ACTOR_MOTION_OK;
+    const gh_action_set_request request={
+        .priority=4,.life=14,.unknown20=0,.callback_id=0x28e7c8,
+        .argument=(void *)actor,.kind=0
+    };
+    unsigned index;
+    int emitted;
+    if(!bindings->buttons||
+       gh_action_button_set_001f7858(bindings->buttons,&request,&emitted,&index,&pc))
+        return move_stop(frontier,pc?pc:0x1f7858);
+    return GH_ACTOR_MOTION_OK;
 }
 
 static gh_actor_motion_status turn_to_player(gh_title_player_view *actor,const gh_enemy2ad_move_bindings *bindings,
@@ -474,4 +484,42 @@ gh_actor_motion_status gh_enemy2ad_dtor_motion_0028e068(gh_actor_motion_call *re
     if(status)*frontier=release->frontier?release->frontier:0x2a84a8;
     else *frontier=0x305778;
     return status?status:GH_ACTOR_MOTION_UNSUPPORTED;
+}
+
+gh_soft_event_status gh_enemy2ad_action_0028e7c8(gh_enemy2ad_action *state,
+    const gh_game_title_player *actor,const gh_soft_event_bindings *bindings,gh_task_threads *threads,
+    gh_native_task_entry entry,void *context,uint32_t *frontier)
+{
+    if(!frontier)return GH_SOFT_EVENT_ARGUMENT;
+    *frontier=0x28e7c8;
+    if(!state||!actor||!bindings||!bindings->work||bindings->work->room!=0x105||
+       !actor->view.bytes||actor->view.size<GH_EM2AD_BYTES||
+       actor->view.original_vtable214!=0x44a528||read_word(actor->view.bytes+0x214)!=0x44a528||
+       !threads||!entry||!bindings->scenario.manager||
+       gh_task_threads_manager(threads)!=bindings->scenario.manager)return GH_SOFT_EVENT_ARGUMENT;
+    if(state->actor&&state->actor!=actor)return GH_SOFT_EVENT_ARGUMENT;
+    state->actor=actor;
+    if(!state->stage){
+        gh_soft_event_status status=gh_scenario_start_soft_event_002c39b0(&state->soft,bindings,2);
+        if(status){*frontier=state->soft.frontier?state->soft.frontier:0x2c39b0;return status;}
+        uint8_t *flags=(uint8_t *)bindings->work+0x5e4;
+        put_word(flags,read_word(flags)&~0x10000u);
+        state->stage=1;
+    }
+    if(state->stage==1){
+        if(gh_scenario_exec_002c3890(bindings->scenario,threads,1,entry,context,0,&state->slot,frontier)){
+            *frontier=0x2c3920;
+            return GH_SOFT_EVENT_CALLEE;
+        }
+        if(state->slot>=0){
+            gh_task_record32 *record=&bindings->scenario.manager->records[state->slot];
+            uint8_t *raw=(uint8_t *)record;
+            raw[0x1e]=1;
+            raw[0x1f]=0;
+            record->attributes|=1;
+        }
+        state->stage=2;
+    }
+    *frontier=0;
+    return GH_SOFT_EVENT_OK;
 }

@@ -11,14 +11,14 @@ not written in GOAL, so Jak's specialized decompiler is not directly applicable.
 
 **Early development.** The Windows New Game replay plays all ten original
 opening cuts and reaches two-way combat in R100. Four Triangle hits lower
-the first enemy's HP from 74 to 26. The hidden, muted run presents a
-knockdown, Gene's recovery prompt and 2,528 scene frames before reaching
-the next breakable-object update.
+the first enemy's HP from 74 to 26. The hidden, muted run presents 2,606
+scene frames, including Gene's recovery prompt and an original grab with
+its left-stick escape prompt. The first encounter is still in progress.
 
 A separate Windows title-load run restores an original-format test save and
 presents R100. A controlled Windows run presents all 28 original EV02 cuts
 in R003 over 2,785 frames and follows the original room exit into R105, where
-it presents 31 scene frames. The controlled run selects R003 at the title
+it presents 183 scene frames. The controlled run selects R003 at the title
 handoff. Completing the first encounter and following the same transition
 through normal play remain in progress.
 
@@ -51,7 +51,7 @@ through normal play remain in progress.
   factory and registries. The first original FX call 0x30F228 completes and
   creates four ambient emitters. Subsequent opening frames create original
   event effects, update their lifetimes and render sprites and framebuffer warp.
-- The frozen regression build compiles 379 C modules and passes 366 native checks.
+- The frozen regression build compiles 381 C modules and passes 371 native checks.
   Eighteen checks that need extra tools or devices were skipped in this run.
   Earlier Windows verification exercised muted hardware audio, movie decoding
   and the full independent ADX comparison.
@@ -174,11 +174,11 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 
 **仍处于早期开发。** Windows 新游戏回放播完原版开场十个镜头并进入 R100 双向战斗。
 四次三角攻击命中，把第一个敌人的 HP 从 74 打到 26。隐藏、静音的实跑共呈现
-2,528 个场景帧，包括 Gene 倒地后的恢复按键提示，随后停在一个可破坏物件的更新。
+2,606 个场景帧，包括 Gene 倒地后的恢复提示、原版抓技和左摇杆挣脱提示。首场战斗仍在移植中。
 
 独立的 Windows 标题读档实跑恢复了原版格式的测试档，并呈现 R100。受控实跑在标题交接处
 选入 R003，呈现 EV02 全部 28 个镜头，共 2,785 帧，随后沿原版房间切换进入 R105，
-并呈现 31 帧场景。正常打完首战并沿同一路径切换房间的连续流程仍在开发。
+并呈现 183 帧场景。正常打完首战并沿同一路径切换房间的连续流程仍在开发。
 
 ### 已验证的进展
 
@@ -199,7 +199,7 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
   地面IK与矩阵回写，随后完成出生和摄像机绑定。来自3EB的4个运行时教程
   物件使用原工厂和注册表。首个原始 FX 调用 0x30F228 创建 4 个环境发射器。
   后续片头帧创建原剧情特效，更新其生命周期，并绘制精灵和画面扭曲。
-- 冻结回归构建编译 379 个 C 模块，通过 366 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
+- 冻结回归构建编译 381 个 C 模块，通过 371 项原生检查，本次跳过 18 项需要额外工具或设备的检查。
   受限 GPU 像素与独立 CPU 方程一致。绘制保留原 OT 的层级、
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；

@@ -512,7 +512,7 @@ gh_room_pool_status gh_om_destroy_detached_mode3(gh_om300_full_retirement *state
  gh_om_factory *factory=bindings->factory;
  if(!state->stage){
   gh_om_object *object=registered_om(factory,handle);
-  if(!object||(om_kind(object)!=0x324&&om_kind(object)!=0x376)||
+  if(!object||(om_kind(object)!=0x305&&om_kind(object)!=0x324&&om_kind(object)!=0x376)||
      object->view.bytes!=actor->bytes||object->view.size!=actor->size||
      word(actor->bytes+0x214)!=class_vtable(object)||original!=gh_om_retire_entry(om_kind(object))||
      (word(actor->bytes+0x250)&0xa0000000u)!=0xa0000000u)

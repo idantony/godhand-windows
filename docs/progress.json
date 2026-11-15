@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T03:56:03.222730+00:00",
-  "stage": "native-windows-R003-ev02-complete-presentation",
+  "verified_utc": "2026-11-15T06:16:12.079864+00:00",
+  "stage": "native-windows-r100-grab-r105-enemy-movement",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -173,13 +173,13 @@
     }
   },
   "native_windows_controlled_r003": {
-    "scope": "EV02 playback isolated with the original A38 destination at title handoff",
+    "scope": "EV02 and original R105 transition with the R003 destination selected at title handoff",
     "hidden": true,
     "muted": true,
-    "ticks": 3268,
-    "room": "0003",
+    "ticks": 3498,
+    "room": "0105",
     "next_room": "0105",
-    "original_GameMain_state": 5,
+    "original_GameMain_state": 4,
     "scene_frames_presented_in_r003": 2785,
     "first_r003_scene_serial": 362,
     "last_r003_scene_serial": 3146,
@@ -188,24 +188,32 @@
     "world_gpu_error": 0,
     "effect_post_error": 0,
     "window_error": 0,
-    "frontier": "00312708",
-    "frontier_operation": "R003 Flag object retirement",
+    "frontier": "00306528",
+    "frontier_operation": "EM27 attached sequence effect",
     "normal_play_entry_verified": false,
-    "r105_load_verified": false,
-    "native_regression": {"c_modules": 379, "passed_checks": 366, "skipped_checks": 18}
+    "r105_load_verified": true,
+    "native_regression": {
+      "c_modules": 381,
+      "passed_checks": 371,
+      "skipped_checks": 18
+    },
+    "scene_frames_presented_in_r105": 183,
+    "first_r105_scene_serial": 3195,
+    "last_r105_scene_serial": 3377,
+    "first_r105_scene_tick": 3315
   },
   "native_windows_execution": {
-    "scope": "R100 New Game with original opening and two-way combat",
+    "scope": "R100 New Game with original opening, two-way combat, recovery and grab",
     "hidden": true,
     "muted": true,
     "synthetic_input_fixture": true,
-    "ticks": 1957,
+    "ticks": 2747,
     "original_GameMain_state": 4,
     "current_room": "0100",
-    "scene_frames_presented": 1816,
-    "frontier": "0023C620",
+    "scene_frames_presented": 2606,
+    "frontier": "002CBF78",
     "frontier_module": "main ELF",
-    "original_world_packets_submitted": 1649361,
+    "original_world_packets_submitted": 2598888,
     "enemy_damage_presented": [
       {
         "scene_serial": 1655,
@@ -218,6 +226,20 @@
         "scene_serial": 1658,
         "hp_before": 62,
         "hp_after": 50,
+        "hit_kind": 18,
+        "hit_power": 12
+      },
+      {
+        "scene_serial": 2077,
+        "hp_before": 50,
+        "hp_after": 38,
+        "hit_kind": 18,
+        "hit_power": 12
+      },
+      {
+        "scene_serial": 2080,
+        "hp_before": 38,
+        "hp_after": 26,
         "hit_kind": 18,
         "hit_power": 12
       }
@@ -237,7 +259,14 @@
         "state": 1,
         "reaction": 3
       }
-    ]
+    ],
+    "frontier_operation": "EM00 attached CORE sound",
+    "grab_and_escape_prompt_presented": true,
+    "om305_destructor_completed": true,
+    "renderer_error": 0,
+    "world_gpu_error": 0,
+    "effect_post_error": 0,
+    "window_error": 0
   },
   "tests": {
     "native_build": "passed",
@@ -444,6 +473,7 @@
       "game_scenario_end_soft_event",
       "r003_event",
       "r003_flags",
+      "r105_room",
       "r100_init",
       "game_object_sound",
       "game_scene_exit_leaves",
@@ -548,6 +578,7 @@
       "game_enemy_ems",
       "game_enemy_retire",
       "game_enemy_entry",
+      "game_enemy_2ad",
       "game_enemy_entry_tail",
       "game_enemy_factory",
       "game_enemy_finalize",
@@ -789,6 +820,7 @@
       "test-game-enemy-ems",
       "test-game-enemy-near",
       "test-game-enemy-first-damage",
+      "test-game-enemy-2ad",
       "test-game-enemy-weapon",
       "test-r003-om382",
       "test-game-enemy-2a2-init",
@@ -862,6 +894,7 @@
       "test-game-player-ground-pose",
       "test-game-ee-acos",
       "test-game-om-frame",
+      "test-game-r100-door-sound",
       "test-game-om-damage",
       "test-game-om-reaction",
       "test-game-om-damage-frame",
@@ -976,6 +1009,10 @@
       "test-r100-watch-geometry",
       "test-r003-event",
       "test-r003-flag",
+      "test-r105-room-init",
+      "test-r105-paper",
+      "test-r105-gate",
+      "test-r105-room",
       "test-r003-om31a",
       "test-r100-init",
       "test-r100-exit",

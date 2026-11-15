@@ -6,6 +6,7 @@
 #include "game_om_damage.h"
 #include "game_collision_solid_step.h"
 #include "game_actor_motion.h"
+#include "game_action_buttons.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -27,6 +28,8 @@ typedef struct {
  gh_om_remove_sound remove_sound;
  const struct gh_motion_ik_globals *ik_globals;
  gh_motion_effect_consumer release_effect;
+ const float *fragment_atan_coeff;
+ gh_game_action_buttons *action_buttons;
 } gh_om_frame_runtime;
 typedef struct {const gh_om_factory *factory;gh_om_object *object;
  const gh_title_player_view *contact634;uint32_t handle,entry,frontier;

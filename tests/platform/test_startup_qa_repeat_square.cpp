@@ -237,6 +237,30 @@ int main(int argc,char **argv)
     p.r100_placement_dead=3;
     pair.neutral();
     CHECK(pair.probe.defeat_scene==p.scene_frame_serial);
-    std::puts("PASS repeated Square/Triangle input and presented evidence with patched ISO pad map");
+
+    Fixture grab(actual_map(argv[1],elf));
+    auto &grab_state=grab.state;
+    grab.probe.saw_event=true;
+    grab_state.player_state[0]=1;
+    grab_state.player_state[1]=0x0a;
+    grab_state.player_state[2]=1;
+    CHECK(!grab.probe.sample(grab_state).left_x);
+    grab.probe.continue_after_pair=true;
+    grab_state.player_updates_completed+=28;
+    auto left=grab.probe.sample(grab_state);
+    CHECK(left.left_x==-32767&&!left.buttons&&!left.left_y);
+    const auto left_input=grab.step(left);
+    CHECK(left_input.analog.axes[0]<-80&&(left_input.raw_pressed&0x00f00000u)==0x00400000u);
+    auto right=grab.probe.sample(grab_state);
+    CHECK(right.left_x==32767&&!right.buttons&&!right.left_y);
+    const auto right_input=grab.step(right);
+    CHECK(right_input.analog.axes[0]>80&&(right_input.raw_pressed&0x00f00000u)==0x00800000u);
+    grab_state.player_state[1]=0x0b;
+    grab_state.player_state[2]=3;
+    CHECK(grab.probe.sample(grab_state).left_x==-32767);
+    grab_state.player_state[2]=6;
+    CHECK(!grab.probe.sample(grab_state).left_x);
+    CHECK(!grab.probe.attempts);
+    std::puts("PASS repeated attacks, grab pad edges and presented evidence with patched ISO pad map");
     return 0;
 }

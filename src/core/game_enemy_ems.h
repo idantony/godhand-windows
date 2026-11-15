@@ -19,6 +19,7 @@ typedef struct {
     gh_enemy_actor_bindings actor;
     const gh_enemy2a2_node_names *names_2a2;
     gh_effect_create_bindings effects_2ad;
+    gh_game_action_buttons *action_buttons;
 } gh_enemy_ems_bindings;
 
 /* The prefix already owns the stop gate, DVD/SE preload, and spawn cursor.

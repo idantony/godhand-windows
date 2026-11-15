@@ -73,7 +73,7 @@ gh_soft_event_status gh_scenario_start_soft_event_002c39b0(gh_soft_event_start *
  if(!s||!b||!b->work||!b->scenario.bytes||b->scenario.size<0xea||!b->scenario.manager||
     !b->scenario.manager->records||b->scenario.manager->count>b->scenario.manager->capacity)
   return GH_SOFT_EVENT_ARGUMENT;
- if(kind!=4&&(kind!=0||!b->kind0))return stop(s,0x2c39b0,GH_SOFT_EVENT_UNSUPPORTED);
+ if(kind!=2&&kind!=4&&(kind!=0||!b->kind0))return stop(s,0x2c39b0,GH_SOFT_EVENT_UNSUPPORTED);
  if(s->stage&&(s->scenario_bytes!=b->scenario.bytes||s->manager!=b->scenario.manager||
                s->work!=b->work||s->kind!=kind))return GH_SOFT_EVENT_ARGUMENT;
  uint8_t *p=b->scenario.bytes,*raw=(uint8_t*)b->work;
@@ -107,8 +107,11 @@ gh_soft_event_status gh_scenario_start_soft_event_002c39b0(gh_soft_event_start *
    ++s->stage;
   }
  }else if(s->stage==4){
-  ww(raw+0x5e4,w(raw+0x5e4)|0x80000);
-  ww(raw+0x5d8,w(raw+0x5d8)|0xf4000000);
+  if(kind==2)ww(raw+0x5d8,w(raw+0x5d8)|0xfc840000);
+  else{
+   ww(raw+0x5e4,w(raw+0x5e4)|0x80000);
+   ww(raw+0x5d8,w(raw+0x5d8)|0xf4000000);
+  }
   s->stage=5;
  }
  if(m->current_index>=0){

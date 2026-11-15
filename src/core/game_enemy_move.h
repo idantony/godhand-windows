@@ -1,6 +1,7 @@
 #ifndef GH_GAME_ENEMY_MOVE_H
 #define GH_GAME_ENEMY_MOVE_H
 #include "game_enemy_damage.h"
+#include "game_action_button_set.h"
 #include "game_enemy_near.h"
 #include "game_player_targets.h"
 #include "game_effect_create.h"
@@ -14,6 +15,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef gh_actor_motion_status (*gh_enemy202_player_grab)(void *,const gh_enemy_actor *,uint32_t *);
 
 typedef struct {
     const gh_scene_nearcheck *owner;
@@ -76,6 +79,9 @@ typedef struct {
     const gh_room_state *room_state;
     gh_player_target_bindings targets;
     gh_enemy_request death_transform_request;
+    gh_enemy202_player_grab player_grab;
+    void *player_grab_context;
+    gh_game_action_buttons *grab_buttons;
     gh_enemy202_devil_spawn devil_spawn;
     void *devil_spawn_context;
     uint8_t death_phase,death_effect_cursor,death_ground_cursor;
@@ -85,6 +91,8 @@ typedef struct {
     uint16_t death_item;
     uint8_t death_fade_phase;
     gh_effect_create_call death_effect_create;
+    gh_scene_at_manager *scene_jump_at;
+    gh_bundle scene_jump_room;
 } gh_enemy202_move;
 
 /* Borrow original Main+18C bound PFD2 owner before entering Move. */
@@ -100,10 +108,13 @@ gh_actor_motion_status gh_enemy202_move_bind_targets(gh_enemy202_move *,const gh
 gh_actor_motion_status gh_enemy202_move_bind_near_sound(gh_enemy202_move *,gh_enemy_ema2_hit_sound,void *);
 /* Borrow the selected RoomSave for original 2736F8 -> 295498. */
 gh_actor_motion_status gh_enemy202_move_bind_room_state(gh_enemy202_move *,const gh_room_state *);
+/* Canonical room AT and bundle for original 24BDA0 same-room jumps. */
+gh_actor_motion_status gh_enemy202_move_bind_scene_jump(gh_enemy202_move *,gh_scene_at_manager *,const gh_bundle *);
 gh_actor_motion_status gh_enemy202_move_bind_devil_spawn(gh_enemy202_move *,
     gh_enemy202_devil_spawn,void *);
 gh_actor_motion_status gh_enemy202_move_bind_death_release(gh_enemy202_move *,
     gh_enemy202_death_release,void *);
+gh_actor_motion_status gh_enemy202_move_bind_player_grab(gh_enemy202_move *,gh_enemy202_player_grab,void *,gh_game_action_buttons *);
 /* One invocation of original 208BE0. Keep the cursor on a suspended result;
  * clear it only before a new Move after an original return. The borrowed
  * player is the canonical Work.playerObj, never a raw guest address. */

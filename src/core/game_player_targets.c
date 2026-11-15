@@ -17,8 +17,72 @@ static int constants(const void*elf,size_t size,float*t){const uint8_t*p=elf_spa
 static float atan_sdk(float input,const float*t){uint32_t bits;memcpy(&bits,&input,4);uint32_t magnitude=bits&0x7fffffffu;if(magnitude>0x7f800000)return add(input,input);if(magnitude>0x507fffff)return bits&0x80000000u?sub(-t[3],t[7]):add(t[3],t[7]);float x=input;int id=-1;if(magnitude<0x3ee00000){if(magnitude<=0x30ffffff)return input;}else{x=fabsf(x);if(magnitude<0x3f980000){if(magnitude<0x3f300000){id=0;x=divide(sub(add(x,x),1),add(x,2));}else{id=1;x=divide(sub(x,1),add(x,1));}}else if(magnitude<0x401c0000){id=2;x=divide(sub(x,1.5f),add(mul(x,1.5f),1));}else{id=3;x=divide(-1,x);}}
  float z=mul(x,x),q=mul(z,z),even=t[18];for(int i=16;i>=8;i-=2)even=add(t[i],mul(q,even));even=mul(z,even);float odd=t[17];for(int i=15;i>=9;i-=2)odd=add(t[i],mul(q,odd));odd=mul(q,odd);float sum=add(even,odd);if(id<0)return sub(x,mul(x,sum));float result=sub(t[id],sub(sub(mul(x,sum),t[id+4]),x));return bits&0x80000000u?-result:result;
 }
-static gh_player_target_status angle(const float*t,const float*from,const float*to,float heading,float limit,float*out){if(!isfinite(heading)||!isfinite(limit)||limit<0)return GH_PLAYER_TARGET_NUMERIC;for(unsigned k=0;k<3;k++)if(!isfinite(from[k])||!isfinite(to[k]))return GH_PLAYER_TARGET_NUMERIC;float x=sub(to[0],from[0]),z=sub(to[2],from[2]);if(!isfinite(x)||!isfinite(z))return GH_PLAYER_TARGET_NUMERIC;if(x==0&&z==0){*out=0;return GH_PLAYER_TARGET_OK;}float delta;if(z==0)delta=sub(x<=0?number(0xbfc90fdb):number(0x3fc90fdb),heading);else {float bearing=atan_sdk(divide(x,z),t);if(z<0)bearing=sub(bearing,number(0x40490fdb));delta=sub(bearing,heading);}if(delta>number(0x40490fdb))delta=sub(delta,number(0x40c90fdb));if(delta<number(0xc0490fdb))delta=add(delta,number(0x40c90fdb));float sign=delta>0?1:-1,absolute=delta>0?delta:-delta;float result=mul(absolute<=limit?absolute:limit,sign);if(!isfinite(result))return GH_PLAYER_TARGET_NUMERIC;*out=result;return GH_PLAYER_TARGET_OK;}
-gh_player_target_status gh_player_target_angle_002da038(const void*elf,size_t size,const float*from,const float*to,float heading,float limit,float*out,uint32_t*f){if(f)*f=0;if(!from||!to||!out)return GH_PLAYER_TARGET_ARGUMENT;float t[19];if(!constants(elf,size,t))return fail(f,0x3a1648,GH_PLAYER_TARGET_ARGUMENT);fenv_t env;if(feholdexcept(&env))return GH_PLAYER_TARGET_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_PLAYER_TARGET_NUMERIC;}float value;gh_player_target_status e=angle(t,from,to,heading,limit,&value);if(fesetenv(&env))return GH_PLAYER_TARGET_NUMERIC;if(e)return fail(f,0x2da038,e);*out=value;return GH_PLAYER_TARGET_OK;}
+static gh_player_target_status angle(const float *table, const float *from, const float *to,
+                                    float heading, float limit, int coincident_is_zero, float *out)
+{
+    if (!isfinite(heading) || !isfinite(limit) || limit < 0) return GH_PLAYER_TARGET_NUMERIC;
+    for (unsigned k = 0; k < 3; k++)
+        if (!isfinite(from[k]) || !isfinite(to[k])) return GH_PLAYER_TARGET_NUMERIC;
+    const float x = sub(to[0], from[0]), z = sub(to[2], from[2]);
+    if (!isfinite(x) || !isfinite(z)) return GH_PLAYER_TARGET_NUMERIC;
+    if (coincident_is_zero && x == 0 && z == 0) {
+        *out = 0;
+        return GH_PLAYER_TARGET_OK;
+    }
+    float bearing;
+    if (z == 0) bearing = number(x <= 0 ? 0xbfc90fdb : 0x3fc90fdb);
+    else {
+        bearing = atan_sdk(divide(x, z), table);
+        if (z < 0) bearing = sub(bearing, number(0x40490fdb));
+    }
+    float delta = sub(bearing, heading);
+    if (delta > number(0x40490fdb)) delta = sub(delta, number(0x40c90fdb));
+    if (delta < number(0xc0490fdb)) delta = add(delta, number(0x40c90fdb));
+    const float sign = delta > 0 ? 1 : -1;
+    const float absolute = delta > 0 ? delta : -delta;
+    const float result = mul(absolute <= limit ? absolute : limit, sign);
+    if (!isfinite(result)) return GH_PLAYER_TARGET_NUMERIC;
+    *out = result;
+    return GH_PLAYER_TARGET_OK;
+}
+
+static gh_player_target_status read_angle(const void *elf, size_t size, const float *from,
+                                        const float *to, float heading, float limit,
+                                        int coincident_is_zero, float *out, uint32_t *frontier)
+{
+    if (frontier) *frontier = 0;
+    if (!from || !to || !out) return GH_PLAYER_TARGET_ARGUMENT;
+    float table[19];
+    if (!constants(elf, size, table)) return fail(frontier, 0x3a1648, GH_PLAYER_TARGET_ARGUMENT);
+    fenv_t env;
+    if (feholdexcept(&env)) return GH_PLAYER_TARGET_NUMERIC;
+    if (fesetround(FE_TONEAREST)) {
+        (void)fesetenv(&env);
+        return GH_PLAYER_TARGET_NUMERIC;
+    }
+    float value;
+    gh_player_target_status status = angle(table, from, to, heading, limit, coincident_is_zero, &value);
+    if (fesetenv(&env)) return GH_PLAYER_TARGET_NUMERIC;
+    if (status) return fail(frontier, coincident_is_zero ? 0x2da038 : 0x2da2d0, status);
+    *out = value;
+    return GH_PLAYER_TARGET_OK;
+}
+
+gh_player_target_status gh_player_target_angle_002da038(const void *elf, size_t size,
+    const float *from, const float *to, float heading, float limit, float *out, uint32_t *frontier)
+{
+    return read_angle(elf, size, from, to, heading, limit, 1, out, frontier);
+}
+
+gh_player_target_status gh_player_target_inside_arc_002da2d0(const void *elf, size_t size,
+    const float *from, const float *to, float heading, float limit, int *inside, uint32_t *frontier)
+{
+    if (!inside) return fail(frontier, 0x2da2d0, GH_PLAYER_TARGET_ARGUMENT);
+    float delta;
+    gh_player_target_status status = read_angle(elf, size, from, to, heading, limit, 0, &delta, frontier);
+    if (!status) *inside = fabsf(delta) < limit;
+    return status;
+}
 static int point(const gh_title_player_view*v,float*out){if(!v->bytes||!v->alias_f0||(uintptr_t)v->alias_f0<(uintptr_t)v->bytes||(uintptr_t)v->alias_f0-(uintptr_t)v->bytes>v->size||12>v->size-((uintptr_t)v->alias_f0-(uintptr_t)v->bytes))return 0;memcpy(out,v->alias_f0,12);for(unsigned k=0;k<3;k++)if(!isfinite(out[k]))return 0;return 1;}
 static float distance(const float*a,const float*b){float x=sub(a[0],b[0]),y=sub(a[1],b[1]),z=sub(a[2],b[2]);return add(add(mul(x,x),mul(y,y)),mul(z,z));}
 static int pickup_kind(unsigned id){switch(id){case 0x361:case 0x362:case 0x363:case 0x368:case 0x36d:case 0x375:case 0x377:case 0x378:case 0x379:case 0x37b:case 0x380:case 0x390:case 0x3a8:case 0x3a9:case 0x3aa:case 0x3ab:case 0x3ad:case 0x3ae:case 0x3af:case 0x3b4:case 0x3b7:return 1;default:return 0;}}
@@ -27,7 +91,7 @@ static gh_player_target_status query(const gh_player_target_bindings*b,int kind,
   if(kind==2){if(id!=0x364)continue;if(candidate.size<0x604)return fail(f,0x1b1620,GH_PLAYER_TARGET_ARGUMENT);if(w(candidate.bytes+0x600))continue;return fail(f,0x147568,GH_PLAYER_TARGET_UNSUPPORTED);}
   if(kind==0){if(!pickup_kind(id))continue;if(candidate.size<0x666)return fail(f,0x1d07e0,GH_PLAYER_TARGET_ARGUMENT);if(!candidate.bytes[0x664])continue;}else {if(candidate.size<0x5b4)return fail(f,0x1b79d0,GH_PLAYER_TARGET_ARGUMENT);if(!(w(candidate.bytes+0x5b0)&8)||b->player->bytes[0x2f4]!=0)continue;}
   float target[3];if(!point(&candidate,target))return fail(f,0x1f7eb0,GH_PLAYER_TARGET_ARGUMENT);float squared=distance(origin,target);if(!isfinite(squared))return fail(f,0x1f7eb0,GH_PLAYER_TARGET_NUMERIC);if(squared>(kind==0?4:nearest))continue;float height=kind==0?sub(target[1],player_point[1]):fabsf(sub(player_point[1],target[1]));int lifted=kind==0&&candidate.bytes[0x665];if(lifted)height=sub(height,1);if(kind==0?(height>1.7f||height<-.5f):(height>.5f))continue;
-  if(kind==1||lifted){if(!have_constants){if(!constants(b->elf,b->elf_bytes,table))return fail(f,0x3a1648,GH_PLAYER_TARGET_ARGUMENT);have_constants=1;}float delta;e=angle(table,player_point,target,number(w(b->player->bytes+0x104)),number(0x40490fdb),&delta);if(e)return fail(f,0x2da038,e);if(fabsf(delta)>(kind==0?number(0x3f060a92):number(0x3f860a92)))continue;}
+  if(kind==1||lifted){if(!have_constants){if(!constants(b->elf,b->elf_bytes,table))return fail(f,0x3a1648,GH_PLAYER_TARGET_ARGUMENT);have_constants=1;}float delta;e=angle(table,player_point,target,number(w(b->player->bytes+0x104)),number(0x40490fdb),1,&delta);if(e)return fail(f,0x2da038,e);if(fabsf(delta)>(kind==0?number(0x3f060a92):number(0x3f860a92)))continue;}
   if(!b->actors)return fail(f,0x131e10,GH_PLAYER_TARGET_ARGUMENT);gh_scene_ray_request ray={.mask=7,.flags=kind==0?0x18:0x10};if(kind==0)memcpy(ray.from,player_point,12);else memcpy(ray.from,b->player->bytes+0x490,12);memcpy(ray.to,target,12);ray.from[1]=add(ray.from[1],.5f);ray.to[1]=add(ray.to[1],.5f);ray.from[3]=ray.to[3]=1;int hit;gh_scene_ray_status r=gh_scene_ray_query_00131e10(b->actors,&ray,&hit,f);if(r)return r==GH_RAY_UNSUPPORTED?GH_PLAYER_TARGET_UNSUPPORTED:GH_PLAYER_TARGET_CALLEE;if(hit)continue;selected=(gh_player_target){handle,candidate};if(kind==0){*out=selected;return GH_PLAYER_TARGET_OK;}nearest=squared;
  }*out=selected;return GH_PLAYER_TARGET_OK;}
 static gh_player_target_status enter_query(const gh_player_target_bindings*b,int kind,gh_player_target*out,uint32_t*f){if(f)*f=0;if(!b||!out||!b->player||!b->player->bytes||b->player->size<0x4a0)return GH_PLAYER_TARGET_ARGUMENT;fenv_t env;if(feholdexcept(&env))return GH_PLAYER_TARGET_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_PLAYER_TARGET_NUMERIC;}gh_player_target result;gh_player_target_status e=query(b,kind,&result,f);if(fesetenv(&env))return GH_PLAYER_TARGET_NUMERIC;if(!e)*out=result;return e;}

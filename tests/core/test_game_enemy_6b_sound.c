@@ -381,6 +381,153 @@ int main(int argc,char **argv)
  }
  C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
 
+ /* Actual R105 stamp2 is authored as EM00 and exchanges to EM27 at Init. */
+ work.room=0x105;
+ size_t r105_bytes;
+ uint8_t *r105_data=read_file(disc,"st1/r105.dat",&r105_bytes);
+ gh_bundle r105_bundle;
+ gh_bundle_entry r105_ems;
+ gh_game_prepare r105_prepare={0};
+ gh_room_state r105_room;
+ gh_game_scene_tables r105_tables={0};
+ gh_room_pools r105_pools={0};
+ uint8_t r105_stop=1;
+ gh_em_scene_placements r105_placement={.stop_flag=&r105_stop};
+ C(!gh_bundle_open(r105_data,r105_bytes,&r105_bundle)&&
+   !gh_bundle_find(&r105_bundle,"EMS",0,&r105_ems)&&
+   !gh_game_prepare_002a5d40(&r105_prepare,(gh_core_save_view){0},work.room,&game_state)&&
+   !gh_room_state_select_002bebc8(&r105_prepare,work.room,0,&r105_room)&&
+   !gh_em_scene_bind_native_00294c68(&r105_placement,&r105_room,&r105_ems,&work,0,
+      GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,&loaded)&&loaded);
+ for(physical=0;physical<64;physical++){
+  C(!gh_enemy_request_from_room_00294ca0(&r105_room,physical,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,
+      &req,&spawn,&saved,&frontier));
+  if(spawn&&req.entry_number==2)break;
+ }
+ C(physical==2&&req.object_kind==0x202&&req.dependency_kind==0x200&&req.dependency_flags==1&&!req.appearance);
+ C(!gh_scene_actors_0012e670(&r105_tables,&r105_bundle)&&
+   !gh_game_room_pools_initialize_002a5d80(&r105_pools,&r105_bundle,heap)&&
+   !gh_enemy202_allocate_003130e0(&enemy,heap,&work,&original)&&original);
+ memcpy(enemy.view.bytes+0x2fe,&req.object_kind,2);
+ memcpy(enemy.view.bytes+0x564,&req.dependency_kind,4);
+ memcpy(enemy.view.bytes+0x1648,&req.dependency_kind,4);
+ memcpy(enemy.view.bytes+0x164c,&req.dependency_flags,4);
+ enemy.view.bytes[0x1651]=2; /* Original R105 room appearance exchange theme. */
+ C(!gh_enemy_model_initialize_00208268(&model,&enemy.view,&resource,&work,&r105_pools,heap,&fog,
+    GH_STATIC_BINARY32_REFERENCE,&original)&&original);
+ memcpy(&dep,enemy.view.bytes+0x564,4);
+ C(dep==0x227);
+ memcpy(enemy.view.alias_f0,anchor,sizeof(anchor));
+ store(enemy.view.bytes+0x5a8,1);
+ int32_t em27_bank;
+ C(!gh_enemy_se_request_002cb278(banks,&work,dep,&em27_bank)&&em27_bank>=1&&em27_bank!=bank);
+ ready=0;
+ for(unsigned n=0;n<16&&!ready;++n){
+  C(!gh_dvd_pump(&dvd)&&!gh_enemy_se_banks_update_002cf440(banks));
+  C(!gh_enemy_se_ready_002cb778(banks,em27_bank,&ready));
+ }
+ C(ready&&!gh_enemy_se_resolve_002cb418(banks,dep,&resolved)&&resolved==em27_bank);
+
+ /* A real EM27 descriptor with an unrelated stamp remains unsupported. */
+ C(!gh_actor_attached_sound_bind(&source,&binding)&&
+   !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
+ gh_motion_sound_request em27_cue={.model=&model.model,.actor=&enemy.view,.bank=1,.program=0xa};
+ uint32_t rejected=99;
+ C(gh_actor_attached_sound_motion(&source,&em27_cue,&rejected,&frontier)==GH_ACTOR_MOTION_UNSUPPORTED&&
+    !rejected&&frontier==0x2cbf78);
+ C(!gh_actor_attached_sound_abort(&source)&&!model.model.sound_borrowers);
+ memcpy(enemy.view.bytes+0x640,&(uint16_t){req.entry_number},2);
+
+ const size_t em27_frames[]={16408,7336};
+ for(unsigned i=0;i<2;++i){
+  em27_cue.program=(int16_t)(0xa+i);
+  check_program(registry,(int16_t)em27_bank,em27_cue.program,9+i,11025,em27_frames[i]);
+  C(!gh_actor_attached_sound_bind(&source,&binding)&&
+    !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
+  const unsigned before=submissions;
+  expected=random;
+  uint32_t handle=0,duplicate=99;
+  C(!gh_actor_attached_sound_motion(&source,&em27_cue,&handle,&frontier)&&handle&&!frontier);
+  C(!gh_actor_attached_sound_motion(&source,&em27_cue,&duplicate,&frontier)&&!duplicate&&!frontier);
+  C(!memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_update(voices));
+  gh_se_voice_info info;
+  C(!gh_se_voice_query(voices,handle,&info)&&info.bank==em27_bank&&info.program==em27_cue.program&&
+    !info.pending&&info.native_voice&&info.position_mode==2&&info.distance==3&&info.sample_slot==9+i&&
+    info.rate==11025&&info.adsr2==0x5fcb&&info.channel>=43&&info.channel<=45);
+  C(submissions==before+1&&submitted[before].frames>em27_frames[i]&&(info.left_q14||info.right_q14));
+  printf("R105 stamp2 EM27 cue %02X slot %u channel %u PCM %zu\n",
+      info.program,info.sample_slot,info.channel,submitted[before].frames);
+  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
+ }
+ em27_cue.bank=0;
+ em27_cue.program=0xaa;
+ for(unsigned variant=0;variant<2;++variant){
+  gh_game_mt_seed_0030f2b0(&random,variant?1:2);
+  expected=random;
+  uint32_t draw;
+  C(!gh_game_mt_next_0030f348(&expected,&draw)&&(draw&1u)==variant);
+  C(!gh_actor_attached_sound_bind(&source,&binding)&&
+    !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
+  const unsigned before=submissions;
+  uint32_t handle=0;
+  C(!gh_actor_attached_sound_motion(&source,&em27_cue,&handle,&frontier)&&handle&&!frontier);
+  C(!memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_update(voices));
+  gh_se_voice_info info;
+  C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&
+    !info.bank&&info.program==(int16_t)(0xaa+variant)&&info.sample_slot==99+variant&&
+    info.rate==14000&&info.adsr1==0x80ff&&info.adsr2==0x5fc0&&info.channel==28&&info.position_mode==2);
+  C(submissions==before+1&&submitted[before].frames>(variant?1316u:2856u));
+  printf("R105 stamp2 CORE footstep %02X slot %u PCM %zu\n",info.program,
+      info.sample_slot,submitted[before].frames);
+  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
+ }
+ em27_cue.bank=1;
+ em27_cue.program=6;
+ const size_t em27_attack_frames[]={8316,9044};
+ for(unsigned variant=0;variant<2;++variant){
+  check_program(registry,(int16_t)em27_bank,(int16_t)(6+variant),
+      5+variant,11025,em27_attack_frames[variant]);
+  gh_game_mt_seed_0030f2b0(&random,variant?1:2);
+  expected=random;
+  uint32_t draw;
+  C(!gh_game_mt_next_0030f348(&expected,&draw)&&(draw&1u)==variant);
+  C(!gh_actor_attached_sound_bind(&source,&binding)&&
+    !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
+  uint32_t handle=0;
+  C(!gh_actor_attached_sound_motion(&source,&em27_cue,&handle,&frontier)&&handle&&!frontier);
+  C(!memcmp(&random,&expected,sizeof(random)));
+  if(variant)C(!gh_se_voice_detach_actor_002ce488(voices,&model.model)&&!model.model.sound_borrowers);
+  const unsigned before=submissions;
+  C(!gh_se_voice_update(voices));
+  gh_se_voice_info info;
+  C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&
+    info.bank==em27_bank&&info.program==(int16_t)(6+variant)&&info.sample_slot==5+variant&&
+    info.rate==11025&&info.adsr1==0x80ff&&info.adsr2==0x5fcb&&info.channel==42&&info.position_mode==2);
+  C(submissions==before+1&&submitted[before].frames>em27_attack_frames[variant]);
+  printf("R105 stamp2 EM27 grab cue %02X slot %u PCM %zu\n",info.program,
+      info.sample_slot,submitted[before].frames);
+  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
+ }
+ em27_cue.bank=0;
+ em27_cue.program=0x8d;
+ C(!gh_actor_attached_sound_bind(&source,&binding)&&
+   !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
+ expected=random;
+ uint32_t em27_turn=0;
+ const unsigned em27_turn_before=submissions;
+ C(!gh_actor_attached_sound_motion(&source,&em27_cue,&em27_turn,&frontier)&&em27_turn&&!frontier&&
+   !memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_update(voices));
+ gh_se_voice_info em27_turn_voice;
+ C(!gh_se_voice_query(voices,em27_turn,&em27_turn_voice)&&em27_turn_voice.bank==0&&
+   em27_turn_voice.program==0x8d&&em27_turn_voice.sample_slot==92&&em27_turn_voice.native_voice&&
+   em27_turn_voice.rate==16000&&em27_turn_voice.adsr2==0x5fc0&&
+   submissions==em27_turn_before+1&&submitted[em27_turn_before].frames);
+ C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
+ C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy)&&
+   !gh_game_room_pools_release(&r105_pools)&&!gh_scene_actors_reset_0012e800(&r105_tables));
+ free(r105_data);
+ work.room=0x100;
+
  size_t player_bytes;
  uint8_t *player_data=read_file(disc,"pl/pl00.dat",&player_bytes);
  gh_bundle player_bundle;
@@ -424,6 +571,6 @@ int main(int argc,char **argv)
  gh_disc_close(disc);
  free(resource_bytes);
  free(room);
- puts("PASS actual R100 EM00/EM02/EM03 selector6B and selector15 attached cues, MT, and PCM commands");
+ puts("PASS actual R100 EM00/EM02/EM03 and R105 EM27 selector6B, selector15 attached cues, MT, and PCM commands");
  return 0;
 }

@@ -21,6 +21,9 @@ gh_player_target_status gh_player_small_object_gate_00129cc8(const gh_player_tar
 /* Original2DA038 uses SDK3A1648 atan polynomial (ELF45EA08 tables), NOT
  *1F8180's VU approximation or hostlibc atan. Finite native nearest reference. */
 gh_player_target_status gh_player_target_angle_002da038(const void *elf,size_t,const float from[3],const float to[3],float heading,float limit,float *out,uint32_t *frontier);
+/* 2DA2D0 uses a strict arc and the original negative-X bearing at coincident XZ. */
+gh_player_target_status gh_player_target_inside_arc_002da2d0(const void *elf,size_t,const float from[3],
+ const float to[3],float heading,float limit,int *inside,uint32_t *frontier);
 /* 291010 mode0, options0, exclude=NULL. Uses the canonical enemy list,
  * then the same room object registry, with original segmented visibility. */
 gh_player_target_status gh_player_enemy_target_00291010(const gh_player_target_bindings *,

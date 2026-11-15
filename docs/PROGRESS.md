@@ -4,6 +4,26 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## First encounter grab and R105 enemy movement
+
+The hidden, muted New Game replay presents 2,606 scene frames through Gene's
+original grab and left-stick escape prompt. It also runs the original OM305
+destructor. The next operation requests an attached CORE sound at
+`0x002CBF78`. The first fight and its normal exit remain in development.
+
+The controlled Windows route follows all 28 EV02 cuts into R105 and presents
+183 R105 scene frames. The next operation creates an attached effect at
+`0x00306528`. Both Windows runs report zero renderer, GPU, postprocess and
+window errors. The combined source compiles 381 C modules and passes 371
+native checks. Eighteen checks requiring additional tools or devices were skipped.
+
+隐藏、静音的新游戏回放呈现 2,606 个场景帧，包括 Gene 的原版抓技和左摇杆挣脱提示，
+并完成 OM305 的原版销毁流程。下一处调用是附着音效 `0x002CBF78`。完整首战及其正常出口仍在开发。
+
+Windows 受控路线播完 EV02 的 28 个镜头后进入 R105，呈现 183 个 R105 场景帧。
+下一处调用是附着特效 `0x00306528`。两次实跑的渲染、GPU、后处理和窗口错误均为 0。
+合并源码编译 381 个 C 模块，通过 371 项原生检查，本次跳过 18 项需额外工具或设备的检查。
+
 ## All 28 R003 EV02 cuts presented on Windows
 
 A hidden, muted Windows run uses the original A38 destination at title

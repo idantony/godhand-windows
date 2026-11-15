@@ -55,6 +55,7 @@ gh_effect_status gh_effect_create_om324_break_begin_001bfd28(gh_effect_create_ca
 gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_call *,
  const uint32_t world_xyz[3]);
 /* Original 109928 part4 impact, bank0/index3, unit scale and zero Euler. */
+gh_effect_status gh_effect_create_om305_break_begin_001c2ce0(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_player_impact_begin_00306838(gh_effect_create_call *,
  const uint32_t world_xyz[3]);
 /* 2FA158's explicit configuration and camera cut -> bank 6 index. The

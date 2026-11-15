@@ -1299,7 +1299,7 @@ gh_actor_motion_status gh_enemy_ems_move_2ad_0028e420(gh_enemy_ems *owner,uint32
         .solve={.model=&scenery->init.model.model,.work=actor->entry.work,.actors=actor->actors,.ray=actor->ray,
             .context=actor->ray_context,.ik_globals=actor->ik,.atan_coeff=actor->atan_coeff},
         .release_effect=actor->effect,.effect_context=actor->effect_context,.rate=actor->canonical_rate,
-        .voices=voices,.play_sound=sound,.sound_context=sound_context
+        .voices=voices,.play_sound=sound,.sound_context=sound_context,.buttons=owner->bindings->action_buttons
     };
     return gh_enemy2ad_move_0028e420(&scenery->move,&scenery->tail,slot->actor,&bindings,frontier);
 }

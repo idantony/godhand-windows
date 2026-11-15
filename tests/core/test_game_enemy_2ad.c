@@ -1,4 +1,8 @@
 #include "menu_state.h"
+#include "game_scene_message_create.h"
+#include "game_message_step.h"
+#include "game_scene_message_draw.h"
+#include <math.h>
 #include "game_actor_motion_ik.h"
 #include "game_camera_envelope.h"
 #include "game_enemy_2ad.h"
@@ -34,6 +38,34 @@ static uint64_t pcm_hash(const int16_t *samples,size_t frames){
   hash=(hash^(value>>8))*UINT64_C(1099511628211);
  }
  return hash;
+}
+typedef struct { unsigned abort_calls,task_calls; } scenery_action_probe;
+static gh_soft_event_status scenery_abort_probe(void *context,uint32_t *frontier){
+ scenery_action_probe *probe=context;
+ probe->abort_calls++;
+ *frontier=0;
+ return GH_SOFT_EVENT_OK;
+}
+static void scenery_task_probe(void *context,int32_t argument){
+ scenery_action_probe *probe=context;
+ if(!argument)probe->task_calls++;
+}
+typedef struct {
+ unsigned calls;
+ size_t count;
+ gh_id_text_glyph normal[32],shadow[32];
+} scenery_glyph_capture;
+static gh_scene_ui_status capture_scenery_glyphs(void *context,const gh_scene_message_glyph_pair *draw,
+ uint32_t *frontier){
+ scenery_glyph_capture *capture=context;
+ if(!draw->count||draw->count>32||draw->bank!=6||draw->depth!=2||draw->font_mode!=0x21)
+   return GH_SCENE_UI_ARGUMENT;
+ capture->calls++;
+ capture->count=draw->count;
+ memcpy(capture->normal,draw->normal_run,draw->count*sizeof(*capture->normal));
+ memcpy(capture->shadow,draw->shadow_run,draw->count*sizeof(*capture->shadow));
+ *frontier=0;
+ return GH_SCENE_UI_OK;
 }
 int main(int argc,char **argv){
  C(argc==2);gh_disc *disc=NULL;C(!gh_disc_open(argv[1],&disc));
@@ -210,10 +242,12 @@ int main(int argc,char **argv){
  memset(esp,0,0x100180);
  memset(emit,0,0x26060);
  C(!gh_game_effects_initialize_00305a68(effects,esp,0x100180,emit,0x26060,core,core_size,&bundle));
+ gh_game_action_buttons buttons={0};
+ gh_game_action_buttons_reset_001f72c0(&buttons);
  gh_enemy_ems_bindings ems_bindings={
     .actor={.entry=bindings,.cockpit=cockpit,.ik=&ik,.actors=&tables,.atan_coeff=camera.atan_coeff,
         .canonical_rate=&rate,.numeric_policy=GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE},
-    .effects_2ad=tail_bindings.effect
+    .effects_2ad=tail_bindings.effect,.action_buttons=&buttons
  };
  gh_em_resource_prefix prefix={.stage=5,.prefix_complete=1,.spawn_cursor=8,.page=room.active};
  gh_enemy_ems *owner=NULL;
@@ -266,13 +300,23 @@ int main(int argc,char **argv){
  C(!gh_enemy_ems_move_2ad_0028e420(owner,handle,&opacity,elf,elf_size,NULL,NULL,NULL,&pc)&&!pc&&!live_bytes[0x2f6]);
  memset((uint8_t *)&work+0x5d8,0,4);
  memcpy((uint8_t *)&work+0x55c,&(float){1.0f},4);
- float distant[3]={100,100,100};
- memcpy(actor.view.alias_f0,distant,sizeof(distant));
+ /* Both endpoints are outside actual R105 geometry, at distance1 and
+  * facing +Z, so the original positive sight path publishes a prompt. */
+ const float player_position[4]={1000,1000,1000,1},scenery_position[4]={1000,1000,1001,1};
+ memcpy(actor.view.alias_f0,player_position,16);
+ memcpy(actor.view.bytes+0x104,&(float){0},4);
+ memcpy(actor_live.actor->view.alias_f0,scenery_position,16);
  gh_actor_motion_status moved=gh_enemy_ems_move_2ad_0028e420(owner,handle,&opacity,elf,elf_size,NULL,NULL,NULL,&pc);
  printf("R105 02AD Move status%d pc%08x phase%u\n",moved,pc,live_bytes[0x2f6]);
  C(moved==GH_ACTOR_MOTION_UNSUPPORTED&&pc==0x2cba48&&live_bytes[0x2f6]==1);
+ gh_action_link link=buttons.heads[4];
+ const gh_action_prompt *prompt;
+ C(!gh_action_button_prompt(&buttons,link,&prompt)&&prompt->life==14&&prompt->priority==4&&
+   prompt->unknown20==0&&prompt->kind==0&&prompt->callback_id10==0x28e7c8&&
+   prompt->callback_argument==actor_live.actor);
+ C(gh_action_button_reset_entry_001f7228(&buttons,link.index,&pc)==GH_ACTION_SET_OK);
  C(gh_enemy_ems_move_2ad_0028e420(owner,handle,&opacity,elf,elf_size,NULL,NULL,NULL,&pc)==GH_ACTOR_MOTION_UNSUPPORTED&&
-    pc==0x2cba48&&live_bytes[0x2f6]==1);
+    pc==0x2cba48&&live_bytes[0x2f6]==1&&buttons.entries[link.index].callback_argument==NULL);
  size_t ses_size;
  uint8_t *ses=load(disc,"se/emad.ses",&ses_size);
  C(ses&&ses_size==14496);
@@ -305,9 +349,132 @@ int main(int argc,char **argv){
  gh_se_voice_info pending_voice;
  C(!gh_se_voice_query(se,voice,&pending_voice)&&pending_voice.pending&&!pending_voice.native_voice);
  gh_se_voice_destroy(se);
+ C(!gh_se_voice_create(audio,(gh_audio_output *)&mix,&mix,&se));
+ C(!gh_se_voice_request_attached(se,owner,&prefix,actor_live.model,-1,11,0,
+    0,0,emad_probe,NULL,NULL,NULL,&voice)&&voice);
+ C(!gh_se_voice_query(se,voice,&pending_voice)&&pending_voice.pending&&
+    pending_voice.bank==11&&pending_voice.program==0&&pending_voice.position_mode==2&&
+    pending_voice.frames==decoded.frames);
+ gh_se_voice_destroy(se);
  gh_audio_pcm_release(&decoded);
  gh_audio_registry_destroy(audio);
  free(ses);
+ uint8_t scenario_bytes[0x114]={0};
+ memset(scenario_bytes+0x5c,0x7b,8);
+ gh_task_record32 records[16]={0};
+ gh_task_manager manager={.records=records,.capacity=16,.count=16,.current_index=-1};
+ gh_task_threads *threads;
+ C(!gh_task_threads_create(&manager,&threads));
+ scenery_action_probe action_probe={0};
+ gh_soft_event_bindings soft={.scenario={scenario_bytes,sizeof(scenario_bytes),&manager},
+    .work=&work,.player_abort_00126770=scenery_abort_probe,.context=&action_probe};
+ gh_enemy2ad_action action={0};
+ const uint32_t initial_flags=0x00010000;
+ memcpy((uint8_t *)&work+0x5e4,&initial_flags,4);
+ C(!gh_enemy2ad_action_0028e7c8(&action,actor_live.actor,&soft,threads,
+    scenery_task_probe,&action_probe,&pc)&&!pc&&action.slot==1);
+ C(action_probe.abort_calls==1&&!action_probe.task_calls&&scenario_bytes[0xe8]==1&&
+   word(scenario_bytes+0xe0)==2&&(manager.flags&1)&&
+   word((uint8_t *)&work+0x5d8)==0xfed40000u&&word((uint8_t *)&work+0x5e4)==0x40000040u);
+ C(records[1].running==2&&records[1].attributes==1&&((uint8_t *)&records[1])[0x1e]==1&&
+    !word(scenario_bytes+0x5c)&&!word(scenario_bytes+0x60));
+ C(!gh_enemy2ad_action_0028e7c8(&action,actor_live.actor,&soft,threads,
+    scenery_task_probe,&action_probe,&pc)&&action_probe.abort_calls==1&&scenario_bytes[0xe8]==1);
+ const gh_task_run_result selection=gh_tasks_run_matching_002d52a0(&manager);
+ C(selection.status==GH_TASK_OK&&action_probe.task_calls==1&&!records[1].running);
+ C(!gh_task_threads_destroy(threads));
+ work.language=1;
+ gh_menu_state menu={0};
+ gh_game_scene_ui ui={0};
+ C(!gh_menu_load_tables_002ae990(&menu,&language));
+ C(!gh_scene_message_initialize_002aea18(&ui,&menu,&bundle,work.language));
+ scenario_bytes[0x112]=scenario_bytes[0x113]=0xff;
+ gh_scene_scenario_view scenario_view={scenario_bytes,sizeof(scenario_bytes),&manager};
+ int visible=0;
+ C(!gh_scenario_message_open_002c42e0(scenario_view,&ui,&work,0x3004,&pc)&&!pc);
+ C(!gh_scenario_message_active_002c4350(scenario_view,&ui,&visible,&pc)&&visible);
+ C(scenario_bytes[0x112]==4&&scenario_bytes[0x113]==0x30&&ui.active_head==0);
+ const uint8_t *text=ui.sources[0].primary.bytes;
+ C(text&&text>=menu.texture_data.bytes&&ui.sources[0].primary.size>=32);
+ printf("MSD 3004 offset %td leading codes:",text-menu.texture_data.bytes);
+ for(unsigned k=0;k<16;k++)printf(" %04x",text[k*2]|(unsigned)text[k*2+1]<<8);
+ puts("");
+ gh_scene_ui_status step=gh_scene_message_update_002aefa8(&ui,&work,&pc);
+ printf("MSD 3004 first update status%d pc%08x\n",step,pc);
+ C(!step&&!pc&&ui.sources[0].cursor_7c==4&&ui.sources[0].cursor_8c==4);
+ uint8_t *window=ui.blocks[0].payload;
+ C(window[0xa4-0xc]==4&&window[0x70-0xc]==2&&!word(window+0x94-0xc));
+ C(!gh_scene_message_prepare_draw_002af028(&ui,&work,&pc)&&!pc&&
+   word(window+0xae - 0xc)==0x01700100&&word(window+0xaa-0xc)==0x007801e0);
+ C(!gh_scene_message_update_002aefa8(&ui,&work,&pc)&&!pc);
+ gh_font_state font={0};
+ gh_display_state display={0};
+ gh_id_view palette;
+ C(!gh_font_initialize(&font,&language,work.language)&&
+   !gh_scene_font_bind_002a4c38(&font,&bundle,work.language));
+ C(!gh_display_state_from_elf(&display,elf,elf_size)&&
+   !gh_display_static_initialize_002a48a8(&display,1,0xffff)&&
+   !gh_id_text_palette_from_elf(elf,elf_size,&palette));
+ scenery_glyph_capture capture={0};
+ C(!gh_scene_message_render_002af028(&ui,&work,&font,&display,palette,
+    capture_scenery_glyphs,&capture,&pc)&&capture.calls==1&&capture.count==1);
+ menu.timer=30;
+ for(unsigned i=0;i<19;i++)C(!gh_scene_message_update_002aefa8(&ui,&work,&pc));
+ C(ui.sources[0].cursor_8c==44);
+ C(!gh_scene_message_render_002af028(&ui,&work,&font,&display,palette,
+    capture_scenery_glyphs,&capture,&pc)&&capture.calls==2&&capture.count==20);
+ double line_width=19*1.8,limits[20];
+ for(unsigned i=0;i<20;i++){
+   const uint16_t code=(uint16_t)(text[4+i*2]|(uint16_t)text[5+i*2]<<8);
+   gh_font_glyph glyph;
+   C(!gh_font_glyph_at(&font,code,&glyph));
+   limits[i]=glyph.width*.81;
+   line_width+=limits[i];
+   C(capture.normal[i].code==code&&capture.shadow[i].code==code&&
+     capture.normal[i].quad.z==65535&&capture.shadow[i].quad.z==65535&&
+     fabs((double)(capture.shadow[i].x-capture.normal[i].x)-2)<.001&&
+     fabs((double)(capture.shadow[i].y-capture.normal[i].y)-2)<.001);
+ }
+ double x=256-line_width*.5;
+ const double y=368-((font.slots[0].cell_height+12)*1.1)*.5+12*1.1;
+ for(unsigned i=0;i<20;i++){
+   C(fabs(capture.normal[i].x-x)<.002&&fabs(capture.normal[i].y-y)<.002);
+   x+=limits[i]+1.8;
+ }
+ printf("MSD 3004 first page: %zu glyphs, start %.4f %.4f\n",
+   capture.count,(double)capture.normal[0].x,(double)capture.normal[0].y);
+ step=gh_scene_message_update_002aefa8(&ui,&work,&pc);
+ printf("page transition status %d pc %x pos %zu/%zu budget %u/%u/%u counter %u choice %x voice %u/%u\n",step,pc,ui.sources[0].cursor_7c,ui.sources[0].cursor_8c,word(window+0x84-0xc),word(window+0x68-0xc),word(window+0x90-0xc),window[0x30-0xc],word(window+0x94-0xc),word(window+0xb4-0xc),word(window+0x40-0xc));
+ C(!step&&!pc&&
+   ui.sources[0].cursor_7c==46&&ui.sources[0].cursor_8c==56&&
+   word(window+0x84-0xc)==600&&word(window+0x68-0xc)==600&&
+   word(window+0x90-0xc)==630&&window[0x30-0xc]==1&&word(window+0x94-0xc)==0x10000);
+ C(!gh_scene_message_render_002af028(&ui,&work,&font,&display,palette,
+    capture_scenery_glyphs,&capture,&pc)&&capture.calls==3&&capture.count==1&&
+    capture.normal[0].code==0x4e);
+ for(unsigned i=0;i<26;i++)C(!gh_scene_message_update_002aefa8(&ui,&work,&pc)&&!pc);
+ C(window[0]==2&&word(window+0x94-0xc)==0x20000&&word(window+0x90-0xc)==1410);
+ C(!gh_scene_message_update_002aefa8(&ui,&work,&pc)&&!pc&&window[0]==4);
+ C(!gh_scene_message_render_002af028(&ui,&work,&font,&display,palette,
+    capture_scenery_glyphs,&capture,&pc)&&capture.calls==4&&capture.count==27&&
+    capture.normal[11].code==0x10&&capture.normal[12].code==0x4b);
+ gh_font_glyph before_option;
+ C(!gh_font_glyph_at(&font,0x10,&before_option)&&
+   fabs((double)capture.normal[12].x-capture.normal[11].x-
+       (before_option.width*.81+1.8+40*.81+1.8))<.002);
+ C(!gh_scene_message_update_002aefa8(&ui,&work,&pc)&&!pc&&
+   window[0]==4&&(word(window+0x14-0xc)&0x20));
+ C(gh_scene_message_render_002af028(&ui,&work,&font,&display,palette,
+    capture_scenery_glyphs,&capture,&pc)==GH_SCENE_UI_UNSUPPORTED&&pc==0x2b00a0&&capture.calls==4);
+ memcpy((uint8_t *)&work+0x1a0,&(uint64_t){UINT64_C(0x4000000)},8);
+ C(gh_scene_message_update_002aefa8(&ui,&work,&pc)==GH_SCENE_UI_UNSUPPORTED&&pc==0x2b46f0);
+ memcpy((uint8_t *)&work+0x1a0,&(uint64_t){UINT64_C(0x10000000)},8);
+ C(gh_scene_message_update_002aefa8(&ui,&work,&pc)==GH_SCENE_UI_UNSUPPORTED&&pc==0x2b3fc8);
+ memset((uint8_t *)&work+0x1a0,0,8);
+ printf("MSD 3004 page two: %zu glyphs, A804 rows 0/1, choice state %u\n",capture.count,window[0]);
+ C(!gh_scenario_message_close_002c4390(scenario_view,&ui,&pc)&&ui.active_head==-1);
+ C(!gh_scenario_message_active_002c4350(scenario_view,&ui,&visible,&pc)&&!visible&&
+    scenario_bytes[0x112]==0xff&&scenario_bytes[0x113]==0xff);
  C(gh_enemy_ems_2ad_dtor_motion_0028e068(owner,handle,&pc)==GH_ACTOR_MOTION_UNSUPPORTED&&pc==0x305778);
  C(gh_enemy_ems_2ad_dtor_motion_0028e068(owner,handle,&pc)==GH_ACTOR_MOTION_UNSUPPORTED&&pc==0x305778);
  C(gh_enemy_ems_release_native(&owner,&pc)==GH_ACTOR_MOTION_UNSUPPORTED&&pc==0x28e068&&owner);

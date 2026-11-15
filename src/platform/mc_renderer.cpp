@@ -28,7 +28,8 @@ struct QueuedMessage {
 struct QueuedCommand {
     CommandKind kind=CommandKind::ID;
     QueuedID id={};gh_cockpit_fan fan={};gh_fade_draw fade={};gh_ui_fade_context fade_context={};gh_id_texture_quad number={};gh_child_cover_quad cover={};
-    QueuedMessage message;
+    std::vector<QueuedMessage> messages;
+    size_t message_glyph_count=0;
     gh_id_texture_quad radar={};
     std::vector<gh_id_text_glyph> title_glyphs;
 };
@@ -39,8 +40,7 @@ struct gh_mc_renderer {
     gh_ui_fade_renderer *fade=nullptr;
     const unsigned char *font_mst=nullptr,*font_msa=nullptr;
     const unsigned char *message_mst=nullptr,*message_msa=nullptr;
-    unsigned message_parity=0;
-    std::shared_ptr<const std::vector<uint8_t>> message_atlas;
+    std::shared_ptr<const std::vector<uint8_t>> message_atlas[2];
     std::vector<unsigned char> palette,frame,next;
     std::vector<gh_id_text_glyph> glyphs;
     std::vector<CachedTexture> textures;
@@ -166,7 +166,7 @@ extern "C" void gh_mc_renderer_reset_resources(gh_mc_renderer *r)
     gh_ui_fade_destroy(r->fade);r->fade=nullptr;
     r->font_mst=r->font_msa=nullptr;r->textures.clear();r->polygon_textures.clear();r->fan_textures.clear();r->number_textures.clear();
     r->message_mst=r->message_msa=nullptr;
-    r->message_atlas.reset();
+    for(auto &atlas:r->message_atlas)atlas.reset();
 }
 extern "C" gh_id_error gh_mc_renderer_enable_reference_polygons(gh_mc_renderer *r,int enabled)
 {if(!r||(enabled!=0&&enabled!=1))return GH_ID_ARGUMENT;if(r->begun)return GH_ID_BUSY;r->reference_polygons=enabled!=0;return GH_ID_OK;}
@@ -444,31 +444,44 @@ extern "C" gh_id_error gh_mc_renderer_queue_message(gh_mc_renderer *r,
     if(!r||!r->begun||!pair||!pair->font||!tags)return GH_ID_ARGUMENT;
     if(r->flushing||r->queue_failed||r->status.jobs)return GH_ID_BUSY;
     const auto &font=*pair->font;
-    const auto parity=pair->normal.quad.palette_parity;
-    if(pair->bank!=6||pair->depth!=2||pair->font_mode!=0x21||
-        pair->normal.code!=pair->shadow.code||pair->shadow.quad.palette_parity!=parity||
-        !font.bound||!font.mst||!font.msa||parity>1)return GH_ID_UNSUPPORTED;
+    if(pair->bank!=6||pair->depth!=2||pair->font_mode!=0x21||!font.bound||!font.mst||!font.msa)
+        return GH_ID_UNSUPPORTED;
     if(r->queued.size()>8190)return GH_ID_CAPACITY;
+    const size_t count=pair->count?pair->count:1;
+    const gh_id_text_glyph *runs[]={pair->count?pair->normal_run:&pair->normal,
+                                   pair->count?pair->shadow_run:&pair->shadow};
+    if(count>512||!runs[0]||!runs[1])return GH_ID_ARGUMENT;
     try{
-        if(r->message_mst!=font.mst||r->message_msa!=font.msa||r->message_parity!=parity){
-            gh_font_transfer clut={};
-            if(gh_font_transfer_at(&font,1,0,&clut)!=GH_FONT_OK)return GH_ID_UNSUPPORTED;
-            for(size_t i=3;i<clut.pixel_bytes;i+=4)if(clut.pixels[i]>128)return GH_ID_UNSUPPORTED;
-            auto atlas=std::make_shared<std::vector<uint8_t>>(512*256*4);
-            if(gh_font_atlas_bank_rgba(&font,parity,atlas->data(),atlas->size()))return GH_ID_UNSUPPORTED;
-            r->message_atlas=std::move(atlas);
+        if(r->message_mst!=font.mst||r->message_msa!=font.msa){
+            for(auto &atlas:r->message_atlas)atlas.reset();
             r->message_mst=font.mst;
             r->message_msa=font.msa;
-            r->message_parity=parity;
         }
-        const gh_id_text_glyph *glyphs[]={&pair->normal,&pair->shadow};
         QueuedCommand commands[2];
-        for(unsigned i=0;i<2;++i){
-            int discarded=0;
-            if(gh_scene_message_glyph_discarded(glyphs[i],r->message_atlas->data(),r->message_atlas->size(),&discarded))
-                return GH_ID_UNSUPPORTED;
-            commands[i].kind=CommandKind::MESSAGE;
-            if(!discarded)commands[i].message={*glyphs[i],r->message_atlas};
+        for(auto &command:commands){
+            command.kind=CommandKind::MESSAGE;
+            command.message_glyph_count=count;
+            command.messages.reserve(count);
+        }
+        for(size_t j=0;j<count;j++){
+            const auto parity=runs[0][j].quad.palette_parity;
+            if(parity>1||runs[0][j].code!=runs[1][j].code||
+               runs[1][j].quad.palette_parity!=parity)return GH_ID_UNSUPPORTED;
+            auto &current_atlas=r->message_atlas[parity];
+            if(!current_atlas){
+                gh_font_transfer clut={};
+                if(gh_font_transfer_at(&font,1,0,&clut)!=GH_FONT_OK)return GH_ID_UNSUPPORTED;
+                for(size_t i=3;i<clut.pixel_bytes;i+=4)if(clut.pixels[i]>128)return GH_ID_UNSUPPORTED;
+                auto atlas=std::make_shared<std::vector<uint8_t>>(512*256*4);
+                if(gh_font_atlas_bank_rgba(&font,parity,atlas->data(),atlas->size()))return GH_ID_UNSUPPORTED;
+                current_atlas=std::move(atlas);
+            }
+            for(unsigned i=0;i<2;i++){
+                int discarded=0;
+                if(gh_scene_message_glyph_discarded(&runs[i][j],current_atlas->data(),current_atlas->size(),&discarded))
+                    return GH_ID_UNSUPPORTED;
+                if(!discarded)commands[i].messages.push_back({runs[i][j],current_atlas});
+            }
         }
         const size_t first=r->queued.size();
         r->queued.reserve(first+2);
@@ -527,7 +540,7 @@ extern "C" gh_id_error gh_mc_renderer_queued_message_depth(gh_mc_renderer *r,
     for(size_t i=0;i<count;++i){
         if(order[i]>=count)return GH_ID_ARGUMENT;
         const auto &command=r->queued[order[i]];
-        if(command.kind==CommandKind::MESSAGE&&command.message.atlas){
+        if(command.kind==CommandKind::MESSAGE&&!command.messages.empty()){
             if(!tracked)return message_depth_unavailable(r);
             needed=1;
         }
@@ -596,14 +609,15 @@ static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t cou
             else if(command.kind==CommandKind::MESSAGE){
                 r->status.consumer=0x2a5930;r->status.frontier=0;r->status.opcode=0;
                 r->status.gpu_error=0;error=GH_ID_OK;
-                const auto &message=command.message;
-                if(message.atlas&&gh_scene_message_glyph_blit(&message.glyph,
-                    message.atlas->data(),message.atlas->size(),r->frame.data(),r->frame.size(),
-                    depth_known?depth_samples.data():nullptr,depth_known?depth_samples.size():0)){
+                for(const auto &message:command.messages){
+                    if(!gh_scene_message_glyph_blit(&message.glyph,message.atlas->data(),
+                        message.atlas->size(),r->frame.data(),r->frame.size(),
+                        depth_known?depth_samples.data():nullptr,depth_known?depth_samples.size():0))continue;
                     r->status.frontier=0x2a53a8;
                     error=GH_ID_UNSUPPORTED;
+                    break;
                 }
-                if(error==GH_ID_OK){++r->status.glyphs;++r->status.jobs;}
+                if(error==GH_ID_OK){r->status.glyphs+=command.message_glyph_count;++r->status.jobs;}
                 r->status.id_error=error;
             }
             else if(command.kind==CommandKind::RADAR){

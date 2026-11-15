@@ -1,3 +1,6 @@
+#include "game_camera_envelope.h"
+#include "game_effect_create.h"
+#include "se_voice.h"
 #include "game_om309.h"
 #include "game_om_frame.h"
 #include "game_hitarea_internal.h"
@@ -39,13 +42,169 @@ static void fragment_frames(gh_om_factory*f,gh_boot_work*work,gh_game_init_state
  }C(seen305&&seen320);
  init->active_camera=NULL;
 }
+typedef struct {
+ gh_effect_create_call effect;
+ gh_effect_create_bindings binding;
+ const gh_actor_model *model;
+ uint64_t key;
+ unsigned effect_calls,sound_calls,collision_calls,removed;
+} fragment_probe;
+static gh_object_step_status fragment_effect(void *context,const gh_actor_model *model,
+ const uint32_t xyz[3],uint32_t yaw,uint32_t *frontier)
+{
+ fragment_probe *p=context;
+ C(model==p->model&&!yaw);
+ p->effect_calls++;
+ gh_effect_status e=gh_effect_create_om305_break_begin_001c2ce0(&p->effect,xyz);
+ if(!e)e=gh_game_effect_create_00306528(&p->effect,&p->binding);
+ *frontier=p->effect.frontier;
+ return e?GH_OBJSTEP_CALLEE:GH_OBJSTEP_OK;
+}
+static gh_actor_motion_status fragment_sound(void *context,const gh_motion_sound_request *r,
+ uint32_t *handle,uint32_t *frontier)
+{
+ fragment_probe *p=context;
+ C(r->model==p->model&&r->actor->bytes==p->model->root.bytes&&r->bank==2&&r->program==0);
+ *handle=0;*frontier=0;
+ if(!p->sound_calls++){*frontier=0x2cba48;return GH_ACTOR_MOTION_UNSUPPORTED;}
+ return GH_ACTOR_MOTION_OK;
+}
+static gh_object_step_status fragment_collision(void *context,uint64_t key,uint32_t *frontier)
+{
+ fragment_probe *p=context;
+ C(key==p->key);p->collision_calls++;*frontier=0;return GH_OBJSTEP_OK;
+}
+static gh_object_step_status fragment_remove(void *context,gh_actor_model *model,uint32_t *frontier)
+{
+ fragment_probe *p=context;
+ C(model==p->model);p->removed++;*frontier=0;return GH_OBJSTEP_OK;
+}
+static gh_voice_status fragment_audio_environment(void *context,const float position[4],int seh,
+ gh_se_attached_environment *out,uint32_t *frontier)
+{
+ (void)context;(void)position;(void)seh;
+ *out=(gh_se_attached_environment){.output_mode=1};
+ *frontier=0;
+ return GH_VOICE_OK;
+}
+
+static void fragment_audio(gh_disc *disc,gh_actor_model *model)
+{
+ size_t bytes;
+ uint8_t *data=load(disc,"se/r100.ses",&bytes);
+ gh_audio_registry *registry;
+ gh_audio_token token;
+ C(!gh_audio_registry_create(&registry)&&!gh_audio_commit_se(registry,2,data,bytes,&token)&&
+    gh_audio_token_complete(registry,token));
+ const uint8_t *pcm_start;
+ gh_sound_span descriptor,tail;
+ C(!gh_audio_sample_at(registry,2,0,&descriptor,&tail));
+ pcm_start=tail.data;
+ gh_adpcm_pcm pcm={0};
+ C(w(descriptor.data)==0xf630&&w(descriptor.data+4)==16000&&
+    !gh_audio_decode_ps_adpcm(pcm_start,tail.size,&pcm)&&pcm.frames==23968);
+ gh_audio_pcm_release(&pcm);
+ gh_se_mix mix;
+ gh_se_voice_engine *voices;
+ max_align_t unused_output;
+ C(!gh_se_mix_boot_defaults_002c9e78(&mix,0,GH_SE_DSP_NATIVE_LINEAR_REFERENCE)&&
+    !gh_se_voice_create(registry,(gh_audio_output *)&unused_output,&mix,&voices));
+ uint32_t first=0,duplicate=0;
+ const gh_voice_status status=gh_se_voice_request_attached(voices,model,&first,model,-1,2,0,0,0,
+    fragment_audio_environment,NULL,NULL,NULL,&first);
+ if(status){
+  uint8_t p[48];gh_audio_get_program(registry,2,0,0,p);
+  fprintf(stderr,"OM305 cue status%d PC%08x root%08x kind%04x work%04x bytes%zu sound%d\n",status,gh_se_voice_frontier(voices),
+   model->root.original_vtable214,h(model->root.bytes+0x2fe),model->work?model->work->room:0,model->root.size,(int16_t)h(model->root.bytes+0x5f6));
+  for(unsigned i=0;i<12;i++)fprintf(stderr,"%08x ",w(p+4*i));fputc('\n',stderr);
+ }
+ C(!status&&first&&model->sound_borrowers==1);
+ C(!gh_se_voice_request_attached(voices,model,&duplicate,model,-1,2,0,0,0,
+    fragment_audio_environment,NULL,NULL,NULL,&duplicate)&&!duplicate);
+ gh_se_voice_info info;
+ C(!gh_se_voice_query(voices,first,&info)&&info.pending&&info.bank==2&&info.program==0&&
+    info.sample_slot==0&&info.rate==16000&&info.position_mode==2&&info.adsr2==0x5fc0);
+ C(!gh_se_voice_abort_attached_owner(voices,model)&&!model->sound_borrowers);
+ gh_se_voice_destroy(voices);
+ gh_audio_registry_destroy(registry);
+ free(data);
+}
+
+static void fragment_positive(gh_disc *disc,const gh_bundle *room,const void *elf,size_t elf_size,
+ gh_om_factory *factory,gh_boot_work *work,gh_game_init_state *init,
+ const gh_title_player_view *player,gh_game_collision_solids *solids)
+{
+ gh_om_object*o=NULL;
+ for(unsigned i=0;i<factory->count;i++)if(factory->objects[i].source.type==0x305){o=factory->objects+i;break;}
+ C(o);
+ gh_om303_state *object=(gh_om303_state*)o->initialization;
+ gh_actor_model *model=&object->common.model;
+ uint8_t *raw=o->view.bytes;
+ C(h(raw+0x5f6)==0&&w(raw+0x5ec)==0xc9&&raw[0x60c]==6&&model->part_count>=6);
+ const uint16_t fixture_room=work->room;
+ work->room=0x100;
+ fragment_audio(disc,model);
+ size_t core_size;
+ uint8_t *core=load(disc,"etc/core.dat",&core_size);
+ uint8_t *esp=calloc(1,0x100180),*emitters=calloc(1,0x26060);
+ gh_game_effects *effects=calloc(1,sizeof(*effects));
+ C(esp&&emitters&&effects&&!gh_game_effects_initialize_00305a68(
+    effects,esp,0x100180,emitters,0x26060,core,core_size,room));
+ gh_effect_view est;
+ C(!gh_effect_est_at_00306030(effects,0,0xc9,&est)&&est.bytes==core+0x1af880&&w(est.bytes+4)==4);
+ uint32_t pc=0;
+ gh_camera_envelope envelope={0};
+ C(!gh_game_camera_envelope_from_elf(&envelope,elf,elf_size,&pc));
+ const float rate=1;
+ gh_game_pl_camera camera={0};
+ C(!gh_game_camera_construct_pl_00139bc8(&camera,&init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+ init->active_camera=&init->camera;
+ gh_object_opacity_environment env={init,&camera,player,1};
+ const gh_object_move_request request={.handle=o->handle,.original_entry=0x188c88,.actor=o->view};
+ gh_om_frame_state move={0};
+ fragment_probe probe={.model=model,.key=(uint64_t)w(raw+0x544)<<32|w(raw+0x540),
+    .binding={.storage={.effects=effects,.esp=esp,.esp_bytes=0x100180,.emitters=emitters,.emitter_bytes=0x26060},
+      .work=work,.random=&init->random,.atan_coeff=envelope.atan_coeff}};
+ const gh_om_frame_runtime runtime={.init=init,.canonical_rate=&rate,.solids=solids,.context=&probe,
+    .break_effect=fragment_effect,.break_sound=fragment_sound,.break_collision=fragment_collision,
+    .remove_sound=fragment_remove,.fragment_atan_coeff=envelope.atan_coeff};
+ C(!gh_om_frame_bind_environment(&move,&env)&&!gh_om_frame_bind_runtime(&move,&runtime));
+ gh_game_mt saved=init->random,expected;
+ const uint32_t original_rate=w((uint8_t *)work+0x574),original_enemy_rate=w(init->enemies+0x548);
+ put((uint8_t *)work+0x574,0x3f800000);put(init->enemies+0x548,0x3f800000);
+ gh_game_mt_seed_0030f2b0(&init->random,42);
+ expected=init->random;
+ for(unsigned j=0;j<37;j++){uint32_t draw;C(!gh_game_mt_next_0030f348(&expected,&draw));}
+ put(raw+0x2f4,2);
+ gh_object_step_status state=gh_om_frame_move(&move,factory,&request,work,GH_STATIC_BINARY32_REFERENCE,&pc);
+ if(state!=GH_OBJSTEP_UNSUPPORTED||pc!=0x2cba48)fprintf(stderr,"OM305 first status%d PC%08x special%u\n",state,pc,move.special_phase);
+ C(state==GH_OBJSTEP_UNSUPPORTED&&pc==0x2cba48&&move.special_phase==1&&probe.effect_calls==1);
+ C(probe.effect.complete&&probe.effect.row==4&&probe.effect.original_return);
+ state=gh_om_frame_move(&move,factory,&request,work,GH_STATIC_BINARY32_REFERENCE,&pc);
+ if(state)fprintf(stderr,"OM305 resume status%d PC%08x special%u raw604=%08x raw560=%08x\n",state,pc,move.special_phase,w(raw+0x604),w(raw+0x560));
+ C(!state&&move.complete&&probe.effect_calls==1&&probe.sound_calls==2&&probe.collision_calls==1&&
+    raw[0x2f5]==1&&h(raw+0x60e)==29&&!memcmp(&expected,&init->random,sizeof(expected)));
+ for(unsigned i=0;i<6;i++)C(object->segments[i*0x60+0x54]==1&&
+    !memcmp(object->segments+i*0x60,model->parts[i].bytes+0xb0,12));
+ for(unsigned i=0;i<46;i++){
+  C(!gh_om_frame_next_call(&move)&&
+     !gh_om_frame_move(&move,factory,&request,work,GH_STATIC_BINARY32_REFERENCE,&pc)&&move.complete);
+ }
+ C(raw[0x2f4]==3&&probe.removed==1&&(w(raw+0x250)&0x80000000u));
+ init->active_camera=NULL;
+ init->random=saved;
+ work->room=fixture_room;
+ put((uint8_t *)work+0x574,original_rate);put(init->enemies+0x548,original_enemy_rate);
+ gh_effect_create_forget_on_owner_destroy(effects);free(effects);free(esp);free(emitters);free(core);
+ puts("PASS actual R100 OM305 effect 0:C9, ordered cue retry, six fragments and complete fade/removal");
+}
 int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t en=(size_t)gh_disc_boot_elf_size(d);uint8_t*elf=malloc(en);C(elf&&!gh_disc_read_boot_elf(d,0,elf,en));size_t rn,fn,f3n,f4n,f5n,f7n,fan,fen,f10n,f20n,f22n,f23n,f24n,f3fn,f46n,f54n,f5dn,f9n;uint8_t*raw=load(d,"st1/r100.dat",&rn),*file=load(d,"om/om00.dat",&fn);uint8_t*file3=load(d,"om/om03.dat",&f3n);uint8_t*file4=load(d,"om/om04.dat",&f4n);uint8_t*file5=load(d,"om/om05.dat",&f5n);uint8_t*file7=load(d,"om/om07.dat",&f7n);uint8_t*filea=load(d,"om/om0a.dat",&fan);uint8_t*filee=load(d,"om/om0e.dat",&fen);uint8_t*file10=load(d,"om/om10.dat",&f10n);uint8_t*file20=load(d,"om/om20.dat",&f20n);uint8_t*file22=load(d,"om/om22.dat",&f22n);uint8_t*file23=load(d,"om/om23.dat",&f23n);uint8_t*file24=load(d,"om/om24.dat",&f24n);uint8_t*file3f=load(d,"om/om3f.dat",&f3fn);uint8_t*file46=load(d,"om/om46.dat",&f46n);uint8_t*file54=load(d,"om/om54.dat",&f54n);uint8_t*file5d=load(d,"om/om5d.dat",&f5dn);uint8_t*file9=load(d,"om/om09.dat",&f9n);gh_bundle room;gh_bundle_entry oms;C(!gh_bundle_open(raw,rn,&room)&&!gh_bundle_find(&room,"OMS",0,&oms));gh_om_scene_placements placement={0};int original;C(gh_om_scene_bind_001c3cb8(&placement,&oms,&original)==GH_PLACE_UNSUPPORTED);gh_om_placement_record first;C(!gh_om_scene_record_at(&placement,0,&first)&&first.type==0x300&&first.bytes[0x2d]==0);gh_game_prepare prepare={0};uint8_t state=0;C(!gh_game_prepare_002a5d40(&prepare,(gh_core_save_view){0},0x100,&state));gh_room_state room_state;C(!gh_room_state_select_002bebc8(&prepare,0x100,0,&room_state));gh_heap*heap;gh_room_pools pools={0};C(!gh_heap_create(16*1024*1024,&heap)&&!gh_game_room_pools_initialize_002a5d80(&pools,&room,heap));size_t baseline=gh_heap_used(heap);gh_stage_slots gs={0},rs={0};gh_game_objects*global,*local;C(!gh_game_objects_create(&gs,0,&global)&&!gh_game_objects_create(&rs,1,&local)&&!gh_stage_slots_reset(&gs,NULL)&&!gh_stage_slots_reset(&rs,NULL));int added;C(!gh_game_objects_add_pinned_001fece0(global,0x300,file,fn,&added)&&!gh_game_objects_set_file_extent(global,0x300,file,fn));C(!gh_game_objects_add_pinned_001fece0(global,0x303,file3,f3n,&added)&&!gh_game_objects_set_file_extent(global,0x303,file3,f3n));C(!gh_game_objects_add_pinned_001fece0(global,0x304,file4,f4n,&added)&&!gh_game_objects_set_file_extent(global,0x304,file4,f4n));C(!gh_game_objects_add_pinned_001fece0(global,0x305,file5,f5n,&added)&&!gh_game_objects_set_file_extent(global,0x305,file5,f5n));C(!gh_game_objects_add_pinned_001fece0(global,0x307,file7,f7n,&added)&&!gh_game_objects_set_file_extent(global,0x307,file7,f7n));C(!gh_game_objects_add_pinned_001fece0(global,0x30a,filea,fan,&added)&&!gh_game_objects_set_file_extent(global,0x30a,filea,fan));C(!gh_game_objects_add_pinned_001fece0(global,0x30e,filee,fen,&added)&&!gh_game_objects_set_file_extent(global,0x30e,filee,fen));C(!gh_game_objects_add_pinned_001fece0(global,0x310,file10,f10n,&added)&&!gh_game_objects_set_file_extent(global,0x310,file10,f10n));C(!gh_game_objects_add_pinned_001fece0(global,0x320,file20,f20n,&added)&&!gh_game_objects_set_file_extent(global,0x320,file20,f20n));C(!gh_game_objects_add_pinned_001fece0(global,0x322,file22,f22n,&added)&&!gh_game_objects_set_file_extent(global,0x322,file22,f22n));C(!gh_game_objects_add_pinned_001fece0(global,0x323,file23,f23n,&added)&&!gh_game_objects_set_file_extent(global,0x323,file23,f23n));C(!gh_game_objects_add_pinned_001fece0(global,0x324,file24,f24n,&added)&&!gh_game_objects_set_file_extent(global,0x324,file24,f24n));C(!gh_game_objects_add_pinned_001fece0(global,0x33f,file3f,f3fn,&added)&&!gh_game_objects_set_file_extent(global,0x33f,file3f,f3fn));C(!gh_game_objects_add_pinned_001fece0(global,0x346,file46,f46n,&added)&&!gh_game_objects_set_file_extent(global,0x346,file46,f46n));C(!gh_game_objects_add_pinned_001fece0(global,0x354,file54,f54n,&added)&&!gh_game_objects_set_file_extent(global,0x354,file54,f54n));C(!gh_game_objects_add_pinned_001fece0(global,0x35d,file5d,f5dn,&added)&&!gh_game_objects_set_file_extent(global,0x35d,file5d,f5dn));C(!gh_game_objects_add_pinned_001fece0(global,0x309,file9,f9n,&added)&&!gh_game_objects_set_file_extent(global,0x309,file9,f9n));gh_boot_work work={0};uint8_t serial=0;uint32_t fog=0x123456;gh_om_initializer_bindings init={.work=&work,.packet_heap=heap,.fog_rgb=&fog};gh_om_factory_bindings b={.pools=&pools,.work=&work,.room_state=&room_state,.objects=global,.room_objects=local,.factory_serial=&serial,.initializer=&init};const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};gh_game_math_globals math={0};C(!gh_game_math_globals_from_elf(&math,elf,(size_t)en)&&!gh_game_math_static_initialize_003079c8(&math,&work,1,0xffff));gh_collision_pairs pairs={0};C(!gh_collision_pairs_construct_002b8ae0(&pairs,heap)&&!gh_collision_pairs_initialize_002b8b50(&pairs));baseline=gh_heap_used(heap);gh_game_init_state*hitstate=malloc(sizeof(*hitstate));C(hitstate);gh_game_init_state_initialize(hitstate);uint32_t frontier;C(!gh_hitarea_objects_construct_001fde00(hitstate,&frontier)&&!gh_game_object_pool_reset_001fdea8(hitstate));gh_hitarea_shape_bindings shapes={&pairs,&math,GH_STATIC_BINARY32_REFERENCE};uint8_t foreign_raw[GH_TITLE_PLAYER_BYTES]={0};gh_title_player_view foreign_actor;C(!gh_title_player_construct_00107e40(foreign_raw,sizeof(foreign_raw),&foreign_actor));gh_hitarea_object foreign_unit;int nonnull;C(!gh_hitarea_object_create_001fe218(hitstate,&foreign_actor,0,&foreign_unit,&nonnull,&frontier)&&nonnull);uint32_t zero[3]={0};int index;C(!gh_hitarea_add_sphere_001fdaf0(&foreign_unit,&shapes,foreign_raw+0x80,zero,0x3e800000,&index,&frontier)&&index==0);const uint8_t*foreign_node;gh_collision_pair_shape foreign_shape;C(!gh_hitarea_node_at(&foreign_unit,0,&foreign_node,&foreign_shape));gh_game_collision_solids solids={0};gh_game_collision_solids_reset_00134690(&solids);gh_collision_solid_unit*foreign_solid;gh_collision_native_sphere*foreign_solid_sphere;C(!gh_collision_solid_create_unit_001346f8(&solids,heap,&foreign_actor,5,0x3e4ccccd,&foreign_solid,&frontier)&&!gh_collision_solid_create_sphere_00134880(&solids,&foreign_actor,foreign_raw+0x80,zero,0x3f000000,&foreign_solid_sphere,&frontier));baseline=gh_heap_used(heap);gh_game_scene_tables tables={0};C(!gh_scene_actors_0012e670(&tables,&room));gh_scene_dynamic_owner dynamic={0};C(!gh_scene_dynamic_bind(&dynamic,&tables,heap));gh_om_door_shared shared={0};C(!gh_om_door_shared_from_elf(&shared,elf,(size_t)en));
 
  _Alignas(16)uint8_t constructor[0x9c0];memset(constructor,0xa5,sizeof(constructor));gh_title_player_view constructed;C(gh_om309_construct_0018b290(constructor,sizeof(constructor)-1,&constructed)==GH_PLACE_BOUNDS&&constructor[0]==0xa5);C(!gh_om309_construct_0018b290(constructor,sizeof(constructor),&constructed)&&w(constructor+0x214)==0x4237e8&&(w(constructor+0x5b0)&8));for(unsigned i=0;i<9;i++){uint8_t*p=constructor+0x660+i*0x60;for(unsigned j=0;j<5;j++)C(!w(p+j*16)&&w(p+j*16+12)==0x3f800000);C(!p[0x54]&&p[0x55]==0xa5);}
  for(unsigned mode=0;mode<4;mode++){init.solids=NULL;((uint8_t*)&work)[0x5b1]=(uint8_t)(mode==0?0:mode==1?2:mode==2?5:8);init.player=NULL;init.init=hitstate;init.shapes=&shapes;init.dynamic=&dynamic;init.door_shared=&shared;gh_om_factory factory={0};C(!gh_om_factory_bind(&factory,&b,69));gh_object_resource_bindings resources={0};factory.bindings.resources=&resources;C(!fesetround(modes[mode])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));
  gh_om_scene_placements live={0};C(gh_om_scene_bind_native_001c3cb8(&live,&oms,&factory,&original)==GH_PLACE_UNSUPPORTED&&!original&&live.cursor==44&&live.created==44&&live.frontier==0x2db6b0&&factory.count==44);uint32_t factor=0x3fa00000;memcpy(foreign_raw+0x600,&factor,4);init.player=&foreign_actor;C(gh_om_scene_bind_native_001c3cb8(&live,&oms,&factory,&original)==GH_PLACE_UNSUPPORTED&&!original&&live.cursor==66&&live.created==66&&live.frontier==0x1346f8&&factory.count==66);init.solids=&solids;C(!gh_om_scene_bind_native_001c3cb8(&live,&oms,&factory,&original)&&original&&live.cursor==69&&live.created==69&&!live.skipped&&!live.frontier&&factory.count==69);C(!gh_om_scene_bind_native_001c3cb8(&live,&oms,&factory,&original)&&original&&factory.count==69);
  C(tables.pending_actor_count==5&&solids.unit_count==2&&solids.global_00460d18==2);C(pools.blocks[0].used_count==472&&pools.blocks[1].used_count==137&&pools.vectors[0].count==69&&pools.vectors[3].count==69);C(fegetround()==modes[mode]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);for(unsigned oi=67;oi<69;oi++){gh_om_object*o=factory.objects+oi;gh_om309_state*st=(gh_om309_state*)o->initialization;uint8_t*p=o->view.bytes;C(st->common.model.part_count==9&&st->common.model.script.mesh_count==2);C(o->source.type==0x309&&o->allocation.bytes==0x9c0&&st->stage==5&&st->common.model.ready&&w(p+0x548)==0x10001&&st->common.hitarea_created);const uint8_t*node,*matrix;gh_collision_pair_shape cylinder;C(!gh_hitarea_node_at(&st->common.hitarea,0,&node,&cylinder)&&!gh_collision_pair_shape_source_matrix(&cylinder,&matrix)&&matrix==p+0x80&&st->common.hitarea.bytes[0x48]==2&&w(cylinder.record+0x1f0)==0x3fa4dd2f&&w(cylinder.record+0x1f4)==0x3f028f5c&&!w(cylinder.record+0x120)&&!w(cylinder.record+0x124)&&!w(cylinder.record+0x128));const gh_actor_node_packets*first,*second;C(!gh_actor_model_packet_at(&st->common.model,0,&first)&&!gh_actor_model_packet_at(&st->common.model,1,&second)&&(w(first->node+0x380)&1)&&!(w(second->node+0x380)&1));for(unsigned i=0;i<st->common.model.part_count;i++)C((w(st->common.model.parts[i].bytes+0x154)&0x18)==((i>0&&i<9)?0x18u:0));C(!memcmp(p+0x490,o->source.bytes,12)&&!memcmp(p+0x100,o->source.bytes+0x10,12));}
- fragment_frames(&factory,&work,hitstate,&foreign_actor);gh_om_placement_record next;C(gh_om_scene_record_at(&placement,69,&next)==GH_PLACE_BOUNDS);C(!gh_om_factory_release(&factory)&&!pools.blocks[0].used_count&&!pools.blocks[1].used_count&&!pools.vectors[0].count&&!pools.arenas[2].live_allocations&&gh_heap_used(heap)==baseline&&!tables.pending_actor_head&&!tables.pending_actor_count&&foreign_unit.bytes[0x4a]&&w(foreign_shape.record)==3&&solids.unit_count==1&&solids.native_units==foreign_solid&&solids.global_00460d18==1);}
+ fragment_frames(&factory,&work,hitstate,&foreign_actor);if(mode==3)fragment_positive(d,&room,elf,en,&factory,&work,hitstate,&foreign_actor,&solids);gh_om_placement_record next;C(gh_om_scene_record_at(&placement,69,&next)==GH_PLACE_BOUNDS);C(!gh_om_factory_release(&factory)&&!pools.blocks[0].used_count&&!pools.blocks[1].used_count&&!pools.vectors[0].count&&!pools.arenas[2].live_allocations&&gh_heap_used(heap)==baseline&&!tables.pending_actor_head&&!tables.pending_actor_count&&foreign_unit.bytes[0x4a]&&w(foreign_shape.record)==3&&solids.unit_count==1&&solids.native_units==foreign_solid&&solids.global_00460d18==1);}
  /* Numeric leaf is deliberately boundedPCSX2-defaultChopZeroREFERENCE,
  nothardwareproof. Fourcallerroundingmodes mustnotchange111 vsnearest112. */
  for(unsigned m=0;m<4;m++){C(!fesetround(modes[m])&&!feclearexcept(FE_ALL_EXCEPT)&&!feraiseexcept(FE_DIVBYZERO));int32_t value=777;uint32_t pc=0;C(!gh_om310_damage_rz_reference(0x3fb33333,&value,&pc)&&value==111&&!pc);C(!gh_om310_damage_rz_reference(0xbfb33333,&value,&pc)&&value==-111);C(!gh_om310_damage_rz_reference(0x3fa00000,&value,&pc)&&value==100);C(!gh_om310_damage_rz_reference(0x3f800000,&value,&pc)&&value==80);value=777;C(gh_om310_damage_rz_reference(0x49800000,&value,&pc)==GH_PLACE_UNSUPPORTED&&pc==0x18f218&&value==777);C(gh_om310_damage_rz_reference(0x7fc00000,&value,&pc)==GH_PLACE_UNSUPPORTED&&value==777);C(fegetround()==modes[m]&&fetestexcept(FE_ALL_EXCEPT)==FE_DIVBYZERO);}

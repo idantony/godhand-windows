@@ -30,6 +30,13 @@ struct QARepeatSquareProbe {
         if(!saw_event||s.current_room!=0x100||s.game_state!=4||s.event_state||
            s.event_motion_camera_active||!s.player_pose_ready||s.player_update_frontier||
            !s.work||(flags&0x82000000u)||!s.player_handle||kill_scene[1])return pad;
+        const auto *state=s.player_state;
+        if(continue_after_pair&&state[0]==1&&
+           ((state[1]==0x0a&&state[2]<=1)||(state[1]==0x0b&&state[2]<=3))){
+            // The original grabs count direction edges on completed player moves.
+            pad.left_x=(s.player_updates_completed&1)?32767:-32767;
+            return pad;
+        }
         const Enemy enemy=selected_enemy(s);
         if(!enemy.handle||!enemy.hp)return pad;
 

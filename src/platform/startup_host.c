@@ -1597,7 +1597,9 @@ static int update_state4(void *context,gh_game_loop *loop)
     if(!s.step->action_frame.active||s.step->action_frame.complete)h->action_bindings=(gh_action_step_bindings){
         .buttons=s.action_buttons,.work=&h->work,.cockpit=s.cockpit,.current_player=&s.title_player->view,
         .init=&h->game_init,.auxiliary_binding_known=1,
-        .callback=h->work.room==0x100?gh_r100_exit_action_002c2138:NULL,.context=&h->r100_exit};
+        .callback=h->work.room==0x100?gh_r100_exit_action_002c2138:
+                  h->work.room==0x105?gh_game_services_r105_scenery_action:NULL,
+        .context=h->work.room==0x105?(void *)h->services:(void *)&h->r100_exit};
     gh_game_scene_step_bindings b={.work=&h->work,.init=&h->game_init,.prepare=s.prepare,
         .save={h->save_bytes,sizeof(h->save_bytes)},.collision=s.collision_pairs,.actors=s.scene_tables,
         .scenario={s.scenario_bytes,s.scenario_bytes_size,s.scenario},.main_threads=h->threads,

@@ -1,4 +1,5 @@
 #include "game_scene_message_create.h"
+#include "game_message_step.h"
 
 #include <string.h>
 
@@ -158,4 +159,47 @@ gh_game_event_status gh_scene_event_message_create_002aeb68(void *work, gh_game_
         case GH_SCENE_UI_BOUNDS: return GH_EVENT_BOUNDS;
         default: return GH_EVENT_UNSUPPORTED;
     }
+}
+
+static uint16_t scenario_message_id(gh_scene_scenario_view scenario)
+{
+    return (uint16_t)(scenario.bytes[0x112] | ((uint16_t)scenario.bytes[0x113]<<8));
+}
+
+gh_scene_ui_status gh_scenario_message_close_002c4390(gh_scene_scenario_view scenario,
+    gh_game_scene_ui *ui,uint32_t *frontier)
+{
+    if(!scenario.bytes||scenario.size<0x114||!ui||!frontier)return GH_SCENE_UI_ARGUMENT;
+    *frontier=0;
+    const uint16_t id=scenario_message_id(scenario);
+    if(id==UINT16_MAX)return GH_SCENE_UI_OK;
+    gh_scene_ui_status status=gh_scene_message_delete_by_id_002aec40(ui,id,frontier);
+    if(!status)put_half(scenario.bytes+0x112,UINT16_MAX);
+    return status;
+}
+
+gh_scene_ui_status gh_scenario_message_open_002c42e0(gh_scene_scenario_view scenario,
+    gh_game_scene_ui *ui,const gh_boot_work *work,uint16_t message_id,uint32_t *frontier)
+{
+    if(!work)return GH_SCENE_UI_ARGUMENT;
+    gh_scene_ui_status status=gh_scenario_message_close_002c4390(scenario,ui,frontier);
+    if(status)return status;
+    uint16_t work_id;
+    status=gh_scene_message_create_002aeb68(ui,work,message_id,&work_id,frontier);
+    if(!status&&work_id!=UINT16_MAX)put_half(scenario.bytes+0x112,message_id);
+    return status;
+}
+
+gh_scene_ui_status gh_scenario_message_active_002c4350(gh_scene_scenario_view scenario,
+    const gh_game_scene_ui *ui,int *active,uint32_t *frontier)
+{
+    if(!scenario.bytes||scenario.size<0x114||!ui||!active||!frontier)return GH_SCENE_UI_ARGUMENT;
+    *active=0;
+    *frontier=0;
+    const uint16_t id=scenario_message_id(scenario);
+    if(id==UINT16_MAX)return GH_SCENE_UI_OK;
+    int slot;
+    gh_scene_ui_status status=gh_scene_message_find_002aed40(ui,id,&slot,frontier);
+    if(!status)*active=slot>=0;
+    return status;
 }

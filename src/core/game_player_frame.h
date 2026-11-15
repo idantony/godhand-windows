@@ -47,6 +47,10 @@ typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_wo
  gh_player_motion_call initialize_motion;gh_player_frame_motion_step advance_motion;void *motion_context;
  /* Explicit original NULL identities only after publishers were audited.
   * Current positive auxiliary callers remain strict; raw0 is not evidence. */
+ const gh_title_player_view *grab_attacker;
+ gh_object_view grab_resource;
+ const gh_game_pl_camera *opacity_camera;
+ gh_player_frame_status (*grab_camera)(void *,const gh_actor_model *,uint32_t *);
  const gh_title_player_view *aux_698,*aux_6a0;uint8_t auxiliary_bindings_known;
  struct gh_player_idle_input *idle_input;const struct gh_player_idle_input_bindings *idle_input_bindings;
  const gh_game_player_node_cache *node_cache;

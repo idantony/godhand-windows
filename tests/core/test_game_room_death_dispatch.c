@@ -24,7 +24,7 @@ typedef struct {
  gh_om300_retire_bindings bindings;
  gh_om300_full_retirement state;
  gh_room_pools *pools;
- uint32_t selected;
+ uint32_t selected,entry,vtable;
  unsigned invoked;
 } live_retire;
 static gh_object_step_status live_resolve(void *opaque,uint32_t handle,
@@ -40,7 +40,7 @@ static gh_object_step_status live_destroy(void *opaque,const gh_object_trans_req
  (void)work;
  live_retire *fixture=opaque;
  if(request->handle!=fixture->selected||request->kind!=GH_OBJECT_TRANS_DESTROY||
-    request->original_entry!=0x198ce0||request->original_vtable!=0x425000||
+    request->original_entry!=fixture->entry||request->original_vtable!=fixture->vtable||
     request->this_delta||request->argument!=3)return GH_OBJSTEP_ARGUMENT;
  ++fixture->invoked;
  gh_room_pool_status status=gh_om_destroy_detached_mode3(&fixture->state,
@@ -284,7 +284,8 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
  C(!gh_hitarea_node_at(&saved_box,0,&dead_record,&dead_shape));
  gh_game_object_step step={0};
  C(!gh_game_object_step_construct_002c53a8(&step,init));
- live_retire live={.bindings=bindings.door,.pools=&pools,.selected=broken->handle};
+ live_retire live={.bindings=bindings.door,.pools=&pools,.selected=broken->handle,
+   .entry=0x198ce0,.vtable=0x425000};
  gh_object_move_bindings mb={.resolve=live_resolve,.context=&live,.elf=c.elf,.elf_bytes=c.elf_size};
  /* Only the Trans provider is being exercised, so do not invent a Move callback. */
  step.live_objects=mb;
@@ -301,6 +302,16 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
  void *retired=NULL;
  C(gh_room_object_lookup(&pools,live.selected,GH_ROOM_OBJECT_OM,&doors,&retired)==GH_POOL_BOUNDS);
  puts("PASS real OM324 ordinary 30F650 descriptor198CE0, same canonical handle and both registry compactions");
+ gh_om_object *fragment=doors.objects+18;
+ C(fragment->source.type==0x305);
+ live=(live_retire){.bindings=bindings.door,.pools=&pools,.selected=fragment->handle,
+   .entry=0x188af0,.vtable=0x423400};
+ erased=0;
+ C(!gh_object_live_trans_one_0030f650(&step,&pools,&work,live.selected,&erased,&live_frontier)&&
+    erased&&!live_frontier&&live.invoked==1&&live.state.stage==5&&
+    pools.vectors[0].count==count_before-2&&pools.vectors[3].count==secondary_before-2&&
+    !fragment->view.bytes&&!box305_record[0x2e]&&(w(box305.record)&0x200u));
+ C(gh_room_object_lookup(&pools,live.selected,GH_ROOM_OBJECT_OM,&doors,&retired)==GH_POOL_BOUNDS);
  const gh_om_object *retiring_objects=doors.objects;
  C(gh_om_factory_release_retired(&doors)==GH_PLACE_BUSY&&doors.objects==retiring_objects&&doors.bound);
  gh_room_pool_status final=gh_room_death_release_owners(&dispatch,&bindings);

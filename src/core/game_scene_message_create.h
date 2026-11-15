@@ -4,6 +4,7 @@
 #include "boot.h"
 #include "game_scene_ui.h"
 #include "game_event.h"
+#include "game_scene_setup.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,6 +15,14 @@ extern "C" {
  * retains borrowed bounded MSD references until window release/reset. */
 gh_scene_ui_status gh_scene_message_create_002aeb68(gh_game_scene_ui *,
     const gh_boot_work *, uint16_t message_id, uint16_t *work_id, uint32_t *frontier);
+
+/* Scenario+112 uses resource ID and may refer to a window already closed by UI. */
+gh_scene_ui_status gh_scenario_message_open_002c42e0(gh_scene_scenario_view,
+    gh_game_scene_ui *,const gh_boot_work *,uint16_t message_id,uint32_t *frontier);
+gh_scene_ui_status gh_scenario_message_close_002c4390(gh_scene_scenario_view,
+    gh_game_scene_ui *,uint32_t *frontier);
+gh_scene_ui_status gh_scenario_message_active_002c4350(gh_scene_scenario_view,
+    const gh_game_scene_ui *,int *active,uint32_t *frontier);
 
 /* Direct adapter for gh_event_message_init_00008100. Context is canonical Work. */
 gh_game_event_status gh_scene_event_message_create_002aeb68(void *work, gh_game_scene_ui *,
