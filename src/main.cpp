@@ -598,7 +598,10 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
     int message_depth=0;
     gh_id_error depth_status=gh_mc_renderer_queued_message_depth(app.renderer,ui_order.data(),ui_order.size(),&message_depth);
     if(depth_status!=GH_ID_OK)return failure("ui-depth",depth_status,ui_order.size());
-    const bool world_surface=!world_order.empty()||message_depth;
+    // A depth-tested full-screen Fade still consumes the cleared scene Z
+    // plane when the chapter map contributes only UI commands to the OT.
+    const bool fade_depth=app.frame_fade_seen&&app.frame_fade.test==0x70000;
+    const bool world_surface=!world_order.empty()||message_depth||fade_depth;
     if(world_surface){
         const gh_display_state *display=app.snapshot.display;
         if(!scene||!display||!display->initialized||display->screen_width!=512||display->screen_lines!=448||display->gs_y_origin!=1824)return GH_ID_UNSUPPORTED;
@@ -745,7 +748,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
         }
         if(frame_mask){app.world_frontier=0x15b0f0;return GH_ID_UNSUPPORTED;}
         app.world_pixels.resize(512*448*4);
-        if(message_depth||(app.frame_fade_seen&&app.frame_fade.test==0x70000))world_depth.resize(512*448);
+        if(message_depth||fade_depth)world_depth.resize(512*448);
         app.world_gpu_error=gh_model_renderer_readback(app.world_renderer,app.world_pixels.data(),app.world_pixels.size(),
             world_depth.empty()?nullptr:world_depth.data(),world_depth.size());
         if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
@@ -777,7 +780,7 @@ static void usage()
     std::fprintf(stderr,"usage: godhand-windows --iso ISO --profile DIRECTORY [--ffmpeg EXE] [--show|--hidden] [--muted] [--prefix] [--max-ticks N]\n");
 #ifdef GH_NATIVE_STARTUP_QA
     std::fprintf(stderr,"       --qa-game-over-retry --qa-capture FILE [--qa-r003-controlled]\n");
-    std::fprintf(stderr,"       --qa-pad-tape CSV [--qa-level-confirm-tick N]\n");
+    std::fprintf(stderr,"       --qa-pad-tape CSV [--qa-level-confirm-tick N] [--qa-after-victory-frames N]\n");
 #endif
 }
 #ifdef GH_NATIVE_STARTUP_QA
@@ -938,6 +941,7 @@ int main(int argc,char **argv)
     QAGameOverRetryProbe qa_retry;
     QAR100PadTape qa_pad_tape;
     const char *qa_pad_tape_path=nullptr;
+    uint64_t qa_after_victory=0,qa_postwin_frames=0,qa_postwin_scene=0;
     const char *qa_capture=nullptr;uint64_t qa_capture_frame=1,qa_last_capture_scene=0;
     uint32_t qa_title_trace=UINT32_MAX,qa_load_trace=UINT32_MAX;
 #endif
@@ -949,6 +953,11 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-load")){qa_load=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-r003-controlled")){qa_r003=true;qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-pad-tape")&&i+1<argc){qa_pad_tape_path=argv[++i];qa_new_game=qa_confirm=true;}
+        else if(!std::strcmp(argv[i],"--qa-after-victory-frames")&&i+1<argc){
+            const char *value=argv[++i];char *end=nullptr;
+            qa_after_victory=std::strtoull(value,&end,10);
+            if(value[0]<'1'||value[0]>'9'||*end||qa_after_victory>100000){usage();return 2;}
+        }
         else if(!std::strcmp(argv[i],"--qa-level-confirm-tick")&&i+1<argc){
             const char *value=argv[++i];
             char *end=nullptr;
@@ -1003,6 +1012,10 @@ int main(int argc,char **argv)
     }
     if(qa_title.level_confirm_tick&&(!qa_pad_tape_path||qa_title.level_confirm_tick>=max_ticks)){
         std::fprintf(stderr,"Timed level confirmation requires a pad tape and a later tick cap.\n");
+        return 2;
+    }
+    if(qa_after_victory&&(!qa_pad_tape_path||qa_after_victory>=max_ticks)){
+        std::fprintf(stderr,"Post-victory capture requires a pad tape and a later tick cap.\n");
         return 2;
     }
     if(qa_retry.enabled&&(prefix||!qa_capture)){
@@ -1136,6 +1149,16 @@ int main(int argc,char **argv)
                            !qa_write_capture(victory+".world.rgba",app.world_pixels)){
                             std::fprintf(stderr,"R100 victory QA capture failed.\n");break;
                         }
+                        if(!qa_after_victory){result=0;break;}
+                    }else if(qa_after_victory&&qa_pad_tape.victory_scene&&++qa_postwin_frames==qa_after_victory&&
+                             app.snapshot.current_room==0x100&&app.snapshot.game_state==4&&
+                             app.snapshot.player_hp&&app.snapshot.player_hp<0x8000){
+                        const std::string followthrough=std::string(qa_capture)+".post-victory.rgba";
+                        if(!qa_write_capture(followthrough,app.queued_pixels)||
+                           !qa_write_capture(followthrough+".world.rgba",app.world_pixels)){
+                            std::fprintf(stderr,"R100 post-victory QA capture failed.\n");break;
+                        }
+                        qa_postwin_scene=app.prepared_scene_serial;
                         result=0;
                         break;
                     }
@@ -1283,6 +1306,10 @@ int main(int argc,char **argv)
 #ifdef GH_NATIVE_STARTUP_QA
     qa_repeat_square.report();
     qa_pad_tape.report();
+    if(qa_after_victory)std::fprintf(stderr,"QA_R100_POST_VICTORY {\"frames\":%llu,\"scene\":%llu,"
+        "\"player_hp\":%u,\"scenario_flags\":%u}\n",
+        (unsigned long long)qa_postwin_frames,(unsigned long long)qa_postwin_scene,
+        unsigned(app.snapshot.player_hp),app.snapshot.r100_scenario_flags);
     if(qa_retry.enabled)
         std::fprintf(stderr,"QA_GAME_OVER_STATUS {\"room\":%u,\"menu_scene\":%llu,\"menu_epoch\":%llu,"
             "\"press_tick\":%llu,\"confirm_edge\":%u,\"continue_tick\":%llu,\"continues_before\":%u,"

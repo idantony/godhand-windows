@@ -43,7 +43,7 @@ def launch_project(snapshot):
 
 def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370,
             capture_count=1, control_probe=None, title_load=False, build_scratch=None, r003_controlled=False,
-            game_over_retry=False, pad_tape=None, level_confirm_tick=None):
+            game_over_retry=False, pad_tape=None, level_confirm_tick=None, after_victory_frames=None):
     """Read-only preflight. No launch or output creation occurs on rejection."""
     snapshot, scratch = Path(snapshot_arg).resolve(), Path(scratch_arg).resolve()
     build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
@@ -62,6 +62,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
                   "pad tape requires standalone New Game")
     proof.require(level_confirm_tick is None or (pad_tape is not None and type(level_confirm_tick) is int
                   and 1 <= level_confirm_tick < max_ticks), "level confirmation needs a pad tape and a later tick cap")
+    proof.require(after_victory_frames is None or (pad_tape is not None and type(after_victory_frames) is int
+                  and 1 <= after_victory_frames < max_ticks), "post-victory capture needs a pad tape and a later tick cap")
     if pad_tape is not None:
         pad_tape = Path(pad_tape).resolve()
         proof.require(pad_tape.is_file(), "pad tape must be an existing file")
@@ -77,6 +79,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
         outputs.extend(capture.with_suffix(suffix) for suffix in (".game-over.rgba", ".retry.rgba"))
     if pad_tape:
         outputs.extend(Path(str(capture) + suffix) for suffix in (".battle-won.rgba", ".battle-won.rgba.world.rgba"))
+    if after_victory_frames:
+        outputs.extend(Path(str(capture) + suffix) for suffix in (".post-victory.rgba", ".post-victory.rgba.world.rgba"))
     if title_load:
         proof.require(profile.is_dir() and profile.resolve() == profile, "QA Load requires the local scratch profile-load directory")
     else:
@@ -98,10 +102,13 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
         command.extend(("--qa-pad-tape", str(pad_tape)))
     if level_confirm_tick is not None:
         command.extend(("--qa-level-confirm-tick", str(level_confirm_tick)))
+    if after_victory_frames is not None:
+        command.extend(("--qa-after-victory-frames", str(after_victory_frames)))
     return {"command": command, "scratch": scratch, "build_scratch": build_scratch, "executable": executable,
             "executable_sha256": exe_sha, "source_snapshot": receipt_fact, "windows_build": report_fact,
             "control_probe": control_probe, "r003_controlled": r003_controlled, "game_over_retry": game_over_retry,
-            "pad_tape": pad_tape, "pad_tape_sha256": proof.digest(pad_tape) if pad_tape else None}
+            "pad_tape": pad_tape, "pad_tape_sha256": proof.digest(pad_tape) if pad_tape else None,
+            "after_victory_frames": after_victory_frames}
 
 
 def game_over_observations(log, capture, exit_code):
@@ -135,7 +142,7 @@ def game_over_observations(log, capture, exit_code):
     return status
 
 
-def pad_tape_observations(log, capture, qa):
+def pad_tape_observations(log, capture, qa, after_victory_frames=None):
     marker = "QA_R100_PAD_TAPE "
     records = [line[len(marker):] for line in log.splitlines() if line.startswith(marker)]
     proof.require(len(records) == 1, "missing or duplicate R100 pad tape status")
@@ -145,16 +152,37 @@ def pad_tape_observations(log, capture, qa):
     proof.require(isinstance(status, dict) and all(type(status.get(key)) is int and status[key] >= 0 for key in fields),
                   "invalid R100 pad tape status")
     moves, scene, first, second, first_handle, second_handle, mask, flags, hp = (status[key] for key in fields)
-    proof.require(bool(scene) == (qa["exit_code"] == 0), "R100 pad tape victory and exit disagree")
+    if not after_victory_frames or qa["exit_code"] == 0:
+        proof.require(bool(scene) == (qa["exit_code"] == 0), "R100 pad tape victory and exit disagree")
     if scene:
-        proof.require(qa.get("room") == "0100" and qa.get("game_state") == 4 and
-                      0 < first <= scene <= qa["scene_frames_presented"] and 0 < second <= scene and
+        proof.require(0 < first <= scene <= qa["scene_frames_presented"] and 0 < second <= scene and
                       moves and first_handle and second_handle and first_handle != second_handle and
                       mask == 3 and flags & 0x01000000 and 0 < hp < 0x8000,
                       "R100 victory lacks original deaths, Scenario flag or visible scene")
         for suffix in (".battle-won.rgba", ".battle-won.rgba.world.rgba"):
             path = Path(str(capture) + suffix)
             proof.require(path.is_file() and path.stat().st_size == 512*448*4, "missing complete R100 victory capture")
+        if not after_victory_frames:
+            proof.require(qa.get("room") == "0100" and qa.get("game_state") == 4, "R100 victory left the initial room")
+    if after_victory_frames:
+        marker = "QA_R100_POST_VICTORY "
+        records = [line[len(marker):] for line in log.splitlines() if line.startswith(marker)]
+        proof.require(len(records) == 1, "missing or duplicate R100 post-victory status")
+        tail = json.loads(records[0])
+        fields = ("frames", "scene", "player_hp", "scenario_flags")
+        proof.require(isinstance(tail, dict) and all(type(tail.get(key)) is int and tail[key] >= 0 for key in fields),
+                      "invalid R100 post-victory status")
+        proof.require(bool(tail["scene"]) == (qa["exit_code"] == 0), "R100 post-victory capture and exit disagree")
+        if tail["scene"]:
+            proof.require(qa.get("room") == "0100" and qa.get("game_state") == 4 and
+                          scene < tail["scene"] == qa.get("scene_frame_serial") and
+                          tail["frames"] == after_victory_frames and 0 < tail["player_hp"] < 0x8000,
+                          "R100 post-victory capture lacks the requested presented frames or living player")
+            for suffix in (".post-victory.rgba", ".post-victory.rgba.world.rgba"):
+                path = Path(str(capture) + suffix)
+                proof.require(path.is_file() and path.stat().st_size == 512*448*4,
+                              "missing complete R100 post-victory capture")
+        status["post_victory"] = tail
     return status
 
 
@@ -189,6 +217,9 @@ def run(prepared):
     if pad_tape:
         receipt["pad_tape_sha256_after"] = proof.digest(pad_tape)
         captures.extend(Path(str(capture) + suffix) for suffix in (".battle-won.rgba", ".battle-won.rgba.world.rgba"))
+    after_victory_frames = prepared.get("after_victory_frames")
+    if after_victory_frames:
+        captures.extend(Path(str(capture) + suffix) for suffix in (".post-victory.rgba", ".post-victory.rgba.world.rgba"))
     captures.extend(sorted(scratch.glob(capture.stem + ".scene-*.rgba")))
     outputs = [scratch / "startup-newgame.json", scratch / "startup-newgame.stderr.log"]
     outputs.extend(path for path in captures if path.is_file() and path.resolve().parent == scratch)
@@ -227,7 +258,7 @@ def run(prepared):
         summary["game_over_retry"] = game_over_observations(log, capture, receipt["exit_code"])
     if pad_tape:
         log = (scratch / "startup-newgame.stderr.log").read_text(encoding="utf-8-sig")
-        summary["pad_tape"] = pad_tape_observations(log, capture, qa)
+        summary["pad_tape"] = pad_tape_observations(log, capture, qa, after_victory_frames)
     if repeated_attack:
         marker = "QA_REPEAT_STATUS "
         with (scratch / "startup-newgame.stderr.log").open(encoding="utf-8", errors="replace") as stream:
@@ -287,11 +318,13 @@ def main():
     parser.add_argument("--pad-tape", type=Path, help="replay recorded R100 gamepad samples by completed player Move")
     parser.add_argument("--level-confirm-tick", type=int,
                         help="delay the original New Game difficulty confirmation to this replay tick")
+    parser.add_argument("--after-victory-frames", type=int,
+                        help="keep replaying R100 for this many presented frames after both opening enemies die")
     args = parser.parse_args()
     try:
         prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame,
                            args.capture_count, args.control_probe, args.title_load, args.build_scratch, args.r003_controlled,
-                           args.game_over_retry, args.pad_tape, args.level_confirm_tick)
+                           args.game_over_retry, args.pad_tape, args.level_confirm_tick, args.after_victory_frames)
         require_frozen_runner(args.snapshot)
         print(json.dumps(run(prepared)), flush=True)
     except (proof.ProofError, OSError, ValueError) as error:

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T09:02:56.884153+00:00",
-  "stage": "native-windows-r100-opening-victory-and-r101-saved-scene-packets",
+  "verified_utc": "2026-11-15T09:26:23.921587+00:00",
+  "stage": "native-windows-r100-post-victory-and-r101-saved-scene",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1206,6 +1206,33 @@
     "completed_packet_frames_after_victory": 500,
     "normal_room_exit_verified": false
   },
+  "native_windows_r100_post_victory": {
+    "scope": "Full recorded New Game, both opening enemies defeated and 500 additional real Windows scene presentations",
+    "room": "0100",
+    "victory_scene_serial": 3732,
+    "last_presented_scene_serial": 4232,
+    "post_victory_presented_frames": 500,
+    "player_hp_at_end": 1,
+    "scenario_flags_at_end": "21000000",
+    "compared_player_updates_with_cpu": 2566,
+    "observed_state_differences_for_compared_updates": 0,
+    "exit_tick": 4372,
+    "exit_code": 0,
+    "normal_room_exit_verified": false
+  },
+  "native_windows_r101_saved_room": {
+    "scope": "Isolated original-format test save, mapped Cross on the original chapter map and native R101 rendering",
+    "room": "0101",
+    "map_confirm_tick": 534,
+    "captured_scene_serial": 461,
+    "capture_tick": 614,
+    "bounded_exit_tick": 800,
+    "bounded_exit_code": 3,
+    "player_updates_completed": 187,
+    "world_packets_submitted": 221323,
+    "runtime_or_render_error_observed": false,
+    "native_r101_presentation_verified": true
+  },
   "native_cpu_r101_saved_room": {
     "scope": "Fresh title load from a test save, original chapter map confirmation and native packet collection",
     "room": "0101",
@@ -1214,8 +1241,7 @@
     "consecutive_packet_frames": 175,
     "exit_tick": 800,
     "exit_code": 0,
-    "first_missing_original_operation": null,
-    "windows_presentation_verified": false
+    "first_missing_original_operation": null
   },
   "native_windows_r100_tutorial": {
     "scope": "Tutorial 1, actual controller approach, Circle open and Cross close",

@@ -157,6 +157,15 @@ can drift across decoder and device runs. Reuse the same tape on the
 packet-only and device replay paths, and compare their original state
 transitions before chasing presentation differences.
 
+If identical inputs diverge at the first gameplay update, compare original
+random state at the same boot, menu and event transitions. The original frame
+loop may consume random numbers while a native movie or input prompt waits.
+For deterministic QA, reproduce the reference timing through a legitimate
+menu input when the trace proves that timing caused the difference. Keep the
+random state and gameplay code intact. During a scripted pause, retain changes
+to sampled inputs that share one gameplay update index and replay them by
+their sample offset within that update.
+
 Use CPU packet replays for rapid source iteration. Before calling a scene
 visually verified, capture it from a separate native device run. A bounded run
 can prove forward progress when the configured and observed tick limits agree,

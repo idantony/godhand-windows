@@ -270,6 +270,22 @@ class StartupRunnerTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaisesRegex(tool.proof.ProofError, "lacks original deaths"):
                 tool.pad_tape_observations(trace + json.dumps({**status, **bad}), capture, qa)
 
+    def test_r100_post_victory_counts_actual_presented_frames_and_living_player(self):
+        capture = self.scratch / "first-scene-candidate.rgba"
+        for name in ("battle-won", "post-victory"):
+            for suffix in (".rgba", ".rgba.world.rgba"):
+                Path(f"{capture}.{name}{suffix}").write_bytes(bytes(512 * 448 * 4))
+        qa = self.qa(exit_code=0, room="0100", game_state=4, scene_frames_presented=98, scene_frame_serial=98)
+        won = dict(sampled_moves=101, victory_scene=78, stamp19_scene=71, stamp20_scene=78,
+                   stamp19_handle=19, stamp20_handle=20, death_mask=3,
+                   scenario_flags=0x01000000, player_hp=1)
+        tail = dict(frames=20, scene=98, player_hp=1, scenario_flags=0x21000000)
+        trace = "QA_R100_PAD_TAPE " + json.dumps(won) + "\nQA_R100_POST_VICTORY "
+        self.assertEqual(tool.pad_tape_observations(trace + json.dumps(tail), capture, qa, 20)["post_victory"], tail)
+        for broken in (dict(frames=19), dict(scene=97), dict(player_hp=0)):
+            with self.subTest(broken=broken), self.assertRaisesRegex(tool.proof.ProofError, "requested presented frames"):
+                tool.pad_tape_observations(trace + json.dumps({**tail, **broken}), capture, qa, 20)
+
     def test_title_load_frontier_pins_its_own_run_scope_and_card_progress(self):
         (self.scratch / "profile-load").mkdir()
         prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, title_load=True)

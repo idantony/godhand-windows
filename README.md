@@ -19,7 +19,8 @@ counter and registers collisions with two enemies, leaving them at 16 and
 opening enemies with Gene at 1 HP. The original room save records both deaths
 and Windows presents scene 3732. The replay schedules the original difficulty
 confirmation to reproduce the startup timing. The same 2,125 gameplay inputs
-match the native CPU replay, which continues for 500 frames after the victory.
+match the native CPU replay. Both replays continue for 500 frames after the
+victory, including the original post-battle event. Gene still has 1 HP.
 
 In a Windows New Game replay, stick input reaches the first tutorial. Circle
 opens the original panel and Cross dismisses it. The game presents the original
@@ -35,9 +36,10 @@ Another actual-disc CPU replay restores the R100 checkpoint from Game Over and
 registers movement and a Square attack after the reload. The normal R100 exit
 after the opening encounter is still in development.
 
-A separate native CPU title-load replay uses an original-format R101 test save
-and confirms the original chapter map. It completes 175 consecutive R101 scene
-frames through packet collection. R101 Windows presentation remains in verification.
+A separate Windows title-load replay uses an original-format R101 test save,
+confirms the original chapter map and presents R101 at scene 461. It runs to
+the planned 800-tick limit with 187 player updates and zero renderer errors.
+Independent native CPU replays validate left-stick movement and a Square attack.
 
 ### Verified progress
 
@@ -195,7 +197,7 @@ Local commits retain rollback points. Public pushes mark substantial milestones.
 挣脱反击，撞击后的两名敌人分别剩下 16 和 24 HP。Windows 新游戏回放用录制的手柄输入击败了
 开场的两名敌人，Gene 剩 1 HP。原版房间存档记录两名敌人的死亡，Windows 呈现了第 3732 帧。
 回放通过安排原版难度确认的时机复现启动流程。同样的 2,125 次玩家更新与无画面回放逐项对齐，
-无画面回放在首战后又完成了 500 帧。
+两条回放也都在首战后继续运行 500 帧，经过原版战后事件，Gene 仍剩 1 HP。
 
 Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面板，再按叉键关闭。画面显示原版文字、
 右摇杆图标和教程背后的场景。
@@ -206,8 +208,9 @@ Gene 战败后，按叉键在原版 Game Over 菜单中选择继续。Windows �
 恢复到 100 HP。单独的无画面原盘回放在这次重载后又完成 60 帧。另一轮无画面原盘回放恢复了
 R100 检查点，重载后接收移动和方块攻击。R100 首战结束后从原版出口前往下一场景的流程仍在开发。
 
-另一轮无画面回放从标题读取 R101 的原版格式测试档，在原版章节地图中确认后，连续完成了 175 帧
-R101 场景的绘制指令。R101 的 Windows 画面正在验证。
+另一轮 Windows 回放从标题读取 R101 的原版格式测试档，经原版章节地图确认，在第 461 帧呈现
+R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染无报错。独立的无画面回放也
+验证了摇杆移动和方块攻击。
 
 ### 已验证的进展
 
