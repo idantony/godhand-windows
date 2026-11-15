@@ -190,15 +190,17 @@ def load_overlay(receipt, sha256, source_base=None):
         "schema", "files", "base_receipt", "base_receipt_sha256", "supersedes",
         "dependency_files", "requires_overlay_receipt", "requires_overlay_receipt_sha256",
         "input_overlay_receipt", "input_overlay_receipt_sha256", "rebase_results", "verification", "scope",
-        "dependencies", "merge", "bounds", "patches",
+        "dependencies", "merge", "bounds", "patches", "rebased_overlay_receipts",
     }
     if record.get("schema") != 1 or set(record) - supported:
         raise RebaseError(f"Unsupported overlay receipt format: {receipt}")
-    if (not isinstance(record.get("files"), list) or not isinstance(record.get("supersedes"), dict) or
+    predecessors = record.get("supersedes", {})
+    if (not isinstance(record.get("files"), list) or not isinstance(predecessors, dict) or
         not isinstance(record.get("dependency_files", {}), dict)):
         raise RebaseError(f"Invalid file manifest in {receipt}")
     checked_dependencies(record, receipt)
     checked_dependencies(record, receipt, "patches")
+    checked_dependencies(record, receipt, "rebased_overlay_receipts")
     old_receipt = Path(record["base_receipt"]).resolve()
     base, manifest = load_snapshot(old_receipt, record["base_receipt_sha256"])
     files = {}
@@ -207,11 +209,13 @@ def load_overlay(receipt, sha256, source_base=None):
         if name in files:
             raise RebaseError(f"Duplicate overlay entry: {name}")
         original = snapshot_file(base, manifest, name)
-        predecessor = record["supersedes"].get(name)
+        predecessor = item.get("base_sha256", predecessors.get(name))
+        if name in predecessors and predecessor != predecessors[name]:
+            raise RebaseError(f"Conflicting overlay predecessors: {name}")
         if (digest(original) if original is not None else None) != predecessor:
             raise RebaseError(f"Overlay predecessor does not match its pinned base: {name}")
         files[name] = (pin, checked(source_path(receipt.parent, name), pin), original)
-    if set(record["supersedes"]) - set(files):
+    if set(predecessors) - set(files):
         raise RebaseError(f"Unmatched predecessor fingerprint in {receipt}")
     if ("requires_overlay_receipt" in record) != ("requires_overlay_receipt_sha256" in record):
         raise RebaseError(f"Incomplete required overlay pin in {receipt}")
@@ -296,12 +300,14 @@ def rebase(overlay_receipt, overlay_sha256, target_receipt, target_sha256, outpu
         "files": [],
         "rebase_results": {},
     }
-    for key in ("dependencies", "patches", "dependency_files", "requires_overlay_receipt", "requires_overlay_receipt_sha256"):
+    for key in ("dependencies", "patches", "dependency_files", "requires_overlay_receipt",
+                "requires_overlay_receipt_sha256", "rebased_overlay_receipts"):
         if key in record:
             result[key] = record[key]
     if source_base is not None:
-        result["dependencies"] = result.get("dependencies", []) + [
-            {"path": record["base_receipt"], "sha256": record["base_receipt_sha256"]}]
+        dependencies = result.setdefault("dependencies", [])
+        if all(Path(row["path"]).resolve() != base / "analysis/source-snapshot.json" for row in dependencies):
+            dependencies.append({"path": record["base_receipt"], "sha256": record["base_receipt_sha256"]})
 
     with tempfile.TemporaryDirectory(prefix="rebase-", dir=output.parent) as directory:
         temporary = Path(directory).resolve()

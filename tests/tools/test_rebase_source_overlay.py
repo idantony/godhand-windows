@@ -77,6 +77,20 @@ class RebaseOverlayTest(unittest.TestCase):
             rebase(*self.overlay(), *target, self.output)
         self.assertFalse(self.output.exists())
 
+    def test_relative_file_predecessor_and_rebased_receipt_pins(self):
+        previous, pin = self.write_json(self.root / "previous/receipt.json", {"schema": 1})
+        evidence = [{"path": str(previous), "sha256": pin}]
+        files = [{"path": self.path, "sha256": digest(self.overlay_content),
+                  "base_sha256": digest(self.base_content)}]
+        overlay = self.overlay(files=files, supersedes={}, rebased_overlay_receipts=evidence)
+        result = rebase(*overlay, *self.base, self.output)
+        self.assertEqual(result["rebased_overlay_receipts"], evidence)
+        self.assertEqual((self.output / self.path).read_bytes(), self.overlay_content)
+        previous.write_bytes(b"changed")
+        with self.assertRaisesRegex(RebaseError, "SHA-256 mismatch"):
+            rebase(*overlay, *self.base, self.root / "stale")
+        self.assertFalse((self.root / "stale").exists())
+
     def test_pinned_tokens_merge_same_line_only_with_unique_predecessor(self):
         overlay = self.overlay()
         recipe = overlay[0].parent / "evidence/integration-tokens.json"
