@@ -827,6 +827,15 @@ int gh_effect_event_part_is_bound(gh_effect_view row,const gh_title_player_view 
    return flags==0x00c00000u&&part==10&&
       w(row.bytes)==0x1e3e8010u&&w(row.bytes+0xbc)==0x000a0004u&&
       w(row.bytes+0x130)==1&&w(row.bytes+0x134)==0;
+  /* EV04 cut 1 bank 6 entry 2 has three EL10 part29 rows. All
+   * use the 302BB4 full part matrix and create ordinary ESP00. */
+  if(kind==0x610&&flags==0x00800000u&&part==29&&!w(row.bytes+0x134)){
+   const uint32_t header=w(row.bytes),texture=w(row.bytes+0xbc);
+   const uint32_t timing=w(row.bytes+0xc0),child=w(row.bytes+0x130);
+   return ((header==0x1e308010u||header==0x1e3e8010u)&&texture==0xff1d0001u&&
+           timing==0x00010000u&&child==1)||
+          (header==0x1eee0010u&&texture==0x001d0501u&&timing==0xffff000au&&child==2);
+  }
   return kind==0x600&&flags==0x00802000u&&part==9;
  }
  /* EV02 cut12 EL59 trail, bank6 entry13 row1. */

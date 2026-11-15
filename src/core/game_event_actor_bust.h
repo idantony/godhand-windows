@@ -11,6 +11,8 @@ extern "C" {
  * from the same component the PLAY timing code publishes. */
 gh_game_event_status gh_event_actor_bust_002b6a40(gh_event_actor_factory *,
     gh_event_components *, uint32_t *frontier);
+gh_game_event_status gh_event_actor_ring_002b79e0(gh_event_actor_factory *,
+    gh_event_components *, uint32_t *frontier);
 
 #ifdef __cplusplus
 }

@@ -1,5 +1,7 @@
 #include "game_world_light_step.h"
 #include "game_scene_at_geometry.h"
+#include "frame_state.h"
+#include "game_om_frame.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -12,6 +14,93 @@ static float add(float a,float b){volatile float r=a+b;return r;}
 static gh_light_status fail(gh_game_world_light*s,uint32_t pc,int detail,gh_light_status e){s->frontier=pc;s->detail=detail;return e;}
 typedef struct {uint8_t *bytes;uint32_t flags;uint8_t write_flags,write_area,area;} model_plan;
 typedef struct {uint32_t area,cached_area,cached_row;const uint8_t *fog;} fog_plan;
+
+const uint8_t *gh_game_world_light_wave_002d9018(const gh_game_world_light *s,unsigned index)
+{
+ if(index>=GH_WORLD_LIGHT_WAVE_SLOTS)index=GH_WORLD_LIGHT_WAVE_SLOTS-1;
+ return s->scalar+0x7080+(size_t)index*GH_WORLD_LIGHT_WAVE_BYTES;
+}
+
+typedef struct {
+ uint8_t wave[GH_WORLD_LIGHT_WAVE_SLOTS][GH_WORLD_LIGHT_WAVE_BYTES];
+ uint8_t changed[GH_WORLD_LIGHT_WAVE_SLOTS];
+ gh_game_mt rng;
+ int draws;
+} wave_plan;
+
+static uint16_t half(const uint8_t *p)
+{
+ return (uint16_t)(p[0] | (unsigned)p[1] << 8);
+}
+
+static float half_float(const uint8_t *p)
+{
+ uint32_t bits=gh_om_half_bits_00156488(half(p));
+ return scalar((const uint8_t *)&bits);
+}
+
+static void put_float(uint8_t *p,float value)
+{
+ memcpy(p,&value,sizeof(value));
+}
+
+static float divide(float a,float b)
+{
+ const volatile float value=a/b;
+ return value;
+}
+
+/* 2D7C5C visits only the first 48 live records. The wave scratch is
+ * indexed by dense record position, so erasing a light leaves its phase. */
+static gh_light_status animate_waves(gh_game_world_light *s,size_t count,
+ const gh_light_move_bindings *bindings,wave_plan *plan)
+{
+ for(unsigned i=0;i<count&&i<GH_WORLD_LIGHT_WAVE_SLOTS;i++){
+  const uint8_t *light=s->scalar+0x80+(size_t)i*0x70;
+  if(!(word(light+0x58)&0x100000u))continue;
+  uint8_t *wave=plan->wave[i];
+  memcpy(wave,gh_game_world_light_wave_002d9018(s,i),GH_WORLD_LIGHT_WAVE_BYTES);
+  float rate,amount;
+  if(light[0x60]==1){
+   rate=scalar(wave+4);
+   amount=scalar(wave+12);
+   rate=add(rate,mul(add(scalar(wave),-rate),.05f));
+   amount=add(amount,mul(add(scalar(wave+8),-amount),.05f));
+   --wave[0x12];
+   if(!wave[0x12]){
+    if(!bindings||!bindings->world_random)return fail(s,0x31d020,(int)i,GH_LIGHT_UNSUPPORTED);
+    if(!plan->draws)plan->rng=*bindings->world_random;
+    uint32_t first,second;
+    if(gh_game_mt_next_0030f348(&plan->rng,&first)||gh_game_mt_next_0030f348(&plan->rng,&second))
+     return fail(s,0x31d020,(int)i,GH_LIGHT_UNSUPPORTED);
+    first=gh_frame_jitter_bits_0031d020_word(first);
+    second=gh_frame_jitter_bits_0031d020_word(second);
+    const float next_rate=add(half_float(light+0x5c),
+     mul(scalar((const uint8_t *)&first),half_float(light+0x62)));
+    const float next_amount=divide(add((float)half(light+0x5e),
+     mul(scalar((const uint8_t *)&second),(float)light[0x61])),100.0f);
+    put_float(wave,next_rate);
+    put_float(wave+8,next_amount);
+    wave[0x12]=20;
+    plan->draws=1;
+   }
+  }else{
+   rate=half_float(light+0x5c);
+   amount=divide((float)half(light+0x5e),100.0f);
+  }
+  put_float(wave+4,rate);
+  put_float(wave+12,amount);
+  /* Preserve the original separate subtract and add around the turn. */
+  const float radians=add(add(mul(rate,0x1.1df46ap-6f),-0x1.921fb6p+1f),0x1.921fb6p+1f);
+  const float phase=mul(divide(radians,0x1.921fb6p+2f),256);
+  if(!isfinite(amount)||!isfinite(phase)||phase < -0x1p31f||phase >= 0x1p31f)
+   return fail(s,0x2d7dec,(int)i,GH_LIGHT_UNSUPPORTED);
+  wave[0x10]=(uint8_t)(wave[0x10]+(uint32_t)(int32_t)phase);
+  plan->changed[i]=1;
+ }
+ return GH_LIGHT_OK;
+}
+
 
 static gh_light_status fog_region(gh_game_world_light *s,const gh_light_move_bindings *b,fog_plan *plan)
 {
@@ -113,15 +202,18 @@ gh_light_status gh_game_world_light_move_native_002d7560(gh_game_world_light*s,g
  if(objects->count&&(!b||!b->actor_view))return fail(s,0x2d74b8,0,GH_LIGHT_UNSUPPORTED);
  for(unsigned i=0;i<256;i++)if(word(p+0x80+i*0x70+4))return fail(s,0x2d7560,(int)i,GH_LIGHT_UNSUPPORTED);
  size_t count=word(p+0x78);if(count>256)return fail(s,0x2d8ff8,0,GH_LIGHT_BOUNDS);
- for(size_t i=0;i<count&&i<48;i++)if(word(p+0x80+i*0x70+0x58)&0x100000u)return fail(s,0x156488,(int)i,GH_LIGHT_UNSUPPORTED);
  /* Prepare fog and model writes before committing the supported invocation. */
  model_plan*plans=objects->count?calloc(objects->count,sizeof(*plans)):NULL;
  if(objects->count&&!plans)return fail(s,0x2d7560,0,GH_LIGHT_MEMORY);
  float target[5]={scalar(p+0x10),scalar(p+0x14),(float)p[4],(float)p[5],(float)p[6]},next[5];
  fenv_t saved;if(feholdexcept(&saved)){free(plans);return fail(s,0x2d7560,0,GH_LIGHT_UNSUPPORTED);}if(fesetround(FE_TONEAREST)){fesetenv(&saved);free(plans);return fail(s,0x2d7560,0,GH_LIGHT_UNSUPPORTED);}
  fog_plan fog;
+ wave_plan wave;
+ memset(wave.changed,0,sizeof(wave.changed));
+ wave.draws=0;
  gh_light_status status=fog_region(s,b,&fog);
  if(!status)status=models(s,objects,b,plans);
+ if(!status)status=animate_waves(s,count,b,&wave);
  if(status){(void)fesetenv(&saved);free(plans);return status;}
  if(fog.fog){
   target[0]=scalar(fog.fog+4);target[1]=scalar(fog.fog+8);
@@ -133,6 +225,10 @@ gh_light_status gh_game_world_light_move_native_002d7560(gh_game_world_light*s,g
  memcpy(p+0x16150,next,sizeof(next));
  put(p+0x16138,255);put(p+0x16134,0);put(p+0x16140,255);put(p+0x1613c,255);
  for(uint32_t i=0;i<objects->count;i++){model_plan*q=plans+i;if(q->write_flags)put(q->bytes+0x250,q->flags);if(q->write_area)q->bytes[0x2cc]=q->area;}free(plans);
+ for(unsigned i=0;i<count&&i<GH_WORLD_LIGHT_WAVE_SLOTS;i++)
+  if(wave.changed[i])memcpy(p+0x7080+(size_t)i*GH_WORLD_LIGHT_WAVE_BYTES,
+   wave.wave[i],GH_WORLD_LIGHT_WAVE_BYTES);
+ if(wave.draws)*b->world_random=wave.rng;
  gh_game_set_background_0030e5c0(work,1,p[0],p[1],p[2]);
  put(p+0x16144,word(p+0x16138));put(p+0x16148,word(p+0x1613c));put(p+0x1614c,word(p+0x16140));
  return GH_LIGHT_OK;

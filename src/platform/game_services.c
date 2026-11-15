@@ -2403,9 +2403,10 @@ static gh_game_event_status event_move_tail(void *context,gh_event_actor_factory
   return gh_game_event_pendulum_002df860(&s->event_actor_move[index].pendulum,actor,
    s->event_actor_extra,&bindings,s->b.player_shared_vector,frontier);
  }
- if(entry!=0x2b6a40)return GH_EVENT_UNSUPPORTED;
+ if(entry!=0x2b6a40&&entry!=0x2b79e0)return GH_EVENT_UNSUPPORTED;
  if(!s->event_actor_extra||!s->event_actor_extra->bindings.creation)return GH_EVENT_ARGUMENT;
  gh_event_components *components=s->event_actor_extra->bindings.creation->bindings.components;
+ if(entry==0x2b79e0)return gh_event_actor_ring_002b79e0(actor,components,frontier);
  return gh_event_actor_bust_002b6a40(actor,components,frontier);
 }
 

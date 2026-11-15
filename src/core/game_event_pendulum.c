@@ -37,8 +37,8 @@ static gh_game_event_status simulate(gh_event_pendulum_call *call, const gh_clot
     return GH_EVENT_OK;
 }
 
-/* Main 2DF950 writes the six profile-2A0 records at 61AF10. */
-static const gh_cloth_sphere spheres[] = {
+/* Original 2DF950 profiles 2A0 and 252 share the same six records. */
+static const gh_cloth_sphere paired_spheres[] = {
     {0,4,4,1,0.075f,0,{0,0.06f,0.02f,1},{0,0.06f,0.02f,1}},
     {0,4,4,1,0.075f,0,{0,0.02f,0.02f,1},{0,0.02f,0.02f,1}},
     {0,3,3,1,0.055f,0,{0,0.01f,0,1},{0,0.01f,0,1}},
@@ -47,30 +47,77 @@ static const gh_cloth_sphere spheres[] = {
     {0,11,11,1,0.09f,0,{0.03f,-0.015f,0,1},{0.03f,-0.015f,0,1}},
 };
 
+static const gh_cloth_sphere ring_spheres[] = {
+    {0,18,18,1,.24f,0,{0,0,0,1},{0,0,0,1}},
+    {0,22,22,1,.24f,0,{0,0,0,1},{0,0,0,1}}
+};
+
+static const gh_cloth_sphere el26_spheres[] = {
+    {0,4,4,1,.05f,0,{0,.12f,.08f,1},{0,.12f,.08f,1}},
+    {0,4,4,1,.06f,0,{0,.08f,.08f,1},{0,.08f,.08f,1}},
+    {0,4,4,1,.055f,0,{0,.03f,.08f,1},{0,.03f,.08f,1}},
+    {0,4,4,1,.08f,0,{0,.06f,.04f,1},{0,.06f,.04f,1}}
+};
+
 gh_game_event_status gh_game_event_pendulum_002df860(gh_event_pendulum_call *call,
     gh_event_actor_factory *actor, const gh_event_actor_extra *extra, const gh_cloth_step_bindings *b,
     gh_player_shared_vector *pivot, uint32_t *frontier) {
     if (!frontier) return GH_EVENT_ARGUMENT;
     *frontier = 0x2df860;
     if (!call || !actor || !extra || !b || !pivot || !pivot->initialized ||
-        actor->kind != 0x60b || !actor->model.ready || actor->model.root.size < GH_EVENT_ACTOR_BYTES ||
+        !actor->model.ready || actor->model.root.size < GH_EVENT_ACTOR_BYTES ||
         actor->model.root.bytes != actor->object.view.bytes || !actor->model.root.bytes)
         return GH_EVENT_ARGUMENT;
     uint8_t *root = actor->model.root.bytes;
-    const gh_event_spring_profile *profile = &extra->pendulum_profile;
-    const gh_actor_model *parent = extra->pendulum_parent;
     const gh_actor_external_parent_set *links = actor->model.external_parts;
-    if (!root[0x1390] || word(root+0x1394) != 0x2a0 || !profile->loaded ||
-        profile->original_scratch != 0x61af10 || !links || links->child != &actor->model ||
-        !parent || links->parent != parent || !parent->ready ||
-        word(root+0x2f20) != 10 || word(root+0x2f58) != 6)
+    const gh_event_spring_profile *profile;
+    const gh_actor_model *parent;
+    const gh_cloth_sphere *spheres = paired_spheres;
+    size_t sphere_count = sizeof(paired_spheres)/sizeof(*paired_spheres);
+    uint32_t kind, scratch;
+    switch (actor->kind) {
+    case 0x60b:
+        profile = &extra->pendulum_profile;
+        parent = extra->pendulum_parent;
+        kind = 0x2a0;
+        scratch = 0x61af10;
+        break;
+    case 0x610:
+        profile = &extra->ev04_pendulums[0];
+        parent = &actor->model;
+        kind = 0x250;
+        scratch = 0x61a9a0;
+        spheres = ring_spheres;
+        sphere_count = sizeof(ring_spheres)/sizeof(*ring_spheres);
+        break;
+    case 0x616:
+        profile = &extra->ev04_pendulums[1];
+        parent = links ? links->parent : NULL;
+        kind = 0x252;
+        scratch = 0x61b150;
+        break;
+    case 0x626:
+        profile = &extra->ev04_pendulums[2];
+        parent = links ? links->parent : NULL;
+        kind = 0x256;
+        scratch = 0x61acd0;
+        spheres = el26_spheres;
+        sphere_count = sizeof(el26_spheres)/sizeof(*el26_spheres);
+        break;
+    default:
+        return GH_EVENT_UNSUPPORTED;
+    }
+    if (!root[0x1390] || word(root+0x1394) != kind || !profile->loaded || profile->original_scratch != scratch ||
+        !parent || !parent->ready ||
+        (parent != &actor->model && (!links || links->child != &actor->model || links->parent != parent)) ||
+        word(root+0x2f20) != profile->count || word(root+0x2f58) != sphere_count)
         return GH_EVENT_UNSUPPORTED;
     gh_cloth_operands operands = {
         .model = &actor->model, .parent = parent, .config = root+0x2f20,
         .records = root+0x13a0, .indices = profile->indices,
         .coefficients = {profile->coefficients[0], profile->coefficients[1], profile->coefficients[2]},
-        .spheres = spheres, .sphere_count = sizeof(spheres)/sizeof(*spheres),
-        .count = 10, .tables = (1u<<0)|(1u<<5)|(1u<<6)|(1u<<7)|(1u<<8)|(1u<<9)
+        .spheres = spheres, .sphere_count = sphere_count,
+        .count = profile->count, .tables = (1u<<0)|(1u<<5)|(1u<<6)|(1u<<7)|(1u<<8)|(1u<<9)
     };
     return simulate(call, &operands, b, pivot, frontier);
 }

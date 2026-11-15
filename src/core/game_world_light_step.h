@@ -1,6 +1,7 @@
 #ifndef GH_GAME_WORLD_LIGHT_STEP_H
 #define GH_GAME_WORLD_LIGHT_STEP_H
 #include "game_world_light.h"
+#include "game_init.h"
 #include "game_room_pools.h"
 #include "game_camera.h"
 #include "game_scene_at.h"
@@ -12,14 +13,17 @@ extern "C" {
  * No draw/present is acknowledged. Unknown modes are original genuine no-op. */
 gh_light_status gh_game_set_background_0030e5c0(gh_boot_work *,unsigned mode,uint8_t red,uint8_t green,uint8_t blue);
 /* Actual2D7560 finite nonfading domain: noFAR area, canonical registry3 empty,
- * no light expiry timers or animated100000 extras. Real13R100 light records
+ * no light expiry timers. Real13R100 light records
  * are retained, not discarded. Fog0.96/0.04 and background writes are real;
  * active unknown branches return precise consumer before native commits. */
 gh_light_status gh_game_world_light_move_002d7560(gh_game_world_light *,gh_boot_work *,
  const gh_room_pools *,gh_camera_numeric_policy);
+enum { GH_WORLD_LIGHT_WAVE_SLOTS=48, GH_WORLD_LIGHT_WAVE_BYTES=0x14 };
+/* Scalar oscillator state is selected by dense light index, clamped at 47. */
+const uint8_t *gh_game_world_light_wave_002d9018(const gh_game_world_light *,unsigned index);
 typedef gh_light_status (*gh_light_actor_view)(void *,uint32_t handle,gh_title_player_view *,uint32_t *frontier);
 typedef struct {const gh_scene_at_manager *scene_at;gh_light_actor_view actor_view;void *context;
- const gh_title_player_view *player;} gh_light_move_bindings;
+ const gh_title_player_view *player;gh_game_mt *world_random;} gh_light_move_bindings;
 /* Same model registry3 and actor bytes, plus original FAR/LAR region selection.
  * Missing typed resolution/visibility-mask backing is an explicit frontier.
  * Native preflight commits no fog or actor writes on an unsupported branch. */

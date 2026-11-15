@@ -1,6 +1,8 @@
 #include "game_actor_model_light.h"
 #include "game_actor_light_normalize.h"
 #include "game_actor_light_attachment.h"
+#include "sdk_rotation_trig.h"
+#include "game_world_light_step.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -48,10 +50,25 @@ static const uint8_t *record(const gh_game_world_light *s,int index){
  return s->scalar+0x80+(size_t)index*0x70;
 }
 
-static gh_actor_model_status directional(const gh_actor_model *model,const uint8_t *r,const gh_actor_light_bindings *b,const gh_game_world_light *s,unsigned area,
+static gh_actor_model_status directional(const gh_actor_model *model,int index,const gh_actor_light_bindings *b,const gh_game_world_light *s,unsigned area,
  const float source_position[3],double strength,float direction[3],float color[3],uint32_t *pc){
- uint32_t flags=word(r+0x58);
- if(flags&0x100000)return stop(pc,0x1f7ef0,GH_ACTOR_MODEL_UNSUPPORTED);
+ const uint8_t *r=record(s,index);
+ const uint32_t flags=word(r+0x58);
+ float pulse=0;
+ if(flags&0x100000u){
+  if(index<0)return stop(pc,0x2d9018,GH_ACTOR_MODEL_UNSUPPORTED);
+  const uint8_t *wave=gh_game_world_light_wave_002d9018(s,(unsigned)index);
+  const float amount=number(wave+12);
+  if(amount!=0){
+   float sine,cosine;
+   const float angle=sub(mul(mul((float)wave[0x10],0x1p-8f),0x1.921fb6p+2f),0x1.921fb6p+1f);
+   if(gh_sdk_rotation_sincos_reference_0030a5d0(angle,&sine,&cosine,
+       GH_STATIC_BINARY32_REFERENCE,pc))
+    return stop(pc,0x1f7ef0,GH_ACTOR_MODEL_UNSUPPORTED);
+   pulse=mul(add(mul(sine,0.5f),0.5f),amount);
+  }
+  if(!isfinite(pulse))return stop(pc,0x14e0a0,GH_ACTOR_MODEL_UNSUPPORTED);
+ }
 
  unsigned kind=half(r);
  if(!b||!b->pivot_owner||!b->pivot_owner->initialized)return stop(pc,0x14dfd8,GH_ACTOR_MODEL_ARGUMENT);
@@ -77,7 +94,7 @@ static gh_actor_model_status directional(const gh_actor_model *model,const uint8
  for(unsigned k=0;k<3;k++){
   float d=number(r+0x20+4*k),c=number(r+0x30+4*k),p=number(b->pivot_owner->bytes+4*k);
   if(!isfinite(p)||(kind<=2&&(!isfinite(c)||(kind!=1&&!isfinite(d)))))return stop(pc,0x14dfd8,GH_ACTOR_MODEL_UNSUPPORTED);
-  direction[k]=kind==1?point_direction[k]:(kind>2?p:d);color[k]=kind>2?p:sub(c,p);
+  direction[k]=kind==1?point_direction[k]:(kind>2?p:d);color[k]=kind>2?p:sub(c,(flags&0x100000u)?pulse:p);
   if(kind<2){float t=strength<0?0:(strength<1?(float)strength:1);volatile float result=color[k]*t;color[k]=result;}
   if(!isfinite(color[k]))return stop(pc,0x14dfd8,GH_ACTOR_MODEL_UNSUPPORTED);
  }
@@ -153,14 +170,14 @@ static gh_actor_model_status run(gh_actor_model *m,gh_game_world_light *s,
  float directions[3][3],colors[3][3],reflect_dir[3],reflect_color[3],shadow_dir[3],shadow_color[3];
  unsigned used=0;
  for(unsigned k=0;k<3;k++)if(selected[k]>=0){
-  gh_actor_model_status e=directional(m,record(s,selected[k]),b,s,root[0x2cc],positions[k],strength[k],directions[used],colors[used],pc);if(e)return e;used++;
+  gh_actor_model_status e=directional(m,selected[k],b,s,root[0x2cc],positions[k],strength[k],directions[used],colors[used],pc);if(e)return e;used++;
  }
  int has_reflection=(word(root+0x254)&0x20000000)!=0;
  if(has_reflection){
   if(reflection<0){int best=0;double best_value=-1;for(unsigned k=0;k<3;k++)if(strength[k]>best_value){best_value=strength[k];best=(int)k;}reflection=selected[best];reflect_strength=strength[best];memcpy(reflection_position,positions[best],12);}
-  gh_actor_model_status e=directional(m,record(s,reflection),b,s,root[0x2cc],reflection_position,reflect_strength,reflect_dir,reflect_color,pc);if(e)return e;
+  gh_actor_model_status e=directional(m,reflection,b,s,root[0x2cc],reflection_position,reflect_strength,reflect_dir,reflect_color,pc);if(e)return e;
  }
- if(shadow>=0){gh_actor_model_status e=directional(m,record(s,shadow),b,s,root[0x2cc],shadow_position,shadow_strength,shadow_dir,shadow_color,pc);if(e)return e;}
+ if(shadow>=0){gh_actor_model_status e=directional(m,shadow,b,s,root[0x2cc],shadow_position,shadow_strength,shadow_dir,shadow_color,pc);if(e)return e;}
  /* Commit only after every required producer was validated. The original
   * writes XYZ only: neighboring W words must survive. */
  for(unsigned k=0;k<3;k++)root[0x2cd+k]=(uint8_t)selected[k];

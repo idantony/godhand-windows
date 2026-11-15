@@ -516,6 +516,59 @@ static int release_test_stage(void *context,gh_game_event *event,int *done)
     return status;
 }
 
+static void test_event_ring_rows(gh_event_components *components)
+{
+    uint8_t bytes[GH_EVENT_ACTOR_BYTES] = {0};
+    gh_event_actor_factory ring = {0};
+    ring.object.view.bytes = bytes;
+    ring.model.root = ring.object.view;
+    ring.model.root.size = sizeof(bytes);
+    ring.model.native_identity = &ring.model;
+    ring.model.bound = ring.model.ready = 1;
+    ring.model.part_count = ring.model.parts_allocated = bytes[0x2b4] = 42;
+    bytes[0x2ff0] = 1;
+    static const unsigned selected[] = {8,10,14,16,30,31,32,33,34,35};
+    uint8_t parts[sizeof(selected)/sizeof(*selected)][0x158] = {{0}};
+    for (unsigned i = 0; i < sizeof(selected)/sizeof(*selected); ++i) {
+        gh_actor_part *part = ring.model.parts + selected[i];
+        part->bytes = parts[i];
+        part->alias_d0 = parts[i] + 0x30;
+        part->alias_f0 = parts[i] + 0xb0;
+    }
+    put_word(ring.model.parts[10].alias_f0 + 4, 0x3f800000u);
+    put_word(ring.model.parts[16].alias_f0 + 4, 0xbf800000u);
+    const float start[] = {-.125f,-.1875f,-.25f,.125f,.1875f,.25f};
+    for (unsigned i = 0; i < 6; ++i)
+        memcpy(ring.model.parts[30+i].alias_d0, start+i, sizeof(float));
+
+    gh_event_component_view env;
+    CHECK(!gh_event_component_at(components, 0, &env));
+    const uint32_t saved = word(env.bytes + 0x14);
+    put_word(env.bytes + 0x14, 0x3f800000u);
+    uint32_t frontier;
+    CHECK(!gh_event_actor_ring_002b79e0(&ring, components, &frontier) && !frontier);
+    CHECK(word(bytes + 0x3004) == 0x3f800000u && word(bytes + 0x3024) == 0xbf800000u);
+    static const float expected[] = {-.11f,-.17625f,-.2425f,.1325f,.19875f,.265f};
+    for (unsigned i = 0; i < 6; ++i) {
+        const gh_actor_part *part = ring.model.parts + 30+i;
+        float x;
+        memcpy(&x, part->alias_d0, sizeof(x));
+        CHECK(fabsf(x - expected[i]) < 1e-6f && word(part->bytes + 0x154) == 0x100200);
+    }
+    put_word(bytes + 0x30a0, 0x3f800000u);
+    CHECK(!gh_event_actor_ring_002b79e0(&ring, components, &frontier) && !frontier);
+    CHECK(word(ring.model.parts[30].alias_d0) == 0xbe333333u &&
+          word(ring.model.parts[35].alias_d0) == 0x3e8ccccdu &&
+          !word(bytes + 0x3080) && !word(bytes + 0x3094) && !word(bytes + 0x30a0));
+    put_word(bytes + 0x3080, 0x3f800000u);
+    put_word(bytes + 0x30a0, 0x3f800000u);
+    put_word(env.bytes + 0x14, 0);
+    CHECK(!gh_event_actor_ring_002b79e0(&ring, components, &frontier) &&
+          !word(bytes + 0x3080) && !word(bytes + 0x30a0));
+    put_word(env.bytes + 0x14, saved);
+}
+
+
 int main(int argc, char **argv) {
     CHECK(argc == 2 || (argc == 3 && !strcmp(argv[2], "--ev02")));
     const int ev02 = argc == 3;
@@ -546,6 +599,7 @@ int main(int argc, char **argv) {
     gh_event_components components = {0};
     CHECK(gh_event_components_bind(&components, &module, elf, elf_bytes) == GH_EVENT_OK);
     CHECK(gh_event_components_construct_00297680(&components, 1) == GH_EVENT_OK);
+    test_event_ring_rows(&components);
     CHECK(gh_game_event_resource_begin_00297540(&resource, &event, &dvd, heap) == GH_EVENT_OK);
     ready = 0;
     for (unsigned i = 0; i < 1024 && !ready; ++i) {

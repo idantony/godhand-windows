@@ -1,5 +1,6 @@
 #include "game_world_light_step.h"
 #include "disc.h"
+#include "frame_state.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -111,6 +112,84 @@ static void actual_r003_fog(gh_disc *disc,gh_heap *heap)
  puts("PASS actual R003 FAR first region, LI33 fog rows, cache repeat, no-match and FEnv");
 }
 
+static void actual_ev04_waves(gh_disc *disc,gh_game_world_light *s,gh_boot_work *work,
+ const gh_room_pools *pools)
+{
+ size_t index;
+ gh_disc_entry entry;
+ C(!gh_disc_find(disc,"event/ev04.dat",&index)&&!gh_disc_entry_at(disc,index,&entry));
+ uint8_t *data=malloc((size_t)entry.size);
+ C(data&&!gh_disc_read(disc,index,0,data,(size_t)entry.size));
+ const uint32_t track=word(data+0x58);
+ C(track+16+7*0x44<=entry.size&&word(data+track)==0x00514553&&word(data+track+4)==70);
+ const uint8_t *key=data+track+16+6*0x44;
+ C(key[3]==3&&key[0x0d]==0x11&&key[0x0e]==2&&word(key+0x40)==0x5550000a);
+ uint8_t *world=s->scalar,*light=world+0x80;
+ uint8_t *state=world+0x7080;
+ uint8_t saved_light[0x70],saved_state[GH_WORLD_LIGHT_WAVE_BYTES];
+ memcpy(saved_light,light,sizeof(saved_light));
+ memcpy(saved_state,state,sizeof(saved_state));
+ const unsigned count=word(world+0x78);
+ put(world+0x78,1);
+ put(light+0x58,0xf0980000u);
+ memcpy(light+0x5c,key+0x42,2);
+ memcpy(light+0x5e,key+0x40,2);
+ memcpy(light+0x60,key+0x3c,4);
+ free(data);
+ memset(state,0,GH_WORLD_LIGHT_WAVE_BYTES);
+
+ C(gh_game_world_light_wave_002d9018(s,0)==state&&
+   gh_game_world_light_wave_002d9018(s,255)==state+47*GH_WORLD_LIGHT_WAVE_BYTES);
+ C(!gh_game_world_light_move_002d7560(s,work,pools,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+ C(state[0x12]==255&&!state[0x10]&&!word(state+4)&&!word(state+12));
+ state[0x12]=1;
+ C(gh_game_world_light_move_002d7560(s,work,pools,GH_CAMERA_NATIVE_BINARY32_REFERENCE)==
+   GH_LIGHT_UNSUPPORTED&&s->frontier==0x31d020&&state[0x12]==1&&!word(state+4));
+
+ gh_game_mt rng,reference;
+ gh_game_mt_seed_0030f2b0(&rng,0xd8a9523d);
+ reference=rng;
+ uint32_t noise[2];
+ for(unsigned i=0;i<2;i++){
+  C(!gh_game_mt_next_0030f348(&reference,noise+i));
+  noise[i]=gh_frame_jitter_bits_0031d020_word(noise[i]);
+ }
+ float first,second;
+ memcpy(&first,noise,sizeof(first));
+ memcpy(&second,noise+1,sizeof(second));
+ const volatile float first_scaled=first*4,second_scaled=second*4;
+ const volatile float target_speed=85+first_scaled,target_amount=(10+second_scaled)/100.0f;
+ gh_light_move_bindings bindings={.world_random=&rng};
+ C(!gh_game_world_light_move_native_002d7560(s,work,pools,&bindings,
+     GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+ float saved_speed,saved_amount;
+ memcpy(&saved_speed,state,4);
+ memcpy(&saved_amount,state+8,4);
+ C(state[0x12]==20&&!state[0x10]&&!word(state+4)&&!word(state+12)&&
+   saved_speed==target_speed&&saved_amount==target_amount&&!memcmp(&rng,&reference,sizeof(rng)));
+ C(!gh_game_world_light_move_native_002d7560(s,work,pools,&bindings,
+     GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+ float speed,amount;
+ memcpy(&speed,state+4,4);
+ memcpy(&amount,state+12,4);
+ C(speed==saved_speed*.05f&&amount==saved_amount*.05f&&state[0x10]==3&&state[0x12]==19);
+ C(!memcmp(&rng,&reference,sizeof(rng)));
+
+ light[0x60]=0;
+ half(light+0x5c,0x55a0); /* 90 degrees */
+ half(light+0x5e,25);
+ C(!gh_game_world_light_move_native_002d7560(s,work,pools,&bindings,
+     GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+ C(state[0x10]==67&&state[0x12]==19&&word(state+4)==0x42b40000&&word(state+12)==0x3e800000);
+ C(!memcmp(&rng,&reference,sizeof(rng)));
+
+ put(world+0x78,count);
+ memcpy(light,saved_light,sizeof(saved_light));
+ memcpy(state,saved_state,sizeof(saved_state));
+ puts("PASS actual EV04 cut3 oscillator bytes, cold phase, deterministic 2x MT, smoothing and static mode");
+}
+
+
 int main(int argc,char**argv){gh_disc*d;C(argc==2&&!gh_disc_open(argv[1],&d));size_t index;gh_disc_entry e;C(!gh_disc_find(d,"st1/r100.dat",&index)&&!gh_disc_entry_at(d,index,&e));uint8_t*b=malloc((size_t)e.size);C(b&&!gh_disc_read(d,index,0,b,(size_t)e.size));gh_bundle room;C(!gh_bundle_open(b,(size_t)e.size,&room));
  gh_heap*heap;gh_room_pools pools={0};C(!gh_heap_create(64*1024*1024,&heap)&&!gh_game_room_pools_initialize_002a5d80(&pools,&room,heap));size_t base=gh_heap_used(heap);
  gh_game_world_light*s=calloc(1,sizeof(*s));C(s&&!gh_game_world_light_construct_002d6d80(s)&&!gh_game_world_light_initialize_with_heap_002d6f40(s,&room,heap));
@@ -130,7 +209,7 @@ int main(int argc,char**argv){gh_disc*d;C(argc==2&&!gh_disc_open(argv[1],&d));si
  gh_boot_work before=work;memcpy(snapshot,p,sizeof(s->scalar));int actor;uint32_t handle;
  C(!gh_room_object_register(&pools,&actor,&actor,999,8,&handle));C(gh_game_world_light_move_002d7560(s,&work,&pools,GH_CAMERA_NATIVE_BINARY32_REFERENCE)==GH_LIGHT_UNSUPPORTED&&s->frontier==0x2d74b8&&!memcmp(snapshot,p,sizeof(s->scalar))&&!memcmp(&before,&work,sizeof(work)));C(!gh_room_object_unregister(&pools,handle,&actor));
  put(p+0x80+4,1);C(gh_game_world_light_move_002d7560(s,&work,&pools,GH_CAMERA_NATIVE_BINARY32_REFERENCE)==GH_LIGHT_UNSUPPORTED&&s->frontier==0x2d7560);put(p+0x80+4,0);
- uint32_t flags=word(p+0x80+0x58);put(p+0x80+0x58,flags|0x100000);C(gh_game_world_light_move_002d7560(s,&work,&pools,GH_CAMERA_NATIVE_BINARY32_REFERENCE)==GH_LIGHT_UNSUPPORTED&&s->frontier==0x156488);put(p+0x80+0x58,flags);
+ actual_ev04_waves(d,s,&work,&pools);
  live_models(s,&work,&pools);
  C(!gh_game_set_background_0030e5c0(&work,0,0,0,0)&&word(w+0x60c)==0x97976f&&(wide(w+0x270)&0x7fff)==0x10);before=work;C(!gh_game_set_background_0030e5c0(&work,99,1,2,3)&&!memcmp(&before,&work,sizeof(work)));
  C(!gh_game_world_light_release_presets(s)&&!gh_game_room_pools_release(&pools)&&!gh_heap_used(heap));actual_r003_fog(d,heap);C(!gh_heap_used(heap)&&!gh_heap_destroy(heap));free(snapshot);free(s);free(b);gh_disc_close(d);

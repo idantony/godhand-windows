@@ -14,6 +14,11 @@ gh_tm3_error gh_tm3_open(const void*raw,size_t n,gh_tm3_bundle*out){
  for(unsigned i=0;i<count;i++){uint32_t o=u32(b+16+i*4);if(o<16+(size_t)count*4||o>=n)return GH_TM3_BOUNDS;}
  *out=(gh_tm3_bundle){b,n,count};return GH_TM3_OK;
 }
+/* 151168 reads positive transfer6 PSMT4 as CT32 at W/2 and H/4.
+ * EL10 member zero adds a four-page pitch and two rows of indexed pages. */
+static int fast4_dimensions(unsigned w,unsigned h){
+ return ((w==128||w==256)&&(h==128||h==256||h==512))||(w==512&&h==256);
+}
 gh_tm3_error gh_tm3_member(const gh_tm3_bundle*t,unsigned index,gh_tm3_picture*out){
  if(!t||!out||!t->bytes)return GH_TM3_ARGUMENT;if(index>=t->count||index>255||t->size<16||(size_t)t->count>(t->size-16)/4)return GH_TM3_BOUNDS;
  size_t off=u32(t->bytes+16+index*4),end=t->size;
@@ -34,7 +39,7 @@ gh_tm3_error gh_tm3_member(const gh_tm3_bundle*t,unsigned index,gh_tm3_picture*o
   else if(w<128||w>512||h<64||h>512)return GH_TM3_UNSUPPORTED;
  }
  else if(b[5]==0){if((w!=32&&w!=64&&w!=128)||(h!=16&&h!=32&&h!=64))return GH_TM3_UNSUPPORTED;}
- else if((w!=128&&w!=256)||(h!=128&&h!=256&&h!=512))return GH_TM3_UNSUPPORTED;
+ else if(!fast4_dimensions(w,h))return GH_TM3_UNSUPPORTED;
  *out=(gh_tm3_picture){b,p+head,p+head+image,end-off,image,clut,w,h,tex0,b[5]};return GH_TM3_OK;
 }
 static size_t addr4(unsigned x,unsigned y,unsigned pitch){
@@ -86,7 +91,7 @@ gh_tm3_error gh_tm3_rgba_gs(const gh_tm3_picture*p,void*raw,size_t capacity){
  for(unsigned y=0;y<p->height;y++)for(unsigned x=0;x<p->width;x++){
   size_t nibble=(size_t)y*p->width+x;
   if(p->transfer_kind==6){
-   if((p->width!=128&&p->width!=256)||(p->height!=128&&p->height!=256&&p->height!=512))return GH_TM3_UNSUPPORTED;
+   if(!fast4_dimensions(p->width,p->height))return GH_TM3_UNSUPPORTED;
    unsigned pitch=p->width/128;size_t a=addr4(x,y,pitch);
    nibble=upload_word(a/8,pitch)*8+a%8;
   }

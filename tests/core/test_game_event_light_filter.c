@@ -33,6 +33,139 @@ static gh_game_event_status register_effects(void *context, const uint8_t *data,
     return status == GH_EFFECT_OK ? GH_EVENT_OK : GH_EVENT_CALLEE;
 }
 
+static float read_float(const uint8_t *p)
+{
+    float value;
+    memcpy(&value, p, sizeof(value));
+    return value;
+}
+
+static int same_half(const uint8_t *p, unsigned value)
+{
+    return p[0] == (uint8_t)value && p[1] == (uint8_t)(value >> 8);
+}
+
+static void move_at(gh_event_light_filter *state, const gh_event_component_view *camera,
+    const gh_event_component_view *env, unsigned cut, float frame)
+{
+    uint32_t frontier;
+    put_word(camera->bytes + 4, cut << 16);
+    memcpy(camera->bytes + 0x0c, &frame, sizeof(frame));
+    put_word(env->bytes + 0x10, cut);
+    CHECK(!gh_event_filter_move_000070d0(state, &frontier) && !frontier);
+    CHECK(!gh_event_object_light_move_000086b0(state, &frontier) && !frontier);
+}
+
+static void test_ev04_light(gh_disc *disc, gh_heap *heap, gh_dvd_jobs *dvd,
+    gh_game_event *event, const gh_event_module *module, const uint8_t *elf, size_t elf_bytes,
+    const uint8_t *core_data, size_t core_size)
+{
+    event->fields.data_number = 4;
+    gh_event_link link = {0};
+    CHECK(!gh_game_event_link_002be890(&link, module, elf, elf_bytes));
+    CHECK(!gh_event_components_construct_00297680(&link.components, 4));
+    gh_event_resource resource = {0};
+    CHECK(!gh_game_event_resource_begin_00297540(&resource, event, dvd, heap));
+    int ready = 0;
+    for (unsigned i = 0; i < 32 && !ready; ++i) {
+        CHECK(!gh_dvd_pump(dvd));
+        CHECK(!gh_game_event_resource_poll_002975d0(&resource, &ready));
+    }
+    CHECK(ready && resource.file_bytes == 2841520);
+
+    size_t room_size;
+    uint8_t *room_data = load(disc, "st0/r002.dat", &room_size);
+    gh_bundle room;
+    CHECK(!gh_bundle_open(room_data, room_size, &room));
+    gh_game_effects *effects = calloc(1, sizeof(*effects));
+    uint8_t *esp = calloc(1, 0x100180), *emitters = calloc(1, 0x26060);
+    CHECK(effects && esp && emitters);
+    CHECK(!gh_game_effects_initialize_00305a68(effects, esp, 0x100180, emitters, 0x26060,
+        core_data, core_size, &room));
+
+    gh_event_components *components = &link.components;
+    gh_event_data_prefix data = {0};
+    uint32_t frontier;
+    CHECK(!gh_event_data_bind_prefix_002977e8(&data, components, &resource, &frontier));
+    CHECK(!gh_event_actor_cuts_bind_00297864(&data, &frontier));
+    CHECK(!gh_event_data_bind_tail_00297880(&data, components, register_effects, effects, &frontier));
+    gh_event_sequence_view filters, lights;
+    CHECK(!gh_event_sequence_at(&data, 7, &filters) && filters.count == 29 && filters.stride == 0x2e8);
+    CHECK(!gh_event_sequence_at(&data, 6, &lights) && lights.count == 10 && lights.stride == 0x1c);
+    uint8_t *saved_keys = malloc(filters.bytes);
+    CHECK(saved_keys);
+    memcpy(saved_keys, filters.records, filters.bytes);
+
+    gh_game_world_light *world = calloc(1, sizeof(*world));
+    gh_scene_filters *scene = calloc(1, sizeof(*scene));
+    CHECK(world && scene && !gh_game_world_light_construct_002d6d80(world));
+    CHECK(!gh_game_world_light_initialize_with_heap_002d6f40(world, &room, heap));
+    CHECK(!gh_scene_filters_initialize_002993a0(scene, &room));
+    uint8_t original_override[0x64];
+    uint8_t *active = scene->work.active140c8;
+    memcpy(original_override, active + 0x208, sizeof(original_override));
+    gh_event_camera_cut first_cut;
+    CHECK(!gh_event_camera_cut_at(&data, 0, &first_cut) && first_cut.primary &&
+          same_half(first_cut.primary + 4, 71));
+    gh_event_light_filter state = {0};
+    CHECK(!gh_event_object_light_init_00008648(&state, components, &data, world, &frontier));
+    CHECK(!gh_event_filter_init_00007040(&state, components, &data, scene, &frontier));
+    gh_event_component_view camera, env, filter;
+    CHECK(!gh_event_component_at(components, 0, &env));
+    CHECK(!gh_event_component_at(components, 1, &camera));
+    CHECK(!gh_event_component_at(components, 7, &filter));
+
+    const uint8_t *a = filters.records + 0x2e8;
+    const uint8_t *b = a + 0x2e8;
+    move_at(&state, &camera, &env, 1, 0);
+    CHECK(!memcmp(active, a + 0x10, 0x208));
+    move_at(&state, &camera, &env, 1, 82.5f);
+    for (unsigned slot = 0; slot < 2; ++slot) {
+        const unsigned at = 0x18 + slot * 4;
+        const float expected = (read_float(a + at) + read_float(b + at)) * 0.5f;
+        CHECK(read_float(active + at - 0x10) == expected);
+    }
+    CHECK(!memcmp(active, filter.bytes + 0x310, 0x208));
+    CHECK(same_half(filter.bytes + 0x324 + 0x28, 255) &&
+          same_half(filter.bytes + 0x324 + 0x58, 255));
+    CHECK(!memcmp(active + 0x208, original_override, sizeof(original_override)));
+    move_at(&state, &camera, &env, 1, 165);
+    CHECK(!memcmp(active, b + 0x10, 0x208));
+
+    move_at(&state, &camera, &env, 8, 0);
+    const uint8_t *preset = scene->work.presets143a0 + 0x10 + GH_FILTER_PRESET_BYTES;
+    CHECK(!memcmp(active + 0x08, preset + 0x260, 8));
+    CHECK(!memcmp(active + 0x14, preset + 0x1fc, 0x64));
+    CHECK(!memcmp(active + 0x274, preset + 0x198, 0x64));
+
+    a = lights.records + 7 * 0x1c;
+    b = a + 0x1c;
+    move_at(&state, &camera, &env, 20, 9);
+    for (unsigned axis = 0; axis < 3; ++axis) {
+        const unsigned at = 0x0c + axis * 4;
+        const float expected = (read_float(a + at) + read_float(b + at)) * 0.5f;
+        CHECK(read_float(world->scalar + 0x40 + axis * 4) == expected);
+    }
+
+    uint8_t first[8] = {0}, last[8] = {0};
+    last[3] = 1;
+    float ratio;
+    CHECK(!gh_event_light_interpolation_factor_00004f08(&data, first, last, 0, 100, &ratio));
+    CHECK(ratio == 1.0f - 1.0f / 71.0f);
+    CHECK(!memcmp(filters.records, saved_keys, filters.bytes));
+    CHECK(!gh_game_world_light_release_presets(world));
+    CHECK(!gh_game_event_resource_abort(&resource));
+    free(saved_keys);
+    free(world);
+    free(scene);
+    free(effects);
+    free(esp);
+    free(emitters);
+    free(room_data);
+    puts("PASS actual EV04 keyed Filter, six gradient lanes, FI2 origin, and ObjectLight interpolation");
+}
+
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     gh_disc *disc = NULL;
@@ -53,7 +186,7 @@ int main(int argc, char **argv) {
     gh_event_module module = {0};
     gh_event_resource resource = {0};
     gh_dvd_jobs dvd;
-    CHECK(gh_heap_create(2 * 1024 * 1024, &heap) == GH_MEM_OK);
+    CHECK(gh_heap_create(8 * 1024 * 1024, &heap) == GH_MEM_OK);
     gh_dvd_jobs_init(&dvd, disc);
     CHECK(gh_game_event_module_begin_00297378(&module, &event, &work, &dvd, heap) == GH_EVENT_OK);
     int ready = 0;
@@ -166,9 +299,10 @@ int main(int argc, char **argv) {
     free(effects);
     free(esp);
     free(emitters);
+    CHECK(!gh_game_event_resource_abort(&resource));
+    test_ev04_light(disc, heap, &dvd, &event, &module, elf, elf_bytes, core_data, core_size);
     free(core_data);
     free(room_data);
-    CHECK(!gh_game_event_resource_abort(&resource));
     CHECK(!gh_game_event_module_abort(&module));
     CHECK(!gh_heap_used(heap) && !gh_heap_destroy(heap));
     gh_disc_close(disc);

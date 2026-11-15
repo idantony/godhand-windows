@@ -548,8 +548,22 @@ int main(int argc,char **argv)
       info.sample_slot,submitted[before].frames);
   C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
  }
+ em27_cue.program=5;
+ C(!gh_actor_attached_sound_bind(&source,&binding)&&
+    !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
+ expected=random;
+ uint32_t fixed_attack=0;
+ const unsigned before_fixed_attack=submissions;
+ C(!gh_actor_attached_sound_motion(&source,&em27_cue,&fixed_attack,&frontier)&&fixed_attack&&!frontier&&
+   !memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_update(voices));
+ gh_se_voice_info fixed_attack_info;
+ C(!gh_se_voice_query(voices,fixed_attack,&fixed_attack_info)&&!fixed_attack_info.pending&&
+   fixed_attack_info.native_voice&&fixed_attack_info.bank==em27_bank&&fixed_attack_info.program==5&&
+   fixed_attack_info.sample_slot==4&&fixed_attack_info.rate==11025&&fixed_attack_info.adsr2==0x5fcb&&
+   submissions==before_fixed_attack+1&&submitted[before_fixed_attack].frames>em27_attack_frames[1]);
+ C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
  em27_cue.bank=0;
- const int16_t em27_core_attack[]={0x83,0x87};
+ const int16_t em27_core_attack[]={0x83,0x85,0x87};
  for(unsigned cue=0;cue<sizeof(em27_core_attack)/sizeof(em27_core_attack[0]);cue++){
   em27_cue.program=em27_core_attack[cue];
   C(!gh_actor_attached_sound_bind(&source,&binding)&&

@@ -93,6 +93,19 @@ int main(int argc,char**argv){
  putf(pivot.bytes,1);putf(pivot.bytes+4,2);putf(pivot.bytes+8,3);C(!gh_actor_model_light_0014d828(&m,s,&b,GH_STATIC_BINARY32_REFERENCE,&pc));
  C(bytes[0x2cd]==0&&bytes[0x2ce]==2&&bytes[0x2cf]==1); /* original least-slot scan, no sorting */
  C(value(s->scalar+0x161a0)==0&&value(s->scalar+0x161b0)==6&&value(s->scalar+0x161c0)==3&&value(s->scalar+0x161d0)==9);
+ /* WorldLight 2D9018 byte phase 192 yields +pi/2 and full pulse.
+  * The same selected type2 subtracts this scalar for all RGB channels. */
+ uint8_t *pulsed=s->scalar+0x80;
+ uint8_t *wave=s->scalar+0x7080;
+ put(pulsed+0x58,0x100001);
+ wave[0x10]=192;
+ putf(wave+12,.25f);
+ C(!gh_actor_model_light_0014d828(&m,s,&b,GH_STATIC_BINARY32_REFERENCE,&pc));
+ for(unsigned k=0;k<3;k++)C(value(s->scalar+0x161d0+k*4)==9.75f+(float)k);
+ wave[0x10]=64;
+ C(!gh_actor_model_light_0014d828(&m,s,&b,GH_STATIC_BINARY32_REFERENCE,&pc));
+ for(unsigned k=0;k<3;k++)C(value(s->scalar+0x161d0+k*4)==10.f+(float)k);
+ put(pulsed+0x58,1);
  /* 2D9360 uses same LAR records, first matching ID, and defaults1 for ID0. */
  uint8_t table[16+2*0x50]={0};put(table,2);table[0x12]=7;table[0x62]=7;putf(table+0x14,.25f);putf(table+0x64,.75f);
  gh_bundle_entry oldtable=s->table;s->table=(gh_bundle_entry){.bytes=table,.size=sizeof(table)};bytes[0x2cc]=7;

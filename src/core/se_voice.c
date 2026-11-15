@@ -183,12 +183,14 @@ static int r105_em27_voice_source(const struct voice *v)
     h(root->bytes+0x2fe)==0x202&&w(root->bytes+0x564)==0x227&&h(root->bytes+0x640)==2;
 }
 
-/* EM00/EM03/EM27 attack SEQs use local programs 4 and 6. */
+/* EM00/EM03/EM27 attack SEQs use local programs 4 and 6. EM27's
+ * unarmed selector16 also requests the fixed program 5 directly. */
 static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
  const int16_t request=v->requested_program;
- if(!v->source_owner||bank<1||bank==2||bank==3||(request!=4&&request!=6)||
+ const int direct_five=request==5&&program==5;
+ if(!v->source_owner||bank<1||bank==2||bank==3||(request!=4&&request!=6&&!direct_five)||
     program<request||program>request+1||h(p)!=(unsigned)bank||h(p+2)!=(unsigned)program)
   return 0;
  const unsigned gain=h(p+0x10);
@@ -198,13 +200,13 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
  const int em27=gain==127&&(r105_em27_voice_source(v)||
     (!v->model&&v->combat_profile&&sample&&w(sample)==em27_offset));
  const uint32_t dependency=em27?0x227:gain==127?0x200:gain==125?0x203:0;
- if(!dependency)return 0;
+ if(!dependency||(direct_five&&!em27))return 0;
  if(v->model){
   const gh_title_player_view *root=&v->model->root;
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
      h(root->bytes+0x2fe)!=0x202||w(root->bytes+0x564)!=dependency)return 0;
  }else if(!v->combat_profile)return 0;
- const unsigned variants=program==request?0x10185u:0x10085u;
+ const unsigned variants=program==request&&!direct_five?0x10185u:0x10085u;
  if(h(p+4)!=(unsigned)(program-1)||w(p+6)!=0x0250022au||h(p+0xe)!=0x20||
     h(p+0x12)!=gain||w(p+0x14)!=0x005a0040||w(p+0x18)!=0x00c8ff38u||
     w(p+0x1c)!=0x00060000u||w(p+0x20)!=variants||w(p+0x24)!=0x400||
@@ -452,7 +454,7 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
      h(root->bytes+0x2fe)!=0x202)return 0;
   const uint32_t dependency=w(root->bytes+0x564);
-  const int em27=(program==0x83||program==0x87)&&r105_em27_voice_source(v);
+  const int em27=(program==0x83||program==0x85||program==0x87)&&r105_em27_voice_source(v);
   if(!em27&&!r100_em0a_core87_source(v,program)&&
      (dependency!=0x200||aged)&&(dependency!=0x203||em00_only))return 0;
  }else if(!v->combat_profile)return 0;

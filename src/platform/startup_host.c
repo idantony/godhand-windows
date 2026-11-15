@@ -1278,7 +1278,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x2d7560){
         gh_light_move_bindings bindings={.scene_at=s.scene_at,.actor_view=light_actor_view,.context=h,
-            .player=s.title_player->ready?&s.title_player->view:NULL};
+            .player=s.title_player->ready?&s.title_player->view:NULL,.world_random=&h->game_init.random};
         gh_light_status e=gh_game_world_light_move_native_002d7560(s.world_light,&h->work,s.pools,&bindings,GH_CAMERA_NATIVE_BINARY32_REFERENCE);
         if(e&&frontier)*frontier=s.world_light->frontier?s.world_light->frontier:address;
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;

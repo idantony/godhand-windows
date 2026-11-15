@@ -194,7 +194,10 @@ static void set_key(gh_event_additional_light *state, const uint8_t *key,
     }
     memcpy(p + 0x40, key + 0x38, 4);
     put(p + 0x50, 1);
-    put(p + 0x58, 0xf0800000u | ((key[0x0d] & 1u) ? 0x80000u : 0));
+    const uint32_t flags = 0xf0800000u |
+        ((key[0x0d] & 1u) ? 0x80000u : 0) |
+        ((key[0x0d] & 0x10u) ? 0x100000u : 0);
+    put(p + 0x58, flags);
     put_half(p + 0x5c, half(key + 0x42));
     put_half(p + 0x5e, half(key + 0x40));
     memcpy(p + 0x60, key + 0x3c, 4);
@@ -277,10 +280,6 @@ gh_game_event_status gh_event_additional_light_move_00004140(gh_event_additional
     for (unsigned i = 0; i < track.count; ++i) {
         const uint8_t *key = track.records + i * ROW_SIZE;
         if (key[3] == cut && (float)half(key + 6) == frame) {
-            if (!key[0x0e] || (key[0x0d] & 0x10)) {
-                *frontier = 0x42b0;
-                return GH_EVENT_UNSUPPORTED;
-            }
             ++adds;
         }
     }
@@ -303,8 +302,8 @@ gh_game_event_status gh_event_additional_light_move_00004140(gh_event_additional
             if (kept + preset_count > RECORDS - adds) return GH_EVENT_BOUNDS;
         }
     }
-    /* These tracks have no deletion/restore rows. The cut-start purge precedes every
-     * exact-frame add, including repeated IDs in file order. */
+    /* These tracks are install records, including EV04 kind zero. The
+     * cut-start purge precedes every exact-frame add in file order. */
     if (number(env.bytes + 0x14) == 0) {
         for (unsigned i = 0; i < RECORDS; ++i) {
             const uint8_t *p = record(world, i);

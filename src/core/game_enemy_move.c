@@ -4440,6 +4440,141 @@ static gh_actor_motion_status enemy_attack_area_00260b30(gh_enemy202_move *s,uin
     return GH_ACTOR_MOTION_OK;
 }
 
+/* 21FD50's original unarmed phase0 and phase1 use the bound dependency
+ * resource, two Give rows, and the yaw shadow at actor+600. */
+static gh_actor_motion_status advance_r105_unarmed16_0021fd50(gh_enemy202_move *s,uint8_t *p)
+{
+    enum { MOTION=200, TRACK, STEP, ROTATE, TRANSLATE, FINISH };
+    gh_enemy_actor *enemy=s->enemy;
+    gh_actor_motion *motion=&enemy->motion.motion;
+    gh_title_player_view *actor=&enemy->entry.object.view;
+    const gh_boot_work *work=enemy->entry.b.work;
+    if(!r105_exchanged_enemy(work,p)||word(p+0x6ec)||
+       gh_enemy_timers_held_weapon(&enemy->timers)||p[0x2f6]>1)
+        return stop(s,0x21fd50,GH_ACTOR_MOTION_UNSUPPORTED);
+    uint32_t pc=0;
+    if(!s->substate67_stage){
+        p[0x186a]=2;
+        put(p+0x16d4,word(p+0x16d4)|0x400u);
+        for(unsigned i=1;i<5;++i){
+            const gh_hitarea_object *give=&enemy->hitareas.units[i];
+            const gh_title_player_view *hit=NULL;
+            if(!enemy->hitareas.created[i]||
+               (!give->fallback&&gh_hitarea_object_last_hit_actor(give,&hit)))
+                return stop(s,0x262a10,GH_ACTOR_MOTION_UNSUPPORTED);
+            if(hit&&hit->bytes&&hit->size>=0x300&&half(hit->bytes+0x2fe)==0x100){
+                p[0x1864]=1;
+                break;
+            }
+        }
+        if(p[0x2f6])s->substate67_stage=TRACK;
+        else{
+            p[0x1864]=0;
+            put(p+0x604,0);
+            put(p+0x5f4,1);
+            put(p+0x5f0,50);
+            stamp19_attack_parameters(p,5,0,0x3d);
+            put(p+0x1888,10);
+            put(p+0x188c,0x37);
+            put(p+0x5fc,0);
+            s->substate67_stage=MOTION;
+        }
+    }
+    if(s->substate67_stage==MOTION){
+        const gh_object_view *resource=&enemy->entry.resource;
+        gh_actor_motion_call *call=&s->substate67_motion;
+        if(!call->active){
+            const unsigned heat=heat_category(s);
+            if(!heat)return stop(s,0x1fa010,GH_ACTOR_MOTION_UNSUPPORTED);
+            if(!resource->bytes||!resource->file_extent_known||resource->file_extent<0x144||
+               resource->file_extent>resource->size||motion->b.resource!=resource->bytes)
+                return stop(s,0x21ff40,GH_ACTOR_MOTION_BOUNDS);
+            const size_t sequence=heat==5?0x140:0x13c;
+            gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(call,
+                motion,&motion->b,word(resource->bytes+0x138),word(resource->bytes+sequence),
+                0,10,p[0x17c3]?2:0,0);
+            if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
+        }
+        gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(call);
+        if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
+        put(p+0x600,word(p+0x104));
+        p[0x2f6]=1;
+        s->substate67_stage=TRACK;
+    }
+    if(s->substate67_stage==TRACK){
+        const uint32_t remaining=word(p+0x5f0);
+        const float turn_delay=number(word(p+0x604));
+        const float rate=number(word(p+0x5a8));
+        if(!isfinite(turn_delay)||!isfinite(rate))
+            return stop(s,0x221758,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(remaining||turn_delay>0){
+            fenv_t env;
+            if(!set_round(&env,FE_TOWARDZERO))
+                return stop(s,0x221758,GH_ACTOR_MOTION_CALLEE);
+            if(turn_delay>0){
+                put(p+0x16d0,word(p+0x16d0)|0x800000u);
+                put(p+0x604,bits(sub(turn_delay,rate)));
+            }
+            if(remaining){
+                float from[3],to[3],turn;
+                const float tracking_yaw=number(word(p+0x600)),actor_yaw=number(word(p+0x104));
+                put(p+0x5f0,remaining-1);
+                if(!position(actor,from)||!position(s->player,to)||
+                   gh_player_target_angle_002da038(s->elf,s->elf_bytes,from,to,
+                    tracking_yaw,mul(rate,number(0x3dc90fdb)),&turn,&pc)){
+                    (void)fesetenv(&env);
+                    return stop(s,pc?pc:0x2da038,GH_ACTOR_MOTION_UNSUPPORTED);
+                }
+                float next_tracking=add(tracking_yaw,turn),next_actor=add(actor_yaw,turn);
+                if(gh_id_angle_reference_001f7d48(next_tracking,&next_tracking)||
+                   gh_id_angle_reference_001f7d48(next_actor,&next_actor)){
+                    (void)fesetenv(&env);
+                    return stop(s,0x1f7d48,GH_ACTOR_MOTION_UNSUPPORTED);
+                }
+                put(p+0x600,bits(next_tracking));
+                put(p+0x104,bits(next_actor));
+            }
+            if(fesetenv(&env))return stop(s,0x221758,GH_ACTOR_MOTION_CALLEE);
+        }
+        s->substate67_stage=STEP;
+    }
+    if(s->substate67_stage==STEP){
+        int ended=0;
+        if(!enemy->b.canonical_rate)return stop(s,0x157c18,GH_ACTOR_MOTION_UNSUPPORTED);
+        gh_actor_motion_status status=gh_actor_motion_step_00157c18(motion,*enemy->b.canonical_rate,
+            GH_STATIC_BINARY32_REFERENCE,&ended,&pc);
+        if(status)return stop(s,pc?pc:0x157c18,status);
+        s->state71_exit=(uint8_t)ended;
+        s->substate67_stage=ROTATE;
+    }
+    if(s->substate67_stage==ROTATE){
+        if(gh_player_root_rotation_0014f9f0(actor,work,GH_STATIC_BINARY32_REFERENCE,&pc))
+            return stop(s,pc?pc:0x14f9f0,GH_ACTOR_MOTION_UNSUPPORTED);
+        s->substate67_stage=TRANSLATE;
+    }
+    if(s->substate67_stage==TRANSLATE){
+        if(gh_player_root_translation_0014f928(actor,work,GH_STATIC_BINARY32_REFERENCE,&pc))
+            return stop(s,pc?pc:0x14f928,GH_ACTOR_MOTION_UNSUPPORTED);
+        s->substate67_stage=FINISH;
+    }
+    if(s->substate67_stage==FINISH){
+        if(s->state71_exit){
+            gh_actor_motion_status status=choose_after_substate_002705d8(s,p);
+            if(status)return status;
+        }else{
+            if(word(p+0x5f4)){
+                gh_actor_motion_status status=enemy_attack_area_00260b30(s,p);
+                if(status)return status;
+            }
+            if(heat_category(s)>=3)return stop(s,0x26f1d8,GH_ACTOR_MOTION_UNSUPPORTED);
+            if(half(p+0x3ac)&3u)put(p+0x5fc,1);
+            if(word(p+0x5fc))put(p+0x16d4,word(p+0x16d4)&~0x400u);
+        }
+        s->substate67_stage=5;
+    }
+    return advance_state0_tail(s,p);
+}
+
 static gh_actor_motion_status advance_r101_armed47_00233738(gh_enemy202_move *s,uint8_t *p)
 {
     enum { ARMED_MOTION=180, ARMED_EFFECT, ARMED_TRACK, ARMED_STEP,
@@ -5505,6 +5640,7 @@ static gh_actor_motion_status advance_target(gh_enemy202_move *s,uint8_t *p,
     if(s->pending_ai_pc==0x23b968||s->pending_ai_pc==0x23c620)
         return advance_substate6b_or_6c(s,p);
     if(s->pending_ai_pc==0x233738)return advance_r101_armed47_00233738(s,p);
+    if(s->pending_ai_pc==0x21fd50)return advance_r105_unarmed16_0021fd50(s,p);
     if(s->pending_ai_pc==0x234d30)return advance_substate4b_00234d30(s,p);
     if(s->pending_ai_pc==0x235db8)return advance_em0a_substate4c_00235db8(s,p);
     if(s->pending_ai_pc==0x236190)return advance_r100_substate4d_00236190(s,p);
