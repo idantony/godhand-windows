@@ -477,8 +477,8 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
         state.zbuf_psm=58;state.z_write=(uint8_t)((p.zbuf>>32)==0);state.colclamp=state.native_float_reference=1;
         if(trail){
             if(p.quad_count){
-                gh_static_gs_vertex vertices[25*6];
-                uint32_t indices[25*6];
+                gh_static_gs_vertex vertices[GH_EFFECT_TRANS_TRAIL_VERTEX_CAPACITY];
+                uint32_t indices[GH_EFFECT_TRANS_TRAIL_VERTEX_CAPACITY];
                 size_t count=0;
                 for(unsigned i=0;i<p.quad_count;++i){
                     const auto &segment=p.quads[i];

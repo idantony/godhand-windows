@@ -1,6 +1,7 @@
 #include "../../src/platform/model_renderer.h"
 #include "../../src/platform/disc.h"
 #include "../../src/assets/tm3.h"
+#include "../../src/core/game_effects_trans.h"
 #include <algorithm>
 #include <array>
 #include <vector>
@@ -101,6 +102,23 @@ static void effect_packets(gh_model_renderer *r,const gh_stage_material &materia
  oracle(trail,material,state,first);
  oracle(trail,material,state,second);
  compare(r,trail,"PRIM54 ordered trail triangles");
+
+ // Only the final triangle of a max-size trail passes depth. A renderer
+ // dropping the tail above the old 150-vertex cap leaves the clear color.
+ static_assert(GH_EFFECT_TRANS_TRAIL_VERTEX_CAPACITY==174,"EV04 trail capacity");
+ constexpr size_t capacity=GH_EFFECT_TRANS_TRAIL_VERTEX_CAPACITY;
+ std::array<gh_static_gs_vertex,capacity> long_trail{};
+ std::array<uint32_t,capacity> long_indices{};
+ const auto behind=triangle(45,255,128);
+ for(size_t i=0;i<capacity;++i){
+  long_trail[i]=(i<capacity-3?behind:second)[i%3];
+  long_indices[i]=(uint32_t)i;
+ }
+ Surface long_expected(0x314159,50);
+ C(!gh_model_renderer_begin(r,0x314159,50));
+ C(!gh_model_renderer_draw_trail(r,&state,texture,long_trail.data(),long_trail.size(),long_indices.data()));
+ oracle(long_expected,material,state,second);
+ compare(r,long_expected,"PRIM54 EV04 29-segment trail");
 
  // R002's ESP draw resolves a 1024x128 PSMT4 atlas. Sample a texel beyond
  // column 512 so copying or wrapping to the display width fails the test.

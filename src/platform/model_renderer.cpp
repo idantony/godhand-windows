@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <algorithm>
 #include "model_renderer.h"
+#include "../core/game_effects_trans.h"
 #include "model_raster_bounds.h"
 template<class T>struct Owned{T*p=nullptr;~Owned(){if(p)p->Release();}T**out(){return &p;}Owned()=default;Owned(const Owned&)=delete;};
 struct Material{uint64_t identity;unsigned width,height;Owned<ID3D11Texture2D> image;Owned<ID3D11ShaderResourceView> view;};
@@ -175,7 +176,7 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
  if(s->frame_mask && s->frame_mask != UINT32_MAX &&
     ((!flat_strip&&!scene_warp) || s->frame_mask != 0xff000000u))return GH_MODEL_GPU_UNSUPPORTED;
  if(trail_packet){
-  if(!flat_strip||count!=n||count>150)return GH_MODEL_GPU_UNSUPPORTED;
+  if(!flat_strip||count!=n||count>GH_EFFECT_TRANS_TRAIL_VERTEX_CAPACITY)return GH_MODEL_GPU_UNSUPPORTED;
   for(size_t i=0;i<n;++i){
    if(indices[i]!=i)return GH_MODEL_GPU_ARGUMENT;
    const auto &color=input[i-i%3].rgba;
