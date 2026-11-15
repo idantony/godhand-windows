@@ -17,10 +17,15 @@ finished port or execute guest instructions in the production runtime.
   from that verified copy while other workers continue editing.
   Worker receipts with absolute paths use their `relative` names and must
   supply each `supersedes` fingerprint or explicitly declare a new file.
+  Relative receipts can pin predecessors in the top-level `supersedes` map
+  or in each file's `base_sha256`. Supply dependent overlays in order. The
+  composer checks each predecessor against the bytes selected so far.
 - `tools/rebase-source-overlay.py` moves a pinned text overlay to a newer frozen
   source snapshot. It verifies both receipts and prerequisites, merges disjoint
   edits, and writes a fresh bundle to project scratch. Absolute worker receipts
-  also check their relative source and predecessor paths. A new file may omit
+  also check their relative source and predecessor paths. For a relative
+  receipt without a base, `--source-base RECEIPT SHA256` pins the source
+  snapshot and verifies its file hashes before the merge. A new file may omit
   the predecessor when the pinned base confirms it was absent. To combine
   changes to different tokens on one line, pass the worker recipe with
   `--tokens` and `--tokens-sha256`. Each replacement must have a unique

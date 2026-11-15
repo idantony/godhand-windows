@@ -94,6 +94,23 @@ class WorkflowTools(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "predecessor"):
             snapshot_freeze.overlay_receipt({"schema": 1, "files": [existing, added]})
 
+    def test_worker_relative_receipts_enforce_all_supplied_predecessors(self):
+        name, added = "src/model.c", "tests/model.c"
+        old, new = "A" * 64, "B" * 64
+        canonical = {"schema": 1, "files": [{"path": name, "sha256": new}, {"path": added, "sha256": new}],
+                     "supersedes": {name: old, added: None}}
+        chained = {"schema": 1, "files": [{"path": name, "sha256": new, "base_sha256": old},
+                                         {"path": added, "overlay_sha256": new, "base_sha256": None}]}
+        for receipt in (canonical, chained, {"files": chained["files"]}):
+            normalized, predecessors = snapshot_freeze.overlay_receipt(receipt)
+            self.assertEqual(normalized["files"], [{"path": name, "sha256": new.lower()},
+                                                  {"path": added, "sha256": new.lower()}])
+            self.assertEqual(predecessors, {name: old.lower(), added: None})
+        with self.assertRaisesRegex(ValueError, "Conflicting"):
+            snapshot_freeze.overlay_receipt({**chained, "supersedes": {name: new}})
+        with self.assertRaisesRegex(ValueError, "Unmatched"):
+            snapshot_freeze.overlay_receipt({**canonical, "supersedes": {"src/unrelated.c": old}})
+
     def test_rejects_other_whitespace_atomically(self):
         path = self.stage("src/demo.c", b"trailing space \n\n")
         before = (self.root / ".git/index").read_bytes()

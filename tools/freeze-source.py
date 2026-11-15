@@ -46,21 +46,38 @@ def dependency_records(value):
 
 def overlay_receipt(value):
     """Read worker digest pairs without rewriting their frozen receipt."""
-    if isinstance(value, dict) and value.get("schema") == 1 and isinstance(value.get("files"), list):
-        entries = value["files"]
-        if not any(isinstance(entry, dict) and "relative" in entry for entry in entries):
-            return value, {}
+    entries = value.get("files") if isinstance(value, dict) else None
+    if isinstance(entries, list) and value.get("schema", 1) == 1:
+        declared = value.get("supersedes", {})
+        if not isinstance(declared, dict):
+            raise ValueError("Invalid overlay predecessor map")
         rows = []
         for entry in entries:
-            if not isinstance(entry, dict) or "supersedes" not in entry:
-                raise ValueError("Missing worker overlay predecessor")
-            previous = entry["supersedes"]
-            if previous is not None and (not isinstance(previous, dict) or not isinstance(previous.get("sha256"), str)):
-                raise ValueError("Invalid worker overlay predecessor")
-            rows.append({"path": entry.get("relative"), "overlay": entry.get("sha256"),
-                         "base": None if previous is None else previous["sha256"]})
+            if not isinstance(entry, dict):
+                raise ValueError("Invalid overlay file record")
+            name = entry.get("relative", entry.get("path"))
+            if not isinstance(name, str) or not name:
+                raise ValueError("Invalid overlay file path")
+            row = {"path": name, "overlay": entry.get("sha256", entry.get("overlay_sha256"))}
+            if "relative" in entry:
+                if "supersedes" not in entry:
+                    raise ValueError("Missing worker overlay predecessor")
+                previous = entry["supersedes"]
+                if previous is not None and (not isinstance(previous, dict) or not isinstance(previous.get("sha256"), str)):
+                    raise ValueError("Invalid worker overlay predecessor")
+                row["base"] = None if previous is None else previous["sha256"]
+            elif "base_sha256" in entry:
+                row["base"] = entry["base_sha256"]
+            if name in declared:
+                if "base" in row and normalized_hash(row["base"], name, optional=True) != normalized_hash(
+                        declared[name], name, optional=True):
+                    raise ValueError("Conflicting overlay predecessors for " + name)
+                row["base"] = declared[name]
             if "bytes" in entry:
-                rows[-1]["bytes"] = entry["bytes"]
+                row["bytes"] = entry["bytes"]
+            rows.append(row)
+        if set(declared) - {row["path"] for row in rows}:
+            raise ValueError("Unmatched predecessor in overlay receipt")
     elif isinstance(value, list):
         rows = value
     elif isinstance(value, dict) and isinstance(value.get("files"), dict):
@@ -71,25 +88,32 @@ def overlay_receipt(value):
             rows.append({"path": name, "base": pair.get("base_sha256"), "overlay": pair.get("overlay_sha256")})
     else:
         raise ValueError("Unsupported overlay bundle receipt")
-    files, predecessors = [], {}
+    files, predecessors, seen = [], {}, set()
     for row in rows:
-        if not isinstance(row, dict) or "base" not in row:
+        if not isinstance(row, dict) or ("base" not in row and not isinstance(entries, list)):
             raise ValueError("Invalid overlay hash pair")
-        name, old, new = row.get("path"), row.get("base"), row.get("overlay")
-        if not isinstance(name, str) or not name or name in predecessors:
+        name = row.get("path")
+        if not isinstance(name, str) or not name or name in seen:
             raise ValueError("Invalid or duplicate overlay file path")
-        for digest_value in ((new,) if old is None else (old, new)):
-            if (not isinstance(digest_value, str) or len(digest_value) != 64
-                    or any(char not in "0123456789abcdefABCDEF" for char in digest_value)):
-                raise ValueError("Invalid predecessor or replacement SHA-256 for " + name)
-        predecessors[name] = None if old is None else old.lower()
-        files.append({"path": name, "sha256": new.lower()})
+        seen.add(name)
+        if "base" in row:
+            predecessors[name] = normalized_hash(row["base"], name, optional=True)
+        files.append({"path": name, "sha256": normalized_hash(row.get("overlay"), name)})
         if "bytes" in row:
             if type(row["bytes"]) is not int or row["bytes"] < 0:
                 raise ValueError("Invalid overlay byte count for " + name)
             files[-1]["bytes"] = row["bytes"]
     dependencies = value.get("dependency_files", {}) if isinstance(value, dict) else {}
     return {"schema": 1, "files": files, "dependency_files": dependencies}, predecessors
+
+
+def normalized_hash(value, name, *, optional=False):
+    if value is None and optional:
+        return None
+    if (not isinstance(value, str) or len(value) != 64
+            or any(char not in "0123456789abcdefABCDEF" for char in value)):
+        raise ValueError("Invalid predecessor or replacement SHA-256 for " + name)
+    return value.lower()
 
 
 def main():
