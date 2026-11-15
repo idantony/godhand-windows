@@ -1,3 +1,6 @@
+#include "game_camera.h"
+#include "game_camera_projection.h"
+#include "game_enemy_ems.h"
 #include "game_enemy_finalize.h"
 #include "game_enemy_solids.h"
 #include "game_enemy_motion.h"
@@ -30,7 +33,6 @@
 #include "game_player_child_tail.h"
 #include "game_player_targets.h"
 #include "game_hitarea_frame.h"
-#include "game_enemy_ems.h"
 #include "game_enemy_row2.h"
 #include "game_enemy_manager.h"
 #include "game_camera_envelope.h"
@@ -1282,6 +1284,25 @@ static int player_rise_sequence(gh_disc *disc,const gh_bundle *room,gh_game_titl
     return 0;
 }
 
+typedef struct {
+    gh_game_effects *owner;
+    unsigned warp,trails;
+} stamp19_draw_probe;
+
+static gh_effect_status stamp19_draw(void *context,const gh_effect_trans_packet *packet)
+{
+    stamp19_draw_probe *probe=context;
+    gh_effect_esp_view child;
+    if(!gh_effect_create_esp_at(probe->owner,packet->slot,&child)&&
+       child.serial==packet->serial&&word(child.payload+0x23a)==0x002d0058u){
+        if(packet->original_callee==0x2f02b8&&packet->kind==GH_EFFECT_PASS_SCENE_WARP)
+            ++probe->warp;
+        if((packet->original_callee==0x2ec398||packet->original_callee==0x2edf70)&&packet->quad_count)
+            ++probe->trails;
+    }
+    return GH_EFFECT_OK;
+}
+
 static int verify_stamp19_attack_effect(const gh_enemy202_move *move,
     const gh_effect_create_bindings *effects,const gh_enemy_actor *enemy,
     const gh_title_player_view *player,gh_game_init_state *init,
@@ -1302,6 +1323,15 @@ static int verify_stamp19_attack_effect(const gh_enemy202_move *move,
             word(emitter.payload+0x1e0)==word(actor->bytes+0x114)&&!word(emitter.payload+0x110));
         matched++;
     }
+    gh_effect_view est;
+    CHECK(!gh_effect_est_at_00306030(effects->storage.effects,0x58,0x2d,&est)&&est.bytes);
+    CHECK(word(est.bytes+4)==4&&est.size>=16+4*0x2f0);
+    static const uint8_t types[]={0x12,9,9,0x12}, delays[]={45,45,45,50};
+    for(unsigned i=0;i<4;i++){
+        const uint8_t *row=est.bytes+16+i*0x2f0;
+        CHECK(row[0xbe]==15&&row[0xc0]==delays[i]&&row[0x133]==types[i]&&
+            word(row+4)==(types[i]==0x12?0x00c00000u:0x00e01000u));
+    }
     CHECK(matched==4);
     gh_effects_frame_globals globals={0};
     gh_game_scene_aux profile={0};
@@ -1312,7 +1342,53 @@ static int verify_stamp19_attack_effect(const gh_enemy202_move *move,
         .init=init,.current_player=player,.globals=&globals,.profile=&profile,
         .clock=stamp19_effect_clock,.clock_context=&clock,.atan_coeff=effects->atan_coeff,
         .policy=GH_STATIC_BINARY32_REFERENCE,.actors=actors};
-    for(unsigned i=0;i<6;i++)CHECK(!gh_game_effects_frame_update_0030f228(&frame,&update)&&!frame.frontier);
+    CHECK(!gh_effect_create_bind_trail_pools(effects->storage.effects,model->pools));
+    gh_display_state display={0};
+    CHECK(!gh_display_state_from_elf(&display,elf,elf_size)&&
+        !gh_display_static_initialize_002a48a8(&display,1,0xffff));
+    const gh_camera_projection_display projection={&display.screen_width,&display.screen_height_bits,
+        &display.pixel_aspect_bits,&display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+    gh_game_pl_camera camera={0};
+    CHECK(!gh_game_camera_construct_pl_00139bc8(&camera,&init->camera,GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+    gh_game_camera *saved_camera=init->active_camera;
+    init->active_camera=camera.identity;
+    float target[3];
+    memcpy(target,part->bytes+0xb0,12);
+    const float eye[3]={target[0]+2,target[1]+1,target[2]+5};
+    memcpy(camera.fields+0x200,target,12);memcpy(camera.fields+0x210,eye,12);
+    uint32_t pc=0;
+    CHECK(!gh_game_camera_project_00138740(&camera,&projection,&pc));
+    gh_stage_textures *textures=NULL;
+    CHECK(!gh_stage_textures_create(&textures));
+    stamp19_draw_probe probe={.owner=effects->storage.effects};
+    const gh_effects_trans_bindings draw={.storage=effects->storage,.work=effects->work,
+        .globals=&globals,.display=&display,.policy=GH_STATIC_BINARY32_REFERENCE,
+        .cvt_policy=GH_FRAME_CHOP_REFERENCE,.emit=stamp19_draw,.context=&probe,
+        .camera=&camera,.init=init,.textures=textures};
+    uint8_t seen=0;
+    for(unsigned i=0;i<53;i++){
+        gh_effect_status fx=gh_game_effects_frame_update_0030f228(&frame,&update);
+        if(fx)fprintf(stderr,"2d Update frame%u status%d pc%08x emitter%u esp%u\n",i+1,fx,frame.frontier,frame.emitter_index,frame.esp_index);
+        CHECK(!fx&&!frame.frontier);
+        if(i<45)continue;
+        for(unsigned slot=0;slot<1024;slot++){
+            gh_effect_esp_view child;
+            if(gh_effect_create_esp_at(effects->storage.effects,slot,&child)||
+               word(child.payload+0x23a)!=0x002d0058u)continue;
+            CHECK(child.initialized&&child.actor==actor&&child.selector==actor&&
+                gh_effect_attack_esp_is_bound(effects->storage.effects,&child));
+            for(unsigned row=0;row<4;row++)if(child.record.bytes==est.bytes+16+row*0x2f0)
+                seen|=(uint8_t)(1u<<row);
+        }
+        gh_game_effects_trans trans={0};
+        fx=gh_game_effects_trans_002fb310(&trans,&draw);
+        if(fx)fprintf(stderr,"2d Draw f%u status%d pc%08x esp%u\n",i+1,fx,trans.frontier,trans.esp_index);
+        CHECK(!fx&&trans.complete);
+    }
+    init->active_camera=saved_camera;
+    gh_stage_textures_destroy(textures);
+    fprintf(stderr,"2d seen %x warp%u trails%u\n",seen,probe.warp,probe.trails);
+    CHECK(seen==15&&probe.warp>0&&probe.trails>0);
     gh_effect_release_bindings release=effects->storage;
     release.actor_match=gh_effect_create_actor_match;
     release.context=release.effects;
@@ -1320,6 +1396,13 @@ static int verify_stamp19_attack_effect(const gh_enemy202_move *move,
     memcpy(masks,release.emitters+0x26000,sizeof(masks));
     uint32_t frontier;
     unsigned last;
+    unsigned active=0;
+    for(unsigned slot=0;slot<256;slot++){
+        gh_effect_emitter_view emitter;
+        if(!gh_effect_create_emitter_at(release.effects,slot,&emitter)&&
+            word(emitter.payload+0x18c)==0x002d0058u)++active;
+    }
+    CHECK(active);
     for(unsigned retry=0;retry<2;retry++){
         CHECK(!gh_game_effect_release_00306200(&release,actor,0,0,&frontier,&last)&&!frontier);
         CHECK(!memcmp(masks,release.emitters+0x26000,sizeof(masks)));
@@ -1331,10 +1414,10 @@ static int verify_stamp19_attack_effect(const gh_enemy202_move *move,
             CHECK(word(emitter.payload+0x114)&0x40000000u);
             stopped++;
         }
-        CHECK(stopped==4);
+        CHECK(stopped==active);
     }
-    puts("PASS original 306200/302918 marks all four stamp19 attack emitters without releasing pool ownership");
-    for(unsigned i=0;i<3;i++)
+    puts("PASS original 58:2D scheduled warp and trail children and 306200/302918 release");
+    for(unsigned i=0;i<90;i++)
         CHECK(!gh_game_effects_frame_update_0030f228(&frame,&update)&&!frame.frontier);
     for(unsigned slot=0;slot<256;slot++){
         gh_effect_emitter_view emitter;
@@ -1933,12 +2016,25 @@ typedef struct {
     const gh_effect_create_bindings *effect;
     const gh_motion_sound_request *pending;
     unsigned calls;
+    gh_motion_sound_request rise_cue[2];
+    unsigned rise_calls;
 } ems_devil_fixture;
 
 static gh_actor_motion_status ems_devil_cue(void *context,const gh_motion_sound_request *cue,
     uint32_t *handle,uint32_t *frontier)
 {
     ems_devil_fixture *fixture=context;
+    if(fixture->calls==2&&fixture->rise_calls<2){
+        const int16_t program=fixture->rise_calls?4:0x0a;
+        if(cue->bank==1&&cue->program==program&&cue->model&&cue->actor&&
+            cue->model->root.bytes==cue->actor->bytes&&!cue->part&&!cue->other_actor&&
+            !cue->argument7&&!cue->argument8){
+            fixture->rise_cue[fixture->rise_calls++]=*cue;
+            *handle=1;
+            *frontier=0;
+            return GH_ACTOR_MOTION_OK;
+        }
+    }
     if(!cue->model||!cue->actor||cue->model->root.bytes!=cue->actor->bytes||
         cue->bank||cue->program!=5||cue->part||cue->other_actor||cue->argument7||cue->argument8)
         return GH_ACTOR_MOTION_ARGUMENT;
@@ -1958,6 +2054,14 @@ static gh_actor_motion_status ems_devil_spawn(void *context,const gh_enemy_actor
     ems_devil_fixture *fixture=context;
     return gh_enemy_ems_spawn_devil_002905d0(fixture->ems,parent,request,fixture->effect,
         ems_devil_cue,fixture,frontier);
+}
+
+static gh_effect_status devil_draw_packet(void *context,const gh_effect_trans_packet *packet)
+{
+    uint32_t *counts=context;
+    unsigned group=packet->original_callee==0x2e9d48?1:packet->original_callee==0x2ec398?2:0;
+    ++counts[group];
+    return GH_EFFECT_OK;
 }
 
 static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_t *elf, size_t elf_size,
@@ -2332,6 +2436,20 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
               word(entry->entry.resource.bytes+rows[draw%5])&&!frame.substate67_motion.release_previous);
         CHECK(!memcmp(&expected,&init->random,sizeof(expected)));
         memcpy(actor,before,sizeof(before));entry->motion.motion=saved_motion;init->random=saved_rng;
+        if(stamp==3){
+            memcpy(actor+0x2f4,&(uint32_t){0x00001300},4);
+            memcpy(actor+0x16c0,&(uint32_t){0x43e08000},4);
+            memcpy(actor+0x16c4,&(uint32_t){6},4);
+            memcpy(actor+0x16b0,entry->entry.object.view.alias_f0,12);
+            frame=(gh_enemy202_move){0};
+            CHECK(!gh_enemy202_move_bind_opacity(&frame,&opacity));
+            CHECK(!gh_enemy202_move_bind_navigation(&frame,navigation));
+            CHECK(!gh_enemy202_move_bind_room_state(&frame,room));
+            const gh_actor_motion_status home=gh_enemy202_move_00208be0(&frame,entry,&player.view,elf,elf_size);
+            CHECK(!home&&frame.original_returned&&frame.pending_ai_pc==0x218c48&&
+                  frame.substate67_motion.motion_offset==word(entry->entry.resource.bytes+0xc0));
+            memcpy(actor,before,sizeof(before));entry->motion.motion=saved_motion;init->random=saved_rng;
+        }
         puts("PASS actual R100 stamps3–5 selector6B and canonical MT row");
     }
     gh_boot_work *work=b->entry.work;
@@ -3416,6 +3534,139 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
         CHECK(!gh_enemy_ems_live_at(owner,child_handle,&transformed)&&transformed.devil&&
             transformed.actor==pending_actor&&transformed.model&&transformed.shadow&&
             word(pending_actor->view.bytes+0x2f4)==0x00020400);
+        gh_enemy_actor_bindings *mutable_bindings=(gh_enemy_actor_bindings *)b;
+        const gh_motion_effect_consumer saved_effect=mutable_bindings->effect;
+        void *saved_effect_context=mutable_bindings->effect_context;
+        mutable_bindings->effect=release_stamp19_effect;
+        mutable_bindings->effect_context=&spawn;
+        uint32_t rise_pc;
+        uint8_t *rise=pending_actor->view.bytes;
+        const gh_actor_part *part27,*part28;
+        CHECK(!gh_actor_model_part_at(transformed.model,27,&part27)&&
+            !gh_actor_model_part_at(transformed.model,28,&part28));
+        gh_game_devil_camera camera={0};
+        const gh_game_camera saved_mode=init->camera;
+        gh_game_camera *saved_active=init->active_camera;
+        init->camera.mode=1;
+        init->active_camera=&init->camera;
+        gh_game_pl_camera base_camera={0};
+        CHECK(!gh_game_camera_construct_pl_00139bc8(&base_camera,&init->camera,
+            GH_CAMERA_NATIVE_BINARY32_REFERENCE));
+        gh_camera_follow restore={.camera=&base_camera,.player=&player.view,.bound=1};
+        gh_object_opacity_environment opacity={init,&base_camera,&player.view,1};
+        status=gh_enemy_ems_devil_step_00208be0(owner,child_handle,&camera,&restore,&opacity,
+            navigation,&spawn,&player.view,elf,elf_size,&rise_pc);
+        fprintf(stderr,"Devil full Move status%d pc%08x state%08x sample%08x mode%x\n",
+            status,rise_pc,word(rise+0x2f4),word(rise+0x430),init->camera.mode);
+        CHECK(!gh_effect_est_at_00306030(devil_effects,0x58,0x3f,&est)&&est.bytes&&word(est.bytes+4)==23);
+        unsigned rise_emitters=0;
+        for(unsigned i=0;i<256;i++){
+            gh_effect_emitter_view emitter;
+            if(!gh_effect_create_emitter_at(devil_effects,i,&emitter)&&emitter.initialized&&
+                word(emitter.payload+0x18c)==0x003f0058){
+                CHECK(emitter.actor==&pending_actor->view&&emitter.model==transformed.model);
+                ++rise_emitters;
+            }
+        }
+        CHECK(rise_emitters==23&&rise[0x616]==1&&rise[0x2f6]==3&&word(rise+0x430)==0x3f800000);
+        CHECK(!status&&!rise_pc);
+        CHECK(init->active_camera==&camera.identity&&init->camera.previous==&init->camera&&
+            init->camera.previous_mode==1&&camera.eye==part27&&camera.look_at==part28);
+        gh_acd_scene_binding camera_path={0};
+        gh_game_camera_path_construct_00137a48(&camera_path);
+        const int32_t sw=512;
+        const uint32_t sh=0x43e00000,aspect=0x3f800000;
+        const uint8_t display_ready=1;
+        const gh_camera_projection_display display={&sw,&sh,&aspect,&display_ready,
+            GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+        CHECK(!gh_effect_create_bind_trail_pools(devil_effects,b->entry.pools));
+        gh_effects_frame_globals devil_globals={0};
+        gh_game_scene_aux devil_profile={0};
+        gh_game_effects_frame devil_update={0};
+        uint32_t devil_clock=0;
+        CHECK(!gh_effects_frame_globals_from_elf(&devil_globals,elf,elf_size));
+        gh_display_state devil_display={0};
+        CHECK(!gh_display_state_from_elf(&devil_display,elf,elf_size)&&
+            !gh_display_static_initialize_002a48a8(&devil_display,1,0xffff));
+        const gh_effects_frame_bindings devil_fx={
+            .storage=spawn.storage,.work=b->entry.work,.init=init,.current_player=&player.view,
+            .globals=&devil_globals,.profile=&devil_profile,.clock=stamp19_effect_clock,
+            .clock_context=&devil_clock,.atan_coeff=spawn.atan_coeff,.policy=GH_STATIC_BINARY32_REFERENCE,
+            .actors=b->actors,.camera=&camera.camera,.display=&devil_display};
+        gh_stage_textures *devil_textures=NULL;
+        CHECK(!gh_stage_textures_create(&devil_textures));
+        uint32_t devil_packets[3]={0};
+        const gh_effects_trans_bindings devil_draw={.storage=spawn.storage,.work=b->entry.work,
+            .globals=&devil_globals,.display=&devil_display,.policy=GH_STATIC_BINARY32_REFERENCE,
+            .cvt_policy=GH_FRAME_CHOP_REFERENCE,.emit=devil_draw_packet,.context=devil_packets,
+            .camera=&camera.camera,.init=init,.textures=devil_textures};
+        CHECK(!gh_game_effects_frame_update_0030f228(&devil_update,&devil_fx));
+        gh_camera_status projected=gh_game_devil_camera_step_00138fc8(&camera,&base_camera,
+            init,&camera_path,&player.view,b->entry.work,&display,&rise_pc);
+        printf("Devil camera status%d frontier%08x fov%08x eye %08x %08x %08x target %08x %08x %08x\n",
+            projected,rise_pc,word(camera.camera.fields+0x250),
+            word(camera.camera.fields+0x210),word(camera.camera.fields+0x214),
+            word(camera.camera.fields+0x218),word(camera.camera.fields+0x200),
+            word(camera.camera.fields+0x204),word(camera.camera.fields+0x208));
+        CHECK(!projected&&!rise_pc&&word(camera.camera.fields+0x250)==0x41fef951&&
+            word(camera.camera.fields+0x210)==0xc16fea24&&word(camera.camera.fields+0x218)==0xc20e6875&&
+            word(camera.camera.fields+0x200)==0xc15aaea2&&word(camera.camera.fields+0x208)==0xc20f9be2);
+        gh_game_effects_trans first_draw={0};
+        CHECK(!gh_game_effects_trans_002fb310(&first_draw,&devil_draw)&&first_draw.complete);
+        unsigned rise_frames=1;
+        unsigned cue_samples[2]={0};
+        for(;rise_frames<230;rise_frames++){
+            const unsigned cues_before=ems_fixture.rise_calls;
+            status=gh_enemy_ems_devil_step_00208be0(owner,child_handle,&camera,&restore,&opacity,
+                navigation,&spawn,&player.view,elf,elf_size,&rise_pc);
+            if(status||!rise[0x2f5])break;
+            if(ems_fixture.rise_calls!=cues_before){
+                CHECK(ems_fixture.rise_calls==cues_before+1&&cues_before<2);
+                cue_samples[cues_before]=rise_frames+1;
+            }
+            gh_effect_status fx_status=gh_game_effects_frame_update_0030f228(&devil_update,&devil_fx);
+            if(fx_status){
+                fprintf(stderr,"Devil scheduled frame%u update%d pc%08x emitter%u esp%u stage%u\n",
+                    rise_frames+1,fx_status,devil_update.frontier,devil_update.emitter_index,
+                    devil_update.esp_index,devil_update.stage);
+                break;
+            }
+            projected=gh_game_devil_camera_step_00138fc8(&camera,&base_camera,init,&camera_path,
+                &player.view,b->entry.work,&display,&rise_pc);
+            if(projected)break;
+            gh_game_effects_trans trans={0};
+            fx_status=gh_game_effects_trans_002fb310(&trans,&devil_draw);
+            if(fx_status){
+                fprintf(stderr,"Devil scheduled frame%u draw%d pc%08x esp%u stage%u\n",
+                    rise_frames+1,fx_status,trans.frontier,trans.esp_index,trans.call_stage);
+                break;
+            }
+        }
+        fprintf(stderr,"Devil shared frames %u pc%08x status%d projected%d\n",rise_frames,rise_pc,status,projected);
+        gh_stage_textures_destroy(devil_textures);
+        fprintf(stderr,"Devil packet counts %u %u %u\n",devil_packets[0],devil_packets[1],devil_packets[2]);
+        CHECK(devil_packets[0]>0&&devil_packets[1]>0&&devil_packets[2]>0);
+        CHECK(rise_frames==220&&!status&&!projected&&!rise_pc&&!word(rise+0x2f4)&&!rise[0x616]&&
+            word(rise+0x430)==0x435c0000&&
+            cue_samples[0]==86&&cue_samples[1]==159&&ems_fixture.rise_calls==2&&
+            ems_fixture.rise_cue[0].model==transformed.model&&
+            ems_fixture.rise_cue[1].model==transformed.model&&
+            init->camera.mode==1&&init->active_camera==&init->camera&&
+            init->camera.previous_mode==0x40&&init->camera.previous==&camera.identity&&
+            word(base_camera.fields+0x250)==0x41f80000);
+        CHECK(gh_enemy_ems_devil_step_00208be0(owner,child_handle,&camera,&restore,&opacity,
+            navigation,&spawn,&player.view,elf,elf_size,&rise_pc)==GH_ACTOR_MOTION_UNSUPPORTED&&
+            rise_pc==0x211c08&&ems_fixture.rise_calls==2);
+        puts("PASS actual Devil 2705D8 far decision through completed Move and selector00 dispatch");
+        puts("PASS 220 actual Devil Move, Effects Update, camera and Draw frames through 124F60");
+        gh_game_devil_camera_detach(&camera,init);
+        CHECK(init->camera.mode==1&&init->active_camera==&init->camera&&!init->camera.previous&&
+            !camera.target);
+        init->camera=saved_mode;
+        init->active_camera=saved_active;
+        puts("PASS real EM20 selector4 phase2, first Devil rise sample and projected camera");
+        mutable_bindings->effect=saved_effect;
+        mutable_bindings->effect_context=saved_effect_context;
         uint32_t abort_pc;
         CHECK(gh_enemy_ems_abort_devil_native(owner,&abort_pc)==GH_ACTOR_MOTION_BUSY&&abort_pc==0x306200);
         gh_effect_create_forget_on_owner_destroy(devil_effects);

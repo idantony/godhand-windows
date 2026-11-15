@@ -296,6 +296,26 @@ struct PostFrame {
         context.visible_width=512;context.visible_height=448;context.colclamp=1;
     }
 };
+#ifdef GH_NATIVE_STARTUP_QA
+static void report_scene_warp_bounds(const NativeApp &app,const gh_effect_trans_packet &packet,
+    uint64_t tex1,uint64_t clamp,const char *stage)
+{
+    std::fprintf(stderr,"QA_WARP_BOUNDS {\"stage\":\"%s\",\"scene_serial\":%llu,\"slot\":%u,\"serial\":%u,"
+        "\"pc\":\"%08X\",\"tex0\":\"%016llX\",\"tex1\":\"%016llX\",\"clamp\":\"%016llX\","
+        "\"test\":\"%016llX\",\"alpha\":\"%016llX\",\"zbuf\":\"%016llX\",\"vertices\":[",
+        stage,(unsigned long long)app.snapshot.scene_frame_serial,packet.slot,packet.serial,packet.original_callee,
+        (unsigned long long)packet.tex0,(unsigned long long)tex1,(unsigned long long)clamp,
+        (unsigned long long)packet.test,(unsigned long long)packet.alpha,(unsigned long long)packet.zbuf);
+    for(unsigned i=0;i<6;++i){
+        const auto &point=packet.quads[0].vertices[i];uint32_t bits[3];
+        const float stq[]={point.s,point.t,point.q};
+        std::memcpy(bits,stq,sizeof(bits));
+        std::fprintf(stderr,"%s{\"xy\":[%d,%d],\"stq_bits\":[\"%08X\",\"%08X\",\"%08X\"],\"z\":%u,\"rgba\":\"%08X\"}",
+            i?",":"",point.x12_4,point.y12_4,bits[0],bits[1],bits[2],point.z,point.rgba);
+    }
+    std::fprintf(stderr,"]}\n");
+}
+#endif
 static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packet &packet,
     WorldSampler &sampler,PostFrame &post,uint32_t x,uint32_t y)
 {
@@ -342,14 +362,9 @@ static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packe
         for(unsigned i=0;i<6;i++){
             const auto &v=packet.quads[0].vertices[i];
             if(v.u12_4||v.v12_4||v.z>0xffff)return GH_ID_UNSUPPORTED;
-            if(display_base0&&!impact){
-                // Positive Q bounds the perspective ratio by its corner ratios.
-                // Keep even bilinear neighbors inside the display's 448 rows.
-                if(!(v.q>0)||!(v.t>=v.q*(1.0f/512.0f)&&v.t<=v.q*(447.0f/512.0f))){
-                    app.effect_post_error=GH_EFFECT_POST_BOUNDS;
-                    return GH_ID_UNSUPPORTED;
-                }
-            }else if(v.q!=1||v.z!=0xfff0)return GH_ID_UNSUPPORTED;
+            // The projected display warp samples a 512-row texture. Its
+            // renderer supplies the aliased rows and validates perspective Q.
+            if((!display_base0||impact)&&(v.q!=1||v.z!=0xfff0))return GH_ID_UNSUPPORTED;
             vertices[i].stq[0]=v.s;vertices[i].stq[1]=v.t;vertices[i].stq[2]=v.q;
             vertices[i].xyz_fixed4[0]=v.x12_4;vertices[i].xyz_fixed4[1]=v.y12_4;
             vertices[i].xyz_fixed4[2]=(int32_t)(v.z<<4);
@@ -362,18 +377,7 @@ static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packe
                 post.capture_first_row_known,display_base0);
         if(app.effect_post_error!=GH_EFFECT_POST_OK){
 #ifdef GH_NATIVE_STARTUP_QA
-                std::fprintf(stderr,"QA_WARP_BOUNDS {\"scene_serial\":%llu,\"slot\":%u,\"serial\":%u,\"tex1\":\"%016llX\",\"clamp\":\"%016llX\",\"alpha\":\"%016llX\",\"zbuf\":\"%016llX\",\"vertices\":[",
-                    (unsigned long long)app.snapshot.scene_frame_serial,packet.slot,packet.serial,
-                    (unsigned long long)sampler.tex1,(unsigned long long)sampler.clamp,
-                    (unsigned long long)packet.alpha,(unsigned long long)packet.zbuf);
-                for(unsigned j=0;j<6;j++){
-                    const auto &point=packet.quads[0].vertices[j];uint32_t bits[3];
-                    const float stq[]={point.s,point.t,point.q};
-                    std::memcpy(bits,stq,sizeof(bits));
-                    std::fprintf(stderr,"%s{\"xy\":[%d,%d],\"stq_bits\":[\"%08X\",\"%08X\",\"%08X\"],\"rgba\":\"%08X\"}",
-                        j?",":"",point.x12_4,point.y12_4,bits[0],bits[1],bits[2],point.rgba);
-                }
-                std::fprintf(stderr,"]}\n");
+            report_scene_warp_bounds(app,packet,sampler.tex1,clamp,"sample_bounds");
 #endif
             return GH_ID_UNSUPPORTED;
         }
@@ -395,7 +399,12 @@ static gh_id_error consume_scene_warp(NativeApp &app,const gh_effect_trans_packe
                 post.warp_capture.size(),packet.texa,vertices);
             post.capture_serial=0;
         }
-        if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+        if(app.world_gpu_error!=GH_MODEL_GPU_OK){
+#ifdef GH_NATIVE_STARTUP_QA
+            report_scene_warp_bounds(app,packet,sampler.tex1,clamp,"gpu_draw");
+#endif
+            return GH_ID_UNSUPPORTED;
+        }
         if(impact){sampler.clamp=clamp;sampler.clamp_known=true;}
     }
     ++app.effect_post_packets;
@@ -1197,9 +1206,14 @@ int main(int argc,char **argv)
             d.scenario_task_slot,(unsigned)d.scenario_task_stage);
         if(d.effect_frontier)std::fprintf(stderr,
             "QA_EFFECT_FRONTIER {\"pc\":\"%08X\",\"emitter_slot\":%u,\"emitter_serial\":%u,"
-            "\"emitter_mode\":%u,\"particle_class\":%u,\"emitter_step\":%u,\"esp_slot\":%u,\"esp_step\":%u}\n",
+            "\"emitter_mode\":%u,\"particle_class\":%u,\"emitter_step\":%u,\"esp_slot\":%u,\"esp_step\":%u,"
+            "\"bank\":%u,\"index\":%u,\"est_flags\":\"%08X\",\"flags\":\"%08X\",\"part_override\":%u,\"est_part\":%u,"
+            "\"actor_kind\":%u,\"actor_dependency\":%u,\"actor_stamp\":%u}\n",
             d.effect_frontier,d.effect_emitter_slot,d.effect_emitter_serial,d.effect_emitter_mode,
-            d.effect_emitter_class,d.effect_emitter_step,d.effect_esp_slot,d.effect_esp_step);
+            d.effect_emitter_class,d.effect_emitter_step,d.effect_esp_slot,d.effect_esp_step,
+            d.effect_emitter_bank,d.effect_emitter_index,d.effect_emitter_est_flags,d.effect_emitter_flags,
+            d.effect_emitter_part_override,d.effect_emitter_est_part,d.effect_emitter_actor_kind,
+            d.effect_emitter_actor_dependency,d.effect_emitter_actor_stamp);
     }
     if(gameplay_qa)for(unsigned i=0;i<app.snapshot.emitter_samples;i++)std::fprintf(stderr,"QA Emitter slot%u bank%u kind%u flags%08X known%u type%u\n",app.snapshot.emitter_slots[i],app.snapshot.emitter_banks[i],app.snapshot.emitter_kinds[i],app.snapshot.emitter_flags[i],app.snapshot.emitter_known[i],app.snapshot.emitter_types[i]);
     if(gameplay_qa&&app.snapshot.current_actor_ready){

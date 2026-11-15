@@ -5,6 +5,24 @@ history was compacted; private receipts and Git preserve old checkpoints.
 
 ## Current verified checkpoints
 
+- Exact247 `room-transition-247-r100-em03-cue` recovers the original EM03
+  program10 for stamp19. Windows New Game presents 2,489 R100 frames and
+  stops at Gene's recovery dispatch `0011A820` (state 0601). No renderer,
+  GPU, postprocess or window error. Proof
+  `analysis/room-transition-247-r100-windows-private.json`. The standard
+  exact247 regression passes 367 checks across 380 native modules.
+- Exact245 Windows New Game proves the full display warp alias in R100.
+  It presents 2,271 scene frames, confirms the first enemy's four hits and
+  HP74→26, and confirms Gene HP100→69 across four hits. The next operation
+  `002CBF78` requests bank7 program16 with part−1, dependency0203 stamp19.
+  All renderer, GPU, postprocess and window errors are zero. Proof
+  `analysis/room-transition-245-r100-windows-private.json`.
+- Exact246 `room-transition-246-r100-home-r105-init` recovers original
+  0202 stamp4's distant choice `00262AA8` and home motion `00218C48` using
+  the same original `00218DA4` switch target as 0203. The CPU replay proceeds
+  to OM Move `001C2DA0` after 2,161 completed packets. The real R105 Init
+  prefix is integrated, but the final EMS02AD placement must finish before it
+  is reached in composed startup. G `verification/room-transition-246-cpu`.
 - Exact238 `room-transition-238-r105-texture-remap`, pin
   `6667b5aa4428b6240bdb0b56de03ba907b15c1de9f216011ebe8a82e292c2189`.
   Actual controlled Windows plays all EV02 cuts, clears R003, enters R105

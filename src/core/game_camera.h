@@ -1,6 +1,7 @@
 #ifndef GH_GAME_CAMERA_H
 #define GH_GAME_CAMERA_H
 #include "game_init.h"
+#include "game_actor_model.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -8,6 +9,18 @@ typedef enum {GH_CAMERA_EXACT_UNAVAILABLE=0,GH_CAMERA_NATIVE_BINARY32_REFERENCE=
 typedef enum {GH_CAMERA_OK,GH_CAMERA_ARGUMENT,GH_CAMERA_BUSY,GH_CAMERA_UNSUPPORTED,GH_CAMERA_NUMERIC} gh_camera_status;
 typedef struct {gh_game_camera *identity;uint8_t fields[0x530];gh_camera_numeric_policy policy;
  int constructed;uint32_t failed_entry;} gh_game_pl_camera;
+typedef struct {
+ gh_game_camera identity;
+ gh_game_pl_camera camera;
+ const gh_actor_model *target;
+ const gh_actor_part *eye,*look_at;
+ uint8_t move_stage;
+} gh_game_devil_camera;
+/* Original 138E38 argument zero and 139B68 typed target writes. */
+gh_camera_status gh_game_devil_camera_bind_00138e38(gh_game_devil_camera *,
+ gh_game_init_state *,const gh_actor_model *,uint32_t *);
+/* Native lifetime detach before the room destroys the borrowed model. */
+void gh_game_devil_camera_detach(gh_game_devil_camera *,gh_game_init_state *);
 /* Shared original1F8180 polynomial, explicit finite binary32 reference.
  * No libc atan or angle reduction. Output atomic and caller FEnv preserved. */
 gh_camera_status gh_game_angle_001f8180(float y,float x,float *out,gh_camera_numeric_policy,uint32_t *frontier);/* Cold original139BC8 prefix construction, not the whole CamManager (0x1030 bytes).

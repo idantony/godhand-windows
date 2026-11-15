@@ -93,14 +93,14 @@ static uint32_t move_flag(gh_om041c_state *flag,unsigned index,gh_game_mt *mt,gh
     return 0;
 }
 
-gh_r003_status gh_r003_move_flags_000003d8(gh_r003_event *room,const gh_om_factory *factory,
-    gh_game_mt *mt,gh_frame_random *random,gh_r100_om_scalar_view other_view,void *other_context,
-    uint32_t *frontier)
+gh_r003_status gh_room_move_flag_wind(gh_boot_work *work,void *wind_words,
+    const gh_om_factory *factory,gh_game_mt *mt,gh_frame_random *random,
+    gh_r100_om_scalar_view other_view,void *other_context,uint32_t relative,uint32_t *frontier)
 {
     if(!frontier)return GH_R003_ARGUMENT;
-    *frontier=0x3d8;
-    if(!room||!room->initialized||!room->work.pointer||!factory||!factory->bound||!mt||!random||
-       factory->bindings.work!=room->bindings.play.work||random->policy!=GH_FRAME_CHOP_REFERENCE)
+    *frontier=relative;
+    if(!work||!wind_words||!factory||!factory->bound||!mt||!random||
+       factory->bindings.work!=work||random->policy!=GH_FRAME_CHOP_REFERENCE)
         return GH_R003_ARGUMENT;
     static const char *const names[FLAG_COUNT]={"om030","om031","om032","om033","om034","om035"};
     gh_om041c_state *flags[FLAG_COUNT]={0};
@@ -123,22 +123,34 @@ gh_r003_status gh_r003_move_flags_000003d8(gh_r003_event *room,const gh_om_facto
         }
     }
     float wind[3];
-    memcpy(wind,room->work.pointer,sizeof(wind));
+    memcpy(wind,wind_words,sizeof(wind));
     for(unsigned i=0;i<3;i++)if(!isfinite(wind[i])||wind[i]<0){
-        *frontier=0x3d8;
+        *frontier=relative;
         return GH_R003_UNSUPPORTED;
     }
     fenv_t saved;
     if(fegetenv(&saved)||fesetround(FE_TOWARDZERO)){
-        *frontier=0x3d8;
+        *frontier=relative;
         return GH_R003_UNSUPPORTED;
     }
     uint32_t pc=0;
     for(unsigned i=0;i<FLAG_COUNT&&!pc;i++)if(flags[i]){
         pc=move_flag(flags[i],i,mt,random,wind);
-        memcpy(room->work.pointer,wind,sizeof(wind));
+        memcpy(wind_words,wind,sizeof(wind));
     }
-    if(fesetenv(&saved)&&!pc)pc=0x3d8;
+    if(fesetenv(&saved)&&!pc)pc=relative;
     *frontier=pc;
     return pc?GH_R003_CALLEE:GH_R003_OK;
+}
+
+
+gh_r003_status gh_r003_move_flags_000003d8(gh_r003_event *room,const gh_om_factory *factory,
+    gh_game_mt *mt,gh_frame_random *random,gh_r100_om_scalar_view other_view,void *other_context,
+    uint32_t *frontier)
+{
+    if(!frontier)return GH_R003_ARGUMENT;
+    *frontier=0x3d8;
+    if(!room||!room->initialized)return GH_R003_ARGUMENT;
+    return gh_room_move_flag_wind(room->bindings.play.work,room->work.pointer,
+        factory,mt,random,other_view,other_context,0x3d8,frontier);
 }

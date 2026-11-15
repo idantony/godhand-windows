@@ -111,3 +111,20 @@ static gh_scene_at_status walk_checked(gh_scene_at_manager*s,gh_at_link link,gh_
 gh_scene_at_status gh_scene_at_first_unit_002c30c0(gh_scene_at_manager*s,gh_at_native_unit*out){if(!s||!out||!s->ready)return GH_AT_ARGUMENT;return walk_checked(s,(gh_at_link){GH_AT_LINK_SLOT,15},out);}
 gh_scene_at_status gh_scene_at_next_unit_002c30c8(gh_scene_at_manager*s,gh_at_native_unit current,gh_at_native_unit*out){if(!s||!out||!own(s,current))return GH_AT_ARGUMENT;node*n=resolve(s->native_units,current.handle);return walk_checked(s,n->next,out);}
 size_t gh_scene_at_native_unit_count(const gh_scene_at_manager*s){return s&&s->native_units?s->native_units->count:0;}
+
+gh_scene_at_status gh_scene_at_find_id_002c3118(gh_scene_at_manager *manager,
+ uint32_t id,gh_at_native_unit *unit)
+{
+ if(!manager||!manager->ready||!unit)return GH_AT_ARGUMENT;
+ *unit=(gh_at_native_unit){0};
+ if(id==0xfffffu)return GH_AT_OK;
+ gh_scene_at_status status=gh_scene_at_first_unit_002c30c0(manager,unit);
+ size_t visited=0;
+ const size_t limit=gh_scene_at_native_unit_count(manager);
+ while(!status&&unit->bytes){
+  if(++visited>limit)return GH_AT_BOUNDS;
+  if(h(unit->bytes+0x36)==id)return GH_AT_OK;
+  status=gh_scene_at_next_unit_002c30c8(manager,*unit,unit);
+ }
+ return status;
+}

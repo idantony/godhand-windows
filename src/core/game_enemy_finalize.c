@@ -9,12 +9,18 @@ gh_actor_motion_status gh_enemy_finalize_00207d40(gh_enemy_finalize*s,gh_enemy_h
  gh_enemy_entry*e=hitareas->behavior->timers->nodes->solids->shadow->pose->motion->hp->tail->entry;uint8_t*p=e->object.view.bytes;
  const int devil=e->request.object_kind==0x220&&e->request.dependency_kind==0x220&&
      e->b.work->room==0x100&&e->request.flags==0x400000&&e->request.entry_number==0xff;
- if(word(p,0x564)!=e->request.dependency_kind||!e->published||!e->object.view.alias_f0||
+ const int exchange=e->b.work->room==0x105&&word(p,0x564)==0x227&&
+    gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)&&e->request.dependency_flags==1;
+ if((!exchange&&word(p,0x564)!=e->request.dependency_kind)||!e->published||!e->object.view.alias_f0||
     (!devil&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&
       !gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)))))return GH_ACTOR_MOTION_ARGUMENT;
  if(!s->stage){/* Actual26B9E8 only211 creates3B8;20Aguardreturnswithoutwrites. */
   s->hitareas=hitareas;put(p,0x560,0xffff);put(p,0x1728,0);put(p,0x17a4,0);put(p,0x17a8,0);p[0x17be]=0;put(p,0x624,0);
-  /* Actual42FA10[20A-204] skipsconditionalrandomloot560 setter. */
+  if(exchange){
+   uint32_t loot;
+   if(gh_game_mt_next_0030f348(&e->b.init->random,&loot)){s->frontier=0x31cfe0;return GH_ACTOR_MOTION_ARGUMENT;}
+   put(p,0x560,(loot&1)?0x3c3:0x9c1);
+  }
   memcpy(p+0x1660,e->object.view.alias_f0,12);put(p,0x1670,word(p,0x104));p[0x617]=0;put(p,0x1730,0);p[0x17c2]=0;put(p,0x1750,0);put(p,0x1754,0);put(p,0x1758,0);
   put(p,0x16c8,0x41f00000);put(p,0x172c,0x43e10000);put(p,0x174c,0x43960000);s->stage=1;
  }

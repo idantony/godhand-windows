@@ -27,7 +27,18 @@ typedef gh_actor_motion_status (*gh_enemy202_devil_spawn)(void *,const gh_enemy_
 typedef gh_actor_motion_status (*gh_enemy202_death_release)(void *,const gh_enemy_actor *,uint32_t *);
 
 typedef struct {
+    gh_enemy_entry *entry;
+    const gh_enemy_actor_bindings *bindings;
+    gh_enemy_node_cache *nodes;
+    gh_enemy_hitareas *hitareas;
+} gh_enemy_move_actor;
+typedef gh_actor_motion_status (*gh_enemy_devil_selector)(void *,uint32_t *);
+
+typedef struct {
     gh_enemy_actor *enemy;
+    gh_enemy_move_actor runtime;
+    gh_enemy_devil_selector devil_selector;
+    void *devil_selector_context;
     const gh_title_player_view *player;
     const void *elf;
     size_t elf_bytes;
@@ -96,6 +107,8 @@ gh_actor_motion_status gh_enemy202_move_bind_death_release(gh_enemy202_move *,
  * player is the canonical Work.playerObj, never a raw guest address. */
 gh_actor_motion_status gh_enemy202_move_00208be0(gh_enemy202_move *,
     gh_enemy_actor *, const gh_title_player_view *player, const void *elf, size_t elf_bytes);
+gh_actor_motion_status gh_enemy_devil_move_00208be0(gh_enemy202_move *,
+    const gh_enemy_move_actor *,const gh_title_player_view *,const void *,size_t);
 #ifdef __cplusplus
 }
 #endif

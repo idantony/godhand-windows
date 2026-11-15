@@ -2,6 +2,7 @@
 #include "../core/game_object_sound.h"
 #include "../core/game_player_square_frame.h"
 #include "../core/game_player_attack_hitarea.h"
+#include "../core/game_enemy_move.h"
 #include "game_services.h"
 #include "../core/game_cockpit.h"
 #include "../core/game_objects.h"
@@ -36,6 +37,7 @@
 #include "../rooms/r100_init_tail.h"
 #include "../rooms/r003_event.h"
 #include "../rooms/r003_flags.h"
+#include "../rooms/r105_room.h"
 #include "../core/game_cockpit_tutorial.h"
 #include "../core/game_player_abort.h"
 #include "../core/game_om3eb.h"
@@ -90,6 +92,7 @@ struct gh_game_services {
  gh_object_opacity_environment enemy_opacity;
  gh_actor_render_call *enemy_renders;
  gh_actor_render_call devil_render;
+ gh_game_devil_camera devil_camera;
  gh_game_scene_step step;gh_r020_title*title;gh_scene_hook scenario_exit,scenario_callback104;
  gh_scene_meshes meshes;
  gh_room_death_dispatch scene_death;
@@ -99,6 +102,7 @@ struct gh_game_services {
  gh_r100_scripts r100_scripts;gh_r100_counter_task r100_counter;gh_r100_live_tasks r100_live;
  gh_soft_event_end r100_soft_end;
  gh_r003_event r003;gh_soft_event_end r003_soft_end;
+ gh_r105_room r105;
  gh_r100_init_tail r100_tail;gh_r100_init_tail_bindings r100_tail_bindings;
  gh_cockpit_tutorial tutorial;gh_object_resource_load tutorial_load;
  gh_om_runtime_create tutorial_create[4];gh_om_object *tutorial_objects[4];
@@ -191,6 +195,10 @@ static gh_game_services_status finalize_room_lifetime(gh_game_services*s){
   gh_r003_status status=gh_r003_event_release(&s->r003);
   if(status)return fail(s,GH_SERVICES_BUSY,0x2a94f0,status);
   s->r003_soft_end=(gh_soft_event_end){0};
+ }
+ if(s->r105.work.pointer){
+  const gh_scene_status status=gh_r105_room_release(&s->r105);
+  if(status)return fail(s,GH_SERVICES_BUSY,0x2a94f0,status);
  }
  {gh_tutorial_status e=gh_cockpit_tutorial_release(&s->tutorial);if(e)return fail(s,GH_SERVICES_ASSET,s->tutorial.frontier?s->tutorial.frontier:0x147188,e);}
  if(s->b.id->pool_used!=s->cockpit_pool_end||s->b.id->job_count!=s->cockpit_jobs_end)return fail(s,GH_SERVICES_BUSY,0x2aa078,0);
@@ -865,6 +873,35 @@ static gh_scene_status room_r003_move(void *context,uint32_t *frontier)
  return status==GH_R003_UNSUPPORTED?GH_SCENE_UNSUPPORTED:GH_SCENE_CALLEE;
 }
 
+static gh_scene_status room_r105_status(gh_game_services *s,gh_scene_status status,uint32_t *frontier)
+{
+ if(!status)return GH_SCENE_OK;
+ s->frontier=*frontier;
+ s->frontier_module_code=*frontier&&*frontier<0x100000?4:0;
+ return status;
+}
+
+static gh_scene_status room_r105_init(void *context,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ const gh_r105_room_bindings bindings={
+  .module=&s->module,.heap=s->b.assets->heap,.work=s->b.work,.room=&s->room_state,
+  .scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario},
+  .threads=s->scenario_threads,.at=&s->scene_at,.init=s->b.init,
+  .player=&s->title_player.view,.save=s->b.save,.context=s};
+ const gh_scene_status result=gh_r105_initialize_000001a8(&s->r105,&bindings);
+ *frontier=result?(s->r105.frontier?s->r105.frontier:0x1a8):0;
+ return room_r105_status(s,result,frontier);
+}
+
+static gh_scene_status room_r105_move(void *context,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ const gh_scene_status result=gh_r105_move_00000398(&s->r105,&s->om_factory,
+  &s->b.init->random,s->b.frame_random,room_r100_om_view,s,frontier);
+ return room_r105_status(s,result,frontier);
+}
+
 static gh_r100_script_status room_r100_camera_ended(void *context,int *ended,uint32_t *frontier)
 {
  gh_game_services *s=context;
@@ -1395,6 +1432,7 @@ gh_game_services_status gh_game_services_state3(gh_game_services*s){
    case 0x20:init=room_init_native;move=room_move_native;break;
    case 0x100:init=room_r100_init;move=room_r100_move;break;
    case 3:init=room_r003_init;move=room_r003_move;break;
+   case 0x105:init=room_r105_init;move=room_r105_move;break;
    default:return fail(s,GH_SERVICES_FRONTIER,0x2c3440,GH_SCENE_UNSUPPORTED);
   }
   s->module.hook8=(gh_scene_hook){GH_SCENE_HOOK_NATIVE,init,s};
@@ -1446,7 +1484,7 @@ void gh_game_services_inspect(const gh_game_services*s,gh_game_services_snapshot
 }
 uint32_t gh_game_services_frontier(const gh_game_services*s){return s?s->frontier:0;}
 int gh_game_services_detail(const gh_game_services*s){return s?s->detail:0;}
-const char *gh_game_services_frontier_module(const gh_game_services*s){return s?(s->frontier_module_code==1?"r020.rel":s->frontier_module_code==2?"r100.rel":s->frontier_module_code==3?"r003.rel":NULL):NULL;}
+const char *gh_game_services_frontier_module(const gh_game_services*s){return s?(s->frontier_module_code==1?"r020.rel":s->frontier_module_code==2?"r100.rel":s->frontier_module_code==3?"r003.rel":s->frontier_module_code==4?"r105.rel":NULL):NULL;}
 gh_game_services_status gh_game_services_destroy(gh_game_services*s){
  if(!s)return GH_SERVICES_ARGUMENT;
  if((s->owns_children&&*s->b.children!=s->created_children)||(s->owns_textures&&s->b.stage->textures!=s->created_textures))return fail(s,GH_SERVICES_BUSY,0x2a5bb8,0);
@@ -1462,6 +1500,10 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
   gh_thread_status e=gh_task_threads_destroy(s->scenario_threads);if(e)return fail(s,GH_SERVICES_THREAD,0x2d56a8,e);s->scenario_threads=NULL;}
  if(s->r003.work.pointer){
   gh_r003_status status=gh_r003_event_release(&s->r003);
+  if(status)return fail(s,GH_SERVICES_BUSY,0x2a94f0,status);
+ }
+ if(s->r105.work.pointer){
+  const gh_scene_status status=gh_r105_room_release(&s->r105);
   if(status)return fail(s,GH_SERVICES_BUSY,0x2a94f0,status);
  }
  {gh_tutorial_status e=gh_cockpit_tutorial_release(&s->tutorial);if(e)return fail(s,GH_SERVICES_ASSET,s->tutorial.frontier?s->tutorial.frontier:0x147188,e);}
@@ -1501,6 +1543,7 @@ gh_game_services_status gh_game_services_destroy(gh_game_services*s){
     if(lookup)return fail(s,enemy_place_error(lookup),0x30f16c,lookup);
     if(actor.actor)gh_scene_dynamic_forget_sphere_actor(&s->dynamic_objects,&actor.actor->view);
    }
+   gh_game_devil_camera_detach(&s->devil_camera,s->b.init);
    uint32_t f=0;gh_actor_motion_status e=gh_enemy_ems_release_native(&s->enemies,&f);
    if(e)return fail(s,GH_SERVICES_ASSET,f?f:0x290770,e);
   }
@@ -1890,6 +1933,17 @@ static gh_actor_motion_status release_stamp19_enemy(void *context,const gh_enemy
  return status;
 }
 
+gh_game_devil_camera *gh_game_services_active_devil_camera(gh_game_services *s)
+{
+ return s&&s->b.init->active_camera==&s->devil_camera.identity?&s->devil_camera:NULL;
+}
+
+static const gh_game_pl_camera *enemy_scene_camera(gh_game_services *s)
+{
+ gh_game_devil_camera *devil=gh_game_services_active_devil_camera(s);
+ return devil?&devil->camera:&s->camera;
+}
+
 static gh_actor_motion_status spawn_stamp8_devil(void *context,const gh_enemy_actor *parent,
  const gh_enemy_request *request,uint32_t *frontier)
 {
@@ -1944,9 +1998,14 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   }
   if(delta){*f=entry;return GH_SERVICES_FRONTIER;}
   if(enemy.devil){
-   /* 20FA64 selector4 dispatch for the newly initialized Devil. */
-   *f=entry==0x208be0&&v->bytes[0x2f4]==0&&v->bytes[0x2f5]==4?0x212c08:entry;
-   return GH_SERVICES_FRONTIER;
+   if(entry!=0x208be0){*f=entry;return GH_SERVICES_FRONTIER;}
+   s->enemy_opacity=(gh_object_opacity_environment){s->b.init,enemy_scene_camera(s),&s->title_player.view,1};
+   gh_actor_motion_status status=gh_enemy_ems_devil_step_00208be0(s->enemies,handle,&s->devil_camera,
+       s->b.camera_follow,&s->enemy_opacity,&s->step.nearcheck,
+       &(gh_effect_create_bindings){.storage=player_effect_storage(s),.work=work,
+           .random=&s->b.init->random,.model=enemy.model,.atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL},
+       &s->title_player.view,s->b.boot_elf,s->b.boot_elf_bytes,f);
+   return !status?GH_SERVICES_OK:status==GH_ACTOR_MOTION_UNSUPPORTED?GH_SERVICES_FRONTIER:GH_SERVICES_ASSET;
   }
   if(enemy.other_move){
    gh_enemy_other_move *move=enemy.other_move;
@@ -1954,7 +2013,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
    gh_actor_motion_status status;
    if(entry==0x2856c0&&enemy.enemy2a2){
     if(actor_sound_prepare(s,&s->enemy_sound,f))return GH_SERVICES_ASSET;
-    s->enemy_opacity=(gh_object_opacity_environment){s->b.init,&s->camera,&s->title_player.view,1};
+    s->enemy_opacity=(gh_object_opacity_environment){s->b.init,enemy_scene_camera(s),&s->title_player.view,1};
     if(!s->player_idle_bindings.targets.resolve)s->player_idle_bindings.targets=gh_game_services_scene_targets(s);
     status=gh_enemy_other_move_bind_targets(move,&s->player_idle_bindings.targets);
     if(!status)status=gh_enemy_other_move_bind_2a2_services(move,&s->enemy_opacity,enemy_motion_effect,s,
@@ -1978,7 +2037,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
    enemy.enemy202->motion.motion.b.sound=gh_actor_attached_sound_motion;
    enemy.enemy202->motion.motion.b.sound_context=&s->enemy_sound;
   }
-  s->enemy_opacity=(gh_object_opacity_environment){s->b.init,&s->camera,&s->title_player.view,1};
+  s->enemy_opacity=(gh_object_opacity_environment){s->b.init,enemy_scene_camera(s),&s->title_player.view,1};
   gh_actor_motion_status e=gh_enemy202_move_bind_navigation(move,&s->step.nearcheck);
   const gh_player_target_bindings targets=gh_game_services_scene_targets(s);
   if(!e)e=gh_enemy202_move_bind_targets(move,&targets);
@@ -2242,6 +2301,7 @@ static gh_game_services_status retire_scene_objects(gh_game_services *s,int clos
  }
  if(s->enemies){
   if(s->b.init->enemy_top){*frontier=0x290770;return GH_SERVICES_FRONTIER;}
+  gh_game_devil_camera_detach(&s->devil_camera,s->b.init);
   gh_actor_motion_status status=gh_enemy_ems_release_native(&s->enemies,frontier);
   if(status)return enemy_retire_status(status,0x290770,frontier);
  }

@@ -69,6 +69,7 @@ typedef struct {gh_effect_view record;const gh_title_player_view *actor,*selecto
  /* SAME creator-owned slot, for the original per-frame consumer. Never a
   * duplicate work buffer; consumers also validate payload against storage. */
  uint8_t *payload;size_t payload_size;int32_t first_esp_child;} gh_effect_emitter_view;
+int gh_effect_devil_emitter_is_bound(const gh_game_effects *,const gh_effect_emitter_view *);
 int gh_effect_player_rise_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
 int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *);
@@ -89,7 +90,13 @@ int gh_effect_event_part_is_bound(gh_effect_view,const gh_title_player_view *,
 struct gh_effects_frame_globals;
 typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;
  uint8_t *payload;size_t payload_size;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t initialized,type;struct gh_effects_frame_globals *globals;gh_game_scene_tables *scene_actors;int32_t parent_emitter,previous,next;uint32_t parent_serial;/* Snapshot of known300458-zeroed source218, not a removedtoken test. */uint8_t target120_known_null;} gh_effect_esp_view;
+int gh_effect_attack_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
+gh_effect_status gh_effect_create_esp_devil_trail_init_002f5788(gh_game_effects *,unsigned,uint32_t,
+ uint32_t,gh_static_transform_policy,uint32_t *);
+gh_effect_status gh_effect_create_esp_devil_trail_move_002f5bf8(gh_game_effects *,unsigned,uint32_t,
+ const gh_boot_work *,gh_static_transform_policy,uint32_t *);
+int gh_effect_devil_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_player_rise_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_knockdown_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_esp_trail_is_bound(const gh_game_effects *,const gh_effect_esp_view *);

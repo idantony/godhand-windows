@@ -16,6 +16,9 @@ gh_scene_at_status gh_scene_at_set_jump_info_002c2750(gh_scene_at_manager *,gh_a
  * handles/identity. Invalid links are errors, never an empty-list success. */
 gh_scene_at_status gh_scene_at_first_unit_002c30c0(gh_scene_at_manager *,gh_at_native_unit *);
 gh_scene_at_status gh_scene_at_next_unit_002c30c8(gh_scene_at_manager *,gh_at_native_unit,gh_at_native_unit *);
+/* Original indexed search, through the canonical linked AT units. Missing
+ * IDs return a null unit. The original selector FFFFF bypasses the search. */
+gh_scene_at_status gh_scene_at_find_id_002c3118(gh_scene_at_manager *,uint32_t id,gh_at_native_unit *);
 size_t gh_scene_at_native_unit_count(const gh_scene_at_manager *);
 /* Native ownership cleanup at proven room lifetime boundary. Includes isolated
  * allocation made by originalself-destination JMP path; no destructor ack. */

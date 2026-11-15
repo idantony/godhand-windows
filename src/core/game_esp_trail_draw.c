@@ -48,8 +48,9 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
  if(!b||!v||!out||!v->payload)return GH_EFFECT_ARGUMENT;
  const uint8_t *p=v->payload;
  const int two_edges=v->type==0x20;
- if((v->type!=9&&!two_edges)||!v->initialized||!gh_effect_esp_trail_is_bound(b->storage.effects,v)||
-    v->payload_size!=0x400||word(p+0xf0)!=(two_edges?0x44f4f8u:0x44e8c8u))
+ const int devil=v->type==0x1f;
+ if((v->type!=9&&!two_edges&&!devil)||!v->initialized||!gh_effect_esp_trail_is_bound(b->storage.effects,v)||
+    v->payload_size!=0x400||word(p+0xf0)!=(two_edges?0x44f4f8u:devil?0x44f448u:0x44e8c8u))
   return reject(f,0x2ec398,GH_EFFECT_ARGUMENT);
  if(word(p+0x11c)&0x800000u){*out=(gh_effect_trans_packet){0};return GH_EFFECT_OK;}
  const unsigned stride=word(p+0x2e4);
@@ -102,6 +103,7 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
  float width=first_width,step=divf(add(last_width,-first_width),(float)count);
  if(mode&2)step=add(step,step);
  float u=flags&0x10000000u?-1:1,v_step=flags&0x08000000u?1:-1;
+ if(devil)v_step=-v_step; /* 2F5788 seeds signed V before the shared Draw. */
  float u_origin=0,v_origin=0;
  if(two_edges){
   const int frame=(int8_t)p[0x244];

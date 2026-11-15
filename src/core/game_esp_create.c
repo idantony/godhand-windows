@@ -43,7 +43,9 @@ static int authored_actor_scale(const gh_esp_create_call *c,float scale)
  gh_effect_emitter_view emitter;
  return isfinite(scale)&&scale>0&&
     !gh_effect_create_emitter_at(c->b.storage.effects,c->emitter_slot,&emitter)&&
-    emitter.serial==c->emitter_serial&&gh_effect_em00_attack_emitter_is_bound(&emitter);
+    emitter.serial==c->emitter_serial&&(gh_effect_em00_attack_emitter_is_bound(&emitter)||
+    gh_effect_stamp19_attack_part_is_bound(&emitter)||
+    gh_effect_devil_emitter_is_bound(c->b.storage.effects,&emitter));
 }
 static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const gh_effect_emitter_view *emitter){
  const uint8_t *r=emitter->record.bytes,*source=emitter->payload;
@@ -165,7 +167,7 @@ static gh_effect_status initialize_12(gh_esp_create_call*c,uint8_t*p,const uint8
  if((int8_t)r[0xbe]!=-4||!(w(r+4)&0x800000u)){
     gh_effect_esp_view child;
     if(gh_effect_create_esp_at(c->b.storage.effects,c->slot,&child)||child.serial!=c->serial||
-       !gh_effect_em00_attack_esp_is_bound(c->b.storage.effects,&child))
+       !gh_effect_attack_esp_is_bound(c->b.storage.effects,&child))
        return fail(c,0x2f00e0,GH_EFFECT_UNSUPPORTED);
  }
 
@@ -365,6 +367,14 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
  if(view.type==0x18&&c->stage==10)return initialize_18(c,p,r);
  if(view.type==0x13&&c->stage==10)return initialize_13(c,p,r);
  if(view.type==8&&c->stage==10)return initialize_8(c,p,view.record);
+ if(view.type==0x1f&&c->stage==10){
+  uint32_t pc=0;
+  status=gh_effect_create_esp_devil_trail_init_002f5788(b->storage.effects,c->slot,c->serial,
+      w((const uint8_t*)b->work+0x594),b->policy,&pc);
+  if(status)return fail(c,pc?pc:0x2f5788,status);
+  c->complete=1;c->stage=12;
+  return GH_EFFECT_OK;
+ }
  if(view.type==0x20&&c->stage==10){
   uint32_t pc=0;
   status=gh_effect_create_esp_trail_edges_002f62f8(b->storage.effects,c->slot,c->serial,

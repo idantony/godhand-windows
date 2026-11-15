@@ -79,6 +79,25 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
             "\"flags\":%u,\"part\":%d,\"update\":%u,\"mode\":%u}\n",voice.bank,voice.program,
             (unsigned)voice.actor_kind,voice.actor_dependency,voice.flags,voice.part_index,
             (unsigned)voice.during_update,(unsigned)voice.position_mode);
+    if(snapshot.effect_frontier&&snapshot.effect_frontier==snapshot.unavailable_entry)
+        std::fprintf(stderr,"CPU_REPLAY_EFFECT {\"pc\":\"%08X\",\"emitter_slot\":%u,\"emitter_serial\":%u,"
+            "\"mode\":%u,\"class\":%u,\"bank\":%u,\"index\":%u,\"flags\":\"%08X\","
+            "\"est_flags\":\"%08X\",\"part_override\":%u,\"est_part\":%u,"
+            "\"actor_kind\":%u,\"actor_dependency\":%u,\"actor_stamp\":%u,\"esp_slot\":%u,\"esp_step\":%u}\n",
+            snapshot.effect_frontier,snapshot.effect_emitter_slot,snapshot.effect_emitter_serial,
+            snapshot.effect_emitter_mode,snapshot.effect_emitter_class,snapshot.effect_emitter_bank,
+            snapshot.effect_emitter_index,snapshot.effect_emitter_flags,snapshot.effect_emitter_est_flags,
+            snapshot.effect_emitter_part_override,snapshot.effect_emitter_est_part,snapshot.effect_emitter_actor_kind,
+            snapshot.effect_emitter_actor_dependency,snapshot.effect_emitter_actor_stamp,
+            snapshot.effect_esp_slot,snapshot.effect_esp_step);
+    if(snapshot.unavailable_entry&&snapshot.current_enemy_placement_ready)
+        std::fprintf(stderr,"CPU_REPLAY_ENEMY {\"handle\":%u,\"stamp\":%u,\"dependency\":\"%04X\","
+            "\"appearance\":%u,\"state\":\"%04X\",\"phase\":%u,\"variant\":%u,"
+            "\"distance_xz_squared_bits\":\"%08X\",\"flags_16d0\":\"%08X\",\"flags_16d4\":\"%08X\"}\n",
+            snapshot.last_move_handle,snapshot.current_enemy_stamp,snapshot.current_enemy_dependency,
+            snapshot.current_enemy_appearance,snapshot.current_actor_state,snapshot.current_enemy_phase,
+            snapshot.current_enemy_variant,snapshot.current_enemy_distance_bits,
+            snapshot.current_enemy_flags_16d0,snapshot.current_enemy_flags_16d4);
     std::printf("{\"scope\":\"native scheduler and packets, no graphics presentation\","
         "\"ticks\":%llu,\"elapsed_seconds\":%.3f,\"room\":\"%04X\",\"next_room\":\"%04X\","
         "\"game_state\":%u,\"scene_stage\":%u,\"phase\":%u,\"frontier\":\"%08X\","

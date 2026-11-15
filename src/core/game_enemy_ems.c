@@ -1,8 +1,10 @@
+#include "game_camera.h"
+#include "game_enemy_ems.h"
 #include "game_effect_create.h"
 #include "game_actor_external_parent.h"
 #include "game_enemy_retire.h"
-#include "game_enemy_ems.h"
 #include "game_enemy_row2.h"
+#include "game_player_root_delta.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +32,9 @@ typedef struct {
     gh_enemy_devil_initialize initialize;
     gh_enemy_devil_pose pose;
     gh_enemy_devil_finish finish;
+    gh_actor_motion_call rise_clip;
+    gh_enemy202_move move;
+    uint8_t rise_stage;
     const gh_enemy_request *request_identity;
     uint8_t live,original_null;
 } ems_devil;
@@ -432,6 +437,165 @@ gh_actor_motion_status gh_enemy_ems_spawn_devil_002905d0(gh_enemy_ems *owner,
     }
     devil->live=1;
     return GH_ACTOR_MOTION_OK;
+}
+
+static uint32_t object_word(const uint8_t *);
+static void retire_put_word(uint8_t *,uint32_t);
+
+/* 2705D8 rank-independent far decision for EM20 in R100.
+ * The three room-specific selectors ahead of the range test return zero. */
+static gh_actor_motion_status devil_choose_far_002705d8(uint8_t *p,
+    const gh_boot_work *work,uint32_t *frontier)
+{
+    *frontier=0x2705d8;
+    if(object_word(p+0x738)){*frontier=0x1d0408;return GH_ACTOR_MOTION_UNSUPPORTED;}
+    if(work->room!=0x100||p[0x1864])return GH_ACTOR_MOTION_UNSUPPORTED;
+    float escape,override,distance;
+    memcpy(&escape,p+0x16c0,4);
+    memcpy(&override,p+0x1734,4);
+    memcpy(&distance,p+0x618,4);
+    if(!isfinite(escape)||!isfinite(override)||!isfinite(distance)||
+       escape>0.0f||override>0.0f||distance<9.0f)return GH_ACTOR_MOTION_UNSUPPORTED;
+    memset(p+0x2f4,0,4);
+    p[0x616]=0;
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy_ems_devil_move_00212c08(gh_enemy_ems *owner,uint32_t handle,
+    gh_game_devil_camera *camera,gh_camera_follow *follow,uint32_t *frontier)
+{
+    if(!owner||!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x212c08;
+    ems_devil *devil=owner->devil;
+    if(!devil||!devil->live||devil->factory.entry.handle!=handle||!devil_registered(owner))
+        return GH_ACTOR_MOTION_ARGUMENT;
+    gh_enemy_entry *entry=&devil->factory.entry;
+    const gh_enemy_actor_bindings *b=&owner->bindings->actor;
+    uint8_t *p=entry->object.view.bytes;
+    if(object_word(p+0x564)!=0x220||!b->canonical_rate)
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    if(devil->rise_stage<2||devil->rise_stage>3){
+        if(p[0x2f4]||p[0x2f5]!=4||(p[0x2f6]!=2&&p[0x2f6]!=3))
+            return GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    gh_actor_motion *motion=&devil->initialize.motion.motion;
+    if(p[0x2f6]==2){
+        const gh_object_view *resource=&entry->resource;
+        *frontier=0x2a8578;
+        if(!resource->bytes||!resource->file_extent_known||resource->file_extent<0x1d80||
+           resource->file_extent>resource->size)return GH_ACTOR_MOTION_BOUNDS;
+        gh_actor_motion_call *call=&devil->rise_clip;
+        if(!call->stage){
+            gh_actor_motion_bindings bindings=motion->b;
+            bindings.effect=b->effect;
+            bindings.context=b->effect_context;
+            const gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(
+                call,motion,&bindings,object_word(resource->bytes+0x1d78),
+                object_word(resource->bytes+0x1d7c),0,0,p[0x17c3]?2:0,1);
+            if(status){if(call->frontier)*frontier=call->frontier;return status;}
+        }
+        const gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(call);
+        if(status){if(call->frontier)*frontier=call->frontier;return status;}
+        p[0x616]=1;
+        p[0x2f6]=3;
+    }
+    uint32_t pc=0;
+    if(devil->rise_stage==0){
+        *frontier=0x138e38;
+        if(!camera)return GH_ACTOR_MOTION_UNSUPPORTED;
+        const gh_camera_status status=gh_game_devil_camera_bind_00138e38(camera,
+            b->entry.init,&entry->initialize.model.model,frontier);
+        if(status)return status==GH_CAMERA_BUSY?GH_ACTOR_MOTION_BUSY:GH_ACTOR_MOTION_UNSUPPORTED;
+        retire_put_word(p+0x54c,0x40400000);
+        devil->rise_stage=1;
+    }
+    if(devil->rise_stage==1){
+        int ended=0;
+        const gh_actor_motion_status status=gh_actor_motion_step_00157c18(motion,
+            *b->canonical_rate,GH_STATIC_BINARY32_REFERENCE,&ended,&pc);
+        if(status){*frontier=pc?pc:0x157c18;return status;}
+        devil->rise_stage=ended?4:2;
+    }
+    if(devil->rise_stage==4){
+        *frontier=0x124f60;
+        if(!camera)return GH_ACTOR_MOTION_UNSUPPORTED;
+        const gh_camera_status status=gh_game_devil_camera_restore_00124f60(camera,follow,
+            b->entry.init,frontier);
+        if(status)return status==GH_CAMERA_BUSY?GH_ACTOR_MOTION_BUSY:GH_ACTOR_MOTION_UNSUPPORTED;
+        devil->rise_stage=5;
+    }
+    if(devil->rise_stage==5){
+        const gh_actor_motion_status status=devil_choose_far_002705d8(p,b->entry.work,frontier);
+        if(status)return status;
+        devil->rise_stage=2;
+    }
+    if(devil->rise_stage==2){
+        if(gh_player_root_rotation_0014f9f0(&entry->object.view,b->entry.work,
+            GH_STATIC_BINARY32_REFERENCE,&pc)){
+            *frontier=pc?pc:0x14f9f0;
+            return GH_ACTOR_MOTION_UNSUPPORTED;
+        }
+        devil->rise_stage=3;
+    }
+    if(gh_player_root_translation_0014f928(&entry->object.view,b->entry.work,
+        GH_STATIC_BINARY32_REFERENCE,&pc)){
+        *frontier=pc?pc:0x14f928;
+        return GH_ACTOR_MOTION_UNSUPPORTED;
+    }
+    devil->rise_stage=0;
+    *frontier=0;
+    return GH_ACTOR_MOTION_OK;
+}
+
+typedef struct {
+    gh_enemy_ems *ems;
+    uint32_t handle;
+    gh_game_devil_camera *camera;
+    gh_camera_follow *follow;
+    gh_object_opacity_environment *opacity;
+} devil_move_context;
+
+static gh_actor_motion_status devil_selector(void *context,uint32_t *frontier)
+{
+    devil_move_context *b=context;
+    const gh_actor_motion_status status=gh_enemy_ems_devil_move_00212c08(
+        b->ems,b->handle,b->camera,b->follow,frontier);
+    if(!status){
+        if(b->opacity->init->active_camera==&b->camera->identity)
+            b->opacity->camera=&b->camera->camera;
+        else if(b->follow&&b->follow->camera&&
+            b->opacity->init->active_camera==b->follow->camera->identity)
+            b->opacity->camera=b->follow->camera;
+    }
+    return status;
+}
+
+gh_actor_motion_status gh_enemy_ems_devil_step_00208be0(gh_enemy_ems *owner,uint32_t handle,
+    gh_game_devil_camera *camera,gh_camera_follow *follow,gh_object_opacity_environment *opacity,
+    const gh_scene_nearcheck *navigation,const gh_effect_create_bindings *effects,const gh_title_player_view *player,const void *elf,
+    size_t elf_bytes,uint32_t *frontier)
+{
+    if(!owner||!camera||!opacity||!effects||!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0x208be0;
+    ems_devil *devil=owner->devil;
+    if(!devil||!devil->live||devil->factory.entry.handle!=handle||!devil_registered(owner))
+        return GH_ACTOR_MOTION_ARGUMENT;
+    const gh_enemy_move_actor runtime={&devil->factory.entry,&owner->bindings->actor,
+        &devil->finish.nodes,&devil->finish.hitareas};
+    gh_enemy202_move *move=&devil->move;
+    if(move->original_returned)*move=(gh_enemy202_move){0};
+    move->impact_bindings=*effects;
+    move->opacity=opacity;
+    move->navigation=navigation;
+    devil_move_context context={owner,handle,camera,follow,opacity};
+    move->devil_selector=devil_selector;
+    move->devil_selector_context=&context;
+    gh_actor_motion_status status=gh_enemy_devil_move_00208be0(move,&runtime,player,elf,elf_bytes);
+    move->devil_selector_context=NULL;
+    *frontier=status?(move->frontier?move->frontier:0x208be0):0;
+    if(!status&&!move->original_returned){*frontier=0x208be0;return GH_ACTOR_MOTION_UNSUPPORTED;}
+    return status;
 }
 
 gh_actor_motion_status gh_enemy_ems_abort_devil_native(gh_enemy_ems *owner,uint32_t *frontier)

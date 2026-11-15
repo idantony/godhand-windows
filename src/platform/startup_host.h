@@ -151,8 +151,8 @@ typedef struct gh_startup_snapshot {
     uint8_t event_motion_camera_active;
     uint32_t effect_frontier, effect_emitter_slot, effect_emitter_serial;
     uint32_t effect_emitter_mode, effect_emitter_class, effect_emitter_step;
-    uint32_t effect_emitter_bank, effect_emitter_index, effect_emitter_row, effect_emitter_flags;
-    uint32_t effect_emitter_part, effect_emitter_delay, effect_emitter_actor_kind;
+    uint32_t effect_emitter_bank, effect_emitter_index, effect_emitter_est_flags, effect_emitter_flags;
+    uint32_t effect_emitter_part_override, effect_emitter_est_part, effect_emitter_actor_kind;
     uint32_t effect_emitter_actor_dependency, effect_emitter_actor_stamp;
     uint32_t effect_esp_slot, effect_esp_step;
     uint8_t save_map_active,save_map_selected;

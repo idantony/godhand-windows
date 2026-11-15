@@ -3,6 +3,8 @@
  * Host policies/timing substitutions: startup-host-verification.json. */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include "../core/game_camera.h"
+#include "../core/game_camera_projection.h"
 #include "startup_host.h"
 #include "../core/dvd_jobs.h"
 #include "../core/game_gate.h"
@@ -428,9 +430,16 @@ static gh_object_step_status move_actor_view(void *context,uint32_t handle,gh_ti
     if(e&&frontier)*frontier=0x30f138;
     return !e?GH_OBJSTEP_OK:e==GH_SERVICES_FRONTIER?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
 }
+static gh_game_pl_camera *active_scene_camera(gh_startup_host *h,gh_game_pl_camera *base)
+{
+    if(h->game_init.active_camera==&h->event_camera.identity)return &h->event_camera.camera;
+    gh_game_devil_camera *devil=gh_game_services_active_devil_camera(h->services);
+    return devil?&devil->camera:base;
+}
+
 static gh_game_actor_render_provider actor_render_provider(gh_startup_host *h)
 {
-    const gh_game_pl_camera *camera=h->game_init.active_camera==&h->event_camera.identity?&h->event_camera.camera:NULL;
+    const gh_game_pl_camera *camera=active_scene_camera(h,NULL);
     return (gh_game_actor_render_provider){.depth_shift=&h->object_step.depth_shift,.shadow_templates=&h->shadow_templates,
         .shadow_emit=h->shadow_emit,.shadow_context=h->shadow_context,.actor_emit=h->actor_emit,.actor_context=h->actor_context,.camera=camera,
         .marker_emit=h->effect_emit,.marker_context=h->effect_context};
@@ -668,8 +677,7 @@ static gh_effect_status event_effect_actor(void *context, uint16_t kind, uint8_t
 static gh_effects_frame_bindings effects_frame_bindings(gh_startup_host *h,
     const gh_game_services_scene_view *scene)
 {
-    gh_game_pl_camera *camera = h->game_init.active_camera == &h->event_camera.identity ?
-        &h->event_camera.camera : scene->pl_camera;
+    gh_game_pl_camera *camera = active_scene_camera(h,scene->pl_camera);
     return (gh_effects_frame_bindings){
         .storage = {.effects = scene->effects, .esp = scene->scene_buffer_a,
             .esp_bytes = scene->scene_buffer_a_size, .emitters = scene->scene_buffer_b,
@@ -1090,7 +1098,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
 {
     gh_startup_host *h=context;gh_game_services_scene_view s;(void)argument;
     if(gh_game_services_get_scene_view(h->services,&s))return GH_SCENE_STEP_ARGUMENT;
-    gh_game_pl_camera *camera=h->game_init.active_camera==&h->event_camera.identity?&h->event_camera.camera:s.pl_camera;
+    gh_game_pl_camera *camera=active_scene_camera(h,s.pl_camera);
     gh_scene_aux_status aux=GH_AUX_OK;
     if(address==0x138f98){
         gh_camera_projection_display display={&h->display.screen_width,&h->display.screen_height_bits,
@@ -1248,6 +1256,12 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     else if(address==0x138fc8){
         gh_camera_projection_display display={&h->display.screen_width,&h->display.screen_height_bits,
             &h->display.pixel_aspect_bits,&h->display.initialized,GH_CAMERA_NATIVE_BINARY32_REFERENCE};
+        gh_game_devil_camera *devil=gh_game_services_active_devil_camera(h->services);
+        if(devil){
+            const gh_camera_status status=gh_game_devil_camera_step_00138fc8(devil,s.pl_camera,&h->game_init,
+                s.acd,&s.title_player->view,&h->work,&display,frontier);
+            return status?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
+        }
         gh_camera_status e=GH_CAMERA_OK;uint32_t pc=0;
         if(!h->camera_update_stage){
             e=gh_game_camera_step_follow_00138fc8(s.pl_camera,&h->game_init,s.acd,&s.title_player->view,
@@ -2528,12 +2542,12 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
             memcpy(&out->effect_emitter_flags,emitter->payload+0x118,4);
             out->effect_emitter_bank=emitter->payload[0x18c]|(uint32_t)emitter->payload[0x18d]<<8;
             out->effect_emitter_index=emitter->payload[0x18e]|(uint32_t)emitter->payload[0x18f]<<8;
-            out->effect_emitter_part=emitter->payload[0x1ec];
+            out->effect_emitter_part_override=emitter->payload[0x1ec];
         }
         if(emitter->record.bytes&&emitter->record.size>0x133){
-            memcpy(&out->effect_emitter_row,emitter->record.bytes+4,4);
+            memcpy(&out->effect_emitter_est_flags,emitter->record.bytes+4,4);
             out->effect_emitter_class=emitter->record.bytes[0x133];
-            out->effect_emitter_delay=emitter->record.bytes[0xbe];
+            out->effect_emitter_est_part=emitter->record.bytes[0xbe];
         }
         if(emitter->actor&&emitter->actor->bytes&&emitter->actor->size>=0x644){
             const uint8_t *actor=emitter->actor->bytes;

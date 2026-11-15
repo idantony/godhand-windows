@@ -74,6 +74,50 @@ gh_camera_status gh_game_camera_construct_motion_00138be8(gh_game_pl_camera*s,gh
  for(unsigned i=0;i<sizeof(vectors)/sizeof(*vectors);i++)w32(s->fields+vectors[i]+12,0x3f800000);
  w32(s->fields+0x35c,0x41d8f8);s->constructed=1;return GH_CAMERA_OK;
 }
+gh_camera_status gh_game_devil_camera_bind_00138e38(gh_game_devil_camera *s,
+ gh_game_init_state *init,const gh_actor_model *model,uint32_t *frontier)
+{
+ if(!s||!init||!model||!frontier)return GH_CAMERA_ARGUMENT;
+ *frontier=0x138e38;
+ if(!model->ready||!model->root.bytes||model->root.size<0x2b5||s->move_stage)
+  return GH_CAMERA_ARGUMENT;
+ if(init->camera.mode==0x40&&init->active_camera!=&s->identity)return GH_CAMERA_BUSY;
+ if(!s->camera.constructed){
+  const gh_camera_status status=construct_base_001380a8(&s->camera,&s->identity,
+      GH_CAMERA_NATIVE_BINARY32_REFERENCE);
+  if(status)return status;
+  w32(s->camera.fields+0x35c,0x41d930);
+  s->camera.constructed=1;
+ }
+ *frontier=0x139b68;
+ const gh_actor_part *eye=NULL,*look_at=NULL;
+ const unsigned parts=model->root.bytes[0x2b4];
+ if((parts>=28&&gh_actor_model_part_at(model,27,&eye))||
+    (parts>=29&&gh_actor_model_part_at(model,28,&look_at)))return GH_CAMERA_ARGUMENT;
+ if(init->camera.mode!=0x40&&init->camera.mode!=0x10){
+  init->camera.previous_mode=init->camera.mode;
+  init->camera.previous=init->active_camera;
+  init->active_camera=&s->identity;
+  init->camera.mode=0x40;
+ }
+ s->target=model;
+ s->eye=eye;
+ s->look_at=look_at;
+ *frontier=0;
+ return GH_CAMERA_OK;
+}
+
+void gh_game_devil_camera_detach(gh_game_devil_camera *s,gh_game_init_state *init)
+{
+ if(!s||!init)return;
+ if(init->active_camera==&s->identity)(void)gh_game_camera_restore_00138d40(init);
+ if(init->camera.previous==&s->identity)init->camera.previous=NULL;
+ s->target=NULL;
+ s->eye=NULL;
+ s->look_at=NULL;
+ s->move_stage=0;
+}
+
 gh_camera_status gh_game_camera_reset_00138210(gh_game_pl_camera*s,const gh_game_camera*active){
  if(!s||!active||!s->constructed)return GH_CAMERA_ARGUMENT;
  if(active!=s->identity||u32(s->fields+0x35c)!=0x41dbb0){s->failed_entry=0x138210;return GH_CAMERA_UNSUPPORTED;}

@@ -78,10 +78,16 @@ static int is_r105_first_appearance0_profile(const gh_enemy_request *request)
     }
 }
 
+static int is_r105_appearance1_profile(const gh_enemy_request *request)
+{
+    return request&&request->object_kind==0x202&&request->dependency_kind==0x203&&
+        request->entry_number==6&&request->appearance==1&&!request->flags&&!request->dependency_flags;
+}
+
 int gh_enemy202_is_room_supported_profile(const gh_enemy_request *request,uint16_t room)
 {
     return gh_enemy202_is_r100_supported_profile(request)||
-        (room==0x105&&is_r105_first_appearance0_profile(request));
+        (room==0x105&&(is_r105_first_appearance0_profile(request)||is_r105_appearance1_profile(request)));
 }
 
 int gh_enemy202_body_radius_002070cc(uint32_t scale,uint32_t nominal,uint32_t *bits)
@@ -192,6 +198,8 @@ gh_actor_model_status gh_enemy202_appearance1_select_00203a9c(
 {
     if (!request || !resource || !out || !resource->bytes || resource->kind!=0x202)
         return GH_ACTOR_MODEL_ARGUMENT;
+    if (is_r105_appearance1_profile(request))
+        return select_initial_motion(resource,0x3fc,1,2,out); /* 42D954 -> 203A78 */
     if (!is_r100_appearance1_profile(request))
         return GH_ACTOR_MODEL_UNSUPPORTED;
     /* 42D6C4 -> 203A40, then 42D970 -> 203A9C for dependency 20A. */

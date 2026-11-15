@@ -1,5 +1,6 @@
 #ifndef GH_GAME_CAMERA_FOLLOW_H
 #define GH_GAME_CAMERA_FOLLOW_H
+#include "game_camera.h"
 #include "game_camera_step.h"
 #include "game_ray_query.h"
 #ifdef __cplusplus
@@ -26,6 +27,9 @@ gh_camera_status gh_game_camera_reset_pose_0013b9b8(gh_camera_follow *,
  * Retains its live offsets and target identity. The caller owns 138D40. */
 gh_camera_status gh_game_camera_reset_pose_0013b9b8(gh_camera_follow *,
  const gh_game_init_state *,uint32_t *frontier);
+/* Original 124F60 argument2=0, argument3=1 used by Devil rise. */
+gh_camera_status gh_game_devil_camera_restore_00124f60(gh_game_devil_camera *,
+ gh_camera_follow *,gh_game_init_state *,uint32_t *frontier);
 /* Actual ordinary139FF8 prefix through terrain rays and smoothed target/eye.
  * NULL ray callback invokes SAME canonical game_ray_query, never a fake miss.
  * Remaining collision-envelope/FOV/mode blend is a precise internal frontier,

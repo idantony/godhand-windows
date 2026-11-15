@@ -14,7 +14,10 @@ gh_actor_model_status gh_enemy_hp_initialize_00202b88(gh_enemy_hp*s,gh_enemy_ent
   return GH_ACTOR_MODEL_ARGUMENT;
  if(!s->stage){p[0x622]=0;unsigned level=p[0x186b];static const uint16_t hp20a[]={148,192,236,296,340,399,444,488};
   static const uint16_t hp200[]={74,96,118,148,170,192,222,244};
-  const uint16_t *hp=e->request.dependency_kind==0x20a?hp20a:hp200;
+  /* Runtime 227 uses jump table 42D110 and sets the elite flag. */
+  const int exchange=word(p,0x564)==0x227;
+  static const uint16_t hp227[]={322,388,455,544,610,677,766,832};
+  const uint16_t *hp=exchange?hp227:e->request.dependency_kind==0x20a?hp20a:hp200;
   uint32_t value=devil?330u:level>=2&&level<=8?hp[level-1]:hp[0];
   /* Actual1FABB0 visits atmostsix equippedA8 bytes whenroomhigh!=0.
    * The 20A and 200 bonus-switch default is 0; no globalplayerHP read occurs. */
@@ -26,7 +29,7 @@ gh_actor_model_status gh_enemy_hp_initialize_00202b88(gh_enemy_hp*s,gh_enemy_ent
     value=(uint32_t)(((uint64_t)value*UINT64_C(13421773))>>24);
    }else if(difficulty==2)value+=20;
   }
-  if(devil)p[0x17c1]=1;
+  if(devil||exchange)p[0x17c1]=1;
   p[0x622]=(uint8_t)devil;uint16_t small=(uint16_t)value;memcpy(p+0x548,&small,2);memcpy(p+0x54a,&small,2);
   s->tail=t;s->hp=value;s->equipped_count=equipped;s->stage=1;
  }

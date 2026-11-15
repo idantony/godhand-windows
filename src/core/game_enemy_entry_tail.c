@@ -16,7 +16,9 @@ static gh_actor_model_status continue_entry(gh_enemy_entry_tail*s,gh_enemy_entry
   /* 200/202/203 keep the spawn-counter scale from 42CCE0. 20A overwrites it. */
   static const uint32_t scales[]={0x3f851eb8,0x3f88f5c3,0x3f87ae14,0x3f8ccccd,
       0x3f8a3d71,0x3f8ccccd,0x3f866666,0x3f8b851f};
-  uint32_t scale=devil?0x3f99999a:e->request.dependency_kind==0x20a?0x3f800000:scales[s->original_counter&7];
+  /* The post-TXE runtime dependency 227 selects original 202A78. */
+  uint32_t scale=devil||word(p,0x564)==0x227?0x3f99999a:
+      e->request.dependency_kind==0x20a?0x3f800000:scales[s->original_counter&7];
   put(p,0x110,scale);put(p,0x118,scale);put(p,0x114,scale);s->stage=3;
  }
  /* Actual271410 dependency20A is another switchdefault with noallocations.

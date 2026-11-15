@@ -1,5 +1,6 @@
 #ifndef GH_GAME_CAMERA_PROJECTION_H
 #define GH_GAME_CAMERA_PROJECTION_H
+#include "game_camera.h"
 #include "game_camera_step.h"
 #ifdef __cplusplus
 extern "C" {
@@ -18,6 +19,10 @@ gh_camera_status gh_game_camera_project_00138740(gh_game_pl_camera *,
 gh_camera_status gh_game_camera_step_projected_00138fc8(gh_game_pl_camera *,
  gh_game_init_state *,gh_acd_scene_binding *,const gh_title_player_view *,
  const gh_boot_work *,const gh_camera_projection_display *,uint32_t *frontier);
+/* Original 138FC8 path stage then 38600 on CamManager+920. */
+gh_camera_status gh_game_devil_camera_step_00138fc8(gh_game_devil_camera *,
+ gh_game_pl_camera *,gh_game_init_state *,gh_acd_scene_binding *,
+ const gh_title_player_view *,const gh_boot_work *,const gh_camera_projection_display *,uint32_t *);
 #ifdef __cplusplus
 }
 #endif

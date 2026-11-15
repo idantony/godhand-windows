@@ -1,5 +1,6 @@
 #ifndef GH_GAME_ENEMY_EMS_H
 #define GH_GAME_ENEMY_EMS_H
+#include "game_camera_follow.h"
 #include "game_enemy_actor.h"
 #include "game_enemy_move.h"
 #include "game_enemy_other_move.h"
@@ -59,6 +60,12 @@ gh_scene_placement_status gh_enemy_ems_live_at(gh_enemy_ems *,uint32_t handle,gh
 gh_actor_motion_status gh_enemy_ems_spawn_devil_002905d0(gh_enemy_ems *,
     const gh_enemy_actor *,const gh_enemy_request *,const gh_effect_create_bindings *,
     gh_motion_sound_consumer,void *,uint32_t *);
+/* Selector4 inside 208BE0. The camera owner borrows the live canonical model. */
+gh_actor_motion_status gh_enemy_ems_devil_move_00212c08(gh_enemy_ems *,uint32_t,
+    gh_game_devil_camera *,gh_camera_follow *,uint32_t *);
+gh_actor_motion_status gh_enemy_ems_devil_step_00208be0(gh_enemy_ems *,uint32_t,
+    gh_game_devil_camera *,gh_camera_follow *,gh_object_opacity_environment *,
+    const gh_scene_nearcheck *,const gh_effect_create_bindings *,const gh_title_player_view *,const void *,size_t,uint32_t *);
 gh_actor_motion_status gh_enemy_ems_abort_devil_native(gh_enemy_ems *,uint32_t *);
 /* Same live +6EC relation, discoverable by either original registry handle. */
 const gh_enemy_weapon_init *gh_enemy_ems_held_weapon(const gh_enemy_ems *,

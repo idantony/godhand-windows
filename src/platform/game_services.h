@@ -143,6 +143,7 @@ typedef struct {
  uint32_t *main_word4;gh_game_main_record *main_records;size_t main_record_count;
  uint8_t *scene_buffer_a,*scene_buffer_b;size_t scene_buffer_a_size,scene_buffer_b_size;
 } gh_game_services_scene_view;
+gh_game_devil_camera *gh_game_services_active_devil_camera(gh_game_services *);
 gh_game_services_status gh_game_services_get_scene_view(gh_game_services *,gh_game_services_scene_view *);
 /* Bind the Event controller's factory roster to the live room and resolver. */
 gh_game_event_status gh_game_services_bind_event_actor_roster(gh_game_services *,

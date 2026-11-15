@@ -286,10 +286,13 @@ int main(int argc,char **argv)
   C(!gh_enemy_se_ready_002cb778(banks,em03_bank,&ready));
  }
  C(ready&&!gh_enemy_se_resolve_002cb418(banks,dep,&resolved)&&resolved==em03_bank);
- const size_t em03_frames[]={7028,9408};
- for(unsigned i=0;i<2;++i){
-  const int16_t program=(int16_t)(0x0a+i);
-  check_program(registry,(int16_t)em03_bank,program,9+i,11025,em03_frames[i]);
+ memcpy(enemy.view.bytes+0x640,&(uint16_t){req.entry_number},2);
+ const int16_t em03_programs[]={0x0a,0x0b,0x10};
+ const unsigned em03_slots[]={9,10,12};
+ const size_t em03_frames[]={7028,9408,22064};
+ for(unsigned i=0;i<3;++i){
+  const int16_t program=em03_programs[i];
+  check_program(registry,(int16_t)em03_bank,program,em03_slots[i],11025,em03_frames[i]);
   C(!gh_actor_attached_sound_bind(&source,&binding));
   C(!gh_actor_attached_sound_bind_scene_tables(&source,&tables));
   gh_motion_sound_request cue={.model=&model.model,.actor=&enemy.view,.bank=1,.program=program};
@@ -304,7 +307,7 @@ int main(int argc,char **argv)
   gh_se_voice_info info;
   C(!gh_se_voice_query(voices,original_handle,&info)&&info.bank==em03_bank&&info.program==program&&
     !info.pending&&info.native_voice&&info.position_mode==2&&info.distance==3&&
-    info.sample_slot==9+i&&info.rate==11025&&info.adsr2==0x5fcb&&info.channel>=45&&info.channel<=47);
+    info.sample_slot==em03_slots[i]&&info.rate==11025&&info.adsr2==0x5fcb&&info.channel>=45&&info.channel<=47);
   C(submissions==before+1&&submitted[before].frames>em03_frames[i]&&(info.left_q14||info.right_q14));
   printf("EM03 cue %02X slot %u pitch %u channel %u PCM %zu\n",program,
       info.sample_slot,info.pitch_q12,info.channel,submitted[before].frames);

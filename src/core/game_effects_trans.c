@@ -369,7 +369,7 @@ static gh_effect_status packet_type12(gh_game_effects_trans*s,const gh_effect_es
     p[0x24a]||half(p+0x276)||p[0x24c]||p[0x2e0])
     return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
  if(projected){
-    if(p[0x2e2]||!v->actor||!gh_effect_em00_attack_esp_is_bound(s->b.storage.effects,v))
+    if(p[0x2e2]||!v->actor||!gh_effect_attack_esp_is_bound(s->b.storage.effects,v))
        return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
     if(!(flags&0x80u)&&(word(v->actor->bytes+0x250)&2u))return GH_EFFECT_OK;
     const gh_effect_sprite_camera camera={s->b.camera,s->b.init,d,s->b.policy,s->b.cvt_policy};
@@ -456,8 +456,8 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
  if(!b->storage.effects||!b->storage.effects->ready||!b->storage.esp||b->storage.esp_bytes<0x100180||!b->globals||!b->globals->initialized)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);uint8_t*base=b->storage.esp;
  for(;s->esp_index<1024;s->esp_index++){unsigned index=s->esp_index,offset=(index>>5)*4;uint32_t mask=0x80000000u>>(index&31);if(!(word(base+0x100000+offset)&mask)||(word(base+0x100080+offset)&mask)||(word(base+0x100100+offset)&mask)){if(s->serial)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);continue;}gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,index,&v)||!v.initialized||v.payload!=base+(size_t)index*0x400||v.globals!=b->globals)return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);if(s->serial&&s->serial!=v.serial)return fail(s,0x2fb310,GH_EFFECT_ARGUMENT);if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&
     !gh_effect_event_part_is_bound(v.record,v.actor,v.selector)&&
-    !gh_effect_em00_attack_esp_is_bound(b->storage.effects,&v)&&
-    !gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_rise_esp_is_bound(b->storage.effects,&v))||
+    !gh_effect_attack_esp_is_bound(b->storage.effects,&v)&&
+    !gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_rise_esp_is_bound(b->storage.effects,&v)&&!gh_effect_devil_esp_is_bound(b->storage.effects,&v))||
     word(v.payload+0x114))return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);
  if(!s->serial&&v.actor&&(word(v.actor->bytes+0x250)&0x8000u))continue;uint32_t flags=word((const uint8_t*)b->work+0x5e4),config=word(v.payload+0x104);if(!s->serial&&s->gate_10000&&!(config&2u)&&!((config&0x40u)?(flags&0x4000000u)!=0:v.actor!=NULL))continue;if(!s->serial)s->serial=v.serial;
  if(!s->call_stage&&!s->pending&&(word(v.payload+0x11c)&0x800000u)){s->serial=s->call_stage=0;continue;}if(v.type==0x14){
@@ -480,7 +480,7 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
        }
     }
     s->serial=s->call_stage=0;continue;
- }if(v.type==9||v.type==0x20){
+ }if(v.type==9||v.type==0x1f||v.type==0x20){
    if(!s->pending&&v.type==0x20&&v.actor&&(word(v.actor->bytes+0x250)&2u)&&!(word(v.payload+0x11c)&0x80u)){
      s->serial=s->call_stage=0;
      continue;

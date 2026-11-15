@@ -96,3 +96,14 @@ gh_camera_status gh_game_camera_reset_pose_0013b9b8(gh_camera_follow *follow,
     if (frontier) *frontier = 0;
     return GH_CAMERA_OK;
 }
+
+gh_camera_status gh_game_devil_camera_restore_00124f60(gh_game_devil_camera *s,
+    gh_camera_follow *follow,gh_game_init_state *init,uint32_t *frontier)
+{
+    if(!s||!init||!frontier)return GH_CAMERA_ARGUMENT;
+    *frontier=0x124f60;
+    if(!s->target||s->move_stage)return GH_CAMERA_BUSY;
+    gh_camera_status status=gh_game_camera_reset_pose_0013b9b8(follow,init,frontier);
+    if(status)return status;
+    return gh_game_camera_restore_00138d40(init);
+}

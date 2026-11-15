@@ -3,6 +3,8 @@
  * analysis/game-camera-projection-evidence.json. Explicit native FP reference. */
 #include "game_camera_projection.h"
 #include "game_camera_shake.h"
+#include "id_layout_rotation.h"
+#include "sdk_rotation_trig.h"
 #include <math.h>
 #include <string.h>
 #include <fenv.h>
@@ -76,5 +78,92 @@ gh_camera_status gh_game_camera_step_projected_00138fc8(gh_game_pl_camera*c,gh_g
   status=gh_game_camera_project_00138740(c,d,&pc);
  }
  if(f)*f=pc;
+ return status;
+}
+
+/* cCamera at CamManager+920, vtable 41D930 slot+14. */
+static gh_camera_status devil_pose_001399a0(gh_game_devil_camera *s,
+ const gh_boot_work *work,uint32_t *frontier)
+{
+ if((word((const uint8_t *)work+0x5d8)&0x00800000)||!s->eye||!s->look_at)
+  return GH_CAMERA_OK;
+ if(!s->target||!s->target->root.bytes||!s->eye->bytes||!s->look_at->bytes)
+  return fail(frontier,0x1399a0,GH_CAMERA_ARGUMENT);
+ uint8_t *p=s->camera.fields;
+ float model[16],eye_local[4]={0,0,0,1},target_local[4]={0,0,0,1};
+ for(unsigned i=0;i<16;i++)model[i]=readf(s->target->root.bytes+0x80+i*4);
+ for(unsigned i=0;i<3;i++){
+  eye_local[i]=readf(s->eye->bytes+0x30+i*4);
+  target_local[i]=readf(s->look_at->bytes+0x30+i*4);
+ }
+ float eye[4],target[4],up[4],up_local[4]={0},roll;
+ apply(eye,model,eye_local);
+ apply(target,model,target_local);
+ const float fov=mul(readf(s->eye->bytes+0x104),bits(0x42652ee0));
+ if(gh_id_angle_reference_001f7d48(-readf(s->look_at->bytes+0x104),&roll)||
+    gh_sdk_rotation_sincos_reference_0030a5d0(roll,&up_local[0],&up_local[1],
+        GH_STATIC_BINARY32_REFERENCE,frontier))
+  return fail(frontier,0x1f8080,GH_CAMERA_UNSUPPORTED);
+ apply(up,model,up_local);
+ const float x=sub(eye[0],target[0]),y=sub(eye[1],target[1]),z=sub(eye[2],target[2]);
+ float yaw=0,pitch=0;
+ if(x!=0||z!=0){
+  gh_camera_status status=gh_game_angle_001f8180(x,z,&yaw,s->camera.policy,frontier);
+  if(status)return status;
+ }
+ float sine,cosine;
+ if(gh_sdk_rotation_sincos_reference_0030a5d0(-yaw,&sine,&cosine,
+    GH_STATIC_BINARY32_REFERENCE,frontier))return fail(frontier,0x147988,GH_CAMERA_UNSUPPORTED);
+ const float rotated_z=add(mul(-sine,x),mul(cosine,z));
+ if(y!=0||rotated_z!=0){
+  gh_camera_status status=gh_game_angle_001f8180(y,rotated_z,&pitch,s->camera.policy,frontier);
+  if(status)return status;
+  pitch=-pitch;
+ }
+ for(unsigned i=0;i<3;i++)
+  if(!isfinite(eye[i])||!isfinite(target[i])||!isfinite(up[i]))
+   return fail(frontier,0x1399a0,GH_CAMERA_NUMERIC);
+ if(!isfinite(fov))return fail(frontier,0x1399a0,GH_CAMERA_NUMERIC);
+ memcpy(p+0x210,eye,12);
+ memcpy(p+0x200,target,12);
+ memcpy(p+0x240,up,12);
+ writef(p+0x220,pitch);writef(p+0x224,yaw);writef(p+0x228,0);
+ writef(p+0x250,fov);
+ return GH_CAMERA_OK;
+}
+
+gh_camera_status gh_game_devil_camera_step_00138fc8(gh_game_devil_camera *s,
+ gh_game_pl_camera *base,gh_game_init_state *init,gh_acd_scene_binding *path,
+ const gh_title_player_view *player,const gh_boot_work *work,
+ const gh_camera_projection_display *display,uint32_t *frontier)
+{
+ if(!s||!init||!work||!frontier||!s->camera.constructed||
+    init->camera.mode!=0x40||init->active_camera!=&s->identity||
+    s->camera.identity!=&s->identity)return GH_CAMERA_ARGUMENT;
+ gh_camera_status status;
+ if(!s->move_stage){
+  status=gh_game_camera_path_step_00137f38(base,path,player,frontier);
+  if(status)return status;
+  s->move_stage=1;
+ }
+ if(s->move_stage==1){
+  fenv_t env;
+  if(feholdexcept(&env))return fail(frontier,0x1399a0,GH_CAMERA_NUMERIC);
+  if(fesetround(FE_TONEAREST)){
+   (void)fesetenv(&env);
+   return fail(frontier,0x1399a0,GH_CAMERA_NUMERIC);
+  }
+  status=devil_pose_001399a0(s,work,frontier);
+  if(fesetenv(&env))return fail(frontier,0x1399a0,GH_CAMERA_NUMERIC);
+  if(status)return status;
+  s->move_stage=2;
+ }
+ if(s->move_stage==2){
+  status=gh_game_camera_shake_step_00138558(&s->camera,frontier);
+  if(status)return status;
+  s->move_stage=3;
+ }
+ status=gh_game_camera_project_00138740(&s->camera,display,frontier);
+ if(!status)s->move_stage=0;
  return status;
 }
