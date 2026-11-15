@@ -442,7 +442,7 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
         if(!p.writes_clamp||p.clamp||!p.writes_tex0||p.prim!=0x54||
             p.source!=GH_EFFECT_SURFACE_MATERIAL||p.destination!=GH_EFFECT_SURFACE_SCENE_COLOR||
             !p.material||p.tex0!=p.material->source_tex0||
-            (trail?p.quad_count>25:p.quad_count!=1||p.quads[0].vertex_count!=4))
+            (trail?p.quad_count>GH_EFFECT_TRANS_QUAD_CAPACITY:p.quad_count!=1||p.quads[0].vertex_count!=4))
             return GH_ID_UNSUPPORTED;
         if(marker){
             if(!p.inherits_scene_target||!p.writes_tex1||p.tex1!=0x60||p.inherited_sampler||

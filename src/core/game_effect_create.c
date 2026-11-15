@@ -827,16 +827,31 @@ int gh_effect_event_part_is_bound(gh_effect_view row,const gh_title_player_view 
    return flags==0x00c00000u&&part==10&&
       w(row.bytes)==0x1e3e8010u&&w(row.bytes+0xbc)==0x000a0004u&&
       w(row.bytes+0x130)==1&&w(row.bytes+0x134)==0;
-  /* EV04 cut 1 bank 6 entry 2 has three EL10 part29 rows. All
-   * use the 302BB4 full part matrix and create ordinary ESP00. */
-  if(kind==0x610&&flags==0x00800000u&&part==29&&!w(row.bytes+0x134)){
-   const uint32_t header=w(row.bytes),texture=w(row.bytes+0xbc);
-   const uint32_t timing=w(row.bytes+0xc0),child=w(row.bytes+0x130);
-   return ((header==0x1e308010u||header==0x1e3e8010u)&&texture==0xff1d0001u&&
-           timing==0x00010000u&&child==1)||
-          (header==0x1eee0010u&&texture==0x001d0501u&&timing==0xffff000au&&child==2);
+  /* EV04 bank6 uses EL10 part29 with 302BB4's full part basis or
+   * 302B58's root basis/part position. EL11 uses its own part4. */
+  if((kind==0x610&&part==29)||(kind==0x611&&part==4)){
+   const uint32_t header=w(row.bytes),texture=w(row.bytes+0xbc),child=w(row.bytes+0x130);
+   if(w(row.bytes+0x134))return 0;
+   if(kind==0x611)return flags==0x00800000u&&(header==0x1eee0010u||header==0x1eee8010u)&&
+      texture==0x00040001u&&child==2;
+   if(flags==0x00c00000u)return header==0x1eee0010u&&child==2&&
+      (texture==0x031d0201u||texture==0x031d0401u);
+   if(flags!=0x00800000u)return 0;
+   if(header==0x1e308010u)return child==1&&texture==0xff1d0001u;
+   if(header==0x1e3e8010u)return child==1&&
+      (texture==0xff1d0001u||texture==0x001d0003u||texture==0x001d0002u);
+   return header==0x1eee0010u&&child==2&&
+      (texture==0x001d0501u||texture==0x031d0201u||texture==0x021d0501u||texture==0x031d0301u);
   }
   return kind==0x600&&flags==0x00802000u&&part==9;
+ }
+ /* EV04 bank6 entry5 rows5/6 use EL10 part29 and the native
+  * original ESP09 trail child. Resource identity is pinned at Init. */
+ if(kind==0x610&&part==29&&row.bytes[0x133]==9){
+  const uint32_t timing=w(row.bytes+0xc0);
+  return flags==0x00800000u&&w(row.bytes)==0x1e3e8010u&&
+     w(row.bytes+0xbc)==0xff1d0001u&&w(row.bytes+0x130)==0x09000001u&&
+     !w(row.bytes+0x134)&&(timing==0x000a0009u||timing==0x00070006u);
  }
  /* EV02 cut12 EL59 trail, bank6 entry13 row1. */
  if(row.bytes[0x133]==0x20)
@@ -1195,10 +1210,16 @@ int gh_effect_esp_trail_is_bound(const gh_game_effects *e,const gh_effect_esp_vi
 {
  if(!v)return 0;
  if(v->type==0x1f)return gh_effect_devil_esp_is_bound(e,v);
- if(v->type==9)return gh_effect_attack_esp_is_bound(e,v)||gh_effect_knockdown_esp_is_bound(e,v)||
-    gh_effect_player_attachment_esp_is_bound(e,v);
  if(v->type==0x20&&gh_effect_em00_attack_esp_is_bound(e,v))return 1;
  gh_effect_view est;
+ if(v->type==9){
+  if(gh_effect_attack_esp_is_bound(e,v)||gh_effect_knockdown_esp_is_bound(e,v)||
+     gh_effect_player_attachment_esp_is_bound(e,v))return 1;
+  return v->payload&&v->payload_size==0x400&&w(v->payload+0x23a)==0x00050006u&&
+     gh_effect_event_part_is_bound(v->record,v->actor,v->selector)&&
+     !gh_effect_est_at_00306030(e,6,5,&est)&&est.bytes&&est.size>=16+7*0x2f0&&
+     (v->record.bytes==est.bytes+16+5*0x2f0||v->record.bytes==est.bytes+16+6*0x2f0);
+ }
  return v->type==0x20&&v->payload&&v->payload_size==0x400&&w(v->payload+0x23a)==0x000d0006u&&
     gh_effect_event_part_is_bound(v->record,v->actor,v->selector)&&
     !gh_effect_est_at_00306030(e,6,13,&est)&&est.bytes&&est.size>=16+2*0x2f0&&

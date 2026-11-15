@@ -16,12 +16,14 @@ typedef struct {uint8_t vertex_count;gh_effect_trans_vertex vertices[6];} gh_eff
  * names refer to frontend-owned resources in the ONE renderer. Coordinates
  * preserve originalGS12.4 and FST UV12.4; sampler state is INHERITED (noTEX1
  * command in these producers). Packet order is enqueueorder, ONEOT sorts it. */
+/* Original EV04 ESP09 supports 30 history points and 29 GS strip segments. */
+enum { GH_EFFECT_TRANS_QUAD_CAPACITY = 29 };
 typedef struct {gh_ui_order_group order;uint32_t original_callee,slot,serial;
  gh_effect_pass_kind kind;gh_effect_surface source,destination;
  uint32_t frame_mask,prim;uint64_t alpha,test,zbuf,tex0;
  uint8_t writes_tex0,inherited_sampler,quad_count;
  uint8_t restores_scene_target,texture_flush_after;uint32_t restore_frame_mask;uint64_t restore_zbuf;
- gh_effect_trans_quad quads[25];
+ gh_effect_trans_quad quads[GH_EFFECT_TRANS_QUAD_CAPACITY];
  uint8_t writes_clamp,writes_texa,writes_tex1,inherits_scene_target;uint64_t clamp,texa,tex1;const gh_stage_material *material;} gh_effect_trans_packet;
 typedef gh_effect_status (*gh_effect_trans_emit)(void *,const gh_effect_trans_packet *);
 typedef struct {gh_effect_release_bindings storage;const gh_boot_work *work;gh_effects_frame_globals *globals;const gh_display_state *display;

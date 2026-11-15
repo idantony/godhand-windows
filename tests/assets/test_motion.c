@@ -9,7 +9,58 @@
 static uint32_t rd(const void*p){uint32_t x;memcpy(&x,p,4);return x;}
 static void wr(void*p,uint32_t x){memcpy(p,&x,4);}
 static void sf(void*p,float x){memcpy(p,&x,4);}
-int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t index;gh_disc_entry e;C(!gh_disc_find(d,"pl/pl00.dat",&index)&&!gh_disc_entry_at(d,index,&e));size_t n=(size_t)e.size;uint8_t*raw=malloc(n);C(raw&&!gh_disc_read(d,index,0,raw,n));gh_disc_close(d);
+static unsigned half(const uint8_t *p){return p[0]|(unsigned)p[1]<<8;}
+static float number(const uint8_t *p){float value;memcpy(&value,p,sizeof(value));return value;}
+static void test_ev04_camera_arc(gh_disc *disc)
+{
+ size_t index;
+ gh_disc_entry entry;
+ C(!gh_disc_find(disc,"event/ev04.dat",&index)&&!gh_disc_entry_at(disc,index,&entry));
+ uint8_t *data=malloc((size_t)entry.size);
+ C(data&&!gh_disc_read(disc,index,0,data,(size_t)entry.size));
+ const size_t camera=rd(data+4)+4*12+4;
+ C(camera+4<=entry.size&&rd(data+camera)==0x40f0u);
+ gh_motion_view view;
+ C(!gh_motion_open_mtb3(data,(size_t)entry.size,rd(data+camera),&view)&&view.frames==42);
+ gh_motion_track track;
+ C(!gh_motion_track_at(&view,6,&track)&&track.packed==0x002a4300u&&track.keys==42);
+ const size_t values=view.offset+track.data;
+ C(values+8+(size_t)track.keys*2<=entry.size);
+ const float scale=number(data+values+4),bias=number(data+values);
+ float sample;
+ gh_motion_cache cache;
+ uint32_t frontier;
+ for(unsigned frame=0;frame+1<view.frames;frame++){
+  const volatile float low=scale*(float)half(data+values+8+frame*2);
+  const volatile float high=scale*(float)half(data+values+10+frame*2);
+  C(!gh_motion_sample_reference(&view,6,(float)frame+.5f,&sample,&cache,&frontier)&&!frontier);
+  const volatile float a=low+bias,b=high+bias,delta=b-a;
+  const volatile float movement=delta*.5f;
+  C(sample==a+movement&&cache.first_frame==frame&&cache.next_frame==frame+1);
+ }
+ C(!gh_motion_sample_reference(&view,6,41,&sample,&cache,&frontier)&&sample==0);
+ free(data);
+
+ /* The original angular branch is taken at integer frames with another
+  * sample. Exact final sample lacks this wrap, as in 159230..159254. */
+ uint8_t fixture[40]={0};
+ memcpy(fixture,"mtb3",4);fixture[4]=2;fixture[6]=1;
+ wr(fixture+8,0x00024300);wr(fixture+16,24);
+ sf(fixture+24,3.125f);sf(fixture+28,-6.25f);fixture[34]=1;
+ C(!gh_motion_open_mtb3(fixture,sizeof(fixture),0,&view));
+ C(!gh_motion_sample_reference(&view,0,0,&sample,&cache,&frontier)&&sample==3.125f);
+ C(!gh_motion_sample_reference(&view,0,.5f,&sample,&cache,&frontier)&&
+   fabsf(fabsf(sample)-0x1.921fb6p+1f)<1e-6f);
+ C(!gh_motion_sample_reference(&view,0,1,&sample,&cache,&frontier)&&sample==-3.125f);
+ sf(fixture+24,6.25f);
+ C(!gh_motion_sample_reference(&view,0,0,&sample,&cache,&frontier)&&sample<0&&sample>-.04f);
+ fixture[34]=0;
+ C(!gh_motion_sample_reference(&view,0,1,&sample,&cache,&frontier)&&sample==6.25f);
+ puts("PASS actual EV04 cut4 42-key camera roll and original short arc, endpoint wrap and final sample");
+}
+
+
+int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t index;gh_disc_entry e;C(!gh_disc_find(d,"pl/pl00.dat",&index)&&!gh_disc_entry_at(d,index,&e));size_t n=(size_t)e.size;uint8_t*raw=malloc(n);C(raw&&!gh_disc_read(d,index,0,raw,n));test_ev04_camera_arc(d);gh_disc_close(d);
  gh_motion_view m;C(!gh_motion_open_mtb3(raw,n,rd(raw+0x28),&m)&&m.frames==61&&m.count==81);gh_motion_track t;C(!gh_motion_track_at(&m,0,&t)&&t.packed==0x1410ff&&t.method==1&&t.keys==20);float value;gh_motion_cache cache;uint32_t frontier;
  const int modes[]={FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO};uint32_t golden[4][80];
  for(unsigned mode=0;mode<4;mode++){C(!fesetround(modes[mode]));for(unsigned frame=0;frame<4;frame++){float tm=(float)(frame==3?60:frame==2?30:frame);for(unsigned track=0;track<80;track++){

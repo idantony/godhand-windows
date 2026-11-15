@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T10:53:42+00:00",
-  "stage": "native-windows-r002-ev04-first-shot",
+  "verified_utc": "2026-11-15T11:25:42+00:00",
+  "stage": "native-windows-r002-ev04-four-shots",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1288,6 +1288,57 @@
     "exit_tick": 3522,
     "next_original_operation": {"module": "main ELF", "address": "002DF860"},
     "renderer_or_window_error_observed": false
+  },
+  "native_windows_r002_ev04_four_shots": {
+    "scope": "Controlled original R105 exit and native Direct3D R002 presentation",
+    "room": "0002",
+    "event_number": 4,
+    "presented_room_frames": 725,
+    "presented_scene_range": [
+      3299,
+      4023
+    ],
+    "completed_shots": 4,
+    "shot_start_scene_serials": [
+      3330,
+      3401,
+      3642,
+      3888
+    ],
+    "capture_shot_number": 2,
+    "captured_scene_range": [
+      3409,
+      3424
+    ],
+    "exit_tick": 4145,
+    "next_original_operation": {
+      "module": "main ELF",
+      "address": "002B61B0"
+    },
+    "renderer_or_window_error_observed": false
+  },
+  "native_cpu_r002_ev04_twenty_shots": {
+    "scope": "Controlled original R105 exit, native original-disc scheduler and packet generation",
+    "room": "0002",
+    "event_number": 4,
+    "completed_shots": 20,
+    "next_shot": 21,
+    "exit_tick": 6250,
+    "packet_scene_serial": 6103,
+    "next_original_operation": {
+      "module": "main ELF",
+      "address": "00301C20"
+    }
+  },
+  "native_cpu_r105_em27_small_hit": {
+    "scope": "Controlled original R105 battle, native original-disc scheduler and packet generation",
+    "room": "0105",
+    "exit_tick": 4048,
+    "packet_scene_serial": 3892,
+    "next_original_operation": {
+      "module": "main ELF",
+      "address": "00262AA8"
+    }
   },
   "native_cpu_r100_at10": {
     "scope": "Native original-disc New Game replay with recorded original controller samples",

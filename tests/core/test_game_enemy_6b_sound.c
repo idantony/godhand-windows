@@ -563,7 +563,7 @@ int main(int argc,char **argv)
    submissions==before_fixed_attack+1&&submitted[before_fixed_attack].frames>em27_attack_frames[1]);
  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
  em27_cue.bank=0;
- const int16_t em27_core_attack[]={0x83,0x85,0x87};
+ const int16_t em27_core_attack[]={0x83,0x84,0x85,0x87};
  for(unsigned cue=0;cue<sizeof(em27_core_attack)/sizeof(em27_core_attack[0]);cue++){
   em27_cue.program=em27_core_attack[cue];
   C(!gh_actor_attached_sound_bind(&source,&binding)&&

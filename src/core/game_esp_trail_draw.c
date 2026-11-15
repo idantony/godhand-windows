@@ -66,9 +66,10 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
  const float *history=NULL,*other_history=NULL;
  unsigned count=0;
  if(gh_effect_create_esp_trail_view_edges(b->storage.effects,slot,v->serial,&history,&other_history,&count)||
-    count<2||count>26||(stride!=1&&((count-1)/stride?((count-1)/stride+2):3)>=count))
+    count<2||count>GH_EFFECT_TRANS_QUAD_CAPACITY+1||(stride!=1&&((count-1)/stride?((count-1)/stride+2):3)>=count))
   return reject(f,0x2edea0,GH_EFFECT_UNSUPPORTED);
- float camera[16],eye[3],points[26][3],other_points[26][3];
+ float camera[16],eye[3],points[GH_EFFECT_TRANS_QUAD_CAPACITY+1][3],
+  other_points[GH_EFFECT_TRANS_QUAD_CAPACITY+1][3];
  memcpy(camera,b->camera->fields,64);memcpy(eye,b->camera->fields+0x210,12);
  for(unsigned i=0;i<count;i++){
   centre(history,i,stride,points[i]);

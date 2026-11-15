@@ -446,17 +446,17 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
  if(!v->source_owner||bank||v->requested_program!=program||
     h(p)||h(p+2)!=(unsigned)program)
   return 0;
- const int em00_only=program==0x84;
+ const int program84=program==0x84;
  const int aged=program==0xa0;
- if(program!=0x83&&!em00_only&&program!=0x85&&program!=0x87&&!aged)return 0;
+ if(program!=0x83&&!program84&&program!=0x85&&program!=0x87&&!aged)return 0;
  if(v->model){
   const gh_title_player_view *root=&v->model->root;
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
      h(root->bytes+0x2fe)!=0x202)return 0;
   const uint32_t dependency=w(root->bytes+0x564);
-  const int em27=(program==0x83||program==0x85||program==0x87)&&r105_em27_voice_source(v);
+  const int em27=(program==0x83||program84||program==0x85||program==0x87)&&r105_em27_voice_source(v);
   if(!em27&&!r100_em0a_core87_source(v,program)&&
-     (dependency!=0x200||aged)&&(dependency!=0x203||em00_only))return 0;
+     (dependency!=0x200||aged)&&(dependency!=0x203||program84))return 0;
  }else if(!v->combat_profile)return 0;
  const unsigned slot=aged?98u:(unsigned)(program-0x2d);
  const unsigned gain=aged?120u:program==0x83?60u:program==0x85?70u:90u;
@@ -689,11 +689,13 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  if(descriptor.size!=16)return unsupported(s,0x35fc);
  uint16_t adsr1=(uint16_t)h(descriptor.data+8),adsr2=(uint16_t)h(descriptor.data+10);
  int square_voice=candidate->source_owner&&bank==3&&program>=1&&program<=3&&adsr2==0x5fcb;
- const int grab_voice=program==6&&candidate->part_index==-1&&candidate->model&&
+ const int hurt_program_six=program==6&&candidate->part_index==-1&&candidate->model&&
     candidate->model->root.bytes&&candidate->model->root.size>=0x300&&
-    h(candidate->model->root.bytes+0x2f4)==0x0b01&&w(descriptor.data+8)==0x5fcb80ffu&&
+    (h(candidate->model->root.bytes+0x2f4)==0x0b01||
+     (h(candidate->model->root.bytes+0x2f4)==0x0001&&!candidate->model->root.bytes[0x2f6]))&&
+    w(descriptor.data+8)==0x5fcb80ffu&&
     !w(descriptor.data+12);
- int hurt_voice=adsr2==0x5fcb&&candidate->source_owner&&bank==3&&(grab_voice||program==7||program==8)&&
+ int hurt_voice=adsr2==0x5fcb&&candidate->source_owner&&bank==3&&(hurt_program_six||program==7||program==8)&&
     candidate->requested_bank==0&&candidate->requested_program==program+200&&
     candidate->model&&candidate->model->root.size>=0x300&&
     candidate->model->root.original_vtable214==0x41d220&&
@@ -701,7 +703,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
     w(p+6)==0x0055000f&&h(p+0xe)==0x21&&w(p+0x10)==0x007f007f&&
     w(p+0x14)==0x005a0040&&!w(p+0x18)&&w(p+0x1c)==0x00ff0000&&
     w(p+0x20)==5&&!w(p+0x24)&&
-    w(descriptor.data)==(grab_voice?52464u:program==7?54128u:57568u)&&w(descriptor.data+4)==11025;
+    w(descriptor.data)==(hurt_program_six?52464u:program==7?54128u:57568u)&&w(descriptor.data+4)==11025;
  /* Borrowed EM02 escape clip at 24E100 requests logical CORE C8 (PL00 row0). */
  const int escape_voice=adsr2==0x5fcb&&candidate->source_owner&&bank==3&&!program&&
     !candidate->requested_bank&&candidate->requested_program==0xc8&&candidate->part_index==-1&&

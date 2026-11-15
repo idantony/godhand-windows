@@ -4,6 +4,29 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Four R002 cutscene shots presented on Windows
+
+A controlled Windows run takes the original R105 exit and presents 725
+consecutive R002 frames. It completes shots 1–4 of Event 04 and captures
+16 final and pre-UI world frames from shot 2. The renderer, GPU, and window
+report zero errors. The run stops at the next original effect callback.
+
+A separate original-disc CPU replay completes shots 1–20 and reaches shot 21
+at tick 6250. It exercises original camera roll, lighting, prop and character
+updates, and effect trails with up to 29 segments. It stops at the next
+original effect update. In a separate controlled R105 battle, the native
+logic runs the original EM27 attack, attached sound, and Gene's minor hit
+reaction. The replay reaches a new enemy attack decision at tick 4048.
+
+受控 Windows 回放沿 R105 原版出口进入 R002，连续呈现 725 帧，播完 EV04 前四个镜头。
+第二个镜头保留了 16 组最终画面和 UI 合成前的世界层画面。渲染、GPU 和窗口无报错，
+回放在下一处原版特效回调停下。
+
+另一轮原盘 CPU 回放经过原版相机横滚、灯光、场景物件、角色和最多 29 段的拖尾特效，
+走完前 20 个镜头，在第 6250 tick 进入第 21 个镜头，并停在下一处原版特效更新。
+独立的 R105 受控战斗回放跑过了原版 EM27 攻击、附着音效和 Gene 的小受击动作，
+在第 4048 tick 到达下一处敌人攻击选择。
+
 ## First R002 cutscene shot presented on Windows
 
 The Windows replay enters R002 through the original R105 exit. Its controlled

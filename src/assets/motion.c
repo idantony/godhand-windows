@@ -1,4 +1,5 @@
 #include "motion.h"
+#include "../core/id_layout_rotation.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -40,8 +41,6 @@ static gh_motion_status sample(const gh_motion_view*v,const gh_motion_track*t,fl
  }
  const uint8_t*k=p+header;unsigned previous=0,next=0,previous_frame=0,next_frame=0,acc=0;
  if(t->method==4){previous=(unsigned)time;next=previous+1<keys?previous+1:previous;previous_frame=previous;next_frame=next;
-  /* Original2DA8D8 is angular short-arc interpolation, separate dependency. */
-  if(next!=previous&&(t->channel==3||t->channel==4||t->channel==5)){*frontier=0x2da8d8;return GH_MOTION_UNSUPPORTED;}
  }else{
   int found=0;
   for(unsigned i=0;i<keys;i++){
@@ -62,6 +61,18 @@ static gh_motion_status sample(const gh_motion_view*v,const gh_motion_track*t,fl
   if(!isfinite(values[j])||!isfinite(incoming[j])||!isfinite(outgoing[j]))return GH_MOTION_NUMERIC;
  }
  *cache=(gh_motion_cache){base+header+(size_t)previous*stride,base+header+(size_t)next*stride,(uint16_t)previous_frame,(uint16_t)next_frame,values[0],values[1],outgoing[0],incoming[1],t->method};
+ /* Original 1592B0 calls 2DA8D8 even on an integer frame when a
+  * following sample exists. Its returned pose is wrapped at both ends. */
+ if(t->method==4&&next!=previous&&t->channel>=3&&t->channel<=5){
+  float a,b,delta;
+  if(gh_id_angle_reference_001f7d48(values[0],&a)||
+     gh_id_angle_reference_001f7d48(values[1],&b)||
+     gh_id_angle_reference_001f7d48(sub(b,a),&delta)||
+     gh_id_angle_reference_001f7d48(add(a,mul(delta,sub(time,(float)previous_frame))),out)){
+   *frontier=0x2da8d8;return GH_MOTION_UNSUPPORTED;
+  }
+  return GH_MOTION_OK;
+ }
  if(previous==next||time==(float)previous_frame){*out=values[0];return GH_MOTION_OK;}if(time==(float)next_frame){*out=values[1];return GH_MOTION_OK;}
  float u=divv(sub(time,(float)previous_frame),(float)(next_frame-previous_frame));
  if(t->method==4){*out=add(mul(values[1],u),mul(values[0],sub(1,u)));return GH_MOTION_OK;}

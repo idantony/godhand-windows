@@ -1,5 +1,8 @@
 #include "game_event_pendulum.h"
 #include "game_actor_external_parent.h"
+#include "game_player_springs_frame.h"
+#include <fenv.h>
+#include <math.h>
 #include <string.h>
 
 static uint32_t word(const uint8_t *p) {
@@ -138,6 +141,58 @@ static const gh_cloth_sphere accessory_spheres[] = {
     {0,23,24,.33f,.11f,0,{0,0,0,1},{0,0,0,1}}
 };
 
+/* 27A414/27AEF4 translate the child's existing world matrices to the
+ * current parent anchor before 107C68 resets the constrained records. */
+static gh_game_event_status reset_accessory(gh_actor_model *model,
+    const gh_actor_part *child, const gh_actor_part *parent, const gh_event_spring_profile *profile)
+{
+    uint8_t *root = model->root.bytes;
+    const unsigned count = model->part_count;
+    if (!count || count > 44 || root[0x2b4] != count ||
+        word(root + 0x2134) || word(root + 0x2184) ||
+        !child->alias_f0 || !parent->alias_f0) return GH_EVENT_UNSUPPORTED;
+    const gh_actor_part *parts[44];
+    for (unsigned i = 0; i < count; ++i) {
+        if (gh_actor_model_part_at(model, i, &parts[i]) || !parts[i]->bytes)
+            return GH_EVENT_BOUNDS;
+    }
+
+    fenv_t env;
+    if (feholdexcept(&env)) return GH_EVENT_CALLEE;
+    if (fesetround(FE_TONEAREST)) {
+        (void)fesetenv(&env);
+        return GH_EVENT_CALLEE;
+    }
+    float anchor[3], first[3], delta[3], original[44][3], moved[44][3];
+    memcpy(anchor, parent->alias_f0, sizeof(anchor));
+    memcpy(first, child->alias_f0, sizeof(first));
+    for (unsigned j = 0; j < 3; ++j) {
+        const volatile float difference = anchor[j] - first[j];
+        delta[j] = difference;
+    }
+    int valid = 1;
+    for (unsigned i = 0; i < count; ++i) {
+        memcpy(original[i], parts[i]->bytes + 0xb0, sizeof(original[i]));
+        for (unsigned j = 0; j < 3; ++j) {
+            const volatile float value = original[i][j] + delta[j];
+            moved[i][j] = value;
+            if (!isfinite(value)) valid = 0;
+        }
+    }
+    if (fesetenv(&env)) return GH_EVENT_CALLEE;
+    if (!valid) return GH_EVENT_UNSUPPORTED;
+
+    for (unsigned i = 0; i < count; ++i)
+        memcpy(parts[i]->bytes + 0xb0, moved[i], sizeof(moved[i]));
+    gh_player_springs_status status = gh_spring_records_reset_00107c68(model, root + 0x5b0,
+        profile->indices[0], profile->count, GH_STATIC_BINARY32_REFERENCE);
+    if (!status) return GH_EVENT_OK;
+    for (unsigned i = 0; i < count; ++i)
+        memcpy(parts[i]->bytes + 0xb0, original[i], sizeof(original[i]));
+    return status == GH_SPRINGS_BOUNDS ? GH_EVENT_BOUNDS : GH_EVENT_UNSUPPORTED;
+}
+
+
 gh_game_event_status gh_game_event_accessory_move_0027a320(gh_event_pendulum_call *call,
     gh_event_actor_factory *actor, const gh_event_spring_profile *profile, const gh_boot_work *work,
     const gh_cloth_step_bindings *bindings, gh_player_shared_vector *pivot, uint32_t *frontier)
@@ -170,7 +225,8 @@ gh_game_event_status gh_game_event_accessory_move_0027a320(gh_event_pendulum_cal
         }
         if (word(root + 0x2f0) & 2) {
             *frontier = 0x107c68;
-            return GH_EVENT_UNSUPPORTED;
+            const gh_game_event_status status = reset_accessory(&actor->model, child_part, parent_part, profile);
+            if (status) return status;
         }
         memcpy(actor->model.root.alias_f0, parent->root.alias_f0, 12);
         memcpy(child_part->alias_f0, parent_part->alias_f0, 12);
