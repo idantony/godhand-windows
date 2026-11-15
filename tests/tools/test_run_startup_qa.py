@@ -256,6 +256,28 @@ class StartupRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(frontier.proof.ProofError, "tick limit differs"):
             frontier.validate(self.snapshot, self.scratch, expected_tick_limit=490)
 
+    def test_launcher_accepts_only_verified_explicit_tick_cap(self):
+        healthy = self.qa(exit_code=3, frontier="00000000", host_phase=0,
+                          host_error=0, subsystem_error=0, scene_frames_presented=31)
+        cases = (
+            (None, {}, "unexpected child exit"),
+            (489, {}, None),
+            (489, {"ticks": 488}, "tick limit differs"),
+            (489, {"effect_post_error": 1}, "bounded QA must exit cleanly"),
+            (489, {"scene_frames_presented": 0}, "needs presented scene frames"),
+        )
+        for index, (expected, changes, message) in enumerate(cases):
+            with self.subTest(changes=changes, expected=expected):
+                prepared = tool.prepare(self.snapshot, self.root / f"cap-{index}", self.iso, self.ffmpeg,
+                                        max_ticks=489, build_scratch=self.scratch)
+                with patch.object(tool.subprocess, "run", self.fake_run(dict(healthy, **changes))):
+                    if message:
+                        with self.assertRaisesRegex(tool.proof.ProofError, message):
+                            tool.run(prepared, expected_tick_limit=expected)
+                    else:
+                        self.assertEqual(tool.run(prepared, expected_tick_limit=expected)["classification"],
+                                         "tick-limit")
+
     def test_r100_pad_tape_proof_requires_death_flags_and_actual_frames(self):
         capture = self.scratch / "first-scene-candidate.rgba"
         for suffix in (".battle-won.rgba", ".battle-won.rgba.world.rgba"):

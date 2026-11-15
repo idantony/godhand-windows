@@ -19,7 +19,7 @@ spec = importlib.util.spec_from_file_location("milestone_proof", PROJECT / "tool
 proof = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(proof)
 
-NATIVE_ERRORS = ("renderer_error", "world_gpu_error", "window_error", "effect_post_error")
+NATIVE_ERRORS = proof.STARTUP_NATIVE_ERRORS
 
 
 def fact(inputs, path, expected):
@@ -258,14 +258,7 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
                       proof.address(qa.get("frontier")) == stop[1], "unexpected original frontier")
         classification = "original-frontier"
     elif expected_tick_limit is not None:
-        proof.require(type(expected_tick_limit) is int and expected_tick_limit > 0 and
-                      argument(command, "--max-ticks") == str(expected_tick_limit) and
-                      qa["ticks"] == expected_tick_limit, "QA tick limit differs from command or observation")
-        proof.require(code == 3 and qa.get("host_phase") == qa.get("host_error") == qa.get("subsystem_error") == 0
-                      and proof.address(qa.get("frontier")) == "00000000" and
-                      not any(qa.get(key, 0) for key in NATIVE_ERRORS), "bounded QA must exit cleanly at tick limit")
-        proof.require(type(qa.get("scene_frames_presented")) is int and qa["scene_frames_presented"] > 0,
-                      "bounded QA needs presented scene frames")
+        proof.require_clean_startup_tick_limit(qa, code, argument(command, "--max-ticks"), expected_tick_limit)
         classification = "tick-limit"
     else:
         proof.require(qa.get(error[0]) == error[1], "unexpected native error")

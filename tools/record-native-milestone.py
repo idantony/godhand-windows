@@ -44,6 +44,21 @@ def address(value):
     return f"{int(value, 16):08X}"
 
 
+STARTUP_NATIVE_ERRORS = ("renderer_error", "world_gpu_error", "window_error", "effect_post_error")
+
+
+def require_clean_startup_tick_limit(qa, code, command_limit, expected_limit):
+    require(type(expected_limit) is int and expected_limit > 0 and
+            command_limit == str(expected_limit) and qa.get("ticks") == expected_limit,
+            "QA tick limit differs from command or observation")
+    require(code == 3 and qa.get("host_phase") == qa.get("host_error") == qa.get("subsystem_error") == 0
+            and address(qa.get("frontier")) == "00000000"
+            and not any(qa.get(key, 0) for key in STARTUP_NATIVE_ERRORS),
+            "bounded QA must exit cleanly at tick limit")
+    require(type(qa.get("scene_frames_presented")) is int and qa["scene_frames_presented"] > 0,
+            "bounded QA needs presented scene frames")
+
+
 def expected_stop(value):
     if value is None:
         return None

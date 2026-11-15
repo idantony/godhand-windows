@@ -170,6 +170,9 @@ Use CPU packet replays for rapid source iteration. Before calling a scene
 visually verified, capture it from a separate native device run. A bounded run
 can prove forward progress when the configured and observed tick limits agree,
 the host and renderer are healthy, and the intended frames were presented.
+In the God Hand QA launcher, pass `--expect-tick-limit` with `--max-ticks` for
+an intentionally bounded observation. The launcher and the evidence recorder
+share the completion check for that run, including positive presented frames.
 
 Recover attribute signedness and scale from actual upload commands and math.
 Do not assume byte weights divide by255, sum normalization is required, or

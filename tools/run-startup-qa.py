@@ -186,7 +186,7 @@ def pad_tape_observations(log, capture, qa, after_victory_frames=None):
     return status
 
 
-def run(prepared):
+def run(prepared, *, expected_tick_limit=None):
     scratch = prepared["scratch"]
     scratch.mkdir(parents=True, exist_ok=True)
     # Exclusive reservation prevents two agents from replacing one QA receipt.
@@ -242,13 +242,19 @@ def run(prepared):
     continue_after_pair = control == "repeat-triangle-pair-continue"
     pair = continue_after_pair or control == "repeat-triangle-pair"
     repeated_attack = pair or control in ("repeat-square", "repeat-triangle")
-    valid_exit_codes = (0, 3, 4) if repeated_attack or r003_controlled or game_over_retry or pad_tape else (0, 4)
+    allow_bounded = repeated_attack or r003_controlled or game_over_retry or pad_tape or expected_tick_limit is not None
+    valid_exit_codes = (0, 3, 4) if allow_bounded else (0, 4)
     proof.require(qa.get("exit_code") == receipt["exit_code"] and receipt["exit_code"] in valid_exit_codes,
                   "unexpected child exit; inspect QA output")
     for field in ("renderer_error", "world_gpu_error", "window_error"):
         proof.require(qa.get(field) == 0, "QA reported " + field)
     summary = {"exit_code": receipt["exit_code"], "frontier": qa.get("frontier"), "ticks": qa.get("ticks"),
                "world_packets_submitted": qa.get("world_packets_submitted"), "receipt": str(scratch / "startup-process.json")}
+    if expected_tick_limit is not None:
+        command = prepared["command"]
+        proof.require_clean_startup_tick_limit(
+            qa, receipt["exit_code"], command[command.index("--max-ticks") + 1], expected_tick_limit)
+        summary["classification"] = "tick-limit"
     if r003_controlled:
         proof.require(qa.get("effect_post_error") == 0, "controlled R003 reported effect_post_error")
         log = (scratch / "startup-newgame.stderr.log").read_text(encoding="utf-8-sig")
@@ -307,6 +313,8 @@ def main():
     parser.add_argument("--iso", type=Path)
     parser.add_argument("--ffmpeg", type=Path)
     parser.add_argument("--max-ticks", type=int, default=1100)
+    parser.add_argument("--expect-tick-limit", action="store_true",
+                        help="require a clean bounded exit at max-ticks with presented scene frames")
     parser.add_argument("--capture-frame", type=int, default=370)
     parser.add_argument("--capture-count", type=int, default=1,
                         help=f"capture up to {MAX_CAPTURE_COUNT} ready scene frames beginning at capture-frame")
@@ -326,7 +334,8 @@ def main():
                            args.capture_count, args.control_probe, args.title_load, args.build_scratch, args.r003_controlled,
                            args.game_over_retry, args.pad_tape, args.level_confirm_tick, args.after_victory_frames)
         require_frozen_runner(args.snapshot)
-        print(json.dumps(run(prepared)), flush=True)
+        expected = args.max_ticks if args.expect_tick_limit else None
+        print(json.dumps(run(prepared, expected_tick_limit=expected)), flush=True)
     except (proof.ProofError, OSError, ValueError) as error:
         parser.exit(1, str(error) + "\n")
 
