@@ -31,6 +31,9 @@ finished port or execute guest instructions in the production runtime.
   `--tokens` and `--tokens-sha256`. Each replacement must have a unique
   match and the recipe must reproduce the complete pinned worker file from
   its base. Unresolved conflicts fail before publishing a new bundle.
+  The `collect` command takes `--base`, `--source` and their SHA-256 pins.
+  It packages changed or added files from an already frozen sequence of
+  overlays into one checked bundle. Use the result as a freeze or rebase input.
 - `tools/record-startup-frontier.py` verifies a completed Windows QA process
   against its source and executable receipts, records the observed original
   stop or native rendering error, and fingerprints its logs and optional raw

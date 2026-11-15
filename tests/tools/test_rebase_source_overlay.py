@@ -77,6 +77,29 @@ class RebaseOverlayTest(unittest.TestCase):
             rebase(*self.overlay(), *target, self.output)
         self.assertFalse(self.output.exists())
 
+    def test_collect_snapshot_delta_for_rebase(self):
+        source = self.snapshot("source", {self.path: self.overlay_content, self.other: b"int x;\n"})
+        collection = self.root / "collected"
+        record = tool.collect(*self.base, *source, collection)
+        files = {row["path"]: row for row in record["files"]}
+        self.assertEqual(files[self.path]["base_sha256"], digest(self.base_content))
+        self.assertIsNone(files[self.other]["base_sha256"])
+        pin = digest((collection / "receipt.json").read_bytes())
+        target = self.snapshot("target", {self.path: self.base_content.replace(b"last = 1", b"last = 9")})
+        rebase(collection / "receipt.json", pin, *target, self.output)
+        self.assertEqual((self.output / self.path).read_bytes(), self.overlay_content.replace(b"last = 1", b"last = 9"))
+        self.assertEqual((self.output / self.other).read_bytes(), b"int x;\n")
+
+    def test_collect_rejects_missing_or_drifted_inputs(self):
+        empty = self.snapshot("empty", {})
+        with self.assertRaisesRegex(RebaseError, "deletions"):
+            tool.collect(*self.base, *empty, self.output)
+        source = self.snapshot("source", {self.path: self.overlay_content})
+        self.write_file(source[0].parent.parent, self.path, b"wrong\n")
+        with self.assertRaisesRegex(RebaseError, "SHA-256 mismatch"):
+            tool.collect(*self.base, *source, self.output)
+        self.assertFalse(self.output.exists())
+
     def test_relative_file_predecessor_and_rebased_receipt_pins(self):
         previous, pin = self.write_json(self.root / "previous/receipt.json", {"schema": 1})
         evidence = [{"path": str(previous), "sha256": pin}]

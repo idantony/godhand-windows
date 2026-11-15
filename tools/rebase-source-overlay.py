@@ -6,6 +6,7 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
+import sys
 import tempfile
 
 SCRATCH_ROOT = Path(r"G:\middle_thing\godhand_windows").resolve()
@@ -344,7 +345,70 @@ def rebase(overlay_receipt, overlay_sha256, target_receipt, target_sha256, outpu
     return result
 
 
+def collect(base_receipt, base_sha256, source_receipt, source_sha256, output):
+    """Collect the authored differences between two pinned local snapshots."""
+    base_receipt, source_receipt = base_receipt.resolve(), source_receipt.resolve()
+    output = output.resolve()
+    if any(SCRATCH_ROOT not in path.parents for path in (base_receipt, source_receipt, output)):
+        raise RebaseError("Collection requires snapshot receipts and output in project scratch")
+    base, before = load_snapshot(base_receipt, base_sha256)
+    source, after = load_snapshot(source_receipt, source_sha256)
+    project = Path(before["source_project"]).resolve()
+    if Path(after["source_project"]).resolve() != project:
+        raise RebaseError("The snapshots belong to different source projects")
+    if output.exists() or any(root == output or root in output.parents for root in (base, source, project)):
+        raise RebaseError(f"Output must be a new directory outside protected trees: {output}")
+    previous, current = before["source_sha256"], after["source_sha256"]
+    removed = previous.keys() - current.keys()
+    if removed:
+        raise RebaseError(f"Cannot collect source deletions: {', '.join(sorted(removed))}")
+
+    result = {
+        "schema": 1,
+        "base_receipt": str(base_receipt),
+        "base_receipt_sha256": base_sha256,
+        "dependencies": [{"path": str(source_receipt), "sha256": source_sha256}],
+        "files": [],
+    }
+    with tempfile.TemporaryDirectory(prefix="collect-", dir=output.parent) as directory:
+        stage = Path(directory) / "result"
+        stage.mkdir()
+        for name, expected in sorted(current.items()):
+            if previous.get(name) == expected:
+                continue
+            previous_bytes = snapshot_file(base, before, name)
+            content = checked(source_path(source, name), expected)
+            normalize(content)
+            destination = source_path(stage, name)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(content)
+            result["files"].append({"path": name, "sha256": expected, "bytes": len(content),
+                                    "base_sha256": digest(previous_bytes) if previous_bytes is not None else None})
+        (stage / "receipt.json").write_bytes((json.dumps(result, indent=2) + "\n").encode("utf-8"))
+        checked(base_receipt, base_sha256)
+        checked(source_receipt, source_sha256)
+        stage.rename(output)
+    return result
+
+
+def collect_main(argv):
+    parser = argparse.ArgumentParser(description=collect.__doc__)
+    parser.add_argument("--base", required=True, type=Path)
+    parser.add_argument("--base-sha256", required=True)
+    parser.add_argument("--source", required=True, type=Path)
+    parser.add_argument("--source-sha256", required=True)
+    parser.add_argument("--output", required=True, type=Path)
+    args = parser.parse_args(argv)
+    try:
+        result = collect(args.base, args.base_sha256, args.source, args.source_sha256, args.output)
+    except (KeyError, OSError, RebaseError, ValueError) as error:
+        parser.exit(1, f"{error}\n")
+    print(f"Collected {len(result['files'])} file(s) in {args.output / 'receipt.json'}")
+
+
 def main():
+    if sys.argv[1:2] == ["collect"]:
+        return collect_main(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--overlay", required=True, type=Path)
     parser.add_argument("--overlay-sha256", required=True)
