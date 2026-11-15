@@ -2305,6 +2305,35 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             word(actor+0x2f4)==0x00000100);
         CHECK((gh_enemy_timers_held_weapon(&entry->timers)!=NULL)==(i==0));
     }
+    for(unsigned stamp=3;stamp<=5;stamp++){
+        gh_game_title_player *scene_enemy=NULL;
+        uint32_t scene_handle=0;
+        gh_enemy_ems_live scene_live={0};
+        CHECK(!gh_enemy_manager_get_00290868(init,(uint8_t)stamp,&scene_enemy)&&scene_enemy);
+        CHECK(!gh_enemy_ems_handle_for_actor(owner,scene_enemy,&scene_handle)&&scene_handle);
+        CHECK(!gh_enemy_ems_live_at(owner,scene_handle,&scene_live)&&scene_live.enemy202);
+        gh_enemy_actor *entry=scene_live.enemy202;
+        uint8_t *actor=entry->entry.object.view.bytes;
+        uint8_t before[0x1978];memcpy(before,actor,sizeof(before));
+        const gh_actor_motion saved_motion=entry->motion.motion;
+        const gh_game_mt saved_rng=init->random;
+        CHECK(actor[0x640]==stamp&&actor[0x1650]==2&&!gh_enemy_timers_held_weapon(&entry->timers));
+        gh_game_mt expected=saved_rng;
+        uint32_t draw;CHECK(!gh_game_mt_next_0030f348(&expected,&draw));
+        memcpy(actor+0x2f4,&(uint32_t){0x00006b00u},4);
+        gh_enemy202_move frame={.stage=10};
+        CHECK(!gh_enemy202_move_bind_navigation(&frame,navigation));
+        CHECK(!gh_enemy202_move_bind_opacity(&frame,&opacity));
+        const gh_actor_motion_status status=gh_enemy202_move_00208be0(&frame,entry,&player.view,elf,elf_size);
+        if(status)fprintf(stderr,"stamp4 selector6B status%d pc%08x stage%u\n",status,frame.frontier,frame.substate67_stage);
+        CHECK(!status&&frame.original_returned&&frame.pending_ai_pc==0x23b968);
+        const unsigned rows[]={0x3c4,0x3cc,0x3d4,0x3dc,0x3ec};
+        CHECK(frame.reaction_resource_offset==rows[draw%5]&&frame.substate67_motion.motion_offset==
+              word(entry->entry.resource.bytes+rows[draw%5])&&!frame.substate67_motion.release_previous);
+        CHECK(!memcmp(&expected,&init->random,sizeof(expected)));
+        memcpy(actor,before,sizeof(before));entry->motion.motion=saved_motion;init->random=saved_rng;
+        puts("PASS actual R100 stamps3–5 selector6B and canonical MT row");
+    }
     gh_boot_work *work=b->entry.work;
     const uint32_t counter=word((const uint8_t*)work+0x210);
     CHECK(!word((const uint8_t*)work+0x1a0));

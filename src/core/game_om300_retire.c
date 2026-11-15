@@ -2,6 +2,11 @@
 #include "game_hitarea_objects.h"
 #include "game_om300_retire.h"
 #include "game_om303.h"
+#include "game_om31a.h"
+#include "game_om339.h"
+#include "game_om355.h"
+#include "game_om041c.h"
+#include "game_om382.h"
 #include "game_om307.h"
 #include "game_om322.h"
 #include "game_om323.h"
@@ -47,6 +52,11 @@ static uint32_t class_vtable(const gh_om_object *actor)
  if(om_kind(actor)==0x354)return 0x427690;
  if(om_kind(actor)==0x35d)return 0x428090;
  if(om_kind(actor)==0x309)return 0x4237e8;
+ if(om_kind(actor)==0x31a)return 0x4246a8;
+ if(om_kind(actor)==0x339)return 0x426268;
+ if(om_kind(actor)==0x355)return 0x4277b8;
+ if(om_kind(actor)==0x41c)return 0x421bb8;
+ if(om_kind(actor)==0x382)return 0x42aa98;
  if(actor->runtime_created&&om_kind(actor)==0x3eb)return 0x4296f0;
  return 0;
 }
@@ -78,6 +88,12 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
   return actor->view.size>=0x6b0&&actor->initialization->stage==6?actor:NULL;
  if(om_kind(actor)==0x35d)
   return actor->view.size>=0xb00&&((gh_om35d_state *)actor->initialization)->stage==6?actor:NULL;
+ if(om_kind(actor)==0x355)
+  return actor->view.size>=GH_OM355_BYTES&&actor->initialization->stage==4?actor:NULL;
+ if(om_kind(actor)==0x41c)
+  return actor->view.size>=GH_OM041C_BYTES&&((gh_om041c_state *)actor->initialization)->initialized?actor:NULL;
+ if(om_kind(actor)==0x382)
+  return actor->view.size>=0x790&&actor->initialization->stage==6?actor:NULL;
  size_t extent;
  switch(om_kind(actor)){
  case 0x303:extent=0x9e0;break;
@@ -90,6 +106,8 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
  case 0x324:extent=0x610;break;
  case 0x33f:extent=0xb40;break;
  case 0x309:extent=0x9c0;break;
+ case 0x31a:extent=GH_OM31A_BYTES;break;
+ case 0x339:extent=GH_OM339_BYTES;break;
  default:return NULL;
  }
  unsigned stage=om_kind(actor)==0x310?6:5;
@@ -122,6 +140,11 @@ uint32_t gh_om_retire_entry(uint32_t kind)
  case 0x354:return 0x1a81d8;
  case 0x35d:return 0x1ae8b0;
  case 0x309:return 0x18b318;
+ case 0x31a:return 0x193278;
+ case 0x339:return 0x19e248;
+ case 0x355:return 0x1a8380;
+ case 0x41c:return 0x17b8f0;
+ case 0x382:return 0x1c91b0;
  case 0x3eb:return 0x1bf4b8;
  default:return 0;
  }
@@ -214,12 +237,16 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
   const gh_om300_retire_bindings *old=&state->bindings;
   if(state->object!=object||state->handle!=handle||old->factory!=bindings->factory||
      old->tables!=bindings->tables||old->scroll!=bindings->scroll||old->solids!=bindings->solids||
-     old->release_sound_slot!=bindings->release_sound_slot||old->sound_context!=bindings->sound_context)
+     old->release_sound_slot!=bindings->release_sound_slot||old->sound_context!=bindings->sound_context||
+     old->effects.effects!=bindings->effects.effects||old->effects.esp!=bindings->effects.esp||
+     old->effects.emitters!=bindings->effects.emitters||old->effects.esp_bytes!=bindings->effects.esp_bytes||
+     old->effects.emitter_bytes!=bindings->effects.emitter_bytes||
+     old->effects.actor_match!=bindings->effects.actor_match||old->effects.context!=bindings->effects.context)
    return GH_POOL_ARGUMENT;
  }else{
   uint8_t *actor=object->view.bytes;
   if(word(actor+0x214)!=class_vtable(object)||(word(actor+0x250)&0xa0000000u)!=0xa0000000u||
-     actor[0x2fe]!=(om_kind(object)&255)||actor[0x2ff]!=3||!bindings->factory->bindings.resources)
+     (word(actor+0x2fc)>>16)!=om_kind(object)||!bindings->factory->bindings.resources)
    return GH_POOL_ARGUMENT;
   state->object=object;state->handle=handle;state->bindings=*bindings;state->stage=1;
  }
@@ -239,7 +266,23 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
   case 0x310:box_field=0x654;break;
   default:break;
   }
-  if(om_kind(object)!=0x3eb&&word(actor+box_field))return fail(&state->frontier,0x1fe278);
+  if(om_kind(object)==0x41c){
+   /* 17B8F0 ->2AD288(mode2) clears the embedded cloth's two links.
+    * Its point/spring storage is inline; mode2 has no free call. */
+   put(actor+0xd90,0);
+   put(actor+0xd94,0);
+  }else if(om_kind(object)==0x382){
+   gh_om382_state *weapon=(gh_om382_state *)init;
+   if(word(actor+0x650))return fail(&state->frontier,0x1fe148);
+   if(weapon->hit_owned&1u){
+    if(release_hitarea(&weapon->hit[0],&state->frontier))
+     return fail(&state->frontier,state->frontier?state->frontier:0x1fe148);
+    weapon->hit_owned&=(uint8_t)~1u;
+    weapon->hit[0]=(gh_hitarea_object){0};
+    put(actor+0x654,UINT32_MAX);
+   }
+  }else if(om_kind(object)!=0x3eb&&word(actor+box_field))
+   return fail(&state->frontier,om_kind(object)==0x355?0x12ec58:0x1fe278);
   if(om_kind(object)==0x3eb&&init->hitarea_created)return fail(&state->frontier,0x1b6f38);
   if(init->hitarea_created){
    if(release_hitarea(&init->hitarea,&state->frontier))
@@ -252,6 +295,27 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
   if(om_kind(object)==0x300||om_kind(object)==0x354){
    if(gh_om_door_release_collision_001bd3f0(&init->geometry_state))
     return fail(&state->frontier,0x1bd3f0);
+  }else if(om_kind(object)==0x355){
+   /* Original 1A8380 unlinks exactly this +600 box with 12EC58. */
+   gh_om_door_geometry *geometry=&init->geometry_state;
+   if(geometry->box){
+    gh_scene_dynamic_box_view box;
+    if(geometry->object!=object||geometry->owner!=init->bindings->dynamic||
+       gh_scene_dynamic_box_view_at(geometry->owner,geometry->box,&box)||box.size!=0x190||
+       box.actor!=&object->view||word(box.bytes+0x5c)!=0x41d558||
+       gh_scene_dynamic_box_abort(geometry->owner,geometry->box))
+     return fail(&state->frontier,0x12ec58);
+   }
+  }else if(om_kind(object)==0x382){
+   if(!state->weapon_effect_released){
+    unsigned slot;
+    if(gh_game_effect_release_00306200(&bindings->effects,&object->view,8,2,&state->frontier,&slot))
+     return fail(&state->frontier,state->frontier?state->frontier:0x306200);
+    state->weapon_effect_released=1;
+   }
+   if(word(actor+0x68c))return fail(&state->frontier,0x1b79b0);
+  }else if(om_kind(object)==0x41c){
+   /* Its base destructor follows the already cleared embedded cloth. */
   }else if(om_kind(object)==0x307||om_kind(object)==0x346){
    gh_hitarea_object *box_b2,*box_a;
    uint8_t *b2_created,*a_created;
@@ -311,7 +375,8 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
   }else if(om_kind(object)==0x30e||om_kind(object)==0x324){
    put(actor+0x214,0x4297d8); /* 1BFB00 */
   }else {
-   if(om_kind(object)==0x305||om_kind(object)==0x320)put(actor+0x214,0x429c80);
+   if(om_kind(object)==0x305||om_kind(object)==0x320||
+      om_kind(object)==0x31a||om_kind(object)==0x339)put(actor+0x214,0x429c80);
    /* 1C286C reloads +600, just cleared, as the argument for the
     * +604-positive branch. 1FE278(NULL) returns. The sphere remains
     * associated until base 1FE370, which uses the correct A/B class. */

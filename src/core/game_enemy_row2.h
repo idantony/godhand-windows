@@ -9,6 +9,7 @@ extern "C" {
 int gh_enemy202_is_row2_profile(const gh_enemy_request *);
 int gh_enemy202_is_r100_appearance2_profile(const gh_enemy_request *);
 int gh_enemy202_is_r100_supported_profile(const gh_enemy_request *);
+int gh_enemy202_is_room_supported_profile(const gh_enemy_request *,uint16_t room);
 /* Original 2070CC default body radius, explicit bounded ChopZero. */
 int gh_enemy202_body_radius_002070cc(uint32_t scale,uint32_t nominal,uint32_t *bits);
 

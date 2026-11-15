@@ -6,11 +6,11 @@ static void put(uint8_t*p,size_t o,uint32_t v){memcpy(p+o,&v,4);}
 gh_actor_motion_status gh_enemy_motion_initialize_002036b0(gh_enemy_motion*s,gh_enemy_hp*hp,const struct gh_motion_ik_globals*ik,gh_motion_effect_consumer effects,void*context){
  if(!s||!hp||hp->stage!=1||!hp->tail||!hp->tail->entry)return GH_ACTOR_MOTION_ARGUMENT;
  if(s->stage&&s->hp!=hp)return GH_ACTOR_MOTION_BUSY;
- gh_enemy_entry*e=hp->tail->entry;uint8_t*p=e->object.view.bytes;if(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_r100_supported_profile(&e->request)))return GH_ACTOR_MOTION_ARGUMENT;
+ gh_enemy_entry*e=hp->tail->entry;uint8_t*p=e->object.view.bytes;if(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)))return GH_ACTOR_MOTION_ARGUMENT;
  if(!s->stage){const gh_object_view*r=&e->resource;if(!r->bytes||!r->file_extent_known||r->file_extent>r->size||r->file_extent<0xc10)return GH_ACTOR_MOTION_BOUNDS;
   size_t a,b;
   uint8_t substate,detail=0;
-  if(gh_enemy202_is_r100_supported_profile(&e->request)){
+  if(gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)){
    gh_enemy_initial_motion_selection selected;
    gh_actor_model_status status;
    uint32_t selection_pc;

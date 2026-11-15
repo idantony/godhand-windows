@@ -1636,6 +1636,15 @@ static gh_scene_exit_status scene_exit_consumer(void *context,uint32_t address,u
     }
     if(address==0x1fef30||address==0x1ff028){gh_game_services_scene_view s;uint32_t f=0;
         if(gh_game_services_get_scene_view(h->services,&s))return GH_SCENE_EXIT_ARGUMENT;
+        if(address==0x1fef30&&argument==0x580d20){
+            /* State5 now discards room resources and then its registries.
+             * Release individually allocated native owners before their
+             * resource records, within the same original phase and tick. */
+            uint32_t blocked_handle=0;
+            const gh_game_services_status status=gh_game_services_scene_release_owners(h->services,frontier,&blocked_handle);
+            if(status&&blocked_handle)fprintf(stderr,"Native room owner release stopped at object handle %u\n",blocked_handle);
+            if(status)return status==GH_SERVICES_FRONTIER?GH_SCENE_EXIT_UNSUPPORTED:GH_SCENE_EXIT_CALLEE;
+        }
         gh_game_objects *objects=argument==0x580d20?s.objects:argument==0x5864e0?s.room_objects:0;
         if(!objects)return GH_SCENE_EXIT_ARGUMENT;
         gh_object_sound_binding sound={&h->sound_control,h->voices};
@@ -2514,10 +2523,24 @@ gh_host_error gh_startup_host_snapshot(const gh_startup_host *h,gh_startup_snaps
         out->effect_emitter_slot=effects_frame->emitter_index;
         out->effect_emitter_serial=effects_frame->emitter_serial;
         out->effect_emitter_step=effects_frame->emitter_stage;
-        if(emitter->payload&&emitter->payload_size>=0x114)
+        if(emitter->payload&&emitter->payload_size>=0x1ed){
             memcpy(&out->effect_emitter_mode,emitter->payload+0x110,4);
-        if(emitter->record.bytes&&emitter->record.size>0x133)
+            memcpy(&out->effect_emitter_flags,emitter->payload+0x118,4);
+            out->effect_emitter_bank=emitter->payload[0x18c]|(uint32_t)emitter->payload[0x18d]<<8;
+            out->effect_emitter_index=emitter->payload[0x18e]|(uint32_t)emitter->payload[0x18f]<<8;
+            out->effect_emitter_part=emitter->payload[0x1ec];
+        }
+        if(emitter->record.bytes&&emitter->record.size>0x133){
+            memcpy(&out->effect_emitter_row,emitter->record.bytes+4,4);
             out->effect_emitter_class=emitter->record.bytes[0x133];
+            out->effect_emitter_delay=emitter->record.bytes[0xbe];
+        }
+        if(emitter->actor&&emitter->actor->bytes&&emitter->actor->size>=0x644){
+            const uint8_t *actor=emitter->actor->bytes;
+            out->effect_emitter_actor_kind=actor[0x2fe]|(uint32_t)actor[0x2ff]<<8;
+            memcpy(&out->effect_emitter_actor_dependency,actor+0x564,4);
+            out->effect_emitter_actor_stamp=actor[0x640]|(uint32_t)actor[0x641]<<8;
+        }
         if(effects_frame->esp_started){
             out->effect_esp_step=effects_frame->esp_call.stage;
             if(effects_frame->esp_call.allocated)out->effect_esp_slot=effects_frame->esp_call.slot;

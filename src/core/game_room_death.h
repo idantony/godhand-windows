@@ -26,6 +26,7 @@ gh_room_pool_status gh_room_death_mark_scroll_0030f8b0(gh_room_death_pass *,gh_s
 /* Ordered type0 retirement after both original mark passes. Foreign actors
  * remain strict and keep their typed owner and registry membership. */
 gh_room_pool_status gh_room_death_scroll_0030f8b0(gh_room_death_pass *,gh_scene_meshes *);
+gh_room_pool_status gh_room_death_release_scroll(gh_room_death_pass *,gh_scene_meshes *);
 /* Original first nonstatic R100 actor 312708. The original player virtual
  * leaf is 14E928 (return); the real shared SE detach runs before flags change. */
 gh_room_pool_status gh_room_death_mark_player_00312708(gh_game_player_factory *,

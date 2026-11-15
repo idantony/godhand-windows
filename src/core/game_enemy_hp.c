@@ -10,7 +10,7 @@ gh_actor_model_status gh_enemy_hp_initialize_00202b88(gh_enemy_hp*s,gh_enemy_ent
  const int devil=e->request.object_kind==0x220&&e->request.dependency_kind==0x220&&
      e->b.work->room==0x100&&p[0x186b]==1&&e->request.flags==0x400000;
  if(!save.bytes||save.size<GH_CORE_SAVE_BYTES||(!devil&&(e->request.object_kind!=0x202||
-    (e->request.dependency_kind!=0x20a&&!gh_enemy202_is_r100_supported_profile(&e->request)))))
+    (e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)))))
   return GH_ACTOR_MODEL_ARGUMENT;
  if(!s->stage){p[0x622]=0;unsigned level=p[0x186b];static const uint16_t hp20a[]={148,192,236,296,340,399,444,488};
   static const uint16_t hp200[]={74,96,118,148,170,192,222,244};

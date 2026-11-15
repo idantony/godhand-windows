@@ -58,6 +58,27 @@ static void frame_checks(gh_om_factory*f,gh_boot_work*work,gh_scene_dynamic_owne
    C(!gh_om_frame_next_call(&state));
   }
   C(sound_calls==1&&!p[0x2f5]&&w(p+0x104)==w(p+0x640));
+  gh_object_opacity_environment environment={.init=runtime.init,.current_player=&actors[2],.player_binding_known=1};
+  C(!gh_om_frame_bind_environment(&state,&environment));
+  fenv_t saved_fixture_env;C(!feholdexcept(&saved_fixture_env)&&!fesetround(FE_TONEAREST));
+  float hinge[3],closed_angle;memcpy(hinge,o->view.alias_f0,12);memcpy(&closed_angle,p+0x638,4);
+  const float facing=closed_angle-1.5707964f;
+  volatile float inside_x=hinge[0]+0.2f*sinf(facing);
+  volatile float inside_z=hinge[2]+0.2f*cosf(facing);
+  C(!fesetenv(&saved_fixture_env));
+  const float inside[3]={inside_x,hinge[1],inside_z};
+  memcpy(actors[2].alias_f0,inside,12);
+  C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&!p[0x2f5]&&(w(p+0x620)&1));
+  C(!gh_om_frame_next_call(&state));
+  const float outside[3]={hinge[0],20.0f,hinge[2]};
+  memcpy(actors[2].alias_f0,outside,12);
+  C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&p[0x2f5]==2&&!(w(p+0x620)&1));
+  C(!gh_om_frame_next_call(&state));
+  for(unsigned turn=0;p[0x2f5]==2&&turn<20;turn++){
+   C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier));
+   C(!gh_om_frame_next_call(&state));
+  }
+  C(sound_calls==2&&!p[0x2f5]&&w(p+0x104)==w(p+0x638));
   put(p+0x104,w(p+0x638));
   put(p+0x620,saved_flags);put(p+0x638,saved_original);put(p+0x640,saved_target);p[0x2f5]=0;
   C(!gh_om_frame_move(&state,f,&q,work,GH_STATIC_BINARY32_REFERENCE,&frontier)&&!state.contact634&&!h(p+0x630));

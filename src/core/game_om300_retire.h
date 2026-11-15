@@ -4,6 +4,7 @@
 #include "game_collision_scroll.h"
 #include "se_voice.h"
 #include "game_actor_model_nodes.h"
+#include "game_effect_release.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -15,12 +16,13 @@ typedef struct {
  gh_game_collision_solids *solids;
  gh_object_slot_release release_sound_slot;
  void *sound_context;
+ gh_effect_release_bindings effects;
 } gh_om300_retire_bindings;
 typedef struct {
  gh_om300_retire_bindings bindings;
  gh_om_object *object;
  uint32_t handle,frontier,hitarea_cursor;
- uint8_t stage;
+ uint8_t stage,weapon_effect_released;
 } gh_om300_retirement;
 
 gh_room_pool_status gh_om300_mark_00312708(gh_om_factory *,uint32_t handle,

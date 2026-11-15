@@ -2195,7 +2195,7 @@ static gh_actor_motion_status scene_retiring_enemy_effect(void *context,const gh
  return release_actor_motion_effect(s,actor,kind,mode,frontier);
 }
 
-gh_game_services_status gh_game_services_scene_retire_objects_0030f8b0(gh_game_services *s,
+static gh_game_services_status retire_scene_objects(gh_game_services *s,int closing,
  uint32_t *frontier,uint32_t *blocked_handle)
 {
  if(!s||!frontier)return GH_SERVICES_ARGUMENT;
@@ -2214,7 +2214,7 @@ gh_game_services_status gh_game_services_scene_retire_objects_0030f8b0(gh_game_s
     .child=&s->player_child,.child_tail=&s->child_tail,
     .door={.factory=&s->om_factory,.tables=&s->scene_tables,.scroll=&s->r100.collision,
      .solids=&s->collision_solids,.release_sound_slot=gh_sound_object_slot_release_002cb340,
-     .sound_context=&s->om_retire_sound},
+     .sound_context=&s->om_retire_sound,.effects=player_effect_storage(s)},
     .hitarea=s->b.init,.pairs=&s->collision_pairs,.dynamic=&s->dynamic_objects,
     .effects=&s->effects,.voices=s->b.voices,.enemies=s->enemies,
     .enemy={.effects=&s->effects,.dynamic=&s->dynamic_objects,
@@ -2222,7 +2222,8 @@ gh_game_services_status gh_game_services_scene_retire_objects_0030f8b0(gh_game_s
      .release_sound_slot=gh_sound_object_slot_release_002cb340,
      .sound_context=&s->enemy_retire_sound}};
   }
-  gh_room_pool_status status=gh_room_death_dispatch_0030f8b0(&s->scene_death,&s->scene_death_bindings);
+  gh_room_pool_status status=closing?gh_room_death_release_owners(&s->scene_death,&s->scene_death_bindings):
+   gh_room_death_dispatch_0030f8b0(&s->scene_death,&s->scene_death_bindings);
   if(status){
    *frontier=s->scene_death.frontier?s->scene_death.frontier:0x30f8b0;
    if(blocked_handle)*blocked_handle=s->scene_death.blocked_handle;
@@ -2250,6 +2251,18 @@ gh_game_services_status gh_game_services_scene_retire_objects_0030f8b0(gh_game_s
  s->scene_death=(gh_room_death_dispatch){0};
  s->scene_death_bindings=(gh_room_death_bindings){0};
  return GH_SERVICES_OK;
+}
+
+gh_game_services_status gh_game_services_scene_retire_objects_0030f8b0(gh_game_services *s,
+ uint32_t *frontier,uint32_t *blocked_handle)
+{
+ return retire_scene_objects(s,0,frontier,blocked_handle);
+}
+
+gh_game_services_status gh_game_services_scene_release_owners(gh_game_services *s,
+ uint32_t *frontier,uint32_t *blocked_handle)
+{
+ return retire_scene_objects(s,1,frontier,blocked_handle);
 }
 
 gh_game_services_status gh_game_services_release_enemies_002908c0(gh_game_services *s,uint32_t *frontier)

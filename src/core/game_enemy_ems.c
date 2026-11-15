@@ -184,7 +184,7 @@ static gh_scene_placement_status spawn(gh_enemy_ems *owner,uint32_t *frontier,in
         if(!entry->entered){
             gh_actor_motion_status status;
             if(request.object_kind==0x202 &&
-                (gh_enemy202_is_r100_supported_profile(&request) ||
+                (gh_enemy202_is_room_supported_profile(&request,bindings->actor.entry.work->room) ||
                  (request.dependency_kind==0x20a&&(request.appearance==0||request.appearance==3)))) {
                 status=enter_202(entry,bindings,&request,frontier);
                 if(status&&!entry->enemy202)return GH_PLACE_MEMORY;

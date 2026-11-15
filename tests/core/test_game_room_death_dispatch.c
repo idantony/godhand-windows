@@ -213,6 +213,10 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
  gh_object_view tutorial;
  C(!gh_game_objects_find(global,0x3eb,&tutorial)&&tutorial.use_count==4);
  const uint32_t known=158+doors.count;
+ const uint32_t scroll_flags=w((uint8_t *)meshes.first.allocation.pointer+0x250);
+ C(gh_room_death_release_owners(&dispatch,&bindings)==GH_POOL_UNSUPPORTED&&
+   dispatch.frontier==0x30f5f0&&pools.vectors[0].count==known&&
+   w((uint8_t *)meshes.first.allocation.pointer+0x250)==scroll_flags);
  C(!gh_room_death_dispatch_0030f8b0(&dispatch,&bindings)&&!dispatch.scan.cursor&&
    pools.vectors[0].count==known&&(w(player.view.bytes+0x250)&0xe0000002u)==0xc0000002u);
  /* Original Main5 op11 deletes still-live R100 door collision boxes after
@@ -299,7 +303,7 @@ gh_game_title_player player={0};gh_game_player_factory factory={0};c.factory=&fa
  puts("PASS real OM324 ordinary 30F650 descriptor198CE0, same canonical handle and both registry compactions");
  const gh_om_object *retiring_objects=doors.objects;
  C(gh_om_factory_release_retired(&doors)==GH_PLACE_BUSY&&doors.objects==retiring_objects&&doors.bound);
- gh_room_pool_status final=gh_room_death_dispatch_0030f8b0(&dispatch,&bindings);
+ gh_room_pool_status final=gh_room_death_release_owners(&dispatch,&bindings);
  if(final)fprintf(stderr,"retire status%d frontier %08x handle %u kind %x stage %u prefix %u\n",final,dispatch.frontier,dispatch.blocked_handle,dispatch.retiring_kind,dispatch.door.stage,dispatch.door.prefix.stage);
  C(!final&&
    !dispatch.frontier&&!dispatch.blocked_handle&&!dispatch.scan.cursor&&

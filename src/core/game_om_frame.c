@@ -279,12 +279,12 @@ static gh_object_step_status door_wait_contact(gh_om_frame_state *s,gh_om_init_s
     return GH_OBJSTEP_OK;
 }
 
-static gh_object_step_status door_open_step(gh_om_frame_state *s,gh_om_init_state *c,
-    gh_static_transform_policy policy,uint32_t *frontier)
+static gh_object_step_status door_turn_step(gh_om_frame_state *s,gh_om_init_state *c,
+    int closing,gh_static_transform_policy policy,uint32_t *frontier)
 {
     uint8_t *p=s->object->view.bytes;
     if(policy!=GH_STATIC_BINARY32_REFERENCE)
-        return fail(s,0x1bc538,frontier,GH_OBJSTEP_UNSUPPORTED);
+        return fail(s,closing?0x1bc610:0x1bc538,frontier,GH_OBJSTEP_UNSUPPORTED);
     if(!p[0x2f6]){
         const unsigned kind=half(p+0x2fe);
         if(kind!=0x314&&kind!=0x354){
@@ -301,7 +301,7 @@ static gh_object_step_status door_open_step(gh_om_frame_state *s,gh_om_init_stat
         p[0x2f6]=1;
     }
     if(p[0x2f6]!=1)return GH_OBJSTEP_OK;
-    const float yaw=number(p+0x104),target=number(p+0x640);
+    const float yaw=number(p+0x104),target=number(p+(closing?0x638:0x640));
     const uint32_t step_bits=0x3e0efa35u;
     const float cap=number((const uint8_t *)&step_bits);
     if(!isfinite(yaw)||!isfinite(target))
@@ -316,6 +316,78 @@ static gh_object_step_status door_open_step(gh_om_frame_state *s,gh_om_init_stat
         return fail(s,0x1f7d48,frontier,GH_OBJSTEP_UNSUPPORTED);
     memcpy(p+0x104,&wrapped,4);
     if(wrapped==target)memset(p+0x2f4,0,4);
+    return GH_OBJSTEP_OK;
+}
+
+/* 1BC300 tests the active player, then EnemyM+500 in native link order. */
+static gh_object_step_status door_blocks_close(gh_om_frame_state *s,const gh_om_init_state *c,
+    const float from[3],const gh_title_player_view *actor,float facing,float limit_squared,
+    int *blocks,uint32_t *frontier)
+{
+    if(!actor||!actor->alias_f0)return fail(s,0x2db6b0,frontier,GH_OBJSTEP_ARGUMENT);
+    const float arc=1.7453293f; /* ELF 3FDF66F3 */
+    float to[3];
+    memcpy(to,actor->alias_f0,sizeof(to));
+    const float x=add(from[0],-to[0]),y=add(from[1],-to[1]),z=add(from[2],-to[2]);
+    const float distance=add(add(mul(x,x),mul(y,y)),mul(z,z));
+    if(!isfinite(distance))return fail(s,0x1f7e28,frontier,GH_OBJSTEP_UNSUPPORTED);
+    *blocks=0;
+    if(distance<limit_squared){
+        float turn;
+        uint32_t pc=0;
+        if(x==0.0f&&z==0.0f){
+            if(gh_id_angle_reference_001f7d48(add(-1.5707964f,-facing),&turn))
+                return fail(s,0x2da2d0,frontier,GH_OBJSTEP_UNSUPPORTED);
+        }else if(gh_player_target_angle_002da038(c->bindings->elf,c->bindings->elf_bytes,
+            from,to,facing,arc,&turn,&pc))
+            return fail(s,pc?pc:0x2da2d0,frontier,GH_OBJSTEP_UNSUPPORTED);
+        *blocks=fabsf(turn)<arc;
+    }
+    return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status door_wait_open(gh_om_frame_state *s,const gh_om_init_state *c,
+    gh_static_transform_policy policy,uint32_t *frontier)
+{
+    if(policy!=GH_STATIC_BINARY32_REFERENCE)
+        return fail(s,0x1bc300,frontier,GH_OBJSTEP_UNSUPPORTED);
+    if(!s->environment_bound||!s->environment.player_binding_known||
+       !s->environment.current_player||!s->environment.init||!c->bindings||
+       c->bindings->init!=s->environment.init||!s->object->view.alias_f0)
+        return fail(s,0x2db6b0,frontier,GH_OBJSTEP_UNSUPPORTED);
+    uint8_t *p=s->object->view.bytes;
+    float from[3],facing;
+    memcpy(from,s->object->view.alias_f0,sizeof(from));
+    const float range=add(number(p+0x610),0.7f);
+    const float limit_squared=mul(range,range);
+    if(!isfinite(limit_squared)||gh_id_angle_reference_001f7d48(add(number(p+0x638),-1.5707964f),&facing))
+        return fail(s,0x1f7d48,frontier,GH_OBJSTEP_UNSUPPORTED);
+    int blocks;
+    gh_object_step_status status=door_blocks_close(s,c,from,s->environment.current_player,facing,
+        limit_squared,&blocks,frontier);
+    if(status||blocks)return status;
+    const gh_game_init_state *init=s->environment.init;
+    if(init->enemy_top){
+        unsigned index=64;
+        for(unsigned i=0;i<64;i++)if(init->enemy_top==init->enemies+i*20){index=i;break;}
+        uint64_t visited=0;
+        while(index!=UINT8_MAX){
+            if(index>=64||(visited&(UINT64_C(1)<<index))||init->enemies[index*20+16]!=1||
+               !init->enemy_actors[index])
+                return fail(s,0x1bc414,frontier,GH_OBJSTEP_ARGUMENT);
+            visited|=UINT64_C(1)<<index;
+            const gh_game_title_player *enemy=init->enemy_actors[index];
+            status=door_blocks_close(s,c,from,&enemy->view,facing,limit_squared,&blocks,frontier);
+            if(status||blocks)return status;
+            index=init->enemy_next[index];
+        }
+    }
+    const uint32_t flags=word(p+0x620);
+    if((flags&3u)==1&&p[0x2f4]<2){
+        put(p+0x620,flags&~1u);
+        p[0x2f4]=p[0x2f6]=p[0x2f7]=0;
+        p[0x2f5]=2;
+    }
     return GH_OBJSTEP_OK;
 }
 
@@ -376,16 +448,20 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
   else if(simple(s->object)||plain(s->object)||segments(s->object)||s->object->source.type==0x307){if(p[0x2f4]){uint32_t pc=state_entry(s->object->source.type,p[0x2f4]);return fail(s,pc?pc:s->entry,f,GH_OBJSTEP_UNSUPPORTED);}}
   else{
    if(p[0x2f4])return fail(s,p[0x2f4]==1?0x1bc6e8:p[0x2f4]==2?0x1bc748:p[0x2f4]==3?0x1bcb18:0x1bc0a0,f,GH_OBJSTEP_UNSUPPORTED);
-   if(p[0x2f5]==1){
-    gh_object_step_status status=door_open_step(s,c,policy,f);
+   if(p[0x2f5]==1||p[0x2f5]==2){
+    gh_object_step_status status=door_turn_step(s,c,p[0x2f5]==2,policy,f);
     if(status)return status;
    }else{
     if(p[0x2f5])return fail(s,p[0x2f5]==2?0x1bc610:0x1bc1c8,f,GH_OBJSTEP_UNSUPPORTED);
-    if(word(p+0x620)&1)return fail(s,0x2db6b0,f,GH_OBJSTEP_UNSUPPORTED);
+    if(word(p+0x620)&1){
+     gh_object_step_status status=door_wait_open(s,c,policy,f);
+     if(status)return status;
+    }else{
     unsigned rawcounter=half(p+0x630);int counter=rawcounter<32768?(int)rawcounter:rawcounter-65536;
     if(s->contact634&&counter>4){
      gh_object_step_status status=door_wait_contact(s,c,policy,f);
      if(status)return status;
+    }
     }
    }
   }

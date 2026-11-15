@@ -66,6 +66,24 @@ int gh_enemy202_is_r100_supported_profile(const gh_enemy_request *request)
         is_r100_appearance9_profile(request)||is_r100_appearance0_profile(request);
 }
 
+static int is_r105_first_appearance0_profile(const gh_enemy_request *request)
+{
+    if(!request||request->object_kind!=0x202||request->appearance||request->flags)
+        return 0;
+    switch(request->entry_number){
+    case 0:return request->dependency_kind==0x200&&!request->dependency_flags;
+    case 1:return request->dependency_kind==0x203&&!request->dependency_flags;
+    case 2:return request->dependency_kind==0x200&&request->dependency_flags==1;
+    default:return 0;
+    }
+}
+
+int gh_enemy202_is_room_supported_profile(const gh_enemy_request *request,uint16_t room)
+{
+    return gh_enemy202_is_r100_supported_profile(request)||
+        (room==0x105&&is_r105_first_appearance0_profile(request));
+}
+
 int gh_enemy202_body_radius_002070cc(uint32_t scale,uint32_t nominal,uint32_t *bits)
 {
     if (!bits || ((scale<0x3f800000 || scale>0x3f8ccccd) && scale!=0x3f99999a) ||
@@ -160,7 +178,7 @@ gh_actor_model_status gh_enemy202_appearance0_select_0020393c(
 {
     if (!request || !resource || !out || !resource->bytes || resource->kind!=0x202)
         return GH_ACTOR_MODEL_ARGUMENT;
-    if (!is_r100_appearance0_profile(request))
+    if (!is_r100_appearance0_profile(request)&&!is_r105_first_appearance0_profile(request))
         return GH_ACTOR_MODEL_UNSUPPORTED;
     /* Dependency 203 uses 42D4C0[1] -> 203700; dependency 200 takes
      * the underflow branch 2036EC. 20393C keeps those candidate pairs. */

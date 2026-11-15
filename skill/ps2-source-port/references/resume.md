@@ -5,6 +5,22 @@ history was compacted; private receipts and Git preserve old checkpoints.
 
 ## Current verified checkpoints
 
+- Exact238 `room-transition-238-r105-texture-remap`, pin
+  `6667b5aa4428b6240bdb0b56de03ba907b15c1de9f216011ebe8a82e292c2189`.
+  Actual controlled Windows plays all EV02 cuts, clears R003, enters R105
+  State3 at tick3303 and stops at original actor finalization `0026B9E8`.
+  All native renderer and window errors are zero. R105 scene rendering is
+  still pending. Proof `analysis/room-transition-238-r003-r105-windows-private.json`.
+  The ordinary State5 visits mark and age owners. Windows releases their
+  individually allocated companions before the first phase5 resource sweep
+  `001FEF30`. The original `0030F5F0` registry/arena teardown follows in the
+  same tick. Running host disposal after the resource sweep invalidated
+  object references at `001FE9B8`. Broad verification passed 366 checks.
+- Exact237 actual R100 New Game presents 2,187 scene frames and four Triangle
+  hits on the first enemy across two attack inputs (HP74→62→50→38→26).
+  It stops at `002FAA88`, bank `58:2D`, owner stamp19 dependency0203, class
+  0x12. Runtime part override 255 uses EST part15. Proof
+  `analysis/room-transition-237-r100-live-private.json`.
 - Exact234 `room-transition-234-wrap-row-r100-cues`, pin
   `8f35cc4e6f9ee48a0f814b4f48046ee36fb979161f768b27873f51b88000e005`.
   Actual controlled Windows presents all 28 EV02 cuts and 2,785 R003 frames
@@ -20,9 +36,8 @@ history was compacted; private receipts and Git preserve old checkpoints.
 - R003 State5 retirement leaves and R105 module load are available as the
   rebased G bundles `r003-state5-retirement-leaves-over234-delta` and
   `r105-module-loader-over234-delta`. The worker verified R105 State3 reaches
-  EMS `002905D0` with an extra diagnostic physical retirement visit. Genuine
-  State5 still needs host ownership disposal at original `0030F5F0` once
-  the ordinary mark/age visits finish. Do not add a gameplay tick for cleanup.
+  EMS `002905D0` with an extra diagnostic physical retirement visit. Exact238
+  advances the production path within the original State5 phase schedule.
 - Exact232 CPU probe with `--r003-controlled` finishes 2,785 R003 packet
   frames and all 28 EV02 cuts in 11.526 seconds. Original State5 selects R105
   and stops in room retirement `00312708` on Flag handle149. The quick sink

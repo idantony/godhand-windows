@@ -195,14 +195,18 @@ static int enemy_selector6b_profile(const struct voice *v,int16_t bank,int16_t p
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
      h(root->bytes+0x2fe)!=0x202)return 0;
   dependency=w(root->bytes+0x564);
-  if(dependency!=0x200&&dependency!=0x203)return 0;
+  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203)return 0;
  }else if(!v->combat_profile)return 0;
  const unsigned alternate=program==0x0b;
- if(h(p+4)!=9u+alternate||w(p+6)!=0x0255022d||h(p+0xe)!=0x20||
-    w(p+0x10)!=0x007d007d||w(p+0x14)!=0x005a0040||h(p+0x1a)!=100||
+ if(w(p+6)!=0x0255022d||h(p+0xe)!=0x20||
+    w(p+0x14)!=0x005a0040||h(p+0x1a)!=100||
     w(p+0x1c)!=0x00030000||w(p+0x20)!=0x00010085||
     w(p+0x24)!=0x400||w(p+0x28)!=0xffff||w(p+0x2c))return 0;
  if(sample&&(w(sample+4)!=11025||w(sample+8)!=0x5fcb80ff||w(sample+12)))return 0;
+ if(h(p+4)==8u+alternate&&w(p+0x10)==0x00730073u)
+    return (!dependency||dependency==0x202)&&h(p+0x18)==0xff38&&
+           (!sample||w(sample)==(alternate?0xe360u:0xc9f0u));
+ if(h(p+4)!=9u+alternate||w(p+0x10)!=0x007d007du||dependency==0x202)return 0;
  const int em00=dependency!=0x203&&h(p+0x18)==(alternate?0xff38:0)&&
     (!sample||w(sample)==(alternate?0x11bc0u:0xff80u));
  const int em03=dependency!=0x200&&h(p+0x18)==0xff38&&
@@ -273,7 +277,7 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
      h(root->bytes+0x2fe)!=0x202)return 0;
   const uint32_t dependency=w(root->bytes+0x564);
-  if(dependency!=0x200&&dependency!=0x203)return 0;
+  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203)return 0;
  }else if(!v->combat_profile)return 0;
  if(h(p+4)!=92||w(p+6)!=0x0246020bu||w(p+0xa)||h(p+0xe)!=0x20||
     w(p+0x10)!=0x00500050||w(p+0x14)!=0x005a0040||w(p+0x18)!=0x00800080||

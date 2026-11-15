@@ -77,6 +77,26 @@ class RebaseOverlayTest(unittest.TestCase):
             rebase(*self.overlay(), *target, self.output)
         self.assertFalse(self.output.exists())
 
+    def test_pinned_tokens_merge_same_line_only_with_unique_predecessor(self):
+        overlay = self.overlay()
+        recipe = overlay[0].parent / "evidence/integration-tokens.json"
+        tokens_path, tokens_sha256 = self.write_json(recipe, {self.path: [["= 1;\nseparator", "= 2;\nseparator"]]})
+        tokens = {"tokens_path": tokens_path, "tokens_sha256": tokens_sha256}
+        target_content = self.base_content.replace(b"value =", b"renamed_value =")
+        target = self.snapshot("target", {self.path: target_content})
+        result = rebase(*overlay, *target, self.output, **tokens)
+        self.assertEqual(result["rebase_results"][self.path]["status"], "merged-tokens")
+        self.assertEqual((self.output / self.path).read_bytes(), target_content.replace(b"= 1;\nseparator", b"= 2;\nseparator"))
+
+        ambiguous = self.snapshot("ambiguous", {self.path: target_content * 2})
+        with self.assertRaisesRegex(RebaseError, "ambiguous in target"):
+            rebase(*overlay, *ambiguous, self.root / "ambiguous-result", **tokens)
+        self.assertFalse((self.root / "ambiguous-result").exists())
+
+        _, wrong_pin = self.write_json(recipe, {self.path: [["= 1;\nseparator", "= 9;\nseparator"]]})
+        with self.assertRaisesRegex(RebaseError, "do not reproduce"):
+            rebase(*overlay, *target, self.root / "wrong-result", tokens_path=recipe, tokens_sha256=wrong_pin)
+
     def test_absolute_worker_receipt_keeps_relative_and_base_fingerprints(self):
         root = self.root / "absolute-overlay"
         self.write_file(root, self.path, self.overlay_content)
@@ -92,6 +112,21 @@ class RebaseOverlayTest(unittest.TestCase):
         with self.assertRaisesRegex(RebaseError, "Invalid worker source predecessor"):
             rebase(*self.write_json(root / "receipt.json", record), *target, self.root / "rejected")
         self.assertFalse((self.root / "rejected").exists())
+
+    def test_absolute_worker_without_predecessor_can_only_add_new_files(self):
+        root = self.root / "absolute-overlay"
+        record = {"schema": 1, "base": {"path": str(self.base[0]), "sha256": self.base[1]}, "files": []}
+        for name in (self.other, self.path):
+            self.write_file(root, name, self.overlay_content)
+            row = {"path": str(root / name), "relative": name, "sha256": digest(self.overlay_content)}
+            record["files"] = [row]
+            receipt = self.write_json(root / "receipt.json", record)
+            if name == self.other:
+                result = rebase(*receipt, *self.base, self.output)
+                self.assertEqual(result["rebase_results"][name]["status"], "added")
+            else:
+                with self.assertRaisesRegex(RebaseError, "predecessor does not match"):
+                    rebase(*receipt, *self.base, self.root / "rejected")
 
     def test_tampered_snapshot_bytes_fail_even_when_only_newline_changed(self):
         target = self.snapshot("target", {self.path: self.base_content})
@@ -110,7 +145,7 @@ class RebaseOverlayTest(unittest.TestCase):
         evidence = self.root / "evidence.json"
         evidence.write_bytes(b"fixture evidence")
         dependencies = [{"path": str(evidence), "sha256": digest(evidence.read_bytes())}]
-        overlay = self.overlay(dependencies=dependencies, merge={"scope": "worker review"})
+        overlay = self.overlay(dependencies=dependencies, merge={"scope": "worker review"}, bounds="focused fixture")
         target = self.snapshot("target", {self.path: self.base_content})
         result = rebase(*overlay, *target, self.output)
         self.assertEqual(result["dependencies"], dependencies)
@@ -126,6 +161,17 @@ class RebaseOverlayTest(unittest.TestCase):
         with self.assertRaisesRegex(RebaseError, "dependency differs"):
             rebase(*overlay, *target, self.output)
         self.assertFalse(self.output.exists())
+
+    def test_pinned_patch_record_survives_rebase(self):
+        patch = self.root / "worker.patch"
+        patch.write_bytes(b"original worker diff")
+        patches = [{"path": str(patch), "sha256": digest(patch.read_bytes())}]
+        overlay = self.overlay(patches=patches)
+        result = rebase(*overlay, *self.base, self.output)
+        self.assertEqual(result["patches"], patches)
+        patch.write_bytes(b"modified worker diff")
+        with self.assertRaisesRegex(RebaseError, "SHA-256 mismatch"):
+            rebase(*overlay, *self.base, self.root / "rejected")
 
     def test_required_overlay_still_requires_raw_pinned_postimage(self):
         required_root = self.root / "required-overlay"

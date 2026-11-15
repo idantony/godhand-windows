@@ -39,6 +39,9 @@ typedef struct {
  * actor with its exact cursor. A successful visit resets only the scan. */
 gh_room_pool_status gh_room_death_dispatch_0030f8b0(gh_room_death_dispatch *,
  const gh_room_death_bindings *);
+
+gh_room_pool_status gh_room_death_release_owners(gh_room_death_dispatch *,
+ const gh_room_death_bindings *);
 #ifdef __cplusplus
 }
 #endif

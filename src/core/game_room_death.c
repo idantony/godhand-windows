@@ -88,7 +88,7 @@ static gh_room_pool_status retire(gh_room_death_pass *pass,gh_scene_meshes *mesh
  return GH_POOL_OK;
 }
 
-static gh_room_pool_status traverse(gh_room_death_pass *pass,gh_scene_meshes *meshes,int destroy)
+static gh_room_pool_status traverse(gh_room_death_pass *pass,gh_scene_meshes *meshes,int destroy,int closing)
 {
  if(!pass||!meshes||!meshes->pools||(pass->owner&&pass->owner!=meshes))
   return GH_POOL_ARGUMENT;
@@ -115,6 +115,7 @@ static gh_room_pool_status traverse(gh_room_death_pass *pass,gh_scene_meshes *me
   uint8_t *bytes=mesh->allocation.pointer;
   if(bytes[0x2fe]||bytes[0x2ff])return block(pass,handle,0x312708);
   uint32_t flags=read_u32(bytes+0x250);
+  if(closing&&(flags&0xe0000000u)!=0xe0000000u)return block(pass,handle,0x30f5f0);
   if(!(flags&0x80000000u)){
    /* 2CBE18 has no attachment to this static object in the native voice
     * namespace. Static type0 VT 450CE8+4C is the exact empty 14E928. */
@@ -137,12 +138,17 @@ static gh_room_pool_status traverse(gh_room_death_pass *pass,gh_scene_meshes *me
 
 gh_room_pool_status gh_room_death_mark_scroll_0030f8b0(gh_room_death_pass *pass,gh_scene_meshes *meshes)
 {
- return traverse(pass,meshes,0);
+ return traverse(pass,meshes,0,0);
 }
 
 gh_room_pool_status gh_room_death_scroll_0030f8b0(gh_room_death_pass *pass,gh_scene_meshes *meshes)
 {
- return traverse(pass,meshes,1);
+ return traverse(pass,meshes,1,0);
+}
+
+gh_room_pool_status gh_room_death_release_scroll(gh_room_death_pass *pass,gh_scene_meshes *meshes)
+{
+ return traverse(pass,meshes,1,1);
 }
 
 

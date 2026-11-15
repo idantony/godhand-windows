@@ -186,6 +186,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
 gh_game_services_status gh_game_services_trans_erase(gh_game_services *,
     const gh_object_trans_request *,const void *owner,int *handled,uint32_t *);
 gh_game_services_status gh_game_services_scene_retire_objects_0030f8b0(gh_game_services *,uint32_t *frontier,uint32_t *blocked_handle);
+gh_game_services_status gh_game_services_scene_release_owners(gh_game_services *,uint32_t *frontier,uint32_t *blocked_handle);
 gh_game_services_status gh_game_services_release_enemies_002908c0(gh_game_services *,uint32_t *);
 gh_game_services_status gh_game_services_trans_actor(gh_game_services *,const gh_object_trans_request *,
  const gh_boot_work *,const gh_game_actor_render_provider *,uint32_t *frontier);
