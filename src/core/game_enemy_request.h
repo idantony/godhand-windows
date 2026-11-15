@@ -10,6 +10,12 @@ gh_scene_placement_status gh_enemy_request_from_room_00294ca0(const gh_room_stat
 /* Actual294CA0 after successfulEntryEm: positiveRoomSave.vitality clamps
  * current54A tooriginalmax548; nonpositive leavesinitializedHP unchanged. */
 gh_actor_motion_status gh_enemy_apply_saved_vitality_00294f34(gh_game_title_player *,int16_t saved_vitality);
+/* 295458 changes only appearance in the first matching saved EMS row. */
+gh_actor_motion_status gh_enemy_set_data_appearance_00295458(const gh_room_state *,
+    uint16_t stamp,uint8_t appearance);
+/* 295498 replaces the flags of the same saved EMS row. */
+gh_actor_motion_status gh_enemy_set_data_flags_00295498(const gh_room_state *,
+    uint16_t stamp,uint32_t flags);
 /* 2736F8 clears the two actor placement flags, then 295498 mirrors the
  * word into the first stamp match in the current RoomSave page. */
 gh_actor_motion_status gh_enemy_clear_set_flags_002736f8(const gh_title_player_view *,

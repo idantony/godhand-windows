@@ -42,6 +42,15 @@ struct gh_game_cockpit {
  unsigned widget_step;
  unsigned game_over_step,game_over_entry,game_over_choice_step;
  uint8_t game_over_accepted;
+ struct {
+  gh_dvd_jobs *dvd;
+  gh_heap *heap;
+  gh_id_state *manager;
+  gh_r207_allocation resource;
+  gh_bundle_entry image;
+  uint32_t job;
+  uint8_t stage;
+ } ticket;
 };
 static uint32_t u32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w32(gh_game_cockpit *s,unsigned o,uint32_t n){for(unsigned i=0;i<4;i++)s->fields[o+i]=(uint8_t)(n>>(8*i));}
@@ -224,9 +233,116 @@ gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit*s,gh_core_save_v
  s->room_ready=1;return GH_ID_OK;
 }
 
+static gh_id_error ticket_error(gh_game_cockpit *s,uint32_t address,gh_id_error error)
+{
+ s->frontier=address;
+ return error;
+}
+
+gh_id_error gh_game_cockpit_load_ticket_0013e418(gh_game_cockpit *s,gh_id_state *manager,
+ gh_dvd_jobs *dvd,gh_heap *heap,int32_t language)
+{
+ static const char *const paths[]={"id/iditem.idd","id/local/US/iditem_US.idd", "id/local/EN/iditem_EN.idd",
+  "id/local/FR/iditem_FR.idd","id/local/GE/iditem_GE.idd","id/local/IT/iditem_IT.idd","id/local/SP/iditem_SP.idd"};
+ if(!s||!s->ready||!manager||s->manager!=manager||!dvd||!dvd->disc||!heap)return GH_ID_ARGUMENT;
+ s->frontier=0;
+ if(s->ticket.stage&&(s->ticket.dvd!=dvd||s->ticket.heap!=heap||s->ticket.manager!=manager))
+  return ticket_error(s,0x13e418,GH_ID_ARGUMENT);
+ if(s->ticket.stage==0){
+  if(manager->pair[0x19].bound||base(s,0x19c0)->owns_run)
+   return ticket_error(s,0x2accf8,GH_ID_BUSY);
+  size_t index;
+  const char *path=paths[(unsigned)language<7?(unsigned)language:0];
+  gh_disc_error found=gh_disc_find(dvd->disc,path,&index);
+  if(found==GH_DISC_NOT_FOUND&&path!=paths[0]){
+   path=paths[0];
+   found=gh_disc_find(dvd->disc,path,&index);
+  }
+  if(found)return ticket_error(s,0x2acfa8,found==GH_DISC_NOT_FOUND?GH_ID_NOT_FOUND:GH_ID_BOUNDS);
+  gh_disc_entry entry;
+  if(gh_disc_entry_at(dvd->disc,index,&entry)||entry.size>SIZE_MAX)
+   return ticket_error(s,0x200cb0,GH_ID_BOUNDS);
+  s->ticket.job=gh_dvd_read_alloc(dvd,path,&s->ticket.resource,heap,0,0,0,0);
+  if(!s->ticket.job)return ticket_error(s,0x200cb0,dvd->last_error==GH_DVD_MEMORY?GH_ID_MEMORY:GH_ID_FORMAT);
+  s->ticket.dvd=dvd;s->ticket.heap=heap;s->ticket.manager=manager;
+  s->ticket.image=(gh_bundle_entry){.bytes=s->ticket.resource.pointer,.size=(size_t)entry.size};
+  w32(s,0x19a0,1);w32(s,0x19a4,s->ticket.job);s->ticket.stage=1;
+ }
+ if(s->ticket.stage==1){
+  while(gh_dvd_check(dvd,s->ticket.job))
+   if(gh_dvd_pump(dvd))return ticket_error(s,0x201160,GH_ID_FORMAT);
+  if(dvd->failed_id==s->ticket.job)return ticket_error(s,0x201160,GH_ID_FORMAT);
+  s->ticket.stage=2;
+ }
+ if(s->ticket.stage==2){
+  if(gh_id_set_data_002accf8(manager,0x19,&s->ticket.image))
+   return ticket_error(s,0x2accf8,GH_ID_FORMAT);
+  s->ticket.stage=3;
+ }
+ if(s->ticket.stage==3){
+  gh_id_base *ticket=base(s,0x19c0);
+  if(ticket->owns_run)return ticket_error(s,0x2a9ea0,GH_ID_BUSY);
+  if(s->owned_count>=BASES)return ticket_error(s,0x2a9ea0,GH_ID_CAPACITY);
+  int original;
+  const gh_id_error error=gh_id_base_initialize_002a9ea0(s->runtime,ticket,0x19,0,rnd,s->random,&original);
+  if(ticket->owns_run)s->owned[s->owned_count++]=ticket;
+  if(error)return ticket_error(s,ticket->first_unported?ticket->first_unported:0x2a9ea0,error);
+  if(original!=1)return ticket_error(s,0x2a9ea0,GH_ID_NOT_FOUND);
+  s->ticket.stage=4;
+ }
+ if(s->ticket.stage==4){
+  const gh_id_error error=restart(s,0x19c0);
+  if(error)return ticket_error(s,0x2abbe8,error);
+  s->fields[0x19dc]=1;s->ticket.stage=5;
+ }
+ return GH_ID_OK;
+}
+
+gh_id_error gh_game_cockpit_set_ticket_visible(gh_game_cockpit *s,int visible)
+{
+ if(!s||!s->ready||(visible!=0&&visible!=1))return GH_ID_ARGUMENT;
+ s->fields[0x1a14]=(uint8_t)visible;
+ return GH_ID_OK;
+}
+
+static gh_id_error release_ticket(gh_game_cockpit *s,int compact)
+{
+ if(!s->ticket.stage)return GH_ID_OK;
+ if(gh_dvd_check(s->ticket.dvd,s->ticket.job)&&!gh_dvd_cancel(s->ticket.dvd,s->ticket.job))
+  return ticket_error(s,0x201018,GH_ID_BUSY);
+ gh_id_base *ticket=base(s,0x19c0);
+ if(ticket->owns_run){
+  int original,freed;
+  gh_id_error error=compact?gh_id_base_detach_for_compaction(s->runtime,ticket):
+   gh_id_base_release_002aa078(s->runtime,ticket,&original,&freed);
+  if(error)return ticket_error(s,0x2aa078,error);
+  if(!compact&&!freed)return ticket_error(s,0x2aa078,GH_ID_BUSY);
+  for(unsigned i=0;i<s->owned_count;++i)if(s->owned[i]==ticket){
+   --s->owned_count;
+   memmove(s->owned+i,s->owned+i+1,(s->owned_count-i)*sizeof(*s->owned));
+   break;
+  }
+ }
+ gh_id_pair *pair=&s->ticket.manager->pair[0x19];
+ const uintptr_t first=(uintptr_t)s->ticket.image.bytes;
+ const uintptr_t data=(uintptr_t)pair->data.bytes,texture=(uintptr_t)pair->texture_data.bytes;
+ if((data>=first&&data-first<s->ticket.image.size)||(texture>=first&&texture-first<s->ticket.image.size))
+  *pair=(gh_id_pair){0};
+ if(gh_heap_release(s->ticket.heap,s->ticket.resource))return ticket_error(s,0x30ee40,GH_ID_MEMORY);
+ memset(&s->ticket,0,sizeof(s->ticket));w32(s,0x19a0,0);
+ return GH_ID_OK;
+}
+
+gh_id_error gh_game_cockpit_abort_ticket(gh_game_cockpit *s)
+{
+ return s?release_ticket(s,0):GH_ID_ARGUMENT;
+}
+
 gh_id_error gh_game_cockpit_destroy(gh_game_cockpit *s){
  gh_id_error result=GH_ID_OK;if(!s)return GH_ID_ARGUMENT;
  while(s->owned_count){int original,freed;gh_id_error e=gh_id_base_release_002aa078(s->runtime,s->owned[--s->owned_count],&original,&freed);if(e)result=e;else if(!freed)result=GH_ID_BUSY;}
+ const gh_id_error resource=release_ticket(s,0);
+ if(resource)result=resource;
  free(s);return result;
 }
 gh_id_error gh_game_cockpit_base(gh_game_cockpit *s,uint32_t o,gh_id_base **out){if(!s||!out)return GH_ID_ARGUMENT;*out=base(s,o);return *out?GH_ID_OK:GH_ID_NOT_FOUND;}
@@ -639,10 +755,27 @@ static gh_id_error gameplay_widget_body(gh_game_cockpit*s,unsigned index,const g
   if(s->fields[o+0x79]||(s->fields[o+0x100]|s->fields[o+0x101]))return frame_stop(s,0x146a18);s->fields[o+0x104]&=0xfe;return GH_ID_OK;
  case 9:/*13E4F0 cache9C is a nativeentry, never inferNULL fromraw0. */
   if((u32(w+0x584)&8)||(u32(w+0x58c)&0x80000000))return GH_ID_OK;
-  if(!s->widget_step){if(!c||!c->save.bytes||c->save.size<GH_CORE_SAVE_BYTES)return frame_stop(s,0x1fa950);
-   if(u32(s->fields+o+0x90))return frame_stop(s,0x13e4f0);
+  if(!s->widget_step){
+   if(!c||!c->save.bytes||c->save.size<GH_CORE_SAVE_BYTES)return frame_stop(s,0x1fa950);
    for(unsigned i=0;i<2;i++){uint32_t value=u32(c->save.bytes+0x68+i*4);TRY(gh_game_cockpit_entry_at(s,o+0x9c+i*4,&e));if(!(value&0x80000000)&&value){e->flags&=~0x8000000u;e->seed=value;}else e->flags|=0x8000000;}
-  }list[0]=o;return widget_moves(s,c,list,1,0);
+   s->widget_step=1;
+  }
+  if(s->widget_step==1){
+   TRY(gameplay_move_base(s,o,c));
+   if(!u32(s->fields+o+0x90)){s->widget_step=0;return GH_ID_OK;}
+   if(s->ticket.stage!=5)return frame_stop(s,0x13e4f0);
+   s->widget_step=2;
+  }
+  for(;s->widget_step<=3;++s->widget_step){
+   const unsigned id=s->widget_step-2;
+   const uint32_t value=u32(s->fields+o+0x100);
+   TRY(work(s,o+0xb0,(int)id,0,&e));
+   if((id==0&&value)||(id==1&&s->fields[o+0x104]==1)){e->flags&=~0x8000000u;e->seed=value;}
+   else e->flags|=0x8000000u;
+   TRY(gameplay_move_base(s,o+0xb0,c));
+  }
+  s->widget_step=0;
+  return GH_ID_OK;
  case 10:/*143670 no pendingmoney particles. Original display stillticks. */
   if(!s->widget_step){if(!c||!c->save.bytes||c->save.size<GH_CORE_SAVE_BYTES)return frame_stop(s,0x1fa710);uint8_t*save=c->save.bytes;
    for(unsigned i=0;i<16;i++)if(s->fields[o+0x1b0+i]==1)return frame_stop(s,0x143670);
@@ -1198,6 +1331,7 @@ gh_id_error gh_game_cockpit_load_map_heat_001434a8(gh_game_cockpit *s,gh_core_sa
 gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit*s,gh_core_save_view save,const uint8_t heat[0x18]){
  if(!s||!s->ready||!save.bytes||save.size<GH_CORE_SAVE_BYTES||!heat)return GH_ID_ARGUMENT;s->frontier=0;
  /*13E400,13C930,13F510 then13E908,147188,1434A8->Heat141CE8. */
+ TRY(release_ticket(s,1));
  w32(s,0x1910+0x90,0);unsigned o=0x1dc0;w32(s,o+0xb8,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);w32(s,o+0xa0,0);
  o=0x1e90;for(unsigned i=0;i<5;i++){w32(s,o+0x260-4*i,0);w32(s,o+0x2d0-4*i,0x3f800000);w32(s,o+0xb8-4*i,0);}s->fields[o+0x384]=0;w32(s,o+0xa0,0);s->fields[o+0x358]=0;
  o=0x2220;if(u32(s->fields+o+0x94)){s->frontier=0x2aa078;return GH_ID_UNSUPPORTED;}w32(s,o+0xa0,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);

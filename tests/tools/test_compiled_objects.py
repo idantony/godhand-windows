@@ -9,7 +9,7 @@ from compiled_objects import ObjectCache, c_driver, compilation_key, project_inp
 
 class CompiledObjectsTests(unittest.TestCase):
     def setUp(self):
-        self.scratch = Path(r"G:\middle_thing\godhand_windows\tests\tools")
+        self.scratch = Path(__file__).resolve().parents[2] / ".work/tests/tools"
         self.scratch.mkdir(parents=True, exist_ok=True)
 
     def test_compile_keys_change_only_with_reachable_inputs(self):

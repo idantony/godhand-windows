@@ -19,6 +19,24 @@ def source():
     raw[0x90+0xBE]=255;raw[0x90+0x133]=6;raw[0x90+0x290]=2
     return raw
 
+def event_source():
+    table = 0x60 + 0x18
+    first = table + 12
+    second = first + 16 + 0x2F0
+    raw = bytearray(second + 16 + 0x2F0)
+    struct.pack_into("<I", raw, 0x1C, 0x60)
+    struct.pack_into("<III", raw, 0x60, 2, 0x14, 0x18)
+    raw[0x6C:0x74] = b"TBL\0TBL\0"
+    struct.pack_into("<III", raw, table, 2, first - table, second - table)
+    for est in (first, second):
+        struct.pack_into("<II", raw, est, 0x545345, 1)
+    row = second + 16
+    struct.pack_into("<I", raw, row + 0x2A0, 0x06000003)
+    raw[row + 0xBE] = 3
+    raw[row + 0x133] = 0x1A
+    return raw, first, row
+
+
 class SourceBounds(unittest.TestCase):
     def test_known_typed_row(self):
         report=module.est_row(source(),7,0)
@@ -44,5 +62,35 @@ class SourceBounds(unittest.TestCase):
         with self.assertRaises(ValueError):module.est_row(raw,7,0)
     def test_bad_bundle_directory(self):
         with self.assertRaises(ValueError):module.bundle_entry(bytes(16),"SSD")
+
+    def test_event_uses_second_table_and_one_based_index(self):
+        raw, _, row = event_source()
+        report = module.event_est_row(raw, 2, 0)
+        self.assertEqual((report["bank"], report["index"], report["row_offset"]), (6, 2, row))
+        self.assertEqual((report["actor_kind"], report["actor_code"], report["part"], report["esp_type"]),
+                         (0x600, 3, 3, 0x1A))
+        with self.assertRaises(ValueError):
+            module.event_est_row(raw, 0, 0)
+
+    def test_event_est_cannot_read_into_next_source(self):
+        raw, first, _ = event_source()
+        struct.pack_into("<I", raw, first + 4, 2)
+        with self.assertRaisesRegex(ValueError, "rows exceed"):
+            module.event_est_row(raw, 1, 1)
+
+    def test_event_group_batch_keeps_requested_order(self):
+        raw, _, _ = event_source()
+        reports = module.event_est_reports(raw, [2, 1], None)
+        self.assertEqual([(row["index"], row["row"], row["esp_type"]) for row in reports],
+                         [(2, 0, 0x1A), (1, 0, 0)])
+
+    def test_event_group_batch_reports_empty_directory_slots(self):
+        raw, _, _ = event_source()
+        struct.pack_into("<I", raw, 0x60 + 0x18 + 4, 0)
+        missing = []
+        reports = module.event_est_reports(raw, [1, 2], None, missing)
+        self.assertEqual((missing, [row["index"] for row in reports]), ([1], [2]))
+        with self.assertRaises(ValueError):
+            module.event_est_row(raw, 1, 0)
 
 if __name__=="__main__":unittest.main()

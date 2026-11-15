@@ -11,7 +11,14 @@ gh_actor_motion_status gh_enemy_behavior_initialize_002064fc(gh_enemy_behavior*s
   const int exchange=word(p,0x564)==0x227;
   uint8_t ordinary=e->request.dependency_kind!=0x20a&&!devil;
   p[0x17b9]=exchange?2:devil?3:e->request.dependency_kind==0x200;
-  p[0x17b8]=p[0x17bd]=exchange?2:1;p[0x17ba]=p[0x17bc]=exchange?2:ordinary;p[0x17bb]=1;s->stage=1;
+  p[0x17b8]=p[0x17bd]=exchange?2:1;p[0x17ba]=p[0x17bc]=exchange?2:ordinary;p[0x17bb]=1;
+  if(e->request.dependency_kind==0x20f){
+   /* Original 2065A4/206608/20666C/2066C8 clear approach options
+    * and leave retreat mode 2 on this dependency. */
+   p[0x17b8]=p[0x17ba]=p[0x17bb]=p[0x17bc]=0;
+   p[0x17bd]=2;
+  }
+  s->stage=1;
  }
  if(s->stage==1){unsigned room=(uint16_t)e->b.work->room;if(room>=0x803&&room<=0x805){s->frontier=0x274140;return GH_ACTOR_MOTION_UNSUPPORTED;}
   static const uint32_t factors[]={0x3f800000,0x3f99999a,0x3fb33333,0x3fcccccd,0x3ff33333,0x40066666,0x40133333,0x40200000};unsigned level=p[0x186b];

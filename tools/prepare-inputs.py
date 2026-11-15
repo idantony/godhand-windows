@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from workspace_paths import overlaps_authored_tree, work_root
 import subprocess
 import sys
 
@@ -41,8 +42,8 @@ def prepare(args):
     for output in (project / "reference", project / "analysis", project / "vendor", scratch):
         if inside(iso, output.resolve()):
             raise ValueError("ISO must be outside preparation output directories")
-    if inside(scratch, project):
-        raise ValueError("Scratch must be outside the permanent project tree")
+    if overlaps_authored_tree(scratch, project):
+        raise ValueError("Scratch must stay outside authored source directories")
     for name in ("reference", "analysis", "vendor"):
         if not inside((project / name).resolve(), project):
             raise ValueError("Project output directory resolves outside project: " + name)
@@ -105,7 +106,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iso", type=Path, required=True)
     parser.add_argument("--project", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--scratch", type=Path, default=Path(r"G:\middle_thing\godhand_windows"))
+    parser.add_argument("--scratch", type=Path, default=work_root(Path(__file__).resolve().parents[1]))
     args = parser.parse_args()
     try:
         result = prepare(args)

@@ -4,6 +4,19 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## First R102 frames presented on Windows
+
+The controlled original-disc replay selects Continue after R002 Event 04.
+R102 initializes its stage, player, enemies and room objects. Direct3D presents
+16 consecutive R102 frames with the HUD, and the run captures the matching
+pre-UI world and final composite. The renderer, effects, GPU and window report
+zero errors. The next original operation is an enemy attached sound request.
+R102 movement and combat remain to be verified.
+
+受控实盘回放在 R002 的 EV04 播完后选择继续。R102 初始化原版场景、玩家、敌人和房间物件。
+Direct3D 连续呈现 16 帧，并保存对应的 HUD 合成画面和合成前的场景画面。渲染、特效、GPU
+和窗口均无报错。下一处待恢复调用是敌人的附属音效，R102 的移动和战斗仍待验证。
+
 ## Complete R002 Event 04 on Windows and enter R102 initialization
 
 The controlled Windows replay presents 3,390 consecutive frames in R002 and

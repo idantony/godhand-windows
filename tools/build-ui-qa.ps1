@@ -1,20 +1,24 @@
 param(
     [string]$Compiler,
-    [string]$ScratchRoot = 'G:\middle_thing\godhand_windows',
+    [string]$ScratchRoot = $env:GODHAND_WORK_ROOT,
     [Parameter(Mandatory=$true)][string]$Iso,
     [string]$OutputRgba,
     [switch]$Sprite
 )
 $ErrorActionPreference = 'Stop'
 $godhandProject = Split-Path -Parent $PSScriptRoot
+if (-not $ScratchRoot) { $ScratchRoot = Join-Path $godhandProject '.work' }
 if (-not $Compiler) { $Compiler = Join-Path $godhandProject '.tools\zig-x86_64-windows-0.17.1\zig.exe' }
 $godhandBuild = Join-Path $ScratchRoot 'build\ui-renderer'
 $godhandCache = Join-Path $ScratchRoot 'cache'
 $godhandScratchPath = [IO.Path]::GetFullPath($ScratchRoot).TrimEnd('\')
 $godhandProjectPath = [IO.Path]::GetFullPath($godhandProject).TrimEnd('\')
-if ($godhandScratchPath.Equals($godhandProjectPath,[StringComparison]::OrdinalIgnoreCase) -or
-    $godhandScratchPath.StartsWith($godhandProjectPath+'\',[StringComparison]::OrdinalIgnoreCase)) {
-    throw 'Scratch must stay outside the permanent project tree.'
+$activeWork = Join-Path $godhandProjectPath '.work'
+$allowedLocal = $godhandScratchPath.Equals($activeWork,[StringComparison]::OrdinalIgnoreCase) -or
+    $godhandScratchPath.StartsWith($activeWork+'\',[StringComparison]::OrdinalIgnoreCase)
+if (-not $allowedLocal -and ($godhandScratchPath.Equals($godhandProjectPath,[StringComparison]::OrdinalIgnoreCase) -or
+    $godhandScratchPath.StartsWith($godhandProjectPath+'\',[StringComparison]::OrdinalIgnoreCase))) {
+    throw 'Scratch must stay outside authored source directories.'
 }
 if (-not (Test-Path -LiteralPath $Iso -PathType Leaf)) { throw 'Supply your existing game ISO.' }
 $godhandSdkRoot = 'C:\Program Files (x86)\Windows Kits\10\Lib'

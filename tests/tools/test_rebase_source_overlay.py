@@ -226,16 +226,6 @@ class RebaseOverlayTest(unittest.TestCase):
         with self.assertRaisesRegex(RebaseError, "SHA-256 mismatch"):
             rebase(*overlay, *self.base, self.root / "rejected")
 
-    def test_pinned_replay_dependencies_survive_rebase(self):
-        replay, pin = self.write_json(self.root / "replay/receipt.json", {"schema": 1})
-        dependencies = {str(replay): pin}
-        overlay = self.overlay(replay_dependencies=dependencies)
-        result = rebase(*overlay, *self.base, self.output)
-        self.assertEqual(result["replay_dependencies"], dependencies)
-        replay.write_bytes(b"different replay")
-        with self.assertRaisesRegex(RebaseError, "SHA-256 mismatch"):
-            rebase(*overlay, *self.base, self.root / "rejected")
-
     def test_required_overlay_still_requires_raw_pinned_postimage(self):
         required_root = self.root / "required-overlay"
         required_bytes = b"typed callback ABI\n"

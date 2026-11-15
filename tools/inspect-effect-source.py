@@ -1,6 +1,6 @@
 """Read-only bounded SSD/EST typed field report, no game byte extraction.
 Repeated FX source-field audits share this tool rather than ad-hoc test printf.
-Output must be a fresh G: scratch JSON. Metadata is not runtime completion proof.
+Output must be a fresh workspace JSON. Metadata is not runtime completion proof.
 """
 import argparse
 import hashlib
@@ -10,6 +10,7 @@ import struct
 import sys
 sys.dont_write_bytecode=True
 from inspect_disc import Iso9660, SECTOR
+from workspace_paths import work_root
 from inspect_assets import bundle_bounds, bundle_entry, parse_fst
 
 def word(raw, offset):
@@ -148,8 +149,8 @@ def main():
     if args.event is not None and not args.index:
         parser.error("--event requires at least one --index")
     output=args.output.resolve()
-    if output.drive.upper() != "G:" or output.suffix.lower() != ".json" or output.exists():
-        raise ValueError("output must be fresh G: scratch JSON")
+    if work_root(Path(__file__).resolve().parents[1]) not in output.parents or output.suffix.lower() != ".json" or output.exists():
+        raise ValueError("output must be fresh workspace JSON")
     iso=Iso9660(args.iso)
     try:
         files={item["path"].upper():item for item in iso.inventory() if not item["directory"]}

@@ -13,6 +13,35 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def git(root, arguments, data=None):
+    return subprocess.check_output(["git", *arguments], cwd=root, input=data, stderr=subprocess.DEVNULL)
+
+
+def filtered_blobs(root, snapshot, files):
+    """Hash immutable files through the repository's clean attributes."""
+    names = list(files)
+    if not names:
+        return []
+    git_dir = git(root, ["rev-parse", "--absolute-git-dir"]).decode().strip()
+    worktree = ["--git-dir=" + git_dir, "--work-tree=" + str(snapshot)]
+    paths = ("\0".join(names) + "\0").encode("utf-8")
+    attributes = ["check-attr", "--all", "-z", "--stdin"]
+    live = git(root, attributes, paths)
+    frozen = git(snapshot, worktree + attributes, paths)
+    # External clean commands can read their current directory. Retain the
+    # original invocation for them or when the worktrees disagree on attributes.
+    if live == frozen and b"filter" not in live.split(b"\0")[1::3]:
+        lines = ("\n".join(names) + "\n").encode("utf-8")
+        blobs = git(snapshot, worktree + ["hash-object", "-w", "--stdin-paths"], lines).decode().splitlines()
+        if len(blobs) != len(names):
+            raise SystemExit("Git did not return one filtered blob per verified source")
+        if any((snapshot / name).read_bytes() != files[name] for name in names):
+            raise SystemExit("Snapshot changed during Git filtering")
+        return blobs
+    return [git(root, ["hash-object", "-w", "--path=" + name, "--stdin"], files[name]).decode().strip()
+            for name in names]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path, required=True)
@@ -58,13 +87,8 @@ def main():
     if args.check_only:
         print("Verified eligible authored inputs:", len(files))
         return
-    index = []
-    for name, data in files.items():
-        # --path applies .gitattributes/clean filters. Raw --stdin alone would
-        # turn CRLF in a Windows worktree into spurious whole-file Git changes.
-        blob = subprocess.check_output(["git", "hash-object", "-w", "--path=" + name, "--stdin"],
-                                       input=data, cwd=ROOT, stderr=subprocess.DEVNULL).decode().strip()
-        index.append("100644 " + blob + "\t" + name + "\n")
+    blobs = filtered_blobs(ROOT, snapshot, files)
+    index = ["100644 " + blob + "\t" + name + "\n" for name, blob in zip(files, blobs)]
     subprocess.run(["git", "update-index", "--index-info"], input="".join(index).encode(), cwd=ROOT, check=True)
     print("Staged verified authored inputs with repository clean filters:", len(files))
 

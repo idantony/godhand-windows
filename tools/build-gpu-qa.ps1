@@ -1,6 +1,6 @@
 param(
     [string]$Compiler,
-    [string]$ScratchRoot = 'G:\middle_thing\godhand_windows',
+    [string]$ScratchRoot = $env:GODHAND_WORK_ROOT,
     [string]$InputRgba,
     [ValidateRange(1,4096)][int]$Width = 64,
     [ValidateRange(1,4096)][int]$Height = 64,
@@ -8,6 +8,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $godhandProject = Split-Path -Parent $PSScriptRoot
+if (-not $ScratchRoot) { $ScratchRoot = Join-Path $godhandProject '.work' }
 if (-not $Compiler) { $Compiler = Join-Path $godhandProject '.tools\zig-x86_64-windows-0.17.1\zig.exe' }
 $godhandBuild = Join-Path $ScratchRoot 'build\asset-qa'
 $godhandCache = Join-Path $ScratchRoot 'cache'

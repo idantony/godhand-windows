@@ -37,7 +37,7 @@ typedef struct {const gh_om_factory *factory;gh_om_object *object;
  const gh_title_player_view *contact634;uint32_t handle,entry,frontier;
  unsigned node_index;uint8_t phase,complete,bound;
  gh_object_opacity_environment environment;uint8_t environment_bound,opacity_complete;
- gh_om_damage_call damage_calls[2];unsigned hit_index;
+ gh_om_damage_call damage_calls[4];unsigned hit_index;
  gh_om_frame_runtime runtime;gh_collision_solid_frame solid_frame;float runtime_rate;
  gh_motion_sound_request break_sound;
  uint8_t runtime_bound,special_phase;} gh_om_frame_state;

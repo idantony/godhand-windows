@@ -108,6 +108,9 @@ struct gh_startup_host {
     int subsystem_error,startup_returned;
     uint32_t unavailable_entry;
     uint64_t ticks;
+#ifdef GH_NATIVE_STARTUP_QA
+    uint8_t qa_r105_exit_fixture;
+#endif
     DWORD owner_thread;
     void *owner_fiber;
     unsigned next_tasks;
@@ -1243,7 +1246,9 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     }else if(address==0x2c1618){
         const gh_scene_at_step_callbacks r100={.context=&h->r100_exit,.spawn=gh_r100_exit_spawn_001f7858};
         const gh_scene_at_step_callbacks r105={.context=h->services,.spawn=gh_game_services_r105_jump_offer};
-        const gh_scene_at_step_callbacks *callbacks=h->work.room==0x100?&r100:h->work.room==0x105?&r105:NULL;
+        const gh_scene_at_step_callbacks r102={.context=h->services,.spawn=gh_game_services_r102_ticket_offer};
+        const gh_scene_at_step_callbacks *callbacks=h->work.room==0x100?&r100:
+            h->work.room==0x105?&r105:h->work.room==0x102?&r102:NULL;
         int original_return;
         gh_scene_at_status e=gh_scene_at_step_native_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,
             &h->work,callbacks,&original_return,frontier);
@@ -1699,6 +1704,9 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.cloth_templates=&h->cloth_templates;b.cloth_globals=&h->cloth_globals;
         e=gh_game_services_create(&b,&h->services);
         if(e)return failure(h,GH_HOST_ASSET,e);
+#ifdef GH_NATIVE_STARTUP_QA
+        if(h->qa_r105_exit_fixture)gh_game_services_qa_enable_r105_exit_fixture(h->services);
+#endif
     }
     e=state==1?gh_game_services_state1(h->services):state==2?
         gh_game_services_state2(h->services):gh_game_services_state3(h->services);
@@ -1751,8 +1759,9 @@ static int update_state4(void *context,gh_game_loop *loop)
         .buttons=s.action_buttons,.work=&h->work,.cockpit=s.cockpit,.current_player=&s.title_player->view,
         .init=&h->game_init,.auxiliary_binding_known=1,
         .callback=h->work.room==0x100?room_r100_action:
-                  h->work.room==0x105?gh_game_services_r105_scenery_action:NULL,
-        .context=h->work.room==0x105?(void *)h->services:(void *)h};
+                  h->work.room==0x105?gh_game_services_r105_scenery_action:
+                  h->work.room==0x102?gh_game_services_r102_ticket_action:NULL,
+        .context=h->work.room==0x105||h->work.room==0x102?(void *)h->services:(void *)h};
     gh_game_scene_step_bindings b={.work=&h->work,.init=&h->game_init,.prepare=s.prepare,
         .save={h->save_bytes,sizeof(h->save_bytes)},.collision=s.collision_pairs,.actors=s.scene_tables,
         .scenario={s.scenario_bytes,s.scenario_bytes_size,s.scenario},.main_threads=h->threads,
@@ -2403,6 +2412,14 @@ gh_host_error gh_startup_host_set_input(gh_startup_host *h,const gh_native_input
     return gh_native_input_store_work(&h->work,input)?GH_HOST_OK:GH_HOST_ARGUMENT;
 }
 #ifdef GH_NATIVE_STARTUP_QA
+gh_host_error gh_startup_host_qa_enable_r105_exit_fixture(gh_startup_host *h)
+{
+    if(!h||h->ticks||h->phase!=GH_HOST_RUNNING)return GH_HOST_ARGUMENT;
+    if(!on_owner(h))return GH_HOST_THREADS;
+    h->qa_r105_exit_fixture=1;
+    return GH_HOST_OK;
+}
+
 gh_host_error gh_startup_host_qa_r003_title_handoff(gh_startup_host *h)
 {
     if(!h||h->phase!=GH_HOST_RUNNING||h->work.room!=0x20||

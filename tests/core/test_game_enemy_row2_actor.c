@@ -94,6 +94,55 @@ int main(int argc,char **argv)
     }
     CHECK(eligible==sizeof(expected_rows)/sizeof(*expected_rows));
     free(r101);
+
+    size_t r102_bytes;
+    uint8_t *r102=load(disc,"st1/r102.dat",&r102_bytes);
+    gh_bundle r102_bundle;
+    gh_bundle_entry r102_ems;
+    CHECK(r102&&!gh_bundle_open(r102,r102_bytes,&r102_bundle)&&
+        !gh_bundle_find(&r102_bundle,"EMS",0,&r102_ems)&&word(r102_ems.bytes+4)==34);
+    r102_ems.bytes+=12;
+    r102_ems.size-=12;
+    uint8_t r102_save[0x60c]={0};
+    gh_room_state r102_page={.active=r102_save,.size=sizeof(r102_save)};
+    const gh_em_numeric_policy numeric=GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE;
+    CHECK(!gh_em_room_table_write_002bede8(&r102_page,34,&r102_ems,numeric,&r101_frontier));
+    struct r102_motion_case {
+        unsigned row, stamp, appearance, dependency, flags, dependency_flags;
+        size_t motion, sequence;
+        uint8_t substate, detail;
+    };
+    static const struct r102_motion_case r102_cases[]={
+        {2,2,5,0x20a,0x10000000u,0,0x393d40,0x395140,1,3},
+        {3,3,1,0x200,0,0,0x20ce40,0x20e000,1,2},
+        {4,4,0,0x200,0,1,0x1792c0,0x17bd00,1,0},
+        {13,15,2,0x200,0,1,0x212e00,0x2154c0,0x71,0},
+        {16,18,0,0x20f,0x10000000u,0,0x44b080,0x44b080,1,0},
+    };
+    for(size_t i=0;i<sizeof(r102_cases)/sizeof(r102_cases[0]);++i){
+        const struct r102_motion_case *expected=&r102_cases[i];
+        gh_enemy_request req;
+        int spawn;
+        int16_t hp;
+        CHECK(!gh_enemy_request_from_room_00294ca0(&r102_page,expected->row,numeric,
+            &req,&spawn,&hp,&r101_frontier)&&spawn);
+        CHECK(req.entry_number==expected->stamp&&req.appearance==expected->appearance&&
+            req.dependency_kind==expected->dependency&&req.flags==expected->flags&&
+            req.dependency_flags==expected->dependency_flags);
+        CHECK(gh_enemy202_is_room_supported_profile(&req,0x102)&&
+            !gh_enemy202_is_room_supported_profile(&req,0x105));
+        gh_enemy_initial_motion_selection motion;
+        gh_actor_model_status status;
+        switch(req.appearance){
+        case 0: status=gh_enemy202_appearance0_select_0020393c(&req,&r101_model,&motion); break;
+        case 1: status=gh_enemy202_appearance1_select_00203a9c(&req,&r101_model,&motion); break;
+        case 2: status=gh_enemy202_appearance2_select_00203c38(&req,&r101_model,&motion); break;
+        default: status=gh_enemy202_appearance5_select_00203b3c(&req,&r101_model,&motion); break;
+        }
+        CHECK(!status&&motion.motion_offset==expected->motion&&motion.sequence_offset==expected->sequence&&
+            !motion.main_state&&motion.substate==expected->substate&&!motion.phase&&motion.phase_detail==expected->detail);
+    }
+    free(r102);
     gh_bundle room_bundle,language;
     gh_bundle_entry ems,idd;
     CHECK(!gh_bundle_open(room_data,room_size,&room_bundle)&&!gh_bundle_find(&room_bundle,"EMS",0,&ems));

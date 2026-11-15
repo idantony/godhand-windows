@@ -1,6 +1,6 @@
 """Run one hidden/muted title probe from an exact frozen Windows build.
 
-Writes fresh process/stdout/stderr receipts in the matching G: scratch. This
+Writes fresh process/stdout/stderr receipts in the matching workspace. This
 does not build, publish, certify gameplay, or replace record-native-milestone.
 """
 import argparse
@@ -33,7 +33,7 @@ def require_frozen_runner(snapshot):
 def launch_project(snapshot):
     if PROJECT != snapshot:
         return PROJECT
-    proof.require(proof.under(snapshot, proof.SCRATCH_ROOT), "frozen launcher must be below project G scratch")
+    proof.require(proof.under(snapshot, proof.SCRATCH_ROOT), "frozen launcher must be below the active work root")
     receipt, _ = proof.Inputs().report(snapshot / "analysis/source-snapshot.json")
     source = Path(receipt.get("source_project", ""))
     proof.require(source.is_absolute() and source.resolve() != snapshot,
@@ -48,7 +48,7 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
     snapshot, scratch = Path(snapshot_arg).resolve(), Path(scratch_arg).resolve()
     build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
     proof.require(proof.under(snapshot, proof.SCRATCH_ROOT) and proof.under(scratch, proof.SCRATCH_ROOT),
-                  "snapshot and scratch must be below project G scratch")
+                  "snapshot and scratch must be below the active work root")
     proof.require(type(max_ticks) is int and 1 <= capture_frame <= max_ticks <= 100000,
                   "require 1 <= capture-frame <= max-ticks <= 100000")
     proof.require(type(capture_count) is int and 1 <= capture_count <= MAX_CAPTURE_COUNT
@@ -309,7 +309,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path, required=True)
     parser.add_argument("--scratch", type=Path, required=True)
-    parser.add_argument("--build-scratch", type=Path, help="reuse the exact build in this G: scratch cohort")
+    parser.add_argument("--build-scratch", type=Path, help="reuse the exact build in this workspace cohort")
     parser.add_argument("--iso", type=Path)
     parser.add_argument("--ffmpeg", type=Path)
     parser.add_argument("--max-ticks", type=int, default=1100)

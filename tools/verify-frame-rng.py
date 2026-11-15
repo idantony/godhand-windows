@@ -8,6 +8,7 @@ import ctypes
 import hashlib
 import json
 from pathlib import Path
+from workspace_paths import work_root
 import random
 import struct
 from inspect_disc import parse_elf
@@ -106,7 +107,7 @@ class InstructionFixture:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dll", type=Path, default=Path(r"G:\middle_thing\godhand_windows\build\native\godhand_core.dll"))
+    parser.add_argument("--dll", type=Path, default=work_root(Path(__file__).resolve().parents[1]) / "build/native/godhand_core.dll")
     args = parser.parse_args()
     blob = (ROOT / "reference/SLUS_215.03").read_bytes()
     fixture = InstructionFixture(blob)

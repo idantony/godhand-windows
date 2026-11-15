@@ -13,12 +13,13 @@ static gh_actor_model_status continue_entry(gh_enemy_entry_tail*s,gh_enemy_entry
  if(s->stage==2){/* Actual150128(self,4), notplayer's twoextraflagwrites. */p[0x140]=4;
   /* Actual 207EE0 default has no inserts for these dependencies. */
   s->original_counter=word(e->b.init->enemies,0x55c);put(e->b.init->enemies,0x55c,s->original_counter+UINT32_C(1));put(p,0x17d0,s->original_counter);
-  /* 200/202/203 keep the spawn-counter scale from 42CCE0. 20A overwrites it. */
+  /* 200/202/203 keep the spawn-counter scale from 42CCE0. 20A and 20F overwrite it. */
   static const uint32_t scales[]={0x3f851eb8,0x3f88f5c3,0x3f87ae14,0x3f8ccccd,
       0x3f8a3d71,0x3f8ccccd,0x3f866666,0x3f8b851f};
   /* The post-TXE runtime dependency 227 selects original 202A78. */
   uint32_t scale=devil||word(p,0x564)==0x227?0x3f99999a:
-      e->request.dependency_kind==0x20a?0x3f800000:scales[s->original_counter&7];
+      (e->request.dependency_kind==0x20a||e->request.dependency_kind==0x20f)?
+       0x3f800000:scales[s->original_counter&7];
   put(p,0x110,scale);put(p,0x118,scale);put(p,0x114,scale);s->stage=3;
  }
  /* Actual271410 dependency20A is another switchdefault with noallocations.

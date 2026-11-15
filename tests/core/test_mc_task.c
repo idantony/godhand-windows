@@ -8,6 +8,7 @@
 #include <windows.h>
 #include "bgm_requests.h"
 #endif
+#include "../platform/test_scratch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -393,7 +394,9 @@ int main(int argc,char **argv)
     C(gh_font_initialize(&font,&language,1)==GH_FONT_OK);
     /* Service opening does not fake an inserted card or create profile data.
      * This prefix ends before first GetInfo/card check, as the original order. */
-    C(gh_memory_card_open("G:\\middle_thing\\godhand_windows\\build\\mc-task-tests\\absent-profile",&card)==GH_MC_OK);
+    char scratch[GH_TEST_SCRATCH_PATH_BYTES],absent_profile[GH_TEST_SCRATCH_PATH_BYTES];
+    C(gh_test_scratch_open(scratch,absent_profile,"absent-profile"));
+    C(gh_memory_card_open(absent_profile,&card)==GH_MC_OK);
     work.language=1;work.phase569=2;work.flags=0x80000;
     memset(&packed,0xa5,sizeof(packed));
     bindings.dvd=&dvd;bindings.module_heap=module_heap;bindings.subscreen_heap=heap;bindings.card=card;
@@ -521,7 +524,9 @@ int main(int argc,char **argv)
     C(gh_heap_used(heap)==baseline&&gh_heap_used(module_heap)==0);
     C(!state.load_payload.pointer&&!game_suspend&&!(work.flags&0x4000));
     puts("PASS real title load module, task slot 2, fade gates, and DispInit mode 1");
-    gh_memory_card_close(card);C(gh_id_runtime_destroy(runtime)==GH_ID_OK);free(id);
+    gh_memory_card_close(card);
+    C(gh_test_scratch_directory(scratch,0));
+    C(gh_id_runtime_destroy(runtime)==GH_ID_OK);free(id);
     C(gh_heap_release(heap,allocation)==GH_MEM_OK && gh_heap_destroy(heap)==GH_MEM_OK && gh_heap_destroy(module_heap)==GH_MEM_OK);
     gh_disc_close(disc);puts("PASS realMC body through module/version/5000work/IDBase/packed/DispInit; exactControl frontier, not task completion");return 0;
 }

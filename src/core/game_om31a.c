@@ -29,12 +29,12 @@ gh_scene_placement_status gh_om31a_construct_001931f0(void *data,size_t size,
 gh_scene_placement_status gh_om_r101_door_construct(unsigned kind,void *data,size_t size,gh_title_player_view *out)
 {
  if(!data||!out)return GH_PLACE_ARGUMENT;
- if(kind!=0x313&&kind!=0x330)return GH_PLACE_ARGUMENT;
+ if(kind!=0x313&&kind!=0x330&&kind!=0x333)return GH_PLACE_ARGUMENT;
  if(size<0x8f0)return GH_PLACE_BOUNDS;
  gh_scene_placement_status e=gh_om_door_construct_001bbeb8(data,size,out);
  if(e)return e;
  uint8_t *actor=data;
- out->original_vtable214=kind==0x313?0x424128:0x425b90;
+ out->original_vtable214=kind==0x313?0x424128:kind==0x333?0x425d48:0x425b90;
  put32(actor+0x214,out->original_vtable214);
  const uint32_t vf0[4]={0,0,0,0x3f800000};
  for(unsigned i=0;i<7;++i){

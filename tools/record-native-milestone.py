@@ -1,7 +1,7 @@
 """Record a fresh private proof from matching immutable source/build/actual QA.
 
 Read-only validation; never builds, runs, publishes, or estimates port completion.
-Example: --snapshot G:/.../snapshots/room-transition-64 --scratch G:/.../verification/room-transition-64
+Example: --snapshot .work/snapshots/room-transition-64 --scratch .work/verification/room-transition-64
  --output E:/godhand_windows/analysis/milestone64-private.json --expected-frontier 00132DA0
 Bare frontier addresses mean main ELF; use 'module:address' for an overlay.
 """
@@ -14,8 +14,10 @@ import re
 import subprocess
 import sys
 
+from workspace_paths import work_root
+
 PROJECT = Path(__file__).resolve().parents[1]
-SCRATCH_ROOT = Path("G:/middle_thing/godhand_windows").resolve()
+SCRATCH_ROOT = work_root(PROJECT)
 
 
 class ProofError(ValueError):
@@ -124,9 +126,31 @@ def controlled_room_observations(log, qa):
     if r105 is not None:
         observations["controlled_r105"] = r105
         ranges.append(r105)
+    r002_records = re.findall(r"^QA_R002_STATUS (.+)$", log, re.M)
+    r002 = None
+    if r002_records:
+        require(len(r002_records) == 1, "duplicate R002 run summary")
+        r002 = json.loads(r002_records[0])
+        fields = ("first_scene", "last_scene", "frames", "first_cut_scene")
+        require(all(type(r002.get(key)) is int for key in fields), "invalid R002 run summary")
+        first, last, count, first_cut = (r002[key] for key in fields)
+        if first:
+            require(r105 and r105["last_scene"] < first <= last <= qa["scene_frames_presented"] and
+                    count == last - first + 1, "R002 presentation does not match its frame range")
+            cut_trace = re.findall(r"^QA_R002_PRESENTED event=4 cut=0 scene=(\d+) tick=(\d+)$", log, re.M)
+            require(len(cut_trace) == 1 and int(cut_trace[0][0]) == first_cut and
+                    first <= first_cut <= last and int(cut_trace[0][1]) <= qa["ticks"],
+                    "EV04 first cut does not match the R002 device presentation")
+            observations["controlled_r002_ev04"] = r002
+            ranges.append(r002)
     captures = [int(serial) for serial in re.findall(r"^QA_CAPTURE_PRESENTED (\d+)$", log, re.M)]
     require(all(any(room["first_scene"] <= serial <= room["last_scene"] for room in ranges)
                 for serial in captures), "capture presented outside controlled rooms")
+    if r002 and r002["first_cut_scene"]:
+        cut_captures = re.findall(r"^QA_EV04_CAPTURE scene=(\d+) cut=1 frame=([\d.]+)$", log, re.M)
+        require(captures and [int(serial) for serial, _ in cut_captures] == captures and
+                all(r002["first_cut_scene"] <= int(serial) <= r002["last_scene"] and float(frame) >= 8
+                    for serial, frame in cut_captures), "capture series does not prove EV04 cut 1")
     return observations
 
 
@@ -203,7 +227,7 @@ def artifact_path(raw, scratch, label):
 def startup_build_inputs(snapshot, scratch, project):
     """Shared launch/receipt preflight for an exact startup-qa build."""
     require(under(snapshot, SCRATCH_ROOT) and under(scratch, SCRATCH_ROOT),
-            "snapshot and scratch must be below project G scratch")
+            "snapshot and scratch must be below the active work root")
     inputs = Inputs()
     receipt, receipt_fact = inputs.report(snapshot / "analysis/source-snapshot.json")
     require(receipt.get("status") == "copied-exact-bytes; not-yet-built-or-tested",
@@ -233,7 +257,7 @@ def validate(snapshot_arg, scratch_arg, frontier=None):
     receipt_path = supplied / "analysis/source-snapshot.json" if supplied.is_dir() else supplied
     snapshot = receipt_path.parent.parent.resolve()
     scratch = Path(scratch_arg).resolve()
-    require(under(snapshot, SCRATCH_ROOT) and under(scratch, SCRATCH_ROOT), "snapshot and scratch must be below project G scratch")
+    require(under(snapshot, SCRATCH_ROOT) and under(scratch, SCRATCH_ROOT), "snapshot and scratch must be below the active work root")
     require(receipt_path == snapshot / "analysis/source-snapshot.json", "snapshot must use analysis/source-snapshot.json receipt")
     inputs = Inputs()
     receipt, receipt_fact = inputs.report(receipt_path)

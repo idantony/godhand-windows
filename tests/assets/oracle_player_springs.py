@@ -1,7 +1,7 @@
 """Independent binary32 oracle for actual default-costume 1038E0 spring setup.
 
 Generate the bounded native input with test_game_player_springs ISO ELF DUMP.
-Then run: python oracle_player_springs.py ELF DUMP --report G:/.../result.json
+Then run: python oracle_player_springs.py ELF DUMP --report .work/verification/player-springs-result.json
 DUMP contains user-owned model input and native output; keep it outside Git.
 The oracle reads actual ELF index tables and reconstructs positions/lengths
 without calling the native implementation. This is an explicit numerical

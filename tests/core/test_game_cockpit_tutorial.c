@@ -196,6 +196,24 @@ static void test_action(gh_game_cockpit *cockpit,gh_boot_work *work,gh_cockpit_t
  printf("Tutorial selector%u real IDD header/body and 10-tick input gate, closed in %u updates\n",selector,closing);
 }
 int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t n;uint8_t*language=read_file(d,"etc/core_usa.bin",&n);gh_bundle bundle;gh_bundle_entry idd;C(!gh_bundle_open(language,n,&bundle)&&!gh_id_find_language_data(&bundle,&idd));gh_id_state*id=calloc(1,sizeof(*id));C(id&&!gh_id_system_init_002acc70(id,&idd));gh_id_runtime*runtime;C(!gh_id_runtime_create(id,1,&runtime)&&!gh_id_runtime_set_path_policy(runtime,GH_ID_PATH_REFERENCE_NEAREST));gh_game_mt mt={.index=625};gh_game_cockpit*c;uint8_t savebytes[GH_CORE_SAVE_BYTES]={0};gh_core_save_view save={savebytes,sizeof(savebytes)};C(!gh_core_save_system_init(save)&&!gh_game_cockpit_create(runtime,id,&mt,&c)&&!gh_game_cockpit_initialize_00140c88(c,save));C(id->pool_used==405&&id->job_count==39);gh_heap*heap;C(!gh_heap_create(2*1024*1024,&heap));gh_dvd_jobs dvd;gh_dvd_jobs_init(&dvd,d);gh_font_state fonts={0};C(!gh_font_initialize(&fonts,&bundle,1));gh_packed_message_state packed={0};gh_boot_work work={0};work.language=1;gh_tutorial_bindings b={c,&dvd,heap,id,&fonts,&packed,&bundle,&work};gh_cockpit_tutorial t={0};
+ const uint8_t *ticket_fields=gh_game_cockpit_fields(c,NULL);
+ C(!gh_game_cockpit_load_ticket_0013e418(c,id,&dvd,heap,work.language));
+ gh_id_base *ticket;
+ C(!gh_game_cockpit_base(c,0x19c0,&ticket)&&ticket->initialized&&ticket->playing&&ticket->resource_number==0x19);
+ C(ticket_fields[0x19a0]&&ticket_fields[0x19dc]&&id->pair[0x19].bound);
+ const uint32_t ticket_jobs=id->job_count,ticket_dvd_jobs=dvd.id_counter;
+ C(!gh_game_cockpit_load_ticket_0013e418(c,id,&dvd,heap,work.language));
+ C(id->job_count==ticket_jobs&&dvd.id_counter==ticket_dvd_jobs);
+ C(!gh_game_cockpit_set_ticket_visible(c,1)&&ticket_fields[0x1a14]==1);
+ C(!gh_game_cockpit_set_ticket_visible(c,0)&&ticket_fields[0x1a14]==0);
+ uint8_t ticket_heat[0x18]={0};
+ C(!gh_game_cockpit_room_quit_00141628(c,save,ticket_heat));
+ C(!ticket->owns_run&&!ticket_fields[0x19a0]&&!id->pair[0x19].bound);
+ int ticket_compacted;
+ C(!gh_id_pool_compact_002ad108(runtime,&ticket_compacted)&&ticket_compacted&&id->pool_used==405&&id->job_count==39);
+ C(!gh_game_cockpit_load_ticket_0013e418(c,id,&dvd,heap,work.language));
+ C(!gh_game_cockpit_abort_ticket(c)&&!id->pair[0x19].bound&&id->pool_used==405&&id->job_count==39);
+ C(!gh_game_cockpit_abort_ticket(c));
  gh_heap*tiny;C(!gh_heap_create(16,&tiny));gh_tutorial_bindings small=b;small.room_heap=tiny;gh_cockpit_tutorial oom={0};C(gh_cockpit_tutorial_room_init_00147028(&oom,&small)==GH_TUTORIAL_MEMORY&&oom.frontier==0x200cb0&&!oom.resource.pointer&&!id->pair[0x1d].bound&&id->pool_used==405);C(!gh_cockpit_tutorial_release(&oom)&&!gh_heap_destroy(tiny));
  for(unsigned round=0;round<2;round++){
   C(!gh_cockpit_tutorial_room_init_00147028(&t,&b));gh_cockpit_tutorial_view v;C(!gh_game_cockpit_get_tutorial(c,&v));C(t.complete&&v.data_present&&v.read_id==t.job&&v.base->initialized&&v.base->resource_number==0x1d&&v.base->id==0&&v.base->playing&&t.packed_return==1&&packed.initialized&&v.current_message==0xffff&&!v.state_b8);C(t.image.size==(round?47104:29712));gh_id_entry*refs[7];for(unsigned i=0;i<7;i++){C(!gh_game_cockpit_entry_at(c,0x1a20+0x90+i*4,&refs[i]));C(refs[i]>=v.base->entries&&refs[i]<v.base->entries+v.base->entry_count);}C(!refs[0]->scale_x&&!refs[0]->scale_y&&(refs[1]->flags&0x8000000)&&(refs[2]->flags&0x8000000)&&refs[3]->message==0x200c&&refs[4]->message==0x200c);

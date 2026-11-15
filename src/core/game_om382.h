@@ -24,6 +24,8 @@ gh_scene_placement_status gh_om382_construct_001c9140(void *,size_t,gh_title_pla
 gh_scene_placement_status gh_om382_initialize_001c9268(gh_om382_state *,gh_om_object *,
     const gh_om_initializer_bindings *,int *);
 gh_scene_placement_status gh_om382_abort(gh_om382_state *);
+/* Use the already registered room-weapon owner for its original virtual Init. */
+gh_scene_placement_status gh_om_factory_initialize_runtime_weapon_001c9268(gh_om_factory *,gh_om_object *);
 
 typedef struct {
     gh_om_runtime_create create;

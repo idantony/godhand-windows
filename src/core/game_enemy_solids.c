@@ -12,7 +12,15 @@ gh_actor_motion_status gh_enemy_solids_initialize_00204b4c(gh_enemy_solids*s,gh_
   s->shadow=shadow;s->manager=manager;s->heap=heap;put(p,0x16cc,0x3ecccccd);s->stage=1;
  }
  if(s->stage==1){gh_solid_unit_status status=gh_collision_solid_create_unit_001346f8(manager,heap,&e->object.view,5,0x3e4ccccd,&s->unit,&s->frontier);if(status)return GH_ACTOR_MOTION_UNSUPPORTED;s->stage=2;}
- if(s->stage==2){const uint32_t xyz[]={0,0x3f000000,0};gh_solid_unit_status status=gh_collision_solid_create_sphere_00134880(manager,&e->object.view,p+0x80,xyz,e->request.dependency_kind==0x20a?0x3f333333:0x3f000000,&s->sphere,&s->frontier);if(status)return GH_ACTOR_MOTION_UNSUPPORTED;s->stage=3;}
+ if(s->stage==2){
+  const uint32_t xyz[]={0,0x3f000000,0};
+  const uint32_t dependency=e->request.dependency_kind;
+  const uint32_t radius=dependency==0x20a?0x3f333333u:dependency==0x20f?0x3e99999au:0x3f000000u;
+  gh_solid_unit_status status=gh_collision_solid_create_sphere_00134880(
+      manager,&e->object.view,p+0x80,xyz,radius,&s->sphere,&s->frontier);
+  if(status)return GH_ACTOR_MOTION_UNSUPPORTED;
+  s->stage=3;
+ }
  if(e->request.object_kind==0x220&&e->request.dependency_kind==0x220&&
     e->b.work->room==0x100&&e->request.flags==0x400000&&e->request.entry_number==0xff){
   if(s->stage==3){

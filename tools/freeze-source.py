@@ -1,4 +1,4 @@
-"""Copy authored source into an immutable G: verification workspace.
+"""Copy authored source into an immutable verification workspace.
 
 Workers can continue editing E: while a complete build/tests run on this copy.
 The receipt identifies exact bytes; this is not a verification result itself.
@@ -12,8 +12,10 @@ from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 
+from workspace_paths import work_root
+
 PROJECT = Path(__file__).resolve().parents[1]
-SCRATCH = Path(r"G:\middle_thing\godhand_windows").resolve()
+SCRATCH = work_root(PROJECT)
 
 
 def digest(path):
@@ -122,14 +124,14 @@ def main():
     parser.add_argument("--base-snapshot", type=Path, help="Reuse exact authored inputs from an immutable snapshot")
     parser.add_argument("--overlay", action="append", default=[], help="Explicit authored E: path replacing/adding a base input; repeatable")
     parser.add_argument("--overlay-bundle", type=Path, action="append", default=[],
-                        help="Immutable G: delta directory with receipt.json or sha256.json; repeatable")
+                        help="Immutable delta directory with receipt.json or sha256.json; repeatable")
     parser.add_argument("--rebase-dependency", nargs=3, metavar=("BUNDLE", "SOURCE", "FINAL_SHA256"),
                         action="append", default=[],
                         help="Pin a reviewed replacement for one bundle dependency in a new, untested composition")
     args = parser.parse_args()
     destination = args.destination.resolve()
     if SCRATCH not in destination.parents or destination.exists():
-        parser.error("Destination must be a new directory below the project's G: scratch")
+        parser.error("Destination must be a new directory below the project's active work root")
     frozen_files = {}
 
     def require_frozen():
@@ -140,7 +142,7 @@ def main():
     if args.base_snapshot:
         base = args.base_snapshot.resolve()
         if SCRATCH not in base.parents:
-            parser.error("Base snapshot must be below the project's G: scratch")
+            parser.error("Base snapshot must be below the project's active work root")
         base_receipt = base / "analysis/source-snapshot.json"
         base_receipt_bytes = base_receipt.read_bytes()
         base_receipt_sha256 = hashlib.sha256(base_receipt_bytes).hexdigest()
@@ -183,7 +185,7 @@ def main():
     for value in args.overlay_bundle:
         bundle = value.resolve()
         if SCRATCH not in bundle.parents:
-            parser.error("Overlay bundle must be below the project's G: scratch")
+            parser.error("Overlay bundle must be below the project's active work root")
         manifest_path = bundle / "receipt.json"
         if not manifest_path.is_file():
             manifest_path = bundle / "sha256.json"

@@ -5,6 +5,7 @@
 #include "cockpit_fan.h"
 #include "game_title_player.h"
 #include "game_camera.h"
+#include "dvd_jobs.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,6 +29,14 @@ gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit *,gh_core_save_v
 gh_id_error gh_game_cockpit_load_map_heat_001434a8(gh_game_cockpit *,gh_core_save_view,const uint8_t heat[0x18]);
 gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit *,gh_core_save_view,const uint8_t heat[0x18]);
 gh_id_error gh_game_cockpit_destroy(gh_game_cockpit *);
+/* Original cCockItem::LoadTicket, binding the room-owned IDD to resource 19. */
+gh_id_error gh_game_cockpit_load_ticket_0013e418(gh_game_cockpit *,gh_id_state *,
+ gh_dvd_jobs *,gh_heap *room_heap,int32_t language);
+/* REL1D48 uses the original ticket-presentation byte at Cockpit+1A14. */
+gh_id_error gh_game_cockpit_set_ticket_visible(gh_game_cockpit *,int visible);
+/* Host shutdown after cancelling the Scenario fibers, before the ID-pool watermark check. */
+gh_id_error gh_game_cockpit_abort_ticket(gh_game_cockpit *);
+
 gh_id_error gh_game_cockpit_base(gh_game_cockpit *,uint32_t original_offset,gh_id_base **);
 gh_id_error gh_game_cockpit_widget_at(const gh_game_cockpit *,unsigned,gh_cockpit_widget *);
 gh_id_error gh_game_cockpit_entry_at(const gh_game_cockpit *,uint32_t original_pointer_field,gh_id_entry **);

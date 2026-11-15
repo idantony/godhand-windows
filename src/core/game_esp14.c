@@ -568,7 +568,7 @@ gh_effect_status gh_effect_position_init_scaled_00301c20(uint8_t p[0x400], gh_ef
     *frontier = 0x301c20;
     if (!p || !record.bytes || record.size < 0x2f0 || !position) return GH_EFFECT_ARGUMENT;
     const uint8_t *r = record.bytes;
-    if ((r[0x133] != 0x14 && r[0x133] != 9 && !gh_effect_r003_esp08_row(record)&& !gh_effect_player_stun_row(record) &&
+    if ((r[0x133] != 0x14 && r[0x133] != 9 && !gh_effect_esp08_screen_row(record)&& !gh_effect_player_stun_row(record) &&
          !(amplitude_scale==1.0f && (core0c_radial_profile(record)||ev04_radial_profile(record)))) || !isfinite(amplitude_scale) ||
         !(word(r + 4) & 0x200000u)) return GH_EFFECT_UNSUPPORTED;
     uint32_t seed = word(p + 0x220);
@@ -657,7 +657,7 @@ static gh_effect_status position_move(gh_game_effects *effects, unsigned slot,
          gh_effect_ev04_radial_record_bound(effects,v->record));
     int supported=v->type==0x14||collateral||
         (v->type==0&&gh_effect_player_stun_row(v->record)&&gh_effect_player_attachment_esp_is_bound(effects,v))||(v->type==9&&gh_effect_esp_trail_is_bound(effects,v))||
-        (v->type==8&&gh_effect_r003_esp08_row(v->record)&&!v->actor&&!v->selector&&v->parent_emitter==-1);
+        (v->type==8&&gh_effect_esp08_screen_row(v->record)&&!v->actor&&!v->selector&&v->parent_emitter==-1);
     if (!supported || (flags & 0x10200000u) != 0x00200000u || (flags & 0x100000u))
         return GH_EFFECT_UNSUPPORTED;
     gh_effect_esp_view canonical;
@@ -857,7 +857,7 @@ gh_effect_status gh_effect_actor_sprite_alpha_002fec38(const gh_game_effects *ow
         !gh_effect_attack_esp_is_bound(owner,v) &&
         !gh_effect_knockdown_esp_is_bound(owner,v) &&
         !gh_effect_player_attachment_esp_is_bound(owner,v)&&!gh_effect_devil_esp_is_bound(owner,v)&&
-        !gh_effect_emad_esp_is_bound(owner,v)) return GH_EFFECT_UNSUPPORTED;
+        !gh_effect_enemy_light_esp_is_bound(owner,v)&&!gh_effect_emad_esp_is_bound(owner,v)) return GH_EFFECT_UNSUPPORTED;
     const uint8_t *p=v->actor?v->actor->bytes:NULL;
     if(!p&&!v->retired_actor.valid)return GH_EFFECT_ARGUMENT;
     const uint32_t actor_flags=p?word(p+0x250):v->retired_actor.flags;

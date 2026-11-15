@@ -7,7 +7,11 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$scratch = 'G:\middle_thing\godhand_windows\ghidra'
+$workRoot = $env:GODHAND_WORK_ROOT
+if (-not $workRoot) { $workRoot = Join-Path $projectRoot '.work' }
+$scratch = Join-Path $workRoot 'ghidra'
+$projects = $env:GODHAND_GHIDRA_PROJECTS
+if (-not $projects) { $projects = Join-Path $projectRoot 'ghidra-work' }
 $ghidra = Join-Path $projectRoot '.tools\ghidra_12.1.4_PUBLIC'
 $python = Join-Path $projectRoot '.tools\python\Scripts\python.exe'
 $validator = Join-Path $PSScriptRoot 'validate-ghidra-report.py'
@@ -16,7 +20,11 @@ if ($ProjectName -notmatch '^[A-Za-z0-9_-][A-Za-z0-9_.-]*$') { throw 'ProjectNam
 $outputPath = [IO.Path]::GetFullPath($OutputJson)
 if (Test-Path -LiteralPath $outputPath) { throw "Output already exists; choose a fresh report path: $outputPath" }
 $run = Join-Path "$scratch\runs" ([Guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $run,"$scratch\projects","$scratch\tmp","$scratch\settings","$scratch\cache" -Force | Out-Null
+New-Item -ItemType Directory -Path $run,$projects,"$scratch\tmp","$scratch\settings","$scratch\cache" -Force | Out-Null
+if (-not $env:GODHAND_GHIDRA_PROJECTS) {
+    $projectDirectory = Get-Item -Force -LiteralPath $projects
+    $projectDirectory.Attributes = $projectDirectory.Attributes -bor [IO.FileAttributes]::Hidden
+}
 $requested = Join-Path $run 'requested.json'
 $manifest = Join-Path $run 'manifest.json'
 $candidate = Join-Path $run 'report.json'
@@ -36,7 +44,7 @@ $env:TEMP = "$scratch\tmp"
 $env:TMP = "$scratch\tmp"
 # Only scratch project data may be overwritten. The requested evidence path
 # stays absent until the current report, log, hash and raw bytes all validate.
-& "$ghidra\support\analyzeHeadless.bat" "$scratch\projects" $ProjectName -import $InputElf -overwrite -processor 'r5900:LE:32:default' -cspec default -noanalysis -scriptPath "$PSScriptRoot\ghidra_scripts" -postScript GodHandProbe.java $candidate max-insns $MaxInstructions @canonicalAddresses -log $headlessLog -scriptlog $scriptLog -max-cpu 4 2>&1 | Tee-Object -FilePath $combinedLog | Out-Null
+& "$ghidra\support\analyzeHeadless.bat" $projects $ProjectName -import $InputElf -overwrite -processor 'r5900:LE:32:default' -cspec default -noanalysis -scriptPath "$PSScriptRoot\ghidra_scripts" -postScript GodHandProbe.java $candidate max-insns $MaxInstructions @canonicalAddresses -log $headlessLog -scriptlog $scriptLog -max-cpu 4 2>&1 | Tee-Object -FilePath $combinedLog | Out-Null
 $headlessExit = $LASTEXITCODE
 & $python $validator validate --manifest $manifest --exit-code $headlessExit --publish $outputPath
 if ($LASTEXITCODE -ne 0) { throw "Ghidra report rejected; original reports preserved; evidence: $run" }

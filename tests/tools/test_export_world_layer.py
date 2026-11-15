@@ -3,10 +3,12 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
 spec = importlib.util.spec_from_file_location("export_progress", ROOT / "tools/export-progress.py")
 tool = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tool)
@@ -14,7 +16,7 @@ spec.loader.exec_module(tool)
 
 class WorldEvidenceTests(unittest.TestCase):
     def setUp(self):
-        base = Path("G:/middle_thing/godhand_windows/tests/export-progress")
+        base = Path(__file__).resolve().parents[2] / ".work/tests/export-progress"
         base.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=str(base)); self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve(); self.snapshot = self.root / "source"

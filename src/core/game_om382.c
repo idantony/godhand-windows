@@ -1,4 +1,5 @@
 #include "game_om382.h"
+#include "game_ray_query.h"
 #include "game_actor_model_nodes.h"
 #include "game_actor_external_parent.h"
 #include "game_event_player_reset.h"
@@ -44,7 +45,8 @@ gh_scene_placement_status gh_om382_initialize_001c9268(gh_om382_state *s,gh_om_o
 {
     if(!s||!object||!b||!out)return GH_PLACE_ARGUMENT;
     const int paper=object->runtime_created&&object->runtime_kind==0x376&&!object->source.bytes;
-    if(!paper&&(object->runtime_created||object->source.type!=0x382))return GH_PLACE_ARGUMENT;
+    const int room_weapon=object->runtime_created&&object->runtime_kind==0x363&&!object->source.bytes;
+    if(!paper&&!room_weapon&&(object->runtime_created||object->source.type!=0x382))return GH_PLACE_ARGUMENT;
     *out=0;
     s->frontier=0;
     int initialized=0;
@@ -58,7 +60,7 @@ gh_scene_placement_status gh_om382_initialize_001c9268(gh_om382_state *s,gh_om_o
         put(p+0x600,0);
         put(p+0x604,0);
         put(p+0x630,0);
-        put(p+0x668,100);
+        put(p+0x668,room_weapon?60:100);
         s->common.stage=4;
     }
     if(s->common.stage==4){
@@ -83,8 +85,8 @@ gh_scene_placement_status gh_om382_initialize_001c9268(gh_om382_state *s,gh_om_o
             }
         }
         p[0x2f4]=0;
-        p[0x2f5]=paper?0:0x17;
-        p[0x2f6]=paper?2:0;
+        p[0x2f5]=(paper||room_weapon)?0:0x17;
+        p[0x2f6]=(paper||room_weapon)?2:0;
         p[0x2f7]=0;
         put(p+0x5b8,word(p+0x5b8)&~0x40u);
         p[0x688]=0;
@@ -218,6 +220,64 @@ static gh_object_step_status paper_loose(gh_title_player_view *actor,float rate,
     return GH_OBJSTEP_OK;
 }
 
+/* 1C9AF0, 0363's ordinary unattached state. Its sparkle is emitted before
+ * descent. Keep the completed emission when the subsequent ray needs retry. */
+static gh_object_step_status grounded_weapon_001c9af0(gh_om382_state *s,const gh_om_frame_runtime *runtime,
+    uint8_t *phase,float rate,uint32_t *frontier)
+{
+    const gh_title_player_view *actor=&s->common.object->view;
+    uint8_t *p=actor->bytes;
+    if(word(p+0x600)||s->common.model.external_owner||!actor->alias_f0)
+        return stop(frontier,0x1cf3a8,GH_OBJSTEP_UNSUPPORTED);
+    if(p[0x2f6]==3){
+        p[0x664]=p[0x665]=1;
+        return GH_OBJSTEP_OK;
+    }
+    if(p[0x2f6]!=2)return stop(frontier,0x1c9af0,GH_OBJSTEP_UNSUPPORTED);
+    if(*phase==1){
+        uint16_t timer=(uint16_t)(half(p+0x56a)-1u);
+        if((int16_t)timer<1){
+            if(!runtime->break_effect)return stop(frontier,0x306838,GH_OBJSTEP_UNSUPPORTED);
+            uint32_t position[3];
+            memcpy(position,actor->alias_f0,sizeof(position));
+            gh_object_step_status status=runtime->break_effect(runtime->context,&s->common.model,position,0,frontier);
+            if(status)return status;
+            timer=60;
+        }
+        put_half(p+0x56a,timer);
+        *phase=2;
+    }
+    float old_position[4];
+    memcpy(old_position,actor->alias_f0,sizeof(old_position));
+    const float old_speed=value(p+0x630);
+    float y=add(old_position[1],mul(old_speed,rate));
+    float speed=add(old_speed,-mul(rate,0.013f));
+    if(!isfinite(speed)||!isfinite(y))return stop(frontier,0x1c9e6c,GH_OBJSTEP_UNSUPPORTED);
+    if(speed<-1.95f){
+        p[0x2f4]=1;
+        p[0x2f5]=p[0x2f6]=p[0x2f7]=0;
+    }else{
+        float hit[4];
+        gh_scene_ray_request ray={.mask=2,.flags=0x534,.hit_position=hit,.segmented=1};
+        memcpy(ray.from,old_position,sizeof(old_position));
+        memcpy(ray.to,old_position,sizeof(old_position));
+        ray.from[1]=add(old_position[1],0.5f);
+        ray.to[1]=add(y,-1.0f);
+        int did_hit;
+        uint32_t pc=0;
+        if(gh_scene_ray_query_00131e10(runtime->scene_tables,&ray,&did_hit,&pc))
+            return stop(frontier,pc?pc:0x131e10,GH_OBJSTEP_UNSUPPORTED);
+        if(did_hit&&y<add(hit[1],0.15f)){
+            y=add(hit[1],0.15f);
+            speed=0;
+        }
+    }
+    p[0x664]=1;
+    put_float(actor->alias_f0+4,y);
+    put_float(p+0x630,speed);
+    return GH_OBJSTEP_OK;
+}
+
 gh_object_step_status gh_om382_move_prefix_001c9860(gh_om382_state *s,const gh_om_frame_runtime *runtime,
     const gh_object_opacity_environment *env,uint8_t *phase,float *rate,
     gh_static_transform_policy policy,uint32_t *frontier)
@@ -258,6 +318,11 @@ gh_object_step_status gh_om382_move_prefix_001c9860(gh_om382_state *s,const gh_o
         if(p[0x2f5]==1)status=paper_attached(s,runtime,*rate,frontier);
         else if(p[0x2f5]==0x13)status=paper_loose(&object->view,*rate,policy,frontier);
         else return stop(frontier,0x1c9a50,GH_OBJSTEP_UNSUPPORTED);
+        if(!status)*phase=6;
+        return status;
+    }
+    if(object->runtime_created&&object->runtime_kind==0x363&&!p[0x2f4]&&!p[0x2f5]){
+        gh_object_step_status status=grounded_weapon_001c9af0(s,runtime,phase,*rate,frontier);
         if(!status)*phase=6;
         return status;
     }

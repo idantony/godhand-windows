@@ -47,6 +47,7 @@ static int authored_actor_scale(const gh_esp_create_call *c,float scale)
     gh_effect_stamp19_attack_part_is_bound(&emitter)||
     gh_effect_r101_weapon_emitter_is_bound(&emitter)||
     gh_effect_player_attachment_emitter_is_bound(&emitter)||
+    gh_effect_enemy_light_emitter_is_bound(c->b.storage.effects,&emitter)||
     gh_effect_devil_emitter_is_bound(c->b.storage.effects,&emitter));
 }
 static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const gh_effect_emitter_view *emitter){
@@ -204,7 +205,7 @@ static gh_effect_status initialize_12(gh_esp_create_call*c,uint8_t*p,const uint8
 }
 static gh_effect_status initialize_8(gh_esp_create_call *c,uint8_t *p,gh_effect_view record)
 {
- if(w(p+0xf0)!=0x44e820u||w(p+0x114)||!gh_effect_r003_esp08_row(record))
+ if(w(p+0xf0)!=0x44e820u||w(p+0x114)||!gh_effect_esp08_screen_row(record))
   return fail(c,0x2ea908,GH_EFFECT_UNSUPPORTED);
  const uint8_t *r=record.bytes;
  float u_rate=mul(floating(r+0x13c),.1f),v_rate=mul(floating(r+0x140),.1f);
@@ -215,7 +216,7 @@ static gh_effect_status initialize_8(gh_esp_create_call *c,uint8_t *p,gh_effect_
  store_float(p+0x2b4,add(mul((float)(int8_t)r[0x18e],.1f),1));
  put(p+0x2b8,0);put(p+0x2bc,0);
  store_float(p+0x2c0,u_rate);store_float(p+0x2c4,v_rate);
- put(p+0x2c8,2);put(p+0x2cc,0);
+ put(p+0x2c8,2+(int8_t)r[0x18c]);put(p+0x2cc,r[0x18f]);
  c->complete=1;c->stage=12;
  return GH_EFFECT_OK;
 }

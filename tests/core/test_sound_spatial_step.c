@@ -28,5 +28,29 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;gh_audio_registry*r;C(!gh_dis
  scene.ts.bytes=&unknown;control.ts_head2c=(void*)&unknown;C(gh_sound_spatial_step_002ca518(&scene,&work,&init,&camera,&player,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&frontier)==GH_SOUND_SCENE_UNSUPPORTED&&frontier==0x2c8ad8);
  put((uint8_t*)&work+0x588,0x80000000);C(gh_sound_spatial_step_002ca518(&scene,&work,&init,&camera,&player,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&frontier)==GH_SOUND_SCENE_UNSUPPORTED&&frontier==0x2c8ad8);
  put((uint8_t*)&work+0x588,0);put((uint8_t*)&work+0x58c,0x80000000);C(!gh_sound_spatial_step_002ca518(&scene,&work,&init,&camera,&player,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&frontier));scene.ts.bytes=NULL;control.ts_head2c=NULL;
- C(!gh_task_threads_destroy(threads)&&!gh_heap_used(h)&&!gh_heap_destroy(h));free(pack);gh_audio_registry_destroy(r);gh_disc_close(d);
- puts("PASS realR020 startup/DVD/fiber/bank2 listener/history/TSgates, canonicalcontroller+scene, nativeviewmatrix/FEnv andexactcameracopy; noextraSEvoicepump");return 0;}
+ C(gh_audio_release_bank(r,2)==GH_AUDIO_OK);
+ scene.ready=0;work.room=0x102;work.system_flags=0;ctx.done=0;
+ size_t room_size;uint8_t *room=read_file(d,"st1/r102.dat",&room_size);
+ C(!gh_bundle_open(room,room_size,&bundle));
+ C(!gh_task_threads_start(threads,2,load,&ctx,0,&slot));
+ for(unsigned i=0;i<12&&!ctx.done;++i){C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK);C(!gh_dvd_pump(&dvd));}
+ C(ctx.done&&!ctx.result&&scene.ts_count==8);
+ gh_sound_ts_row *source=&scene.ts_rows[0];
+ const uint8_t *record=scene.ts.bytes+source->offset;
+ C(record[0x0d]==2);
+ float center[3];memcpy(center,record+0x30,12);
+ float position[3]={center[0],center[1]+3.5f,center[2]};
+ memcpy(player.alias_f0,position,12);
+ C(!gh_sound_spatial_step_002ca518(&scene,&work,&init,&camera,&player,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&frontier));
+ C(source->state13==0&&!(source->flags0c&2u));
+ position[1]=center[1]+3;
+ memcpy(player.alias_f0,position,12);
+ put((uint8_t*)&work+0x5e4,0x800);
+ C(!gh_sound_spatial_step_002ca518(&scene,&work,&init,&camera,&player,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&frontier));
+ C(source->state13==0&&!(source->flags0c&2u));
+ put((uint8_t*)&work+0x5e4,0);
+ C(!gh_sound_spatial_step_002ca518(&scene,&work,&init,&camera,&player,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&frontier));
+ C(source->state13==1&&source->flags0c==3&&source->volume10==3);
+ C(gh_sound_spatial_step_002ca518(&scene,&work,&init,&camera,&player,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&frontier)==GH_SOUND_SCENE_UNSUPPORTED&&frontier==0x2cb968&&source->state13==1);
+ C(!gh_task_threads_destroy(threads)&&!gh_heap_used(h)&&!gh_heap_destroy(h));free(room);free(pack);gh_audio_registry_destroy(r);gh_disc_close(d);
+ puts("PASS original R020 listener and R102 authored TS sphere, boundary, suspend gate and voice-start frontier");return 0;}

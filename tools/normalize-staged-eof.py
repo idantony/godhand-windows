@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from workspace_paths import work_root
 import re
 import subprocess
 import uuid
@@ -84,7 +85,7 @@ def normalize(root, apply=False):
     if index_path.read_bytes() != before_index:
         raise RuntimeError("Index changed during inspection; no normalization applied")
     if apply and updates:
-        scratch = Path(r"G:/middle_thing/godhand_windows/tool-tests")
+        scratch = work_root(root) / "tool-tests"
         scratch.mkdir(parents=True, exist_ok=True)
         temporary_index = scratch / ("eof-" + uuid.uuid4().hex + ".index")
         temporary_index.write_bytes(before_index)

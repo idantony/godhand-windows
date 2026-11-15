@@ -17,7 +17,12 @@ gh_actor_model_status gh_enemy_hp_initialize_00202b88(gh_enemy_hp*s,gh_enemy_ent
   /* Runtime 227 uses jump table 42D110 and sets the elite flag. */
   const int exchange=word(p,0x564)==0x227;
   static const uint16_t hp227[]={322,388,455,544,610,677,766,832};
-  const uint16_t *hp=exchange?hp227:e->request.dependency_kind==0x20a?hp20a:hp200;
+  /* 42CEF0[0x0F] -> 202D9C -> the 42D190 level table. */
+  static const uint16_t hp20f[]={37,51,66,81,96,111,125,140};
+  const uint16_t *hp=hp200;
+  if(exchange)hp=hp227;
+  else if(e->request.dependency_kind==0x20a)hp=hp20a;
+  else if(e->request.dependency_kind==0x20f)hp=hp20f;
   uint32_t value=devil?330u:level>=2&&level<=8?hp[level-1]:hp[0];
   /* Actual1FABB0 visits atmostsix equippedA8 bytes whenroomhigh!=0.
    * The 20A and 200 bonus-switch default is 0; no globalplayerHP read occurs. */

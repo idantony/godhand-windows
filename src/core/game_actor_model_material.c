@@ -1,8 +1,53 @@
 #include "game_actor_model_material.h"
+#include "../assets/tm3.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
 static uint32_t word(const void*p){uint32_t n;memcpy(&n,p,4);return n;}
+static unsigned halfword(const uint8_t *bytes){return bytes[0]|(unsigned)bytes[1]<<8;}
+
+gh_actor_model_status gh_actor_texture_exchange_00149ad8(const gh_bundle_entry *texture,
+ const gh_bundle_entry *exchange,unsigned row,uint8_t result[16],int *original)
+{
+ if(!texture||!exchange||!result||!original)return GH_ACTOR_MODEL_ARGUMENT;
+ *original=0;
+ if(!texture->bytes||!exchange->bytes)return GH_ACTOR_MODEL_OK;
+ if(exchange->size<8)return GH_ACTOR_MODEL_BOUNDS;
+ const uint8_t *bytes=exchange->bytes;
+ if(memcmp(bytes,"TXE\0",4)||row>=halfword(bytes+4))return GH_ACTOR_MODEL_OK;
+ const unsigned name_count=halfword(bytes+6);
+ size_t offset=8+(size_t)name_count*8;
+ for(unsigned i=0;i<=row;i++){
+  if(offset>=exchange->size)return GH_ACTOR_MODEL_BOUNDS;
+  const size_t size=1+2*(size_t)bytes[offset];
+  if(size>exchange->size-offset)return GH_ACTOR_MODEL_BOUNDS;
+  if(i==row)break;
+  offset+=size;
+ }
+ gh_tm3_bundle tm3;
+ if(gh_tm3_open(texture->bytes,texture->size,&tm3))return GH_ACTOR_MODEL_UNSUPPORTED;
+ const size_t names=(16+(size_t)tm3.count*4+7)&~(size_t)7;
+ if(names>tm3.size||tm3.count>(tm3.size-names)/8)return GH_ACTOR_MODEL_BOUNDS;
+
+ uint8_t mapped[16];
+ memset(mapped,255,sizeof(mapped));
+ const uint8_t *entries=bytes+offset;
+ for(unsigned i=0;i<entries[0];i++){
+  const unsigned replacement=entries[1+2*i],name=entries[2+2*i];
+  if(name>=name_count||replacement>=tm3.count)return GH_ACTOR_MODEL_BOUNDS;
+  const uint8_t *key=bytes+8+(size_t)name*8;
+  for(unsigned member=0;member<tm3.count;member++){
+   if(memcmp(tm3.bytes+names+(size_t)member*8,key,8))continue;
+   if(member>=sizeof(mapped))return GH_ACTOR_MODEL_UNSUPPORTED;
+   mapped[member]=(uint8_t)replacement;
+   break;
+  }
+ }
+ memcpy(result,mapped,sizeof(mapped));
+ *original=1;
+ return GH_ACTOR_MODEL_OK;
+}
+
 static float number(const void*p){float n;memcpy(&n,p,4);return n;}
 static float mul(float a,float b){volatile float n=a*b;return n;}
 static float divf(float a,float b){volatile float n=a/b;return n;}

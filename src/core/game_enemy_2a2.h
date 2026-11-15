@@ -1,12 +1,14 @@
 #ifndef GH_GAME_ENEMY_2A2_H
 #define GH_GAME_ENEMY_2A2_H
 #include "game_enemy_factory.h"
+#include "game_enemy_request.h"
 #include "game_enemy_model.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define GH_EM2A2_BYTES 0x1610u
+int gh_enemy2a2_is_r102_entry(const gh_enemy_request *request);
 /* 284A28 is the shared constructor for factory kinds 2A2, 2A3 and 2A4. */
 gh_title_player_status gh_enemy2a2_construct_00284a28(void *, size_t, gh_title_player_view *);
 /* Borrow the already initialized native owner of original heap 754220. */

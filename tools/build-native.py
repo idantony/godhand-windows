@@ -1,4 +1,4 @@
-"""Build and run the native source-port modules; all intermediates stay on G:."""
+"""Build and run the native source-port modules; intermediates stay under the active work root."""
 import argparse
 import concurrent.futures
 import datetime
@@ -15,8 +15,10 @@ from test_contracts import check_contracts, TestContractError
 from compiler_response import write_response_file
 from compiled_objects import OBJECT_CACHE_DIRECTORY, ObjectCache, c_driver, project_inputs, source_hashes
 
+from workspace_paths import overlaps_authored_tree, work_root
+
 PROJECT = Path(__file__).resolve().parents[1]
-SCRATCH = Path(r"G:\middle_thing\godhand_windows")
+SCRATCH = work_root(PROJECT)
 
 
 def main():
@@ -46,17 +48,13 @@ def main():
         parser.error("--focus runs selected tests and cannot be combined with --skip-tests")
     compiler, scratch = args.compiler.resolve(), args.scratch.resolve()
     compiler_cache = args.compiler_cache.resolve()
-    if compiler_cache == PROJECT or PROJECT in compiler_cache.parents:
-        parser.error("Compiler cache must stay outside the permanent project tree")
+    if overlaps_authored_tree(compiler_cache, PROJECT):
+        parser.error("Compiler cache must stay outside authored source directories")
     cache_root = args.object_cache.resolve()
-    if not args.no_object_cache and (cache_root == PROJECT or PROJECT in cache_root.parents):
-        parser.error("Object cache must stay outside the source snapshot")
-    try:
-        scratch.relative_to(PROJECT)
-    except ValueError:
-        pass
-    else:
-        raise SystemExit("Build scratch must be outside the permanent project tree")
+    if not args.no_object_cache and overlaps_authored_tree(cache_root, PROJECT):
+        parser.error("Object cache must stay outside authored source directories")
+    if overlaps_authored_tree(scratch, PROJECT):
+        parser.error("Build scratch must stay outside authored source directories")
     output = scratch / "build" / "native"
     logs = scratch / "logs" / "native"
     (PROJECT / "analysis").mkdir(parents=True, exist_ok=True)
@@ -64,7 +62,8 @@ def main():
     for path in (output, logs, card_scratch, scratch / "cache" / "tmp", compiler_cache, scratch / "cache" / "zig-local"):
         path.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
-    env.update({"TEMP": str(scratch / "cache" / "tmp"), "TMP": str(scratch / "cache" / "tmp"),
+    temporary = str(scratch / "cache" / "tmp")
+    env.update({"TEMP": temporary, "TMP": temporary, "TMPDIR": temporary,
                 "ZIG_GLOBAL_CACHE_DIR": str(compiler_cache),
                 "ZIG_LOCAL_CACHE_DIR": str(scratch / "cache" / "zig-local"), "PYTHONDONTWRITEBYTECODE": "1"})
     manifest = {"created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -272,6 +271,7 @@ def main():
                ("game_scenario_end_soft_event", "src/core/game_scenario_end_soft_event.c"),
                ("r003_event", "src/rooms/r003_event.c"), ("r003_flags", "src/rooms/r003_flags.c"),
                ("r105_room", "src/rooms/r105_room.c"),
+               ("r102_room", "src/rooms/r102_room.c"),
                ("r100_init", "src/rooms/r100_init.c"),
                ("game_object_sound", "src/core/game_object_sound.c"),
                ("game_scene_exit_leaves", "src/core/game_scene_exit_leaves.c"),
@@ -408,6 +408,7 @@ def main():
                ("game_om304", "src/core/game_om304.c"),
                ("game_om305", "src/core/game_om305.c"),
                ("game_om307", "src/core/game_om307.c"),
+               ("game_om311", "src/core/game_om311.c"),
                ("game_om30a", "src/core/game_om30a.c"),
                ("game_om30e", "src/core/game_om30e.c"),
                ("game_om310", "src/core/game_om310.c"),
@@ -540,6 +541,9 @@ def main():
         ("game-om323", "tests/core/test_game_om323.c", "both"),
         ("game-om324", "tests/core/test_game_om324.c", "both"),
         ("r003-om339", "tests/core/test_r003_om339.c", "both"),
+        ("r102-om338", "tests/core/test_r102_om338.c", "both"),
+        ("r102-om311", "tests/core/test_r102_om311.c", "both"),
+        ("r102-room-prefix", "tests/core/test_r102_room.c", "both"),
         ("game-om33f", "tests/core/test_game_om33f.c", "both"),
         ("game-om346", "tests/core/test_game_om346.c", "both"),
         ("game-om354", "tests/core/test_game_om354.c", "both"),
@@ -830,7 +834,8 @@ def main():
                      "tools/compiled_objects.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
                      "tests/platform/test_memory.c", "tests/core/test_tasks.c",
-                     "tests/platform/test_task_threads.c", "tests/assets/test_tim2.c", "tools/decode-tim2.c",
+                     "tests/platform/test_task_threads.c", "tests/platform/test_scratch.h",
+                     "tests/assets/test_tim2.c", "tools/decode-tim2.c",
                      "tests/assets/test_model.c", "tests/core/test_startup_task.c", "tests/core/test_dvd_jobs.c",
                      "tests/assets/test_core_bundle.c", "tests/assets/test_sound_bank.c",
                      "tests/core/test_font_state.c", "tests/core/test_menu_state.c",

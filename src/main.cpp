@@ -6,6 +6,7 @@
 #include "platform/startup_qa_r100_pad_tape.h"
 #include "platform/startup_qa_repeat_square.h"
 #include "platform/startup_qa_title.h"
+#include "platform/startup_qa_save_map_continue.h"
 #endif
 #include "platform/window_host.h"
 #include "platform/mc_renderer.h"
@@ -442,7 +443,8 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
         if(!p.writes_clamp||p.clamp||!p.writes_tex0||p.prim!=0x54||
             p.source!=GH_EFFECT_SURFACE_MATERIAL||p.destination!=GH_EFFECT_SURFACE_SCENE_COLOR||
             !p.material||p.tex0!=p.material->source_tex0||
-            (trail?p.quad_count>GH_EFFECT_TRANS_QUAD_CAPACITY:p.quad_count!=1||p.quads[0].vertex_count!=4))
+            (trail?p.quad_count>GH_EFFECT_TRANS_QUAD_CAPACITY:
+                   !(p.quad_count==1||(wave&&p.quad_count==9))))
             return GH_ID_UNSUPPORTED;
         if(marker){
             if(!p.inherits_scene_target||!p.writes_tex1||p.tex1!=0x60||p.inherited_sampler||
@@ -502,19 +504,26 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
             }
             ++app.effect_sprite_packets;app.world_frontier=0;return GH_ID_OK;
         }
-        gh_static_gs_vertex vertices[4]={};
-        for(unsigned k=0;k<4;k++){
-            const auto &v=p.quads[0].vertices[k];auto &dest=vertices[k];
-            if(v.z>0xffffffu)return GH_ID_UNSUPPORTED;
-            dest.stq[0]=v.s;dest.stq[1]=v.t;dest.stq[2]=v.q;
-            dest.xyz_fixed4[0]=v.x12_4;dest.xyz_fixed4[1]=v.y12_4;dest.xyz_fixed4[2]=(int32_t)(v.z<<4);
-            for(unsigned c=0;c<4;c++)dest.rgba[c]=(v.rgba>>(8*c))&255;
+        // 2EAF70 restarts the strip at each row boundary. Core packets
+        // preserve both triangles of each strip cell and the order of cells.
+        gh_static_gs_vertex vertices[9][4]={};
+        for(unsigned i=0;i<p.quad_count;++i){
+            if(p.quads[i].vertex_count!=4)return GH_ID_UNSUPPORTED;
+            for(unsigned k=0;k<4;++k){
+                const auto &v=p.quads[i].vertices[k];auto &dest=vertices[i][k];
+                if(v.z>0xffffffu)return GH_ID_UNSUPPORTED;
+                dest.stq[0]=v.s;dest.stq[1]=v.t;dest.stq[2]=v.q;
+                dest.xyz_fixed4[0]=v.x12_4;dest.xyz_fixed4[1]=v.y12_4;dest.xyz_fixed4[2]=(int32_t)(v.z<<4);
+                for(unsigned c=0;c<4;c++)dest.rgba[c]=(v.rgba>>(8*c))&255;
+            }
         }
         uint32_t texture=0;app.world_gpu_error=gh_model_renderer_upload(app.world_renderer,p.material,&texture);
         if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
         static const uint32_t indices[]={0,1,2,2,1,3};
-        app.world_gpu_error=gh_model_renderer_draw(app.world_renderer,&state,texture,vertices,4,indices,6);
-        if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+        for(unsigned i=0;i<p.quad_count;++i){
+            app.world_gpu_error=gh_model_renderer_draw(app.world_renderer,&state,texture,vertices[i],4,indices,6);
+            if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+        }
         ++app.effect_sprite_packets;app.world_frontier=0;return GH_ID_OK;
     }
     if(p.writes_clamp||(unsigned)p.source>=4||(unsigned)p.destination>=4)return GH_ID_UNSUPPORTED;
@@ -779,7 +788,7 @@ static void usage()
 {
     std::fprintf(stderr,"usage: godhand-windows --iso ISO --profile DIRECTORY [--ffmpeg EXE] [--show|--hidden] [--muted] [--prefix] [--max-ticks N]\n");
 #ifdef GH_NATIVE_STARTUP_QA
-    std::fprintf(stderr,"       --qa-game-over-retry --qa-capture FILE [--qa-r003-controlled]\n");
+    std::fprintf(stderr,"       --qa-game-over-retry --qa-capture FILE [--qa-r003-controlled | --qa-r102-capture]\n");
     std::fprintf(stderr,"       --qa-pad-tape CSV [--qa-level-confirm-tick N] [--qa-after-victory-frames N]\n");
 #endif
 }
@@ -931,11 +940,15 @@ int main(int argc,char **argv)
     bool show=false,muted=false,prefix=false;uint64_t max_ticks=0;
 #ifdef GH_NATIVE_STARTUP_QA
     bool qa_confirm=false,qa_new_game=false,qa_load=false;unsigned qa_captured=0,qa_capture_count=1;gh_native_input qa_input={};
-    bool qa_r003=false;
+    bool qa_r003=false,qa_r102=false;
+    uint64_t qa_r102_first=0,qa_r102_last=0,qa_r102_frames=0;
     uint64_t qa_r003_handoff=0,qa_r003_first=0,qa_r003_last=0,qa_r003_frames=0;
     int qa_r003_cut=-1;
+    uint64_t qa_r002_first=0,qa_r002_last=0,qa_r002_frames=0,qa_ev04_first_cut=0;
+    int qa_r002_cut=-1;
     uint64_t qa_r105_first=0,qa_r105_last=0,qa_r105_frames=0;
     QAStartupTitleProbe qa_title;
+    QASaveMapContinueProbe qa_r002_save_map;
     QAControlProbe qa_control;
     QARepeatSquareProbe qa_repeat_square;
     QAGameOverRetryProbe qa_retry;
@@ -952,6 +965,7 @@ int main(int argc,char **argv)
         else if(!std::strcmp(argv[i],"--qa-new-game")){qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-load")){qa_load=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-r003-controlled")){qa_r003=true;qa_new_game=true;qa_confirm=true;}
+        else if(!std::strcmp(argv[i],"--qa-r102-capture")){qa_r102=true;qa_r003=true;qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-pad-tape")&&i+1<argc){qa_pad_tape_path=argv[++i];qa_new_game=qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-after-victory-frames")&&i+1<argc){
             const char *value=argv[++i];char *end=nullptr;
@@ -1002,7 +1016,7 @@ int main(int argc,char **argv)
 #ifdef GH_NATIVE_STARTUP_QA
     if(qa_confirm&&(!muted||show||!max_ticks)){std::fprintf(stderr,"Synthetic input QA requires --muted --hidden and --max-ticks.\n");return 2;}
     if(qa_load&&(qa_new_game||prefix)){std::fprintf(stderr,"QA load requires the full title flow and a separate profile.\n");return 2;}
-    if(qa_r003&&(prefix||qa_control.mode||qa_repeat_square.enabled)){
+    if(qa_r003&&(prefix||qa_control.mode||qa_repeat_square.enabled||(qa_r102&&!qa_capture))){
         std::fprintf(stderr,"Controlled R003 QA requires a standalone title handoff.\n");return 2;
     }
     if(qa_pad_tape_path&&(qa_r003||qa_retry.enabled||prefix||!qa_capture||
@@ -1057,6 +1071,12 @@ int main(int argc,char **argv)
         if(gh_actor_world_queue_create(&app.actor_queue)!=GH_ACTOR_WORLD_OK)break;
         host_error=gh_startup_host_create_with_profile(iso,profile,1,0,64*1024*1024,&app.host);
         if(host_error!=GH_HOST_OK)break;
+#ifdef GH_NATIVE_STARTUP_QA
+        if(qa_r102){
+            host_error=gh_startup_host_qa_enable_r105_exit_fixture(app.host);
+            if(host_error!=GH_HOST_OK)break;
+        }
+#endif
         host_error=gh_startup_host_set_mc_consumers(app.host,draw_mc,&app,post_mc,&app);
         if(host_error!=GH_HOST_OK)break;
         host_error=gh_startup_host_set_mc_frame_begin(app.host,begin_mc,&app);
@@ -1139,6 +1159,23 @@ int main(int argc,char **argv)
                         }
                         ++qa_r105_frames;
                     }
+                    if(qa_r003&&app.snapshot.current_room==2&&app.snapshot.game_state==4){
+                        qa_r002_last=app.prepared_scene_serial;
+                        if(!qa_r002_first)qa_r002_first=qa_r002_last;
+                        ++qa_r002_frames;
+                        const int cut=app.snapshot.event_number==4?app.snapshot.event_cut:-1;
+                        if(cut>=0&&cut!=qa_r002_cut){
+                            qa_r002_cut=cut;
+                            if(cut==0)qa_ev04_first_cut=qa_r002_last;
+                            std::fprintf(stderr,"QA_R002_PRESENTED event=4 cut=%d scene=%llu tick=%llu\n",cut,
+                                (unsigned long long)qa_r002_last,(unsigned long long)app.snapshot.ticks);
+                        }
+                    }
+                    if(qa_r102&&app.snapshot.current_room==0x102&&app.snapshot.game_state==4){
+                        qa_r102_last=app.prepared_scene_serial;
+                        if(!qa_r102_first)qa_r102_first=qa_r102_last;
+                        ++qa_r102_frames;
+                    }
                     qa_control.presented(app.prepared_scene_serial);
                     qa_repeat_square.presented(app.prepared_scene_serial);
                     if(app.prepared_scene_serial>=qa_capture_frame&&app.prepared_scene_serial<=qa_last_capture_scene)
@@ -1178,6 +1215,13 @@ int main(int argc,char **argv)
                 if(qa_pad_tape.enabled)pad=qa_pad_tape.sample(app.snapshot);
                 else if(!retry_owns_input)
                     pad=qa_repeat_square.enabled?qa_repeat_square.sample(app.snapshot):qa_control.sample(app.snapshot);
+                if(qa_r003&&app.snapshot.current_room==0x105&&app.snapshot.game_state==4&&
+                   app.snapshot.scene_frame_ready&&app.snapshot.ticks>3326&&(app.snapshot.ticks&1)){
+                    pad.connected=1;
+                    pad.buttons=0x2000;
+                }
+                if(qa_r003&&app.snapshot.current_room==2&&app.snapshot.game_state==4&&app.snapshot.save_map_active)
+                    pad=qa_r002_save_map.sample(app.snapshot,qa_r002_last);
                 if(!gh_native_input_tick_device(&qa_input,app.snapshot.work,&pad,&input))break;
                 if(retry_confirm)qa_retry.record_confirm(app.snapshot.ticks,input);
             }
@@ -1220,10 +1264,12 @@ int main(int argc,char **argv)
                 gh_id_error error=prepare_ui_display(app,true);
                 if(error!=GH_ID_OK){std::fprintf(stderr,"Native scene OT preparation failed: %u\n",(unsigned)error);break;}
 #ifdef GH_NATIVE_STARTUP_QA
-                const bool controlled_scene=qa_r003_handoff&&!qa_retry.handoff_tick&&app.snapshot.game_state==4&&
-                    (app.snapshot.current_room==3||(qa_r003_last&&app.snapshot.current_room==0x105));
+                const bool controlled_scene=qa_r003_handoff&&app.snapshot.current_room==2&&
+                    app.snapshot.game_state==4&&app.snapshot.event_number==4&&
+                    app.snapshot.event_cut==1&&app.snapshot.event_cut_frame>=8.0f;
+                const bool r102_scene=qa_r003_handoff&&app.snapshot.current_room==0x102&&app.snapshot.game_state==4;
                 if(qa_capture&&qa_captured<qa_capture_count&&app.snapshot.scene_frame_serial>=qa_capture_frame&&
-                   (!qa_r003||controlled_scene)){
+                   (qa_r102?r102_scene:!qa_r003||controlled_scene)){
                     if(qa_capture_count>1&&app.world_pixels.empty()){
                         std::fprintf(stderr,"QA capture range requires the matching pre-UI world frame\n");break;
                     }
@@ -1238,6 +1284,9 @@ int main(int argc,char **argv)
                     std::fprintf(stderr,"QA_WORLD_CAPTURE {\"scene_serial\":%llu,\"world_bytes\":%llu,\"fade_visible\":%u,\"fade_rgba\":\"%08X\",\"fade_alpha\":\"%016llX\",\"presentation_tracking\":true}\n",
                         (unsigned long long)app.snapshot.scene_frame_serial,(unsigned long long)app.world_pixels.size(),app.frame_fade_seen?1u:0u,app.frame_fade.rgba,(unsigned long long)app.frame_fade.alpha);
                     std::fprintf(stderr,"QA scene capture: frame%llu, 512x448 rawRGBA\n",(unsigned long long)app.snapshot.scene_frame_serial);
+                    if(controlled_scene)std::fprintf(stderr,
+                        "QA_EV04_CAPTURE scene=%llu cut=1 frame=%g\n",
+                        (unsigned long long)app.snapshot.scene_frame_serial,(double)app.snapshot.event_cut_frame);
                 }
 #endif
             }
@@ -1328,7 +1377,13 @@ int main(int argc,char **argv)
             (unsigned long long)qa_r003_frames,qa_r003_cut);
         std::fprintf(stderr,"QA_R105_STATUS {\"first_scene\":%llu,\"last_scene\":%llu,\"frames\":%llu}\n",
             (unsigned long long)qa_r105_first,(unsigned long long)qa_r105_last,(unsigned long long)qa_r105_frames);
+        std::fprintf(stderr,"QA_R002_STATUS {\"first_scene\":%llu,\"last_scene\":%llu,\"frames\":%llu,\"first_cut_scene\":%llu}\n",
+            (unsigned long long)qa_r002_first,(unsigned long long)qa_r002_last,
+            (unsigned long long)qa_r002_frames,(unsigned long long)qa_ev04_first_cut);
     }
+    if(qa_r102)
+        std::fprintf(stderr,"QA_R102_STATUS {\"first_scene\":%llu,\"last_scene\":%llu,\"frames\":%llu}\n",
+            (unsigned long long)qa_r102_first,(unsigned long long)qa_r102_last,(unsigned long long)qa_r102_frames);
     if(qa_control.mode)
         std::fprintf(stderr,"QA_CONTROL_STATUS mode=%s saw_event=%u pressed=%u motion_presented=%u\n",
             qa_control.mode,(unsigned)qa_control.saw_event,(unsigned)qa_control.pressed,(unsigned)qa_control.reported_motion);

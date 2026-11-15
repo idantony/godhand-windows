@@ -14,6 +14,15 @@ static uint32_t word(const uint8_t *bytes)
     return value;
 }
 
+int gh_enemy2a2_is_r102_entry(const gh_enemy_request *request)
+{
+    return request && request->object_kind == 0x2a2 &&
+        request->dependency_kind == 0x2a2 && request->appearance == 5 &&
+        !request->dependency_flags &&
+        ((request->entry_number == 14 && !request->flags) ||
+         (request->entry_number == 17 && request->flags == 0x10000000u));
+}
+
 gh_title_player_status gh_enemy2a2_construct_00284a28(void *raw,size_t extent,
     gh_title_player_view *out)
 {

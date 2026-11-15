@@ -92,9 +92,9 @@ python -B tools/normalize-staged-eof.py
 python -B tools/normalize-staged-eof.py --apply --report analysis/new-eof-receipt-private.json
 ```
 
-Generated disassembly/decompiler reports stay in ignored `analysis/`; scratch
-projects, caches and builds stay on G:. Public source includes no game bytes or
-tool binaries. Byte verification is evidence provenance, not proof that inferred
+Generated disassembly and decompiler reports stay in ignored `analysis/`.
+Caches and builds default to `.work/`. The local Ghidra project directory is
+`ghidra-work/`. Public source includes no game bytes or tool binaries. Byte verification is evidence provenance, not proof that inferred
 C, complete control flow, numerical behavior or gameplay is correct. Separate
 native tests and actual execution remain required.
 
@@ -102,7 +102,7 @@ native tests and actual execution remain required.
 指令上限和截断状态；函数工具核对用户 ELF 的实际字节、调用／导入及静态访存操作。
 “寄存器＋偏移”仍需结合调用者和生命周期才能解释为字段，未知项保留未知。
 固定源码工具让多智能体继续工作时，验证仍对应同一批准确源码。原始反汇编报告留在
-私有 analysis，临时项目／缓存／构建放 G 盘；公开仓库只包含自制源码。字节核对不能
+私有 `analysis/`。缓存和构建默认放在 `.work/`，Ghidra 项目放在 `ghidra-work/`。字节核对不能
 代替原生测试、实际执行或可玩验收。
 
 同类可复现问题第二次出现时，优先固化成检查或修复工具。行尾工具只处理暂存区中
@@ -112,9 +112,9 @@ native tests and actual execution remain required.
 
 `run-ghidra.ps1` validates each new headless run before publishing its report.
 Pass addresses as quoted hexadecimal strings: PowerShell can interpret an
-unquoted value containing `e` as scientific notation. The wrapper uses a new G:
-run directory, checks logs and the complete requested function set, and verifies
-raw words against the same ELF. A process exit code of zero is insufficient.
+unquoted value containing `e` as scientific notation. The wrapper creates a new
+run directory under `.work/ghidra/runs/`, checks logs and the requested function
+set, and verifies raw words against the same ELF. A process exit code of zero is insufficient.
 Choose a fresh output filename; a failed or repeated probe never replaces an
 existing report. `tests/tools/test_validate_ghidra_report.py` covers these failures.
 
@@ -150,7 +150,7 @@ The output must be a new ignored `analysis/*-private.json`, and existing evidenc
 is not overwritten. It does not build, launch the game or publish progress.
 
 ```powershell
-python -B tools/record-native-milestone.py --snapshot 'G:\middle_thing\godhand_windows\snapshots\room-transition-67' --scratch 'G:\middle_thing\godhand_windows\verification\room-transition-67' --output 'E:\godhand_windows\analysis\new-proof-private.json' --expected-frontier 00186928
+python -B tools/record-native-milestone.py --snapshot '.\.work\snapshots\room-transition-67' --scratch '.\.work\verification\room-transition-67' --output 'E:\godhand_windows\analysis\new-proof-private.json' --expected-frontier 00186928
 ```
 
 验收汇总工具核对固定源码、二进制、报告与实际运行是否属于同一批；失败报告、混合

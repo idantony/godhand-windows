@@ -934,8 +934,7 @@ static gh_actor_motion_status advance_post_pose(gh_enemy202_move *s,uint8_t *p)
          * 227's table entry at 44621C, return from 271410 without using 1860. */
         uint32_t dependency=word(p+0x564);
         if(actor->entry->object.view.initial_memory!=GH_TITLE_MEMORY_ORIGINAL_FACTORY_ZERO||
-            (dependency>=0x214&&dependency!=0x220&&!r105_exchanged_enemy(actor->entry->b.work,p)&&
-             !(actor->entry->b.work->room==0x101&&dependency==0x227&&half(p+0x640)==9&&p[0x1650]==4))||
+            (dependency>=0x214&&dependency!=0x220&&dependency!=0x227)||
             word(p+0x1860))return stop(s,0x2714e8,GH_ACTOR_MOTION_UNSUPPORTED);
         s->substate67_stage=18;
     }
@@ -950,8 +949,44 @@ static gh_actor_motion_status advance_post_pose(gh_enemy202_move *s,uint8_t *p)
     if(s->substate67_stage==19){
         uint32_t flags=word(p+0x16d0);
         int ambient=actor->entry->b.init->enemies[0x518]!=0;
-        if(ambient!=!!(flags&0x100u))
-            return stop(s,ambient?0x306528:0x306200,GH_ACTOR_MOTION_UNSUPPORTED);
+        gh_effect_create_call *pending=&s->ambient_light_effect;
+        if(ambient!=!!(flags&0x100u)||(pending->active&&!pending->complete)){
+            const unsigned dependency=word(p+0x564);
+            const gh_boot_work *work=actor->entry->b.work;
+            if(!ambient)return stop(s,0x306200,GH_ACTOR_MOTION_UNSUPPORTED);
+            if(work->room!=0x100)return stop(s,0x306528,GH_ACTOR_MOTION_UNSUPPORTED);
+            if(dependency==0x220){
+                /* Original 2685D0's 0220 table entry only sets the flag. */
+                put(p+0x16d0,flags|0x100u);
+            }else{
+                uint16_t index;
+                switch(dependency){
+                case 0x200:case 0x202:case 0x203:index=0xb;break;
+                case 0x20a:index=0xc;break;
+                default:return stop(s,0x306528,GH_ACTOR_MOTION_UNSUPPORTED);
+                }
+                gh_effect_create_bindings bindings=s->impact_bindings;
+                bindings.model=&actor->entry->initialize.model.model;
+                if(!bindings.storage.effects||bindings.work!=work||
+                   bindings.random!=&actor->entry->b.init->random)
+                    return stop(s,0x306528,GH_ACTOR_MOTION_UNSUPPORTED);
+                if(!pending->active){
+                    uint32_t scale=word(p+0x114);
+                    if(!isfinite(number(scale))||number(scale)<=0.0f)
+                        return stop(s,0x2685d0,GH_ACTOR_MOTION_UNSUPPORTED);
+                    put(p+0x16d0,flags|0x100u);
+                    const gh_effect_create_request request={.bank=0x58,.index=index,
+                        .actor=&actor->entry->object.view,.mode=4,.selector=-1};
+                    if(gh_effect_create_begin(pending,&request))
+                        return stop(s,0x306528,GH_ACTOR_MOTION_ARGUMENT);
+                    pending->configuration_nested_scale=scale;
+                }
+                gh_effect_status status=gh_game_effect_create_00306528(pending,&bindings);
+                if(status||!pending->complete)
+                    return stop(s,pending->frontier?pending->frontier:0x306528,
+                       status==GH_EFFECT_UNSUPPORTED?GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_CALLEE);
+            }
+        }
         s->substate67_stage=20;
     }
     if(s->substate67_stage==20){
@@ -1176,9 +1211,6 @@ static gh_actor_motion_status advance_body_finish(gh_enemy202_move *s,uint8_t *p
             }
         }else{
             uint32_t dependency=word(p+0x564);
-            if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a&&dependency!=0x220&&
-                !r105_exchanged_enemy(s->runtime.entry->b.work,p))
-                return stop(s,0x26a3d8,GH_ACTOR_MOTION_UNSUPPORTED);
             gh_actor_model *model=&s->runtime.entry->initialize.model.model;
             const gh_actor_part *parts[2]={NULL,NULL};
             for(unsigned i=0;i<2;i++)
@@ -1188,7 +1220,8 @@ static gh_actor_motion_status advance_body_finish(gh_enemy202_move *s,uint8_t *p
             if(!isfinite(roll))return stop(s,0x26a508,GH_ACTOR_MOTION_UNSUPPORTED);
             fenv_t env;
             if(!set_round(&env,FE_TOWARDZERO))return stop(s,0x26a508,GH_ACTOR_MOTION_CALLEE);
-            float next=mul(roll,0.6f);
+            const float decay=dependency==0x223||dependency==0x275||dependency==0x276?-0.6f:0.6f;
+            float next=mul(roll,decay);
             if(fesetenv(&env)||!isfinite(next))
                 return stop(s,0x26a508,GH_ACTOR_MOTION_UNSUPPORTED);
             for(unsigned i=0;i<2;i++)if(parts[i]){
@@ -1198,11 +1231,14 @@ static gh_actor_motion_status advance_body_finish(gh_enemy202_move *s,uint8_t *p
                 put(part+0x154,roll==0?flags&~0x800u:flags|0x800u);
             }
             put(p+0x16fc,ordered_abs(next)<=0.017453292f?0:bits(next));
-            /* Actual 26A558 and 273F98 gate out on these dependency IDs. */
             s->substate67_stage=11;
         }
     }
     if(s->substate67_stage==11){
+        /* These two original texture updates return for the other dependencies. */
+        const uint32_t dependency=word(p+0x564);
+        if(dependency==0x251)return stop(s,0x26a558,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(dependency==0x265)return stop(s,0x273f98,GH_ACTOR_MOTION_UNSUPPORTED);
         if(half(p+0x3ac)&8u){
             gh_actor_motion_status status=death_ground_pitch_0026eb20(s,p);
             if(status)return status;
@@ -2868,6 +2904,10 @@ static gh_actor_motion_status advance_substate1_0020fbb8(gh_enemy202_move *s,uin
     const int r105_exchange=r105_exchanged_enemy(work,p);
     const unsigned stamp=half(p+0x640);
     const int r105_em0a=work->room==0x105&&dependency==0x20a&&appearance==0&&(stamp==3||stamp==5);
+    const int em0a_appearance5=dependency==0x20a&&appearance==5;
+    const int em0f_appearance0=dependency==0x20f&&appearance==0;
+    const int em27_appearance0=dependency==0x227&&appearance==0;
+    const int common_appearance1=appearance==1&&(dependency==0x200||dependency==0x203);
     const int appearance1_em03=dependency==0x203&&appearance==1&&
         ((work->room==0x105&&stamp==6)||(work->room==0x101&&stamp==0));
     const int r101_appearance4=work->room==0x101&&appearance==4&&
@@ -2880,7 +2920,8 @@ static gh_actor_motion_status advance_substate1_0020fbb8(gh_enemy202_move *s,uin
         if(r105_entry&&(p[0x2f6]>1||held))
             return stop(s,p[0x2f6]>1?0x210a58:0x210590,GH_ACTOR_MOTION_UNSUPPORTED);
         if(!(((appearance==0||appearance==5)&&(dependency==0x200||dependency==0x203))||
-            (appearance==9&&dependency==0x202)||r105_entry||r105_stamp8))
+            (appearance==9&&dependency==0x202)||em0a_appearance5||em0f_appearance0||em27_appearance0||
+            common_appearance1||r105_entry||r105_stamp8))
             return stop(s,0x20fbb8,GH_ACTOR_MOTION_UNSUPPORTED);
         put(p+0x16d0,word(p+0x16d0)|0x400u);
         switch(p[0x2f6]){
@@ -2910,16 +2951,27 @@ static gh_actor_motion_status advance_substate1_0020fbb8(gh_enemy202_move *s,uin
             const gh_object_view *resource=&enemy->entry.resource;
             unsigned offset,sequence;
             if(!enter){
-                if(appearance==5)offset=dependency==0x203?0x7bc:0x42c;
-                else offset=dependency==0x200?0x414:0x7b4;
+                if(common_appearance1)offset=0x404;
+                else if(em0a_appearance5)offset=0xbe0;
+                else if(em0f_appearance0)offset=0xfcc;
+                else if(appearance==5)offset=dependency==0x203?0x7bc:0x42c;
+                else offset=dependency==0x200||em27_appearance0?0x414:0x7b4;
                 sequence=offset+4;
             }else if(held){
                 offset=appearance==9?0x490:0x44c;
                 sequence=offset+4;
                 p[0x2f7]=0;
             }else if(appearance==5){
-                offset=0x424;
-                sequence=0x428;
+                /* The 20A row selects its own pair in the appearance-5 table. */
+                offset=em0a_appearance5?0xbd8:0x424;
+                sequence=offset+4;
+            }else if(em0f_appearance0){
+                /* The initial 20F row uses the ordinary pair unless bit 21
+                 * selects the shared-motion branch at 21000C. */
+                if(word(p+0x1644)&0x200000u)
+                    return stop(s,0x21000c,GH_ACTOR_MOTION_UNSUPPORTED);
+                offset=0xcf8;
+                sequence=0xcfc;
             }else if(r105_em0a){
                 /* Dependency 20A dispatches to 20FD18. */
                 offset=0x828;
@@ -2928,13 +2980,13 @@ static gh_actor_motion_status advance_substate1_0020fbb8(gh_enemy202_move *s,uin
                 /* Original 20FBB8 appearance 4 entry rows. */
                 offset=0x40c;
                 sequence=0x410;
-            }else if(appearance1_em03){
-                /* Appearance 1 and dependency 203 dispatch to 21038C. */
+            }else if(common_appearance1){
+                /* Dependencies 200 and 203 share the appearance-1 entry pair. */
                 offset=0x3fc;
                 sequence=0x400;
             }else{
                 /* Original 227 uses 20FCA8's ordinary entry pair as well. */
-                offset=dependency==0x200||r105_exchange?0x98:0x648;
+                offset=dependency==0x200||em27_appearance0?0x98:0x648;
                 sequence=0x9c;
             }
             if(!resource->bytes||!resource->file_extent_known||resource->file_extent<offset+4||
@@ -6921,7 +6973,7 @@ static gh_actor_motion_status advance_death_0025e600(gh_enemy202_move *s,uint8_t
         const uint32_t dependency=word(p+0x564);
         const unsigned stamp=half(p+0x640);
         if((uint16_t)work->room!=0x100||
-           !((dependency==0x203&&stamp==19)||(dependency==0x200&&(stamp==20||(stamp==8&&p[0x2f5]==3)))))
+           !((dependency==0x203&&stamp==19)||(dependency==0x200&&(stamp==20||(stamp==8&&(p[0x2f5]==3||p[0x2f5]==2))))))
             return stop(s,0x25e600,GH_ACTOR_MOTION_UNSUPPORTED);
         if(word(p+0x6e4)||word(p+0x6e8))return stop(s,0x26a938,GH_ACTOR_MOTION_UNSUPPORTED);
         if(word(p+0x6ec)||gh_enemy_timers_held_weapon_runtime(&enemy->timers))
@@ -7128,16 +7180,13 @@ static gh_actor_motion_status enemy_move(gh_enemy202_move *s,gh_enemy_actor *ene
         s->stage=HEADINGS;
     }
     if(s->stage==RETURNED)return GH_ACTOR_MOTION_OK;
-    unsigned dep=word(p+0x564);
-    if(dep!=0x200&&dep!=0x202&&dep!=0x203&&dep!=0x20a&&dep!=0x220&&
-        !r105_exchanged_enemy(rt->entry->b.work,p)&&
-        !(rt->entry->b.work->room==0x101&&dep==0x227&&half(p+0x640)==9&&p[0x1650]==4))
-        return stop(s,0x208c38,GH_ACTOR_MOTION_UNSUPPORTED);
     float actor_xyz[3],player_xyz[3];
     if(!position(view,actor_xyz)||!position(player,player_xyz)||player->size<0x63c)
         return stop(s,0x2db6b0,GH_ACTOR_MOTION_UNSUPPORTED);
     gh_actor_model *model=&rt->entry->initialize.model.model;
     if(s->stage==HEADINGS){
+        /* 208C38 distinguishes only dependency 23B before the shared headings. */
+        if(word(p+0x564)==0x23b)put_half(p+0x54a,half(p+0x548));
         uint32_t pc=0;
         float angle;
         gh_player_target_status status=gh_player_target_angle_002da038(elf,elf_bytes,

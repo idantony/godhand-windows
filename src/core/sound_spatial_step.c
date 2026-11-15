@@ -6,6 +6,7 @@
 #include <fenv.h>
 _Static_assert(offsetof(gh_boot_work,system_flags)==0x58c,"747A2C Work58C");
 static uint32_t word(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
+static unsigned half(const uint8_t *p){return (unsigned)p[0]|(unsigned)p[1]<<8;}
 static float number(uint32_t n){float f;memcpy(&f,&n,4);return f;}
 static uint32_t bits(float f){uint32_t n;memcpy(&n,&f,4);return n;}
 static float add(float a,float b){volatile float r=a+b;return r;}
@@ -39,6 +40,96 @@ gh_sound_scene_status gh_sound_listener_update_002cc150(gh_sound_control*s,const
  if(fesetenv(&env))return fail(f,0x2cc150,GH_SOUND_SCENE_UNSUPPORTED);if(!good)return fail(f,0x30a8c8,GH_SOUND_SCENE_UNSUPPORTED);
  for(unsigned i=0;i<4;i++)s->listener_position_c0[i]=bits(position[i]);for(unsigned i=0;i<16;i++)s->listener_matrix_d0[i]=bits(matrix[i]);return GH_SOUND_SCENE_OK;
 }
+/* Original 2C8CF8 dispatches TS type 2 to the sphere check and type 3
+ * to the bounded cylinder. Both require a strict radial intersection. */
+static gh_sound_scene_status ts_proximity(const uint8_t *record,const float player[3],
+    gh_sound_ts_row *row,uint32_t *frontier)
+{
+    const unsigned kind=record[0x0d];
+    if((kind!=2&&kind!=3)||!record[0x0e])
+        return fail(frontier,0x2c8cf8,GH_SOUND_SCENE_UNSUPPORTED);
+
+    float delta[3];
+    for(unsigned axis=0;axis<3;++axis){
+        const float center=number(word(record+0x30+axis*4));
+        if(!isfinite(center)||!isfinite(player[axis]))
+            return fail(frontier,0x2c8cf8,GH_SOUND_SCENE_ASSET);
+        delta[axis]=sub(center,player[axis]);
+    }
+    float square=mul(delta[0],delta[0]);
+    if(kind==2)square=add(square,mul(delta[1],delta[1]));
+    square=add(square,mul(delta[2],delta[2]));
+    const float distance=sqrtf(square);
+    const float limiting_radius=add((float)half(record+0x24),1.5f);
+    const float limiting_height=add((float)half(record+0x26),1.5f);
+    const int inside=distance<limiting_radius&&(kind==2||fabsf(delta[1])<=limiting_height);
+    row->flags0c&=(uint8_t)~2u;
+    if(inside){
+        row->flags0c|=2u;
+        row->volume10=(uint16_t)(uint32_t)distance;
+    }
+    return GH_SOUND_SCENE_OK;
+}
+
+static gh_sound_scene_status update_ts_rows(gh_sound_scene *scene,const gh_boot_work *work,
+    const gh_title_player_view *player,uint32_t *frontier)
+{
+    if(!scene->ts_count||scene->ts_count>GH_SOUND_TS_ROWS||!player->alias_f0||
+       scene->control->ts_head2c!=&scene->ts_rows[scene->ts_count-1])
+        return fail(frontier,0x2c8ad8,GH_SOUND_SCENE_UNSUPPORTED);
+
+    const uint8_t *fields=(const uint8_t *)work;
+    const int suspend=(word(fields+0x5e4)&0x20000880u)||
+        (word(fields+0x584)&8u)||(work->system_flags&0x01000000u);
+    float position[3];
+    memcpy(position,player->alias_f0,sizeof(position));
+    gh_sound_ts_row next[GH_SOUND_TS_ROWS];
+    memcpy(next,scene->ts_rows,(size_t)scene->ts_count*sizeof(*next));
+    for(unsigned i=scene->ts_count;i>0;--i){
+        gh_sound_ts_row *row=&next[i-1];
+        if(row->offset>scene->ts.size||scene->ts.size-row->offset<0x40)
+            return fail(frontier,0x2c8ad8,GH_SOUND_SCENE_ASSET);
+        const uint8_t *record=scene->ts.bytes+row->offset;
+        const int sound_effect=half(record+0x2a)==0;
+        if(suspend||!(row->flags0c&1u)){
+            if(row->voice14){
+                if(sound_effect)return fail(frontier,0x2cbc20,GH_SOUND_SCENE_UNSUPPORTED);
+                row->state13=4;
+                row->voice14=0;
+            }
+            continue;
+        }
+        if(row->disabled12)continue;
+        gh_sound_scene_status status=ts_proximity(record,position,row,frontier);
+        if(status)return status;
+        switch(row->state13){
+        case 0:
+            if(row->flags0c&2u)row->state13=1;
+            break;
+        case 1:
+            if(sound_effect)return fail(frontier,0x2cb968,GH_SOUND_SCENE_UNSUPPORTED);
+            row->state13=2;
+            break;
+        case 2:
+            if(!(row->flags0c&2u))row->state13=3;
+            else if(sound_effect)return fail(frontier,0x2cbf48,GH_SOUND_SCENE_UNSUPPORTED);
+            break;
+        case 3:
+            if(sound_effect&&row->voice14)return fail(frontier,0x2cbc20,GH_SOUND_SCENE_UNSUPPORTED);
+            /* Original state 3 falls through to state 4's reset. */
+            row->state13=0;
+            row->voice14=0;
+            break;
+        case 4:
+            row->state13=0;
+            row->voice14=0;
+            break;
+        }
+    }
+    memcpy(scene->ts_rows,next,(size_t)scene->ts_count*sizeof(*next));
+    return GH_SOUND_SCENE_OK;
+}
+
 gh_sound_scene_status gh_sound_spatial_step_002ca518(gh_sound_scene*s,const gh_boot_work*w,const gh_game_init_state*init,const gh_game_pl_camera*camera,const gh_title_player_view*player,gh_camera_numeric_policy policy,uint32_t*f){
  if(f)*f=0;if(!s||!s->startup_bound||!s->control||!s->control->initialized||!w)return GH_SOUND_SCENE_ARGUMENT;
  gh_sound_scene_status e=gh_sound_listener_update_002cc150(s->control,w,init,camera,player,policy,f);if(e)return e;
@@ -46,7 +137,17 @@ gh_sound_scene_status gh_sound_spatial_step_002ca518(gh_sound_scene*s,const gh_b
  c->previous_mask54=c->event_mask50;c->flags_ac=c->flags_b0;c->event_mask50=c->event_mask58;
  s->ratios74[0]=s->fade_ratio_bits;s->ratios88[0]=s->default_ratio_bits;
  if(s->bmh.bytes)return fail(f,0x2d22f0,GH_SOUND_SCENE_UNSUPPORTED);
- if(!(w->system_flags&0x80000000u)&&s->ts.bytes&&c->ts_head2c&&player)return fail(f,0x2c8ad8,GH_SOUND_SCENE_UNSUPPORTED);
+ if(!(w->system_flags&0x80000000u)&&s->ts.bytes&&c->ts_head2c&&player){
+  fenv_t env;
+  if(feholdexcept(&env))return fail(f,0x2c8cf8,GH_SOUND_SCENE_UNSUPPORTED);
+  if(fesetround(FE_TOWARDZERO)){
+   (void)fesetenv(&env);
+   return fail(f,0x2c8cf8,GH_SOUND_SCENE_UNSUPPORTED);
+  }
+  e=update_ts_rows(s,w,player,f);
+  if(fesetenv(&env))return fail(f,0x2c8cf8,GH_SOUND_SCENE_UNSUPPORTED);
+  if(e)return e;
+ }
  /* Actual2CB200 isJRra/NOP. Originvoices areNOTiteratedorflushed by2CA518;
   * theirONErealengine isadvanced at the separateoriginalsoundframe boundary. */
  return GH_SOUND_SCENE_OK;

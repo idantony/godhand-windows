@@ -68,7 +68,23 @@ static void test_clear_set_flags(gh_room_state *room,const gh_bundle_entry *ems)
     const gh_room_state short_page={.active=room->active,.size=12+29*24};
     C(gh_enemy_clear_set_flags_002736f8(&view,&short_page,&frontier)==GH_ACTOR_MOTION_BOUNDS&&
         frontier==0x295498&&w(actor+0x1644)==0x10008003&&!memcmp(room->active,expected,room->size));
-    puts("PASS actual R100 appearance5 stamp8 persistence, first match, full stamp width and missing-entry cases");
+    expected[12+6*24+0x10]=0;
+    C(!gh_enemy_set_data_appearance_00295458(room,request.entry_number,0)&&
+        !memcmp(room->active,expected,room->size));
+    C(!gh_enemy_request_from_room_00294ca0(room,6,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,
+        &request,&spawn,&vitality,&frontier)&&spawn&&!request.appearance);
+    C(!gh_enemy_set_data_appearance_00295458(room,0x108,1)&&
+        !gh_enemy_set_data_appearance_00295458(NULL,0xff,1)&&
+        gh_enemy_set_data_appearance_00295458(&short_page,8,1)==GH_ACTOR_MOTION_BOUNDS&&
+        !memcmp(room->active,expected,room->size));
+    put(expected+12+6*24+8,0);
+    C(!gh_enemy_set_data_flags_00295498(room,request.entry_number,0)&&
+        !memcmp(room->active,expected,room->size));
+    C(!gh_enemy_set_data_flags_00295498(room,0x108,1)&&
+        !gh_enemy_set_data_flags_00295498(NULL,0xff,1)&&
+        gh_enemy_set_data_flags_00295498(&short_page,8,1)==GH_ACTOR_MOTION_BOUNDS&&
+        !memcmp(room->active,expected,room->size));
+    puts("PASS actual R100 stamp8 RoomSave updates, first match, full stamp width and missing-entry cases");
 }
 
 int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));size_t n,n20;uint8_t*raw=load(d,"st1/r100.dat",&n),*raw20=load(d,"st0/r020.dat",&n20),*immutable=malloc(n);C(immutable);memcpy(immutable,raw,n);gh_bundle bundle,b20;gh_bundle_entry ems,empty;C(!gh_bundle_open(raw,n,&bundle)&&!gh_bundle_find(&bundle,"EMS",0,&ems)&&!gh_bundle_open(raw20,n20,&b20)&&!gh_bundle_find(&b20,"EMS",0,&empty)&&w(ems.bytes)==0x534d45&&w(ems.bytes+4)==30&&!w(empty.bytes+4));

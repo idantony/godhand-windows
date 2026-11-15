@@ -3,6 +3,7 @@
 #include "../src/platform/startup_qa_repeat_square.h"
 #include "../src/platform/startup_qa_r100_pad_tape.h"
 #include "../src/platform/startup_qa_title.h"
+#include "../src/platform/startup_qa_save_map_continue.h"
 #include "../src/platform/disc.h"
 #include <cerrno>
 #include <chrono>
@@ -30,10 +31,11 @@ static bool load_input_map(const char *iso,std::vector<uint8_t> &elf,gh_native_i
 }
 
 static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh_native_input &input,
-    uint64_t max_ticks,bool controlled_r003,QAR100PadTape &tape,uint64_t after_victory)
+    uint64_t max_ticks,bool controlled_r003,QAR100PadTape &tape,uint64_t after_victory,bool jump_r105)
 {
     if(!configure_cpu_sink(host,&sink,ffmpeg))return fail("consumer setup");
     QAStartupTitleProbe title;
+    QASaveMapContinueProbe r002_save_map;
     QARepeatSquareProbe combat;
     combat.enabled=!controlled_r003&&!tape.enabled;
     combat.triangle=combat.pair=combat.continue_after_pair=combat.packet_only=true;
@@ -43,16 +45,34 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
     const auto started=std::chrono::steady_clock::now();
     uint64_t completed_frames=0,r003_handoff=0,r003_frames=0;
     uint64_t post_victory_frames=0;
+    uint64_t r102_first_tick=0,r102_frames=0;
+    unsigned r102_world=0,r102_actors=0;
     bool pad_complete=false;
-    int r003_cut=-1;
+    int r003_cut=-1,r002_cut=-2,r002_state=-1;
     while(snapshot.ticks<max_ticks&&snapshot.phase==GH_HOST_RUNNING&&!combat.complete()&&!pad_complete){
         title.sample(snapshot,input,true,false);
-        const gh_native_gamepad_sample pad=tape.enabled?tape.sample(snapshot):combat.sample(snapshot);
+        gh_native_gamepad_sample pad=tape.enabled?tape.sample(snapshot):combat.sample(snapshot);
+        if(jump_r105&&snapshot.current_room==0x105&&snapshot.game_state==4&&
+           snapshot.scene_frame_ready&&snapshot.ticks>3326&&(snapshot.ticks&1)){
+            pad.connected=1;
+            pad.buttons=0x2000;
+        }
+        if(jump_r105&&snapshot.current_room==2&&snapshot.game_state==4&&snapshot.save_map_active)
+            pad=r002_save_map.sample(snapshot,completed_frames);
         gh_native_input_snapshot controls={};
         if(!gh_native_input_tick_device(&input,snapshot.work,&pad,&controls)||
            gh_startup_host_set_input(host,&controls)!=GH_HOST_OK)return fail("native input");
+        const unsigned previous_world=sink.world,previous_actors=sink.actor;
         gh_startup_host_tick(host);
         if(gh_startup_host_snapshot(host,&snapshot)!=GH_HOST_OK)return fail("scheduler snapshot");
+        if(jump_r105&&snapshot.current_room==2&&snapshot.game_state==4&&
+           (snapshot.event_cut!=r002_cut||snapshot.event_state!=r002_state)){
+            r002_cut=snapshot.event_cut;
+            r002_state=snapshot.event_state;
+            std::fprintf(stderr,"CPU_R002_EVENT tick=%llu number=%d state=%d cut=%d scene=%llu\n",
+                (unsigned long long)snapshot.ticks,snapshot.event_number,r002_state,r002_cut,
+                (unsigned long long)snapshot.scene_frame_serial);
+        }
         if(controlled_r003&&!r003_handoff&&snapshot.current_room==0x20&&snapshot.game_state==5&&
            snapshot.next_room==0x100){
             if(gh_startup_host_qa_r003_title_handoff(host)!=GH_HOST_OK)return fail("R003 title handoff");
@@ -65,6 +85,12 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
             if(tape.victory_scene)++post_victory_frames;
             tape.presented(snapshot,completed_frames);
             pad_complete=tape.victory_scene&&post_victory_frames>=after_victory;
+            if(snapshot.current_room==0x102&&snapshot.game_state==4){
+                if(!r102_frames)r102_first_tick=snapshot.ticks;
+                ++r102_frames;
+                r102_world+=sink.world-previous_world;
+                r102_actors+=sink.actor-previous_actors;
+            }
             if(r003_handoff&&snapshot.current_room==3&&snapshot.game_state==4){
                 ++r003_frames;
                 if(snapshot.event_number==2&&snapshot.event_cut>=0&&snapshot.event_cut!=r003_cut){
@@ -111,13 +137,16 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
         "\"last_move\":\"%08X\",\"actor_stamp\":%u,\"actor_dependency\":%u,"
         "\"packet_frame_serial\":%llu,\"world_commands\":%u,\"actor_commands\":%u,\"effect_commands\":%u,"
         "\"r003_controlled_handoff_tick\":%llu,\"r003_packet_frames\":%llu,\"r003_last_ev02_cut\":%d,"
+        "\"r102_first_frame_tick\":%llu,\"r102_packet_frames\":%llu,"
+        "\"r102_world_commands\":%u,\"r102_actor_commands\":%u,"
         "\"movie_frames_decoded\":%u,\"post_victory_packet_frames\":%llu,"
         "\"probe_complete\":%s}\n",
         (unsigned long long)snapshot.ticks,seconds,(unsigned)snapshot.current_room,(unsigned)snapshot.next_room,
         (unsigned)snapshot.game_state,snapshot.scene_stage,(unsigned)snapshot.phase,snapshot.unavailable_entry,
         snapshot.last_move_entry,snapshot.current_enemy_stamp,snapshot.current_enemy_dependency,
         (unsigned long long)completed_frames,sink.world,sink.actor,sink.effects,
-        (unsigned long long)r003_handoff,(unsigned long long)r003_frames,r003_cut,sink.movie,
+        (unsigned long long)r003_handoff,(unsigned long long)r003_frames,r003_cut,
+        (unsigned long long)r102_first_tick,(unsigned long long)r102_frames,r102_world,r102_actors,sink.movie,
         (unsigned long long)post_victory_frames,combat.complete()||pad_complete?"true":"false");
     if(combat.complete()||pad_complete)return 0;
     return snapshot.phase==GH_HOST_FRONTIER?4:snapshot.phase==GH_HOST_RUNNING?3:1;
@@ -125,12 +154,13 @@ static int replay(gh_startup_host *host,fixture_sink &sink,const char *ffmpeg,gh
 
 int main(int argc,char **argv)
 {
-    const bool controlled_r003=argc==6&&!std::strcmp(argv[5],"--r003-controlled");
+    const bool jump_r105=argc==6&&!std::strcmp(argv[5],"--r105-jump");
+    const bool controlled_r003=jump_r105||(argc==6&&!std::strcmp(argv[5],"--r003-controlled"));
     const bool post_victory=argc==9&&!std::strcmp(argv[7],"--after-victory-frames");
     const bool pad_tape=(argc==7||post_victory)&&!std::strcmp(argv[5],"--pad-tape");
     if(argc!=5&&!controlled_r003&&!pad_tape){
         std::fprintf(stderr,"Usage: probe-startup-cpu <ISO> <FFmpeg> <absent profile path> <max ticks> "
-            "[--r003-controlled | --pad-tape CSV [--after-victory-frames N]]\n");
+            "[--r003-controlled | --r105-jump | --pad-tape CSV [--after-victory-frames N]]\n");
         return 2;
     }
     QAR100PadTape tape;
@@ -161,8 +191,12 @@ int main(int argc,char **argv)
     gh_startup_host *host=nullptr;
     if(gh_startup_host_create_with_profile(argv[1],argv[3],1,0,64*1024*1024,&host)!=GH_HOST_OK)
         return fail("native startup creation");
+    if(jump_r105&&gh_startup_host_qa_enable_r105_exit_fixture(host)!=GH_HOST_OK){
+        gh_startup_host_destroy(host);
+        return fail("controlled R105 exit setup");
+    }
     fixture_sink sink={};
-    const int result=replay(host,sink,argv[2],input,max_ticks,controlled_r003,tape,after_victory);
+    const int result=replay(host,sink,argv[2],input,max_ticks,controlled_r003,tape,after_victory,jump_r105);
     if(gh_startup_host_destroy(host)!=GH_HOST_OK){
         std::fprintf(stderr,"CPU replay host cleanup failed\n");
         if(result==0)return 1;

@@ -63,6 +63,8 @@ gh_effect_status gh_effect_create_enemy_counter_impact_begin_00306838(gh_effect_
 gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_call *,
  const uint32_t world_xyz[3]);
 /* Original 109928 part4 impact, bank0/index3, unit scale and zero Euler. */
+/* Original grounded item sparkle, bank 0 and index 1B. */
+gh_effect_status gh_effect_create_om_sparkle_begin_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_om305_break_begin_001c2ce0(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_player_impact_begin_00306838(gh_effect_create_call *,
  const uint32_t world_xyz[3]);
@@ -87,6 +89,7 @@ int gh_effect_r101_weapon_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
 int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *);
+int gh_effect_enemy_light_emitter_is_bound(const gh_game_effects *,const gh_effect_emitter_view *);
 int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *);
 gh_effect_status gh_effect_create_emitter_at(const gh_game_effects *,unsigned,gh_effect_emitter_view *);
 /* Read same producer metadata for original3039E8 matching. Unknown external
@@ -115,6 +118,7 @@ gh_effect_status gh_effect_create_esp_devil_trail_init_002f5788(gh_game_effects 
 gh_effect_status gh_effect_create_esp_devil_trail_move_002f5bf8(gh_game_effects *,unsigned,uint32_t,
  const gh_boot_work *,gh_static_transform_policy,uint32_t *);
 int gh_effect_devil_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
+int gh_effect_enemy_light_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_emad_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_player_attachment_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_knockdown_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
@@ -146,6 +150,8 @@ gh_effect_status gh_effect_create_esp_commit_base(gh_game_effects *,unsigned,uin
 gh_effect_status gh_effect_create_esp_commit_type6(gh_game_effects *,unsigned,uint32_t);
 /* R003 SSD bank3/index0 parentless class08, original 2FFC20/2EA908. */
 int gh_effect_r003_esp08_row(gh_effect_view);
+int gh_effect_esp08_grid_row(gh_effect_view);
+int gh_effect_esp08_screen_row(gh_effect_view);
 gh_effect_status gh_effect_create_esp_commit_8(gh_game_effects *,unsigned,uint32_t);
 int gh_effect_esp_type7_record_bound(const gh_game_effects *,const gh_effect_esp_view *);
 gh_effect_status gh_effect_create_esp_commit_type7(gh_game_effects *,unsigned slot,uint32_t serial);

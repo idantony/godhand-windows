@@ -14,7 +14,8 @@ static int lerp(int a,int b,int f){return a+fd((b-a)*f,16);}
 static int64_t edge(const int64_t*a,const int64_t*b,int64_t x,int64_t y){return (b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0]);}
 static bool top(const int64_t*a,const int64_t*b){return b[1]<a[1]||(b[1]==a[1]&&b[0]>a[0]);}
 static int texel(const std::vector<unsigned char>&t,int x,int y,unsigned c){int n=t[((y&15)*16+(x&15))*4+c];return c==3?(n==255?128:n/2):n;}
-static size_t oracle(std::vector<unsigned char>&dst,const gh_cockpit_fan&q,const std::vector<unsigned char>&t){
+static size_t oracle(std::vector<unsigned char>&dst,const gh_cockpit_fan&q,const std::vector<unsigned char>&t,
+ std::vector<uint32_t>*depth=nullptr){
  int64_t xy[33][2];uint64_t us[33],vs[33];size_t fragments=0;
  for(unsigned i=0;i<33;i++){xy[i][0]=(int64_t)(q.x[i]*16);xy[i][1]=(int64_t)(q.y[i]*16);us[i]=(uint64_t)(q.u[i]*16*65536.0f);vs[i]=(uint64_t)(q.v[i]*16*65536.0f);}
  for(unsigned tri=0;tri<31;tri++){unsigned a=0,b=tri+1,c=tri+2;int64_t area=edge(xy[a],xy[b],xy[c][0],xy[c][1]);if(!area)continue;if(area<0){std::swap(b,c);area=-area;}
@@ -25,6 +26,7 @@ static size_t oracle(std::vector<unsigned char>&dst,const gh_cockpit_fan&q,const
    int tx=fd(u,65536),ty=fd(v,65536),fu=(u-tx*65536)/4096,fv=(v-ty*65536)/4096,p[4];
    for(unsigned k=0;k<4;k++)p[k]=lerp(lerp(texel(t,tx,ty,k),texel(t,tx+1,ty,k),fu),lerp(texel(t,tx,ty+1,k),texel(t,tx+1,ty+1,k),fu),fv);
    int alpha=p[3];if(alpha<=1)continue;fragments++;size_t o=((size_t)y*512+x)*4;
+   if(depth)(*depth)[o/4]=0;
    for(unsigned k=0;k<3;k++){int rgb=dst[o+k]+fd((p[k]-dst[o+k])*alpha,128);dst[o+k]=(unsigned char)(rgb<0?0:rgb>255?255:rgb);}dst[o+3]=(unsigned char)alpha;
   }
  }return fragments;
@@ -43,9 +45,16 @@ int main(int argc,char**argv){
   double ratio=(double)value/1000,theta=.115*ratio;for(unsigned k=2;k<33;k++){double angle=(k-1)*theta,x=(5*std::cos(angle)-40*std::sin(angle))*.9+46,y=5*std::sin(angle)+40*std::cos(angle)+394;C(std::fabs(fan.x[k]-x)<.1&&std::fabs(fan.y[k]-y)<.1);C(std::fabs(fan.u[k]-ratio*(k-1)/31)<1e-6);}
   cpu=back;total+=oracle(cpu,fan,texture);C(!gh_ui_polygon_fan(r,&state,handle,&fan,back.data(),gpu.data(),gpu.size()));if(gpu!=cpu){for(size_t k=0;k<gpu.size();k++)if(gpu[k]!=cpu[k]){std::fprintf(stderr,"mismatch%zu gpu%u cpu%u\n",k,gpu[k],cpu[k]);break;}C(false);}
  }
- C(total>0);auto bad=fan;bad.x[2]=2000;C(gh_ui_polygon_fan(r,&state,handle,&bad,back.data(),gpu.data(),gpu.size())==GH_UI_UNSUPPORTED);state.prim=0x54;C(gh_ui_polygon_fan(r,&state,handle,&fan,back.data(),gpu.data(),gpu.size())==GH_UI_UNSUPPORTED);
+ C(total>0);
+ std::vector<uint32_t> gpu_depth(512*448,0x8bad),cpu_depth=gpu_depth;
+ cpu=back;
+ C(oracle(cpu,fan,texture,&cpu_depth)>0);
+ gh_ui_depth_write plane={gpu_depth.data(),gpu_depth.size(),0};
+ C(!gh_ui_polygon_fan_with_depth(r,&state,handle,&fan,back.data(),gpu.data(),gpu.size(),&plane));
+ C(gpu==cpu&&gpu_depth==cpu_depth);
+ auto bad=fan;bad.x[2]=2000;C(gh_ui_polygon_fan(r,&state,handle,&bad,back.data(),gpu.data(),gpu.size())==GH_UI_UNSUPPORTED);state.prim=0x54;C(gh_ui_polygon_fan(r,&state,handle,&fan,back.data(),gpu.data(),gpu.size())==GH_UI_UNSUPPORTED);
  auto prior=fan;save[0x1c]=save[0x1d]=255;C(gh_cockpit_fan_prepare(m.get(),sv,&fan,&f)==GH_ID_UNSUPPORTED&&f==0x1fa080&&!std::memcmp(&prior,&fan,sizeof(fan)));
  auto corrupted=std::vector<unsigned char>(fan.texture.source.bytes,fan.texture.source.bytes+fan.texture.source.size);gh_tim2_picture picture;C(!gh_tim2_first(corrupted.data(),corrupted.size(),&picture));corrupted[(size_t)(picture.clut-corrupted.data())+3]=129;auto invalid=fan.texture;invalid.source.bytes=corrupted.data();C(gh_cockpit_fan_texture_rgba(&invalid,texture.data(),texture.size())==GH_ID_UNSUPPORTED);
  if(argc==3){FILE*out=std::fopen(argv[2],"wbx");C(out&&std::fwrite(cpu.data(),1,cpu.size(),out)==cpu.size()&&!std::fclose(out));}gh_ui_polygon_destroy(r);
- std::printf("PASS actual16TIM2/33vertexHUDfan progress0/.5/.999;3*229376 GPU pixels exactindependentCPU, %zu fragments, doublegeometry/FEnv/statebounds\n",total);return 0;
+ std::printf("PASS actual16TIM2/33vertexHUDfan progress0/.5/.999; RGB and Z0 writes match independent CPU coverage, %zu fragments, doublegeometry/FEnv/statebounds\n",total);return 0;
 }

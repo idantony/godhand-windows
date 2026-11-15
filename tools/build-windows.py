@@ -1,4 +1,4 @@
-"""Build native Windows presentation tools; all outputs and caches stay outside the project."""
+"""Build native Windows presentation tools; outputs and caches use the active work root."""
 import argparse
 import ast
 import concurrent.futures
@@ -13,8 +13,10 @@ from compiler_response import write_response_file
 from compiled_objects import (OBJECT_CACHE_DIRECTORY, WINDOWS_COMPILER_FLAGS, ObjectCache,
                               c_driver, project_inputs, source_hashes)
 
+from workspace_paths import overlaps_authored_tree, work_root
+
 PROJECT = Path(__file__).resolve().parents[1]
-DEFAULT_SCRATCH = Path(r"G:\middle_thing\godhand_windows")
+DEFAULT_SCRATCH = work_root(PROJECT)
 
 
 def main():
@@ -34,8 +36,8 @@ def main():
     if not 1 <= args.jobs <= 16:
         parser.error("--jobs must be in 1..16")
     scratch = args.scratch.resolve()
-    if scratch == PROJECT or PROJECT in scratch.parents:
-        parser.error("Scratch must stay outside the permanent project tree")
+    if overlaps_authored_tree(scratch, PROJECT):
+        parser.error("Scratch must stay outside authored source directories")
     sdk = args.sdk_lib
     if sdk is None:
         versions = list(Path(r"C:\Program Files (x86)\Windows Kits\10\Lib").glob("*/um/x64"))
@@ -48,7 +50,9 @@ def main():
         parser.error(f"Windows SDK library directory does not exist: {sdk}")
     compiler = args.compiler.resolve()
     cache_root = args.object_cache.resolve()
-    if not args.no_object_cache and (cache_root == PROJECT or PROJECT in cache_root.parents):
+    if overlaps_authored_tree(args.compiler_cache.resolve(), PROJECT):
+        parser.error("Compiler cache must stay outside authored source directories")
+    if not args.no_object_cache and overlaps_authored_tree(cache_root, PROJECT):
         parser.error("Object cache must stay outside the source snapshot")
     build = scratch / "build" / ("windows-" + args.target)
     logs = scratch / "logs" / ("windows-" + args.target)
@@ -159,7 +163,7 @@ def main():
         name, source = module
         obj = build / (name + ".o")
         driver = c_driver(compiler)
-        if args.target in ("startup-qa", "startup-cpu-qa") and name == "startup_host":
+        if args.target in ("startup-qa", "startup-cpu-qa") and name in ("startup_host", "game_services"):
             driver += ["-DGH_NATIVE_STARTUP_QA=1"]
         compile_object("compile-" + name, driver + ["-c", source, "-o", obj], source, obj)
         return obj

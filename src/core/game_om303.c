@@ -7,20 +7,56 @@
 static uint32_t w(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}static void put(uint8_t*p,size_t o,uint32_t n){memcpy(p+o,&n,4);}static void half(uint8_t*p,size_t o,uint16_t n){memcpy(p+o,&n,2);}static void vf0(uint8_t*p,size_t o){memset(p+o,0,12);put(p,o+12,0x3f800000);}
 gh_scene_placement_status gh_om303_construct_001879c8(void*data,size_t bytes,gh_title_player_view*out){if(!data||!out)return GH_PLACE_ARGUMENT;if(bytes<0x9e0)return GH_PLACE_BOUNDS;uint8_t*p=data;if(gh_om_base_construct_001b6e90(p,bytes,out))return GH_PLACE_BOUNDS;
  put(p,0x214,0x429c80);put(p,0x214,0x423230);for(unsigned i=0;i<10;i++){size_t o=0x620+(size_t)i*0x60;for(unsigned j=0;j<5;j++)vf0(p,o+j*16);p[o+0x54]=0;}out->original_vtable214=0x423230;out->original_kind4ac=0x4289f0;return GH_PLACE_OK;}
+gh_scene_placement_status gh_om338_construct_0019ded0(void *data,size_t size,gh_title_player_view *out)
+{
+ if(!data||!out)return GH_PLACE_ARGUMENT;
+ if(size<GH_OM338_BYTES)return GH_PLACE_BOUNDS;
+ gh_scene_placement_status status=gh_om_base_construct_001b6e90(data,size,out);
+ if(status)return status;
+ uint8_t *root=data;
+ put(root,0x214,0x426180);
+ out->original_vtable214=0x426180;
+ for(unsigned i=0;i<6;i++){
+  uint8_t *part=root+0x620+i*0x60;
+  for(unsigned j=0;j<5;j++)vf0(part,j*16);
+  part[0x54]=0;
+ }
+ return GH_PLACE_OK;
+}
+
 static gh_scene_placement_status fail(gh_om303_state*s,uint32_t f,gh_scene_placement_status e){s->frontier=f;return e;}
 
-gh_scene_placement_status gh_om303_initialize_00187a78(gh_om303_state*s,gh_om_object*o,const gh_om_initializer_bindings*b,int*out){if(!s||!o||o->source.type!=0x303||!out)return GH_PLACE_ARGUMENT;*out=0;s->frontier=0;int common_return=0;gh_scene_placement_status e=gh_om_common_initialize_001b6fb8(&s->common,o,b,&common_return);if(e)return fail(s,s->common.frontier,e);if(!common_return)return fail(s,0x1b6fb8,GH_PLACE_UNSUPPORTED);uint8_t*p=o->view.bytes;
+static gh_scene_placement_status initialize_fragments(gh_om303_state*s,gh_om_object*o,const gh_om_initializer_bindings*b,int*out,uint16_t kind){if(!s||!o||!b||o->source.type!=kind||!out)return GH_PLACE_ARGUMENT;const int ceramic=kind==0x338;*out=0;s->frontier=0;int common_return=0;gh_scene_placement_status e=gh_om_common_initialize_001b6fb8(&s->common,o,b,&common_return);if(e)return fail(s,s->common.frontier,e);if(!common_return)return fail(s,0x1b6fb8,GH_PLACE_UNSUPPORTED);uint8_t*p=o->view.bytes;
  if(s->stage==0){if(!b->init)return fail(s,0x1fe218,GH_PLACE_UNSUPPORTED);uint32_t frontier=0;int original;gh_hitarea_status he=gh_hitarea_object_create_001fe218(b->init,&o->view,2,&s->common.hitarea,&original,&frontier);if(he)return fail(s,frontier?frontier:0x1fe218,GH_PLACE_UNSUPPORTED);s->common.hitarea_created=(uint8_t)original;put(p,0x600,0);s->stage=1;}
- if(s->stage==1){if(s->common.hitarea_created){if(!b->shapes)return fail(s,0x1fd9d8,GH_PLACE_UNSUPPORTED);const uint32_t zero[3]={0},size[3]={0x4027ae14,0x3f8ccccd,0x3fb33333};uint32_t frontier=0;int index;gh_hitarea_status he=gh_hitarea_add_box_001fd9d8(&s->common.hitarea,b->shapes,p+0x80,zero,zero,size,&index,&frontier);if(he)return fail(s,frontier?frontier:0x1fd9d8,GH_PLACE_UNSUPPORTED);}s->stage=2;}
+ if(s->stage==1){if(s->common.hitarea_created){if(!b->shapes)return fail(s,0x1fd9d8,GH_PLACE_UNSUPPORTED);const uint32_t zero[3]={0},size[3]={ceramic?0x3f19999a:0x4027ae14,ceramic?0x3f800000:0x3f8ccccd,ceramic?0x3f19999a:0x3fb33333};uint32_t frontier=0;int index;gh_hitarea_status he=gh_hitarea_add_box_001fd9d8(&s->common.hitarea,b->shapes,p+0x80,zero,zero,size,&index,&frontier);if(he)return fail(s,frontier?frontier:0x1fd9d8,GH_PLACE_UNSUPPORTED);}s->stage=2;}
  if(s->stage==2){uint32_t frontier=0;int original;gh_hitarea_status he=gh_hitarea_object_create_001fe0e8(b->init,&o->view,0,&s->sphere_unit,&original,&frontier);if(he)return fail(s,frontier?frontier:0x1fe0e8,GH_PLACE_UNSUPPORTED);s->sphere_created=(uint8_t)original;put(p,0x604,0);s->stage=3;}
- if(s->stage==3){if(s->sphere_created){const uint32_t zero[3]={0};uint32_t frontier=0;int index;gh_hitarea_status he=gh_hitarea_add_sphere_001fdaf0(&s->sphere_unit,b->shapes,p+0x80,zero,0x40400000,&index,&frontier);if(he)return fail(s,frontier?frontier:0x1fdaf0,GH_PLACE_UNSUPPORTED);half(s->sphere_unit.bytes,0x46,0x2e);put(s->sphere_unit.bytes,0x4c,0);
+ if(s->stage==3){if(s->sphere_created){const uint32_t center[3]={0,ceramic?0x3f800000:0,0};uint32_t frontier=0;int index;gh_hitarea_status he=gh_hitarea_add_sphere_001fdaf0(&s->sphere_unit,b->shapes,p+0x80,center,ceramic?0x3f800000:0x40400000,&index,&frontier);if(he)return fail(s,frontier?frontier:0x1fdaf0,GH_PLACE_UNSUPPORTED);half(s->sphere_unit.bytes,0x46,ceramic?0x32:0x2e);put(s->sphere_unit.bytes,0x4c,0);
   /*1FD668(false) traversesnewUnit's ownlist, only itsjust-createdsphere. A
    * genuinefullpool/fallback -1 result hasno newnode andtheloopisempty. */
-  if(index>=0){const uint8_t*record;gh_collision_pair_shape shape;uint32_t*mask;if(gh_hitarea_node_at(&s->sphere_unit,0,&record,&shape)||gh_collision_pair_shape_mode_pointer(&shape,&mask))return fail(s,0x1fd668,GH_PLACE_UNSUPPORTED);*mask&=~2u;}}
+  if(!ceramic&&index>=0){const uint8_t*record;gh_collision_pair_shape shape;uint32_t*mask;if(gh_hitarea_node_at(&s->sphere_unit,0,&record,&shape)||gh_collision_pair_shape_mode_pointer(&shape,&mask))return fail(s,0x1fd668,GH_PLACE_UNSUPPORTED);*mask&=~2u;}
+ }
  s->stage=4;}
- if(s->stage==4){put(p,0x5e8,0);put(p,0x5e4,0);put(p,0x5f0,0);half(p,0x5f6,0);half(p,0x54a,1);put(p,0x608,0);s->segments=p+0x620;p[0x60c]=10;put(p,0x5ec,7);half(p,0x548,1);half(p,0x5f4,0xffff);
+ if(ceramic&&s->stage==4&&s->sphere_created){
+  uint32_t frontier=0;
+  if(gh_hitarea_object_set_active_001fd668(&s->sphere_unit,0,&frontier))
+   return fail(s,frontier?frontier:0x1fd668,GH_PLACE_UNSUPPORTED);
+  put(s->sphere_unit.bytes,0,w(s->sphere_unit.bytes)|1u);
+ }
+ if(s->stage==4){put(p,0x5e8,0);put(p,0x5e4,0);put(p,0x5f0,0);half(p,0x5f6,0);half(p,0x54a,1);put(p,0x608,0);s->segments=p+0x620;p[0x60c]=(uint8_t)(ceramic?6:10);put(p,0x5ec,7);half(p,0x548,1);half(p,0x5f4,0xffff);
   e=gh_om_fragments_initialize_001c28a0(&s->common);if(e)return fail(s,s->common.frontier,e);s->stage=5;}
  *out=1;return GH_PLACE_OK;}
+gh_scene_placement_status gh_om303_initialize_00187a78(gh_om303_state *state,gh_om_object *object,
+ const gh_om_initializer_bindings *bindings,int *out)
+{
+ return initialize_fragments(state,object,bindings,out,0x303);
+}
+
+gh_scene_placement_status gh_om338_initialize_0019dfb8(gh_om303_state *state,gh_om_object *object,
+ const gh_om_initializer_bindings *bindings,int *out)
+{
+ return initialize_fragments(state,object,bindings,out,0x338);
+}
+
 static gh_scene_placement_status setters(gh_om303_state*s,const uint8_t*xyz,int euler){if(!s||!xyz||s->stage<5||!s->common.object)return GH_PLACE_ARGUMENT;uint8_t*p=s->common.object->view.bytes;if(euler)memcpy(p+0x100,xyz,12);else{memcpy(p+0x490,xyz,12);memcpy(s->common.object->view.alias_f0,p+0x490,12);}put(p,0x5b8,w(p+0x5b8)|0x10u);int segment_count=p[0x60c]<128?p[0x60c]:(int)p[0x60c]-256;if(!(w(p+0x5b0)&2u)){for(unsigned i=1;(int)i<segment_count&&i<s->common.model.part_count;i++){const gh_actor_part*part;if(gh_actor_model_part_at(&s->common.model,i,&part))return fail(s,0x14bfe0,GH_PLACE_BOUNDS);put(part->bytes,0x154,w(part->bytes+0x154)&~0x18u);}gh_actor_model_status me=gh_actor_model_update_hierarchy_00149eb8(&s->common.model,GH_STATIC_BINARY32_REFERENCE);if(me)return fail(s,s->common.model.frontier,GH_PLACE_UNSUPPORTED);for(unsigned i=1;(int)i<segment_count&&i<s->common.model.part_count;i++){const gh_actor_part*part;if(gh_actor_model_part_at(&s->common.model,i,&part))return GH_PLACE_BOUNDS;put(part->bytes,0x154,w(part->bytes+0x154)|0x18u);}}s->frontier=0;return GH_PLACE_OK;}
 gh_scene_placement_status gh_om303_set_position_001c3778(gh_om303_state*s,const uint8_t*xyz){return setters(s,xyz,0);}gh_scene_placement_status gh_om303_set_euler_001c3988(gh_om303_state*s,const uint8_t*xyz){return setters(s,xyz,1);}
 gh_scene_placement_status gh_om303_abort(gh_om303_state*s){if(!s)return GH_PLACE_ARGUMENT;if(s->sphere_created){uint32_t frontier=0;gh_hitarea_status he=gh_hitarea_shapes_abort_object(&s->sphere_unit,&frontier);if(he)return fail(s,frontier,GH_PLACE_UNSUPPORTED);he=gh_hitarea_object_release_empty_001fe278(&s->sphere_unit,&frontier);if(he)return fail(s,frontier,GH_PLACE_UNSUPPORTED);s->sphere_created=0;}return gh_om_initialize_abort(&s->common);}

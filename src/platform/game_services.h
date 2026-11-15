@@ -197,6 +197,9 @@ gh_player_target_bindings gh_game_services_scene_targets(gh_game_services *);
 gh_scene_at_status gh_game_services_r105_jump_offer(void *,
  const gh_scene_at_task_request *,uint32_t *frontier);
 gh_action_step_status gh_game_services_r105_scenery_action(void *,uint32_t,void *,uint32_t *);
+/* Authenticated R102 AT 1A -> 2C2138 -> REL0EB8 via the native action pool. */
+gh_scene_at_status gh_game_services_r102_ticket_offer(void *,const gh_scene_at_task_request *,uint32_t *);
+gh_action_step_status gh_game_services_r102_ticket_action(void *,uint32_t,void *,uint32_t *);
 /* Inspect native script errors immediately after a real Scenario visit. */
 gh_action_step_status gh_game_services_r100_tutorial_action(gh_game_services *,void *,
     uint32_t *frontier);
@@ -214,6 +217,9 @@ uint64_t gh_game_services_ui_resource_epoch(const gh_game_services *);
  * storage are private. CancreatefromexecutingMain task on nativebackend.
  * Explicit pathREFERENCE_NEAREST and cameraBINARY32_REFERENCE numericprofile. */
 gh_game_services_status gh_game_services_create(const gh_game_services_bindings *,gh_game_services **);
+#ifdef GH_NATIVE_STARTUP_QA
+void gh_game_services_qa_enable_r105_exit_fixture(gh_game_services *);
+#endif
 gh_game_services_status gh_game_services_state1(gh_game_services *);
 gh_game_services_status gh_game_services_state2(gh_game_services *);
 gh_game_services_status gh_game_services_state3(gh_game_services *);

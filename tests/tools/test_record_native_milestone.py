@@ -1,17 +1,19 @@
-"""Milestone proof tests; synthetic inputs stay in G:, no builds/QA execution."""
+"""Milestone proof tests; synthetic inputs stay under the active work root, no builds/QA execution."""
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 PROJECT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT / "tools"))
 spec = importlib.util.spec_from_file_location("native_milestone", PROJECT / "tools/record-native-milestone.py")
 tool = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tool)
-TEST_ROOT = Path("G:/middle_thing/godhand_windows/tool-tests")
+TEST_ROOT = tool.SCRATCH_ROOT / "tool-tests"
 
 
 class MilestoneTests(unittest.TestCase):

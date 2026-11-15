@@ -215,6 +215,8 @@ gh_host_error gh_startup_host_read_scene_wrap_row(gh_startup_host *,uint32_t pix
  * Does not invent physical input, replay, analog or pad-lock policy. */
 gh_host_error gh_startup_host_set_input(gh_startup_host *,const gh_native_input_snapshot *);
 #ifdef GH_NATIVE_STARTUP_QA
+/* Explicit pre-tick opt-in for the controlled R105 exit replay. */
+gh_host_error gh_startup_host_qa_enable_r105_exit_fixture(gh_startup_host *);
 /* Isolate R003 presentation by replacing the pending title room handoff. */
 gh_host_error gh_startup_host_qa_r003_title_handoff(gh_startup_host *);
 typedef struct {uint32_t continue_count;int retry_ready;} gh_qa_game_over_state;

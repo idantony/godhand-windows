@@ -2,7 +2,9 @@
 *.iso
 reference/*
 !reference/.gitkeep
-# Build products and caches belong in G:/middle_thing/godhand_windows.
+# Active build products, caches, and snapshots.
+/.work/
+/ghidra-work/
 __pycache__/
 *.pyc
 build/

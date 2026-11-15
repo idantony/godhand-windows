@@ -13,9 +13,10 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
  if(!s||!b||!ready||!b->init||!b->pools||!b->room_objects||!b->global_objects||!b->work||!b->room_heap||!b->packet_heap||!b->fog_rgb||!b->factory_serial||!b->scenario14||!b->save.bytes)return GH_ACTOR_MODEL_ARGUMENT;
  *ready=0;if(!r||kind< -1)return GH_ACTOR_MODEL_OK;
  if(profile==HEAVY_ENTRY){
-  if(r->object_kind!=0x2a2||r->appearance||r->flags||r->dependency_flags||
+  const int entry_r102=b->work->room==0x102&&gh_enemy2a2_is_r102_entry(r);
+  if(!entry_r102&&(r->object_kind!=0x2a2||r->appearance||r->flags||r->dependency_flags||
      !((r->dependency_kind==0x2a2&&r->entry_number==6)||
-       (r->dependency_kind==0x2a3&&r->entry_number==14)))return fail(s,0x2905d0);
+       (r->dependency_kind==0x2a3&&r->entry_number==14))))return fail(s,0x2905d0);
  }else if(profile==SCENERY_ENTRY){
   if(b->work->room!=0x105||r->object_kind!=0x2ad||r->dependency_kind!=0x2ad||
      r->entry_number!=63||kind!=0||argument)return fail(s,0x2905d0);

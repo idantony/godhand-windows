@@ -15,7 +15,7 @@ spec.loader.exec_module(tool)
 
 class ResponseTests(unittest.TestCase):
     def setUp(self):
-        base = Path("G:/middle_thing/godhand_windows/tests/compiler-response")
+        base = Path(__file__).resolve().parents[2] / ".work/tests/compiler-response"
         base.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(prefix="response-", dir=str(base))
         self.addCleanup(self.temp.cleanup)
@@ -51,7 +51,7 @@ class ResponseTests(unittest.TestCase):
         self.assertGreater(fact["size"], 32767)
         env = os.environ.copy()
         env.update(TEMP=str(self.root), TMP=str(self.root),
-                   ZIG_GLOBAL_CACHE_DIR="G:/middle_thing/godhand_windows/cache/zig-global",
+                   ZIG_GLOBAL_CACHE_DIR=str(ROOT / ".work/cache/zig-global"),
                    ZIG_LOCAL_CACHE_DIR=str(self.root / "cache"))
         command = [str(ROOT / ".tools/zig-x86_64-windows-0.17.1/zig.exe"), "cc", "@" + str(response)]
         result = subprocess.run(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")

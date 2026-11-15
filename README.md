@@ -49,8 +49,9 @@ A controlled Windows replay begins with the R105 gate open in room save data
 and Gene at the original exit. Native audio plays the gate sound, and the
 original transition loads R002. Direct3D presents 3,390 consecutive R002
 frames through all 24 shots of Event 04 and the original save prompt. The
-replay selects Continue with the original pad input and enters R102
-initialization. R102's first gameplay frame remains in development.
+replay selects Continue with the original pad input. A follow-up replay
+presents the first 16 consecutive R102 frames with the original stage, Gene,
+enemies and HUD. R102 movement and combat still need verification.
 
 ### Verified progress
 
@@ -130,7 +131,7 @@ essentials, distributed separately under its own license. Pass its path below.
 
 ```powershell
 python -B .\tools\build-windows.py --target native
-& 'G:\middle_thing\godhand_windows\build\windows-native\godhand-windows.exe' `
+& '.\.work\build\windows-native\godhand-windows.exe' `
   --iso 'X:\your\God Hand.iso' --profile 'X:\your\native-profile' `
   --ffmpeg 'X:\tools\ffmpeg.exe' --show
 ```
@@ -153,7 +154,7 @@ For the explicitly synthetic, hidden startup acceptance check:
 
 ```powershell
 python -B .\tools\build-windows.py --target startup-qa
-& 'G:\middle_thing\godhand_windows\build\windows-startup-qa\probe-native-startup.exe' `
+& '.\.work\build\windows-startup-qa\probe-native-startup.exe' `
   --iso 'X:\your\God Hand.iso' --profile 'X:\your\native-profile' `
   --ffmpeg 'X:\tools\ffmpeg.exe' --hidden --muted --qa-new-game --max-ticks 2000
 python -B .\tools\build-native.py --hardware-audio --movie-codec 'X:\tools\ffmpeg.exe'
@@ -178,6 +179,11 @@ select a scene serial and `--capture-count` to retain consecutive frames.
 To inspect the same room's scheduler and drawing packets quickly, append
 `--r003-controlled` to `probe-startup-cpu.exe` after the tick limit.
 
+For the R102 presentation replay, run the `startup-qa` executable with
+`--hidden --muted --max-ticks 7300 --qa-r102-capture` and add
+`--qa-capture FILE --qa-capture-count 16`. Give this replay a fresh profile.
+This option enables the test-only R105 gate and exit setup.
+
 | Directory | Purpose |
 |---|---|
 | `src/`, `tests/` | Recovered source, native backends and meaningful checks |
@@ -187,9 +193,9 @@ To inspect the same room's scheduler and drawing packets quickly, append
 | `reference/`, `analysis/` | Private input/evidence, excluded from Git |
 | `vendor/`, `.tools/` | Pinned upstream and local tools, excluded from Git |
 
-Useful project files stay under `E:\godhand_windows`; builds, cache and large
-logs stay under `G:\middle_thing\godhand_windows`. Scripts accept external
-scratch/compiler paths. Original game data remains read-only. Attribution:
+Builds, caches and logs default to the ignored `.work/` directory in the
+project. Scripts accept alternate scratch and compiler paths. Original game
+data remains read-only. Attribution:
 [NOTICE.md](NOTICE.md).
 
 Next work continues the first battle and its exit, then verifies the subsequent
@@ -227,8 +233,8 @@ R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染�
 
 一轮受控的 Windows 回放从 R105 已开门的存档状态开始，并把 Gene 放在原版出口。原生音频
 播放开门声，原版房间切换载入 R002。Direct3D 连续呈现了 R002 的 3,390 帧，完整播放 EV04 的
-24 个镜头并显示原版保存界面。回放用原版按键选择继续，进入 R102 初始化。R102 的首帧游戏画面
-仍在开发。
+24 个镜头并显示原版保存界面。回放用原版按键选择继续。后续回放连续呈现了 R102 的前 16 帧，
+显示原版场景、Gene、敌人与 HUD。R102 的移动与战斗仍待验证。
 
 ### 已验证的进展
 
@@ -283,8 +289,13 @@ FFmpeg、一个不存在的存档目录和正整数 tick 上限。该工具复�
 需要快速查看同一房间的调度和绘制指令时，在 `probe-startup-cpu.exe` 的 tick 上限后
 追加 `--r003-controlled`。
 
-有用文件保存在 `E:\godhand_windows`，构建、缓存及大日志保存在
-`G:\middle_thing\godhand_windows`。原镜像始终只读，原始反汇编等私有恢复证据及外部工具二进制不进 Git。
+复现 R102 画面时，给 `startup-qa` 可执行程序传入
+`--hidden --muted --max-ticks 7300 --qa-r102-capture`，并用
+`--qa-capture FILE --qa-capture-count 16` 保存画面。请使用新的存档目录。
+该选项启用测试用的 R105 门与出口起始状态。
+
+构建、缓存和日志默认保存在项目内由 Git 忽略的 `.work/` 目录。原镜像始终只读，
+原始反汇编等私有恢复证据及外部工具二进制保存在本地。
 自制源码核验工具见 [证据工具说明](docs/EVIDENCE_TOOLS.md)。
 独立 [PS2 移植 skill](skill/ps2-source-port/SKILL.md) 随开发维护。
 

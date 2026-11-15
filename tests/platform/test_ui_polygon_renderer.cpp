@@ -20,7 +20,7 @@ static int64_t edge(const int64_t*a,const int64_t*b,int64_t x,int64_t y){return 
 static bool top(const int64_t*a,const int64_t*b){return b[1]<a[1]||(b[1]==a[1]&&b[0]>a[0]);}
 static size_t oracle(std::vector<unsigned char>&dst,const gh_id_texture_polygon&q,const std::vector<unsigned char>&texture){
  int64_t xy[4][2];uint64_t us[4],vs[4];size_t changed=0;
- for(unsigned i=0;i<4;i++){xy[i][0]=(int64_t)(q.x[i]*16);xy[i][1]=(int64_t)(q.y[i]*16);us[i]=(uint64_t)(q.u[i]*64*65536.0f);vs[i]=(uint64_t)(q.v[i]*64*65536.0f);}
+ for(unsigned i=0;i<4;i++){xy[i][0]=(int64_t)(q.x[i]*16);xy[i][1]=(int64_t)(q.y[i]*16);us[i]=(uint64_t)(q.u[i]*q.texture.width*65536.0f);vs[i]=(uint64_t)(q.v[i]*q.texture.height*65536.0f);}
  for(unsigned y=0;y<448;y++)for(unsigned x=0;x<512;x++){uint64_t u=0,v=0;bool hit=false;
   for(unsigned triangle=0;triangle<2&&!hit;triangle++){unsigned a=triangle?1:0,b=triangle?3:1,c=2;int64_t area=edge(xy[a],xy[b],xy[c][0],xy[c][1]);if(area<0){std::swap(b,c);area=-area;}
    int64_t wa=edge(xy[b],xy[c],x*16,y*16),wb=edge(xy[c],xy[a],x*16,y*16),wc=edge(xy[a],xy[b],x*16,y*16);
@@ -28,7 +28,7 @@ static size_t oracle(std::vector<unsigned char>&dst,const gh_id_texture_polygon&
    u=(us[a]*(uint64_t)wa+us[b]*(uint64_t)wb+us[c]*(uint64_t)wc)/(uint64_t)area;v=(vs[a]*(uint64_t)wa+vs[b]*(uint64_t)wb+vs[c]*(uint64_t)wc)/(uint64_t)area;hit=true;
   }if(!hit)continue;
   int uf=(int)u-32768,vf=(int)v-32768,tx=floor_div(uf,65536),ty=floor_div(vf,65536),fu=(uf-tx*65536)/4096,fv=(vf-ty*65536)/4096;int filtered[4];
-  for(unsigned c=0;c<4;c++)filtered[c]=lerp(lerp((int)sample(texture,64,64,tx,ty,c),(int)sample(texture,64,64,tx+1,ty,c),fu),lerp((int)sample(texture,64,64,tx,ty+1,c),(int)sample(texture,64,64,tx+1,ty+1,c),fu),fv);
+  for(unsigned c=0;c<4;c++)filtered[c]=lerp(lerp((int)sample(texture,q.texture.width,q.texture.height,tx,ty,c),(int)sample(texture,q.texture.width,q.texture.height,tx+1,ty,c),fu),lerp((int)sample(texture,q.texture.width,q.texture.height,tx,ty+1,c),(int)sample(texture,q.texture.width,q.texture.height,tx+1,ty+1,c),fu),fv);
   int alpha=filtered[3]*(int)(q.color>>24)/128;if(alpha>255)alpha=255;if(alpha<=1)continue;changed++;size_t o=((size_t)y*512+x)*4;
   for(unsigned c=0;c<3;c++){int src=filtered[c]*(int)((q.color>>(8*c))&255)/128;if(src>255)src=255;int value=dst[o+c]+floor_div((src-dst[o+c])*alpha,128);dst[o+c]=(unsigned char)(value<0?0:value>255?255:value);}dst[o+3]=(unsigned char)alpha;
  }
@@ -47,10 +47,37 @@ int main(int argc,char**argv){C(argc==2||argc==3);gh_disc*d;C(gh_disc_open(argv[
  C(items[1].polygon.x[0]==301&&items[1].polygon.y[0]==181&&items[1].polygon.x[3]==341&&items[1].polygon.y[3]==221);
  e.b89=2;C(gh_id_texture_polygon_prepare(manager.get(),&b,&e,&items[1].polygon)==GH_ID_UNSUPPORTED);
  e=actual;e.draw_scale_x=e.draw_scale_y=1;e.draw_rotation=1.5707963705062866f;gh_id_texture_polygon quarter;C(gh_id_texture_polygon_prepare(manager.get(),&b,&e,&quarter)==GH_ID_OK);C(quarter.x[0]==241&&quarter.y[0]==241&&quarter.x[1]==241&&quarter.y[1]==281&&quarter.x[2]==201&&quarter.y[2]==241&&quarter.x[3]==201&&quarter.y[3]==281);
+ // Exact Windows recovery-prompt observation, on its original HUD entry.
+ gh_id_base action={};C(gh_id_base_initialize_002a9ea0(r,&action,1,4,nullptr,nullptr,&ret)==GH_ID_OK&&ret==1&&action.entry_count>17);
+ gh_id_entry prompt=action.entries[17];C(prompt.source_index==17&&prompt.b8a==1&&prompt.b8b==38&&prompt.b89==0&&prompt.f68==18&&prompt.f6c==22);
+ prompt.draw_x=206;prompt.draw_y=299;prompt.draw_scale_x=prompt.draw_scale_y=1.11999989f;prompt.draw_rotation=.589999676f;
+ prompt.color=0x80808080;
+ gh_ui_polygon_item recovery={};C(gh_id_texture_polygon_prepare(manager.get(),&action,&prompt,&recovery.polygon)==GH_ID_OK);
+ const gh_id_texture &atlas=recovery.polygon.texture;
+ C(atlas.width==128&&atlas.height==64&&atlas.tex0==UINT64_C(0x19d308000)&&atlas.source.offset==461184&&atlas.source.size==9280);
+ std::vector<unsigned char> recovery_texture(atlas.width*atlas.height*4);
+ C(gh_id_polygon_texture_rgba(&atlas,recovery_texture.data(),recovery_texture.size())==GH_ID_OK);
+ unsigned zero=0;
+ for(size_t j=3;j<recovery_texture.size();j+=4){
+  const unsigned a=recovery_texture[j];C(!(a&1)||a==255);zero+=a==0;
+ }
+ C(zero==3706);
+ std::vector<unsigned char> clear(512*448*4);const size_t recovery_fragments=oracle(clear,recovery.polygon,recovery_texture);
+ C(recovery_fragments>100);
+ C(gh_id_base_release_002aa078(r,&action,&ret,&reclaimed)==GH_ID_OK&&reclaimed);
+ if(argc==3&&!std::strcmp(argv[2],"--cpu-only")){
+  C(gh_id_base_release_002aa078(r,&b,&ret,&reclaimed)==GH_ID_OK&&reclaimed&&gh_id_runtime_destroy(r)==GH_ID_OK);
+  std::printf("PASS actual rotated recovery prompt 128x64 PSMT8 CPU packet and %zu oracle fragments\n",recovery_fragments);
+  return 0;
+ }
  std::vector<unsigned char> texture(64*64*4);C(gh_id_polygon_texture_rgba(&items[0].polygon.texture,texture.data(),texture.size())==GH_ID_OK);gh_ui_polygon_renderer*renderer;C(gh_ui_polygon_create(640,448,&renderer)==GH_UI_UNSUPPORTED&&renderer==nullptr);C(gh_ui_polygon_create(512,448,&renderer)==GH_UI_OK);C(gh_ui_polygon_upload(renderer,&items[0].polygon.texture,texture.data(),texture.size(),&items[0].texture)==GH_UI_OK);items[1].texture=items[0].texture;
  gh_ui_sprite_state state={UINT64_C(0x8000000044),0x3001d,0x54,0x60,0,1,1,0,0,0};std::vector<unsigned char> back(512*448*4),expected,output(back.size());for(size_t i=0;i<back.size();i++)back[i]=(unsigned char)((i*17+i/512)%131);
  size_t count=0;for(unsigned pass=0;pass<4;pass++){expected=back;for(unsigned i=0;i<2;i++)count+=oracle(expected,items[i].polygon,texture);C(gh_ui_polygon_batch(renderer,&state,items,2,back.data(),output.data(),output.size())==GH_UI_OK);if(output!=expected){for(size_t j=0;j<output.size();j++)if(output[j]!=expected[j]){std::fprintf(stderr,"mismatchbyte%zu actual%u expected%u\n",j,output[j],expected[j]);break;}C(false);}}
- C(count>1000);auto bad=items[0];bad.polygon.x[0]=2000;C(gh_ui_polygon_batch(renderer,&state,&bad,1,back.data(),output.data(),output.size())==GH_UI_UNSUPPORTED);state.test=0x70000;C(gh_ui_polygon_batch(renderer,&state,items,2,back.data(),output.data(),output.size())==GH_UI_UNSUPPORTED);unsigned h;texture[3]=3;C(gh_ui_polygon_upload(renderer,&items[0].polygon.texture,texture.data(),texture.size(),&h)==GH_UI_UNSUPPORTED);
+ C(count>1000);
+ C(gh_ui_polygon_upload(renderer,&atlas,recovery_texture.data(),recovery_texture.size(),&recovery.texture)==GH_UI_OK);
+ auto recovery_expected=back;C(oracle(recovery_expected,recovery.polygon,recovery_texture)==recovery_fragments);
+ C(gh_ui_polygon_batch(renderer,&state,&recovery,1,back.data(),output.data(),output.size())==GH_UI_OK&&output==recovery_expected);
+ auto bad=items[0];bad.polygon.x[0]=2000;C(gh_ui_polygon_batch(renderer,&state,&bad,1,back.data(),output.data(),output.size())==GH_UI_UNSUPPORTED);state.test=0x70000;C(gh_ui_polygon_batch(renderer,&state,items,2,back.data(),output.data(),output.size())==GH_UI_UNSUPPORTED);unsigned h;texture[3]=3;C(gh_ui_polygon_upload(renderer,&items[0].polygon.texture,texture.data(),texture.size(),&h)==GH_UI_UNSUPPORTED);
  if(argc==3){FILE*f=std::fopen(argv[2],"wbx");C(f&&std::fwrite(expected.data(),1,expected.size(),f)==expected.size()&&std::fclose(f)==0);}
  gh_ui_polygon_destroy(renderer);C(gh_id_base_release_002aa078(r,&b,&ret,&reclaimed)==GH_ID_OK&&reclaimed&&gh_id_runtime_destroy(r)==GH_ID_OK);std::printf("PASS actualHUD64TIM2 angle2.35318/anchor3 andzeroangle0: %zu fragments,4*229376 GPU pixels exactindependentCPU; bounds/oddalpha reject\n",count);return 0;
 }

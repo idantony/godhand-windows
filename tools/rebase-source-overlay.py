@@ -9,7 +9,9 @@ import subprocess
 import sys
 import tempfile
 
-SCRATCH_ROOT = Path(r"G:\middle_thing\godhand_windows").resolve()
+from workspace_paths import overlaps_authored_tree, work_root
+
+SCRATCH_ROOT = work_root(Path(__file__).resolve().parents[1])
 
 
 class RebaseError(Exception):
@@ -291,9 +293,10 @@ def rebase(overlay_receipt, overlay_sha256, target_receipt, target_sha256, outpu
     project = Path(target_manifest["source_project"]).resolve()
     if Path(old_manifest["source_project"]).resolve() != project:
         raise RebaseError("The base and target are snapshots of different source projects")
-    protected = {base, target, project, overlay_receipt.parent}
+    protected = {base, target, overlay_receipt.parent}
     check_required_overlay(record, target, target_manifest, {overlay_receipt}, protected)
-    if output.exists() or any(root == output or root in output.parents for root in protected):
+    if (output.exists() or overlaps_authored_tree(output, project) or
+            any(root == output or root in output.parents for root in protected)):
         raise RebaseError(f"Output must be a new directory outside protected trees: {output}")
 
     result = {
@@ -361,7 +364,8 @@ def collect(base_receipt, base_sha256, source_receipt, source_sha256, output):
     project = Path(before["source_project"]).resolve()
     if Path(after["source_project"]).resolve() != project:
         raise RebaseError("The snapshots belong to different source projects")
-    if output.exists() or any(root == output or root in output.parents for root in (base, source, project)):
+    if (output.exists() or overlaps_authored_tree(output, project) or
+            any(root == output or root in output.parents for root in (base, source))):
         raise RebaseError(f"Output must be a new directory outside protected trees: {output}")
     previous, current = before["source_sha256"], after["source_sha256"]
     removed = previous.keys() - current.keys()

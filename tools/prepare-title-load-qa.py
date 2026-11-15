@@ -7,7 +7,9 @@ import tempfile
 from pathlib import Path
 
 
-SCRATCH_ROOT = Path(r"G:\middle_thing\godhand_windows").resolve()
+from workspace_paths import work_root
+
+SCRATCH_ROOT = work_root(Path(__file__).resolve().parents[1])
 SLOT = "BASLUS-21503GODHD003"
 
 
@@ -34,7 +36,7 @@ def main():
     args = parser.parse_args()
     scratch = args.scratch.resolve()
     if SCRATCH_ROOT not in scratch.parents:
-        parser.error("Scratch must be below the project G: scratch root")
+        parser.error("Scratch must be below the project's active work root")
     scratch.mkdir(parents=True, exist_ok=True)
     profile = scratch / "profile-load"
     if profile.exists() or profile.is_symlink():

@@ -1,4 +1,5 @@
 #include "mc_error.h"
+#include "../platform/test_scratch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,12 +49,15 @@ int main(int argc,char **argv)
     C(gh_bundle_open(allocation.pointer,(size_t)source.size,&language)==GH_BUNDLE_OK);
     id=calloc(1,sizeof(*id));C(id && gh_id_find_language_data(&language,&idd)==GH_MENU_OK && gh_id_system_init_002acc70(id,&idd)==GH_MENU_OK);
     C(gh_id_runtime_create(id,1,&runtime)==GH_ID_OK && gh_font_initialize(&font,&language,1)==GH_FONT_OK);
-    C(gh_memory_card_open("G:\\middle_thing\\godhand_windows\\build\\mc-error-tests\\absent-profile",&card)==GH_MC_OK);
+    char scratch[GH_TEST_SCRATCH_PATH_BYTES],absent_profile[GH_TEST_SCRATCH_PATH_BYTES];
+    C(gh_test_scratch_open(scratch,absent_profile,"absent-profile"));
+    C(gh_memory_card_open(absent_profile,&card)==GH_MC_OK);
     work.language=1;work.phase569=2;f.b=(gh_mc_task_bindings){&dvd,module_heap,heap,0,card,id,runtime,&font,&packed,&language,&work,&game};
     C(gh_task_threads_create(&manager,&f.b.threads)==GH_THREAD_OK && gh_task_threads_start(f.b.threads,-1,task,&f,6,&slot)==GH_THREAD_OK);
     while(!f.done && ticks<10){C(gh_tasks_run_matching_002d52a0(&manager).status==GH_TASK_OK);C(gh_dvd_pump(&dvd)==GH_DVD_OK);++ticks;}
     C(f.done && ticks==3 && !f.mc.checks.done);C(gh_mc_task_abort(&f.mc,&f.b)==GH_MC_TASK_OK);
     C(gh_task_threads_destroy(f.b.threads)==GH_THREAD_OK && gh_id_runtime_destroy(runtime)==GH_ID_OK);free(id);gh_memory_card_close(card);
+    C(gh_test_scratch_directory(scratch,0));
     C(gh_heap_release(heap,allocation)==GH_MEM_OK && gh_heap_destroy(heap)==GH_MEM_OK && gh_heap_destroy(module_heap)==GH_MEM_OK);gh_disc_close(disc);
     puts("PASS realMC no-card ErrorProc/display/choice, and explicit SeCall frontier before input completion; no fake sound or boot success");return 0;
 }

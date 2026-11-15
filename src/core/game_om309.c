@@ -51,6 +51,11 @@ gh_scene_placement_status gh_om30c_construct_0018dc58(void *data,size_t size,gh_
  return construct_layered_fragments(data,size,out,0x423ab8);
 }
 
+gh_scene_placement_status gh_om331_construct_0019c588(void *data,size_t size,gh_title_player_view *out)
+{
+ return construct_layered_fragments(data,size,out,0x425c78);
+}
+
 static gh_scene_placement_status fail(gh_om309_state*s,uint32_t f,gh_scene_placement_status e){s->frontier=f;return e;}
 static gh_scene_placement_status initialize_fragment_cylinder(gh_om309_state*s,gh_om_object*o,
  const gh_om_initializer_bindings*b,int*out,unsigned kind,size_t hitarea_offset,size_t segment_offset)
@@ -61,7 +66,7 @@ static gh_scene_placement_status initialize_fragment_cylinder(gh_om309_state*s,g
  if(s->stage==2){
   half(p,0x548,1);half(p,0x54a,1);
   gh_actor_model *model=&s->common.model;
-  const int layered=kind==0x30b||kind==0x30c;
+  const int layered=kind==0x30b||kind==0x30c||kind==0x331;
   if(layered){
    for(unsigned i=0;i<model->script.mesh_count;++i){
     const gh_actor_node_packets *node;
@@ -110,6 +115,12 @@ gh_scene_placement_status gh_om30c_initialize_0018dd40(gh_om309_state *s,gh_om_o
  const gh_om_initializer_bindings *b,int *out)
 {
  return initialize_fragment_cylinder(s,o,b,out,0x30c,0x650,0x660);
+}
+
+gh_scene_placement_status gh_om331_initialize_0019c670(gh_om309_state *s,gh_om_object *o,
+ const gh_om_initializer_bindings *b,int *out)
+{
+ return initialize_fragment_cylinder(s,o,b,out,0x331,0x650,0x660);
 }
 
 gh_scene_placement_status gh_om309_abort(gh_om309_state*s){return gh_om303_abort(s);}

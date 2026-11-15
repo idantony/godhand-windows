@@ -1,7 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $godhandProjectRoot = Split-Path -Parent $PSScriptRoot
-$godhandScratchRoot = 'G:\middle_thing\godhand_windows'
+$godhandScratchRoot = $env:GODHAND_WORK_ROOT
+if (-not $godhandScratchRoot) { $godhandScratchRoot = Join-Path $godhandProjectRoot '.work' }
 $godhandToolRoot = Join-Path $godhandProjectRoot '.tools'
 $godhandArchive = Join-Path $godhandScratchRoot 'cache\zig-x86_64-windows-0.17.1.zip'
 $godhandReleaseUrl = 'https://ziglang.org/download/index.json'

@@ -519,6 +519,37 @@ static int r100_devil_spawn_cue(const struct voice *v,const uint8_t *p)
     !w(p+0x18)&&!w(p+0x1c)&&w(p+0x20)==4&&!w(p+0x24)&&!w(p+0x28)&&!w(p+0x2c);
 }
 
+/* EM20's initial rise SEQ resolves its own dynamic SES bank. */
+static int r100_devil_rise_cue(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ const gh_actor_model *model=v->model;
+ const int request=v->requested_program;
+ if(!v->source_owner||v->part_index!=-1||bank<4||bank!=v->requested_bank||
+    !model||!model->work||model->work->room!=0x100||
+    !model->root.bytes||model->root.size<=0x1651||
+    model->root.original_vtable214!=0x4479c8)return 0;
+ unsigned slot,offset,variants;
+ if(request==4&&program>=4&&program<=6){
+  static const unsigned offsets[]={32160,40000,47776};
+  slot=(unsigned)program-1;
+  offset=offsets[program-4];
+  variants=program==4?2:0;
+ }else if(request==0x0a&&(program==0x0a||program==0x0b)){
+  slot=(unsigned)program-3;
+  offset=program==0x0a?76576:85808;
+  variants=program==0x0a?1:0;
+ }else return 0;
+ const uint8_t *actor=model->root.bytes;
+ if(h(actor+0x2fe)!=0x220||w(actor+0x564)!=0x220||w(actor+0x1644)!=0x400000||
+    actor[0x1651]!=0xff||h(p)!=(unsigned)bank||h(p+2)!=(unsigned)program||
+    h(p+4)!=slot||w(p+6)!=0x02500228||h(p+0xe)!=0x10||w(p+0x10)!=0x007f007f||
+    w(p+0x14)!=0x005a0040||w(p+0x18)||w(p+0x1c)||w(p+0x20)!=(0x00030005|(variants<<8))||
+    w(p+0x24)!=0x400||w(p+0x28)!=0xffff||w(p+0x2c))return 0;
+ return !sample||(w(sample)==offset&&w(sample+4)==11025&&
+    w(sample+8)==0x5fc080ff&&!w(sample+12));
+}
+
 /* Actual PL00 recovery selector06 plays CORE 8C at the actor root. */
 static int player_recovery_footing_profile(const struct voice *voice,const uint8_t *row,
  const uint8_t *sample)
@@ -783,6 +814,9 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  if(door&&(w(descriptor.data)!=(h(candidate->model->root.bytes+0x2fe)==0x313?0x1e00u:0x19750u)||
     w(descriptor.data+4)!=14000||
     w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))return unsupported(s,0x35fc);
+ const int devil_rise=r100_devil_rise_cue(candidate,bank,program,p,NULL);
+ if(devil_rise&&!r100_devil_rise_cue(candidate,bank,program,p,descriptor.data))
+  return unsupported(s,0x35fc);
  const int devil_spawn=r100_devil_spawn_cue(candidate,p);
  if(devil_spawn&&(w(descriptor.data)!=0x40b70||w(descriptor.data+4)!=18000||
     w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))return unsupported(s,0x35fc);
@@ -858,7 +892,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
   return unsupported(s,0x35fc);
  if(impact_voice||reaction_voice||ema2_voice||ema2_timer_voice||timed_voice||footstep||sequence_voice||attack_core||
     local_cue_voice||weapon_swing||turn_core||attack_voice||death_voice||knockdown_core||player_hurt||player_recovery||
-    devil_spawn||em0a_attack_voice||em0a_player_impact)candidate->combat_profile=1;
+    devil_spawn||devil_rise||em0a_attack_voice||em0a_player_impact)candidate->combat_profile=1;
  /* The admitted cue keeps its spatial mix when 2CE488 detaches the actor. */
  candidate->door_spatial=(uint8_t)(door||om305);
  rate=w(descriptor.data+4);if(rate<1000 || rate>48000)return unsupported(s,0x38e4);
@@ -1292,6 +1326,7 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
   if(!enemy_reaction_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_state71_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_local_cue_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !r100_devil_rise_cue(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !enemy_attack_sequence_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em0a_attack_voice_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !r100_death_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T11:58:58+00:00",
-  "stage": "native-windows-r002-ev04-complete-r102-init",
+  "verified_utc": "2026-11-15T14:38:27+00:00",
+  "stage": "native-windows-r102-first-gameplay-presentation",
   "playable": false,
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
@@ -1312,6 +1312,24 @@
     },
     "renderer_or_window_error_observed": false,
     "effect_or_world_gpu_error_observed": false
+  },
+  "native_windows_r102_first_presentation": {
+    "scope": "Controlled original-disc replay through Event 04 and SaveMap Continue",
+    "room": "0102",
+    "game_state": 4,
+    "presented_room_frames": 16,
+    "presented_room_scene_range": [6752, 6767],
+    "matched_composite_and_pre_ui_capture_pairs": 16,
+    "capture_width": 512,
+    "capture_height": 448,
+    "last_composite_nonblack_rgb_pixels": 229349,
+    "last_pre_ui_nonblack_rgb_pixels": 229376,
+    "renderer_or_window_error_observed": false,
+    "effect_or_world_gpu_error_observed": false,
+    "r105_test_setup_enabled_only_in_qa": true,
+    "exit_tick": 6890,
+    "next_original_operation": {"module": "main ELF", "address": "002CBF78"},
+    "room_input_or_combat_verified_in_this_replay": false
   },
   "native_windows_r002_ev04_four_shots": {
     "scope": "Controlled original R105 exit and native Direct3D R002 presentation",

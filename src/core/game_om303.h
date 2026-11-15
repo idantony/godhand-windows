@@ -9,6 +9,10 @@ typedef struct {gh_om_init_state common;gh_hitarea_object sphere_unit;uint8_t *s
  * fields notwritten by originalchain; factoryowns itsrealzeroallocation. */
 gh_scene_placement_status gh_om303_construct_001879c8(void *,size_t,gh_title_player_view *);
 gh_scene_placement_status gh_om303_initialize_00187a78(gh_om303_state *,gh_om_object *,const gh_om_initializer_bindings *,int *original_return);
+enum {GH_OM338_BYTES=0x860};
+gh_scene_placement_status gh_om338_construct_0019ded0(void *,size_t,gh_title_player_view *);
+gh_scene_placement_status gh_om338_initialize_0019dfb8(gh_om303_state *,gh_om_object *,
+ const gh_om_initializer_bindings *,int *original_return);
 gh_scene_placement_status gh_om303_set_position_001c3778(gh_om303_state *,const uint8_t source_xyz[12]);
 gh_scene_placement_status gh_om303_set_euler_001c3988(gh_om303_state *,const uint8_t source_xyz[12]);
 gh_scene_placement_status gh_om303_abort(gh_om303_state *);

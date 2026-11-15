@@ -186,7 +186,7 @@ def validate(snapshot_arg, scratch_arg, *, project=PROJECT, expected_frontier=No
              r003_controlled=False, expected_tick_limit=None):
     snapshot, scratch, project = (Path(p).resolve() for p in (snapshot_arg, scratch_arg, project))
     build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
-    proof.require(proof.under(scratch, proof.SCRATCH_ROOT), "run scratch must be below project G scratch")
+    proof.require(proof.under(scratch, proof.SCRATCH_ROOT), "run scratch must be below the active work root")
     stop = proof.expected_stop(expected_frontier)
     error = native_error(expected_native_error)
     proof.require(sum(value is not None for value in (stop, error, expected_tick_limit)) == 1,
@@ -360,7 +360,7 @@ def main():
     try:
         output = args.output.resolve()
         proof.require(proof.under(output, proof.SCRATCH_ROOT) and output.name.endswith("-private.json")
-                      and output.parent.is_dir() and not output.exists(), "output must be a fresh G scratch *-private.json")
+                      and output.parent.is_dir() and not output.exists(), "output must be a fresh workspace *-private.json")
         receipt, inputs = validate(args.snapshot, args.scratch, project=args.project,
                                    expected_frontier=args.expected_frontier,
                                    expected_native_error=args.expected_native_error,

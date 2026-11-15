@@ -33,6 +33,24 @@ static gh_actor_motion_status find_room_enemy_002bef60(const gh_room_state *room
     return GH_ACTOR_MOTION_OK;
 }
 
+gh_actor_motion_status gh_enemy_set_data_appearance_00295458(const gh_room_state *room,
+    uint16_t stamp,uint8_t appearance)
+{
+    uint8_t *record;
+    const gh_actor_motion_status status=find_room_enemy_002bef60(room,stamp,&record);
+    if(!status&&record)record[0x10]=appearance;
+    return status;
+}
+
+gh_actor_motion_status gh_enemy_set_data_flags_00295498(const gh_room_state *room,
+    uint16_t stamp,uint32_t flags)
+{
+    uint8_t *record;
+    const gh_actor_motion_status status=find_room_enemy_002bef60(room,stamp,&record);
+    if(!status&&record)memcpy(record+8,&flags,sizeof(flags));
+    return status;
+}
+
 gh_actor_motion_status gh_enemy_clear_set_flags_002736f8(const gh_title_player_view *actor,
     const gh_room_state *room,uint32_t *frontier)
 {

@@ -271,8 +271,10 @@ static gh_scene_placement_status spawn(gh_enemy_ems *owner,uint32_t *frontier,in
                  (request.dependency_kind==0x20a&&(request.appearance==0||request.appearance==3)))) {
                 status=enter_202(entry,bindings,&request,frontier);
                 if(status&&!entry->enemy202)return GH_PLACE_MEMORY;
-            }else if(index==5 && request.entry_number==6 && request.object_kind==0x2a2 &&
-                request.dependency_kind==0x2a2 && request.appearance==0 && bindings->names_2a2){
+            }else if (bindings->names_2a2 &&
+                ((index==5 && request.entry_number==6 && request.object_kind==0x2a2 &&
+                  request.dependency_kind==0x2a2 && request.appearance==0) ||
+                 (bindings->actor.entry.work->room==0x102 && gh_enemy2a2_is_r102_entry(&request)))) {
                 if(!entry->enemy2a2)entry->enemy2a2=calloc(1,sizeof(*entry->enemy2a2));
                 if(!entry->enemy2a2)return GH_PLACE_MEMORY;
                 status=enter_2a2(entry,bindings,&request,frontier);

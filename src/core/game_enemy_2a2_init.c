@@ -99,17 +99,23 @@ gh_actor_model_status gh_enemy2a2_initialize_prefix_00284af8(gh_enemy2a2_init *s
         s->stage=HP_WRITTEN;
     }
     if (s->stage==HP_WRITTEN) {
-        if (bytes[0x1560]!=0) {s->frontier=0x284c28;return GH_ACTOR_MODEL_UNSUPPORTED;}
-        if (resource->file_extent<0x30) {s->frontier=0x284c7c;return GH_ACTOR_MODEL_BOUNDS;}
+        const unsigned appearance=bytes[0x1560];
+        if (appearance!=0 && appearance!=5) {
+            s->frontier=0x284c28;
+            return GH_ACTOR_MODEL_UNSUPPORTED;
+        }
+        /* 448A90[5] -> 284D70 binds the default pair with detail 1. */
+        const uint32_t row_pc=appearance==5 ? 0x284da0 : 0x284c7c;
+        if (resource->file_extent<0x30) {s->frontier=row_pc;return GH_ACTOR_MODEL_BOUNDS;}
         size_t motion=word(resource->bytes+0x28), sequence=word(resource->bytes+0x2c);
         if (motion>resource->file_extent-4 || sequence>resource->file_extent-4) {
-            s->frontier=0x284c7c;
+            s->frontier=row_pc;
             return GH_ACTOR_MODEL_BOUNDS;
         }
         bytes[0x2f4]=0;
         bytes[0x2f5]=2;
         bytes[0x2f6]=0;
-        bytes[0x2f7]=0;
+        bytes[0x2f7]=(uint8_t)(appearance==5);
         s->motion_offset=motion;
         s->sequence_offset=sequence;
         s->stage=MOTION_SELECTED;

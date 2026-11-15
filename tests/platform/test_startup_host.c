@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "../../src/platform/startup_host.h"
+#include "test_scratch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -133,7 +134,9 @@ int main(int argc,char **argv)
     if(argc==3){
         gh_startup_continuation c={1,1,GH_SE_DSP_NATIVE_LINEAR_REFERENCE,0,0,0};
         frame_fixture fixture={0};unsigned inputs=0;
-        CHECK(gh_startup_host_create_with_profile(argv[1],"G:\\middle_thing\\godhand_windows\\build\\startup-normal-host\\absent-profile",1,0,64*1024*1024,&h)==GH_HOST_OK);
+        char scratch[GH_TEST_SCRATCH_PATH_BYTES],absent_profile[GH_TEST_SCRATCH_PATH_BYTES];
+        CHECK(gh_test_scratch_open(scratch,absent_profile,"absent-profile"));
+        CHECK(gh_startup_host_create_with_profile(argv[1],absent_profile,1,0,64*1024*1024,&h)==GH_HOST_OK);
         CHECK(gh_startup_host_set_continuation(h,&c)==GH_HOST_OK);
         CHECK(gh_startup_host_set_mc_consumers(h,fixture_draw,&fixture,0,0)==GH_HOST_OK);
         CHECK(gh_startup_host_set_mc_frame_begin(h,fixture_begin,&fixture)==GH_HOST_OK);
@@ -153,6 +156,7 @@ int main(int argc,char **argv)
         CHECK(s.id->pool_used==0 && s.id->job_count==0 && s.sound_control && s.normal_continuation);
         CHECK(gh_startup_host_set_continuation(h,&c)==GH_HOST_ARGUMENT);
         CHECK(gh_startup_host_destroy(h)==GH_HOST_OK);
+        CHECK(gh_test_scratch_directory(scratch,0));
         /* True alternate branch through Main/services and real assets; no
          * fake movie/UI consumers are needed on this original branch. */
         CHECK(gh_startup_host_create(argv[1],1,0x80000000u,64*1024*1024,&h)==GH_HOST_OK);

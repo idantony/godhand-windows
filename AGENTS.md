@@ -6,7 +6,8 @@
 - Follow the OpenGOAL style of recovering readable source and replacing platform dependencies with native implementations.
 - Do not substitute a packaged PS2 emulator or a generic instruction-translated runtime for the requested source port.
 - Useful source, reference inputs, installed portable tools, evidence and project documentation belong in `E:\godhand_windows`.
-- Build outputs, object files, test executables, temporary downloads, caches, headless projects and bulky logs belong in `G:\middle_thing\godhand_windows`.
+- Keep active snapshots, builds, caches, fixtures and replays in `E:\godhand_windows\.work`. Ghidra project files live in the hidden `E:\godhand_windows\ghidra-work` directory.
+- Treat `G:\middle_thing\godhand_windows` as cold HDD storage. Use E paths for routine searches, tools and worker jobs. When a specific archived file is needed, copy that file to E once, check its hash when available and use the local copy. Apply this rule to resumed tasks and older snapshots whose instructions predate the storage change.
 - The user has authorized installing needed tools. Do not ask again for routine tool installation or reversible implementation work.
 - Public GitHub repository: `https://github.com/idantony/godhand-windows`. Keep local commits for rollback; push only meaningful execution/integration milestones, not every small module. Exclude original game data, raw instruction/decompiler dumps, dependencies and caches. Publish curated progress separately from private analysis.
 - After each meaningful GitHub push, review the overall execution frontier, remaining blockers and critical path; adjust the next work and independent agent assignments when evidence warrants it. Keep this review short and actionable. Local commits retain rollback points; formal overall reviews use the GitHub push milestone, following the user's latest clarification.
@@ -25,8 +26,8 @@
 
 ## Verification
 
-- `python tools/build-native.py` builds and runs native C module tests, writing `analysis/native-verification.json` and G: build outputs.
+- `python tools/build-native.py` builds and runs native C module tests, writing `analysis/native-verification.json` and build outputs under `.work` by default.
 - `python -B tools/verify_rng.py` compares two recovered RNG functions with a restricted, development-only model of the actual MIPS routines. This is not PS2 hardware validation and is never shipped as game runtime.
 - Numerical adaptations must preserve defined 32-bit wrap and relevant PS2 floating-point behavior. Do not assume Windows default float conversion matches EE.
-- Original assets are read-only. Avoid bulk extraction, duplicated ISOs and all destructive cleanup. Move only verified task-generated intermediates to the dedicated G: tree.
+- Original assets are read-only. Avoid bulk extraction, duplicated ISOs and all destructive cleanup. Archive only verified task-generated intermediates that have left the active workflow.
 - Report separately: readable source recovered, native modules built, modeled differential checks, and actual gameplay tested. Only mark playable after a real original-game scene has been observed and verified.

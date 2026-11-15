@@ -1,4 +1,4 @@
-"""Synthetic validator regressions; temporary files are confined to G scratch."""
+"""Synthetic validator regressions; temporary files are confined to active work directories."""
 import copy
 import hashlib
 import importlib.util
@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("ghidra_report_validator", ROOT/"tools/validate-ghidra-report.py")
 v = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(v)
-SCRATCH = Path("G:/middle_thing/godhand_windows/build/ghidra-validator-tests")
+SCRATCH = ROOT / ".work/build/ghidra-validator-tests"
 SCRATCH.mkdir(parents=True, exist_ok=True)
 
 

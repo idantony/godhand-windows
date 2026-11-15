@@ -1,4 +1,4 @@
-"""Workflow regression tests; all generated repositories remain under G:."""
+"""Workflow regression tests; all generated repositories remain under the active work root."""
 import importlib.util
 import os
 from pathlib import Path
@@ -21,7 +21,7 @@ spec.loader.exec_module(snapshot_stage)
 spec = importlib.util.spec_from_file_location("freeze_source", PROJECT / "tools/freeze-source.py")
 snapshot_freeze = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshot_freeze)
-SCRATCH = Path(os.environ.get("GH_TEST_SCRATCH", r"G:/middle_thing/godhand_windows/tool-tests"))
+SCRATCH = Path(os.environ.get("GH_TEST_SCRATCH", str(snapshot_freeze.SCRATCH / "tool-tests")))
 
 
 class WorkflowTools(unittest.TestCase):

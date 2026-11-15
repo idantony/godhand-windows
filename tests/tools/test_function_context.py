@@ -66,7 +66,7 @@ def make_report(binary, overlay_function=False):
 
 class ContextTests(unittest.TestCase):
     def setUp(self):
-        scratch = Path(os.environ.get("GH_TEST_SCRATCH", "G:/middle_thing/godhand_windows/build/function-context-tests"))
+        scratch = Path(os.environ.get("GH_TEST_SCRATCH", str(Path(__file__).resolve().parents[2] / ".work/build/function-context-tests")))
         scratch.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(prefix="owned-", dir=scratch)
         self.root = Path(self.temp.name).resolve()
