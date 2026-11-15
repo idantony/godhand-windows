@@ -5,6 +5,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* SearchData with original holes in a packed enemy directory. */
+gh_bundle_error gh_enemy_bundle_find(const uint8_t *, size_t bytes, const char *tag,
+    unsigned occurrence, gh_bundle_entry *);
 /* Bounded original208268 EM202/20A path. Resource is SAME acquired holder;
  * file_extent is distinct from allocated capacity. No resource copy/registry. */
 typedef struct {gh_actor_model model;gh_bundle_entry geometry,texture;const uint8_t *resource;
@@ -13,6 +17,7 @@ gh_actor_model_status gh_enemy_model_initialize_00208268(gh_enemy_model *,const 
  const gh_object_view *,gh_boot_work *,gh_room_pools *,gh_heap *,const void *fog_rgb,
  gh_static_transform_policy,int *original_return);
 gh_actor_model_status gh_enemy_model_release_prefix(gh_enemy_model *);
+gh_bundle_error gh_enemy_bundle_find(const uint8_t *,size_t,const char *,unsigned,gh_bundle_entry *);
 #ifdef __cplusplus
 }
 #endif

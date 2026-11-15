@@ -21,6 +21,8 @@ typedef struct {
     size_t actor_index;
     uint16_t source_kind, create_kind, resource_kind, create_argument;
     gh_object_view loaded_resource;
+    unsigned pack_index;
+    uint8_t packed_resource;
 } gh_event_actor_create_request;
 
 typedef gh_game_event_status (*gh_event_create_factory)(void *, const gh_event_actor_create_request *,
@@ -49,6 +51,7 @@ typedef struct {
     /* Zero retains the legacy single-row provider contract. */
     size_t row_limit;
     gh_event_create_finish finish;
+    const gh_stage_slots *room_enemy_slots;
 } gh_event_actor_create_bindings;
 
 typedef struct {
@@ -70,6 +73,7 @@ typedef struct {
 
 /* Source IDs from EV04's complete original 17-row actor table. */
 int gh_event_actor_ev04_source_kind(uint16_t);
+int gh_event_actor_packed_enemy(int32_t event,size_t row,uint16_t source,uint8_t code);
 
 /* After the actual Env allocation, run REL+0AC0, +0BA8 and +0D20.
  * Success here means the original create task was registered. Its first

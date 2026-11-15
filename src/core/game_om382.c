@@ -399,7 +399,7 @@ gh_scene_placement_status gh_om376_set_paper_0012c8d8(gh_om376_paper *call,
     if(!frontier)return GH_PLACE_ARGUMENT;
     *frontier=0x12c8d8;
     if(!call||!factory||!factory->bound||
-       (factory->bindings.work->room!=0x105&&factory->bindings.work->room!=2&&factory->bindings.work->room!=0x102)||
+       !gh_om376_paper_room_supported(factory->bindings.work->room)||
        !player||!player->ready||!player->root.bytes||!player->root.alias_f0||
        player->root.size<0x6ac||player->root.original_vtable214!=0x41d220||
        player->pools!=factory->bindings.pools||!save.bytes||save.size<GH_CORE_SAVE_BYTES||

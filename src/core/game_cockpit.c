@@ -4,6 +4,7 @@
  * Host handles replace every guest pointer. Finite UI source reconstruction,
  * not a GS interpreter or a claim of Cockpit Move/Trans implementation. */
 #include "game_cockpit.h"
+#include "../rooms/r100_counter_task.h"
 #include "id_entry_reset.h"
 #include "id_animation.h"
 #include "id_tick.h"
@@ -52,7 +53,11 @@ struct gh_game_cockpit {
   gh_bundle_entry image;
   uint32_t job;
   uint8_t stage;
- } ticket;
+ } ticket,middle_boss;
+ const gh_title_player_view *middle_boss_actors[5];
+ gh_id_base *middle_boss_bars[5];
+ gh_id_base *middle_boss_draw_order[5];
+ gh_id_texture middle_boss_names[5];
 };
 static uint32_t u32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w32(gh_game_cockpit *s,unsigned o,uint32_t n){for(unsigned i=0;i<4;i++)s->fields[o+i]=(uint8_t)(n>>(8*i));}
@@ -235,7 +240,7 @@ gh_id_error gh_game_cockpit_room_reset_00140de0(gh_game_cockpit*s,gh_core_save_v
  s->room_ready=1;return GH_ID_OK;
 }
 
-static gh_id_error ticket_error(gh_game_cockpit *s,uint32_t address,gh_id_error error)
+static gh_id_error room_id_error(gh_game_cockpit *s,uint32_t address,gh_id_error error)
 {
  s->frontier=address;
  return error;
@@ -249,10 +254,10 @@ gh_id_error gh_game_cockpit_load_ticket_0013e418(gh_game_cockpit *s,gh_id_state 
  if(!s||!s->ready||!manager||s->manager!=manager||!dvd||!dvd->disc||!heap)return GH_ID_ARGUMENT;
  s->frontier=0;
  if(s->ticket.stage&&(s->ticket.dvd!=dvd||s->ticket.heap!=heap||s->ticket.manager!=manager))
-  return ticket_error(s,0x13e418,GH_ID_ARGUMENT);
+  return room_id_error(s,0x13e418,GH_ID_ARGUMENT);
  if(s->ticket.stage==0){
   if(manager->pair[0x19].bound||base(s,0x19c0)->owns_run)
-   return ticket_error(s,0x2accf8,GH_ID_BUSY);
+   return room_id_error(s,0x2accf8,GH_ID_BUSY);
   size_t index;
   const char *path=paths[(unsigned)language<7?(unsigned)language:0];
   gh_disc_error found=gh_disc_find(dvd->disc,path,&index);
@@ -260,44 +265,186 @@ gh_id_error gh_game_cockpit_load_ticket_0013e418(gh_game_cockpit *s,gh_id_state 
    path=paths[0];
    found=gh_disc_find(dvd->disc,path,&index);
   }
-  if(found)return ticket_error(s,0x2acfa8,found==GH_DISC_NOT_FOUND?GH_ID_NOT_FOUND:GH_ID_BOUNDS);
+  if(found)return room_id_error(s,0x2acfa8,found==GH_DISC_NOT_FOUND?GH_ID_NOT_FOUND:GH_ID_BOUNDS);
   gh_disc_entry entry;
   if(gh_disc_entry_at(dvd->disc,index,&entry)||entry.size>SIZE_MAX)
-   return ticket_error(s,0x200cb0,GH_ID_BOUNDS);
+   return room_id_error(s,0x200cb0,GH_ID_BOUNDS);
   s->ticket.job=gh_dvd_read_alloc(dvd,path,&s->ticket.resource,heap,0,0,0,0);
-  if(!s->ticket.job)return ticket_error(s,0x200cb0,dvd->last_error==GH_DVD_MEMORY?GH_ID_MEMORY:GH_ID_FORMAT);
+  if(!s->ticket.job)return room_id_error(s,0x200cb0,dvd->last_error==GH_DVD_MEMORY?GH_ID_MEMORY:GH_ID_FORMAT);
   s->ticket.dvd=dvd;s->ticket.heap=heap;s->ticket.manager=manager;
   s->ticket.image=(gh_bundle_entry){.bytes=s->ticket.resource.pointer,.size=(size_t)entry.size};
   w32(s,0x19a0,1);w32(s,0x19a4,s->ticket.job);s->ticket.stage=1;
  }
  if(s->ticket.stage==1){
   while(gh_dvd_check(dvd,s->ticket.job))
-   if(gh_dvd_pump(dvd))return ticket_error(s,0x201160,GH_ID_FORMAT);
-  if(dvd->failed_id==s->ticket.job)return ticket_error(s,0x201160,GH_ID_FORMAT);
+   if(gh_dvd_pump(dvd))return room_id_error(s,0x201160,GH_ID_FORMAT);
+  if(dvd->failed_id==s->ticket.job)return room_id_error(s,0x201160,GH_ID_FORMAT);
   s->ticket.stage=2;
  }
  if(s->ticket.stage==2){
   if(gh_id_set_data_002accf8(manager,0x19,&s->ticket.image))
-   return ticket_error(s,0x2accf8,GH_ID_FORMAT);
+   return room_id_error(s,0x2accf8,GH_ID_FORMAT);
   s->ticket.stage=3;
  }
  if(s->ticket.stage==3){
   gh_id_base *ticket=base(s,0x19c0);
-  if(ticket->owns_run)return ticket_error(s,0x2a9ea0,GH_ID_BUSY);
-  if(s->owned_count>=BASES)return ticket_error(s,0x2a9ea0,GH_ID_CAPACITY);
+  if(ticket->owns_run)return room_id_error(s,0x2a9ea0,GH_ID_BUSY);
+  if(s->owned_count>=BASES)return room_id_error(s,0x2a9ea0,GH_ID_CAPACITY);
   int original;
   const gh_id_error error=gh_id_base_initialize_002a9ea0(s->runtime,ticket,0x19,0,rnd,s->random,&original);
   if(ticket->owns_run)s->owned[s->owned_count++]=ticket;
-  if(error)return ticket_error(s,ticket->first_unported?ticket->first_unported:0x2a9ea0,error);
-  if(original!=1)return ticket_error(s,0x2a9ea0,GH_ID_NOT_FOUND);
+  if(error)return room_id_error(s,ticket->first_unported?ticket->first_unported:0x2a9ea0,error);
+  if(original!=1)return room_id_error(s,0x2a9ea0,GH_ID_NOT_FOUND);
   s->ticket.stage=4;
  }
  if(s->ticket.stage==4){
   const gh_id_error error=restart(s,0x19c0);
-  if(error)return ticket_error(s,0x2abbe8,error);
+  if(error)return room_id_error(s,0x2abbe8,error);
   s->fields[0x19dc]=1;s->ticket.stage=5;
  }
  return GH_ID_OK;
+}
+
+
+/* R103's original 13F330 binds bank 0D and initializes six ID bases. The
+ * source data must remain owned until all native ID views are detached. */
+gh_id_error gh_game_cockpit_load_middle_boss_0013f330(gh_game_cockpit *s,
+ gh_id_state *manager,gh_dvd_jobs *dvd,gh_heap *heap)
+{
+ static const char path[]="id/idmiddlebossstage1.idd";
+ const unsigned widget=0x1e90;
+ if(!s||!s->ready||!manager||s->manager!=manager||!dvd||!dvd->disc||!heap)return GH_ID_ARGUMENT;
+ s->frontier=0;
+ if(s->middle_boss.stage&&(s->middle_boss.manager!=manager||
+    s->middle_boss.dvd!=dvd||s->middle_boss.heap!=heap))
+  return room_id_error(s,0x13f330,GH_ID_ARGUMENT);
+ if(s->middle_boss.stage==0){
+  if(manager->pair[0x0d].bound)return room_id_error(s,0x2accf8,GH_ID_BUSY);
+  size_t index;
+  gh_disc_entry entry;
+  if(gh_disc_find(dvd->disc,path,&index)||gh_disc_entry_at(dvd->disc,index,&entry))
+   return room_id_error(s,0x2acfa8,GH_ID_NOT_FOUND);
+  s->middle_boss.job=gh_dvd_read_alloc(dvd,path,&s->middle_boss.resource,heap,0,0,0,0);
+  if(!s->middle_boss.job)return room_id_error(s,0x200cb0,GH_ID_MEMORY);
+  s->middle_boss.manager=manager;s->middle_boss.dvd=dvd;s->middle_boss.heap=heap;
+  s->middle_boss.image=(gh_bundle_entry){.bytes=s->middle_boss.resource.pointer,.size=(size_t)entry.size};
+  w32(s,widget+0xa0,1);w32(s,widget+0xa4,s->middle_boss.job);
+  s->middle_boss.stage=1;
+ }
+ if(s->middle_boss.stage==1){
+  while(gh_dvd_check(dvd,s->middle_boss.job))
+   if(gh_dvd_pump(dvd))return room_id_error(s,0x201160,GH_ID_FORMAT);
+  if(dvd->failed_id==s->middle_boss.job)return room_id_error(s,0x201160,GH_ID_FORMAT);
+  if(gh_id_set_data_002accf8(manager,0x0d,&s->middle_boss.image))
+   return room_id_error(s,0x2accf8,GH_ID_FORMAT);
+  s->middle_boss.stage=2;
+ }
+ while(s->middle_boss.stage<8){
+  const unsigned index=s->middle_boss.stage-2;
+  const unsigned offset=index?widget+0xc0+(index-1)*0x50:widget;
+  gh_id_base *id=base(s,offset);
+  if(!id)return room_id_error(s,0x2a9ea0,GH_ID_NOT_FOUND);
+  if(!id->owns_run){
+   if(s->owned_count>=BASES)return room_id_error(s,0x2a9ea0,GH_ID_CAPACITY);
+   int original;
+   gh_id_error error=gh_id_base_initialize_002a9ea0(s->runtime,id,0x0d,index!=0,rnd,s->random,&original);
+   if(id->owns_run)s->owned[s->owned_count++]=id;
+   if(error)return room_id_error(s,id->first_unported?id->first_unported:0x2a9ea0,error);
+   if(original!=1)return room_id_error(s,0x2a9ea0,GH_ID_NOT_FOUND);
+  }
+  const uint8_t playing=id->playing;
+  gh_id_error error=gh_id_base_restart_anim(id,rnd,s->random);
+  id->playing=playing;
+  if(error)return room_id_error(s,0x2aba78,error);
+  gh_id_entry *entry;
+  error=gh_id_base_get_work_002aa410(s->runtime,id,0,&entry,NULL);
+  if(error||!entry)return room_id_error(s,0x2aa410,error?error:GH_ID_NOT_FOUND);
+  if(!index){
+   entry->pos_x=-100.0f;
+   w32(s,widget+0x90,0);
+  }else{
+   gh_id_entry *root;
+   error=gh_id_base_get_work_002aa410(s->runtime,base(s,widget),0,&root,NULL);
+   if(error||!root)return room_id_error(s,0x2aa410,error?error:GH_ID_NOT_FOUND);
+   const unsigned actor=index-1;
+   w32(s,widget+0x2c0+actor*4,0x3f800000);
+   w32(s,widget+0x2d4+actor*4,0x3f800000);
+   w32(s,widget+0x2e8+actor*4,0x3f800000);
+   w16(s,widget+0x2fc+actor*2,0);
+   w32(s,widget+0x370+actor*4,0);
+   w32(s,widget+0xa8+actor*4,0);
+   entry->pos_y=root->pos_y;
+  }
+  ++s->middle_boss.stage;
+ }
+ /* 13F330 sets the bit on each call. R103Init clears it immediately. */
+ w32(s,widget+0x90,0x80000000);
+ return GH_ID_OK;
+}
+
+gh_id_error gh_game_cockpit_hide_middle_boss(gh_game_cockpit *s)
+{
+ if(!s||s->middle_boss.stage!=8)return GH_ID_ARGUMENT;
+ w32(s,0x1f20,u32(s->fields+0x1f20)&0x7fffffffu);
+ return GH_ID_OK;
+}
+
+gh_id_error gh_game_cockpit_register_middle_boss_0013f558(gh_game_cockpit *s,
+ const gh_boot_work *work,const gh_title_player_view *actor)
+{
+ if(!s||!s->ready||!work||!actor||!actor->bytes||actor->size<0x2f4)return GH_ID_ARGUMENT;
+ if((u32((const uint8_t *)work+0x5e4)&0x20000000u)||(u32(actor->bytes+0x2f0)&0x1000u))return GH_ID_OK;
+ const unsigned widget=0x1e90;
+ const unsigned index=s->fields[widget+0x358];
+ if(index>=5)return GH_ID_OK;
+ s->middle_boss_actors[index]=actor;
+ s->middle_boss_bars[index]=base(s,widget+0xc0+index*0x50);
+ w32(s,widget+0xa8+index*4,0);
+ ++s->fields[widget+0x358];
+ return GH_ID_OK;
+}
+
+void gh_game_cockpit_forget_middle_boss(gh_game_cockpit *s,const gh_title_player_view *actor)
+{
+ if(!s||!actor)return;
+ for(unsigned i=0;i<5;++i)if(s->middle_boss_actors[i]==actor){
+  s->middle_boss_actors[i]=NULL;s->middle_boss_bars[i]=NULL;
+ }
+}
+
+static gh_id_error release_middle_boss(gh_game_cockpit *s,int compact)
+{
+ memset(s->middle_boss_actors,0,sizeof(s->middle_boss_actors));
+ memset(s->middle_boss_bars,0,sizeof(s->middle_boss_bars));
+ memset(s->middle_boss_draw_order,0,sizeof(s->middle_boss_draw_order));
+ memset(s->middle_boss_names,0,sizeof(s->middle_boss_names));
+ s->fields[0x21e8]=0;
+ if(!s->middle_boss.stage)return GH_ID_OK;
+ if(gh_dvd_check(s->middle_boss.dvd,s->middle_boss.job)&&
+    !gh_dvd_cancel(s->middle_boss.dvd,s->middle_boss.job))return room_id_error(s,0x201018,GH_ID_BUSY);
+ for(unsigned i=6;i>0;--i){
+  gh_id_base *id=base(s,i==1?0x1e90:0x1f50+(i-2)*0x50);
+  if(!id->owns_run)continue;
+  int original,freed;
+  gh_id_error error=compact?gh_id_base_detach_for_compaction(s->runtime,id):
+   gh_id_base_release_002aa078(s->runtime,id,&original,&freed);
+  if(error||(!compact&&!freed))return room_id_error(s,0x2aa078,error?error:GH_ID_BUSY);
+  for(unsigned k=0;k<s->owned_count;++k)if(s->owned[k]==id){
+   --s->owned_count;
+   memmove(s->owned+k,s->owned+k+1,(s->owned_count-k)*sizeof(*s->owned));
+   break;
+  }
+ }
+ if(s->middle_boss.stage>=2)s->middle_boss.manager->pair[0x0d]=(gh_id_pair){0};
+ if(gh_heap_release(s->middle_boss.heap,s->middle_boss.resource))
+  return room_id_error(s,0x30ee40,GH_ID_MEMORY);
+ memset(&s->middle_boss,0,sizeof(s->middle_boss));w32(s,0x1f30,0);
+ return GH_ID_OK;
+}
+
+gh_id_error gh_game_cockpit_abort_middle_boss(gh_game_cockpit *s)
+{
+ return s?release_middle_boss(s,0):GH_ID_ARGUMENT;
 }
 
 gh_id_error gh_game_cockpit_set_ticket_visible(gh_game_cockpit *s,int visible)
@@ -311,14 +458,14 @@ static gh_id_error release_ticket(gh_game_cockpit *s,int compact)
 {
  if(!s->ticket.stage)return GH_ID_OK;
  if(gh_dvd_check(s->ticket.dvd,s->ticket.job)&&!gh_dvd_cancel(s->ticket.dvd,s->ticket.job))
-  return ticket_error(s,0x201018,GH_ID_BUSY);
+  return room_id_error(s,0x201018,GH_ID_BUSY);
  gh_id_base *ticket=base(s,0x19c0);
  if(ticket->owns_run){
   int original,freed;
   gh_id_error error=compact?gh_id_base_detach_for_compaction(s->runtime,ticket):
    gh_id_base_release_002aa078(s->runtime,ticket,&original,&freed);
-  if(error)return ticket_error(s,0x2aa078,error);
-  if(!compact&&!freed)return ticket_error(s,0x2aa078,GH_ID_BUSY);
+  if(error)return room_id_error(s,0x2aa078,error);
+  if(!compact&&!freed)return room_id_error(s,0x2aa078,GH_ID_BUSY);
   for(unsigned i=0;i<s->owned_count;++i)if(s->owned[i]==ticket){
    --s->owned_count;
    memmove(s->owned+i,s->owned+i+1,(s->owned_count-i)*sizeof(*s->owned));
@@ -330,7 +477,7 @@ static gh_id_error release_ticket(gh_game_cockpit *s,int compact)
  const uintptr_t data=(uintptr_t)pair->data.bytes,texture=(uintptr_t)pair->texture_data.bytes;
  if((data>=first&&data-first<s->ticket.image.size)||(texture>=first&&texture-first<s->ticket.image.size))
   *pair=(gh_id_pair){0};
- if(gh_heap_release(s->ticket.heap,s->ticket.resource))return ticket_error(s,0x30ee40,GH_ID_MEMORY);
+ if(gh_heap_release(s->ticket.heap,s->ticket.resource))return room_id_error(s,0x30ee40,GH_ID_MEMORY);
  memset(&s->ticket,0,sizeof(s->ticket));w32(s,0x19a0,0);
  return GH_ID_OK;
 }
@@ -345,6 +492,8 @@ gh_id_error gh_game_cockpit_destroy(gh_game_cockpit *s){
  while(s->owned_count){int original,freed;gh_id_error e=gh_id_base_release_002aa078(s->runtime,s->owned[--s->owned_count],&original,&freed);if(e)result=e;else if(!freed)result=GH_ID_BUSY;}
  const gh_id_error resource=release_ticket(s,0);
  if(resource)result=resource;
+ const gh_id_error boss_resource=release_middle_boss(s,0);
+ if(boss_resource)result=boss_resource;
  free(s);return result;
 }
 gh_id_error gh_game_cockpit_base(gh_game_cockpit *s,uint32_t o,gh_id_base **out){if(!s||!out)return GH_ID_ARGUMENT;*out=base(s,o);return *out?GH_ID_OK:GH_ID_NOT_FOUND;}
@@ -878,6 +1027,162 @@ static gh_id_error gameplay_widget_body(gh_game_cockpit*s,unsigned index,const g
 static gh_id_error gameplay_widget(gh_game_cockpit*s,unsigned i,const gh_boot_work*w,const gh_cockpit_frame_callbacks*c){
  fenv_t env;if(feholdexcept(&env))return GH_ID_UNSUPPORTED;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_ID_UNSUPPORTED;}gh_id_error e=gameplay_widget_body(s,i,w,c);if(fesetenv(&env))return GH_ID_UNSUPPORTED;return e;
 }
+
+static gh_id_error middle_boss_select_00140718(gh_game_cockpit *s,unsigned selected,int force)
+{
+ const unsigned widget=0x1e90;
+ uint8_t *timer=s->fields+widget+0x384;
+ if(*timer&&!force)return GH_ID_OK;
+ *timer=(uint8_t)(*timer+10);
+ s->middle_boss_draw_order[0]=base(s,widget+0xc0+selected*0x50);
+ gh_id_entry *entry;
+ TRY(work(s,widget+0xc0+selected*0x50,0,0,&entry));
+ entry->color_base=(entry->color_base&0xffffffu)|0x80000000u;
+ unsigned order=1;
+ for(unsigned i=selected;i>0;i--){
+  const unsigned offset=widget+0xc0+(i-1)*0x50;
+  s->middle_boss_draw_order[order++]=base(s,offset);
+  TRY(work(s,offset,0,0,&entry));
+  entry->color_base=(entry->color_base&0xffffffu)|0x20000000u;
+ }
+ for(unsigned i=selected+1;i<s->fields[widget+0x358];i++){
+  const unsigned offset=widget+0xc0+i*0x50;
+  s->middle_boss_draw_order[order++]=base(s,offset);
+  TRY(work(s,offset,0,0,&entry));
+  entry->color_base=(entry->color_base&0xffffffu)|0x20000000u;
+ }
+ return GH_ID_OK;
+}
+
+static gh_id_error middle_boss_cleanup_00140860(gh_game_cockpit *s,int clear_all)
+{
+ const unsigned widget=0x1e90;
+ uint8_t *count=s->fields+widget+0x358;
+ for(unsigned i=0;i<*count;){
+  int dead;
+  if(gh_enemy_placement_dead_0028fb38(s->gameplay.room,s->middle_boss_actors[i],&dead))
+   return frame_stop(s,0x28fb38);
+  if(!dead&&!clear_all){i++;continue;}
+  const unsigned bar=widget+0xc0+i*0x50;
+  TRY(restart(s,bar));
+  s->middle_boss_actors[i]=NULL;
+  s->middle_boss_names[i]=(gh_id_texture){0};
+  w32(s,widget+0x2c0+i*4,0x3f800000u);
+  w32(s,widget+0x2d4+i*4,0x3f800000u);
+  w32(s,widget+0x2e8+i*4,0x3f800000u);
+  w16(s,widget+0x2fc+i*2,0);
+  w32(s,widget+0xa8+i*4,0);
+  for(unsigned j=i;j+1<*count;j++){
+   s->middle_boss_actors[j]=s->middle_boss_actors[j+1];
+   s->middle_boss_names[j]=s->middle_boss_names[j+1];
+   static const unsigned shifted_fields[]={0x2c0,0x2d4,0x2e8,0xa8};
+   for(unsigned k=0;k<sizeof(shifted_fields)/sizeof(shifted_fields[0]);k++){
+    const unsigned slot=widget+shifted_fields[k]+j*4;
+    w32(s,slot,u32(s->fields+slot+4));
+   }
+   memcpy(s->fields+widget+0x2fc+j*2,s->fields+widget+0x2fc+(j+1)*2,2);
+   memcpy(s->fields+widget+0x308+j*16,s->fields+widget+0x308+(j+1)*16,16);
+   memcpy(s->fields+widget+0x270+j*16,s->fields+widget+0x270+(j+1)*16,12);
+  }
+  TRY(middle_boss_select_00140718(s,(unsigned)*count-1,1));
+  --*count;
+  s->middle_boss_actors[*count]=NULL;
+ }
+ return GH_ID_OK;
+}
+
+static gh_id_error middle_boss_move_0013f5d0(gh_game_cockpit *s,const gh_boot_work *work_state,
+ const gh_cockpit_frame_callbacks *callbacks)
+{
+ const unsigned widget=0x1e90;
+ const uint8_t *work_bytes=(const uint8_t *)work_state;
+ if((u32(work_bytes+0x584)&8)||(u32(work_bytes+0x58c)&0x80000000u))return GH_ID_OK;
+ if(!(s->hud_cold_known&2))return frame_stop(s,0x140860);
+ if(!s->fields[widget+0x358]&&!u32(s->fields+widget+0xa0))return GH_ID_OK;
+ if(work_state->room!=0x103||s->fields[widget+0x358]>2||s->middle_boss.stage!=8||
+    !s->gameplay.room||!u32(s->fields+widget+0xa0))return frame_stop(s,0x140860);
+ TRY(middle_boss_cleanup_00140860(s,!!(u32(work_bytes+0x5e4)&0x20000000u)));
+ const unsigned count=s->fields[widget+0x358];
+ gh_id_entry *root,*caption;
+ TRY(work(s,widget,0,0,&root));
+ TRY(work(s,widget,2,0,&caption));
+ if(!root->source)return frame_stop(s,0x14048c);
+ for(unsigned i=0;i<count;i++){
+  const unsigned bar=widget+0xc0+i*0x50;
+  const unsigned bank=i*4,uv=i*16;
+  const uint8_t *actor=s->middle_boss_actors[i]->bytes;
+  const uint32_t dependency=u32(actor+0x564);
+  if(dependency!=0x214&&dependency!=0x215)return frame_stop(s,0x13ffd0);
+  const int em15=dependency==0x215;
+  int16_t maximum,current,timer;
+  memcpy(&maximum,actor+0x548,2);
+  memcpy(&current,actor+0x54a,2);
+  memcpy(&timer,s->fields+widget+0x2fc+i*2,2);
+  if(maximum<=0)continue;
+  const volatile float hp=(float)current/(float)maximum;
+  const unsigned flags=u32(s->fields+widget+0xa8+bank);
+  if(flags&0x80000000u)return frame_stop(s,0x14016c);
+  if((flags&0x40000000u)&&frame_number(s->fields+widget+0x2e8+bank)!=hp)
+   return frame_stop(s,0x140718);
+  gh_id_entry *position,*fill,*lag;
+  TRY(work(s,bar,0,0,&position));
+  TRY(work(s,bar,1,0,&fill));
+  TRY(work(s,bar,2,0,&lag));
+  if(!(flags&0x40000000u)){
+   TRY(gh_id_texture_open(s->manager,0xd,2+(unsigned)em15,s->middle_boss_names+i));
+   w32(s,widget+0x308+uv,0x3f200000u);
+   w32(s,widget+0x30c+uv,em15?0x3e8f5c29u:0x3e1eb852u);
+   w32(s,widget+0x310+uv,0x3f300000u);
+   w32(s,widget+0x314+uv,em15?0x3e99db23u:0x3e2f9db2u);
+   position->color_base=(position->color_base&0xffffffu)|(i?0x20000000u:0x80000000u);
+   wf(s,widget+0x274+uv,root->pos_y);
+   w32(s,widget+0xa8+bank,flags|0x40000000u);
+  }
+  fill->f70[0]=frame_number(s->fields+widget+0x30c+uv);
+  fill->f70[1]=frame_number(s->fields+widget+0x308+uv);
+  fill->f70[2]=frame_number(s->fields+widget+0x314+uv);
+  fill->f70[3]=frame_number(s->fields+widget+0x310+uv);
+  fill->scale_x=hp;
+  const float delayed=frame_number(s->fields+widget+0x2d4+bank);
+  lag->scale_x=delayed;
+  if(timer)w16(s,widget+0x2fc+i*2,(uint16_t)((unsigned)timer-1u));
+  else wf(s,widget+0x2d4+bank,add(delayed,-mul(add(delayed,-hp),.07f)));
+  wf(s,widget+0x2e8+bank,hp);
+  const float target=add(add(frame_number(root->source+0xc),mul(14.0f,(float)i)),14.0f);
+  const float old_y=frame_number(s->fields+widget+0x274+uv);
+  position->pos_x=add(mul((float)i,6.0f),75.0f);
+  position->pos_y=add(old_y,mul(add(target,-old_y),.5f));
+  const int visible=!!(u32(s->fields+widget+0x90)&0x80000000u);
+  wf(s,widget+0x274+uv,visible?position->pos_y:-100.0f);
+  TRY(gameplay_move_base(s,bar,callbacks));
+ }
+ caption->flags&=~0x08000000u;
+ const float goal_x=frame_number(root->source+8);
+ const float goal_y=frame_number(root->source+0xc);
+ wf(s,widget+0x94,goal_x);
+ wf(s,widget+0x98,goal_y);
+ if(count){
+  root->pos_x=fminf(add(root->pos_x,10.0f),goal_x);
+  root->pos_y=fminf(add(root->pos_y,10.0f),goal_y);
+ }else{
+  root->pos_x=fmaxf(add(root->pos_x,-10.0f),-100.0f);
+  root->pos_y=fmaxf(add(root->pos_y,-10.0f),goal_y);
+ }
+ if(!(u32(s->fields+widget+0x90)&0x80000000u))root->pos_x=-100.0f;
+ if(s->fields[widget+0x384])--s->fields[widget+0x384];
+ return gameplay_move_base(s,widget,callbacks);
+}
+
+static gh_id_error middle_boss_move(gh_game_cockpit *s,const gh_boot_work *work_state,
+ const gh_cockpit_frame_callbacks *callbacks)
+{
+ fenv_t environment;
+ if(feholdexcept(&environment))return GH_ID_UNSUPPORTED;
+ if(fesetround(FE_TONEAREST)){(void)fesetenv(&environment);return GH_ID_UNSUPPORTED;}
+ gh_id_error status=middle_boss_move_0013f5d0(s,work_state,callbacks);
+ return fesetenv(&environment)?GH_ID_UNSUPPORTED:status;
+}
+
 gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit*s,const gh_boot_work*work_state,const gh_cockpit_frame_callbacks*c){
  if(!s||!s->ready||!s->room_ready||!work_state)return GH_ID_ARGUMENT;const uint8_t*w=(const uint8_t*)work_state;s->frontier=0;
  if(!s->update_stage){if(u32(w+0x58c)&0x80000000)return GH_ID_OK;
@@ -885,7 +1190,7 @@ gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit*s,const gh_boot_work*w
   else{if(u32(s->fields+0x15bc)!=0xffff){gh_id_entry*a,*b;TRY(gh_game_cockpit_entry_at(s,0x15b0,&a));TRY(gh_game_cockpit_entry_at(s,0x15b4,&b));uint32_t n=u32(s->fields+0x15bc)&0xffff;a->seed=(a->seed&0xffff0000)|n;b->seed=(b->seed&0xffff0000)|n;}s->update_stage=1;}
  }
  if(s->update_stage==10){/* Actual13C808 constructor-established resourceNULL. */if(!(s->hud_cold_known&1)||u32(s->fields+0x1dc0+0x94)||base(s,0x1dc0)->owns_run)return frame_stop(s,0x13c950);s->update_stage=11;}
- if(s->update_stage==11){/*13F5D0 global guards precede real140860 cleanup. */if(!(u32(w+0x584)&8)&&!(u32(w+0x58c)&0x80000000)){if(!(s->hud_cold_known&2)||s->fields[0x1e90+0x358])return frame_stop(s,0x140860);if(u32(s->fields+0x1e90+0xa0))return frame_stop(s,0x13f5d0);}s->update_stage=12;}
+ if(s->update_stage==11){TRY(middle_boss_move(s,work_state,c));s->update_stage=12;}
  if(s->update_stage==12){if(!(s->hud_cold_known&4)||u32(s->fields+0x2220+0x94)||base(s,0x2220)->owns_run)return frame_stop(s,0x13e970);s->update_stage=13;}
  if(s->update_stage==13){if(u32(s->fields+0x1a20+0xb0)){unsigned state=s->fields[0x1a20+0xb8];if(!s->gameplay_error&&state>=1&&state<=5)TRY(gh_game_cockpit_tutorial_move_001471f0(s));TRY(gameplay_move_base(s,0x1a20,c));}s->update_stage=14;}
  if(s->update_stage==14){/* First true registeredwidget,unlessoriginal77 gate. */if(!s->fields[0x6e0+0x77])TRY(gameplay_radar(s,c));s->gameplay_index=1;s->update_stage=15;}
@@ -1447,6 +1752,7 @@ gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit*s,gh_core_save_vi
  if(!s||!s->ready||!save.bytes||save.size<GH_CORE_SAVE_BYTES||!heat)return GH_ID_ARGUMENT;s->frontier=0;
  /*13E400,13C930,13F510 then13E908,147188,1434A8->Heat141CE8. */
  TRY(release_ticket(s,1));
+ TRY(release_middle_boss(s,1));
  w32(s,0x1910+0x90,0);unsigned o=0x1dc0;w32(s,o+0xb8,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);w32(s,o+0xa0,0);
  o=0x1e90;for(unsigned i=0;i<5;i++){w32(s,o+0x260-4*i,0);w32(s,o+0x2d0-4*i,0x3f800000);w32(s,o+0xb8-4*i,0);}s->fields[o+0x384]=0;w32(s,o+0xa0,0);s->fields[o+0x358]=0;
  o=0x2220;if(u32(s->fields+o+0x94)){s->frontier=0x2aa078;return GH_ID_UNSUPPORTED;}w32(s,o+0xa0,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);

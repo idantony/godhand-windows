@@ -5,6 +5,7 @@
 #include "cockpit_fan.h"
 #include "game_title_player.h"
 #include "game_camera.h"
+#include "game_room_state.h"
 #include "dvd_jobs.h"
 #ifdef __cplusplus
 extern "C" {
@@ -36,6 +37,12 @@ gh_id_error gh_game_cockpit_load_ticket_0013e418(gh_game_cockpit *,gh_id_state *
 gh_id_error gh_game_cockpit_set_ticket_visible(gh_game_cockpit *,int visible);
 /* Host shutdown after cancelling the Scenario fibers, before the ID-pool watermark check. */
 gh_id_error gh_game_cockpit_abort_ticket(gh_game_cockpit *);
+/* Original R103 stage-1 arena HUD data. The room initially keeps it disabled. */
+gh_id_error gh_game_cockpit_load_middle_boss_0013f330(gh_game_cockpit *,gh_id_state *,gh_dvd_jobs *,gh_heap *);
+gh_id_error gh_game_cockpit_hide_middle_boss(gh_game_cockpit *);
+gh_id_error gh_game_cockpit_register_middle_boss_0013f558(gh_game_cockpit *,const gh_boot_work *,const gh_title_player_view *);
+void gh_game_cockpit_forget_middle_boss(gh_game_cockpit *,const gh_title_player_view *);
+gh_id_error gh_game_cockpit_abort_middle_boss(gh_game_cockpit *);
 
 gh_id_error gh_game_cockpit_base(gh_game_cockpit *,uint32_t original_offset,gh_id_base **);
 gh_id_error gh_game_cockpit_widget_at(const gh_game_cockpit *,unsigned,gh_cockpit_widget *);
@@ -71,7 +78,8 @@ gh_id_error gh_game_cockpit_tutorial_detach(gh_game_cockpit *);
 typedef gh_id_error (*gh_cockpit_resolve_actor)(void *,uint32_t handle,gh_title_player_view *,uint32_t *frontier);
 typedef struct {gh_game_init_state *init;const gh_title_player_view *player;
  const gh_room_pools *pools;const gh_game_pl_camera *camera;
- gh_cockpit_resolve_actor resolve_handle;void *context;uint8_t player_known;} gh_cockpit_gameplay_bindings;
+ gh_cockpit_resolve_actor resolve_handle;void *context;uint8_t player_known;
+ const gh_room_state *room;} gh_cockpit_gameplay_bindings;
 /* SAME original GetPlayer/actor registry sources, no copied HP/profile.
  * Explicit knownNULL is distinct from unresolved publisher. */
 gh_id_error gh_game_cockpit_bind_gameplay(gh_game_cockpit *,const gh_cockpit_gameplay_bindings *);

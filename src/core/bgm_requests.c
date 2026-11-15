@@ -369,6 +369,8 @@ gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
     case 0x21ae3a: path="se/ev/ev01.afs";break;
     case 0x4e303a: path="se/ev/ev02.afs";break;
     case 0x5ceb3a: path="se/ev/ev04.afs";break;
+    case 0x18008e: path="se/ev/ev1a.afs";break;
+    case 0x1ad45a: path="se/ev/ev1b.afs";break;
     default:return fail(s,0x32bb48,GH_BGM_DISC);
     }
     gh_disc_entry archive;

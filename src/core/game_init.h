@@ -36,6 +36,8 @@ typedef struct gh_game_init_state {
  uint32_t world_time;
  gh_game_camera camera,*active_camera;
  uint8_t enemies[0x5b8];void *enemy_actors[64],*enemy_top,*enemy_last,*enemy_kept[16];
+ /* Original cEmManage +560/+564, typed actor aliases for dependencies 214/215. */
+ void *enemy_r103_boss[2];
  uint8_t side_counter[16];
  uint8_t object_pool[0xacd4];gh_game_damage_link *object_links[416];
  uint8_t records_a[160][0x40],records_b[512][0x40];

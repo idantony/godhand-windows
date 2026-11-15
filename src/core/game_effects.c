@@ -108,7 +108,7 @@ gh_effect_status gh_game_effects_initialize_00305a68(gh_game_effects*s,
  gh_game_effects_pool_reset_00306d18(s);s->ready=1;return GH_EFFECT_OK;
 }
 
-gh_effect_status gh_game_effects_register_2ad_00305758(gh_game_effects *s,gh_effect_view data)
+static gh_effect_status register_embedded_effects(gh_game_effects *s,unsigned kind,gh_effect_view data)
 {
     if(!s||!s->ready||!data.bytes)return GH_EFFECT_ARGUMENT;
     s->frontier=0;
@@ -125,12 +125,22 @@ gh_effect_status gh_game_effects_register_2ad_00305758(gh_game_effects *s,gh_eff
     if(u32(emitters.bytes+16))return fail(s,0x306a48,0,GH_EFFECT_UNSUPPORTED);
     for(unsigned i=0;i<64;i++){
         const gh_effect_resource *resource=s->resources+i;
-        if(resource->kind==0xd7&&(resource->references==UINT32_MAX||
+        if(resource->kind==(int32_t)kind&&(resource->references==UINT32_MAX||
            resource->tbl0.bytes!=table0.bytes||resource->tbl1.bytes!=table1.bytes||
-           s->emd_tables[0xd7].bytes!=emitters.bytes))
+           s->emd_tables[kind].bytes!=emitters.bytes))
             return fail(s,0x305908,(int)i,GH_EFFECT_UNSUPPORTED);
     }
-    return reg(s,0xd7,&bundle);
+    return reg(s,kind,&bundle);
+}
+
+gh_effect_status gh_game_effects_register_204_00305758(gh_game_effects *s,gh_effect_view data)
+{
+    return register_embedded_effects(s,0x6c,data);
+}
+
+gh_effect_status gh_game_effects_register_2ad_00305758(gh_game_effects *s,gh_effect_view data)
+{
+    return register_embedded_effects(s,0xd7,data);
 }
 
 gh_effect_status gh_game_effects_release_2ad_native(gh_game_effects *s,gh_effect_view data)
@@ -140,7 +150,7 @@ gh_effect_status gh_game_effects_release_2ad_native(gh_game_effects *s,gh_effect
     return gh_game_effects_release_2ad_00305778(s,data);
 }
 
-gh_effect_status gh_game_effects_release_2ad_00305778(gh_game_effects *s,gh_effect_view data)
+static gh_effect_status release_embedded_effects(gh_game_effects *s,unsigned kind,gh_effect_view data)
 {
     if(!s||!s->ready||!data.bytes)return GH_EFFECT_ARGUMENT;
     gh_bundle bundle;
@@ -150,15 +160,25 @@ gh_effect_status gh_game_effects_release_2ad_00305778(gh_game_effects *s,gh_effe
        gh_bundle_find(&bundle,"EMD",0,&emitters))return GH_EFFECT_BOUNDS;
     for(unsigned i=0;i<64;i++){
         gh_effect_resource *resource=s->resources+i;
-        if(resource->kind!=0xd7)continue;
+        if(resource->kind!=(int32_t)kind)continue;
         if(!resource->references||resource->tbl0.bytes!=table0.bytes||
-           resource->tbl1.bytes!=table1.bytes||s->emd_tables[0xd7].bytes!=emitters.bytes)
+           resource->tbl1.bytes!=table1.bytes||s->emd_tables[kind].bytes!=emitters.bytes)
             return GH_EFFECT_ARGUMENT;
         if(!--resource->references){
             *resource=(gh_effect_resource){.kind=5};
-            s->emd_tables[0xd7]=(gh_effect_view){0};
+            s->emd_tables[kind]=(gh_effect_view){0};
         }
         return GH_EFFECT_OK;
     }
     return GH_EFFECT_ARGUMENT;
+}
+
+gh_effect_status gh_game_effects_release_204_00305778(gh_game_effects *s,gh_effect_view data)
+{
+    return release_embedded_effects(s,0x6c,data);
+}
+
+gh_effect_status gh_game_effects_release_2ad_00305778(gh_game_effects *s,gh_effect_view data)
+{
+    return release_embedded_effects(s,0xd7,data);
 }

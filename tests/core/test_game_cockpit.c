@@ -87,7 +87,47 @@ CHECK(gh_disc_open(argv[1],&d)==GH_DISC_OK);
   CHECK(!result&&m->pool_used==405&&m->job_count==39&&global_base->entries==global_entries);
   CHECK(!gh_game_cockpit_entry_at(c,0x6e0+0x4a0,&entry)&&entry==cached);
  }
+ /* 13F330 takes bank D from the real room HUD IDD. 01A0 hides it after load. */
+ gh_heap *room_heap;
+ gh_dvd_jobs dvd;
+ gh_dvd_jobs_init(&dvd,d);
+ CHECK(gh_heap_create(1024*1024,&room_heap)==GH_MEM_OK);
+ CHECK(gh_disc_find(d,"id/idmiddlebossstage1.idd",&i)==GH_DISC_OK);
+ CHECK(gh_disc_entry_at(d,i,&e)==GH_DISC_OK&&e.size==149968);
+ uint8_t boss_raw[0x2f4]={0};
+ gh_title_player_view boss={.bytes=boss_raw,.size=sizeof(boss_raw)};
+ boss_raw[0x2f1]=0x10;
+ CHECK(!gh_game_cockpit_register_middle_boss_0013f558(c,&work_state,&boss)&&!fields[0x21e8]);
+ boss_raw[0x2f1]=0;
+ CHECK(!gh_game_cockpit_register_middle_boss_0013f558(c,&work_state,&boss)&&fields[0x21e8]==1);
+ result=gh_game_cockpit_load_middle_boss_0013f330(c,m,&dvd,room_heap);
+ if(result)fprintf(stderr,"middle boss HUD blocked %d frontier %08X\n",result,gh_game_cockpit_frontier(c));
+ CHECK(result==GH_ID_OK&&m->pair[0x0d].bound&&m->job_count==45&&fields[0x21e8]==1);
+ CHECK(u32(fields+0x1f20)==0x80000000u&&u32(fields+0x1f30)==1);
+ CHECK(!gh_game_cockpit_hide_middle_boss(c)&&!u32(fields+0x1f20));
+ CHECK(!gh_game_cockpit_base(c,0x1e90,&base)&&base->owns_run&&base->id==0);
+ CHECK(!gh_id_base_get_work_002aa410(r,base,0,&entry,NULL)&&entry->pos_x==-100.0f);
+ const float original_y=entry->pos_y;
+ for(unsigned actor=0;actor<5;++actor){
+  CHECK(!gh_game_cockpit_base(c,0x1f50+actor*0x50,&base)&&base->owns_run&&base->id==1);
+  CHECK(!gh_id_base_get_work_002aa410(r,base,0,&entry,NULL)&&entry->pos_y==original_y);
+  CHECK(u32(fields+0x2150+actor*4)==0x3f800000);
+ }
+ CHECK(!gh_game_cockpit_load_middle_boss_0013f330(c,m,&dvd,room_heap)&&m->job_count==45);
+ CHECK(!gh_game_cockpit_abort_middle_boss(c)&&!gh_heap_used(room_heap));
+ CHECK(!m->pair[0x0d].bound&&m->pool_used==405&&m->job_count==39&&!fields[0x21e8]);
+ /* Normal room exit detaches the six typed views. The original pool
+  * compaction, explicitly checked here, reclaims their runs afterward. */
+ CHECK(!gh_game_cockpit_load_middle_boss_0013f330(c,m,&dvd,room_heap)&&m->job_count==45);
+ CHECK(!gh_game_cockpit_room_quit_00141628(c,sv,heat)&&!gh_heap_used(room_heap));
+ CHECK(!m->pair[0x0d].bound&&m->job_count==45&&!u32(fields+0x1f30));
+ int compacted;
+ CHECK(!gh_id_pool_compact_002ad108(r,&compacted)&&compacted&&m->pool_used==405&&m->job_count==39);
+ CHECK(!gh_game_cockpit_room_reset_00140de0(c,sv,&work_state,heat));
+ CHECK(!gh_game_cockpit_load_middle_boss_0013f330(c,m,&dvd,room_heap)&&m->job_count==45);
+ CHECK(!gh_game_cockpit_abort_middle_boss(c)&&!gh_heap_used(room_heap));
+ CHECK(gh_heap_destroy(room_heap)==GH_MEM_OK);
  CHECK(gh_game_cockpit_destroy(c)==GH_ID_OK && m->pool_used==0 && m->job_count==0);
  CHECK(gh_id_runtime_destroy(r)==GH_ID_OK);free(m);free(b);free(elf);gh_disc_close(d);
- puts("PASS actual USA Cockpit11 widget init/reset, eight quit-reset room lifecycles preserve global405entries39runs/cacheidentity, exhausted-pool cleanup");return 0;
+ puts("PASS actual USA Cockpit11 widget init/reset, eight quit-reset room lifecycles preserve global405entries39runs/cacheidentity, exhausted-pool cleanup, original R103 middle-boss HUD IDD initialization and release");return 0;
 }

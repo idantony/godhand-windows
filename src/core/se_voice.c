@@ -19,7 +19,7 @@ struct voice {gh_se_voice_info info;gh_adpcm_pcm pcm;uint32_t age,ee_age;uint16_
  gh_se_attached_probe probe;void *probe_context;gh_se_attached_random random;void *random_context;
  uint8_t descriptor[48],setup_stage,variants;int16_t requested_bank,requested_program;
  const gh_se_attached_environment *ts_environment;uint16_t ts_distance;
- uint32_t flags18,flags1c;uint16_t selected_pitch,submitted_pitch;int16_t selected_offset;uint8_t pitch_setup,spatial_slow,combat_profile,external_channels,door_spatial,emad_loop,emad_occluded;uint16_t spatial_gain;};
+ uint32_t flags18,flags1c;uint16_t selected_pitch,submitted_pitch;int16_t selected_offset;uint8_t pitch_setup,spatial_slow,combat_profile,external_channels,door_spatial,emad_loop,emad_occluded,verified_live_gain;uint16_t spatial_gain;};
 typedef struct {
  gh_disc *disc;
  const gh_sound_control *control;
@@ -328,12 +328,13 @@ static int r102_obstacle_voice_actor(const struct voice *v)
  return actor&&h(actor+0x2f4)==0x7500&&!actor[0x1650]&&h(actor+0x640)==7&&w(actor+0x564)==0x200;
 }
 
-static int r102_area11_em02_voice(const struct voice *v,uint16_t state)
+static int r102_em02_route_voice(const struct voice *v,uint16_t state)
 {
  const uint8_t *actor=r102_voice_actor(v);
  return actor&&v->model->root.size>=0x16c8&&
     h(actor+0x2f4)==state&&
-    !actor[0x1650]&&h(actor+0x640)==0x17&&
+    !actor[0x1650]&&
+    (h(actor+0x640)==0x17||((state==0x1500||state==0x4b00)&&h(actor+0x640)==0x19))&&
     w(actor+0x564)==0x202&&w(actor+0x16c4)==2;
 }
 
@@ -468,8 +469,8 @@ static uint32_t r102_enemy_motion_sample(const struct voice *v,int16_t bank,int1
  /* The AT0B EM02 uses the same authored voice for the 4E motion and
   * the late selector 15 attack. */
  if(bank>=4&&v->requested_program==4&&(program==4||program==5)&&
-    (r102_area11_em02_voice(v,0x4e00)||
-     (r102_area11_em02_voice(v,0x1500)&&v->model->root.bytes[0x2f6]==1))){
+    (r102_em02_route_voice(v,0x4e00)||
+     (r102_em02_route_voice(v,0x1500)&&v->model->root.bytes[0x2f6]==1))){
   const unsigned alternate=(unsigned)(program-4);
   return w(p)==((uint32_t)program<<16|(uint16_t)bank)&&
     w(p+4)==0x022a0003u+alternate&&w(p+8)==0x250&&w(p+12)==0x00200000&&
@@ -478,7 +479,7 @@ static uint32_t r102_enemy_motion_sample(const struct voice *v,int16_t bank,int1
     w(p+32)==(alternate?0x00010085:0x00010185)&&w(p+36)==0x400&&
     w(p+40)==0xffff&&!w(p+44)?(alternate?0x32a0u:0x2c00u):0;
  }
- const int index=r102_area11_em02_voice(v,0x1500)||r102_area11_em02_voice(v,0x4b00)?0:mount;
+ const int index=r102_em02_route_voice(v,0x1500)||r102_em02_route_voice(v,0x4b00)?0:mount;
  if(index<0||bank<1||bank==2||bank==3||v->requested_program!=6||(program!=6&&program!=7))return 0;
  const unsigned alternate=(unsigned)(program-6);
  const uint32_t variants=program==6&&actors[index].sample[1]?0x10185u:0x10085u;
@@ -624,8 +625,8 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
      h(root->bytes+0x2fe)!=0x202)return 0;
   const uint32_t dependency=w(root->bytes+0x564);
   const int em27=(program==0x83||program84||program==0x85||program==0x87)&&r105_em27_voice_source(v);
-  const int area11=((aged||program==0x83||program==0x85||program==0x87)&&r102_area11_em02_voice(v,0x1500))||
-      (program==0x85&&r102_area11_em02_voice(v,0x4e00));
+  const int area11=((aged||program==0x83||program==0x85||program==0x87)&&r102_em02_route_voice(v,0x1500))||
+      (program==0x85&&r102_em02_route_voice(v,0x4e00));
   if(!area11&&!em27&&!r100_em0a_core87_source(v,program)&&
      (dependency!=0x200||aged)&&(dependency!=0x203||program84))return 0;
  }else if(!v->combat_profile)return 0;
@@ -1018,7 +1019,8 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  const int player_death=adsr2==0x5fcb&&candidate->source_owner&&bank==3&&program==14&&
     candidate->requested_bank==0&&candidate->requested_program==0xd6&&candidate->part_index==-1&&
     candidate->model&&candidate->model->work&&
-    (candidate->model->work->room==0x100||candidate->model->work->room==0x105)&&
+    (candidate->model->work->room==0x100||candidate->model->work->room==0x102||
+     candidate->model->work->room==0x105)&&
     candidate->model->root.bytes&&candidate->model->root.size>=0x54c&&
     candidate->model->root.original_vtable214==0x41d220&&
     h(candidate->model->root.bytes+0x2fe)==0x100&&
@@ -2074,8 +2076,10 @@ static gh_voice_status spatial_update(gh_se_voice_engine *s,struct voice *v,
  uint32_t entry=v->info.pending?0x2ce588:0x2cea00;
  if(env->output_mode!=1||env->se_level_q8!=s->mix.se_level_q8)return unsupported(s,0x375630);
  int combat=combat_voice_profile(v);
+ /* 2CEA00 keeps updating live voices during the SaveMap fade. Only
+  * pending 2CE588 switches its gain and records the 80000 voice flag. */
  if((!combat&&!v->emad_loop&&!v->ts_environment&&(v->flags18!=4||v->flags1c!=3))||env->reverb||
-    (env->system_flags_5e4&0x08000000u)||(env->game_flags_5d8&0x40u))
+    (v->info.pending&&(env->system_flags_5e4&0x08000000u))||(env->game_flags_5d8&0x40u))
   return unsupported(s,entry);
  if(v->flags18&0x40u){
   if(!env->sound_flags_ac||!env->sound_flags_b0)return unsupported(s,0x2cda80);
@@ -2172,9 +2176,96 @@ static gh_voice_status spatial_update(gh_se_voice_engine *s,struct voice *v,
  return GH_VOICE_OK;
 }
 
-static gh_voice_status attached_update(gh_se_voice_engine*s,struct voice*v){if(v->ts_environment)return spatial_update(s,v,v->ts_environment);if(!v->source_owner)return GH_VOICE_OK;gh_voice_status e;if(!v->info.pending&&v->model){e=source_position(v,1);if(e){s->frontier=0x2cea00;return e;}}gh_se_attached_environment env={0};e=v->probe(v->probe_context,v->info.source_position,v->info.pending&&(v->flags18&1)!=0,&env,&s->frontier);if(e)return e;if(voice_uses_ee_mix(v))return spatial_update(s,v,&env);if(v->info.position_mode)return unsupported(s,0x2cf058);if(env.se_level_q8!=s->mix.se_level_q8)return unsupported(s,0x375630);if(env.output_mode!=1)return unsupported(s,0x37d680);if(env.system_flags_5e4&0x08000000u)return unsupported(s,0x2ce588);if(env.game_flags_5d8&0x40u)return unsupported(s,0x2cda80);if(v->flags18&~5u)return unsupported(s,v->info.pending?0x2ce588:0x2cea00);if(v->info.pending&&env.reverb)return unsupported(s,0x2ce588);if(!v->info.pending&&(v->flags18&4)&&env.gain64_bits!=0x3f800000u)return unsupported(s,0x2cea00);
- if(v->model){float speed;memcpy(&speed,v->model->root.bytes+0x5a8,4);if(!isfinite(speed)||((v->flags1c&1)&&(speed<.5f||(v->info.pending&&env.debug58c>=0&&speed<1))))return unsupported(s,v->info.pending?0x2ce588:0x2cea00);}return GH_VOICE_OK;}
-gh_voice_status gh_se_voice_detach_actor_002ce488(gh_se_voice_engine*s,gh_actor_model*model){if(!s||!model)return GH_VOICE_ARGUMENT;s->frontier=0;for(unsigned i=0;i<64;i++){struct voice*v=s->voices+i;if(v->used!=1||v->model!=model)continue;if(v->info.pending){gh_voice_status e=source_position(v,0);if(e){s->frontier=0x2ce488;return e;}}if(gh_actor_model_sound_return(model))return GH_VOICE_ARGUMENT;v->model=NULL;v->part_index=-1;}return GH_VOICE_OK;}
+/* The original 2CEA00 mode-zero command keeps active mono voices live
+ * while the save-map fade changes +64. Authenticate the observed player
+ * footstep and the authored nine recordings of the EM00 CORE000A cue. */
+static int r102_live_mono_gain_cue(const struct voice *v)
+{
+ if(v->info.pending||!v->info.native_voice||v->info.bank||v->part_index!=-1||
+    !v->model||!v->model->work||v->model->work->room!=0x102||
+    v->model->root.size<0x5ac||h(v->descriptor+0x14)!=64)return 0;
+ const uint8_t *actor=v->model->root.bytes;
+ const unsigned kind=h(actor+0x2fe);
+ if(kind==0x100)
+  return v->info.program==0x1e&&v->flags18==5&&v->flags1c==3&&
+         w(v->descriptor+0x10)==0x00190019u;
+
+ const int program=v->info.program;
+ if(kind!=0x202||v->model->root.size<=0x1650||w(actor+0x564)!=0x200||
+    h(actor+0x640)!=11||actor[0x1650]!=5||v->requested_bank||
+    v->requested_program!=0x0a||program<0x0a||program>0x12||
+    v->flags18!=4||v->flags1c)return 0;
+ const unsigned authored=program==0x0f?120u:program==0x12?115u:110u;
+ return h(v->descriptor+4)==(unsigned)(program-6)&&h(v->descriptor+0xe)==0x21&&
+        w(v->descriptor+0x10)==authored*0x10001u;
+}
+
+/* 2CEBA8 scales the authored level by +64. 2CEEAC limits the change
+ * to six command units while the native endpoint keeps its pitch. */
+static gh_voice_status update_live_mono_gain(gh_se_voice_engine *s,struct voice *v,
+ const gh_se_attached_environment *env)
+{
+ const float ratio=sound_float(env->gain64_bits);
+ if(!(ratio>=0&&ratio<=1))return unsupported(s,0x2ceba8);
+ const unsigned master=s->mix.se_level_q8;
+ if(!master)return GH_VOICE_OK;
+ /* The verified master can represent each 7-bit level distinctly. Recover
+  * the last command from the existing pre-envelope master-scaled gain. */
+ const unsigned previous=((unsigned)v->base_gain*127u+master/2u)/master;
+ const unsigned authored=h(v->descriptor+0x10);
+ const unsigned target=(unsigned)nearbyintf((float)authored*ratio);
+ const unsigned command=approach(previous,target,6);
+ const uint16_t base=(uint16_t)(master*command/127u);
+ if(base==v->base_gain)return GH_VOICE_OK;
+ const uint16_t level=(uint16_t)((unsigned)base*(unsigned)v->info.stop_current/0x7f00u/2u);
+ const float gain=(float)level/16384.0f;
+ const gh_voice_status status=gh_audio_output_voice_gain(s->output,v->info.native_voice,gain,gain);
+ if(status){s->frontier=0x374f30;return status;}
+ v->base_gain=base;
+ v->info.left_q14=v->info.right_q14=v->info.level_q14=level;
+ return GH_VOICE_OK;
+}
+
+static gh_voice_status attached_update(gh_se_voice_engine *s,struct voice *v)
+{
+ if(v->ts_environment)return spatial_update(s,v,v->ts_environment);
+ if(!v->source_owner)return GH_VOICE_OK;
+ gh_voice_status status;
+ if(!v->info.pending&&v->model){
+  status=source_position(v,1);
+  if(status){s->frontier=0x2cea00;return status;}
+ }
+ gh_se_attached_environment env={0};
+ status=v->probe(v->probe_context,v->info.source_position,v->info.pending&&(v->flags18&1)!=0,&env,&s->frontier);
+ if(status)return status;
+ if(voice_uses_ee_mix(v))return spatial_update(s,v,&env);
+ if(v->info.position_mode)return unsupported(s,0x2cf058);
+ if(env.se_level_q8!=s->mix.se_level_q8)return unsupported(s,0x375630);
+ if(env.output_mode!=1)return unsupported(s,0x37d680);
+ const int live_gain=v->model?r102_live_mono_gain_cue(v):v->verified_live_gain;
+ if((env.system_flags_5e4&0x08000000u)&&!live_gain)return unsupported(s,0x2ce588);
+ if(env.game_flags_5d8&0x40u)return unsupported(s,0x2cda80);
+ if(v->flags18&~5u)return unsupported(s,v->info.pending?0x2ce588:0x2cea00);
+ if(v->info.pending&&env.reverb)return unsupported(s,0x2ce588);
+ if(!v->info.pending&&(v->flags18&4)&&env.gain64_bits!=0x3f800000u&&!live_gain)
+  return unsupported(s,0x2cea00);
+ if(v->model){
+  float speed;
+  memcpy(&speed,v->model->root.bytes+0x5a8,4);
+  if(!isfinite(speed)||((v->flags1c&1)&&(speed<.5f||(v->info.pending&&env.debug58c>=0&&speed<1))))
+   return unsupported(s,v->info.pending?0x2ce588:0x2cea00);
+ }
+ if(!live_gain)return GH_VOICE_OK;
+ status=update_live_mono_gain(s,v,&env);
+ if(!status)v->verified_live_gain=1;
+ return status;
+}
+gh_voice_status gh_se_voice_detach_actor_002ce488(gh_se_voice_engine*s,gh_actor_model*model){if(!s||!model)return GH_VOICE_ARGUMENT;s->frontier=0;for(unsigned i=0;i<64;i++){struct voice*v=s->voices+i;if(v->used!=1||v->model!=model)continue;if(v->info.pending){gh_voice_status e=source_position(v,0);if(e){s->frontier=0x2ce488;return e;}}const int verified=v->verified_live_gain||r102_live_mono_gain_cue(v);
+  if(gh_actor_model_sound_return(model))return GH_VOICE_ARGUMENT;
+  /* 2CE488 clears the model reference. Active 2CEA00 mode zero keeps
+   * using the same owner, descriptor and +64 gain until the voice ends. */
+  v->verified_live_gain=(uint8_t)verified;
+  v->model=NULL;v->part_index=-1;}return GH_VOICE_OK;}
 gh_voice_status gh_se_voice_abort_attached_owner(gh_se_voice_engine *s,const void *owner)
 {
  if(!s||!owner)return GH_VOICE_ARGUMENT;

@@ -1,4 +1,5 @@
 #include "game_event_actor_create.h"
+#include "game_enemy_row2.h"
 
 #include <string.h>
 
@@ -27,7 +28,8 @@ static int same(const gh_event_actor_create_bindings *a, const gh_event_actor_cr
            a->save.size == b->save.size && a->object_view == b->object_view && a->context == b->context &&
            a->factory == b->factory && a->factory_context == b->factory_context &&
            a->initialize == b->initialize && a->extra == b->extra && a->extra_context == b->extra_context &&
-           a->row_limit == b->row_limit && a->finish == b->finish;
+           a->row_limit == b->row_limit && a->finish == b->finish &&
+           a->room_enemy_slots == b->room_enemy_slots;
 }
 
 static gh_game_event_status suspend_unneeded(gh_event_actor_create *s, uint32_t *frontier) {
@@ -66,6 +68,7 @@ static gh_game_event_status actor_source_kind(const uint8_t *info, uint16_t *kin
     const int hi = hex_digit(info[2]), lo = hex_digit(info[3]);
     if (hi < 0 || lo < 0) return GH_EVENT_UNSUPPORTED;
     if (info[0] == 'e' && info[1] == 'l') *kind = (uint16_t)(0x600 + hi * 16 + lo);
+    else if (info[0] == 'e' && info[1] == 'm') *kind = (uint16_t)(0x200 + hi * 16 + lo);
     else if (info[0] == 'o' && info[1] == 'm') *kind = (uint16_t)(0x300 + hi * 16 + lo);
     else return GH_EVENT_UNSUPPORTED;
     return GH_EVENT_OK;
@@ -76,6 +79,19 @@ int gh_event_actor_ev04_source_kind(uint16_t kind)
     return (kind >= 0x610 && kind <= 0x612) || (kind >= 0x615 && kind <= 0x618) ||
         (kind >= 0x620 && kind <= 0x622) || (kind >= 0x625 && kind <= 0x627) ||
         (kind >= 0x660 && kind <= 0x662);
+}
+
+int gh_event_actor_packed_enemy(int32_t event,size_t row,uint16_t source,uint8_t code)
+{
+    if (event == 0x1a && row >= 3 && row <= 9) {
+        static const uint16_t kinds[] = {0x200,0x200,0x203,0x203,0x20a,0x214,0x215};
+        return source == kinds[row - 3] && code == (row == 4 || row == 6);
+    }
+    if (event == 0x1b && row >= 1 && row <= 4) {
+        static const uint16_t kinds[] = {0x200,0x20a,0x20f,0x2a2};
+        return source == kinds[row - 1] && code == 0;
+    }
+    return 0;
 }
 
 gh_game_event_status gh_event_actor_create_work_at(const gh_event_actor_create *s,
@@ -117,7 +133,12 @@ static gh_game_event_status create_row(gh_event_actor_create *s, size_t index) {
     s->frontier = 0x297a48;
     s->frontier_rel = 0x04d0;
     const int ev04_actor = b->components->event_no == 4 && gh_event_actor_ev04_source_kind(source);
-    if (!ev04_actor && (source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60c) &&
+    const int ev1b_el40 = b->components->event_no == 0x1b && index == 0 && source == 0x640;
+    const int packed_enemy = gh_event_actor_packed_enemy(b->components->event_no,index,source,info[4]);
+    const int ev1b_prop = b->components->event_no == 0x1b &&
+        ((index == 5 && source == 0x338) || (index == 6 && source == 0x3bc));
+    if (!ev04_actor && !ev1b_el40 && !packed_enemy && !ev1b_prop &&
+        (source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60c) &&
         (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x634 && source != 0x639 &&
         source != 0x641 && source != 0x642 && source != 0x646 && source != 0x647 &&
         (source < 0x650 || source > 0x652) && source != 0x659 && source != 0x667 && source != 0x367) return GH_EVENT_UNSUPPORTED;
@@ -147,8 +168,30 @@ static gh_game_event_status create_row(gh_event_actor_create *s, size_t index) {
         .create_kind = create, .resource_kind = source, .create_argument = 0xffff
     };
     s->frontier = 0x1fea00;
-    const gh_object_status lookup = gh_game_objects_find(b->objects, source, &request.loaded_resource);
-    if (lookup != GH_OBJECT_OK && lookup != GH_OBJECT_MISSING) return GH_EVENT_CALLEE;
+    gh_object_status lookup = GH_OBJECT_OK;
+    if (packed_enemy) {
+        /* REL+0EA8 selects the first room EmdManager pack whose
+         * GetEm00CharIndex can supply this actor's model occurrence. */
+        const gh_stage_slots *slots = b->room_enemy_slots;
+        s->frontier = 0x2ddea0;
+        s->frontier_rel = 0;
+        if (!slots || !slots->configured || !slots->records || slots->count != 32 ||
+            slots->bytes < (size_t)slots->count * 0x5c) return GH_EVENT_ARGUMENT;
+        for (uint32_t i = 0; i < slots->count; ++i) {
+            const uint32_t pack = word(slots->records + (size_t)i * 0x5c + 0x20);
+            if (pack != 0xffff && !gh_enemy_model_occurrence_002ddea0(pack, source, &request.pack_index)) {
+                request.packed_resource = 1;
+                break;
+            }
+        }
+        if (!request.packed_resource) {
+            put(actor.bytes, word(actor.bytes) | 2u);
+            return GH_EVENT_OK;
+        }
+    } else {
+        lookup = gh_game_objects_find(b->objects, source, &request.loaded_resource);
+        if (lookup != GH_OBJECT_OK && lookup != GH_OBJECT_MISSING) return GH_EVENT_CALLEE;
+    }
     const uint16_t flags = half(row + 0x24) | (lookup == GH_OBJECT_MISSING ? 5 : 1);
     row[0x24] = (uint8_t)flags;
     row[0x25] = (uint8_t)(flags >> 8);

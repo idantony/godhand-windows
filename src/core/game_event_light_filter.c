@@ -128,24 +128,34 @@ static gh_game_event_status read_track(const gh_event_light_filter *state,
     return GH_EVENT_OK;
 }
 
-/* EV01/EV02 keys use the primary camera at frame zero. Original 8378
+/* Fixed frame-zero keys use the primary camera. Original 8378
  * maps FFFF to lane FF, and the four timing repair calls keep these times. */
 static gh_game_event_status mapped_keys(const gh_event_data_prefix *data,
                                         const gh_event_sequence_view *track, unsigned index)
 {
     const unsigned event = data->components->event_no;
     const int object_light = index == OBJECT_LIGHT;
-    if ((event != 1 && event != 2 && event != 4) ||
-        data->camera_count != (event == 1 ? 10 : event == 2 ? 28 : 24))
+    const int ev1a = event == 0x1a;
+    const int ev1b = event == 0x1b;
+    if ((!ev1a && !ev1b && event != 1 && event != 2 && event != 4) ||
+        data->camera_count != (ev1a ? 11 : ev1b ? 12 : event == 1 ? 10 : event == 2 ? 28 : 24))
         return GH_EVENT_UNSUPPORTED;
-    const unsigned count = event == 4 ? (object_light ? 10 : 29) : (object_light ? event : event == 1 ? 10 : 25);
+    static const uint8_t ev1b_light_cuts[] = {0, 6, 7, 8, 11};
+    static const uint8_t ev1b_filter_cuts[] = {1, 2, 4, 5, 7, 8, 9, 10, 11};
+    const unsigned count = ev1a ? (object_light ? 1 : 8) :
+        ev1b ? (object_light ? sizeof(ev1b_light_cuts) : sizeof(ev1b_filter_cuts)) :
+        event == 4 ? (object_light ? 10 : 29) : (object_light ? event : event == 1 ? 10 : 25);
     const size_t stride = object_light ? 0x1c : 0x2e8;
     if (!track->records || track->count != count || track->stride != stride ||
         track->bytes != count * stride) return GH_EVENT_UNSUPPORTED;
     for (unsigned i = 0; i < count; ++i) {
         const uint8_t *key = track->records + i * stride;
         unsigned cut = i;
-        if (event == 4) cut = key[3];
+        if (ev1b) cut = object_light ? ev1b_light_cuts[i] : ev1b_filter_cuts[i];
+        else if (ev1a && !object_light) {
+            static const uint8_t cuts[] = {0, 1, 2, 3, 4, 5, 8, 9};
+            cut = cuts[i];
+        } else if (event == 4) cut = key[3];
         else if (object_light && event == 1) cut = 1;
         if (!object_light && event == 2 && i >= 16) cut += 3;
         const unsigned frame = read_half(key + 6);

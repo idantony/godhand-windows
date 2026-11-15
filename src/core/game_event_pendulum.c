@@ -19,25 +19,7 @@ static void put(uint8_t *p, uint32_t value)
 static gh_game_event_status simulate(gh_event_pendulum_call *call, const gh_cloth_operands *operands,
     const gh_cloth_step_bindings *bindings, gh_player_shared_vector *pivot, uint32_t *frontier)
 {
-    gh_cloth_status status = gh_cloth_step_operands_00104010(&call->prefix, bindings, operands);
-    if (status != GH_CLOTH_UNSUPPORTED || call->prefix.frontier != 0x10430c) {
-        if (call->prefix.frontier) *frontier = call->prefix.frontier;
-        return GH_EVENT_UNSUPPORTED;
-    }
-    if ((status = gh_cloth_integrate_forces_0010430c(&call->forces, &call->prefix)))
-        *frontier = call->forces.frontier;
-    else if ((status = gh_cloth_constrain_angles_0010497c(&call->angles, &call->forces, pivot)))
-        *frontier = call->angles.frontier;
-    else if ((status = gh_cloth_constrain_distances_00104ec8(&call->distances, &call->angles)))
-        *frontier = call->distances.frontier;
-    else if ((status = gh_cloth_finish_00105a94(&call->finish, &call->distances)))
-        *frontier = call->finish.frontier;
-    if (status) {
-        if (!*frontier) *frontier = 0x104010;
-        return GH_EVENT_UNSUPPORTED;
-    }
-    *frontier = 0;
-    return GH_EVENT_OK;
+    return gh_cloth_frame_00104010(call,operands,bindings,pivot,frontier)?GH_EVENT_UNSUPPORTED:GH_EVENT_OK;
 }
 
 /* Original 2DF950 profiles 2A0 and 252 share the same six records. */

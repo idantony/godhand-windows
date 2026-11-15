@@ -32,3 +32,28 @@ static gh_cloth_status body(gh_cloth_finish*s,gh_cloth_distances*distances){
 gh_cloth_status gh_cloth_finish_00105a94(gh_cloth_finish*s,gh_cloth_distances*distances){
  if(!s||!distances||!distances->complete||distances->frontier!=0x105a94||!distances->angles)return GH_CLOTH_ARGUMENT;if(s->distances&&s->distances!=distances)return GH_CLOTH_ARGUMENT;if(s->complete)return GH_CLOTH_OK;s->distances=distances;fenv_t env;if(feholdexcept(&env))return GH_CLOTH_NUMERIC;if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return GH_CLOTH_NUMERIC;}gh_cloth_status e=body(s,distances);if(fesetenv(&env))return GH_CLOTH_NUMERIC;return e;
 }
+
+
+gh_cloth_status gh_cloth_frame_00104010(gh_cloth_frame *frame,const gh_cloth_operands *operands,
+    const gh_cloth_step_bindings *bindings,gh_player_shared_vector *pivot,uint32_t *frontier)
+{
+    if(!frame||!operands||!bindings||!frontier)return GH_CLOTH_ARGUMENT;
+    *frontier=0x104010;
+    gh_cloth_status status=gh_cloth_step_operands_00104010(&frame->prefix,bindings,operands);
+    if(!status){*frontier=0;return GH_CLOTH_OK;}
+    if(status!=GH_CLOTH_UNSUPPORTED||frame->prefix.frontier!=0x10430c){
+        if(frame->prefix.frontier)*frontier=frame->prefix.frontier;
+        return status;
+    }
+    if((status=gh_cloth_integrate_forces_0010430c(&frame->forces,&frame->prefix)))
+        *frontier=frame->forces.frontier;
+    else if((status=gh_cloth_constrain_angles_0010497c(&frame->angles,&frame->forces,pivot)))
+        *frontier=frame->angles.frontier;
+    else if((status=gh_cloth_constrain_distances_00104ec8(&frame->distances,&frame->angles)))
+        *frontier=frame->distances.frontier;
+    else if((status=gh_cloth_finish_00105a94(&frame->finish,&frame->distances)))
+        *frontier=frame->finish.frontier;
+    if(status){if(!*frontier)*frontier=0x104010;return status;}
+    *frontier=0;
+    return GH_CLOTH_OK;
+}

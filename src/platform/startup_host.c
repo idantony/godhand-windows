@@ -695,7 +695,8 @@ static gh_game_event_status event_data_prepare(void *context, uint32_t *frontier
         .extra = gh_event_actor_extra_run,
         .extra_context = &host->event_actor_extra,
         .row_limit = capacity,
-        .finish = gh_event_actor_extra_finish
+        .finish = gh_event_actor_extra_finish,
+        .room_enemy_slots = &host->game_stage.room_slots
     };
     return gh_event_actor_create_start_002979f0(&host->event_actor_create, &bindings, frontier);
 }
@@ -989,6 +990,7 @@ static gh_game_event_status event_play_visit(void *context, uint32_t site, int *
                 .emitters = scene.scene_buffer_b, .emitter_bytes = scene.scene_buffer_b_size,
                 .actor_match = gh_effect_create_actor_match, .context = scene.effects},
             .work = &host->work, .random = &host->game_init.random,
+            .atan_coeff = host->camera_envelope.atan_coeff,
             .event_actor = event_effect_actor, .event_actor_context = host
         };
         return gh_event_effect_move_00005050(&host->event_effect_play, &bindings, frontier, relative);
@@ -1273,7 +1275,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     }else if(address==0x2c1618){
         const gh_scene_at_step_callbacks r100={.context=&h->r100_exit,.spawn=gh_r100_exit_spawn_001f7858};
         const gh_scene_at_step_callbacks r105={.context=h->services,.spawn=gh_game_services_r105_jump_offer};
-        const gh_scene_at_step_callbacks r102={.context=h->services,.spawn=gh_game_services_r102_ticket_offer};
+        const gh_scene_at_step_callbacks r102={.context=h->services,.spawn=gh_game_services_r102_action_offer};
         const gh_scene_at_step_callbacks *callbacks=h->work.room==0x100?&r100:
             h->work.room==0x105?&r105:h->work.room==0x102?&r102:NULL;
         int original_return;
@@ -1350,7 +1352,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;
     }else if(address==0x140e58||address==0x1410a8){
         gh_cockpit_gameplay_bindings gameplay={.init=&h->game_init,.player=s.title_player->ready?&s.title_player->view:NULL,
-            .pools=s.pools,.camera=camera,.resolve_handle=cockpit_actor_view,.context=h,.player_known=(uint8_t)(s.title_player->ready!=0)};
+            .pools=s.pools,.camera=camera,.resolve_handle=cockpit_actor_view,.context=h,.player_known=(uint8_t)(s.title_player->ready!=0),.room=s.room_state};
         gh_id_error bound=gh_game_cockpit_bind_gameplay(s.cockpit,&gameplay);
         if(bound){if(frontier)*frontier=address;return GH_SCENE_STEP_CALLEE;}
         gh_cockpit_frame_callbacks callbacks={.context=h,.trans=scene_cockpit_trans,.set_draw_order=scene_cockpit_order,
@@ -1782,6 +1784,20 @@ static gh_action_step_status room_r100_action(void *context,uint32_t entry,void 
     return gh_r100_exit_action_002c2138(&h->r100_exit,entry,argument,frontier);
 }
 
+static gh_action_step_status room_r102_action(void *context,uint32_t entry,void *argument,
+    uint32_t *frontier)
+{
+    gh_startup_host *host=context;
+    if(entry==0x2c2138)
+        return gh_game_services_r102_ticket_action(host->services,entry,argument,frontier);
+    *frontier=entry;
+    if(entry!=0x2c2078)return GH_ACTION_STEP_UNSUPPORTED;
+    gh_game_services_scene_view scene;
+    if(gh_game_services_get_scene_view(host->services,&scene))return GH_ACTION_STEP_ARGUMENT;
+    const gh_game_door_bindings bindings=scene_door_bindings(host,&scene);
+    return gh_game_services_r102_jump_action(host->services,&bindings,argument,frontier);
+}
+
 static int update_state4(void *context,gh_game_loop *loop)
 {
     gh_startup_host *h=context;gh_game_services_scene_view s;(void)loop;
@@ -1795,9 +1811,9 @@ static int update_state4(void *context,gh_game_loop *loop)
         .init=&h->game_init,.auxiliary_binding_known=1,
         .callback=h->work.room==0x100?room_r100_action:
                   h->work.room==0x105?gh_game_services_r105_scenery_action:
-                  h->work.room==0x102?gh_game_services_r102_ticket_action:
+                  h->work.room==0x102?room_r102_action:
                   h->work.room==0x101?room_r101_action:NULL,
-        .context=h->work.room==0x105||h->work.room==0x102?(void *)h->services:(void *)h};
+        .context=h->work.room==0x105?(void *)h->services:(void *)h};
     gh_game_scene_step_bindings b={.work=&h->work,.init=&h->game_init,.prepare=s.prepare,
         .save={h->save_bytes,sizeof(h->save_bytes)},.collision=s.collision_pairs,.actors=s.scene_tables,
         .scenario={s.scenario_bytes,s.scenario_bytes_size,s.scenario},.main_threads=h->threads,

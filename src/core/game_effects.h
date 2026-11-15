@@ -30,6 +30,9 @@ void gh_game_effects_pool_reset_00306d18(gh_game_effects *);
 /* 2FA0B0 -> 305758, original bank 6. The EV01 bundle is borrowed until
  * 2FA0E8/305778 removes its references or the effects owner is retired. */
 gh_effect_status gh_game_effects_register_event_002fa0b0(gh_game_effects *, const void *, size_t);
+/* Original 305758/305778 for the shared EM204/214 and EM204/215 effect bank. */
+gh_effect_status gh_game_effects_register_204_00305758(gh_game_effects *,gh_effect_view);
+gh_effect_status gh_game_effects_release_204_00305778(gh_game_effects *,gh_effect_view);
 /* Original 305758 for EMAD's embedded D7 resource. Same room effect owner. */
 gh_effect_status gh_game_effects_register_2ad_00305758(gh_game_effects *,gh_effect_view);
 /* Host shutdown only, after native effects have relinquished actor borrows. */

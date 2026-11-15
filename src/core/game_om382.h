@@ -33,8 +33,14 @@ typedef struct {
     uint8_t stage;
 } gh_om376_paper;
 
-/* Actual pl00::setPaper first-visit R105 path. The live registered OM owns
- * its model, while PL00 borrows its handle and owns the attachment parent. */
+/* Rooms verified to recreate the original carried OM376 from CoreSave. */
+static inline int gh_om376_paper_room_supported(int16_t room)
+{
+    return room==2||room==0x102||room==0x103||room==0x105;
+}
+
+/* Actual pl00::setPaper. The live registered OM owns its model, while
+ * PL00 borrows its handle and owns the attachment parent. */
 gh_scene_placement_status gh_om376_set_paper_0012c8d8(gh_om376_paper *,gh_om_factory *,
     gh_actor_model *player,gh_core_save_view,gh_game_scene_tables *,
     gh_collision_scroll_mutation *,uint32_t *frontier);

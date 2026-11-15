@@ -69,6 +69,7 @@ gh_player_springs_status gh_event_spring_profile_from_elf(gh_event_spring_profil
   float radius;
   uint32_t indices[4],coefficients[3],scratch;
  } profiles[]={
+  {0x214,5,0.1f,{0x3c35e8,0,0x3c35f0,0x3c35f8},{0x3c3600,0x3c3618,0x3c3630},0x61aa00},
   {0x250,4,0.1f,{0x3c35a0,0,0x3c35a8,0x3c35b0},{0x3c35b8,0x3c35c8,0x3c35d8},0x61a9a0},
   {0x252,10,0.06f,{0x3c3a40,0,0x3c3a50,0x3c3a60},{0x3c3a70,0x3c3a98,0x3c3ac0},0x61b150},
   {0x253,20,0.1f,{0x3bfb48,0x3bfb90,0x3bfb60,0x3bfb78},{0x3bfba8,0x3bfbf8,0x3bfc48},0x585240},
@@ -76,6 +77,7 @@ gh_player_springs_status gh_event_spring_profile_from_elf(gh_event_spring_profil
   {0x2a0,10,0.06f,{0x3c3938,0,0x3c3948,0x3c3958},{0x3c3968,0x3c3990,0x3c39b8},0x61af10},
   {0x628,22,0.1f,{0x3bfc98,0x3bfce0,0x3bfcb0,0x3bfcc8},{0x3bfcf8,0x3bfd50,0x3bfda8},0x585450}
  };
+ if(kind==0x215)kind=0x214; /* Both original entries reach 2DEAEC. */
  size_t p=0;
  while(p<sizeof(profiles)/sizeof(*profiles)&&profiles[p].kind!=kind)++p;
  if(p==sizeof(profiles)/sizeof(*profiles))return GH_SPRINGS_ARGUMENT;

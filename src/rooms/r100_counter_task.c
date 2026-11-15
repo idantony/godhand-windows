@@ -24,14 +24,20 @@ static int placement_dead(const gh_room_state *room,int16_t stamp)
     return 1;
 }
 
+gh_r100_script_status gh_enemy_placement_dead_0028fb38(const gh_room_state *room,
+    const gh_title_player_view *actor,int *dead)
+{
+    if(!room||!room->active||!actor||!actor->bytes||!dead)return GH_R100_SCRIPT_ARGUMENT;
+    if(room->size<12||room->active[8]>64||12+(size_t)room->active[8]*24>room->size||actor->size<0x642)
+        return GH_R100_SCRIPT_BOUNDS;
+    *dead=placement_dead(room,(int16_t)half(actor->bytes+0x640));
+    return GH_R100_SCRIPT_OK;
+}
+
 gh_r100_script_status gh_r100_enemy_dead_0028fb38(const gh_room_state *room,
     const gh_game_title_player *actor,int *dead)
 {
-    if(!room||!room->active||!actor||!actor->view.bytes||!dead)return GH_R100_SCRIPT_ARGUMENT;
-    if(room->size<12||room->active[8]>64||12+(size_t)room->active[8]*24>room->size||actor->view.size<0x642)
-        return GH_R100_SCRIPT_BOUNDS;
-    *dead=placement_dead(room,(int16_t)half(actor->view.bytes+0x640));
-    return GH_R100_SCRIPT_OK;
+    return gh_enemy_placement_dead_0028fb38(room,actor?&actor->view:NULL,dead);
 }
 
 static gh_r100_script_status scan_alive(const gh_game_init_state *init,

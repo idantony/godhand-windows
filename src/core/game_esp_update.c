@@ -213,8 +213,9 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
  if(c->stage==6){int length=sh(p+0x238);if(length>0&&sh(p+0x22e)>=length){if(!(w(p+0x11c)&0x800u)){gh_effect_status status=retire(c);if(status)return status;}else half(p+0x22e,(w(p+0x11c)&0x400u)?0:length);}if(!c->retired){float time;int n;if(!advance(c,rf(p+0x234),scaled(c,p,r),&time)||!integer(time,&n))return stop(c,0x2fc9a8,GH_EFFECT_UNSUPPORTED);sf(p+0x234,time);half(p+0x22e,n);c->stage=7;}}
  if(c->stage==7){gh_effect_status s=colour(c,p,r);if(s)return s;if(!c->retired)c->stage=8;}
  if(c->stage==8){if(w(p+0x11c)&0x4000000u){float time;int n;if(!advance(c,rf(p+0x240),scaled(c,p,r),&time)||!integer(time,&n))return stop(c,0x2fcf88,GH_EFFECT_UNSUPPORTED);uint8_t frame=p[0x244];if((int8_t)p[0x23f]<=(int8_t)(uint8_t)n){time=0;uint8_t next=(uint8_t)(frame+1);if((int8_t)p[0x2a0]<=(int8_t)next)next=(w(p+0x11c)&0x2000000u)?0:frame;frame=next;}sf(p+0x240,time);p[0x244]=frame;}c->stage=9;}
- const int event_scale=v.type==0&&uh(p+0x23a)==6&&uh(p+0x23c)==7&&r[0xbe]==10&&
-    (gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector));
+ const int event_scale=v.type==0&&uh(p+0x23a)==6&&
+    (gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||
+     (uh(p+0x23c)==7&&r[0xbe]==10&&gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector)));
  if(c->stage==9&&(v.type==8||event_scale)&&p[0x140]==1&&(w(p+0x11c)&0x400000u)){
   float factor;
   if(!key_curve(p,0x14c,1,sh(p+0x238),0,&factor))return stop(c,0x2fd078,GH_EFFECT_UNSUPPORTED);

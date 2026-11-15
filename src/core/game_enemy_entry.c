@@ -24,7 +24,9 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
   if(r->object_kind!=0x220||r->dependency_kind!=0x220||b->work->room!=0x100||
      r->flags!=0x400000||r->entry_number!=0xff||r->appearance||r->dependency_flags||
      kind!=0||argument)return fail(s,0x2905d0);
- }else if(r->object_kind!=0x202||(r->dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(r,b->work->room)))return fail(s,0x2905d0);
+ }else if(!gh_enemy204_is_r103_entry(r,b->work->room)&&
+     (r->object_kind!=0x202||(r->dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(r,b->work->room))))
+  return fail(s,0x2905d0);
  if(s->stage&&(s->b.init!=b->init||s->b.pools!=b->pools||s->b.work!=b->work||s->b.room_objects!=b->room_objects||s->b.global_objects!=b->global_objects||s->manager_kind!=kind||s->argument!=argument||s->b.room_heap!=b->room_heap||s->b.packet_heap!=b->packet_heap||s->b.factory_serial!=b->factory_serial||!same_request(&s->request,r)))return GH_ACTOR_MODEL_BUSY;
  if(!s->stage){int slot;if(gh_enemy_manager_find_free_00290958(b->init,&slot))return GH_ACTOR_MODEL_ARGUMENT;if(slot<0)return GH_ACTOR_MODEL_OK;s->slot=slot;s->b=*b;s->request=*r;s->manager_kind=kind;s->argument=argument;s->stage=1;}
  if(s->stage==1){int ready=0;gh_object_status e=gh_game_objects_check_ready_001ff238(s->b.room_objects,r->object_kind,&s->b.resources,&ready,&s->frontier);if(e==GH_OBJECT_MISSING)ready=0;else if(e)return fail(s,s->frontier?s->frontier:0x1fe9b8);
@@ -42,6 +44,7 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
    factory=0x313820;
    e=gh_enemy2a2_allocate_00313820(&s->object,s->b.room_heap,s->b.work,&present);
   }else{
+   /* Original 30FEB8 sends both 202 and 204 to the same cEm00 factory. */
    factory=0x3130e0;
    e=gh_enemy202_allocate_003130e0(&s->object,s->b.room_heap,s->b.work,&present);
   }
@@ -78,6 +81,7 @@ gh_actor_model_status gh_enemy_entry_002905d0(gh_enemy_entry*s,const gh_enemy_en
  int ready;
  gh_actor_model_status status=prepare_entry(s,b,r,kind,argument,&ready,ORDINARY_ENTRY);
  if(status||!ready)return status;
+ s->initialize.effects=s->b.effects;
  gh_actor_model_status e=gh_enemy202_initialize_prefix_002022d0(&s->initialize,&s->object.view,&s->request,&s->resource,s->b.work,s->b.save,s->b.scenario14,s->b.borrowed586aa4,s->b.pools,s->b.packet_heap,s->b.fog_rgb,s->b.policy);s->frontier=s->initialize.frontier;return e;
 }
 gh_actor_model_status gh_enemy_devil_entry_002905d0(gh_enemy_devil_entry *call,

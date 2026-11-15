@@ -1,6 +1,7 @@
 /* Actual patched 2AEFA8 and 2AF028 prefixes. MIT LICENSE.upstream. */
 #include "game_message_step.h"
 
+#include <math.h>
 #include <string.h>
 
 static uint16_t half(const uint8_t *p)
@@ -57,10 +58,8 @@ static gh_scene_ui_status active_slots(const gh_game_scene_ui *ui, unsigned slot
     return GH_SCENE_UI_OK;
 }
 
-static gh_scene_ui_status clear_event_cut(gh_scene_message_sources *source,
-    gh_event_timing *timing, uint32_t *frontier)
+static gh_scene_ui_status event_message_env(const gh_event_timing *timing, const uint8_t **bytes)
 {
-    *frontier = 0x297bf8;
     if (!timing || !timing->components || !timing->allocation.pointer)
         return GH_SCENE_UI_UNSUPPORTED;
     const gh_event_components *components = timing->components;
@@ -68,7 +67,18 @@ static gh_scene_ui_status clear_event_cut(gh_scene_message_sources *source,
     if (!components->constructed || components->event_no != timing->event_number ||
         !env.bytes || env.original_offset != 0xd200 || env.size != 0x44 ||
         word(env.bytes + 8) != timing->count) return GH_SCENE_UI_ARGUMENT;
-    const uint32_t cut = word(env.bytes + 0x10);
+    *bytes = env.bytes;
+    return GH_SCENE_UI_OK;
+}
+
+static gh_scene_ui_status clear_event_cut(gh_scene_message_sources *source,
+    gh_event_timing *timing, uint32_t *frontier)
+{
+    *frontier = 0x297bf8;
+    const uint8_t *env;
+    gh_scene_ui_status status = event_message_env(timing, &env);
+    if (status) return status;
+    const uint32_t cut = word(env + 0x10);
     if (cut >= timing->count) return GH_SCENE_UI_BOUNDS;
     gh_event_cut_timing *rows = timing->allocation.pointer;
     rows[cut].kind = 0;
@@ -92,6 +102,18 @@ static int code_at(const gh_scene_message_sources *source, size_t offset, uint16
     return 1;
 }
 
+static void advance_message_budget(uint8_t *p, const gh_game_scene_ui *ui,
+    const gh_boot_work *work)
+{
+    p[1] = 1; /* 2B45D0 and 2B45D8 are empty. */
+    uint32_t flags = word(p + 0x14 - 0xc);
+    if (word((const uint8_t *)work + 0x1a0) & 0x10000000u) flags |= 1u;
+    put(p + 0x14 - 0xc, flags);
+    uint32_t increment = (uint32_t)ui->root->timer;
+    if (!word(p + 0x34 - 0xc) && ((flags & 1u) || native_confirm(work))) increment *= 10;
+    put(p + 0x68 - 0xc, word(p + 0x68 - 0xc) + increment);
+}
+
 static gh_scene_ui_status advance_scenery(uint8_t *p,gh_scene_message_sources *source,
     const gh_game_scene_ui *ui,const gh_boot_work *work,uint32_t *frontier)
 {
@@ -101,14 +123,8 @@ static gh_scene_ui_status advance_scenery(uint8_t *p,gh_scene_message_sources *s
        source->cursor_8c<source->cursor_7c||source->cursor_8c>source->primary.size||
        word(p+0x1c-0xc)||word(p+0x6c-0xc)!=0x3f800000u||p[1]>1)
         return GH_SCENE_UI_UNSUPPORTED;
-    p[1]=1;
-    uint32_t flags=word(p+0x14-0xc);
-    if(word((const uint8_t *)work+0x1a0)&0x10000000u)flags|=1u;
-    put(p+0x14-0xc,flags);
-    uint32_t increment=(uint32_t)ui->root->timer;
-    if(!word(p+0x34-0xc)&&((flags&1u)||native_confirm(work)))increment*=10;
+    advance_message_budget(p, ui, work);
     uint8_t *budget=p+0x68-0xc,*time=p+0x90-0xc;
-    put(budget,word(budget)+increment);
     while(signed_word(budget)>=signed_word(time)){
         uint16_t code;
         if(!code_at(source,source->cursor_8c,&code))return GH_SCENE_UI_BOUNDS;
@@ -190,14 +206,78 @@ static gh_scene_ui_status wait_scenery_choice(uint8_t *p,const gh_boot_work *wor
     return GH_SCENE_UI_OK;
 }
 
+static int ev1b_timed_caption(const gh_scene_message_sources *source,
+    const gh_boot_work *work, const gh_event_timing *timing)
+{
+    uint16_t command;
+    return work->room == 0x102 && timing && timing->event_number == 0x1b &&
+        code_at(source, 0, &command) && command == 0xe705;
+}
+
+static gh_scene_ui_status advance_event_caption(uint8_t *p, gh_scene_message_sources *source,
+    const gh_game_scene_ui *ui, const gh_boot_work *work, const gh_event_timing *timing,
+    uint32_t *frontier)
+{
+    *frontier = 0x2b3338;
+    if (source->cursor_7c != 10 || source->cursor_8c < source->cursor_7c)
+        return GH_SCENE_UI_UNSUPPORTED;
+    advance_message_budget(p, ui, work);
+    uint8_t *budget = p + 0x68 - 0xc, *time = p + 0x90 - 0xc;
+    while (signed_word(budget) >= signed_word(time)) {
+        uint16_t code;
+        if (!code_at(source, source->cursor_8c, &code)) return GH_SCENE_UI_BOUNDS;
+        if (code == 0xb002) {
+            uint16_t percent;
+            if (!code_at(source, source->cursor_8c + 2, &percent)) return GH_SCENE_UI_BOUNDS;
+            if (percent != 100 && percent != 150) return GH_SCENE_UI_UNSUPPORTED;
+            /* 2B34D8 has no state action for B0. 2AF1F8/2AF218 give two
+             * halfwords and zero time. The renderer consumes the operand. */
+            source->cursor_8c += 4;
+            continue;
+        }
+        if (code == 0xe801) {
+            *frontier = 0x2b47c8;
+            const uint8_t *env;
+            gh_scene_ui_status status = event_message_env(timing, &env);
+            if (status) return status;
+            const uint32_t cut = word(env + 0x10);
+            float frame;
+            memcpy(&frame, env + 0x14, sizeof(frame));
+            if (cut >= timing->count || !isfinite(frame) || frame < 0) return GH_SCENE_UI_BOUNDS;
+            if (cut >= p[0x44 - 0xc] &&
+                (cut < p[0x4c - 0xc] || frame <= (float)signed_word(p + 0x50 - 0xc))) {
+                put(budget, word(time));
+                return GH_SCENE_UI_OK;
+            }
+            source->cursor_8c += 2;
+            continue;
+        }
+        if (code == 0x8001) {
+            *frontier = 0x2b3b70;
+            if (word(p + 0xb4 - 0xc) || word(p + 0x40 - 0xc)) return GH_SCENE_UI_UNSUPPORTED;
+            p[0] = 6;
+            p[1] = p[2] = p[3] = 0;
+            put(budget, word(time));
+            return GH_SCENE_UI_OK;
+        }
+        if (code < 14 || code >= 0x1000) return GH_SCENE_UI_UNSUPPORTED;
+        source->cursor_8c += 2;
+        put(time, word(time) + 30);
+    }
+    return GH_SCENE_UI_OK;
+}
+
 static gh_scene_ui_status advance_english(uint8_t *p, gh_scene_message_sources *source,
-    const gh_game_scene_ui *ui, const gh_boot_work *work, uint32_t *frontier)
+    const gh_game_scene_ui *ui, const gh_boot_work *work, const gh_event_timing *timing,
+    uint32_t *frontier)
 {
     if(p[0xa4-0xc]==4)return advance_scenery(p,source,ui,work,frontier);
     *frontier = 0x2b3240;
     if (!work->language || p[0xa4 - 0xc] || word(p + 0x1c - 0xc) ||
         word(p + 0x6c - 0xc) != 0x3f800000u || p[1] > 1)
         return GH_SCENE_UI_UNSUPPORTED;
+    if (ev1b_timed_caption(source, work, timing))
+        return advance_event_caption(p, source, ui, work, timing, frontier);
     uint16_t current;
     *frontier = 0x2b3338;
     if (!code_at(source, source->cursor_8c, &current)) return GH_SCENE_UI_BOUNDS;
@@ -211,14 +291,8 @@ static gh_scene_ui_status advance_english(uint8_t *p, gh_scene_message_sources *
         return GH_SCENE_UI_UNSUPPORTED;
     }
 
-    p[1] = 1; /* 2B45D0 and 2B45D8 are empty. */
-    uint32_t flags = word(p + 0x14 - 0xc);
-    if (word((const uint8_t *)work + 0x1a0) & 0x10000000u) flags |= 1u;
-    put(p + 0x14 - 0xc, flags);
-    int32_t increment = ui->root->timer;
-    if (!word(p + 0x34 - 0xc) && ((flags & 1u) || native_confirm(work))) increment *= 10;
+    advance_message_budget(p, ui, work);
     uint8_t *budget = p + 0x68 - 0xc, *time = p + 0x90 - 0xc;
-    put(budget, word(budget) + (uint32_t)increment);
     if (signed_word(budget) < signed_word(time)) return GH_SCENE_UI_OK;
     if (!(current & 0x8000u)) {
         /* No actor voice is present, so 2B33D8 returns before the glyph
@@ -389,6 +463,34 @@ static gh_scene_ui_status wait_english(uint8_t *p, gh_scene_message_sources *sou
     return GH_SCENE_UI_OK;
 }
 
+static gh_scene_ui_status event_caption_start_002b2d88(uint8_t *p, gh_scene_message_sources *source,
+    const gh_boot_work *work, gh_event_timing *timing, int *waiting, uint32_t *frontier)
+{
+    *frontier = 0x2b2d88;
+    *waiting = 0;
+    if (source->primary.size - source->cursor_8c < 10) return GH_SCENE_UI_BOUNDS;
+    if (word((const uint8_t *)work + 0x5e4) & 0x20000000u) {
+        const uint8_t *env;
+        gh_scene_ui_status status = event_message_env(timing, &env);
+        if (status) return status;
+        const unsigned cut = word(env + 0x10);
+        float frame;
+        memcpy(&frame, env + 0x14, sizeof(frame));
+        if (cut >= timing->count || !isfinite(frame) || frame < 0) return GH_SCENE_UI_BOUNDS;
+        const uint8_t *command = source->primary.bytes + source->cursor_8c;
+        const unsigned begin = half(command + 2), end = half(command + 6);
+        if ((begin != 0xff && begin >= timing->count) || (end != 0xff && end >= timing->count))
+            return GH_SCENE_UI_BOUNDS;
+        p[0x44 - 0xc] = (uint8_t)(begin == 0xff ? cut : begin);
+        p[0x4c - 0xc] = (uint8_t)(end == 0xff ? cut : end);
+        put(p + 0x48 - 0xc, half(command + 4));
+        put(p + 0x50 - 0xc, half(command + 8));
+        *waiting = cut < p[0x44 - 0xc] || frame < (float)half(command + 4);
+    }
+    if (!*waiting) source->cursor_8c += 10;
+    return GH_SCENE_UI_OK;
+}
+
 static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_message_sources *source,
     gh_game_scene_ui *ui, const gh_boot_work *work, gh_event_timing *timing,
     const unsigned *slots, unsigned count, uint32_t *frontier)
@@ -399,7 +501,7 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
     if (!source->bound) return GH_SCENE_UI_UNSUPPORTED;
     if (source->confirm_pending || state == 2 || state == 3 || state == 4 || state == 6) {
         gh_scene_ui_status status = source->confirm_pending ? clear_event_cut(source, timing, frontier) :
-            state == 2 ? advance_english(p, source, ui, work, frontier) :
+            state == 2 ? advance_english(p, source, ui, work, timing, frontier) :
             state == 3 ? wait_english(p, source, ui, work, timing, frontier) :
             state == 4 ? wait_scenery_choice(p,work,frontier) :
             close_window(p, source, frontier);
@@ -423,6 +525,14 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
         p[1] = 1; /* 2B2580 is the original empty phase-0 initializer. */
         if (same_group >= 2) goto finish;
         uint16_t command=half(source->primary.bytes+source->cursor_8c);
+        const int timed_caption = command == 0xe705 && ev1b_timed_caption(source, work, timing);
+        if (timed_caption) {
+            int waiting;
+            gh_scene_ui_status status = event_caption_start_002b2d88(p, source, work, timing, &waiting, frontier);
+            if (status) return status;
+            if (waiting) goto finish;
+            if (!code_at(source, source->cursor_8c, &command)) return GH_SCENE_UI_BOUNDS;
+        }
         if (command==0xa602) {
             *frontier=0x2b2b78;
             if (source->primary.size-source->cursor_8c<6) return GH_SCENE_UI_BOUNDS;
@@ -436,7 +546,9 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
             source->cursor_8c+=4;
             command=half(source->primary.bytes+source->cursor_8c);
         }
-        if (command & 0x8000u) {
+        /* B0 falls through 2B2638 with result 2. 2B2588 opens at the
+         * current byte so the renderer still sees the scale command. */
+        if ((command & 0x8000u) && !(timed_caption && command == 0xb002)) {
             *frontier = 0x2b2638;
             return GH_SCENE_UI_UNSUPPORTED;
         }

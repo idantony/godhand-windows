@@ -19,6 +19,10 @@ gh_tm3_error gh_tm3_open(const void*raw,size_t n,gh_tm3_bundle*out){
 static int fast4_dimensions(unsigned w,unsigned h){
  return ((w==128||w==256)&&(h==128||h==256||h==512))||(w==512&&h==256);
 }
+static int direct8_dimensions(unsigned w,unsigned h){
+ /* Transfer 0 keeps both the 64x64 rows and EM14's 64x32 rows linear. */
+ return w==64&&(h==32||h==64);
+}
 gh_tm3_error gh_tm3_member(const gh_tm3_bundle*t,unsigned index,gh_tm3_picture*out){
  if(!t||!out||!t->bytes)return GH_TM3_ARGUMENT;if(index>=t->count||index>255||t->size<16||(size_t)t->count>(t->size-16)/4)return GH_TM3_BOUNDS;
  size_t off=u32(t->bytes+16+index*4),end=t->size;
@@ -35,7 +39,7 @@ gh_tm3_error gh_tm3_member(const gh_tm3_bundle*t,unsigned index,gh_tm3_picture*o
  if(u16(p+14)!=(indexed8?256:16)||p[19]!=(indexed8?5:4)||
     image!=(size_t)w*h/(indexed8?1:2)||clut!=(indexed8?1024:64))return GH_TM3_UNSUPPORTED;
  if(indexed8){
-  if(b[5]==0){if(w!=64||h!=64)return GH_TM3_UNSUPPORTED;}
+  if(b[5]==0){if(!direct8_dimensions(w,h))return GH_TM3_UNSUPPORTED;}
   else if(w<128||w>512||h<64||h>512)return GH_TM3_UNSUPPORTED;
  }
  else if(b[5]==0){if((w!=32&&w!=64&&w!=128)||(h!=16&&h!=32&&h!=64))return GH_TM3_UNSUPPORTED;}
@@ -64,7 +68,7 @@ gh_tm3_error gh_tm3_rgba_gs(const gh_tm3_picture*p,void*raw,size_t capacity){
  if(indexed8){
   uint8_t *out=raw;
   if(p->transfer_kind==0){
-   if(p->width!=64||p->height!=64)return GH_TM3_UNSUPPORTED;
+   if(!direct8_dimensions(p->width,p->height))return GH_TM3_UNSUPPORTED;
    /* 151990 uses 150F68 with PSMT8 and unscaled width/height.
     * The direct image transfer reads rows in order. The CT32 CLUT
     * still follows the common 16x16 CSM1 index permutation. */

@@ -37,7 +37,9 @@ static gh_game_event_status get_component(const gh_event_data_prefix *data, unsi
     if (data->components->event_no == 1 ||
         (data->components->event_no == 2 &&
          (index == 0 || index == 5 || index == 9 || index == 10)) ||
-        (data->components->event_no == 4 && (index == 0 || index == 1 || index == 5 || index == 9 || index == 10)))
+        ((data->components->event_no == 4 || data->components->event_no == 0x1a ||
+          data->components->event_no == 0x1b) &&
+         (index == 0 || index == 1 || index == 5 || index == 9 || index == 10)))
         return GH_EVENT_OK;
     return GH_EVENT_UNSUPPORTED;
 }
@@ -64,10 +66,10 @@ static gh_game_event_status scroll_light_track(const gh_event_data_prefix *data,
     if (status) return status;
     if (word(component->bytes + 0x10) || word(component->bytes + 0x14) != track->count)
         return GH_EVENT_UNSUPPORTED;
-    if (data->components->event_no == 1)
+    if (data->components->event_no == 1 || data->components->event_no == 0x1b)
         return !track->records && !track->count ? GH_EVENT_OK : GH_EVENT_UNSUPPORTED;
     const unsigned event = data->components->event_no;
-    const unsigned keys = event == 4 ? 9 : 2;
+    const unsigned keys = event == 0x1a ? 1 : event == 4 ? 9 : 2;
     if (!track->records || track->count != keys || track->stride != 0x60 || track->bytes != keys * 0x60)
         return GH_EVENT_UNSUPPORTED;
 
@@ -75,7 +77,7 @@ static gh_game_event_status scroll_light_track(const gh_event_data_prefix *data,
      * substitution. B770 normalizes their anonymous actor index to -1. */
     for (unsigned i = 0; i < track->count; ++i) {
         const uint8_t *row = track->records + i * track->stride;
-        const unsigned cut = event == 4 ? row[3] : 26u + i;
+        const unsigned cut = event == 0x1a ? 0 : event == 4 ? row[3] : 26u + i;
         const unsigned frame = half(row + 6);
         uint16_t length;
         if (word(row) != (cut << 24 | 0xffffu) || half(row + 4) ||

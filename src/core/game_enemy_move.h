@@ -12,6 +12,7 @@
 #include "game_enemy_route_graph.h"
 #include "game_room_state.h"
 #include "game_om_factory.h"
+#include "game_cloth_finish.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -99,9 +100,14 @@ typedef struct {
     gh_effect_create_call death_effect_create, ambient_light_effect;
     gh_scene_at_manager *scene_jump_at;
     gh_bundle scene_jump_room;
+    gh_cloth_step_bindings spring_bindings;
+    gh_player_shared_vector *spring_pivot;
+    gh_cloth_frame spring_frame;
 } gh_enemy202_move;
 
 /* Borrow original Main+18C bound PFD2 owner before entering Move. */
+gh_actor_motion_status gh_enemy204_move_bind_springs(gh_enemy202_move *,const gh_cloth_step_bindings *,
+    gh_player_shared_vector *);
 gh_actor_motion_status gh_enemy202_move_bind_navigation(gh_enemy202_move *,const gh_scene_nearcheck *);
 gh_actor_motion_status gh_enemy202_move_bind_opacity(gh_enemy202_move *,const gh_object_opacity_environment *);
 /* Borrow the canonical player auxiliary; NULL is an explicit known-empty binding. */

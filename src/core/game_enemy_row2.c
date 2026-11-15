@@ -199,6 +199,16 @@ int gh_enemy202_is_room_supported_profile(const gh_enemy_request *request,uint16
                        is_r102_appearance6_profile(request)||is_r102_appearance9_profile(request)));
 }
 
+int gh_enemy204_is_r103_entry(const gh_enemy_request *request,uint16_t room)
+{
+    static const uint16_t dependencies[]={0x214,0x215,0x200,0x200,0x20a,0x20a,0x203,0x203};
+    if (room!=0x103 || !request || request->object_kind!=0x204 || request->entry_number>=8 ||
+        request->flags!=0x14000000u || request->dependency_flags)
+        return 0;
+    const unsigned stamp=request->entry_number;
+    return request->dependency_kind==dependencies[stamp] && request->appearance==(stamp<2?15:24);
+}
+
 int gh_enemy202_body_radius_002070cc(uint32_t scale,uint32_t nominal,uint32_t *bits)
 {
     if (!bits || ((scale<0x3f800000 || scale>0x3f8ccccd) && scale!=0x3f99999a) ||
@@ -221,6 +231,15 @@ gh_actor_model_status gh_enemy_model_occurrence_002ddea0(uint32_t kind,
         case 0x203: *occurrence=1; return GH_ACTOR_MODEL_OK;
         case 0x20a: *occurrence=2; return GH_ACTOR_MODEL_OK;
         case 0x20f: *occurrence=3; return GH_ACTOR_MODEL_OK;
+        }
+    } else if (kind==0x204) {
+        /* Original 2DDF54 table 44D980. The asset carries these in this order. */
+        switch (dependency) {
+        case 0x200: *occurrence=0; return GH_ACTOR_MODEL_OK;
+        case 0x203: *occurrence=1; return GH_ACTOR_MODEL_OK;
+        case 0x20a: *occurrence=2; return GH_ACTOR_MODEL_OK;
+        case 0x214: *occurrence=3; return GH_ACTOR_MODEL_OK;
+        case 0x215: *occurrence=4; return GH_ACTOR_MODEL_OK;
         }
     } else if (kind==0x2a2 && dependency>=0x2a2 && dependency<=0x2a4) {
         *occurrence=(unsigned)(dependency-0x2a2);
@@ -246,6 +265,24 @@ static gh_actor_model_status select_initial_motion(const gh_object_view *resourc
     *out=(gh_enemy_initial_motion_selection){.motion_offset=motion,.sequence_offset=sequence,
         .substate=substate,.phase_detail=detail};
     return GH_ACTOR_MODEL_OK;
+}
+
+gh_actor_model_status gh_enemy204_motion_select_002036b0(
+    const gh_enemy_request *request,const gh_object_view *resource,
+    gh_enemy_initial_motion_selection *out)
+{
+    if (!request || !resource || !out || !resource->bytes || resource->kind!=0x204)
+        return GH_ACTOR_MODEL_ARGUMENT;
+    if (!gh_enemy204_is_r103_entry(request,0x103))
+        return GH_ACTOR_MODEL_UNSUPPORTED;
+    switch (request->dependency_kind) {
+    case 0x214: case 0x215: /* Appearance 15 takes 203F48. */
+        return select_initial_motion(resource,0x10a8,0x7d,0,out);
+    case 0x200: return select_initial_motion(resource,0x98,1,0,out);
+    case 0x203: return select_initial_motion(resource,0x648,1,0,out);
+    case 0x20a: return select_initial_motion(resource,0x828,1,0,out);
+    default: return GH_ACTOR_MODEL_UNSUPPORTED;
+    }
 }
 
 gh_actor_model_status gh_enemy202_appearance2_select_00203c38(

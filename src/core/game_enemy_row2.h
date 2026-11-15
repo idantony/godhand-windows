@@ -10,6 +10,8 @@ int gh_enemy202_is_row2_profile(const gh_enemy_request *);
 int gh_enemy202_is_r100_appearance2_profile(const gh_enemy_request *);
 int gh_enemy202_is_r100_supported_profile(const gh_enemy_request *);
 int gh_enemy202_is_room_supported_profile(const gh_enemy_request *,uint16_t room);
+/* Live entries from the original R103 EMS. */
+int gh_enemy204_is_r103_entry(const gh_enemy_request *,uint16_t room);
 /* Original 2070CC default body radius, explicit bounded ChopZero. */
 int gh_enemy202_body_radius_002070cc(uint32_t scale,uint32_t nominal,uint32_t *bits);
 
@@ -25,6 +27,9 @@ typedef struct {
     uint8_t phase;
     uint8_t phase_detail;
 } gh_enemy_initial_motion_selection;
+
+gh_actor_model_status gh_enemy204_motion_select_002036b0(
+    const gh_enemy_request *, const gh_object_view *, gh_enemy_initial_motion_selection *);
 
 /* Original appearance-2 branch 203C38 on unexchanged EM202/200, /202, /203. The caller
  * still owns the state writes and the actual 2A8578 Begin call. */

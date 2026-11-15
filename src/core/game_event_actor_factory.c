@@ -1,4 +1,5 @@
 #include "game_event_actor_factory.h"
+#include "game_enemy_model.h"
 
 #include <string.h>
 
@@ -85,7 +86,16 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
     const int ev04_actor = (gh_event_actor_ev04_source_kind(source) || source == 0x253 || source == 0x628) &&
         request->data && request->data->components &&
         request->data->components->event_no == 4;
-    if ((!ev04_actor && (source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60d) &&
+    const int ev1b_el40 = source == 0x640 && request->actor_index == 0 && request->data &&
+        request->data->components && request->data->components->event_no == 0x1b;
+    const int packed_enemy = request->packed_resource && request->info && request->data &&
+        request->data->components && gh_event_actor_packed_enemy(request->data->components->event_no,
+            request->actor_index,source,request->info[4]);
+    const int ev1b_prop = ((request->actor_index == 5 && source == 0x338) ||
+        (request->actor_index == 6 && source == 0x3bc)) && request->data &&
+        request->data->components && request->data->components->event_no == 0x1b;
+    if ((!ev04_actor && !ev1b_el40 && !packed_enemy && !ev1b_prop &&
+        (source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60d) &&
         (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x634 && source != 0x639 &&
         source != 0x641 && source != 0x642 && source != 0x646 && source != 0x647 &&
         (source < 0x650 || source > 0x652) && source != 0x659 && source != 0x667 && source != 0x367) ||
@@ -117,7 +127,9 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
         p[0x2fc] = (*b->factory_serial)++;
         memcpy(p + 0x2fe, &kind, sizeof(kind));
         memcpy(p + 0x300, &kind, sizeof(kind));
-        put(p + 0x2d0, kind == 0x253 ? 0x40000000 : kind == 0x367 ? 0x20000000 : 0x800000);
+        const uint32_t category = kind == 0x253 || packed_enemy ? 0x40000000 :
+            kind == 0x367 || ev1b_prop ? 0x20000000 : 0x800000;
+        put(p + 0x2d0, category);
         s->stage = 1;
     }
     if (s->stage == 1) {
@@ -158,6 +170,12 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
             // Original registration failure enters the actual derived destructor.
             return GH_EVENT_UNSUPPORTED;
         }
+        if (packed_enemy) {
+            /* REL invokes SetPackIndex after CreateEventObj returns. */
+            uint8_t *p = s->object.view.bytes;
+            put(p + 0x4d4, request->pack_index);
+            p[0x4d0] = 1;
+        }
         s->stage = 5;
     }
     *original_nonnull = 1;
@@ -182,29 +200,43 @@ gh_game_event_status gh_event_actor_factory_initialize_model(gh_event_actor_fact
         request->create_kind != s->kind) return GH_EVENT_ARGUMENT;
     *original_nonnull = 0;
     uint8_t *p = s->object.view.bytes;
-    if (p[0x4d0]) return GH_EVENT_UNSUPPORTED;
+    if (p[0x4d0] != request->packed_resource ||
+        (request->packed_resource && word(p + 0x4d4) != request->pack_index)) return GH_EVENT_UNSUPPORTED;
 
     if (!s->init_stage) {
         if (frontier) *frontier = 0x31ccf0;
-        gh_bundle bundle;
-        if (gh_bundle_open(s->resource.bytes, s->resource.file_extent, &bundle)) return GH_EVENT_BOUNDS;
-        gh_bundle_error geometry = gh_bundle_find(&bundle, "MD", 0, &s->geometry);
+        gh_bundle_error geometry, texture;
+        if (request->packed_resource) {
+            const uint8_t *bytes = s->resource.bytes;
+            const size_t size = s->resource.file_extent;
+            const unsigned index = request->pack_index;
+            geometry = gh_enemy_bundle_find(bytes, size, "MD", index, &s->geometry);
+            texture = gh_enemy_bundle_find(bytes, size, "TM3", index, &s->texture);
+            if (texture == GH_BUNDLE_NOT_FOUND) texture = gh_enemy_bundle_find(bytes, size, "T32", index, &s->texture);
+        } else {
+            gh_bundle bundle;
+            if (gh_bundle_open(s->resource.bytes, s->resource.file_extent, &bundle)) return GH_EVENT_BOUNDS;
+            geometry = gh_bundle_find(&bundle, "MD", 0, &s->geometry);
+            texture = gh_bundle_find(&bundle, "TM3", 0, &s->texture);
+            if (texture == GH_BUNDLE_NOT_FOUND) texture = gh_bundle_find(&bundle, "T32", 0, &s->texture);
+        }
         if (geometry != GH_BUNDLE_OK && geometry != GH_BUNDLE_NOT_FOUND) return GH_EVENT_BOUNDS;
-        gh_bundle_error texture = gh_bundle_find(&bundle, "TM3", 0, &s->texture);
-        if (texture == GH_BUNDLE_NOT_FOUND) texture = gh_bundle_find(&bundle, "T32", 0, &s->texture);
         if (texture != GH_BUNDLE_OK && texture != GH_BUNDLE_NOT_FOUND) return GH_EVENT_BOUNDS;
-        // 2B6688's 44B378 carries original full body shadow owners.
-        const unsigned profile = request->source_kind == 0x600 || request->source_kind == 0x605 ||
+        /* 2B6688 has separate shadow presets for EL40 and the EM actors. */
+        const int full_body = request->packed_resource ||
+            request->source_kind == 0x600 || request->source_kind == 0x605 ||
             s->kind == 0x60a || s->kind == 0x610 || s->kind == 0x615 || s->kind == 0x620 ||
             s->kind == 0x625 || s->kind == 0x6f4 ||
-            s->kind == 0x630 || s->kind == 0x631 || s->kind == 0x634 || s->kind == 0x639 || s->kind == 0x641 || s->kind == 0x646 ? 3 : 0;
+            s->kind == 0x630 || s->kind == 0x631 || s->kind == 0x634 || s->kind == 0x639 || s->kind == 0x641 || s->kind == 0x646;
+        const unsigned profile = s->kind == 0x640 ? 2 : full_body ? 3 : 0;
         put(p + 0x4dc, profile);
-        if (profile == 3) {
+        if (profile) {
             if (frontier) *frontier = 0x14ef50;
-            if (gh_game_actor_shadow_initialize_0014ef50(&s->shadow, &s->object.view, 0x4f0, 0x3c3f68)) {
+            if (gh_game_actor_shadow_initialize_0014ef50(&s->shadow, &s->object.view, 0x4f0,
+                    profile == 2 ? 0x3c3f58 : 0x3c3f68)) {
                 return GH_EVENT_CALLEE;
             }
-            put(p + 0x4a8, word(p + 0x4a8) | 0x20000000u);
+            put(p + 0x4a8, word(p + 0x4a8) | (profile == 2 ? 0x40000000u : 0x20000000u));
         }
         put(p + 0x254, word(p + 0x254) | 0x08000000u);
         s->init_stage = 1;

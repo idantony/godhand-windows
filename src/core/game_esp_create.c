@@ -52,7 +52,7 @@ static int authored_actor_scale(const gh_esp_create_call *c,float scale)
 }
 static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const gh_effect_emitter_view *emitter){
  const uint8_t *r=emitter->record.bytes,*source=emitter->payload;
- const int event_scale=w(source+0x18c)==0x00070006u&&r[0xbe]==10&&r[0x133]==0&&
+ const int event_scale=h(source+0x18c)==6&&r[0x133]==0&&
     gh_effect_event_part_is_bound(emitter->record,emitter->actor,emitter->selector);
  if(r[0x290]==1&&(gh_effect_r003_esp08_row(emitter->record)||event_scale)){
   /* 301648–301878 scale mode1 seeds the local transform from the first

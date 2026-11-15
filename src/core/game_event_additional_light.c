@@ -6,7 +6,8 @@
 enum {
     COMPONENT = 14, ROW_SIZE = 0x44, RECORD_SIZE = 0x70, RECORDS = 256,
     EV01_CUTS = 10, EV01_ROWS = 42, EV02_CUTS = 28, EV02_ROWS = 90,
-    EV04_CUTS = 24, EV04_ROWS = 70
+    EV04_CUTS = 24, EV04_ROWS = 70, EV1A_CUTS = 11, EV1A_ROWS = 33,
+    EV1B_CUTS = 12, EV1B_ROWS = 36
 };
 
 static uint16_t half(const uint8_t *p)
@@ -56,9 +57,12 @@ static gh_game_event_status track_at(gh_event_link *link, const gh_event_data_pr
     if (status) return status;
     if (word(component->bytes + 0x14) != track->count) return GH_EVENT_FORMAT;
     const unsigned event = link->components.event_no;
-    if (event != 1 && event != 2 && event != 4) return GH_EVENT_UNSUPPORTED;
-    const unsigned cuts = event == 1 ? EV01_CUTS : event == 2 ? EV02_CUTS : EV04_CUTS;
-    const unsigned rows = event == 1 ? EV01_ROWS : event == 2 ? EV02_ROWS : EV04_ROWS;
+    if (event != 1 && event != 2 && event != 4 && event != 0x1a && event != 0x1b)
+        return GH_EVENT_UNSUPPORTED;
+    const unsigned cuts = event == 1 ? EV01_CUTS : event == 2 ? EV02_CUTS :
+        event == 4 ? EV04_CUTS : event == 0x1a ? EV1A_CUTS : EV1B_CUTS;
+    const unsigned rows = event == 1 ? EV01_ROWS : event == 2 ? EV02_ROWS :
+        event == 4 ? EV04_ROWS : event == 0x1a ? EV1A_ROWS : EV1B_ROWS;
     if (data->camera_count != cuts || track->count != rows || track->stride != ROW_SIZE ||
         track->bytes != rows * ROW_SIZE || !track->records)
         return GH_EVENT_UNSUPPORTED;
@@ -69,7 +73,7 @@ static gh_game_event_status map_keys(const gh_event_data_prefix *data,
     gh_event_sequence_view track, uint16_t *cut_start)
 {
     const unsigned event = data->components->event_no;
-    const unsigned key_flags = event == 1 ? 4u : event == 2 ? 5u : 0x15u;
+    const unsigned key_flags = event == 1 ? 4u : event == 2 ? 5u : event == 4 ? 0x15u : event == 0x1a ? 0x11u : 1u;
     for (unsigned cut = 0; cut < data->camera_count; ++cut) {
         gh_event_camera_cut camera;
         uint16_t length;
@@ -83,14 +87,20 @@ static gh_game_event_status map_keys(const gh_event_data_prefix *data,
     for (unsigned i = 0; i < track.count; ++i) {
         const uint8_t *key = track.records + i * ROW_SIZE;
         const unsigned cut = key[3], frame = half(key + 6), id = half(key + 0x10);
+        if (event == 0x1b && (cut != i / 3 || frame || key[0x0e] != 2 || id != i % 3 + 1))
+            return GH_EVENT_UNSUPPORTED;
         /* 6978 keeps FFFF, 8378 maps it to camera-global FF. The four timing
          * repair calls leave these primary keys inside their original cuts. */
         if (word(key) != (0xffffu | cut << 24) || half(key + 4) ||
             cut >= data->camera_count || frame >= (unsigned)(cut_start[cut + 1] - cut_start[cut]) ||
             cut_start[cut] + frame < last_time ||
             key[0x0c] || (key[0x0d] & ~key_flags) ||
-            (key[0x0e] != 2 && (event == 1 || key[0x0e] != 1) && (event != 4 || key[0x0e])) || key[0x0f] ||
+            (key[0x0e] != 2 && (event == 1 || key[0x0e] != 1) &&
+             ((event != 4 && event != 0x1a) || key[0x0e])) || key[0x0f] ||
             id < 1 || id > 3)
+            return GH_EVENT_UNSUPPORTED;
+        if (event == 0x1a && (cut != i / 3 || frame || id != i % 3 + 1 ||
+            key[0x0e] != (cut == 1 ? 0 : 2) || key[0x0d] != (i == 3 ? 0x10 : 1)))
             return GH_EVENT_UNSUPPORTED;
         for (unsigned j = 0; j < 9; ++j) {
             if (!isfinite(number(key + 0x14 + j * 4))) return GH_EVENT_FORMAT;

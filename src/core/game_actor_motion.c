@@ -81,8 +81,21 @@ int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_
  uint32_t blend_frames,uint16_t flags){
  if(!b||!b->model||!b->model->root.bytes||b->model->root.size<0x5ac)return 0;
  const uint8_t *p=b->model->root.bytes;
- if(half(p+0x2fe)!=0x202)return 0;
+ const uint16_t kind=half(p+0x2fe);
  const uint32_t dependency=rd(p+0x564);
+ if(kind==0x204&&b->work&&b->work->room==0x103&&b->model->root.size>=0x1651&&
+    !p[0x2f4]&&!p[0x2f6]&&!flags){
+  const unsigned stamp=half(p+0x640);
+  if(dependency==0x215&&stamp==1&&p[0x2f5]==0x7d&&blend_frames==10)
+   return start_bits==0x41c80000u; /* 242754 starts EM15's first 7D clip at 25. */
+  if(p[0x1650]==24&&stamp>=2&&stamp<=7&&p[0x2f5]==1&&!blend_frames&&
+     dependency==(stamp<4?0x200u:stamp<6?0x20au:0x203u)){
+   /* 20FBB8's appearance-18 table staggers these R103 rows by stamp. */
+   const float start=(float)(7u-stamp);
+   return start_bits==rd((const uint8_t *)&start);
+  }
+ }
+ if(kind!=0x202)return 0;
  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a)return 0;
  if(!p[0x2f4]&&p[0x2f5]==0x71&&!p[0x2f6]&&blend_frames==10&&!flags)
   return start_bits==0x41a00000u||start_bits==0x42700000u;

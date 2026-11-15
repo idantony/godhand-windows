@@ -10,7 +10,7 @@ enum {GH_ROOM_OBJECT_ENEMY=0x200};
 typedef struct {gh_game_init_state *init;gh_room_pools *pools;gh_game_objects *room_objects,*global_objects;
  gh_boot_work *work;gh_heap *room_heap,*packet_heap;const void *fog_rgb;gh_core_save_view save;
  const uint8_t *scenario14,*borrowed586aa4;uint8_t *factory_serial;gh_enemy_se_banks *banks;
- gh_object_resource_bindings resources;gh_static_transform_policy policy;} gh_enemy_entry_bindings;
+ gh_object_resource_bindings resources;gh_static_transform_policy policy;gh_game_effects *effects;const void *boot_elf;size_t boot_elf_bytes;} gh_enemy_entry_bindings;
 typedef struct {gh_enemy_entry_bindings b;gh_enemy_request request;int32_t manager_kind;uint32_t argument,stage,frontier,handle;
  int slot;uint8_t resource_from_room,room_reference,global_reference,published,preload_reference;
  gh_game_title_player object;gh_object_view resource;gh_object_resource_load load,global_load;gh_object_sound_load sound;

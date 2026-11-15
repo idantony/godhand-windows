@@ -68,7 +68,19 @@ attack, Gene's hit reaction at 45 to 36 HP, and the enemy's recovery. A CPU
 test starts with the mid-room gate's defeat conditions set in the card and
 verifies the gate sequence with five reinforcements over 120 room frames.
 The integrated New Game CPU replay reaches 1,113 R102 room frames at its
-planned limit. The normal R102 exit is still in development.
+planned limit.
+
+A later native replay starts from an isolated R102 card with the gate's defeat
+conditions set. Stick input follows the original corridor and Circle activates
+the original exit. The replay chooses Continue in the original save map, enters
+R103 through its original door spawn, restores the carried paper, and completes
+all 11 EV1A shots with Gene at 100 HP. It runs more than 840 R103 CPU frames
+before reaching the original arena setup. A Windows replay uses native CPU
+title setup, then Direct3D presents all 776 R102 frames in the route and 12
+consecutive R103 frames after the transition, with zero renderer errors.
+A longer replay switches to Direct3D shortly before the R102 exit and
+presents 120 consecutive R103 frames, including Gene in the original EV1A
+cutscene after the loading fade.
 
 Native CPU replays also verify R100's original Game Over and Retry flow and
 R101's box throw and 200 G pickup. R100 reloads with 100 HP and continues
@@ -271,7 +283,14 @@ EV04 结尾的原版保存菜单已写出有效的 R102 存档。重新启动后
 
 后续 R102 读档回放呈现了 88 个 Direct3D 帧，覆盖敌人攻击、Gene 从 45 HP 降到 36 HP 的
 受击反应，以及敌人收招。CPU 测试用预置击败条件的存档验证了中段门和五个增援，运行了 120 个
-房间帧。合并版本的新游戏 CPU 回放在 1,113 个 R102 房间帧达到预定上限。R102 的正常离场仍在开发。
+房间帧。合并版本的新游戏 CPU 回放在 1,113 个 R102 房间帧达到预定上限。
+
+后续原生回放从预置击败条件的隔离 R102 存档开始。摇杆沿原版走廊移动，圆圈打开原版出口，
+在原版保存地图选择「继续」后从原版门口进入 R103。回放恢复了随身纸片，并以 100 HP 播完
+EV1A 的全部 11 个镜头。进入原版竞技场初始化前已运行超过 840 个 R103 CPU 帧。
+Windows 回放用原生 CPU 完成标题流程，随后 Direct3D 呈现路线中的全部 776 个 R102 帧，
+转场后又连续呈现 12 个 R103 帧，渲染器报错为零。另一次回放在 R102 出口前切换到
+Direct3D，进入 R103 后连续呈现 120 帧，包括加载淡出之后 Gene 出现在原版 EV1A 过场中的画面。
 
 原生 CPU 回放验证了 R100 的原版 Game Over 和重试，以及 R101 的投箱和拾取 200 金币。
 R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101 回放运行了 4,494 个原生 CPU 帧，

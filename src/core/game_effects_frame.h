@@ -35,6 +35,7 @@ typedef struct {gh_effects_frame_bindings b;const void *identity;uint32_t stage,
  gh_effect_emitter_view emitter;uint8_t emitter_stage;uint32_t emitter_serial;
  gh_effect_create_call ambient_call;uint8_t ambient_started;
  int32_t emitter_spawn_count;gh_esp_create_call esp_call;uint8_t esp_started,esp_stage;
+ float curved_emitter_world[16],curved_emitter_yaw,curved_emitter_step;
  gh_esp_update_call esp_update;
 } gh_game_effects_frame;
 /* Same original profiler from scene_aux; completes and resets continuation

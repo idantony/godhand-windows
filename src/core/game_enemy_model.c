@@ -6,7 +6,8 @@ static uint32_t word(const uint8_t*p,size_t o){uint32_t v;memcpy(&v,p+o,4);retur
 static uint16_t half(const uint8_t*p,size_t o){uint16_t v;memcpy(&v,p+o,2);return v;}
 /* SearchData scans tags even when reserved directory holes have offset0.
  * Host extent ends at the next populated entry; no game bytes are relocated. */
-static gh_bundle_error sparse_find(const uint8_t*b,size_t n,const char*tag,unsigned occurrence,gh_bundle_entry*out){
+gh_bundle_error gh_enemy_bundle_find(const uint8_t*b,size_t n,const char*tag,unsigned occurrence,gh_bundle_entry*out){
+ if(!b||!tag||!out)return GH_BUNDLE_ARGUMENT;
  if(n<4)return GH_BUNDLE_BOUNDS;uint32_t count=word(b,0);if(!count||count>(n-4)/8)return GH_BUNDLE_BOUNDS;
  size_t directory=4+(size_t)count*8,previous=directory;uint32_t selected=UINT32_MAX;
  for(uint32_t i=0;i<count;i++){
@@ -35,7 +36,8 @@ gh_actor_model_status gh_enemy_model_initialize_00208268(gh_enemy_model*s,const 
  if(exchange)dependency=0x200;
  unsigned occurrence;
  if(kind==0x220&&dependency==0x220&&work->room==0x100)occurrence=0;
- else if(kind!=0x202||gh_enemy_model_occurrence_002ddea0(kind,dependency,&occurrence)){
+ else if((kind!=0x202&&!(kind==0x204&&work->room==0x103))||
+     gh_enemy_model_occurrence_002ddea0(kind,dependency,&occurrence)){
   s->frontier=0x2ddea0;return GH_ACTOR_MODEL_UNSUPPORTED;
  }
  if(!exchange&&(dependency==0x200||dependency==0x202||dependency==0x203)&&(word(root->bytes,0x164c)&1)){
@@ -44,14 +46,14 @@ gh_actor_model_status gh_enemy_model_initialize_00208268(gh_enemy_model*s,const 
  if(resource->kind!=kind||!resource->bytes||!resource->file_extent_known||resource->file_extent>resource->size)return GH_ACTOR_MODEL_ARGUMENT;
  if(s->stage&&(s->resource!=resource->bytes||s->occurrence!=occurrence))return GH_ACTOR_MODEL_BUSY;
  if(!s->stage){
-  gh_bundle_error e=sparse_find(resource->bytes,resource->file_extent,"MD",occurrence,&s->geometry);
+  gh_bundle_error e=gh_enemy_bundle_find(resource->bytes,resource->file_extent,"MD",occurrence,&s->geometry);
   if(e&&e!=GH_BUNDLE_NOT_FOUND){s->frontier=0x31ccf0;return GH_ACTOR_MODEL_BOUNDS;}
-  e=sparse_find(resource->bytes,resource->file_extent,"TM3",occurrence,&s->texture);
+  e=gh_enemy_bundle_find(resource->bytes,resource->file_extent,"TM3",occurrence,&s->texture);
   if(e&&e!=GH_BUNDLE_NOT_FOUND){s->frontier=0x31ccf0;return GH_ACTOR_MODEL_BOUNDS;}
   if(exchange){
    gh_bundle_entry txe;
    uint8_t replacement[16];
-   e=sparse_find(resource->bytes,resource->file_extent,"TXE",0,&txe);
+   e=gh_enemy_bundle_find(resource->bytes,resource->file_extent,"TXE",0,&txe);
    if(e||resource->file_extent<0x48||txe.offset!=word(resource->bytes,0x44)){
     s->frontier=0x149ad8;return GH_ACTOR_MODEL_UNSUPPORTED;
    }

@@ -21,7 +21,30 @@ static int read_elf(const void*raw,size_t n,uint32_t pc,void*out,size_t bytes){
  const uint8_t*p=raw;if(!p||n<52||memcmp(p,"\177ELF\1\1\1",7)||half(p+18)!=8)return 0;uint32_t ph=word(p+28);unsigned stride=half(p+42),count=half(p+44),found=0;if(stride<32||count>128||ph>n||(size_t)count*stride>n-ph)return 0;
  for(unsigned i=0;i<count;i++){const uint8_t*q=p+ph+(size_t)i*stride;uint32_t off=word(q+4),base=word(q+8),size=word(q+16);if(word(q)!=1)continue;if(off>n||size>n-off)return 0;if(base<=pc&&(uint64_t)pc+bytes<=(uint64_t)base+size){if(found++)return 0;memcpy(out,p+(size_t)off+(size_t)(pc-base),bytes);}}return found==1;
 }
-gh_actor_model_status gh_shadow_templates_from_elf(gh_shadow_templates*s,const void*elf,size_t bytes){if(!s||!elf)return GH_ACTOR_MODEL_ARGUMENT;if(s->initialized)return GH_ACTOR_MODEL_BUSY;uint8_t pattern[64];if(!read_elf(elf,bytes,0x3c3f68,pattern,64))return GH_ACTOR_MODEL_BOUNDS;unsigned count=0;for(unsigned i=0;i<8;i++){const uint8_t*p=pattern+i*8;if(!isfinite(value(p))||value(p)<0||!p[5]||p[5]>12)return GH_ACTOR_MODEL_UNSUPPORTED;count+=p[5];}if(count!=12)return GH_ACTOR_MODEL_UNSUPPORTED;memset(s,0,sizeof(*s));memcpy(s->player_pattern,pattern,64);s->initialized=1;s->identity=s;return GH_ACTOR_MODEL_OK;}
+gh_actor_model_status gh_shadow_templates_from_elf(gh_shadow_templates*s,const void*elf,size_t bytes){
+ if(!s||!elf)return GH_ACTOR_MODEL_ARGUMENT;
+ if(s->initialized)return GH_ACTOR_MODEL_BUSY;
+ uint8_t pattern[64];
+ if(!read_elf(elf,bytes,0x3c3f68,pattern,64))return GH_ACTOR_MODEL_BOUNDS;
+ unsigned count=0;
+ for(unsigned i=0;i<8;i++){
+  const uint8_t*p=pattern+i*8;
+  if(!isfinite(value(p))||value(p)<0||!p[5]||p[5]>12)return GH_ACTOR_MODEL_UNSUPPORTED;
+  count+=p[5];
+ }
+ if(count!=12)return GH_ACTOR_MODEL_UNSUPPORTED;
+ memset(s,0,sizeof(*s));
+ memcpy(s->player_pattern,pattern,64);
+ uint8_t single[16];
+ if(read_elf(elf,bytes,0x3c3f58,single,16)&&word(single)==0x3f800000u&&
+    word(single+4)==0x00480100u&&!word(single+8)&&word(single+12)==0x00ff01ffu){
+  memcpy(s->single_part_pattern,single,8);
+  s->single_part_ready=1;
+ }
+ s->initialized=1;
+ s->identity=s;
+ return GH_ACTOR_MODEL_OK;
+}
 static void point(float*out,const float*m,const float*p){for(unsigned r=0;r<4;r++){float n=mul(m[r],p[0]);n=add(n,mul(m[4+r],p[1]));n=add(n,mul(m[8+r],p[2]));out[r]=add(n,mul(m[12+r],p[3]));}}
 static gh_actor_model_status project(gh_shadow_quad*q,const gh_game_pl_camera*c,gh_static_transform_policy policy,uint32_t*f){
  float rotation[16],translation[16]={0},scale[16]={0},temporary[16],model[16],clip[16],screen[16];uint32_t pc=0;
@@ -48,9 +71,13 @@ static int same(const gh_shadow_bindings*a,const gh_shadow_bindings*b){return a-
 static gh_actor_model_status ray(gh_shadow_call*c,int*hit,uint32_t*f){gh_scene_ray_status e=c->bindings.ray?c->bindings.ray(c->bindings.ray_context,c->bindings.actors,&c->ray,hit,f):gh_scene_ray_query_00131e10(c->bindings.actors,&c->ray,hit,f);return e?stop(f,*f?*f:0x131e10,GH_ACTOR_MODEL_UNSUPPORTED):GH_ACTOR_MODEL_OK;}
 static gh_actor_model_status run(gh_shadow_call*c,uint32_t*f){
  const gh_shadow_bindings*b=&c->bindings;uint8_t*p=b->model->root.bytes;const uint8_t*w=(const uint8_t*)b->work;gh_actor_model_status e;
+ const int single_part=b->shadow&&b->shadow->pattern_original==0x3c3f58;
  if(c->phase==0){
   if((word(w+0x5e0)&0x400000u)||(word(p+0x4a8)&0x80000000u)||(word(p+0x250)&2u)||value(p+0x24c)<=.3f){c->complete=1;return GH_ACTOR_MODEL_OK;}
-  if(!b->shadow||!b->shadow->initialized||!b->shadow->object||b->shadow->object->bytes!=p||b->shadow->pattern_original!=0x3c3f68||!b->templates||!b->templates->initialized||b->templates->identity!=b->templates)return stop(f,0x14efa8,GH_ACTOR_MODEL_UNSUPPORTED);
+  if(!b->shadow||!b->shadow->initialized||!b->shadow->object||b->shadow->object->bytes!=p||
+     !b->templates||!b->templates->initialized||b->templates->identity!=b->templates||
+     (single_part?!b->templates->single_part_ready:b->shadow->pattern_original!=0x3c3f68))
+   return stop(f,0x14efa8,GH_ACTOR_MODEL_UNSUPPORTED);
   /* 14EFA8 reads the active camera and the independent global Up vector. */
   if(!b->camera||!b->camera->constructed||!b->world_light||!b->world_light->constructed||!b->up_owner||!b->up_owner->bound||!b->pivot_owner||!b->pivot_owner->initialized||!b->actors)return stop(f,0x14efa8,GH_ACTOR_MODEL_UNSUPPORTED);
   uintptr_t base=(uintptr_t)p,a=(uintptr_t)b->shadow->packets[0],z=(uintptr_t)b->shadow->packets[1];if(a<base||a-base>b->model->root.size||0x750>b->model->root.size-(a-base)||z<base||z-base>b->model->root.size||0x750>b->model->root.size-(z-base)||z-a!=0x750)return GH_ACTOR_MODEL_BOUNDS;
@@ -60,8 +87,15 @@ static gh_actor_model_status run(gh_shadow_call*c,uint32_t*f){
   memcpy(c->current_point,pos,12);memcpy(c->current_quat,b->pivot_owner->bytes,16);c->current_alpha=1;c->current_size=c->scale;c->current_valid=c->previous_valid=1;
   c->far_mode=!(word(p+0x4a8)&0x20000000u)&&dot3(distance,distance)>=100;c->phase=c->far_mode?10:1;
  }
+ const uint8_t *pattern_rows=single_part?b->templates->single_part_pattern:b->templates->player_pattern;
  while(c->slot<12){
-  if(c->phase==1){if(!c->remaining){if(c->row>=8)return stop(f,0x14f2bc,GH_ACTOR_MODEL_BOUNDS);const uint8_t*pattern=b->templates->player_pattern+c->row*8;c->row_count=c->remaining=pattern[5];if(!c->remaining||c->remaining>12)return stop(f,0x14f2bc,GH_ACTOR_MODEL_UNSUPPORTED);c->previous_valid=c->current_valid;memcpy(c->previous_point,c->current_point,12);memcpy(c->previous_quat,c->current_quat,16);c->previous_alpha=c->current_alpha;c->previous_size=c->current_size;
+  if(c->phase==1){if(!c->remaining){
+    /* 3C3F60 marks the remaining quads invalid after EL40's first part. */
+    if(single_part&&c->row){
+     for(;c->slot<12;c->slot++)disabled(c,c->slot);
+     break;
+    }
+    if(c->row>=8)return stop(f,0x14f2bc,GH_ACTOR_MODEL_BOUNDS);const uint8_t*pattern=pattern_rows+c->row*8;c->row_count=c->remaining=pattern[5];if(!c->remaining||c->remaining>12)return stop(f,0x14f2bc,GH_ACTOR_MODEL_UNSUPPORTED);c->previous_valid=c->current_valid;memcpy(c->previous_point,c->current_point,12);memcpy(c->previous_quat,c->current_quat,16);c->previous_alpha=c->current_alpha;c->previous_size=c->current_size;
     unsigned part_index=pattern[4];if(part_index==255||part_index>=b->model->part_count)c->invalid_part=1;
     const gh_actor_part*part=NULL;if(!c->invalid_part&&gh_actor_model_part_at(b->model,part_index,&part))return stop(f,0x150128,GH_ACTOR_MODEL_UNSUPPORTED);
     if(c->invalid_part){c->current_valid=0;c->phase=3;}
@@ -69,7 +103,7 @@ static gh_actor_model_status run(gh_shadow_call*c,uint32_t*f){
    }else c->phase=3;
   }
   if(c->phase==2){if(word(w+0x5d8)&0x1000u)return stop(f,0x135ec8,GH_ACTOR_MODEL_UNSUPPORTED);int hit=0;e=ray(c,&hit,f);if(e)return e;c->current_valid=(uint8_t)(hit!=0);c->phase=hit?20:3;}
-  if(c->phase==20){if(!(c->ray_length>0))return stop(f,0x14f4a0,GH_ACTOR_MODEL_UNSUPPORTED);e=align(b->up_owner->up_global,c->normal,c->current_quat,f);if(e)return e;const uint8_t*pattern=b->templates->player_pattern+c->row*8;float fade=clamp(sub(1,divide(sub(c->from[1],c->current_point[1]),c->ray_length)),1);c->current_alpha=mul(mul(mul((float)pattern[6],fade),value(b->world_light->scalar+0x16230)),value(p+0x24c));c->current_size=mul(value(pattern),c->scale);c->current_point[1]=add(c->current_point[1],.02f);c->phase=3;}
+  if(c->phase==20){if(!(c->ray_length>0))return stop(f,0x14f4a0,GH_ACTOR_MODEL_UNSUPPORTED);e=align(b->up_owner->up_global,c->normal,c->current_quat,f);if(e)return e;const uint8_t*pattern=pattern_rows+c->row*8;float fade=clamp(sub(1,divide(sub(c->from[1],c->current_point[1]),c->ray_length)),1);c->current_alpha=mul(mul(mul((float)pattern[6],fade),value(b->world_light->scalar+0x16230)),value(p+0x24c));c->current_size=mul(value(pattern),c->scale);c->current_point[1]=add(c->current_point[1],.02f);c->phase=3;}
   if(c->phase==3){c->remaining--;c->phase=21;}
   if(c->phase==21){if(c->invalid_part||!c->current_valid||!c->previous_valid){disabled(c,c->slot);c->phase=5;}
    else {float t=divide((float)c->remaining,(float)c->row_count);c->pending=(gh_shadow_quad){0};e=interpolate(t,c->current_quat,c->previous_quat,c->pending.quaternion,b->policy,f);if(e)return e;for(unsigned k=0;k<3;k++)c->pending.position[k]=add(c->current_point[k],mul(sub(c->previous_point[k],c->current_point[k]),t));c->pending.size=mul(add(c->current_size,mul(sub(c->previous_size,c->current_size),t)),.5f);float alpha=clamp(add(c->current_alpha,mul(sub(c->previous_alpha,c->current_alpha),t)),128);if(!isfinite(alpha)||!isfinite(c->pending.size))return stop(f,0x14f5a0,GH_ACTOR_MODEL_UNSUPPORTED);c->pending.alpha=(uint8_t)(int32_t)alpha;c->phase=4;}

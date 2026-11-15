@@ -7,7 +7,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-typedef struct {uint8_t player_pattern[64],initialized;const void *identity;} gh_shadow_templates;
+typedef struct {
+ uint8_t player_pattern[64],initialized;
+ const void *identity;
+ uint8_t single_part_pattern[8],single_part_ready;
+} gh_shadow_templates;
 gh_actor_model_status gh_shadow_templates_from_elf(gh_shadow_templates *,const void *,size_t);
 typedef struct {float size,position[3],quaternion[4];int32_t xy_fixed4[4][2],z_integer[4];uint8_t alpha,enabled;} gh_shadow_quad;
 typedef struct {const gh_player_shadow *owner;uint32_t parity,bank,depth;uint64_t tex0,tex1,alpha,test,clamp;uint16_t primitive;gh_shadow_quad quads[12];uint8_t ready;} gh_shadow_group;

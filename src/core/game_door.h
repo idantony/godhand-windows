@@ -52,6 +52,10 @@ gh_door_status gh_game_door_request_001ffeb8(gh_game_door*,const gh_game_door_bi
 /* Direct original 1FFF30 uses the supplied destination room verbatim. */
 gh_door_status gh_game_door_request_001fff30(gh_game_door *,const gh_game_door_bindings *,
  uint16_t room,const uint32_t position_bits[3],uint32_t yaw_bits,uint8_t kind,uint32_t flags,uint8_t force);
+/* Original 2004C8 with t0=0 reads a destination from the active room JMP
+ * and preserves the destination jump index before invoking 1FFF80. */
+gh_door_status gh_game_door_request_jump_002004c8(gh_game_door *,const gh_game_door_bindings *,
+ const gh_bundle_entry *,uint8_t index,uint8_t kind,uint32_t flags,uint8_t force);
 /* Original per-frame1FFE10: wait decrement, Fade readiness,2000F8. No hidden
  * Fade stepping, no forced frame waits, and no room asset loading shortcut.
  * R020 kind1/force1 changes canonical Main state to5 and Work's next-room data;

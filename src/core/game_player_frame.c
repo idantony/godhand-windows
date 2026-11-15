@@ -2114,7 +2114,7 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
  if(s->stage==14&&s->state_entry==0x10b6b0){if(p[0x2f5]>0x46)p[0x2f5]=0;uint32_t method,descriptor;if(!elf_word(b,0x3bd0f0+(uint32_t)p[0x2f5]*8,&descriptor)||!elf_word(b,0x3bd0f4+(uint32_t)p[0x2f5]*8,&method))return fail(s,0x10b6b0,GH_PLAYER_FRAME_ARGUMENT);if((int16_t)(descriptor>>16)>=0||(int16_t)descriptor)return fail(s,0x10b6b0,GH_PLAYER_FRAME_UNSUPPORTED);s->state_entry=method;s->stage=15;}
  if(s->stage==14&&s->state_entry==0x122c48){
   const unsigned selector=p[0x2f5];
-  if((b->work->room!=0x100&&b->work->room!=0x105)||selector>1||
+  if((b->work->room!=0x100&&b->work->room!=0x102&&b->work->room!=0x105)||selector>1||
      (int16_t)half(p+0x54a)>0)
    return fail(s,0x122c48,GH_PLAYER_FRAME_UNSUPPORTED);
   p[0x648]=0;put(p+0x640,0);

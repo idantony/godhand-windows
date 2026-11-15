@@ -1,4 +1,5 @@
 #include "game_door.h"
+#include <fenv.h>
 #include <stddef.h>
 #include <string.h>
 _Static_assert(offsetof(gh_game_door,wait)==0,"Door wait");
@@ -95,6 +96,45 @@ gh_door_status gh_game_door_request_001ffeb8(gh_game_door*s,const gh_game_door_b
  uint16_t target=room==b->work->room?UINT16_MAX:room;
  return gh_game_door_request_001fff30(s,b,target,xyz,yaw_bits,kind,flags,force);
 }
+gh_door_status gh_game_door_request_jump_002004c8(gh_game_door *door,
+ const gh_game_door_bindings *bindings,const gh_bundle_entry *jump,uint8_t index,
+ uint8_t kind,uint32_t flags,uint8_t force)
+{
+ if(!door||!door->initialized||!bindings||!bindings->work||!jump||!jump->bytes)
+  return GH_DOOR_ARGUMENT;
+ if(jump->size<4||index>=w(jump->bytes)||index>=(jump->size-4)/20)
+  return fail(door,0x2004c8,GH_DOOR_BOUNDS);
+ const uint8_t *record=jump->bytes+4+(size_t)index*20;
+ const uint16_t room=h(record+8);
+ const uint32_t scale_bits[]={0x3c23d70a,0x3c8efa35};
+ float scale[2];
+ memcpy(scale,scale_bits,sizeof(scale));
+
+ fenv_t environment;
+ if(feholdexcept(&environment))return fail(door,0x200594,GH_DOOR_UNSUPPORTED);
+ if(fesetround(FE_TONEAREST)){
+  (void)fesetenv(&environment);
+  return fail(door,0x200594,GH_DOOR_UNSUPPORTED);
+ }
+ float values[4];
+ for(unsigned i=0;i<4;++i){
+  const uint16_t raw=h(record+2*i);
+  const int coordinate=raw<0x8000?(int)raw:(int)raw-0x10000;
+  volatile float value=(float)coordinate*scale[i==3];
+  values[i]=value;
+ }
+ if(fesetenv(&environment))return fail(door,0x200594,GH_DOOR_UNSUPPORTED);
+
+ door->target_room=room==bindings->work->room?-1:(int16_t)room;
+ memcpy(door->position_bits,values,sizeof(door->position_bits));
+ memcpy(&door->yaw_bits,values+3,sizeof(door->yaw_bits));
+ door->point=record[10];
+ door->kind=kind;
+ door->flags=flags;
+ door->force3a=force;
+ return begin(door,bindings);
+}
+
 static int reset_clock_room(uint16_t room){return room==0x100||room==0x200||room==0x300||room==0x400||room==0x500||room==0x600||room==0x700||room==0x802||room==0x806;}
 /* Door progression prompt uses the same child3 and Save cursor owners as
  * SubScr Move. The Scenario end provider runs the real 2C3858 callbacks. */

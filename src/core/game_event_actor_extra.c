@@ -353,8 +353,9 @@ static gh_game_event_status extra_standalone(gh_event_actor_extra *s,
     put(request->work + 0x38, 0);
     p[0x2fe] = (uint8_t)request->source_kind;
     p[0x2ff] = (uint8_t)(request->source_kind >> 8);
-    put(p + 0x2d0, request->source_kind == 0x367 ? 0x20000000 : 0x800000);
-    if (request->source_kind == 0x367) {
+    const int prop = request->source_kind >= 0x300 && request->source_kind < 0x500;
+    put(p + 0x2d0, request->packed_resource ? 0x40000000 : prop ? 0x20000000 : 0x800000);
+    if (prop) {
         if (frontier) *frontier = 0x14b6f8;
         for (unsigned i = 0; i < p[0x2b1]; ++i) {
             const uint8_t *node;
@@ -365,14 +366,22 @@ static gh_game_event_status extra_standalone(gh_event_actor_extra *s,
         }
     }
     if (request->source_kind == 0x650) p[0x2b5] = (uint8_t)-10;
-    if (request->source_kind == 0x630 || request->source_kind == 0x631 ||
+    if (request->packed_resource || request->source_kind == 0x630 || request->source_kind == 0x631 ||
         request->source_kind == 0x634 || request->source_kind == 0x639) p[0x4d8] = 1;
+    static const uint8_t one_body_meshes[][9] = {"HD_01", "z_hana", "z_hana_m"};
+    if (request->packed_resource) {
+        /* 2B83B8 sets one-body and hides the same three child meshes. */
+        if (frontier) *frontier = 0x14a338;
+        for (unsigned i = 0; i < sizeof(one_body_meshes) / sizeof(*one_body_meshes); ++i) {
+            gh_game_event_status status = hide_mesh(&actor->model, one_body_meshes[i]);
+            if (status) return status;
+        }
+    }
     if (request->source_kind == 0x630 || request->source_kind == 0x631) {
         if (frontier) *frontier = 0x14a338;
-        static const uint8_t names[][9] = {"HD_01", "z_hana", "z_hana_m"};
         uint8_t *cursor = &s->one_body_mesh[request->source_kind - 0x630];
-        for (; *cursor < sizeof(names) / sizeof(*names); ++*cursor) {
-            gh_game_event_status status = hide_mesh(&actor->model, names[*cursor]);
+        for (; *cursor < sizeof(one_body_meshes) / sizeof(*one_body_meshes); ++*cursor) {
+            gh_game_event_status status = hide_mesh(&actor->model, one_body_meshes[*cursor]);
             if (status) return status;
         }
     }
@@ -613,6 +622,17 @@ gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor
         default: break;
         }
     }
+    /* EV1B's first actor takes the original ExtraInitialize default for EL40. */
+    if (request->source_kind == 0x640 && request->actor_index == 0 && request->data &&
+        request->data->components && request->data->components->event_no == 0x1b) {
+        return extra_standalone(s, request, handle, original_success, frontier);
+    }
+    if (((request->actor_index == 5 && request->source_kind == 0x338) ||
+         (request->actor_index == 6 && request->source_kind == 0x3bc)) && request->data &&
+        request->data->components && request->data->components->event_no == 0x1b) {
+        return extra_standalone(s, request, handle, original_success, frontier);
+    }
+    if (request->packed_resource) return extra_standalone(s, request, handle, original_success, frontier);
     if (request->source_kind == 0x630 || request->source_kind == 0x631 ||
         request->source_kind == 0x634 || request->source_kind == 0x639 ||
         request->source_kind == 0x641 || request->source_kind == 0x646 ||

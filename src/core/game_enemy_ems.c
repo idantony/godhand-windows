@@ -275,6 +275,9 @@ static gh_scene_placement_status spawn(gh_enemy_ems *owner,uint32_t *frontier,in
                  (request.dependency_kind==0x20a&&(request.appearance==0||request.appearance==3)))) {
                 status=enter_202(entry,bindings,&request,frontier);
                 if(status&&!entry->enemy202)return GH_PLACE_MEMORY;
+            }else if(gh_enemy204_is_r103_entry(&request,bindings->actor.entry.work->room)){
+                status=enter_202(entry,bindings,&request,frontier);
+                if(status&&!entry->enemy202)return GH_PLACE_MEMORY;
             }else if (bindings->names_2a2 &&
                 ((index==5 && request.entry_number==6 && request.object_kind==0x2a2 &&
                   request.dependency_kind==0x2a2 && request.appearance==0) ||
@@ -1591,8 +1594,10 @@ gh_actor_motion_status gh_enemy_ems_remove_00290770(gh_enemy_ems *owner,gh_enemy
     if(!call->stage){
         const uint8_t *bytes=actor->object.view.bytes;
         const unsigned kind=bytes[0x2fe]|(unsigned)bytes[0x2ff]<<8;
-        if(kind!=0x202&&kind!=0x2a2)return retire_stop(frontier,0x2956f0);
-        /* 2956F0 only stores surviving 220/223 actors. */
+        const int r103=kind==0x204&&gh_enemy204_is_r103_entry(&actor->request,actor->b.work->room);
+        if(kind!=0x202&&kind!=0x2a2&&!r103)return retire_stop(frontier,0x2956f0);
+        /* 2956F0 only stores surviving 220/223 actors. 2956A0 separately
+         * preserves current vitality in the current placement page. */
         unsigned stamp=bytes[0x640]|(unsigned)bytes[0x641]<<8;
         if(stamp<64){
             if(!owner->room||owner->page!=owner->room->active||!valid_page(owner->room))

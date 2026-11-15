@@ -104,15 +104,19 @@ gh_actor_model_status gh_actor_model_retire_001496c0(gh_actor_model *model,
  if(model->native_identity!=model||!model->root.bytes||(model->root.original_vtable214!=0x41d220&&model->root.original_vtable214!=0x41b6a0&&model->root.original_vtable214!=0x422f90&&model->root.original_vtable214!=0x423230&&model->root.original_vtable214!=0x423338&&
      model->root.original_vtable214!=0x423400&&model->root.original_vtable214!=0x423608&&
      model->root.original_vtable214!=0x4238d8&&model->root.original_vtable214!=0x423c70&&
-     model->root.original_vtable214!=0x423e48&&model->root.original_vtable214!=0x424128&&
+     model->root.original_vtable214!=0x423e48&&model->root.original_vtable214!=0x423f58&&
+     model->root.original_vtable214!=0x424128&&model->root.original_vtable214!=0x424790&&
+     model->root.original_vtable214!=0x425c78&&model->root.original_vtable214!=0x425d48&&
+     model->root.original_vtable214!=0x425fb0&&model->root.original_vtable214!=0x426098&&
      model->root.original_vtable214!=0x424c30&&
      model->root.original_vtable214!=0x424e18&&model->root.original_vtable214!=0x424f28&&
-     model->root.original_vtable214!=0x425000&&
+     model->root.original_vtable214!=0x425000&&model->root.original_vtable214!=0x4251c0&&
      model->root.original_vtable214!=0x4479c8&&
      model->root.original_vtable214!=0x448ca0&&
      model->root.original_vtable214!=0x44a528&&
      model->root.original_vtable214!=0x4267f8&&
      model->root.original_vtable214!=0x426e78&&
+     model->root.original_vtable214!=0x4275c8&&
      model->root.original_vtable214!=0x427690&&
      model->root.original_vtable214!=0x428090&&
      model->root.original_vtable214!=0x4237e8&&
@@ -120,7 +124,8 @@ gh_actor_model_status gh_actor_model_retire_001496c0(gh_actor_model *model,
      model->root.original_vtable214!=0x4296f0&&
      model->root.original_vtable214!=0x429b88&&
      model->root.original_vtable214!=0x421bb8&&model->root.original_vtable214!=0x4246a8&&
-     model->root.original_vtable214!=0x426268&&model->root.original_vtable214!=0x4277b8&&
+     model->root.original_vtable214!=0x426180&&model->root.original_vtable214!=0x426268&&
+     model->root.original_vtable214!=0x4277b8&&
      model->root.original_vtable214!=0x427880&&model->root.original_vtable214!=0x42aa98)||
     model->external_owner||model->external_parts||model->external_borrowers||model->sound_borrowers)
   return retirement_error(frontier,0x1496c0);
