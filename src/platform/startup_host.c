@@ -1106,7 +1106,23 @@ static gh_game_event_status event_release_leaf(void *context,uint32_t site,uint3
         uint32_t mode,flags;
         memcpy(&mode,env.bytes+0xc,4);
         memcpy(&flags,env.bytes+0x28,4);
-        if((mode<1||mode>3)&&(flags&4)&&!(h->event_config.flags&0x68u))return GH_EVENT_UNSUPPORTED;
+        if((mode<1||mode>3)&&(flags&4)&&!(h->event_config.flags&0x68u)){
+            /* REL 65C8 releases the event's screen ownership before starting
+             * the original 15-tick fade and posting Game+1B0. */
+            uint8_t *work=(uint8_t *)&h->work;
+            uint32_t system,shift;
+            memcpy(&system,work+0x5e0,sizeof(system));
+            memcpy(&shift,work+0x564,sizeof(shift));
+            system&=~0x02000000u;
+            memcpy(work+0x5e0,&system,sizeof(system));
+            const gh_screen_fade_context fade={h->display.screen_width,
+                h->display.gs_y_origin,shift,system};
+            *frontier=0x307208;
+            *relative=0;
+            if(gh_screen_fade_start_00307208(&h->fade,&fade,0,8,0,0xff000000u,0,15))
+                return GH_EVENT_CALLEE;
+            h->screen_state_5cae40=15;
+        }
         return GH_EVENT_OK;
     }
     case 0x29724c:

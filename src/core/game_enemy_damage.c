@@ -1,4 +1,5 @@
 #include "game_enemy_damage.h"
+#include "game_enemy_row2.h"
 #include "game_camera.h"
 #include "frame_state.h"
 #include "game_hitarea_frame.h"
@@ -36,9 +37,16 @@ static int r100_stamp8(const gh_enemy_actor *enemy, const uint8_t *actor) {
         enemy->entry.b.work && (uint16_t)enemy->entry.b.work->room == 0x100;
 }
 
-static int r102_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
-    return effect == 7 && word(actor + 0x564) == 0x200 &&
-        enemy->entry.b.work && enemy->entry.b.work->room == 0x102;
+static int r103_punch_target(const gh_enemy_actor *enemy)
+{
+    return enemy->entry.b.work && enemy->entry.request.dependency_kind == 0x200 &&
+        gh_enemy204_is_r103_entry(&enemy->entry.request, enemy->entry.b.work->room);
+}
+
+static int room_em00_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect)
+{
+    return effect == 7 && word(actor + 0x564) == 0x200 && enemy->entry.b.work &&
+        (enemy->entry.b.work->room == 0x102 || r103_punch_target(enemy));
 }
 
 static int opening_triangle(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
@@ -55,7 +63,7 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
     gh_title_player_view *view = &enemy->entry.object.view;
     if (!view->bytes || view->size < 0x642 || view->original_vtable214 != 0x4479c8 ||
         word(view->bytes + 0x214) != view->original_vtable214 ||
-        half(view->bytes + 0x2fe) != 0x202 || !enemy->hitareas.created[0])
+        (half(view->bytes + 0x2fe) != 0x202 && !r103_punch_target(enemy)) || !enemy->hitareas.created[0])
         return stop(frontier, 0x20a5dc);
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
     gh_title_player_view *owner;
@@ -549,7 +557,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int opening_203 = r100_stamp19(enemy, p);
     const int opening_200 = r100_stamp20(enemy, p) || (triangle && r100_stamp8(enemy, p));
     const int opening_pair = opening_203 || opening_200;
-    const int ordinary_punch = r102_punch(enemy, p, effect);
+    const int ordinary_punch = room_em00_punch(enemy, p, effect);
     const int hit_probe_selector = opening_pair || ordinary_punch;
     const int counter_selector = opening_200 || ordinary_punch;
 
@@ -785,7 +793,7 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const int triangle = opening_triangle(enemy, p, effect);
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
-         !r100_stamp20(enemy, p) && !triangle && !r102_punch(enemy, p, effect)) ||
+         !r100_stamp20(enemy, p) && !triangle && !room_em00_punch(enemy, p, effect)) ||
         (amplified && !(triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p)))))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
@@ -857,7 +865,7 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     if ((!thrown_box && (call->effect == 0x2e ? !scenery_reaction_enemy(enemy,p) :
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
             !(call->effect == 0x12 && r100_stamp8(enemy, p)) &&
-            !r102_punch(enemy, p, half(body->bytes + 0x46)))) ||
+            !room_em00_punch(enemy, p, half(body->bytes + 0x46)))) ||
         init->heat[0x10] || word(player->bytes + 0x5fc) ||
         (!manager_active && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);

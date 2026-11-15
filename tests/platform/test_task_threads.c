@@ -38,6 +38,11 @@ static void sleeper(void *context,int32_t arg)
     CHECK(gh_task_threads_sleep(s->backend,arg)==GH_THREAD_OK);
     ++s->resumed;
 }
+static void cancel_sibling(void *context,int32_t slot)
+{
+    scenario *s=context;
+    CHECK(gh_task_threads_cancel(s->backend,slot)==GH_THREAD_OK);
+}
 static DWORD WINAPI foreign_cancel(void *context)
 {
     scenario *s=context;
@@ -123,6 +128,13 @@ int main(void)
     if(thread) {WaitForSingleObject(thread,INFINITE);GetExitCodeThread(thread,&exitcode);CloseHandle(thread);CHECK(exitcode==GH_THREAD_WRONG_THREAD);}
     CHECK(gh_task_threads_cancel(s.backend,2)==GH_THREAD_OK);
     tick(&m);CHECK(s.resumed==(int)i && records[2].running==0);
+    /* An executing scenario task may cancel a suspended sibling. */
+    CHECK(gh_task_threads_start(s.backend,3,sleeper,&s,2,&b)==GH_THREAD_OK && b==3);
+    tick(&m);
+    CHECK(records[3].running==1);
+    CHECK(gh_task_threads_start(s.backend,2,cancel_sibling,&s,b,&a)==GH_THREAD_OK && a==2);
+    tick(&m);
+    CHECK(s.resumed==(int)i && records[3].running==0 && records[3].thread_id==-1);
     /* Original zero-count underflow, not an invented immediate yield. */
     CHECK(gh_task_threads_start(s.backend,2,sleeper,&s,0,&a)==GH_THREAD_OK);
     tick(&m);i=(unsigned)s.resumed;

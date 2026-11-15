@@ -65,8 +65,12 @@ static gh_camera_status finish(gh_camera_envelope*s,gh_camera_follow*follow,
    gh_camera_status status=resolve_target(targets,follow->player,target_handle,&target,0x13a70c,f);
    if(status)return status;
    if(!(word(target.bytes+0x250)&0xe0000000u)){
-    if(target.original_vtable214!=0x4479c8||
-       ((unsigned)target.bytes[0x2fe]|(unsigned)target.bytes[0x2ff]<<8)!=0x202)
+    const unsigned kind=(unsigned)target.bytes[0x2fe]|(unsigned)target.bytes[0x2ff]<<8;
+    const int arena=kind==0x204&&s->player_model&&s->player_model->work&&
+      s->player_model->work->room==0x103&&target.size>0x1650&&target.bytes[0x1650]==24&&
+      word(target.bytes+0x564)==0x200&&
+      ((word(target.bytes+0x640)&0xffffu)==2||(word(target.bytes+0x640)&0xffffu)==3);
+    if(target.original_vtable214!=0x4479c8||(kind!=0x202&&!arena))
      return fail(f,0x13a73c,GH_CAMERA_UNSUPPORTED);
     float point[3];
     if(gh_enemy_target_position_00275978(&target,point))return fail(f,0x275978,GH_CAMERA_UNSUPPORTED);

@@ -2771,8 +2771,90 @@ static gh_scene_status room_r103_status(gh_game_services *s,uint32_t *frontier,
  return status;
 }
 
-/* 0670 starts the arena BGM and closes the return jump before spawning
- * the original protection task at 0258. */
+static int room_r103_sleep(gh_game_services *s,int32_t frames)
+{
+ if(gh_task_threads_sleep(s->scenario_threads,frames)==GH_THREAD_OK)return 0;
+ s->r103_task_frontier=0x2d5aa0;
+ return 1;
+}
+
+static int room_r103_set_lock(gh_game_services *s,uint8_t stamp,int enabled)
+{
+ uint32_t pc=0;
+ if(!gh_enemy_ems_set_stamp_lock_off_00295c10(s->b.init,stamp,enabled,&pc))return 0;
+ s->r103_task_frontier=pc?pc:0x295c10;
+ return 1;
+}
+
+static int room_r103_protect_stamp(gh_game_services *s,uint8_t stamp)
+{
+ gh_game_title_player *actor;
+ if(gh_enemy_manager_get_00290868(s->b.init,stamp,&actor)){
+  s->r103_task_frontier=0x295978;return 1;
+ }
+ if(actor){
+  if(!actor->view.bytes||actor->view.size<0x550){
+   s->r103_task_frontier=0x295b80;return 1;
+  }
+  w32(actor->view.bytes+0x54c,0x41a00000);
+ }
+ return 0;
+}
+
+/* REL0258 refreshes protection until each wave's bit opens. */
+static const uint8_t r103_waves[][2]={{2,3},{6,7},{4,5},{0,1}};
+
+static void room_r103_protection_0258(void *context,int32_t argument)
+{
+ gh_game_services *s=context;
+ (void)argument;
+ for(;;){
+  const uint32_t flags=u32((const uint8_t *)s->b.work+0x5ec);
+  for(unsigned wave=0;wave<4;++wave){
+   if(flags&(0x80000000u>>wave))continue;
+   const uint8_t *stamps=r103_waves[wave];
+   if(room_r103_protect_stamp(s,stamps[0])||room_r103_protect_stamp(s,stamps[1])||
+      room_r103_set_lock(s,stamps[0],1)||room_r103_set_lock(s,stamps[1],1))return;
+  }
+  if((flags&0x10000000u)||room_r103_sleep(s,1))return;
+ }
+}
+
+static int room_r103_wave_begin(gh_game_services *s,unsigned wave,float centers[2][3])
+{
+ uint8_t *flags=(uint8_t *)s->b.work+0x5ec;
+ w32(flags,u32(flags)|(0x80000000u>>wave));
+ const uint8_t *stamps=r103_waves[wave];
+ for(unsigned i=0;i<2;++i){
+  uint32_t pc=0;
+  if(gh_enemy_ems_set_stamp_goto_timed_00295f80(s->enemies,s->b.init,
+     stamps[i],centers[i],2,0,0x43160000u,&pc)){
+   s->r103_task_frontier=pc?pc:0x295f80;return 1;
+  }
+ }
+ if(room_r103_set_lock(s,stamps[0],0)||room_r103_set_lock(s,stamps[1],0))return 1;
+ uint32_t pc=0;
+ if(room_r100_program_se(s,(int16_t)(0x32+wave),&pc)){
+  s->r103_task_frontier=pc?pc:0x2cb8a0;return 1;
+ }
+ return 0;
+}
+
+static int room_r103_dead(gh_game_services *s,uint8_t stamp,int *dead)
+{
+ gh_game_title_player *actor;
+ if(gh_enemy_manager_get_00290868(s->b.init,stamp,&actor)){
+  s->r103_task_frontier=0x295978;return 1;
+ }
+ *dead=1;
+ if(actor&&gh_r100_enemy_dead_0028fb38(&s->room_state,actor,dead)){
+  s->r103_task_frontier=0x28fb38;return 1;
+ }
+ return 0;
+}
+
+/* REL0670 starts the arena BGM and closes the return jump. The original
+ * Scenario thread opens the first three reinforcement waves in order. */
 static void room_r103_arena_0670(void *context,int32_t argument)
 {
  gh_game_services *s=context;
@@ -2789,7 +2871,59 @@ static void room_r103_arena_0670(void *context,int32_t argument)
  if(!jump.bytes||gh_scene_at_set_enabled(&s->scene_at,jump,0,&original)||!original){
   s->r103_task_frontier=s->scene_at.frontier?s->scene_at.frontier:0x2c29a0;return;
  }
- s->r103_task_frontier=0x6ec;
+ const gh_scene_scenario_view scene={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};
+ int32_t slot;
+ uint32_t pc=0;
+ if(gh_scenario_exec_002c3890(scene,s->scenario_threads,-1,room_r103_protection_0258,s,-1,&slot,&pc)){
+  s->r103_task_frontier=pc?pc:0x6ec;return;
+ }
+ if(room_r103_sleep(s,30))return;
+
+ float centers[2][3]={0};
+ for(unsigned i=0;i<2;++i){
+  gh_at_native_unit unit;
+  if(gh_scene_at_find_id_002c3118(&s->scene_at,i,&unit)||gh_scene_at_center_002c0e78(unit,centers[i])){
+   s->r103_task_frontier=0x2c2a48;return;
+  }
+ }
+ if(room_r103_wave_begin(s,0,centers))return;
+ for(unsigned elapsed=0;elapsed<0x709;++elapsed){
+  int dead;
+  if(room_r103_dead(s,2,&dead))return;
+  if(dead)break;
+  if(room_r103_dead(s,3,&dead))return;
+  if(dead)break;
+  if(room_r103_sleep(s,1))return;
+ }
+ if(room_r103_wave_begin(s,1,centers))return;
+ for(;;){
+  unsigned dead_count=0;
+  for(unsigned wave=0;wave<2;++wave){
+   for(unsigned i=0;i<2;++i){
+    int dead;
+    if(room_r103_dead(s,r103_waves[wave][i],&dead))return;
+    dead_count+=(unsigned)dead;
+   }
+  }
+  uint8_t *flags=(uint8_t *)s->b.work+0x5ec;
+  if(dead_count>=2&&!(u32(flags)&0x04000000u)){
+   w32(flags,u32(flags)|0x04000000u);
+   s->r103_task_frontier=0x974;return; /* REL0448 positional dialogue task. */
+  }
+  if(dead_count==4)break;
+  if(room_r103_sleep(s,1))return;
+ }
+ if(room_r103_wave_begin(s,2,centers))return;
+ for(;;){
+  int all_dead=1;
+  for(unsigned wave=0;wave<3&&all_dead;++wave){
+   for(unsigned i=0;i<2&&all_dead;++i)
+    if(room_r103_dead(s,r103_waves[wave][i],&all_dead))return;
+  }
+  if(all_dead)break;
+  if(room_r103_sleep(s,1))return;
+ }
+ s->r103_task_frontier=0xad8; /* Difficulty-gated arena bonus wave. */
 }
 
 static void room_r103_entry_0538(void *context,int32_t argument)
@@ -5061,7 +5195,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   if(!e)e=gh_enemy202_move_bind_opacity(move,&s->enemy_opacity);
   if(!e)e=gh_enemy202_move_bind_near_sound(move,enemy_ema2_near_sound,s);
   if(!e)e=gh_enemy202_move_bind_room_state(move,&s->room_state);
-  if(!e&&(s->b.work->room==0x102||s->b.work->room==0x105||s->b.work->room==0x101)){
+  if(!e&&(s->b.work->room==0x101||s->b.work->room==0x102||s->b.work->room==0x103||s->b.work->room==0x105)){
    gh_bundle room;
    if(gh_game_room_pack_bundle(&s->room_pack,&room)){*f=0x31ccf0;return GH_SERVICES_ASSET;}
    e=gh_enemy202_move_bind_scene_jump(move,&s->scene_at,&room);
@@ -5423,6 +5557,11 @@ gh_game_services_status gh_game_services_release_enemies_002908c0(gh_game_servic
   if(!removed){*frontier=0x290770;return GH_SERVICES_FRONTIER;}
   s->enemy_removal=(gh_enemy_manager_remove){0};
  }
+ /* EV1A retires the original room placements before its packed actors load.
+  * The second 294CA0 at 2972B0 must build a fresh pass from the saved rows. */
+ if(s->b.work->room==0x103&&s->b.event&&s->b.event->fields.data_number==0x1a&&
+    s->em_resources.stage==9)
+  s->em_resources=(gh_em_resource_prefix){0};
  return GH_SERVICES_OK;
 }
 

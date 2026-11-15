@@ -235,9 +235,14 @@ static int em27_attack_actor(const gh_title_player_view *actor)
  * The episode's TXE exchange leaves the shared MOT/SEQ resource in EM02.DAT. */
 static int em00_family_attack_actor(const gh_title_player_view *actor)
 {
- return em27_attack_actor(actor)||
-        (actor&&actor->bytes&&actor->size>=0x568&&actor->original_vtable214==0x4479c8&&
-         (w(actor->bytes+0x2fc)>>16)==0x202&&w(actor->bytes+0x564)==0x200);
+ if(em27_attack_actor(actor))return 1;
+ if(!actor||!actor->bytes||actor->size<0x568||actor->original_vtable214!=0x4479c8||
+    w(actor->bytes+0x564)!=0x200)return 0;
+ const unsigned kind=w(actor->bytes+0x2fc)>>16;
+ if(kind==0x202)return 1;
+ if(kind!=0x204||actor->size<=0x1650||actor->bytes[0x1650]!=24)return 0;
+ const unsigned stamp=w(actor->bytes+0x640)&0xffffu;
+ return stamp==2||stamp==3;
 }
 
 static int em0a_attack_actor(const gh_title_player_view *actor)
@@ -1039,13 +1044,17 @@ int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *v)
 }
 /* The 240548 recovery SEQ shares bank 58/index2 with the part-0
  * emitter already used by the original knockdown/death paths. */
-static int r102_landing_emitter(const gh_effect_emitter_view *v)
+static int enemy_landing_emitter(const gh_effect_emitter_view *v)
 {
  const gh_title_player_view *actor=v->actor;
- if(!v->model->work||v->model->work->room!=0x102||actor->size<=0x1650||
-    actor->original_vtable214!=0x4479c8)return 0;
+ const gh_boot_work *work=v->model->work;
+ if(!work||actor->size<=0x1650||actor->original_vtable214!=0x4479c8)return 0;
  const unsigned stamp=w(actor->bytes+0x640)&0xffffu,appearance=actor->bytes[0x1650];
- const uint32_t kind=w(actor->bytes+0x564);
+ const uint32_t kind=w(actor->bytes+0x564),object=w(actor->bytes+0x2fc)>>16;
+ if(work->room==0x103)
+  return object==0x204&&appearance==24&&kind==0x200&&(stamp==2||stamp==3)&&
+     w(v->payload+0x110)==UINT32_MAX;
+ if(work->room!=0x102||object!=0x202)return 0;
  if(!appearance)return stamp==7&&kind==0x200;
  static const uint16_t dependency[]={0x202,0x200,0x203};
  return appearance==6&&stamp>=0x20&&stamp<=0x22&&kind==dependency[stamp-0x20];
@@ -1053,18 +1062,22 @@ static int r102_landing_emitter(const gh_effect_emitter_view *v)
 
 int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *v)
 {
- return v&&v->actor&&v->actor->bytes&&v->actor->size>=0x644&&v->selector==v->actor&&
-        v->model&&v->model->root.bytes==v->actor->bytes&&v->part==v->model->parts&&v->part&&
-        v->record.bytes&&v->record.size==0x2f0&&v->payload&&v->payload_size==0x260&&w(v->payload+0x18c)==0x00020058u&&
-        !v->payload[0x1ec]&&(w(v->actor->bytes+0x2fc)>>16)==0x202&&
-        ((w(v->actor->bytes+0x564)==0x203&&(w(v->actor->bytes+0x640)&0xffff)==19)||
-         (w(v->actor->bytes+0x564)==0x200&&(w(v->actor->bytes+0x640)&0xffff)==20)||
-         (v->model->work&&v->model->work->room==0x100&&stamp8_attack_actor(v->actor))||
-         r102_landing_emitter(v)||
-         (w(v->actor->bytes+0x564)==0x20a&&!(w(v->actor->bytes+0x640)&0xffff)&&
-          v->actor->size>0x1650&&v->actor->bytes[0x1650]==3))&&
-        !v->record.bytes[0xbe]&&!v->record.bytes[0x128]&&!v->record.bytes[0x136];
+ if(!v||!v->actor||!v->actor->bytes||v->actor->size<0x644||v->selector!=v->actor||
+    !v->model||v->model->root.bytes!=v->actor->bytes||!v->part||v->part!=v->model->parts||
+    !v->record.bytes||v->record.size!=0x2f0||!v->payload||v->payload_size!=0x260||
+    w(v->payload+0x18c)!=0x00020058u||v->payload[0x1ec]||
+    v->record.bytes[0xbe]||v->record.bytes[0x128]||v->record.bytes[0x136])return 0;
+ if(enemy_landing_emitter(v))return 1;
+
+ const uint8_t *actor=v->actor->bytes;
+ if((w(actor+0x2fc)>>16)!=0x202)return 0;
+ const uint32_t dependency=w(actor+0x564);
+ const unsigned stamp=w(actor+0x640)&0xffffu;
+ return (dependency==0x203&&stamp==19)||(dependency==0x200&&stamp==20)||
+    (v->model->work&&v->model->work->room==0x100&&stamp8_attack_actor(v->actor))||
+    (dependency==0x20a&&!stamp&&v->actor->size>0x1650&&actor[0x1650]==3);
 }
+
 gh_effect_status gh_effect_create_emitter_at(const gh_game_effects*s,unsigned slot,gh_effect_emitter_view*out){
  if(!s||!out||slot>=256||!s->native||s->native->owner!=s)return GH_EFFECT_ARGUMENT;
  const struct gh_effect_native*n=s->native;const emitter_metadata*m=&n->slots[slot];uint32_t mask=0x80000000u>>(slot&31);if(!m->associated||m->quiesced||!(w(n->emitters+0x26000+(slot>>5)*4)&mask))return GH_EFFECT_UNSUPPORTED;

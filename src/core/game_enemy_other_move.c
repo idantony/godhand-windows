@@ -4,6 +4,7 @@
 #include "game_actor_matrix.h"
 #include "game_scene_at_geometry.h"
 #include "game_enemy_timers.h"
+#include "frame_state.h"
 #include <fenv.h>
 #include <math.h>
 #include <string.h>
@@ -174,6 +175,9 @@ enum { HEAVY_TIMER_CONVERT=28, HEAVY_TIMER_SOUND, HEAVY_TIMER_DRAW };
 enum { HEAVY_REACTION_SOLID=32, HEAVY_REACTION_SELECT, HEAVY_REACTION_BEGIN,
        HEAVY_REACTION_SOUND, HEAVY_REACTION_STEP, HEAVY_REACTION_WORLD };
 
+enum { HEAVY_POISON_SOLID=38, HEAVY_POISON_BEGIN, HEAVY_POISON_STEP,
+       HEAVY_POISON_ROOT, HEAVY_POISON_COUNTDOWN, HEAVY_POISON_VOICE, HEAVY_POISON_RELOAD };
+
 static gh_actor_motion_status heavy_root_matrix_0014a2b0(gh_enemy_other_move *s,
     const gh_enemy2a2_init *prefix)
 {
@@ -190,6 +194,114 @@ static gh_actor_motion_status heavy_root_matrix_0014a2b0(gh_enemy_other_move *s,
             return stop(s,pc?pc:0x14a2b0,GH_ACTOR_MOTION_UNSUPPORTED);
         memcpy(p+0x80,matrix,sizeof(matrix));
         memcpy(p+0x120,scale,sizeof(scale));
+    }
+    return GH_ACTOR_MOTION_OK;
+}
+
+static gh_actor_motion_status heavy_root_motion_002da9b8(gh_enemy_other_move *s,
+    const gh_enemy2a2_init *prefix)
+{
+    gh_actor_motion_status status=heavy_root_matrix_0014a2b0(s,prefix);
+    if(status)return status;
+    const gh_title_player_view *root=prefix->root;
+    const uint8_t *p=root->bytes;
+    float matrix[16],delta[3],world[4];
+    memcpy(matrix,p+0x80,sizeof(matrix));
+    memcpy(delta,p+0x330,sizeof(delta));
+    if(word(p+0x33c)!=0x3f800000u)return stop(s,0x2da9b8,GH_ACTOR_MOTION_UNSUPPORTED);
+    if(gh_scene_at_apply_world_001508d8(matrix,delta,world))
+        return stop(s,0x30a2b0,GH_ACTOR_MOTION_UNSUPPORTED);
+    memcpy(root->alias_f0,world,sizeof(world));
+    return GH_ACTOR_MOTION_OK;
+}
+
+static gh_actor_motion_status heavy_poison_00287090(gh_enemy_other_move *s,
+    gh_enemy2a2_virtual_init *actor)
+{
+    gh_enemy2a2_init *prefix=&actor->prefix;
+    gh_title_player_view *root=prefix->root;
+    uint8_t *p=root->bytes;
+    uint32_t pc=0;
+    if(s->stage==5){
+        if(prefix->bindings.work->room!=0x102||half(p+0x640)!=0x11||
+           word(p+0x564)!=0x2a2||p[0x2f6]>1)
+            return stop(s,0x287090,GH_ACTOR_MOTION_UNSUPPORTED);
+        s->stage=HEAVY_POISON_SOLID;
+    }
+    if(s->stage==HEAVY_POISON_SOLID){
+        if(gh_collision_solid_set_enabled_001351d8(actor->pose.bindings.solids,root,0,&pc))
+            return stop(s,pc?pc:0x1351d8,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(!p[0x2f6])put(p+0x15b0,word(p+0x15b0)|1u);
+        s->stage=p[0x2f6]?HEAVY_POISON_STEP:HEAVY_POISON_BEGIN;
+    }
+    if(s->stage==HEAVY_POISON_BEGIN){
+        const gh_object_view *resource=&prefix->resource;
+        if(!resource->bytes||!resource->file_extent_known||resource->file_extent<0x118||
+           resource->file_extent>resource->size||prefix->motion.b.resource!=resource->bytes)
+            return stop(s,0x287090,GH_ACTOR_MOTION_BOUNDS);
+        if(!s->motion.active){
+            gh_actor_motion_bindings b=prefix->motion.b;
+            b.effect=s->effect;b.context=s->effect_context;
+            b.sound=s->sound;b.sound_context=s->sound_context;
+            const uint8_t *row=resource->bytes+0x110;
+            gh_actor_motion_status status=gh_actor_motion_call_open_002a8578(
+                &s->motion,&prefix->motion,&b,word(row),word(row+4),0);
+            if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
+        }
+        gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(&s->motion);
+        if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
+        put_float(p+0x600,10.0f);
+        ++p[0x2f6];
+        s->stage=HEAVY_POISON_STEP;
+    }
+    if(s->stage==HEAVY_POISON_STEP){
+        if(!actor->pose.bindings.rate)return stop(s,0x157c18,GH_ACTOR_MOTION_UNSUPPORTED);
+        int ended;
+        gh_actor_motion_status status=gh_actor_motion_step_00157c18(&prefix->motion,
+            *actor->pose.bindings.rate,prefix->bindings.policy,&ended,&pc);
+        if(status)return stop(s,pc?pc:0x157c18,status);
+        s->stage=HEAVY_POISON_ROOT;
+    }
+    if(s->stage==HEAVY_POISON_ROOT){
+        gh_actor_motion_status status=heavy_root_motion_002da9b8(s,prefix);
+        if(status)return status;
+        s->stage=HEAVY_POISON_COUNTDOWN;
+    }
+    if(s->stage==HEAVY_POISON_COUNTDOWN){
+        fenv_t env;
+        const float previous=scalar(p+0x600),rate=scalar(p+0x5a8);
+        if(!isfinite(previous)||!isfinite(rate)||!begin(&env))
+            return stop(s,0x287090,GH_ACTOR_MOTION_UNSUPPORTED);
+        const float time=sub(previous,rate);
+        if(fesetenv(&env)||!isfinite(time))return stop(s,0x287090,GH_ACTOR_MOTION_UNSUPPORTED);
+        put_float(p+0x600,time);
+        if(time<=0){
+            s->sound_request=(gh_motion_sound_request){.model=&prefix->model.model,
+                .actor=root,.bank=2,.program=0x60};
+            s->stage=HEAVY_POISON_VOICE;
+        }else s->stage=12;
+    }
+    if(s->stage==HEAVY_POISON_VOICE){
+        if(!s->sound)return stop(s,0x2cba48,GH_ACTOR_MOTION_UNSUPPORTED);
+        uint32_t handle;
+        gh_actor_motion_status status=s->sound(s->sound_context,&s->sound_request,&handle,&pc);
+        if(status)return stop(s,pc?pc:0x2cba48,status);
+        s->stage=HEAVY_POISON_RELOAD;
+    }
+    if(s->stage==HEAVY_POISON_RELOAD){
+        fenv_t env;
+        if(!prefix->bindings.random||!begin(&env))
+            return stop(s,0x31d000,GH_ACTOR_MOTION_UNSUPPORTED);
+        uint32_t raw;
+        if(gh_game_mt_next_0030f348(prefix->bindings.random,&raw)){
+            (void)fesetenv(&env);
+            return stop(s,0x31d000,GH_ACTOR_MOTION_ARGUMENT);
+        }
+        const uint32_t bits=gh_frame_unit_bits_0030f518_word(raw);
+        const float timer=add(mul(scalar(&bits),60.0f),90.0f);
+        if(fesetenv(&env))return stop(s,0x31d000,GH_ACTOR_MOTION_CALLEE);
+        put_float(p+0x600,timer);
+        s->stage=12;
     }
     return GH_ACTOR_MOTION_OK;
 }
@@ -340,14 +452,8 @@ static gh_actor_motion_status heavy_move_substate_002866f8(gh_enemy_other_move *
         s->stage=10;
     }
     if(s->stage==10){
-        gh_actor_motion_status status=heavy_root_matrix_0014a2b0(s,prefix);
+        gh_actor_motion_status status=heavy_root_motion_002da9b8(s,prefix);
         if(status)return status;
-        float matrix[16],delta[3],world[4];
-        memcpy(matrix,p+0x80,64);memcpy(delta,p+0x330,12);
-        if(word(p+0x33c)!=0x3f800000u)return stop(s,0x2da9b8,GH_ACTOR_MOTION_UNSUPPORTED);
-        if(gh_scene_at_apply_world_001508d8(matrix,delta,world))
-            return stop(s,0x30a2b0,GH_ACTOR_MOTION_UNSUPPORTED);
-        memcpy(root->alias_f0,world,16);
         s->stage=11;
     }
     if(s->stage==11){
@@ -562,8 +668,13 @@ gh_actor_motion_status gh_enemy2a2_move_002856c0(gh_enemy_other_move *s,
         put(p+0x600,word(p+0x600)&0x7fffffffu);
         s->stage=5;
     }
-    if((s->stage==5&&p[0x2f4]==1)||s->stage>=HEAVY_REACTION_SOLID){
+    if((s->stage==5&&p[0x2f4]==1)||
+       (s->stage>=HEAVY_REACTION_SOLID&&s->stage<=HEAVY_REACTION_WORLD)){
         gh_actor_motion_status status=heavy_reaction_002887d0(s,actor);
+        if(status)return status;
+    }else if((s->stage==5&&!p[0x2f4]&&p[0x2f5]==5)||
+             (s->stage>=HEAVY_POISON_SOLID&&s->stage<=HEAVY_POISON_RELOAD)){
+        gh_actor_motion_status status=heavy_poison_00287090(s,actor);
         if(status)return status;
     }else if(s->stage<12||(s->stage>=HEAVY_TIMER_CONVERT&&s->stage<=HEAVY_TIMER_DRAW)){
         gh_actor_motion_status status=heavy_move_substate_002866f8(s,actor);

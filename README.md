@@ -79,8 +79,16 @@ before reaching the original arena setup. A Windows replay uses native CPU
 title setup, then Direct3D presents all 776 R102 frames in the route and 12
 consecutive R103 frames after the transition, with zero renderer errors.
 A longer replay switches to Direct3D shortly before the R102 exit and
-presents 120 consecutive R103 frames, including Gene in the original EV1A
-cutscene after the loading fade.
+presents 1,122 consecutive R103 frames. It presents all 11 original EV1A
+shots, returns to the arena with Gene still carrying the paper from R102,
+and reaches the first enemy hit, which lowers Gene from 100 to 91 HP.
+The replay reports zero graphics errors. A separate input replay through
+the same exit presses Square and lowers the first enemy from 74 to 71 HP.
+
+Another saved R102 route plays all 12 original EV1B shots and resumes
+gameplay. After a lethal enemy hit, the replay selects Retry in the original
+Game Over menu. Gene reloads the checkpoint at 100 HP, and Direct3D presents
+64 consecutive frames after the reload.
 
 Native CPU replays also verify R100's original Game Over and Retry flow and
 R101's box throw and 200 G pickup. R100 reloads with 100 HP and continues
@@ -290,7 +298,12 @@ EV04 结尾的原版保存菜单已写出有效的 R102 存档。重新启动后
 EV1A 的全部 11 个镜头。进入原版竞技场初始化前已运行超过 840 个 R103 CPU 帧。
 Windows 回放用原生 CPU 完成标题流程，随后 Direct3D 呈现路线中的全部 776 个 R102 帧，
 转场后又连续呈现 12 个 R103 帧，渲染器报错为零。另一次回放在 R102 出口前切换到
-Direct3D，进入 R103 后连续呈现 120 帧，包括加载淡出之后 Gene 出现在原版 EV1A 过场中的画面。
+Direct3D，进入 R103 后连续呈现 1,122 帧。回放播完原版 EV1A 的全部 11 个镜头，进入竞技场时
+Gene 仍带着从 R102 拿到的纸片，随后第一下敌方命中将他的生命值从 100 降到 91。
+回放未报告图形错误。另一轮回放经过同一出口，按方块命中第一波敌人，将其生命值从 74 降到 71。
+
+另一条 R102 读档路线播完原版 EV1B 的全部 12 个镜头并回到可操作状态。Gene 被敌人击倒后，
+回放在原版 Game Over 菜单选择重试。他以 100 HP 读回检查点，随后 Direct3D 连续呈现 64 帧。
 
 原生 CPU 回放验证了 R100 的原版 Game Over 和重试，以及 R101 的投箱和拾取 200 金币。
 R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101 回放运行了 4,494 个原生 CPU 帧，

@@ -11,12 +11,14 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
   if(!b->actor_match){*f=emitter?0x3039e8:0x2feb80;return GH_EFFECT_UNSUPPORTED;}
   gh_effect_status e=b->actor_match(b->context,emitter,i,actor,&match,f);if(e)return e;
   if(!match)continue;
+  const uint32_t profile=rd(p+(emitter?0x18c:0x23a));
+  const int attached=kind==4||(kind==0&&(profile==0x00590058u||
+      profile==0x005d0058u||(emitter&&profile==0x00420000u)));
   if(emitter){
    gh_effect_emitter_view view;
    if(!gh_effect_create_emitter_at(b->effects,i,&view)&&view.payload==p&&
       (gh_effect_stamp19_attack_part_is_bound(&view)||gh_effect_stamp19_death_part_is_bound(&view)||gh_effect_knockdown_emitter_is_bound(&view)||gh_effect_em00_attack_emitter_is_bound(&view)||gh_effect_devil_emitter_is_bound(b->effects,&view)||
-       ((kind==4||(kind==0&&(rd(p+0x18c)==0x00420000u||rd(p+0x18c)==0x00590058u)))&&
-        gh_effect_player_attachment_emitter_is_bound(&view)))&&
+       (attached&&gh_effect_player_attachment_emitter_is_bound(&view)))&&
       actor&&view.actor->bytes==actor->bytes){
     /* 302918 only sets the stop request. The Effects step owns child
      * links, pending masks, and final destruction. */
@@ -30,8 +32,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
    if(!gh_effect_create_esp_at(b->effects,i,&view)&&view.payload==p&&
       (gh_effect_devil_esp_is_bound(b->effects,&view)||
        (kind==0&&rd(p+0x23a)==0x002b0058u&&gh_effect_em00_attack_esp_is_bound(b->effects,&view))||
-       ((kind==4||(kind==0&&rd(p+0x23a)==0x00590058u))&&
-        gh_effect_player_attachment_esp_is_bound(b->effects,&view)))&&actor&&view.actor->bytes==actor->bytes){
+       (attached&&gh_effect_player_attachment_esp_is_bound(b->effects,&view)))&&actor&&view.actor->bytes==actor->bytes){
     e=gh_effect_create_esp_pause_002fbe50(b->effects,i,view.serial,f);
     if(e)return e;
     continue;

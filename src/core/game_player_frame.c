@@ -800,11 +800,18 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   }else{
    if(source->size<0x642||source->original_vtable214!=0x4479c8||
-      w(source->bytes+0x214)!=0x4479c8||half(source->bytes+0x2fe)!=0x202)
+      w(source->bytes+0x214)!=0x4479c8)
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
+   const unsigned source_kind=half(source->bytes+0x2fe);
    const uint32_t dependency=w(source->bytes+0x564);
    const unsigned stamp=half(source->bytes+0x640);
    const uint32_t override_bank=w(take+0x40);
+   const int arena_hit=b->work->room==0x103&&source_kind==0x204&&dependency==0x200&&
+     (stamp==2||stamp==3)&&source->size>0x1650&&source->bytes[0x1650]==24&&
+     half(source->bytes+0x2f4)==0x1500&&source->bytes[0x2f6]==1&&
+     s->pending_damage_kind==0x37&&s->pending_damage==20&&
+     override_bank==UINT32_MAX&&!half(take+0x44)&&!w(p+0x160c);
+   if(source_kind!=0x202&&!arena_hit)return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
    const int em0a_override=b->work->room==0x100&&dependency==0x20a&&!stamp&&
      source->size>0x1650&&source->bytes[0x1650]==3&&source->bytes[0x2f4]==0&&
      source->bytes[0x2f5]==0x15&&source->bytes[0x2f6]==1&&
@@ -873,7 +880,7 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      ((w(take+0x4c)==60&&s->pending_damage==45&&residual==15)||
       (source->size>=0x16c8&&w(source->bytes+0x16c4)==2&&override_bank==UINT32_MAX&&!cue&&
        w(take+0x4c)==30&&s->pending_damage==23&&residual==7));
-   if(!r101_weapon&&!r102_armed47&&!r102_armed16&&!r102_short_hit&&!area11_fall&&!r105_short_hit&&!r105_combo_hit&&!em03_fall&&
+   if(!r101_weapon&&!r102_armed47&&!r102_armed16&&!r102_short_hit&&!area11_fall&&!r105_short_hit&&!r105_combo_hit&&!em03_fall&&!arena_hit&&
       (b->work->room!=0x100||(!short_hit&&!stamp19_fall&&!em0a_override)))
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   }
@@ -960,7 +967,7 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
    const unsigned kind=s->pending_damage_kind;
    const int fall=(kind==0x3e&&(b->work->room==0x100||b->work->room==0x102||b->work->room==0x105))||
        (kind==0x3b&&(b->work->room==0x101||b->work->room==0x102));
-   const int short_hit=(kind==0x37&&(b->work->room==0x100||b->work->room==0x105))||
+   const int short_hit=(kind==0x37&&(b->work->room==0x100||b->work->room==0x102||b->work->room==0x105))||
                        (kind==0x3d&&b->work->room==0x105)||(kind==0x3a&&(b->work->room==0x101||b->work->room==0x102));
    uint32_t target;
    if((!fall&&!short_hit)||!elf_word(b,0x41ba70+4*(kind-0x37),&target)||

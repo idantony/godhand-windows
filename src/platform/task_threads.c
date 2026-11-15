@@ -195,8 +195,15 @@ gh_thread_status gh_task_threads_cancel(gh_task_threads *b,int32_t slot)
     if(slot<0 || slot>=b->manager->count) return GH_THREAD_INVALID;
     s=&b->slots[slot];
     if(b->executing==s) return GH_THREAD_BUSY;
-    if(b->executing) return GH_THREAD_UNSUPPORTED;
+    if(b->executing && GetCurrentFiber()!=b->executing->fiber) return GH_THREAD_UNSUPPORTED;
     if(!s->registered) return b->records[slot].running?GH_THREAD_UNSUPPORTED:GH_THREAD_OK;
+    if(b->executing) {
+        /* 2D59F0 can retire a different scenario task while this task runs.
+         * The serial manager only executes the caller's stack. */
+        const uint16_t running=b->records[slot].running;
+        if((running!=1 || !s->fiber) && (running!=2 || s->fiber))
+            return GH_THREAD_UNSUPPORTED;
+    }
     if(s->fiber) DeleteFiber(s->fiber);
     s->fiber=0;s->registered=0;s->entry=0;
     b->records[slot].running=0;b->records[slot].thread_id=-1;

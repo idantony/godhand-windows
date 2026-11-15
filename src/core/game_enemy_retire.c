@@ -262,6 +262,12 @@ gh_actor_motion_status gh_enemy_destroy_prefix_mode3(gh_enemy_destructor *state,
             heavy?entry.enemy2a2->pose.bindings.solids:entry.solids;
         if(gh_collision_solid_release_unit_001347e8(solids,view,frontier))
             return stop(frontier,*frontier?*frontier:0x1347e8);
+        if(r103){
+            gh_game_init_state *manager=entry.enemy202->b.entry.init;
+            for(unsigned i=0;i<2;++i)
+                if(manager->enemy_r103_boss[i]==entry.actor)
+                    manager->enemy_r103_boss[i]=NULL;
+        }
         put(bytes+0x214,0x44ae28);
         put(bytes+0x214,0x41ebe8);
         put(bytes+0x214,0x41eaf0);
