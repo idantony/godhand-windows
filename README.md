@@ -103,19 +103,21 @@ replay reaches the original reinforcement area and lands two Triangle hits
 during its Devil encounter. A controller replay from a zero-defeat R102
 checkpoint records four of the six qualifying defeats. Two original scenery
 hits defeat the third enemy. His punches defeat the fourth, with Gene at 18 HP.
-A native CPU replay from an isolated R103 test save defeats four enemies
-across the first two arena waves and triggers the original third wave.
-Direct3D presents the escape counter and the movement that follows it in a
-separate R102 gate-ready replay through the original door into R103.
+A native CPU replay loads an isolated R103 test save and uses original pad
+inputs to defeat all six enemies in the first three arena waves. Gene takes
+the original healing drop and enters the twin boss wave with 58 HP. The replay
+submits render commands for the boss models and continues into their original
+attack selection. A separate controlled fight starts with the first three
+waves cleared and verifies three hits from the first boss's original combo.
+Gene's HP drops from 100 to 87. Full boss clearance remains in development.
+Earlier Direct3D replays present the escape counter and the movement that
+follows it after entering R103 through the original door from R102.
 
-An isolated R103 CPU test starts with the first three waves marked cleared.
-The original camera plays as the two protected bosses enter the arena, and
-their original health bars are submitted for drawing. The complete fourth-wave
-fight remains in development. A separate test starts with all enemies marked
-defeated and places Gene at the original interaction areas. Circle opens the
-arena's post-battle dialogue, Cross closes it, and Circle at the original
-return door loads R102. The native CPU replay completes 120 R102 frames.
-Both original English post-battle messages pass drawing and dismissal checks.
+A separate test starts with all enemies marked defeated and places Gene at
+the original interaction areas. Circle opens the arena's post-battle dialogue,
+Cross closes it, and Circle at the original return door loads R102. The native
+CPU replay completes 120 R102 frames. Both original English post-battle
+messages pass drawing and dismissal checks.
 
 ### Verified progress
 
@@ -334,13 +336,15 @@ R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101
 确认重试，以 100 HP 回到 R100。西侧回放进入原版增援区域，在恶魔遭遇期间打出两次三角攻击。
 R102 从零击败存档开始，经手柄回放完成开门所需的六次击败中的四次。第三名敌人受到两次
 原版场景机关攻击，Gene 用拳击打倒第四名敌人，此时还剩 18 HP。
-从独立的 R103 测试存档开始，原生 CPU 回放击倒前两波共四名敌人，并触发原版第三波。
-另一条从预置开门条件的 R102 检查点出发的 Direct3D 回放经过原版门，进入 R103 后呈现挣脱反击和摇杆移动。
+原生 CPU 回放从独立的 R103 测试存档开始，用原版手柄输入击倒前三波共六名敌人。
+Gene 拿到原版恢复道具，以 58 HP 进入双头目战。回放提交两名头目的模型绘制指令，并运行到
+原版选招。另一项受控测试预置前三波已清场，验证首名头目连击三次命中，Gene 从 100 HP
+降到 87 HP。完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
+已呈现挣脱反击和随后的摇杆移动。
 
-另一项独立 R103 CPU 测试预置前三波已清场。两名受保护的头目按原版镜头进入竞技场，
-原版头目血条已进入绘制流程。第四波完整战斗仍在开发中。另一项测试预置全场已清，并将
-Gene 放到原版交互区域。用圆圈打开战后对白，叉键关闭，再在原版返回门按圆圈加载 R102。
-原生 CPU 回放进入 R102 后连续运行 120 帧。两条原版英文战后对白均通过绘制和关闭测试。
+另一次测试预置全场已清，并将 Gene 放到原版交互区域。用圆圈打开战后对白，叉键关闭，
+再在原版返回门按圆圈加载 R102。原生 CPU 回放进入 R102 后连续运行 120 帧。
+两条原版英文战后对白均通过绘制和关闭测试。
 
 ### 已验证的进展
 

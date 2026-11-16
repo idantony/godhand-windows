@@ -706,17 +706,18 @@ static int player_motion_request_matches(gh_game_services*s,const gh_player_moti
  const int arena=r103_grab_attacker(s,live.enemy202,0x200);
  const int short_grab=selector==0xa&&
      (r105_grab_attacker(s,live.enemy202)||r102_em00_grab_attacker(s,live.enemy202)||arena);
- const int gate_grab=selector==8&&r102_gate_em0a_grab_attacker(s,live.enemy202);
+ const int em0a_grab=selector==8&&(r102_gate_em0a_grab_attacker(s,live.enemy202)||
+     r103_grab_attacker(s,live.enemy202,0x20a));
  const int counter=p[0x2f4]==0&&selector==0x39&&phase==0;
  const int r102_counter=counter&&r102_em00_grab_attacker(s,live.enemy202);
- if(s->b.work->room!=0x100&&!long_grab&&!short_grab&&!gate_grab&&!r102_counter&&!(arena&&counter))return 0;
- if(p[0x2f4]==1&&selector==8&&(phase==0||phase==2||phase==4)&&(s->b.work->room==0x100||gate_grab)){
+ if(s->b.work->room!=0x100&&!long_grab&&!short_grab&&!em0a_grab&&!r102_counter&&!(arena&&counter))return 0;
+ if(p[0x2f4]==1&&selector==8&&(phase==0||phase==2||phase==4)&&(s->b.work->room==0x100||em0a_grab)){
   const size_t row=0xc80u+4u*phase;
   const gh_title_player_view *attacker=&live.enemy202->entry.object.view;
   const gh_object_view *resource=&live.enemy202->entry.resource;
   return attacker->bytes&&attacker->size>0x1650&&attacker->original_vtable214==0x4479c8&&
      u32(attacker->bytes+0x564)==0x20a&&
-     (gate_grab||(!attacker->bytes[0x640]&&!attacker->bytes[0x641]&&attacker->bytes[0x1650]==3))&&
+     (em0a_grab||(!attacker->bytes[0x640]&&!attacker->bytes[0x641]&&attacker->bytes[0x1650]==3))&&
      resource->bytes&&resource->file_extent_known&&
      resource->file_extent>=row+8&&resource->file_extent<=resource->size&&
      r->resource==resource->bytes&&r->resource_bytes==resource->size&&
@@ -4418,7 +4419,7 @@ static gh_player_frame_status player_grab_camera(void *context,const gh_actor_mo
    GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
 }
 
-/* Original 129718 selectors 2 and 3 share the same cleanup and borrow. */
+/* Original 129718 selectors 0, 2 and 3 share the same cleanup and borrow. */
 static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_actor *enemy,unsigned argument,uint32_t *frontier)
 {
  gh_game_services*s=context;
@@ -4428,9 +4429,9 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  const int arena=r103_grab_attacker(s,enemy,0x200);
  const int arena_em03=r103_grab_attacker(s,enemy,0x203);
  const int area11=r102_area11_grab_attacker(s,enemy);
- const int gate_grab=r102_gate_em0a_grab_attacker(s,enemy);
+ const int em0a_grab=r102_gate_em0a_grab_attacker(s,enemy)||r103_grab_attacker(s,enemy,0x20a);
  if(!p||s->title_player.view.size<0x1660||
-    (s->b.work->room!=0x100&&!em27&&!r102_em00&&!area11&&!arena&&!arena_em03&&!gate_grab)||
+    (s->b.work->room!=0x100&&!em27&&!r102_em00&&!area11&&!arena&&!arena_em03&&!em0a_grab)||
     !enemy||enemy->entry.b.init!=s->b.init||!enemy->entry.published){
   *frontier=0x129718;
   return GH_ACTOR_MOTION_UNSUPPORTED;
@@ -4443,7 +4444,7 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  unsigned selector;
  const uint32_t dependency=u32(attacker+0x564);
  if(argument==0&&dependency==0x20a&&enemy->entry.object.view.size>0x1650&&
-    (gate_grab||(!attacker[0x640]&&attacker[0x1650]==3))&&
+    (em0a_grab||(!attacker[0x640]&&attacker[0x1650]==3))&&
     !attacker[0x2f4]&&attacker[0x2f5]==0x4c)selector=8;
  else if(argument==2&&((dependency==0x200&&attacker[0x640]==20)||r102_em00||em27||arena)&&attacker[0x2f5]==0x4d)selector=0xa;
  else if(argument==3&&((dependency==0x203&&attacker[0x640]==19)||
@@ -4583,7 +4584,7 @@ static gh_object_step_status om_break_effect(void *context,const gh_actor_model 
    const gh_effect_create_request door={.bank=0,.index=0x1a,.actor=&model->root,.mode=-1,.selector=-1};
    opened=gh_effect_create_begin(call,&door);
   }else if(kind==0x30a||kind==0x304||kind==0x33f)opened=gh_effect_create_om30a_break_begin_0018c580(call,position);
-  else if(kind==0x363||kind==0x3c4||kind==0x3d0||(kind>=0x3d3&&kind<=0x3d6))
+  else if(kind==0x363||kind==0x3c4||kind==0x3c8||kind==0x3d0||(kind>=0x3d3&&kind<=0x3d6))
    opened=gh_effect_create_om_sparkle_begin_00306838(call,position);
   else if(kind==0x305)opened=gh_effect_create_om305_break_begin_001c2ce0(call,position);
   else if(kind==0x3be&&model->root.original_vtable214==0x4290c8&&s->b.work->room==0x100)
@@ -5083,8 +5084,10 @@ static gh_actor_motion_status enemy_drop_item_002923e8(void *context,gh_om_box_i
 {
  gh_game_services *s=context;
  if(!s||!drop||!s->b.work||!s->b.init||!frontier)return GH_ACTOR_MOTION_ARGUMENT;
- const int arena=enemy&&(r103_grab_attacker(s,enemy,0x200)||r103_grab_attacker(s,enemy,0x203));
- if(!((kind==0x3c4&&(arena||r102_em00_grab_attacker(s,enemy)))||(kind==0x3d0&&arena))){
+ const int arena=enemy&&(r103_grab_attacker(s,enemy,0x200)||r103_grab_attacker(s,enemy,0x203)||
+     r103_grab_attacker(s,enemy,0x20a));
+ if(!((kind==0x3c4&&(arena||r102_em00_grab_attacker(s,enemy)))||
+      (kind==0x3d0&&arena)||(kind==0x3c8&&r103_grab_attacker(s,enemy,0x20a)))){
   *frontier=0x30fa98;return GH_ACTOR_MOTION_UNSUPPORTED;
  }
  const gh_title_player_view *source=&enemy->entry.object.view;
@@ -5105,8 +5108,9 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
  const int16_t room=s->b.work->room;
  const uint32_t kind=u32(item->bytes+0x2fc)>>16;
  const int full_heal=room==0x103&&kind==0x3d0;
+ const int partial_heal=room==0x103&&kind==0x3c8;
  if(!(((room==0x101||room==0x103)&&kind==0x3d6)||
-      ((room==0x102||room==0x103)&&kind==0x3c4)||full_heal))return GH_OBJSTEP_ARGUMENT;
+      ((room==0x102||room==0x103)&&kind==0x3c4)||full_heal||partial_heal))return GH_OBJSTEP_ARGUMENT;
  *frontier=0;
  const gh_title_player_view *player=&s->title_player.view;
  uint8_t *work=(uint8_t *)s->b.work;
@@ -5122,7 +5126,7 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
   const int premium=bonus||(u32(work+0x59c)&0x40000u);
   const uint32_t hp_pair=u32(player->bytes+0x548);
   const uint16_t maximum=(uint16_t)hp_pair, hp=(uint16_t)(hp_pair>>16);
-  if(!full_heal||hp==maximum){
+  if((!full_heal&&!partial_heal)||hp==maximum){
    const int32_t amount=(premium?2:1)*(full_heal?1000:200);
    int32_t count,money;
    memcpy(&count,save+0x24,4);memcpy(&money,save+0x20,4);
@@ -5137,14 +5141,18 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
    memcpy(save+0x20,&changed,4);
   }
   /* 1C0E50 replenishes current HP and clears stagger. */
-  if(full_heal){
-   memcpy(player->bytes+0x54a,&maximum,2);
+  if(full_heal||partial_heal){
+   /* 1C0678 truncates 30 percent of maximum HP before adding it. */
+   const volatile float partial=(float)maximum*0.3f;
+   const unsigned healed=full_heal?maximum:(unsigned)hp+(unsigned)partial;
+   const uint16_t health=(uint16_t)(healed>maximum?maximum:healed);
+   memcpy(player->bytes+0x54a,&health,2);
    w32(player->bytes+0x5f4,0);
   }
   /* Original 13E2F8 returns without drawing. The live HUD consumes +24/+28. */
   const int devil=(u32(player->bytes+0x15f4)&0x1000u)!=0;
   pickup->sound=(gh_motion_sound_request){.model=&s->player_model,.actor=player,
-      .bank=devil?2:0,.program=devil?200:full_heal?0xdc:0xd4};
+      .bank=devil?2:0,.program=devil?200:full_heal?0xdc:partial_heal?0xd2:0xd4};
   pickup->stage=1;
  }
  if(pickup->stage==1){

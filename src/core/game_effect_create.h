@@ -45,6 +45,7 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
  * and otherwise identity configuration. */
 gh_effect_status gh_effect_create_player_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_gate_guard_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
+gh_effect_status gh_effect_create_em0a_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_enemy_death_part0_00306900(gh_effect_create_call *,
  const gh_title_player_view *,int32_t mode);
 /* 2A8608's original 58:2F/30 mode0, selector self, explicit part0. */
@@ -92,6 +93,7 @@ int gh_effect_player_stun_row(gh_effect_view);
 int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_r101_weapon_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
+int gh_effect_r103_slide_camera_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_enemy_light_emitter_is_bound(const gh_game_effects *,const gh_effect_emitter_view *);

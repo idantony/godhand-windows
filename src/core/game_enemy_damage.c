@@ -3,6 +3,7 @@
 #include "game_camera.h"
 #include "frame_state.h"
 #include "game_hitarea_frame.h"
+#include "game_player_targets.h"
 #include <fenv.h>
 #include <math.h>
 #include <string.h>
@@ -629,6 +630,55 @@ static gh_actor_motion_status r101_box_hit(gh_enemy202_hit_call *call,
  return r101_box_reaction(call,enemy,rank,frontier);
 }
 
+enum { EM0A_COUNTER_START=15, EM0A_COUNTER_SOUND=42, EM0A_COUNTER_FINISH };
+
+static gh_actor_motion_status em0a_counter_00274238(gh_enemy202_hit_call *call,
+    gh_enemy_actor *enemy,uint8_t *p,unsigned rank,uint32_t *frontier)
+{
+    if(!r103_arena_em0a(enemy,p)||!rank||rank>5)return stop(frontier,0x274238);
+    gh_actor_motion *motion=&enemy->motion.motion;
+    gh_game_mt *random=&enemy->entry.b.init->random;
+    if(call->phase==EM0A_COUNTER_START){
+        if(!(word(p+0x16d0)&0x2000u)){
+            static const float cooldown[]={0,40,30,25,25,15};
+            float delay=cooldown[rank];
+            if(rank<5){
+                gh_game_mt next=*random;
+                uint32_t draw;
+                if(gh_game_mt_next_0030f348(&next,&draw))return stop(frontier,0x31d000);
+                fenv_t env;
+                if(feholdexcept(&env))return stop(frontier,0x274448);
+                if(fesetround(FE_TOWARDZERO)){(void)fesetenv(&env);return stop(frontier,0x274448);}
+                volatile float source=(float)(draw>>1);
+                volatile float scaled=source*0x1p-29f;
+                volatile float adjusted=delay+scaled;
+                delay=adjusted;
+                if(fesetenv(&env))return stop(frontier,0x274448);
+                *random=next;
+            }
+            memcpy(p+0x173c,&delay,4);
+        }
+        p[0x2f4]=0;p[0x2f5]=0x69;p[0x2f6]=0;p[0x2f7]=1;
+        call->pressure_sound=(gh_motion_sound_request){.model=motion->b.model,
+            .actor=&enemy->entry.object.view,.bank=0,.program=0x7c};
+        call->phase=EM0A_COUNTER_SOUND;
+    }
+    if(call->phase==EM0A_COUNTER_SOUND){
+        if(!motion->b.sound)return stop(frontier,0x2cba48);
+        uint32_t handle=0;
+        gh_actor_motion_status status=motion->b.sound(motion->b.sound_context,
+            &call->pressure_sound,&handle,frontier);
+        if(status)return status;
+        call->phase=EM0A_COUNTER_FINISH;
+    }
+    uint32_t draw;
+    if(gh_game_mt_next_0030f348(random,&draw))return stop(frontier,0x31cfe0);
+    put(p+0x17c4,UINT32_MAX);put_half(p+0x17c8,0);
+    p[0x17bf]=(uint8_t)(draw%3u);
+    call->phase=5;
+    return GH_ACTOR_MOTION_OK;
+}
+
 gh_actor_motion_status gh_enemy202_hit_0020a178(
     gh_enemy202_hit_call *call, gh_enemy_actor *enemy, const gh_title_player_view *player,
     unsigned rank, uint32_t *frontier) {
@@ -671,10 +721,13 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int ordinary_punch = room_unarmed_punch(enemy, p, effect);
     const int hit_probe_selector = opening_pair || ordinary_punch;
     const int counter_selector = opening_200 || (ordinary_punch && dependency==0x200);
-    const int continuing_knockdown = triangle && dependency == 0x203 &&
-        r103_arena_punch_target(enemy, dependency) && !half(p + 0x54a) &&
-        half(p + 0x2f4) == 0x0701 && (half(p + 0x3ac) & 0x2cu) == 4 &&
-        !(word(p + 0x16d4) & 0x100040u);
+    const int arena_em0a=triangle&&r103_arena_em0a(enemy,p);
+    const int arena_stun_airborne=arena_em0a&&effect==0x12&&number(p+0x17cc)>0;
+    const int dead_airborne=triangle&&!half(p+0x54a)&&
+        ((dependency==0x203&&r103_arena_punch_target(enemy,dependency))||arena_em0a);
+    const int continuing_knockdown=(dead_airborne||arena_stun_airborne)&&
+        half(p+0x2f4)==0x0701&&(half(p+0x3ac)&0x2cu)==4&&
+        !(word(p+0x16d4)&0x100040u);
 
     if (call->phase == 0) {
         const float drain = number(p + 0x770), cooldown = number(p + 0x54c);
@@ -705,7 +758,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     enum { amplified_power_ready = 16, stamp2_counter_cue = 18, stamp2_counter_reset = 19 };
     if (call->phase == 2 && (half(p + 0x3ac) & 0x100u)) {
         const int amplified_triangle = triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) ||
-            r103_first_wave_em00(enemy));
+            r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p));
         const int r102_em00 = r102_close_em00_punch(enemy, p, effect);
         const int verified_motion = ((amplified_triangle || r102_em00 ||
             (r102_stamp2_punch(enemy, p, effect) && p[0x2f6] == 1)) && p[0x2f5] == 0x15) ||
@@ -753,21 +806,23 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         call->phase = 3;
     }
     if (call->phase == 14) return stop(frontier,0x26ecd0);
-    if (call->phase == 15) return stop(frontier,0x274238);
+    if(call->phase==EM0A_COUNTER_START||call->phase==EM0A_COUNTER_SOUND||
+       call->phase==EM0A_COUNTER_FINISH)return em0a_counter_00274238(call,enemy,p,rank,frontier);
     if (call->phase == 3) {
         const uint16_t flags = half(p + 0x3ac);
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
-        /* 20DA18 returns zero for previous HP <= 0. The airborne
-         * effect-12 branch then returns 1 without resetting 01/07. */
+        /* 20DA18 returns zero for previous HP <= 0 and active stagger.
+         * The airborne effect-12 branch keeps the original 01/07 motion. */
         if (continuing_knockdown) {
             call->reacted = 1;
             call->phase = 5;
             return GH_ACTOR_MOTION_OK;
         }
         if (!triangle && p[0x17bd] == 1 && rank >= 3) return stop(frontier, 0x26ecd0);
-        if (r102_stamp2_punch(enemy, p, effect) &&
+        if (((r102_stamp2_punch(enemy,p,effect)&&(behavior&0x882000u)==0x800000u)||
+             (arena_em0a&&(behavior&0x800000u))) &&
             !p[0x2f4] && p[0x2f5] == 0x4b && p[0x2f6] == 1 && !p[0x2f7] &&
-            (behavior & 0x882000u) == 0x800000u && half(p + 0x54a) &&
+            half(p + 0x54a) &&
             !body->state->heat[0x10]) {
             /* 20AF20 goes directly to 20B390 with no block timer flag.
              * Live HP and Heat inactive reach 26A338 without resetting Move. */
@@ -779,7 +834,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         /* 20BB58 dispatches effect 7 to the original 20BB80 dead-HP arm. */
         const int r102_em00 = r102_close_em00_punch(enemy, p, effect);
-        if ((opening_pair || r102_em00) && !half(p + 0x54a) && rank &&
+        if ((opening_pair || r102_em00 || arena_em0a) && !half(p + 0x54a) && rank &&
             (triangle||rank < 3) && p[0x17bd] == 1 &&
             !(flags & 0x2cu) && !(behavior & 0x806020u) &&
             !(status & 0x180040u) && !(p[0x2f4] == 1 && p[0x2f5] == 0x16)) {
@@ -790,8 +845,39 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             call->phase = 5;
             return GH_ACTOR_MOTION_OK;
         }
+        const int recover=arena_em0a&&effect==0x12&&half(p+0x2f4)==0x6900&&
+            p[0x2f6]==1&&p[0x2f7]==1&&(behavior&0x2000u)&&!(behavior&0x804020u)&&
+            !(status&0x180040u)&&!(flags&0x12cu)&&p[0x17bd]==1&&rank&&rank<=2;
+        if(recover&&!body->state->heat[0x10]&&!word(player->bytes+0x5fc)){
+            const gh_enemy_entry_bindings *binding=&enemy->entry.b;
+            float from[3],to[3],angle;
+            const float facing=number(p+0x760),timer=number(p+0x173c);
+            if(!isfinite(facing)||!isfinite(timer)||!enemy->entry.object.view.alias_f0||!player->alias_f0)
+                return stop(frontier,0x20b140);
+            memcpy(from,enemy->entry.object.view.alias_f0,sizeof(from));
+            memcpy(to,player->alias_f0,sizeof(to));
+            if(gh_player_target_angle_002da038(binding->boot_elf,binding->boot_elf_bytes,from,to,
+               number(p+0x104),3.1415927f,&angle,frontier))return stop(frontier,0x2da038);
+            if(fabsf(angle)<=1.5707964f&&facing<1.5707964f){
+                if(timer>0){
+                    /* 20CAC8 draws for selector1, then rejects effect12. */
+                    uint32_t draw;
+                    if(p[0x17bc]==1&&gh_game_mt_next_0030f348(&body->state->random,&draw))
+                        return stop(frontier,0x31cfe0);
+                    restore_counter_hp(p);
+                    call->phase=EM0A_COUNTER_START;
+                    return em0a_counter_00274238(call,enemy,p,rank,frontier);
+                }
+                restore_counter_hp(p);
+                p[0x2f4]=0;p[0x2f5]=0x6f;p[0x2f6]=p[0x2f7]=0;
+                call->reacted=1;
+                call->phase=5;
+                return GH_ACTOR_MOTION_OK;
+            }
+        }
+        const uint32_t ignored=recover?0x2000u:0u;
         if (!rank || p[0x17bd] != 1 || !half(p + 0x54a) || (flags & 0x2cu) ||
-            (behavior & (opening_pair ? 0x806020u : 0x802020u)) ||
+            (behavior & (opening_pair ? 0x806020u : 0x802020u) & ~ignored) ||
             (status & 0x80040u) || (p[0x2f4] == 1 && p[0x2f5] == 0x16))
             return stop(frontier, 0x20a7e0);
         if (p[0x17bc] != (unsigned)hit_probe_selector || p[0x17ba] != (unsigned)hit_probe_selector ||
@@ -848,6 +934,12 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                 if (gh_game_mt_next_0030f348(&random_state,&retry))
                     return stop(frontier,0x31cfe0);
                 if(!(retry&3u)&&number(p+0x760)<=1.5707964f){
+                    if(arena_em0a){
+                        body->state->random=random_state;
+                        restore_counter_hp(p);
+                        call->phase=EM0A_COUNTER_START;
+                        return em0a_counter_00274238(call,enemy,p,rank,frontier);
+                    }
                     if(r102_em00||synchronous_counter){
                         /* 274238's ordinary dependency arm and 20D358's counter reset
                          * commit only once after the original ordered RNG draws. */
@@ -1010,7 +1102,7 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
          !r100_stamp20(enemy, p) && !triangle && !room_unarmed_punch(enemy, p, effect) &&
          !r102_em03_punch(enemy, p, effect)) ||
         (amplified && !(triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) ||
-        r103_first_wave_em00(enemy))) &&
+        r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p))) &&
          !r102_close_em00_punch(enemy, p, effect) && !r102_stamp2_punch(enemy, p, effect)))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
@@ -1076,7 +1168,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     }
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     const int amplified_triangle = call->effect == 0x12 &&
-        (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) || r103_first_wave_em00(enemy));
+        (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) || r103_first_wave_em00(enemy) ||
+         r103_arena_em0a(enemy,p));
     if (amplified && (manager_active ||
         (!amplified_triangle && !r102_close_em00_punch(enemy, p, half(body->bytes + 0x46)) &&
          !r102_stamp2_punch(enemy, p, half(body->bytes + 0x46)))))
