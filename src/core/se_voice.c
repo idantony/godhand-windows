@@ -388,8 +388,7 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
          w(sample+4)==11025u&&w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
   }
   const int arena_em03=r103_em03_voice_actor(v)&&h(root->bytes+0x2f4)==0x6c00&&
-      root->bytes[0x2f6]==1&&(program!=0x10||
-       (h(root->bytes+0x640)==7&&(w((const uint8_t *)v->model->work+0x5ec)&0x04000000u)));
+      root->bytes[0x2f6]==1;
   if(h(root->bytes+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!arena_em03)return 0;
   if(dependency==0x20a){
    if(program==0x10||v->part_index!=-1||!v->model->work||v->model->work->room!=0x102||
@@ -1919,8 +1918,9 @@ static int core_critical_sequence(const struct voice *v)
     (state==0x0001||(state==0x0002&&!h(actor+0x54a)));
  const int r102_em0a=model->work->room==0x102&&stamp==2&&state==0x0101&&
     model->root.size>0x1650&&actor[0x1650]==5&&w(actor+0x564)==0x20a;
- const int arena=(r103_em00_voice_actor(v)||r103_em0a_voice_actor(v))&&
-    state==0x0101&&actor[0x2f6]==0;
+ const int arena_em00=r103_em00_voice_actor(v)!=NULL;
+ const int arena=actor[0x2f6]==0&&
+    ((state==0x0101&&(arena_em00||r103_em0a_voice_actor(v)))||(state==0x0701&&arena_em00));
  const int room_actor=(((r100||r102)&&w(actor+0x564)==0x200)||r102_em0a)&&
     h(actor+0x2fe)==0x202;
  return (room_actor||arena)&&

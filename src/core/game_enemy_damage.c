@@ -753,7 +753,8 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int arena_em0a=triangle&&r103_arena_em0a(enemy,p);
     const int arena_stun_airborne=arena_em0a&&effect==0x12&&number(p+0x17cc)>0;
     const int dead_airborne=triangle&&!half(p+0x54a)&&
-        ((dependency==0x203&&r103_arena_punch_target(enemy,dependency))||arena_em0a);
+        ((dependency==0x203&&r103_arena_punch_target(enemy,dependency))||arena_em0a||
+         r103_first_wave_em00(enemy));
     const int continuing_knockdown=(dead_airborne||arena_stun_airborne)&&
         half(p+0x2f4)==0x0701&&(half(p+0x3ac)&0x2cu)==4&&
         !(word(p+0x16d4)&0x100040u);

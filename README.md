@@ -112,8 +112,10 @@ the first arena wave starts. Direct3D presents 86 R102 and 10 R103 scene
 frames around the exit, plus eight consecutive arena frames after EV1A and
 its fade finish. Both Direct3D runs report zero renderer errors.
 The continuous replay also reaches the original Game Over menu in R103.
-After confirming Retry, Gene returns to the arena at 100 HP and defeats one
-of the first two enemies. The original encounter ledger records the defeat.
+After confirming Retry, Gene returns to the arena at 100 HP and defeats both
+first-wave enemies. The original encounter ledger records both defeats. Gene
+has 56 HP after the second defeat. Direct3D presents 118 scene frames through
+the second defeat with zero renderer errors.
 A native CPU replay loads an isolated R103 test save and uses original pad
 inputs to defeat all six enemies in the first three arena waves. Gene takes
 the original healing drop and enters the twin boss wave with 58 HP. The replay
@@ -362,7 +364,8 @@ R102 从零击败存档开始，经手柄回放完成开门所需的全部六次
 呈现了 86 个 R102 场景帧和 10 个 R103 场景帧，在 EV1A 及淡出结束后又连续呈现了 8 个竞技场帧。
 两项 Direct3D 回放的渲染器报错均为零。
 同一条连续路线还在 R103 进入原版 Game Over 菜单，确认重试后以 100 HP 回到竞技场，随后
-击败首波两名敌人中的一名，原版遭遇记录登记了这次击败。
+击败首波两名敌人。原版遭遇记录登记了两次击败，第二次击败后 Gene 还剩 56 HP。
+Direct3D 呈现了直到第二次击败的 118 个场景帧，渲染器报错为零。
 原生 CPU 回放从独立的 R103 测试存档开始，用原版手柄输入击倒前三波共六名敌人。
 Gene 拿到原版恢复道具，以 58 HP 进入双头目战。回放提交两名头目的模型绘制指令，并运行到
 原版选招。静音 Direct3D 回放呈现了 6,908 个场景帧，覆盖原版头目入场，渲染器报错为零。
