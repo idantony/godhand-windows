@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-enum { GH_ESP14_VTABLE = 0x44ee38, GH_ESP_MODEL_KIND = 0x500 };
+enum { GH_ESP04_VTABLE = 0x44e538, GH_ESP14_VTABLE = 0x44ee38, GH_ESP_MODEL_KIND = 0x500 };
 
 typedef struct {
     gh_room_pools *pools;
@@ -110,6 +110,15 @@ typedef struct gh_esp14_instance {
 gh_effect_status gh_esp14_initialize_002f1d58(gh_esp14_instance *,
     const gh_esp14_bindings *, const gh_effect_esp_view *, unsigned slot,
     uint32_t source_parameter_40, int *original_return, uint32_t *frontier);
+
+/* 2E64B0 and 2E6868 use the same stable kind500 child and scene traversal.
+ * This covers the original EST 6C:3B mode-2 ballistic model rows. */
+gh_effect_status gh_esp04_initialize_002e64b0(gh_esp14_instance *,
+    const gh_esp14_bindings *, const gh_effect_esp_view *, unsigned,
+    uint32_t parameter_40, int *original_return, uint32_t *frontier);
+gh_effect_status gh_esp04_move_after_base_002e6868(gh_esp14_instance *,
+    const gh_esp14_bindings *, const gh_effect_esp_view *, int active,
+    uint32_t *frontier);
 
 /* Normal 30F090 kind500 virtual Move. The next 30F650 normal virtual Trans
  * is generic actor rendering at 14A3E8; its canonical model is child.model. */

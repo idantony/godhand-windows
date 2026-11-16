@@ -328,7 +328,7 @@ static gh_effect_status initialize_1a(gh_esp_create_call*c,uint8_t*p,const uint8
 static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bindings*b){
  if(!c||!b||!c->active||c->identity!=c||!b->work)return GH_EFFECT_ARGUMENT;if(b->policy!=GH_STATIC_BINARY32_REFERENCE)return fail(c,0x300ef8,GH_EFFECT_UNSUPPORTED);if(c->stage&&!same(&c->b,b))return fail(c,0x300e30,GH_EFFECT_ARGUMENT);if(c->stage&&!c->b.actors&&b->actors)c->b.actors=b->actors;if(c->stage&&!c->b.atan_coeff&&b->atan_coeff)c->b.atan_coeff=b->atan_coeff;c->frontier=0;if(c->complete)return GH_EFFECT_OK;if(!c->stage)c->b=*b;
  gh_effect_emitter_view emitter;gh_effect_status status=gh_effect_create_emitter_at(b->storage.effects,c->emitter_slot,&emitter);if(status||emitter.serial!=c->emitter_serial||!emitter.initialized||emitter.payload!=b->storage.emitters+(size_t)c->emitter_slot*0x260)return fail(c,0x300e30,GH_EFFECT_ARGUMENT);uint8_t*source=emitter.payload;const uint8_t*r=emitter.record.bytes;
- status=gh_effect_create_bind_frame_globals(b->storage.effects,b->globals);if(status)return fail(c,0x2e8038,status);if(r[0x133]==0x1a&&b->actors){status=gh_effect_create_bind_frame_actors(b->storage.effects,b->actors);if(status)return fail(c,0x131e10,status);}
+ status=gh_effect_create_bind_frame_globals(b->storage.effects,b->globals);if(status)return fail(c,0x2e8038,status);if((r[0x133]==4||r[0x133]==0x1a)&&b->actors){status=gh_effect_create_bind_frame_actors(b->storage.effects,b->actors);if(status)return fail(c,0x131e10,status);}
  if(!c->stage){int allocated=0;uint32_t f=0;status=gh_effect_create_esp_allocate_002faa88(&b->storage,c->emitter_slot,c->emitter_serial,&c->slot,&c->serial,&allocated,&f);if(status)return fail(c,f?f:0x2faa88,status);c->allocated=(uint8_t)allocated;if(!allocated){c->complete=1;return GH_EFFECT_OK;}c->stage=1;}
  gh_effect_esp_view view;status=gh_effect_create_esp_at(b->storage.effects,c->slot,&view);if(status||view.serial!=c->serial||view.emitter_slot!=c->emitter_slot||view.emitter_serial!=c->emitter_serial||view.payload!=b->storage.esp+(size_t)c->slot*0x400)return fail(c,0x300ef8,GH_EFFECT_ARGUMENT);uint8_t*p=view.payload;
  if(c->stage==1){uint32_t seed;if(!r[0x28e]){if(!b->random)return fail(c,0x31cfe0,GH_EFFECT_ARGUMENT);if(gh_game_mt_next_0030f348(b->random,&seed))return fail(c,0x31cfe0,GH_EFFECT_ARGUMENT);}else seed=w(source+0x220)*UINT32_C(0x19660d)+UINT32_C(0x3c6ef35f);put(source+0x220,seed);c->stage=2;}
@@ -377,16 +377,39 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
   c->stage=12;c->complete=1;
   return GH_EFFECT_OK;
  }
- if(view.type==0x14&&c->stage==10){
+ if(view.type==0x15&&c->stage==10){
+  /* With authored detach delay zero, 2F2898 records the world position. */
+  const unsigned count=gh_effect_esp_type15_copies(b->storage.effects,&view);
+  if(!count||w(p+0xf0)!=0x44ef08u||p[0x103]||w(r+0x16c)||w(r+0x170)||
+     w(r+0x18c)!=count-1||w(r+0x13c)!=0x3e4ccccdu)
+   return fail(c,0x2f2898,GH_EFFECT_UNSUPPORTED);
+  uint32_t pc=0;
+  float origin[4];
+  status=gh_effect_node_world_position_native(b->storage.effects,0,c->slot,c->serial,
+     origin,b->policy,&pc);
+  if(status)return fail(c,pc?pc:0x2b6160,status);
+  put(p+0x2b0,0);put(p+0x2b4,0);put(p+0x2b8,count);
+  memcpy(p+0x2c0,origin,12);
+  p[0x2d0]=0;
+  put(p+0x2d8,w(r+0x13c));
+  memcpy(p+0x2e0,r+0x148,12);
+  put(p+0x2ec,0x3f800000u);
+  status=gh_effect_create_esp_commit_15(b->storage.effects,c->slot,c->serial);
+  if(status)return fail(c,0x2f2898,status);
+  c->stage=12;c->complete=1;
+  return GH_EFFECT_OK;
+ }
+ if((view.type==4||view.type==0x14)&&c->stage==10){
+  const uint32_t init_pc=view.type==4?0x2e64b0:0x2f1d58;
   const gh_esp14_provider *provider=b->model_effect;
-  if(!provider||!provider->initialize)return fail(c,0x2f1d58,GH_EFFECT_UNSUPPORTED);
+  if(!provider||!provider->initialize)return fail(c,init_pc,GH_EFFECT_UNSUPPORTED);
   int original_return=0;
   uint32_t frontier=0;
   status=provider->initialize(provider->context,&view,c->slot,w(source+0x1e0),&original_return,&frontier);
-  if(status)return fail(c,frontier?frontier:0x2f1d58,status);
+  if(status)return fail(c,frontier?frontier:init_pc,status);
   if(!original_return)return fail(c,0x2fbe50,GH_EFFECT_UNSUPPORTED);
   status=gh_effect_create_esp_commit_14(b->storage.effects,c->slot,c->serial);
-  if(status)return fail(c,0x2f1d58,status);
+  if(status)return fail(c,init_pc,status);
   c->stage=12;
   c->complete=1;
   return GH_EFFECT_OK;

@@ -32,6 +32,9 @@ gh_player_target_status gh_player_enemy_target_00291010(const gh_player_target_b
 gh_player_target_status gh_enemy_target_from_00291010(const gh_player_target_bindings *,
  const gh_game_init_state *,const float origin[3],float yaw,float range,float cone,
  const gh_title_player_view *exclude,gh_player_target *,uint32_t *);
+/* The enemy item selector calls mode1 with yaw0, a 25-unit radius and a full cone. */
+gh_player_target_status gh_death_drop_target_00291010(const gh_player_target_bindings *,
+ const gh_game_init_state *,const float origin[3],gh_player_target *,uint32_t *frontier);
 /* Same mode0 with the original excluded actor, borrowed by follow camera. */
 gh_player_target_status gh_player_enemy_target_excluding_00291010(const gh_player_target_bindings *,
  const gh_game_init_state *,float range,float cone,const gh_title_player_view *exclude,

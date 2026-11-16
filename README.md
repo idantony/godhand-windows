@@ -101,8 +101,9 @@ armed encounter, and reaches the original Game Over menu after a lethal
 hit. Confirming Retry restores Gene to 100 HP in R100. A separate west-route
 replay reaches the original reinforcement area and lands two Triangle hits
 during its Devil encounter. A controller replay from a zero-defeat R102
-checkpoint records four of the six qualifying defeats. Two original scenery
-hits defeat the third enemy. His punches defeat the fourth, with Gene at 18 HP.
+checkpoint records five of the six qualifying defeats. An original counter
+finishes the fifth enemy with Gene at 18 HP. The original item drop grants
+an attack boost, and Gene regains control and walks toward the sixth fight.
 A native CPU replay loads an isolated R103 test save and uses original pad
 inputs to defeat all six enemies in the first three arena waves. Gene takes
 the original healing drop and enters the twin boss wave with 58 HP. The replay
@@ -111,8 +112,11 @@ attack selection. A muted Direct3D replay presents 6,908 scene frames through
 the original boss entrance with zero renderer errors. A separate controlled
 fight starts with the first three
 waves cleared and verifies three hits from the first boss's original combo.
-Gene's HP drops from 100 to 87. Full boss clearance remains in development.
-Earlier Direct3D replays present the escape counter and the movement that
+Gene's HP drops from 100 to 87. On the replay that clears all six enemies,
+the original paired throw lowers Gene's HP from 58 to 40. He gets back up
+and regains control. Pressing Square then lowers the second boss's HP from
+597 to 594. A muted Direct3D replay presents the original paired throw.
+Full boss clearance remains in development. Earlier Direct3D replays present the escape counter and the movement that
 follows it after entering R103 through the original door from R102.
 
 A separate test starts with all enemies marked defeated and places Gene at
@@ -336,13 +340,15 @@ R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101
 
 从新游戏开始的东侧回放打破原版木门，在后续持械战斗中被击倒，并在原版 Game Over 界面
 确认重试，以 100 HP 回到 R100。西侧回放进入原版增援区域，在恶魔遭遇期间打出两次三角攻击。
-R102 从零击败存档开始，经手柄回放完成开门所需的六次击败中的四次。第三名敌人受到两次
-原版场景机关攻击，Gene 用拳击打倒第四名敌人，此时还剩 18 HP。
+R102 从零击败存档开始，经手柄回放完成开门所需的六次击败中的五次。Gene 用原版反击
+打倒第五名敌人，此时还剩 18 HP。他拾取原版掉落的攻击强化，恢复操作后继续向第六场战斗移动。
 原生 CPU 回放从独立的 R103 测试存档开始，用原版手柄输入击倒前三波共六名敌人。
 Gene 拿到原版恢复道具，以 58 HP 进入双头目战。回放提交两名头目的模型绘制指令，并运行到
 原版选招。静音 Direct3D 回放呈现了 6,908 个场景帧，覆盖原版头目入场，渲染器报错为零。
 另一项受控测试预置前三波已清场，验证首名头目连击三次命中，Gene 从 100 HP
-降到 87 HP。完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
+降到 87 HP。清完六名敌人的回放继续进入双头目战，原版合投让 Gene 从 58 HP 降到 40。
+Gene 起身恢复操作后，按方块将第二名头目的生命值从 597 降到 594。静音 Direct3D 回放
+呈现了合投过程。完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
 已呈现挣脱反击和随后的摇杆移动。
 
 另一次测试预置全场已清，并将 Gene 放到原版交互区域。用圆圈打开战后对白，叉键关闭，

@@ -64,11 +64,19 @@ static int r103_arena_em0a(const gh_enemy_actor *enemy,const uint8_t *actor)
         gh_enemy204_is_r103_entry(&enemy->entry.request,enemy->entry.b.work->room);
 }
 
+static int r103_em15_square_target(const gh_enemy_actor *enemy,const uint8_t *actor)
+{
+    return enemy->entry.b.work&&word(actor+0x564)==0x215&&
+        enemy->entry.request.dependency_kind==0x215&&enemy->entry.request.entry_number==1&&
+        gh_enemy204_is_r103_entry(&enemy->entry.request,enemy->entry.b.work->room);
+}
+
 static int room_unarmed_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect)
 {
     const uint32_t dependency=word(actor+0x564);
     return effect==7&&enemy->entry.b.work&&
-        ((dependency==0x200&&enemy->entry.b.work->room==0x102)||r103_arena_punch_target(enemy,dependency));
+        ((dependency==0x200&&enemy->entry.b.work->room==0x102)||r103_arena_punch_target(enemy,dependency)||
+         r103_em15_square_target(enemy,actor));
 }
 
 static int r102_close_em00_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
@@ -80,6 +88,12 @@ static int r102_close_em00_punch(const gh_enemy_actor *enemy, const uint8_t *act
 static int r102_em03_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
     return effect == 7 && enemy->entry.object.view.size > 0x1650 &&
         word(actor + 0x564) == 0x203 && half(actor + 0x640) == 8 && !actor[0x1650] &&
+        enemy->entry.b.work && enemy->entry.b.work->room == 0x102;
+}
+
+static int r102_east_em27_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
+    return effect == 7 && enemy->entry.object.view.size > 0x1650 &&
+        word(actor + 0x564) == 0x227 && half(actor + 0x640) == 4 && !actor[0x1650] &&
         enemy->entry.b.work && enemy->entry.b.work->room == 0x102;
 }
 
@@ -108,7 +122,7 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
     if (!view->bytes || view->size < 0x642 || view->original_vtable214 != 0x4479c8 ||
         word(view->bytes + 0x214) != view->original_vtable214 ||
         (half(view->bytes+0x2fe)!=0x202&&!r103_arena_punch_target(enemy,word(view->bytes+0x564))&&
-         !r103_arena_em0a(enemy,view->bytes)) ||
+         !r103_arena_em0a(enemy,view->bytes)&&!r103_em15_square_target(enemy,view->bytes)) ||
         !enemy->hitareas.created[0])
         return stop(frontier, 0x20a5dc);
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
@@ -212,8 +226,9 @@ gh_actor_motion_status gh_enemy_counter_heat_002a9978(gh_enemy_actor *enemy, uin
     const uint8_t *p = view->bytes;
     const unsigned stamp = word(p + 0x640) & 0xffffu;
     const gh_boot_work *work = enemy->entry.b.work;
-    const int story = work && work->room == 0x102 && stamp == 11 && view->size > 0x1650 &&
-        view->original_vtable214 == 0x4479c8 && p[0x1650] == 5 && p[0x2f4] == 1 &&
+    const int story = work && work->room == 0x102 && view->size > 0x1650 &&
+        view->original_vtable214 == 0x4479c8 &&
+        ((stamp == 11 && p[0x1650] == 5) || (stamp == 3 && p[0x1650] == 1)) && p[0x2f4] == 1 &&
         p[0x2f5] == 0x1d && p[0x2f6] == 1 && p[0x2f7] == 1;
     if (word(p + 0x564) != 0x200 || (stamp != 20 && !story && !r103_first_wave_em00(enemy)))
         return stop(frontier, 0x2a9978);
@@ -719,6 +734,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         (triangle&&(r100_stamp8(enemy,p)||r103_first_wave_em00(enemy)));
     const int opening_pair = opening_203 || opening_200;
     const int ordinary_punch = room_unarmed_punch(enemy, p, effect);
+    const int east_em27 = r102_east_em27_punch(enemy, p, effect);
     const int hit_probe_selector = opening_pair || ordinary_punch;
     const int counter_selector = opening_200 || (ordinary_punch && dependency==0x200);
     const int arena_em0a=triangle&&r103_arena_em0a(enemy,p);
@@ -734,7 +750,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         const float block = number(p + 0x1740), armor = number(p + 0x1734);
         const uint16_t hp = half(p + 0x54a);
         uint16_t flags = half(p + 0x3ac);
-        if ((!hit_probe_selector && dependency != 0x20a) || (!hp && !continuing_knockdown) || hp >= 0x8000 ||
+        if ((!hit_probe_selector && !east_em27 && dependency != 0x20a) || (!hp && !continuing_knockdown) || hp >= 0x8000 ||
             !isfinite(drain) || drain > 0 || !isfinite(cooldown) || cooldown > 0 ||
             !isfinite(block) || !isfinite(armor))
             return stop(frontier, 0x20a178);
@@ -876,12 +892,16 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             }
         }
         const uint32_t ignored=recover?0x2000u:0u;
-        if (!rank || p[0x17bd] != 1 || !half(p + 0x54a) || (flags & 0x2cu) ||
+        /* 20A7D0 suppresses the ordinary pressure gain for EM27 at rank one. */
+        if(east_em27&&p[0x17bd]==2&&rank>=2)return stop(frontier,0x26ecd0);
+        if (!rank || p[0x17bd] != (east_em27 ? 2u : 1u) || !half(p + 0x54a) || (flags & 0x2cu) ||
             (behavior & (opening_pair ? 0x806020u : 0x802020u) & ~ignored) ||
             (status & 0x80040u) || (p[0x2f4] == 1 && p[0x2f5] == 0x16))
             return stop(frontier, 0x20a7e0);
-        if (p[0x17bc] != (unsigned)hit_probe_selector || p[0x17ba] != (unsigned)hit_probe_selector ||
-            p[0x17b9] != (unsigned)counter_selector || p[0x17bb] != 1)
+        const unsigned probe_kind=east_em27?2u:(unsigned)hit_probe_selector;
+        const unsigned counter_kind=east_em27?2u:(unsigned)counter_selector;
+        if (p[0x17bc] != probe_kind || p[0x17ba] != probe_kind ||
+            p[0x17b9] != counter_kind || p[0x17bb] != 1)
             return stop(frontier, 0x20cac8);
         /* 20D138 returns 0. With selector 1, 20CAC8 draws once before
          * rejecting effect 7. 20D398 requires selector 3 for effect 7,
@@ -909,6 +929,25 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         const float block = number(p + 0x1740);
         if (!isfinite(block)) return stop(frontier, 0x20d140);
+        if(east_em27){
+            /* 20CAC8 selector2 and 20D398 Give 7 do not draw. 20CD00
+             * selector2 uses the original 1/32 roll at rank one. */
+            const float face=number(p+0x760),rate=number(p+0x5a8),stun=number(p+0x17cc);
+            if(!isfinite(face)||!isfinite(rate)||!isfinite(stun))
+                return stop(frontier,0x20cd00);
+            if(((status&0x04000000u)||(!body->state->heat[0x10]&&!word(player->bytes+0x5fc)))&&
+                !(flags&0x100u)&&(int32_t)word(p+0x17ac)>0&&face<=2.3561945f&&
+                rate>=1.0f&&block<=0&&stun<=0){
+                uint32_t draw;
+                if(gh_game_mt_next_0030f348(&body->state->random,&draw))
+                    return stop(frontier,0x31cfe0);
+                if((draw&31u)==3){
+                    counter_mode(p,0xa,0);
+                    call->phase=5;
+                    return GH_ACTOR_MOTION_OK;
+                }
+            }
+        }
         /* 20D218 returns before the counter RNG on the amplified effect-7 Take. */
         const int skip_counter = (flags & 0x100u) && (r102_close_em00_punch(enemy, p, effect) ||
             r102_stamp2_punch(enemy, p, effect));
@@ -924,7 +963,9 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             if (p[0x17bf] >= threshold) {
                 const int r102_em00 = r102_close_em00_punch(enemy, p, effect);
                 const int stamp2=r102_stamp2_punch(enemy,p,effect);
-                const int synchronous_counter=stamp2||r102_em03_punch(enemy,p,effect);
+                const int east_em00=ordinary_punch&&dependency==0x200&&enemy->entry.b.work->room==0x102&&
+                    half(p+0x640)==3&&p[0x1650]==1;
+                const int synchronous_counter=stamp2||east_em00||r102_em03_punch(enemy,p,effect);
                 if(!triangle&&!r102_em00&&!synchronous_counter&&!r103_arena_punch_target(enemy,dependency)){
                     call->phase = 6;
                     return stop(frontier, 0x20d2a0);
@@ -1100,7 +1141,7 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
          !r100_stamp20(enemy, p) && !triangle && !room_unarmed_punch(enemy, p, effect) &&
-         !r102_em03_punch(enemy, p, effect)) ||
+         !r102_em03_punch(enemy, p, effect) && !r102_east_em27_punch(enemy, p, effect)) ||
         (amplified && !(triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) ||
         r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p))) &&
          !r102_close_em00_punch(enemy, p, effect) && !r102_stamp2_punch(enemy, p, effect)))
@@ -1181,7 +1222,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
             !triangle_take_supported(enemy,p,call->effect) &&
             !room_unarmed_punch(enemy, p, half(body->bytes + 0x46)) &&
-            !r102_em03_punch(enemy, p, half(body->bytes + 0x46)))) ||
+            !r102_em03_punch(enemy, p, half(body->bytes + 0x46)) &&
+            !r102_east_em27_punch(enemy, p, half(body->bytes + 0x46)))) ||
         init->heat[0x10] || word(player->bytes + 0x5fc) ||
         (!manager_active && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);

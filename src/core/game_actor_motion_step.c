@@ -46,7 +46,9 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
     ((half(p+0x640)==0x10&&!p[0x1650])||(half(p+0x640)==11&&p[0x1650]==5));
  const int r102_em03=dependency==0x203&&model->root.size>0x1650&&model->work&&
     model->work->room==0x102&&half(p+0x640)==8&&!p[0x1650];
- const int allowed=(p[0x2f4]==1&&(dependency==0x20a||stamp19||stamp20||r102_em00||r102_em03))||
+ const int east_em27=dependency==0x227&&model->root.size>0x1650&&model->work&&
+    model->work->room==0x102&&half(p+0x640)==4&&!p[0x1650]&&p[0x2f6]==1&&!p[0x2f7];
+ const int allowed=(p[0x2f4]==1&&(dependency==0x20a||stamp19||stamp20||r102_em00||r102_em03||east_em27))||
                    (p[0x2f4]==2&&(stamp19||stamp20||r102_death||(r102_em03&&!half(p+0x54a))));
  return allowed?0x48u:0x40u;
 }

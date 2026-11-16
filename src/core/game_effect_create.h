@@ -164,6 +164,8 @@ int gh_effect_esp08_screen_row(gh_effect_view);
 gh_effect_status gh_effect_create_esp_commit_8(gh_game_effects *,unsigned,uint32_t);
 int gh_effect_esp_type7_record_bound(const gh_game_effects *,const gh_effect_esp_view *);
 gh_effect_status gh_effect_create_esp_commit_type7(gh_game_effects *,unsigned slot,uint32_t serial);
+unsigned gh_effect_esp_type15_copies(const gh_game_effects *,const gh_effect_esp_view *);
+gh_effect_status gh_effect_create_esp_commit_15(gh_game_effects *,unsigned slot,uint32_t serial);
 gh_effect_status gh_effect_create_esp_commit_14(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_12(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_13(gh_game_effects *,unsigned,uint32_t);

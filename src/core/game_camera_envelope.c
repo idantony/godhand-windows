@@ -68,12 +68,14 @@ static gh_camera_status finish(gh_camera_envelope*s,gh_camera_follow*follow,
     const unsigned kind=(unsigned)target.bytes[0x2fe]|(unsigned)target.bytes[0x2ff]<<8;
     int arena=0;
     if(kind==0x204&&s->player_model&&s->player_model->work&&
-       s->player_model->work->room==0x103&&target.size>0x1650&&target.bytes[0x1650]==24){
+       s->player_model->work->room==0x103&&target.size>0x1650){
       const unsigned stamp=word(target.bytes+0x640)&0xffffu;
       const uint32_t dependency=word(target.bytes+0x564);
-      arena=(dependency==0x200&&(stamp==2||stamp==3))||
+      const unsigned appearance=target.bytes[0x1650];
+      arena=(appearance==24&&((dependency==0x200&&(stamp==2||stamp==3))||
         (dependency==0x20a&&(stamp==4||stamp==5))||
-        (dependency==0x203&&(stamp==6||stamp==7));
+        (dependency==0x203&&(stamp==6||stamp==7))))||
+        (appearance==15&&((dependency==0x214&&stamp==0)||(dependency==0x215&&stamp==1)));
     }
     if(target.original_vtable214!=0x4479c8||(kind!=0x202&&!arena))
      return fail(f,0x13a73c,GH_CAMERA_UNSUPPORTED);

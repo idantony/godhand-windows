@@ -168,7 +168,7 @@ static gh_player_target_status consider_focus(const gh_player_target_bindings *b
  return GH_PLAYER_TARGET_OK;
 }
 
-enum focus_mode { FOCUS_ORDINARY, FOCUS_FALLBACK, FOCUS_THROW };
+enum focus_mode { FOCUS_ORDINARY, FOCUS_FALLBACK, FOCUS_THROW, FOCUS_DROP_NEARBY };
 
 static gh_player_target_status enemy_focus(const gh_player_target_bindings *b,
  const gh_game_init_state *init,const float origin[3],float heading,float range,float cone,
@@ -196,6 +196,9 @@ static gh_player_target_status enemy_focus(const gh_player_target_bindings *b,
   if(view->original_vtable214!=0x4479c8)return fail(f,0x29117c,GH_PLAYER_TARGET_UNSUPPORTED);
   if(mode!=FOCUS_FALLBACK&&(int16_t)half(p+0x54a)<1&&(mode==FOCUS_THROW||!(half(p+0x3ac)&4u)))continue;
 
+  const unsigned dependency=w(p+0x564);
+  const int extended=dependency==0x260||dependency==0x264||dependency==0x265||dependency==0x26a;
+  if(mode==FOCUS_DROP_NEARBY&&extended)continue;
   float candidate[3];
   gh_player_target_status status=gh_enemy_target_position_00275978(view,candidate);
   if(status)return fail(f,0x275978,status);
@@ -212,11 +215,10 @@ static gh_player_target_status enemy_focus(const gh_player_target_bindings *b,
     if(pitch>number(0x3e860a92))continue;
    }
   }
-  const unsigned dependency=w(p+0x564);
-  const int extended=dependency==0x260||dependency==0x264||dependency==0x265||dependency==0x26a;
   int accepted;
   status=consider_focus(b,origin,candidate,heading,add(range,dependency==0x26a?8:extended?4:0),
-   mode==FOCUS_THROW||ignores_height?INFINITY:1.5f,1,!extended,&cone,&accepted,f);
+   mode==FOCUS_THROW||ignores_height?INFINITY:1.5f,1,
+   mode!=FOCUS_DROP_NEARBY&&!extended,&cone,&accepted,f);
   if(status)return status;
   if(accepted)selected_enemy=actor;
  }
@@ -248,7 +250,7 @@ static gh_player_target_status enemy_focus(const gh_player_target_bindings *b,
   const int wide=(flags&0x400u)!=0;
   int accepted;
   status=consider_focus(b,origin,candidate,heading,wide?add(range,range):range,
-   wide?1.5f:1,wide?1.25f:1,!(flags&0x80u),&cone,&accepted,f);
+   wide?1.5f:1,wide?1.25f:1,mode!=FOCUS_DROP_NEARBY&&!(flags&0x80u),&cone,&accepted,f);
   if(status)return status;
   if(accepted){*selected=(gh_player_target){handle,view};selected_enemy=NULL;}
  }
@@ -304,6 +306,12 @@ gh_player_target_status gh_enemy_target_from_00291010(const gh_player_target_bin
  const gh_title_player_view *exclude,gh_player_target *out,uint32_t *f)
 {
  return focus_from(b,init,origin,yaw,range,cone,0,exclude,out,f);
+}
+
+gh_player_target_status gh_death_drop_target_00291010(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,const float origin[3],gh_player_target *out,uint32_t *f)
+{
+ return focus_from(b,init,origin,0,25,number(0x40490fdb),FOCUS_DROP_NEARBY,NULL,out,f);
 }
 
 gh_player_target_status gh_player_enemy_target_00291010(const gh_player_target_bindings *b,

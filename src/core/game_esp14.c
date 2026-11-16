@@ -1,5 +1,8 @@
 #include "game_esp14.h"
 #include "game_actor_motion_step.h"
+#include "game_actor_inverse.h"
+#include "game_ray_query.h"
+#include "game_scene_at_geometry.h"
 #include "game_actor_model_nodes.h"
 #include "game_actor_two_bone.h"
 #include "id_layout_rotation.h"
@@ -342,15 +345,17 @@ static gh_effect_status model_pose(const gh_esp14_bindings *b, gh_esp14_instance
 }
 
 static gh_effect_status configure_model_packets(gh_esp14_model *child,
-    const uint8_t *p, uint32_t *frontier) {
+    const uint8_t *p, int test_only, uint32_t *frontier) {
     static const uint64_t alpha[] = {
         UINT64_C(0x8000000044), UINT64_C(0x8000000048), UINT64_C(0x80000000a1),
         UINT64_C(0x8000000041), UINT64_C(0x8000000068), UINT64_C(0x80000000a4),
         UINT64_C(0x8000000009), UINT64_C(0x8000000042), UINT64_C(0x8000000006)
     };
     *frontier = 0x14d700;
-    if (p[0x247] >= sizeof(alpha) / sizeof(*alpha)) return GH_EFFECT_UNSUPPORTED;
     const uint32_t flags = word(p + 0x11c);
+    if (test_only && !(flags & 0x80000u)) return GH_EFFECT_OK;
+    if (!test_only && p[0x247] >= sizeof(alpha) / sizeof(*alpha))
+        return GH_EFFECT_UNSUPPORTED;
     uint8_t *object = child->object.view.bytes;
     unsigned nodes = object[0x2b1];
     if (!nodes) return GH_EFFECT_ARGUMENT;
@@ -358,8 +363,10 @@ static gh_effect_status configure_model_packets(gh_esp14_model *child,
         const gh_actor_node_packets *packet;
         if (gh_actor_model_packet_at(&child->model, i, &packet) || !packet->ready || !packet->node)
             return GH_EFFECT_UNSUPPORTED;
-        memcpy(packet->node + 0x50, &alpha[p[0x247]], 8);
-        memcpy(packet->node + 0x100, &alpha[p[0x247]], 8);
+        if (!test_only) {
+            memcpy(packet->node + 0x50, &alpha[p[0x247]], 8);
+            memcpy(packet->node + 0x100, &alpha[p[0x247]], 8);
+        }
         if (flags & 0x80000u) {
             static const uint64_t test = 0x51011;
             memcpy(packet->node + 0x30, &test, 8);
@@ -367,7 +374,7 @@ static gh_effect_status configure_model_packets(gh_esp14_model *child,
         }
     }
     const unsigned blend_flags = (flags >> 13) & 3;
-    if (blend_flags) {
+    if (!test_only && blend_flags) {
         static const uint8_t mask[] = {0, 2, 5, 1};
         put_half(object + 0x2ac, mask[blend_flags]);
         put(object + 0x2c0, 3);
@@ -473,7 +480,7 @@ gh_effect_status gh_esp14_initialize_002f1d58(gh_esp14_instance *s,
         s->stage = 5;
     }
     if (s->stage == 5) {
-        status = configure_model_packets(&s->child, p, frontier);
+        status = configure_model_packets(&s->child, p, 0, frontier);
         if (status) return status;
         uint32_t motion=word(p+0x2b8);
         if(motion){
@@ -500,11 +507,200 @@ gh_effect_status gh_esp14_initialize_002f1d58(gh_esp14_instance *s,
     return GH_EFFECT_OK;
 }
 
+gh_effect_status gh_esp04_initialize_002e64b0(gh_esp14_instance *s,
+    const gh_esp14_bindings *b, const gh_effect_esp_view *v, unsigned slot,
+    uint32_t parameter_40, int *original, uint32_t *frontier)
+{
+    if (!frontier || !original) return GH_EFFECT_ARGUMENT;
+    *frontier = 0x2e64b0;
+    *original = 0;
+    if (!s || !b || !b->effects || !v || v->type != 4 || v->payload_size != 0x400 ||
+        v->record.size != 0x2f0 || !gh_effect_player_attachment_esp_is_bound(b->effects, v))
+        return GH_EFFECT_ARGUMENT;
+    uint8_t *p = v->payload;
+    const uint8_t *r = v->record.bytes;
+    if (!v->target120_known_null || word(p + 0x120) || word(r + 0x16c) != 2 ||
+        word(r + 0x170) || r[0x174] || r[0x12e] != 5 ||
+        word(r + 0x18c) || r[0x190] || r[0x191] || r[0x192])
+        return GH_EFFECT_UNSUPPORTED;
+    if (s->stage && (s->effects != b->effects || s->slot != slot || s->serial != v->serial))
+        return GH_EFFECT_ARGUMENT;
+    if (s->complete) {
+        *original = s->stage == 7;
+        *frontier = 0;
+        return GH_EFFECT_OK;
+    }
+    gh_effect_status status;
+    int found;
+    if (!s->stage) {
+        gh_effect_view impact;
+        *frontier = 0x306030;
+        status = gh_effect_est_at_00306030(b->effects, 0, 1, &impact);
+        if (status) return status;
+        if (!impact.bytes || impact.size < 16 || word(impact.bytes) != 0x00545345u)
+            return GH_EFFECT_UNSUPPORTED;
+        put(p + 0x2b4, r[0x12e]);
+        put(p + 0x2d4, word(r + 0x16c));
+        put(p + 0x2d8, word(r + 0x170));
+        store(p + 0x2c0, multiply(number(word(r + 0x13c)), 0.1f));
+        store(p + 0x2c4, multiply(number(word(r + 0x140)), 0.1f));
+        put(p + 0x2e8, parameter_40);
+        if ((int16_t)half(p + 0x238) < 1 && !r[0x293]) {
+            put_half(p + 0x238, 0xff);
+            put(p + 0x2dc, 4);
+        }
+        s->effects = b->effects;
+        s->slot = slot;
+        s->serial = v->serial;
+        s->stage = 1;
+    }
+    if (s->stage == 1) {
+        *frontier = 0x306c78;
+        status = gh_esp14_resource_00306c78(b->effects, word(p + 0x2b4), &s->resources, &found);
+        if (status) return status;
+        if (found) {
+            status = gh_esp14_model_create_0030fa98(&s->child, &b->model, &found, frontier);
+            if (status) return status;
+        }
+        if (!found) {
+            s->complete = 1;
+            *frontier = 0;
+            return GH_EFFECT_OK;
+        }
+        s->stage = 2;
+    }
+    if (s->stage == 2) {
+        status = gh_esp14_model_initialize_002f1b60(&s->child, &b->model, &s->resources,
+            &found, frontier);
+        if (status) return status;
+        if (!found) {
+            *frontier = 0x312708;
+            return GH_EFFECT_UNSUPPORTED;
+        }
+        s->stage = 3;
+    }
+    if (s->stage == 3) {
+        put(p + 0x11c, word(p + 0x11c) & ~0x40000000u);
+        status = model_pose(b, s, p, frontier);
+        if (status) return status;
+        status = configure_model_packets(&s->child, p, 1, frontier);
+        if (status) return status;
+        s->stage = 6;
+    }
+    status = gh_esp14_model_move_002b8850(&s->child, b->model.work, b->model.policy, frontier);
+    if (status) return status;
+    s->stage = 7;
+    s->complete = 1;
+    *original = 1;
+    return GH_EFFECT_OK;
+}
+
+static gh_effect_status move_esp04_ballistic_002e7098(const gh_esp14_bindings *b,
+    unsigned slot, const gh_effect_esp_view *v, uint32_t *frontier)
+{
+    uint8_t *p = v->payload;
+    float pos[4], velocity[3], hit_pos[4] = {0,0,0,1}, normal[4] = {0,0,0,1};
+    gh_effect_status status = gh_effect_node_world_position_native(b->effects,
+        0, slot, v->serial, pos, b->model.policy, frontier);
+    if (status) return status;
+    memcpy(velocity, p + 0x124, 12);
+    gh_scene_ray_request ray = {
+        .mask = 3, .flags = 0x24, .hit_position = hit_pos, .hit_normal = normal,
+        .segmented = 1
+    };
+    for (unsigned i = 0; i < 3; ++i) ray.from[i] = add(pos[i], -velocity[i]);
+    ray.from[3] = 1;
+    memcpy(ray.to, pos, 16);
+    if (ray.from[0] == pos[0] && ray.from[1] == pos[1] && ray.from[2] == pos[2])
+        return GH_EFFECT_OK;
+    if (!v->scene_actors) {
+        *frontier = 0x131e10;
+        return GH_EFFECT_ARGUMENT;
+    }
+    int hit = 0;
+    gh_scene_ray_status ray_status = gh_scene_ray_query_00131e10(v->scene_actors, &ray, &hit, frontier);
+    if (ray_status)
+        return ray_status == GH_RAY_ARGUMENT ? GH_EFFECT_ARGUMENT :
+            ray_status == GH_RAY_BOUNDS ? GH_EFFECT_BOUNDS : GH_EFFECT_UNSUPPORTED;
+    if (!hit) return GH_EFFECT_OK;
+    for (unsigned i = 0; i < 3; ++i) hit_pos[i] = add(hit_pos[i], multiply(normal[i], 0.1f));
+    if (v->parent_emitter >= 0) {
+        float parent[16], inverse[16], local[4];
+        status = gh_effect_node_world_matrix_native(b->effects, 1, (unsigned)v->parent_emitter,
+            v->parent_serial, parent, b->model.policy, frontier);
+        if (status) return status;
+        if (gh_actor_matrix_inverse_00147568(parent, inverse, b->model.policy, frontier))
+            return GH_EFFECT_UNSUPPORTED;
+        if (gh_scene_at_apply_world_001508d8(inverse, hit_pos, local))
+            return GH_EFFECT_UNSUPPORTED;
+        memcpy(hit_pos, local, 12);
+    }
+    status = gh_effect_node_set_position_native(b->effects, 0, slot, v->serial, hit_pos, frontier);
+    if (status) return status;
+    float dot = 0, length_squared = 0, reflection_squared = 0, reflected[3];
+    for (unsigned i = 0; i < 3; ++i) {
+        dot = add(dot, multiply(-velocity[i], normal[i]));
+        length_squared = add(length_squared, multiply(velocity[i], velocity[i]));
+    }
+    const float factor = multiply(sqrtf(length_squared), number(word(p + 0x2c4)));
+    for (unsigned i = 0; i < 3; ++i) {
+        reflected[i] = multiply(add(multiply(add(dot, dot), normal[i]), velocity[i]), factor);
+        reflection_squared = add(reflection_squared, multiply(reflected[i], reflected[i]));
+    }
+    if (sqrtf(reflection_squared) >= 0.05f) {
+        memcpy(p + 0x124, reflected, 12);
+        for (unsigned i = 0; i < 3; ++i)
+            store(p + 0x178 + 4*i, multiply(number(word(p + 0x178 + 4*i)), -0.8f));
+    } else {
+        put(p + 0x2dc, word(p + 0x2dc) | 1);
+        memset(p + 0x124, 0, 12);
+        memset(p + 0x134, 0, 12);
+        memset(p + 0x178, 0, 12);
+    }
+    return GH_EFFECT_OK;
+}
+
+gh_effect_status gh_esp04_move_after_base_002e6868(gh_esp14_instance *s,
+    const gh_esp14_bindings *b, const gh_effect_esp_view *v, int active, uint32_t *frontier)
+{
+    if (!frontier) return GH_EFFECT_ARGUMENT;
+    *frontier = 0x2e6868;
+    if (!s || !b || !v || v->type != 4 || v->serial != s->serial ||
+        !s->complete || !s->child.handle)
+        return GH_EFFECT_ARGUMENT;
+    gh_effect_esp_view current;
+    if (gh_effect_create_esp_at(b->effects, s->slot, &current) || current.serial != v->serial)
+        return GH_EFFECT_ARGUMENT;
+    uint8_t *p = current.payload;
+    if (!(word(p + 0x2dc) & 1)) {
+        if (word(p + 0x2d4) != 2 || word(p + 0x2d8)) return GH_EFFECT_UNSUPPORTED;
+        gh_effect_status status = move_esp04_ballistic_002e7098(b, s->slot, &current, frontier);
+        if (status) return status;
+    } else if (word(p + 0x2dc) & 4) {
+        p[0x24c] = p[0x2e5] ? p[0x2e5] : 30;
+        put(p + 0x2dc, word(p + 0x2dc) & ~4u);
+    }
+    uint8_t *child = s->child.object.view.bytes;
+    if (!active) {
+        put(child + 0x250, word(child + 0x250) | 2);
+    } else {
+        if (!current.target120_known_null || word(p + 0x120)) return GH_EFFECT_UNSUPPORTED;
+        gh_effect_status status = model_pose(b, s, p, frontier);
+        if (status) return status;
+        if (p[0x24c]) {
+            volatile float fade = (float)((int)p[0x24c] - (int)p[0x24d]) / (float)p[0x24c];
+            store(child + 0x24c, multiply(number(word(child + 0x24c)), fade));
+        }
+    }
+    *frontier = 0;
+    return GH_EFFECT_OK;
+}
+
 gh_effect_status gh_esp14_trans_002f2758(gh_esp14_instance *s,
     const gh_effect_esp_view *v, uint32_t *frontier) {
     if (!frontier) return GH_EFFECT_ARGUMENT;
-    *frontier = 0x2f2758;
-    if (!s || !v || v->type != 0x14 || v->serial != s->serial || !s->complete ||
+    *frontier = v && v->type == 4 ? 0x2e6af8 : 0x2f2758;
+    if (!s || !v || (v->type != 4 && v->type != 0x14) || v->serial != s->serial || !s->complete ||
         !v->payload || v->payload_size != 0x400) return GH_EFFECT_ARGUMENT;
     if (s->child.handle) {
         if (v->actor) {

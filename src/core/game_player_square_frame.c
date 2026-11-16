@@ -4,6 +4,7 @@
 #include "game_player_square_input.h"
 #include "game_player_idle_input.h"
 #include "game_player_root_delta.h"
+#include "game_player_idle_input.h"
 #include "id_layout_rotation.h"
 #include <string.h>
 #include <fenv.h>
@@ -149,7 +150,10 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
    uint32_t pc=0;
    gh_player_target_status e=gh_player_pickup_target_0012a610(b->target_bindings,&found,&pc);
    if(e)return target_error(s,pc?pc:0x12a610,e);
-   if(found.handle)return stop(s,0x1d07e8,GH_PLAYER_FRAME_UNSUPPORTED);
+   if(found.handle){
+    const gh_player_frame_status prompt=gh_game_player_pickup_prompt_002dbd40(f->idle_input_bindings,&found,&pc);
+    if(prompt)return stop(s,pc?pc:0x2dbd40,prompt);
+   }
    put(p+0x69c,0);
    e=gh_player_interact_target_0012b328(b->target_bindings,&found,&pc);
    if(e)return target_error(s,pc?pc:0x12b328,e);

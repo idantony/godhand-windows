@@ -17,6 +17,8 @@ gh_player_frame_status gh_player_idle_input_begin(gh_player_idle_input *);
 gh_player_frame_status gh_game_player_idle_cleanup_0012bfb8(gh_player_idle_input *);
 gh_player_frame_status gh_game_player_interact_prompt_002dc108(
  const gh_player_idle_input_bindings *,const gh_player_target *,uint32_t *frontier);
+gh_player_frame_status gh_game_player_pickup_prompt_002dbd40(
+ const gh_player_idle_input_bindings *,const gh_player_target *,uint32_t *frontier);
 gh_player_frame_status gh_game_player_input_cleanup_0012bfb8(const gh_player_frame_bindings *,uint32_t *frontier);
 gh_player_frame_status gh_game_player_idle_input_00123938(gh_player_idle_input *,const gh_player_idle_input_bindings *,int *original_return);
 /* Original 123938(player,1), ordinary evade cancel windows. */

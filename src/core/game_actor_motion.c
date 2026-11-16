@@ -93,7 +93,10 @@ unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *b)
     half(p+0x640)==2&&p[0x1650]==5&&
     ((p[0x2f4]==1&&((p[0x2f5]==8&&p[0x2f7]==2)||(p[0x2f5]==0xd&&!p[0x2f7])))||
      (p[0x2f4]==2&&p[0x2f5]==1&&!p[0x2f7]&&!half(p+0x54a)));
- return (blowaway||gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
+ const int east_rear=p&&root->size>0x1650&&b->work&&b->work->room==0x102&&
+    root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x202&&rd(p+0x564)==0x200&&
+    half(p+0x640)==3&&p[0x1650]==1&&p[0x2f4]==1&&!p[0x2f5]&&p[0x2f6]==2&&!p[0x2f7];
+ return (blowaway||east_rear||gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
 }
 
 int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_bits,
@@ -126,8 +129,12 @@ int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_
  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a)return 0;
  if(!p[0x2f4]&&p[0x2f5]==0x71&&!p[0x2f6]&&blend_frames==10&&!flags)
   return start_bits==0x41a00000u||start_bits==0x42700000u;
- return dependency==0x20a&&p[0x2f4]==1&&!p[0x2f5]&&p[0x2f6]==2&&
-    blend_frames==2&&flags==0x40u&&(!start_bits||start_bits==0x41200000u);
+ const int east_rear=dependency==0x200&&b->work&&b->work->room==0x102&&
+    b->model->root.size>0x17c3&&b->model->root.original_vtable214==0x4479c8&&
+    half(p+0x640)==3&&p[0x1650]==1&&!p[0x2f7]&&flags==(p[0x17c3]?0x42u:0x40u);
+ return (east_rear||(dependency==0x20a&&flags==0x40u))&&
+    p[0x2f4]==1&&!p[0x2f5]&&p[0x2f6]==2&&blend_frames==2&&
+    (!start_bits||start_bits==0x41200000u);
 }
 
 /* Actual 157568 seeds the root tracks at start - motion speed before the

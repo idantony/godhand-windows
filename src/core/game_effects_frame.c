@@ -391,7 +391,9 @@ static int esp_update_class(const gh_effect_esp_view *view)
  case 9: return vtable==0x44e8c8;
  case 0x12: return vtable==0x44eb70;
  case 0x13: return vtable==0x44ec68;
+ case 4: return vtable==GH_ESP04_VTABLE;
  case 0x14: return vtable==GH_ESP14_VTABLE;
+ case 0x15: return vtable==0x44ef08u;
  case 0x18: return vtable==0x44f078;
  case 0x1a: return vtable==0x44f270;
  case 0x20: return vtable==0x44f4f8;
@@ -399,9 +401,9 @@ static int esp_update_class(const gh_effect_esp_view *view)
  }
 }
 static gh_effect_status esps(gh_game_effects_frame*s){uint8_t*base=s->b.storage.esp;for(;s->esp_index<1024;s->esp_index++){unsigned i=s->esp_index,off=(i>>5)*4;uint32_t mask=UINT32_C(0x80000000)>>(i&31);if(!(w(base+0x100000+off)&mask))continue;if(w(base+0x100100+off)&mask){gh_effect_esp_view hidden;if(gh_effect_create_esp_at(s->b.storage.effects,i,&hidden))return fail(s,0x2fb0e8,GH_EFFECT_UNSUPPORTED);uint32_t f=0;gh_effect_status status;
- if(hidden.type==0x14){
+ if(hidden.type==4||hidden.type==0x14){
   const gh_esp14_provider *provider=s->b.model_effect;
-  if(!provider||!provider->destroy_hidden)return fail(s,0x2f27e8,GH_EFFECT_UNSUPPORTED);
+  if(!provider||!provider->destroy_hidden)return fail(s,hidden.type==4?0x2e6368:0x2f27e8,GH_EFFECT_UNSUPPORTED);
   status=provider->destroy_hidden(provider->context,&hidden,i,&f);
  }else status=gh_effect_create_esp_destroy_hidden_native(s->b.storage.effects,i,hidden.serial,&f);if(status)return fail(s,f?f:0x2fb0e8,status);put(base+0x100000+off,w(base+0x100000+off)&~mask);continue;}if(w(base+0x100080+off)&mask){put(base+0x100100+off,w(base+0x100100+off)|mask);continue;}gh_effect_esp_view v={0};if(gh_effect_create_esp_at(s->b.storage.effects,i,&v)||v.payload!=base+(size_t)i*0x400||!v.initialized||v.globals!=s->b.globals||!esp_update_class(&v))return fail(s,0x2fb2b0,GH_EFFECT_UNSUPPORTED);if(!s->esp_stage){/* Original2FB0E8 gate precedes VT+24=2FBE88; native pointer
  * tokens are resolved only through SAME creator metadata. */
@@ -414,12 +416,13 @@ static gh_effect_status esps(gh_game_effects_frame*s){uint8_t*base=s->b.storage.
  /* Original wrapper2FBE88 counts the call but skips virtualUpdate whenfrozen. */
  if(!s->esp_update.identity&&(w(v.payload+0x11c)&0x10000u)){s->esp_stage=0;continue;}gh_esp_update_bindings b={.storage=s->b.storage,.work=s->b.work,.globals=s->b.globals,.atan_coeff=s->b.atan_coeff,.policy=s->b.policy,.camera=s->b.camera,.display=s->b.display,
  .active_camera=s->b.init?s->b.init->active_camera:NULL};gh_effect_status status=gh_game_esp_update_002fbed0(&s->esp_update,&b,i,v.serial);if(status)return fail(s,s->esp_update.frontier,status);if(!s->esp_update.complete)return fail(s,0x2fbed0,GH_EFFECT_ARGUMENT);
- if(v.type==0x14){
+ if(v.type==4||v.type==0x14){
+  const uint32_t move_pc=v.type==4?0x2e6868:0x2f2250;
   const gh_esp14_provider *provider=s->b.model_effect;
-  if(!provider||!provider->move)return fail(s,0x2f2250,GH_EFFECT_UNSUPPORTED);
+  if(!provider||!provider->move)return fail(s,move_pc,GH_EFFECT_UNSUPPORTED);
   uint32_t frontier=0;
   status=provider->move(provider->context,&v,i,!s->esp_update.retired,&frontier);
-  if(status)return fail(s,frontier?frontier:0x2f2250,status);
+  if(status)return fail(s,frontier?frontier:move_pc,status);
  }
  s->esp_update=(gh_esp_update_call){0};s->esp_stage=0;}s->b.profile->effect_count_3c3bb8=s->esp_count;return GH_EFFECT_OK;}
 static gh_effect_status update_body(gh_game_effects_frame*s,const gh_effects_frame_bindings*b){
