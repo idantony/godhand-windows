@@ -61,6 +61,8 @@ gh_effect_status gh_effect_create_enemy_amplified_impact_begin_00306838(gh_effec
  const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_enemy_counter_impact_begin_00306838(gh_effect_create_call *,
  const uint32_t world_xyz[3]);
+gh_effect_status gh_effect_create_enemy_blowaway_begin_00306838(gh_effect_create_call *,
+   const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_call *,
  const uint32_t world_xyz[3]);
 /* Original 109928 part4 impact, bank0/index3, unit scale and zero Euler. */

@@ -101,11 +101,17 @@ armed encounter, and reaches the original Game Over menu after a lethal
 hit. Confirming Retry restores Gene to 100 HP in R100. A separate west-route
 replay reaches the original reinforcement area and lands two Triangle hits
 during its Devil encounter. A controller replay from a zero-defeat R102
-checkpoint records two of the six qualifying defeats with Gene at 33 HP.
+checkpoint records three of the six qualifying defeats. Two original scenery
+hits defeat the third enemy and the room records its death with Gene at 18 HP.
 A native CPU replay from an isolated R103 test save defeats four enemies
 across the first two arena waves and triggers the original third wave.
 Direct3D presents the escape counter and the movement that follows it in a
 separate R102 gate-ready replay through the original door into R103.
+
+An isolated R103 CPU test starts with the first three waves marked cleared.
+The original camera plays as the two protected bosses enter the arena, and
+their original health bars are submitted for drawing. The complete fourth-wave
+fight and the return through the arena exit remain in development.
 
 ### Verified progress
 
@@ -322,9 +328,13 @@ R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101
 
 从新游戏开始的东侧回放打破原版木门，在后续持械战斗中被击倒，并在原版 Game Over 界面
 确认重试，以 100 HP 回到 R100。西侧回放进入原版增援区域，在恶魔遭遇期间打出两次三角攻击。
-R102 从零击败存档开始，用手柄打出开门所需的六次击败中的两次，Gene 还剩 33 HP。
+R102 从零击败存档开始，经手柄回放完成开门所需的六次击败中的三次。第三名敌人受到两次
+原版场景机关攻击，房间记录其死亡时，Gene 还剩 18 HP。
 从独立的 R103 测试存档开始，原生 CPU 回放击倒前两波共四名敌人，并触发原版第三波。
 另一条从预置开门条件的 R102 检查点出发的 Direct3D 回放经过原版门，进入 R103 后呈现挣脱反击和摇杆移动。
+
+另一项独立 R103 CPU 测试预置前三波已清场。两名受保护的头目按原版镜头进入竞技场，
+原版头目血条已进入绘制流程。第四波完整战斗以及经竞技场出口返回仍在开发中。
 
 ### 已验证的进展
 

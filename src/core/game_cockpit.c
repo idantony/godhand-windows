@@ -32,7 +32,7 @@ struct gh_game_cockpit {
  gh_id_view gauge_texture[5],icon_texture;uint32_t frontier;int begun,ready,room_begun,room_ready;
  float radar_curve[5][2],radar_uv[7][4];uint8_t radar_color_curve[5][5],radar_pulse,frame_bound;
  unsigned update_stage,draw_stage,radar_stage,heat_stage;
- unsigned money_draw_index;
+ unsigned money_draw_index,middle_boss_draw_index;
  uint8_t money_draw_moved;
  unsigned radar_draw_pass,radar_draw_index;uint8_t radar_arrow_moved;gh_cockpit_fan heat_fan;
  gh_cockpit_gameplay_bindings gameplay;const gh_title_player_view *radar_player;
@@ -382,6 +382,13 @@ gh_id_error gh_game_cockpit_load_middle_boss_0013f330(gh_game_cockpit *s,
  return GH_ID_OK;
 }
 
+gh_id_error gh_game_cockpit_show_middle_boss(gh_game_cockpit *s)
+{
+ if(!s||s->middle_boss.stage!=8)return GH_ID_ARGUMENT;
+ w32(s,0x1f20,u32(s->fields+0x1f20)|0x80000000u);
+ return GH_ID_OK;
+}
+
 gh_id_error gh_game_cockpit_hide_middle_boss(gh_game_cockpit *s)
 {
  if(!s||s->middle_boss.stage!=8)return GH_ID_ARGUMENT;
@@ -417,6 +424,7 @@ static gh_id_error release_middle_boss(gh_game_cockpit *s,int compact)
  memset(s->middle_boss_actors,0,sizeof(s->middle_boss_actors));
  memset(s->middle_boss_bars,0,sizeof(s->middle_boss_bars));
  memset(s->middle_boss_draw_order,0,sizeof(s->middle_boss_draw_order));
+ s->middle_boss_draw_index=0;
  memset(s->middle_boss_names,0,sizeof(s->middle_boss_names));
  s->fields[0x21e8]=0;
  if(!s->middle_boss.stage)return GH_ID_OK;
@@ -1200,8 +1208,47 @@ gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit*s,const gh_boot_work*w
  if(u32(w+0x584)&0x20000){if(!c||!c->set_draw_order)return frame_stop(s,0x2c7850);uint32_t f=0;gh_id_error e=c->set_draw_order(c->context,6,5,&f);if(e){s->frontier=f?f:0x2c7850;return e;}}
  s->update_stage=s->gameplay_index=s->radar_move_stage=s->radar_move_index=0;s->gameplay_error=GH_ID_OK;s->gameplay_error_frontier=0;return GH_ID_OK;
 }
-static gh_id_error frame_trans(gh_game_cockpit*s,unsigned o,const gh_cockpit_frame_callbacks*c){
- if(!c||!c->trans)return frame_stop(s,0x2aac28);uint32_t f=0;gh_id_error e=c->trans(c->context,base(s,o),&f);if(e)s->frontier=f?f:0x2aac28;return e;
+static gh_id_error frame_trans_base(gh_game_cockpit *s,gh_id_base *drawing,
+ const gh_cockpit_frame_callbacks *c)
+{
+ if(!c||!c->trans)return frame_stop(s,0x2aac28);
+ uint32_t frontier=0;
+ gh_id_error status=c->trans(c->context,drawing,&frontier);
+ if(status)s->frontier=frontier?frontier:0x2aac28;
+ return status;
+}
+
+static gh_id_error frame_trans(gh_game_cockpit*s,unsigned o,const gh_cockpit_frame_callbacks*c)
+{
+ return frame_trans_base(s,base(s,o),c);
+}
+
+/* The selected boss bar is first in the original reverse-priority draw list. */
+static gh_id_error middle_boss_draw_00140638(gh_game_cockpit *s,const uint8_t *work,
+ const gh_cockpit_frame_callbacks *c)
+{
+ const unsigned widget=0x1e90;
+ if(!u32(s->fields+widget+0xa0)||(u32(work+0x584)&8)||
+    (u32(work+0x58c)&0x80000000u)||!(u32(s->fields+widget+0x90)&0x80000000u))
+  return GH_ID_OK;
+ if(!c)return frame_stop(s,0x1fc708);
+ if(c->save.bytes){
+  if(c->save.size<0xbbc)return frame_stop(s,0x1fc708);
+  if(c->save.bytes[0xbba]&1)return GH_ID_OK;
+ }
+
+ const unsigned count=s->fields[widget+0x358];
+ if(count>sizeof(s->middle_boss_draw_order)/sizeof(s->middle_boss_draw_order[0]))
+  return frame_stop(s,0x140638);
+ while(s->middle_boss_draw_index<count){
+  gh_id_base *drawing=s->middle_boss_draw_order[s->middle_boss_draw_index];
+  if(!drawing)break;
+  TRY(frame_trans_base(s,drawing,c));
+  ++s->middle_boss_draw_index;
+ }
+ TRY(frame_trans(s,widget,c));
+ s->middle_boss_draw_index=0;
+ return GH_ID_OK;
 }
 static gh_id_error radar_prefix(gh_game_cockpit*s){
  if(!s->frame_bound)return frame_stop(s,0x144368);unsigned frame=s->fields[0x6e0+0x5dc];if(frame>=16)return frame_stop(s,0x144368);
@@ -1547,7 +1594,10 @@ gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit*s,const gh_boot_work*
   if(u32(w+0x5e0)&0x2000000){if(u32(s->fields+0x15bc)!=0xffff)TRY(frame_trans(s,0x1520,c));return GH_ID_OK;}
   /* Four direct draw gates, in original order, before17registered slots. */
   if(u32(s->fields+0x1e54)&&u32(s->fields+0x1e5c))return frame_stop(s,0x13cf20);
-  if(u32(s->fields+0x1f30)&&(u32(s->fields+0x1f20)&0x80000000))return frame_stop(s,0x140638);
+  TRY(middle_boss_draw_00140638(s,w,c));
+  s->draw_stage=15;
+ }
+ if(s->draw_stage==15){
   if(u32(s->fields+0x22b4)&&u32(s->fields+0x22bc))return frame_stop(s,0x13eba0);
   unsigned kind=s->fields[0x1ad8];if(u32(s->fields+0x1ad0)&&kind>0&&kind<5)TRY(frame_trans(s,0x1a20,c));
   s->draw_stage=1;

@@ -13,9 +13,11 @@ static float add(float a,float b){volatile float x=a+b;return x;}
 static float sub(float a,float b){volatile float x=a-b;return x;}
 static float mul(float a,float b){volatile float x=a*b;return x;}
 static gh_actor_motion_status fail(uint32_t*f,uint32_t a){*f=a;return GH_ACTOR_MOTION_UNSUPPORTED;}
-static unsigned motion_flags_allowed(const gh_actor_model *model){
- if(gh_actor_motion_mirror_supported(model))return 0x42u;
+static unsigned motion_flags_allowed(const gh_actor_motion *s){
+ const gh_actor_model *model=s->b.model;
  const uint8_t *p=model->root.bytes;
+ const unsigned admitted=gh_actor_motion_begin_flags(&s->b)|(s->flags&2u);
+ if(admitted&2u)return admitted|8u;
  /* Original 24C3C8 sets 434 bit 8 for the ordinary frontal reaction.
   * Sample tests bit 2, sequence tests bit 20, and advance tests 1/4/10. */
  if(model->root.size<0x568)return 0x40u;
@@ -53,7 +55,7 @@ static gh_actor_motion_status track_value(gh_actor_motion*s,unsigned index,float
 }
 gh_actor_motion_status gh_actor_motion_sample_00158328(gh_actor_motion*s,gh_static_transform_policy policy,uint32_t*f){
  if(!s||!s->bound||!s->complete||!s->b.model||!f)return GH_ACTOR_MOTION_ARGUMENT;*f=0;gh_actor_model*m=s->b.model;uint8_t*p=m->root.bytes;
- if(policy!=GH_STATIC_BINARY32_REFERENCE||(half(p+0x434)&~motion_flags_allowed(m)))return fail(f,0x158328);if(m->part_count>255)return GH_ACTOR_MOTION_BOUNDS;
+ if(policy!=GH_STATIC_BINARY32_REFERENCE||(half(p+0x434)&~motion_flags_allowed(s)))return fail(f,0x158328);if(m->part_count>255)return GH_ACTOR_MOTION_BOUNDS;
  float time=rf(p+0x430),blend=rf(p+0x27c);if(!isfinite(time)||!isfinite(blend)||time<0||time>s->motion.frames-1)return fail(f,0x158328);
  int indices[256][9];for(unsigned i=0;i<256;i++)for(unsigned j=0;j<9;j++)indices[i][j]=-1;
  for(unsigned k=0;k<s->motion.count;k++){gh_motion_track t;if(gh_motion_track_at(&s->motion,k,&t))return GH_ACTOR_MOTION_BOUNDS;
@@ -105,7 +107,7 @@ gh_actor_motion_status gh_actor_motion_sample_00158328(gh_actor_motion*s,gh_stat
 }
 gh_actor_motion_status gh_actor_motion_step_00157c18(gh_actor_motion*s,float rate,gh_static_transform_policy policy,int*ended,uint32_t*f){
  if(!s||!s->bound||!s->complete||!s->b.model||!s->b.work||!ended||!f)return GH_ACTOR_MOTION_ARGUMENT;*f=0;*ended=0;uint8_t*p=s->b.model->root.bytes;uint32_t rate_bits;memcpy(&rate_bits,&rate,4);
- if(policy!=GH_STATIC_BINARY32_REFERENCE||(half(p+0x434)&~motion_flags_allowed(s->b.model))||!isfinite(rate)||rate<0)return fail(f,0x157c18);
+ if(policy!=GH_STATIC_BINARY32_REFERENCE||(half(p+0x434)&~motion_flags_allowed(s))||!isfinite(rate)||rate<0)return fail(f,0x157c18);
  if(s->step_stage&&rate_bits!=s->step_rate_bits)return GH_ACTOR_MOTION_BUSY;
  fenv_t env;if(feholdexcept(&env))return fail(f,0x157c18);if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return fail(f,0x157c18);}gh_actor_motion_status result=GH_ACTOR_MOTION_OK;
  if(!s->step_stage){result=gh_actor_motion_sequence_002c7fd0(s,rate,policy,f);if(result)goto finish;s->step_rate_bits=rate_bits;s->step_stage=4;}

@@ -5,8 +5,85 @@
 #include <string.h>
 #include <fenv.h>
 #include <math.h>
+#include <float.h>
 #define C(x) do{if(!(x)){fprintf(stderr,"line%d %s\n",__LINE__,#x);exit(1);}}while(0)
-int main(int argc,char**argv){C(argc==2);gh_disc*d;size_t i;gh_disc_entry file;C(!gh_disc_open(argv[1],&d)&&!gh_disc_find(d,"st1/r100.dat",&i)&&!gh_disc_entry_at(d,i,&file));
+/* Exact matrices from the native renderer at R103 tick 2979. The stream is
+ * the original room's SCR0 / mesh5 / stream0 from the supplied disc. */
+static void r103_near_plane_strip(const char *iso)
+{
+    static const uint32_t screen_bits[]={
+        0x4480fd9a,0x43a896cb,0xbfd900d8,0x3e2eedee,0xc33b6ca8,0xc477f02e,0x3f6880ec,0xbdbb6ca8,
+        0xc4ec4cee,0xc4f20b30,0x411bc6ad,0xbf7b2587,0xc833d372,0xc82a69a5,0x45e86f52,0xc2b208ee};
+    static const uint32_t clip_bits[]={
+        0x3fd5254b,0xbcf87077,0x3e2efcdb,0x3e2eedee,0,0xbff63915,0xbdbb7ca6,0xbdbb6ca8,
+        0x3e9475fe,0x3e3257ac,0xbf7b3af5,0xbf7b2587,0xc08f4940,0x4195553b,0xc2b27e8a,0xc2b208ee};
+    static const uint32_t projection_bits[]={
+        0x43ccccce,0,0,0,0,0x43d11110,0,0,0,0,0xc6fffe00,0,0x45000000,0x45000000,0x47000000,0x3f800000};
+    static const uint32_t uv_bits[]={0,0x3f1eaa00};
+    static const uint32_t color_bits[]={0x3f7eb852,0x3f7eb852,0x3f7eb852,0x3f800000};
+    static const uint32_t fog_bits[]={0x43990000,0xbf028f5c};
+    gh_disc *disc;
+    size_t entry_index;
+    gh_disc_entry entry;
+    C(!gh_disc_open(iso,&disc));
+    C(!gh_disc_find(disc,"st1/r103.dat",&entry_index)&&!gh_disc_entry_at(disc,entry_index,&entry));
+    uint8_t *data=malloc((size_t)entry.size);
+    C(data&&!gh_disc_read(disc,entry_index,0,data,(size_t)entry.size));
+    gh_disc_close(disc);
+
+    gh_bundle room,objects;
+    gh_bundle_entry scp,scr;
+    C(!gh_bundle_open(data,(size_t)entry.size,&room)&&!gh_bundle_find(&room,"SCP",0,&scp));
+    C(!gh_bundle_open(scp.bytes,scp.size,&objects)&&!gh_bundle_find(&objects,"SCR",0,&scr));
+    gh_scene_mesh_descriptor mesh={.node_flags=0x01001000};
+    C(!gh_model_open_scr(scr.bytes,scr.size,&mesh.script));
+    C(!gh_model_mesh_at(&mesh.script,5,&mesh.mesh));
+    gh_scene_mesh_stream stream;
+    C(!gh_scene_mesh_stream_at(&mesh,0,&stream));
+
+    gh_static_transform_inputs input;
+    float projection[16];
+    memcpy(input.screen_matrix,screen_bits,sizeof(screen_bits));
+    memcpy(input.clip_matrix,clip_bits,sizeof(clip_bits));
+    memcpy(projection,projection_bits,sizeof(projection_bits));
+    memcpy(input.uv_offset,uv_bits,sizeof(uv_bits));
+    memcpy(input.color_scale,color_bits,sizeof(color_bits));
+    memcpy(input.fog,fog_bits,sizeof(fog_bits));
+
+    size_t batch_count=0,total_triangles=0,unused_overflows=0;
+    C(gh_static_mesh_batch_count(&stream,&batch_count)==GH_STATIC_OK);
+    for(size_t batch=0;batch<batch_count;batch++){
+        gh_static_gs_vertex vertices[362];
+        uint32_t indices[864];
+        gh_static_packet_range ranges[37];
+        gh_static_packet_result result;
+        gh_static_transform_frontier frontier;
+        const gh_static_mesh_status status=gh_static_mesh_program10_packets(&stream,mesh.node_flags,
+            batch,&input,projection,GH_STATIC_BINARY32_REFERENCE,vertices,362,indices,864,ranges,37,&result,&frontier);
+        if(status)fprintf(stderr,"R103 tick2979 SCR0/mesh5 batch%zu status%d EE%08X VU%08X\n",
+            batch,status,frontier.ee_entry,frontier.vu_byte_pc);
+        C(status==GH_STATIC_OK&&result.packets>0);
+        total_triangles+=result.triangles;
+        const gh_static_packet_range *strip=&ranges[result.packets-1];
+        const gh_static_gs_vertex *strip_vertices=vertices+strip->vertex_offset;
+        for(size_t i=0;i<strip->vertices;i++){
+            const gh_static_gs_vertex *vertex=&strip_vertices[i];
+            C(isfinite(vertex->stq[0])&&isfinite(vertex->stq[1])&&isfinite(vertex->stq[2]));
+            unused_overflows+=vertex->clip_flags!=0&&
+                (fabsf(vertex->stq[0])==FLT_MAX||fabsf(vertex->stq[1])==FLT_MAX);
+        }
+        for(size_t i=0;i<strip->triangles*3;i++){
+            const uint32_t index=indices[strip->index_offset+i];
+            C(index<strip->vertices&&strip_vertices[index].clip_flags==0);
+        }
+    }
+    fprintf(stderr,"R103 tick2979 clipped strip: %zu unused overflowed vertices, %zu triangles\n",
+        unused_overflows,total_triangles);
+    C(unused_overflows>0);
+    free(data);
+}
+
+int main(int argc,char**argv){C(argc==2);r103_near_plane_strip(argv[1]);gh_disc*d;size_t i;gh_disc_entry file;C(!gh_disc_open(argv[1],&d)&&!gh_disc_find(d,"st1/r100.dat",&i)&&!gh_disc_entry_at(d,i,&file));
  uint8_t*room=malloc((size_t)file.size);C(room&&!gh_disc_read(d,i,0,room,(size_t)file.size));gh_bundle bundle,scp;gh_bundle_entry child,scr;
  C(!gh_bundle_open(room,(size_t)file.size,&bundle)&&!gh_bundle_find(&bundle,"SCP",0,&child)&&!gh_bundle_open(child.bytes,child.size,&scp)&&!gh_bundle_find(&scp,"SCR",0,&scr));
  long n=(long)scr.size;C(n==12640);uint8_t*b=malloc((size_t)n);C(b);memcpy(b,scr.bytes,(size_t)n);free(room);gh_disc_close(d);

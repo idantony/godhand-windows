@@ -120,7 +120,7 @@ static gh_effect_status initial_transform(gh_esp_create_call*c,uint8_t*p,const g
  if(w(r+4)&0x200000u){
   const int collateral=part==-1&&scale==1.0f&&!emitter->actor&&!emitter->selector&&
      !emitter->model&&!emitter->part&&
-     (gh_effect_core0c_radial_record_bound(c->b.storage.effects,emitter->record)||
+     (gh_effect_core_radial_record_bound(c->b.storage.effects,emitter->record)||
       gh_effect_ev04_radial_record_bound(c->b.storage.effects,emitter->record));
   uint32_t f=0;
   gh_effect_status status=(r[0x133]==9||r[0x133]==8||gh_effect_player_stun_row(emitter->record)||collateral)?
@@ -281,6 +281,10 @@ static gh_effect_status initialize_18(gh_esp_create_call*c,uint8_t*p,const uint8
     if(horizontal==-1&&vertical==0){
        if(!gh_effect_est_at_00306030(effects,0,3,&impact)&&impact.bytes&&
           impact.size>=16+2*0x2f0&&r==impact.bytes+16+0x2f0)
+          bound=1;
+       if(!bound&&!gh_effect_est_at_00306030(effects,0,0xf,&impact)&&impact.bytes&&
+          impact.size>=16+2*0x2f0&&w(impact.bytes+4)==2&&r==impact.bytes+16+0x2f0&&
+          w(r)==0x1e3e0010u&&w(r+4)==0x00800000u&&w(r+0x130)==0x18000001u)
           bound=1;
        if(!bound&&!gh_effect_est_at_00306030(effects,0x58,0x12,&impact)&&impact.bytes&&
           impact.size>=16+4*0x2f0&&r==impact.bytes+16+0x2f0)

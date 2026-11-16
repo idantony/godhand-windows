@@ -67,8 +67,9 @@ gh_effect_status gh_esp14_model_initialize_002f1b60(gh_esp14_model *,
 /* Native shutdown of the partial/ready child, distinct from 312708. */
 gh_effect_status gh_esp14_model_dispose(gh_esp14_model *);
 
-/* Original CORE0:C third EST row, matched by identity in the loaded bank. */
+/* Original positioned CORE 0:B and 0:C radial EST rows. */
 int gh_effect_core0c_radial_record_bound(const gh_game_effects *,gh_effect_view);
+int gh_effect_core_radial_record_bound(const gh_game_effects *,gh_effect_view);
 int gh_effect_ev04_radial_record_bound(const gh_game_effects *,gh_effect_view);
 
 /* Shared 300EF8 positive record flag 0x00200000. Inputs use the same staged

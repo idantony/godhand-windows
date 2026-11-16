@@ -90,6 +90,8 @@ typedef struct {gh_player_frame_bindings b;uint32_t stage,frontier;uint8_t bound
  gh_player_run_call run;
  uint8_t enemy_focus_fallback,enemy_focus_previous,script_wait_phase;
 } gh_game_player_frame;
+gh_player_frame_status gh_core_save_game_level_001fa010(gh_core_save_view,
+    const void *elf,size_t elf_bytes,unsigned *level);
 gh_player_frame_status gh_game_player_frame_00108ab0(gh_game_player_frame *,const gh_player_frame_bindings *);
 /* Actual126820 +five-entry button history leaves1268B0/1268F0. */
 gh_player_frame_status gh_game_player_button_history_00126820(gh_title_player_view *,const gh_boot_work *);

@@ -94,7 +94,7 @@ typedef struct {
     gh_om_box_item_drop death_drop;
     gh_enemy202_item_drop death_item_spawn;
     void *death_item_context;
-    gh_effect_create_call death_effect_create, ambient_light_effect, stun_effect_create;
+    gh_effect_create_call death_effect_create, ambient_light_effect, stun_effect_create, blowaway_effect;
     gh_scene_at_manager *scene_jump_at;
     gh_bundle scene_jump_room;
     gh_cloth_step_bindings spring_bindings;

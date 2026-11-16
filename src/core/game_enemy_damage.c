@@ -56,6 +56,13 @@ static int r103_arena_punch_target(const gh_enemy_actor *enemy,uint32_t dependen
         gh_enemy204_is_r103_entry(&enemy->entry.request,enemy->entry.b.work->room);
 }
 
+static int r103_arena_em0a(const gh_enemy_actor *enemy,const uint8_t *actor)
+{
+    return enemy->entry.b.work&&word(actor+0x564)==0x20a&&
+        enemy->entry.request.dependency_kind==0x20a&&
+        gh_enemy204_is_r103_entry(&enemy->entry.request,enemy->entry.b.work->room);
+}
+
 static int room_unarmed_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect)
 {
     const uint32_t dependency=word(actor+0x564);
@@ -69,16 +76,19 @@ static int r102_close_em00_punch(const gh_enemy_actor *enemy, const uint8_t *act
     return (stamp==0x10&&!actor[0x1650])||(stamp==0x0b&&actor[0x1650]==5);
 }
 
+static int r102_stamp2(const gh_enemy_actor *enemy, const uint8_t *actor) {
+    return enemy->entry.object.view.size > 0x1650 && word(actor + 0x564) == 0x20a && half(actor + 0x640) == 2 &&
+        actor[0x1650] == 5 && enemy->entry.b.work && enemy->entry.b.work->room == 0x102;
+}
+
 static int r102_stamp2_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
-    const gh_title_player_view *view=&enemy->entry.object.view;
-    return effect==7&&view->size>0x1650&&word(actor+0x564)==0x20a&&half(actor+0x640)==2&&
-        actor[0x1650]==5&&enemy->entry.b.work&&enemy->entry.b.work->room==0x102;
+    return effect == 7 && r102_stamp2(enemy, actor);
 }
 
 static int triangle_take_supported(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
     return effect==0x12&&(r100_stamp19(enemy,actor)||r100_stamp20(enemy,actor)||
         r100_stamp8(enemy,actor)||r100_at2_em03(enemy,actor)||
-        r103_arena_punch_target(enemy,word(actor+0x564)));
+        r103_arena_punch_target(enemy,word(actor+0x564))||r103_arena_em0a(enemy,actor));
 }
 
 gh_actor_motion_status gh_enemy202_damage_0028fb88(
@@ -90,7 +100,8 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
     gh_title_player_view *view = &enemy->entry.object.view;
     if (!view->bytes || view->size < 0x642 || view->original_vtable214 != 0x4479c8 ||
         word(view->bytes + 0x214) != view->original_vtable214 ||
-        (half(view->bytes+0x2fe)!=0x202&&!r103_arena_punch_target(enemy,word(view->bytes+0x564))) ||
+        (half(view->bytes+0x2fe)!=0x202&&!r103_arena_punch_target(enemy,word(view->bytes+0x564))&&
+         !r103_arena_em0a(enemy,view->bytes)) ||
         !enemy->hitareas.created[0])
         return stop(frontier, 0x20a5dc);
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
@@ -292,8 +303,7 @@ static gh_actor_motion_status environment_pressure_sound(gh_enemy202_hit_call *c
     return GH_ACTOR_MOTION_OK;
 }
 
-/* Scenery and the released EM00's secondary Give use the non-player
- * effect 2E path, with the environment flag set in 20A5DC's VT+AC call. */
+/* Original scenery Give paths set the environment flag in 20A5DC's VT+AC call. */
 static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     gh_enemy_actor *enemy, const gh_title_player_view *source, unsigned rank,
     uint32_t *frontier)
@@ -306,19 +316,24 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     enum { PRESSURE_CORE_SOUND = 40, PRESSURE_LOCAL_SOUND };
     const unsigned source_kind = half(source->bytes + 0x2fe);
     const uint32_t power = word(body->bytes + 0x4c);
+    const uint16_t effect = half(body->bytes + 0x46);
+    const int barrel = effect == 0x52 && source_kind == 0x310 && source->size >= 0x920 &&
+        r102_stamp2(enemy, p) && power == 80 && !half(body->bytes + 0x44) &&
+        !word(source->bytes + 0x2f4);
     const int arena_counter = r103_counter_collateral(enemy,source,power);
-    const uint32_t source_vtable = source_kind == 0x202 || arena_counter ?
-        0x4479c8u : scenery_hit_vtable(source_kind);
-    if (!source_vtable || source->original_vtable214 != source_vtable ||
+    const uint32_t source_vtable = barrel ? 0x423e48u :
+        source_kind == 0x202 || arena_counter ? 0x4479c8u : scenery_hit_vtable(source_kind);
+    if ((effect != 0x2e && !barrel) || !source_vtable || source->original_vtable214 != source_vtable ||
         word(source->bytes + 0x214) != source_vtable ||
         actor->original_vtable214 != 0x4479c8 || word(p + 0x214) != 0x4479c8 ||
-        (half(p + 0x2fe) != 0x202 && !arena_counter) || !scenery_reaction_enemy(enemy,p) ||
+        (half(p + 0x2fe) != 0x202 && !arena_counter) ||
+        (!barrel && !scenery_reaction_enemy(enemy,p)) ||
         word(body->bytes + 0x40) != UINT32_MAX)
         return stop(frontier, 0x20a178);
     if (source_kind == 0x202) {
         if (!r100_counter_collateral(enemy,p,source,power))
             return stop(frontier, 0x20a178);
-    } else if (power && !arena_counter) {
+    } else if (power && !arena_counter && !barrel) {
         return stop(frontier, 0x20a178);
     }
 
@@ -332,7 +347,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
             (drain > 0 && hp > 0))
             return stop(frontier, 0x20a178);
         if (cooldown > 0) return GH_ACTOR_MOTION_OK;
-        call->effect = 0x2e;
+        call->effect = effect;
         if (half(p + 0x17ca)) flags &= (uint16_t)~0x100u;
         if ((behavior & 0x40000u) || block > 0 || armor > 0) {
             flags |= 0x100;
@@ -354,6 +369,10 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
         put(p + 0x17a4, word(p + 0x17a4)+power);
         put(p + 0x17a8, word(p + 0x17a8)+power);
         put(p + 0x17b4, power);
+        if (barrel) {
+            put(p + 0x17c4, 1);
+            put_half(p + 0x17c8, 0x2a);
+        }
         put(p + 0x1940, 0xbd4ccccd);
         put(p + 0x54c, 0x41700000);
         put(p + 0x16dc, 0);
@@ -362,7 +381,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     if (call->phase == 1) {
         if ((p[0x17bd] == 1 && rank >= 3) || (p[0x17bd] == 2 && rank >= 2)) {
             uint32_t points = word(p + 0x16e8);
-            if ((int32_t)word(p + 0x16ec) < 1) points += 5;
+            if ((int32_t)word(p + 0x16ec) < 1) points += barrel ? 20 : 5;
             if ((int32_t)points > 200) {
                 const int em03 = word(p + 0x564) == 0x203 && half(p + 0x640) == 13 &&
                     !p[0x1650] && enemy->entry.b.work && enemy->entry.b.work->room == 0x101;
@@ -398,13 +417,43 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
         /* 20B3D4 branches away from the ordinary route only for the
          * outer1/selector16 reaction before phase4. Variant is not read. */
         const int early_reaction = p[0x2f4] == 1 && p[0x2f5] == 0x16 && p[0x2f6] < 4;
-        if ((status & 0x80040u) || (behavior & 0x806020u) ||
-            (flags & 0x2cu) || early_reaction)
+        const int grounded_barrel=barrel&&(flags&8u)&&p[0x2f4]==1&&p[0x2f5]==8&&
+            p[0x2f6]==3&&p[0x2f7]==2;
+        if ((status & (grounded_barrel?0x180040u:0x80040u)) || (behavior & 0x806020u) ||
+            (flags & (grounded_barrel?0x24u:0x2cu)) || early_reaction)
             return stop(frontier, 0x20b394);
 
-        /* 4316D4 maps effect 2E at zero HP to original 20BB80.
-         * The ground bit chooses the ordinary death selector. */
-        if(power&&!half(p+0x54a)){
+        if(grounded_barrel){
+            /* 430FC8 selects one MT & 7 for EM0A's grounded response.
+             * 20B668 adds a separate rank3+ draw before the Heat gate. */
+            uint32_t random;
+            gh_game_mt mt=body->state->random;
+            if(gh_game_mt_next_0030f348(&mt,&random))
+                return stop(frontier,0x31cfe0);
+            int counter=(random&7u)==0;
+            if(rank>=3){
+                if(gh_game_mt_next_0030f348(&mt,&random))
+                    return stop(frontier,0x31cfe0);
+                if(random%3u==0)counter=1;
+            }
+            body->state->random=mt;
+            if(counter&&!body->state->heat[0x10]&&(int32_t)word(p+0x17ac)>0&&number(p+0x17cc)<=0){
+                const uint16_t maximum=half(p+0x548);
+                const uint32_t before=word(p+0x17ac);
+                put_half(p+0x54a,(uint16_t)(before<maximum?before:maximum));
+                p[0x1866]=0;
+                put(p+0x54c,0x40a00000u);
+                put(p+0x17c4,UINT32_MAX);
+                put_half(p+0x17c8,0);
+                p[0x2f4]=1;p[0x2f5]=0x14;p[0x2f6]=p[0x2f7]=0;
+                call->phase=5;
+                return GH_ACTOR_MOTION_OK;
+            }
+        }
+
+        /* Dead 2E uses 20BB80 while dead 52 uses the 20BC44 knockdown. */
+        const int dead=!half(p+0x54a);
+        if(power&&dead&&!barrel){
             p[0x2f4]=2;
             p[0x2f5]=(flags&8u)?1:0;
             p[0x2f6]=p[0x2f7]=0;
@@ -413,17 +462,18 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
             return GH_ACTOR_MOTION_OK;
         }
 
-        /* 20D138 returns zero. For 2E, 20CAC8 can still draw once
-         * on +17BC == 1 before rejecting. The other probes reject
-         * 2E without drawing from the shared random owner. */
-        if (p[0x17bc] == 1) {
+        /* For original 2E/52, only 20CAC8 draws once for selector 1.
+         * The remaining counter tables reject these effects before RNG. */
+        if ((!barrel || !dead) && p[0x17bc] == 1) {
             uint32_t random;
             if (gh_game_mt_next_0030f348(&body->state->random, &random))
                 return stop(frontier, 0x31cfe0);
         }
         p[0x2f4] = 1;
-        p[0x2f5] = 0x11;
-        p[0x2f6] = p[0x2f7] = 0;
+        /* Live kind52 selects 20C74C, the variant2 knockdown. */
+        p[0x2f5] = barrel ? 8 : 0x11;
+        p[0x2f6] = 0;
+        p[0x2f7] = barrel ? 2 : 0;
         call->reacted = 1;
         call->phase = 5;
     }
@@ -596,9 +646,9 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     if (!call->phase && number(p + 0x54c) > 0.0f)
         return GH_ACTOR_MOTION_OK;
 
-    if (half(body->bytes + 0x46) == 0x2e)
-        return environment_hit(call, enemy, source, rank, frontier);
     const uint16_t effect = half(body->bytes + 0x46);
+    if (effect == 0x2e || effect == 0x52)
+        return environment_hit(call, enemy, source, rank, frontier);
     if(effect==0x36)return r101_box_hit(call,enemy,source,rank,frontier);
     const int triangle = triangle_take_supported(enemy, p, effect);
     if (source != player || half(player->bytes + 0x2fe) != 0x100 || (effect != 7 && !triangle))
@@ -956,7 +1006,7 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
          !r102_close_em00_punch(enemy, p, effect) && !r102_stamp2_punch(enemy, p, effect)))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
-    if (triangle) {
+    if (triangle || effect == 0x52) {
         uint32_t random;
         if (gh_game_mt_next_0030f348(&enemy->entry.b.init->random, &random))
             return stop(frontier, 0x31cfe0);
@@ -1036,8 +1086,30 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     const unsigned costume = manager_active ? 0 : gh_core_save_costume(save);
     if (costume == 1 || costume == 3 || costume == 5 || costume == 7)
         return stop(frontier, 0x271e58);
+    gh_actor_motion_status position_status=gh_enemy202_impact_position_00271518(enemy,call->impact.position,frontier);
+    if(position_status)return position_status;
+    call->impact.bank=manager_active ? 0 : 0x58;
+    call->impact.index=manager_active ? 0xc : amplified ? 0x12 : 0x10;
+    call->impact.scale=1;
+    call->impact.mode=-1;
+    /* 292F08 tests the original actor byte before the unbound effect. */
+    if (amplified && p[0x538]) call->impact.index = 0;
+    call->phase = 10;
+    return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy202_impact_position_00271518(gh_enemy_actor *enemy,
+    float result[4], uint32_t *frontier)
+{
+    if(!frontier)return GH_ACTOR_MOTION_ARGUMENT;
+    *frontier=0;
+    if(!enemy||!result||!enemy->entry.b.init)return GH_ACTOR_MOTION_ARGUMENT;
+    const gh_title_player_view *actor=&enemy->entry.object.view;
+    const gh_hitarea_object *body=&enemy->hitareas.units[0];
+    gh_game_init_state *init=enemy->entry.b.init;
+    const uint8_t *p=actor->bytes;
     const uintptr_t base = (uintptr_t)p, origin = (uintptr_t)actor->alias_f0;
-    if (origin < base || origin - base > actor->size - 16)
+    if (!p||actor->size<16||!body->bytes||body->size<0x2c||origin < base || origin - base > actor->size - 16)
         return stop(frontier, 0x271518);
 
     const float x = number(actor->alias_f0), z = number(actor->alias_f0 + 8);
@@ -1085,14 +1157,9 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     volatile float out_x = x + world[0], out_z = z + world[2];
     if (fesetenv(&saved) || !isfinite(out_x) || !isfinite(out_z))
         return stop(frontier, 0x30a2b0);
-    call->impact = (gh_enemy202_impact_request){
-        .position = {out_x, hit_y, out_z, 1.0f},
-        .bank = manager_active ? 0 : 0x58,
-        .index = manager_active ? 0xc : amplified ? 0x12 : 0x10,
-        .scale = 1.0f, .mode = -1,
-    };
-    /* 292F08 tests the original actor byte before the unbound effect. */
-    if (amplified && p[0x538]) call->impact.index = 0;
-    call->phase = 10;
+    result[0]=out_x;
+    result[1]=hit_y;
+    result[2]=out_z;
+    result[3]=1;
     return GH_ACTOR_MOTION_OK;
 }

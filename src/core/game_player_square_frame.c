@@ -195,7 +195,9 @@ static gh_player_frame_status body(gh_player_square_frame *s,const gh_player_squ
   gh_hitarea_status e=gh_player_attack_recent_0010b2e8(&f->player->view,f->give_objects,&recent,&pc);
   if(e)return stop(s,pc?pc:0x10b2e8,GH_PLAYER_FRAME_CALLEE);
   if(recent&&word(p+0x5e8)==0x5d)return stop(s,0x2cba48,GH_PLAYER_FRAME_UNSUPPORTED);
-  if(p[0x2f6]>1||(p[0x2f6]&&word(p+0x5e8)!=0&&word(p+0x5e8)!=29))return stop(s,0x10d3a8,GH_PLAYER_FRAME_UNSUPPORTED);
+  const uint32_t skill=word(p+0x5e8);
+  if(p[0x2f6]>1||(p[0x2f6]&&skill!=0&&skill!=4&&skill!=10&&skill!=13&&skill!=29))
+   return stop(s,0x10d3a8,GH_PLAYER_FRAME_UNSUPPORTED);
   s->stage=p[0x2f6]?5:2;
  }
  if(s->stage==2){
@@ -314,7 +316,7 @@ static gh_player_frame_status body(gh_player_square_frame *s,const gh_player_squ
    if(e)return stop(s,pc?pc:0x10a438,e);
    sh(p+0x5e6,1);
   }else if(half(p+0x5e6)){
-   /* The decoded skill0 and skill29 tables' remaining four entries are zero. */
+   /* The supported skills' original secondary power rows are zero. */
    unsigned i=half(p+0x5e4)+1u;if(i>4)i=4;
    sh(p+0x5e4,(uint16_t)i);put(p+0x1668,0);put(p+0x166c,0);sh(p+0x5e6,0);
   }

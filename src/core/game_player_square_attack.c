@@ -1,4 +1,4 @@
-/* Original first normal combo call, decoded against patched SLUS_215.03. */
+/* Original default combo calls, decoded against patched SLUS_215.03. */
 #include "game_player_square_attack.h"
 #include "game_actor_motion.h"
 #include <string.h>
@@ -59,17 +59,21 @@ gh_player_frame_status gh_player_square_attack_begin_00126918(
   unsigned set=half(p+0x5e2),slot=half(p+0x5e0);
   if(slot>=combo_limit(b->save,set))set=slot=0;
   const uint32_t skill=combo_skill(b->save,set,slot);
+  static const struct { uint8_t skill; uint16_t motion_row; uint32_t entry; } square[]={
+   {0,0xe0,0x126a58},{4,0x84,0x126bcc},{10,0xf0,0x126e40},{13,0x3f0,0x126f38}
+  };
   const int triangle=set==1&&!slot&&skill==29;
-  if(!triangle&&(set||slot||skill))
+  if(!triangle&&(set||slot>=sizeof(square)/sizeof(square[0])||skill!=square[slot].skill))
    return stop(s,0x1269e0,GH_PLAYER_FRAME_UNSUPPORTED);
+  const uint32_t expected=triangle?0x12749c:square[slot].entry;
+  const size_t motion_row=triangle?0x110:square[slot].motion_row;
   uint32_t dispatch,power;
-  if(!elf_word(b,0x41cb80+skill*4,&dispatch)||dispatch!=(triangle?0x12749c:0x126a58)||
+  if(!elf_word(b,0x41cb80+skill*4,&dispatch)||dispatch!=expected||
      !elf_word(b,0x3bc7d0+skill*0x14,&power))
    return stop(s,0x126a50,GH_PLAYER_FRAME_UNSUPPORTED);
-  if(!b->resource||b->resource_bytes<(triangle?0x120u:0xf0u))
+  if(!b->resource||b->resource_bytes<motion_row+0x10u)
    return stop(s,dispatch,GH_PLAYER_FRAME_ARGUMENT);
   unsigned variant=half(p+0x5f2);
-  const size_t motion_row=triangle?0x110:0xe0;
   const size_t sequence_row=motion_row+(variant<3?8:variant==3?12:4);
   size_t motion=word(b->resource+motion_row);
   size_t sequence=word(b->resource+sequence_row);
@@ -81,7 +85,8 @@ gh_player_frame_status gh_player_square_attack_begin_00126918(
   s->bindings=b;s->skill=(uint8_t)skill;
   s->motion=(gh_player_motion_request){.player=b->player,.work=b->work,
    .model=b->model,.resource=b->resource,.resource_bytes=b->resource_bytes,
-   .motion_offset=motion,.sequence_candidate_offset=sequence,.blend_frames=triangle||variant==3?5:7,
+   .motion_offset=motion,.sequence_candidate_offset=sequence,.start_frame_bits=skill==13?0x3f800000u:0,
+   .blend_frames=triangle||variant==3?5:7,
    .flags=0x40,.release_previous_sequence=1,.rate=b->rate};
   sh(p+0x5e2,(uint16_t)set);sh(p+0x5e0,(uint16_t)slot);
   sh(p+0x5e4,0);sh(p+0x5e6,0);
@@ -89,7 +94,7 @@ gh_player_frame_status gh_player_square_attack_begin_00126918(
   /* The two original 10A408/10A420 calls configure both sides. */
   for(unsigned i=0;i<2;i++){
    put(p+0x1660+i*4,(uint32_t)triangle);put(p+0x1668+i*4,power);
-   put(p+0x1670+i*4,triangle?0x12u:7u);put(p+0x1678+i*4,0);sh(p+0x1680+i*2,triangle?10:100);
+   put(p+0x1670+i*4,triangle?0x12u:7u);put(p+0x1678+i*4,0);sh(p+0x1680+i*2,triangle||skill==13?10:100);
   }
   s->stage=1;
  }

@@ -77,7 +77,7 @@ static uint32_t class_vtable(const gh_om_object *actor)
  if(om_kind(actor)==0x41c)return 0x421bb8;
  if(weapon_destructor(om_kind(actor)))return 0x42aa98;
  if(actor->runtime_created&&om_kind(actor)==0x3be)return 0x4290c8;
- if(actor->runtime_created&&(om_kind(actor)==0x3c4||om_kind(actor)==0x3d6))return 0x429b88;
+ if(actor->runtime_created&&(om_kind(actor)==0x3c4||om_kind(actor)==0x3d0||om_kind(actor)==0x3d6))return 0x429b88;
  if(actor->runtime_created&&om_kind(actor)==0x3eb)return 0x4296f0;
  return 0;
 }
@@ -97,7 +97,7 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
  if(actor->runtime_created&&om_kind(actor)==0x3be)
   return actor->view.size==0x630&&((gh_om3be_state *)actor->initialization)->stage==9?actor:NULL;
  if(actor->runtime_created&&!weapon_destructor(om_kind(actor))){
-  if(om_kind(actor)==0x3c4||om_kind(actor)==0x3d6)
+  if(om_kind(actor)==0x3c4||om_kind(actor)==0x3d0||om_kind(actor)==0x3d6)
    return actor->view.size>=0x690&&actor->initialization->stage==4?actor:NULL;
   if(om_kind(actor)==0x3da)
    return actor->view.size>=0x690&&actor->initialization->stage==4&&word(actor->view.bytes+0x560)==0x905?actor:NULL;
@@ -223,7 +223,7 @@ uint32_t gh_om_retire_entry(uint32_t kind)
  case 0x41c:return 0x17b8f0;
  case 0x363:case 0x376:case 0x382:return 0x1c91b0;
  case 0x3be:return 0x1b9030;
- case 0x3c4:case 0x3d6:return 0x1c00c8;
+ case 0x3c4:case 0x3d0:case 0x3d6:return 0x1c00c8;
  case 0x3da:return 0x1c00c8;
  case 0x3eb:return 0x1bf4b8;
  default:return 0;
@@ -345,7 +345,7 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
   case 0x304:box_field=0x604;break;
   case 0x30a:case 0x33f:case 0x309:case 0x331:box_field=0x650;break;
   case 0x310:box_field=0x654;break;
-  case 0x3c4:case 0x3d6:box_field=0x680;break;
+  case 0x3c4:case 0x3d0:case 0x3d6:box_field=0x680;break;
   default:break;
   }
   if(om_kind(object)==0x41c){
@@ -459,7 +459,7 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
     *a_created=0;
    }
   }else if(om_kind(object)==0x353||om_kind(object)==0x356||om_kind(object)==0x3eb||
-           om_kind(object)==0x311||om_kind(object)==0x3c4||om_kind(object)==0x3d6||
+           om_kind(object)==0x311||om_kind(object)==0x3c4||om_kind(object)==0x3d0||om_kind(object)==0x3d6||
            om_kind(object)==0x3da){
    /* These classes reach 1B6F38 without a remaining derived HitArea. */
   }else if(om_kind(object)==0x35d){
@@ -630,7 +630,7 @@ gh_room_pool_status gh_om_destroy_detached_mode3(gh_om300_full_retirement *state
   if(!object||(om_kind(object)!=0x300&&om_kind(object)!=0x304&&om_kind(object)!=0x305&&om_kind(object)!=0x30a&&
       om_kind(object)!=0x33f&&
      om_kind(object)!=0x313&&om_kind(object)!=0x324&&om_kind(object)!=0x326&&om_kind(object)!=0x356&&om_kind(object)!=0x363&&
-     om_kind(object)!=0x376&&om_kind(object)!=0x3be&&om_kind(object)!=0x3c4&&om_kind(object)!=0x3d6)||
+     om_kind(object)!=0x376&&om_kind(object)!=0x3be&&om_kind(object)!=0x3c4&&om_kind(object)!=0x3d0&&om_kind(object)!=0x3d6)||
      object->view.bytes!=actor->bytes||object->view.size!=actor->size||
      word(actor->bytes+0x214)!=class_vtable(object)||original!=gh_om_retire_entry(om_kind(object))||
      (word(actor->bytes+0x250)&0xa0000000u)!=0xa0000000u)

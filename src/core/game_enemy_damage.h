@@ -39,6 +39,7 @@ gh_actor_motion_status gh_enemy202_hit_rank_points_001fa280(
 gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *, uint32_t *frontier);
 /* Position and stage the original unattached 306838 request. The effect
  * consumer owns allocation. A pending request keeps the three MT draws. */
+gh_actor_motion_status gh_enemy202_impact_position_00271518(gh_enemy_actor *, float result[4], uint32_t *frontier);
 gh_actor_motion_status gh_enemy202_impact_00271810(gh_enemy202_hit_call *,
     gh_enemy_actor *, const gh_title_player_view *, uint32_t *frontier);
 #ifdef __cplusplus

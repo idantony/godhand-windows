@@ -39,6 +39,7 @@ gh_id_error gh_game_cockpit_set_ticket_visible(gh_game_cockpit *,int visible);
 gh_id_error gh_game_cockpit_abort_ticket(gh_game_cockpit *);
 /* Original R103 stage-1 arena HUD data. The room initially keeps it disabled. */
 gh_id_error gh_game_cockpit_load_middle_boss_0013f330(gh_game_cockpit *,gh_id_state *,gh_dvd_jobs *,gh_heap *);
+gh_id_error gh_game_cockpit_show_middle_boss(gh_game_cockpit *);
 gh_id_error gh_game_cockpit_hide_middle_boss(gh_game_cockpit *);
 gh_id_error gh_game_cockpit_register_middle_boss_0013f558(gh_game_cockpit *,const gh_boot_work *,const gh_title_player_view *);
 void gh_game_cockpit_forget_middle_boss(gh_game_cockpit *,const gh_title_player_view *);

@@ -46,13 +46,18 @@ static gh_static_mesh_status calculate(const gh_scene_mesh_stream*s,uint32_t fla
    screen_history[i][j]=mul(screen[j],q);
    if(!gh_static_vu_ftoi4(screen_history[i][j],v.xyz_fixed4+j))return unsupported(f,0x0290);
   }
-  for(unsigned j=0;j<2;j++){
-   float uv=add(divide((float)raw.uv[j],4096.0f),in->uv_offset[j]);
-   v.stq[j]=mul(uv,q);
-   if(!isfinite(v.stq[j]))return unsupported(f,0x0260);
-  }
   v.stq[2]=q;memcpy(source[i].clip,clip,sizeof(clip));
-  for(unsigned j=0;j<2;j++)source[i].uv[j]=add(divide((float)raw.uv[j],4096.0f),in->uv_offset[j]);
+  for(unsigned j=0;j<2;j++){
+   source[i].uv[j]=add(divide((float)raw.uv[j],4096.0f),in->uv_offset[j]);
+   v.stq[j]=mul(source[i].uv[j],q);
+   if(!isfinite(v.stq[j])){
+    if(!v.clip_flags||isnan(v.stq[j]))return unsupported(f,0x0260);
+    /* 0308 routes every triangle using this vertex to the clipper or
+     * rejection. Fans use pre-Q UV above. Keep the unused strip ST finite
+     * for the host vertex upload without changing any rasterized STQ. */
+    v.stq[j]=copysignf(FLT_MAX,v.stq[j]);
+   }
+  }
   for(unsigned j=0;j<4;j++){
    float color=mul((float)raw.color[j],in->color_scale[j]);
    if(!isfinite(color)||color<0.0f)return unsupported(f,0x0218);

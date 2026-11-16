@@ -83,12 +83,29 @@ int gh_actor_motion_mirror_supported(const gh_actor_model *model){
  const uint8_t *p=model->root.bytes;
  return half(p+0x2fe)==0x220&&rd(p+0x564)==0x220&&half(p+0x640)==0xff;
 }
+
+unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *b)
+{
+ const gh_title_player_view *root=&b->model->root;
+ const uint8_t *p=root->bytes;
+ const int blowaway=p&&root->size>0x1650&&b->work&&b->work->room==0x102&&
+    root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x202&&rd(p+0x564)==0x20a&&
+    half(p+0x640)==2&&p[0x1650]==5&&
+    ((p[0x2f4]==1&&((p[0x2f5]==8&&p[0x2f7]==2)||(p[0x2f5]==0xd&&!p[0x2f7])))||
+     (p[0x2f4]==2&&p[0x2f5]==1&&!p[0x2f7]&&!half(p+0x54a)));
+ return (blowaway||gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
+}
+
 int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_bits,
  uint32_t blend_frames,uint16_t flags){
  if(!b||!b->model||!b->model->root.bytes||b->model->root.size<0x5ac)return 0;
  const uint8_t *p=b->model->root.bytes;
  const uint16_t kind=half(p+0x2fe);
  const uint32_t dependency=rd(p+0x564);
+ if(kind==0x100&&b->model->root.original_vtable214==0x41d220&&b->model->root.size>=0x5e4&&
+    half(p+0x2f4)==0x0b00&&!p[0x2f6]&&half(p+0x5e0)==3&&!half(p+0x5e2)&&
+    flags==0x40u&&(blend_frames==5||blend_frames==7))
+  return start_bits==0x3f800000u; /* 126F54 sets skill13 start to frame one. */
  if(kind==0x204&&b->work&&b->work->room==0x103&&b->model->root.size>=0x1651&&
     !p[0x2f4]&&!p[0x2f6]&&!flags){
   const unsigned stamp=half(p+0x640);
@@ -158,8 +175,7 @@ static gh_actor_motion_status begin_motion(gh_actor_motion*s,const gh_actor_moti
  if(b->model->root.size<required)return GH_ACTOR_MOTION_ARGUMENT;
  uint8_t*p=b->model->root.bytes;
  const int seek=gh_actor_motion_seek_start(b,start_frame_bits,blend_frames,flags);
- const unsigned allowed=gh_actor_motion_mirror_supported(b->model)?0x42u:0x40u;
- if((flags&~allowed)||(start_frame_bits&&!seek)||(flags&&!blend_frames))return fail(s,0x157568,flags?flags:start_frame_bits);
+ if((flags&~gh_actor_motion_begin_flags(b))||(start_frame_bits&&!seek)||(flags&&!blend_frames))return fail(s,0x157568,flags?flags:start_frame_bits);
  if(blend_frames&&b->model->native_identity!=b->model)return GH_ACTOR_MOTION_ARGUMENT;
  if(blend_frames&&(!b->ik_globals||!b->ik_globals->initialized||(b->model->blend_globals&&b->model->blend_globals!=b->ik_globals)))return fail(s,0x156d70,0);
  if(s->bound&&(s->b.model!=b->model||s->b.resource!=b->resource||s->b.work!=b->work||s->motion.offset!=motion||s->sequence_offset!=sequence||s->flags!=flags||s->start_frame_bits!=start_frame_bits||s->blend_frames!=blend_frames))return GH_ACTOR_MOTION_BUSY;

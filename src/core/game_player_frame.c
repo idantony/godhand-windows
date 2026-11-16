@@ -81,18 +81,27 @@ static int damage_rank_thresholds(const gh_player_frame_bindings *b,int32_t thre
  return 1;
 }
 
+gh_player_frame_status gh_core_save_game_level_001fa010(gh_core_save_view save,
+    const void *elf,size_t elf_bytes,unsigned *level)
+{
+ if(!level)return GH_PLAYER_FRAME_ARGUMENT;
+ *level=0;
+ if(!save.bytes)return GH_PLAYER_FRAME_OK;
+ const gh_player_frame_bindings asset={.elf=elf,.elf_bytes=elf_bytes};
+ int32_t thresholds[5];
+ if(save.size<0x1e||!damage_rank_thresholds(&asset,thresholds))return GH_PLAYER_FRAME_ARGUMENT;
+ *level=damage_rank_001fa010((int16_t)half(save.bytes+0x1c),thresholds);
+ return GH_PLAYER_FRAME_OK;
+}
+
 static gh_player_frame_status damage_hp_0012c0f8(gh_game_player_frame *s,int32_t power)
 {
  const gh_player_frame_bindings *b=&s->b;
  uint8_t *p=b->player->view.bytes,*heat=b->init->heat;
  const gh_core_save_view save=b->save;
- unsigned rank=0;
- if(save.bytes){
-  int32_t thresholds[5];
-  if(save.size<0x20||!damage_rank_thresholds(b,thresholds))
-   return fail(s,0x1fa010,GH_PLAYER_FRAME_ARGUMENT);
-  rank=damage_rank_001fa010((int16_t)half(save.bytes+0x1c),thresholds);
- }
+ unsigned rank;
+ if((save.bytes&&save.size<0x20)||gh_core_save_game_level_001fa010(save,b->elf,b->elf_bytes,&rank))
+  return fail(s,0x1fa010,GH_PLAYER_FRAME_ARGUMENT);
  const unsigned difficulty=save.bytes?save.bytes[0x1f]:1;
  const int easy=save.bytes&&!difficulty&&!(w(save.bytes+0x14)&0x4000000u);
  const uint16_t continues=(uint16_t)b->init->continue_count;
@@ -812,8 +821,10 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      half(source->bytes+0x2f4)==0x1500&&source->bytes[0x2f6]==1&&
      override_bank==UINT32_MAX&&!half(take+0x44);
    const int arena_short=s->pending_damage_kind==0x37&&s->pending_damage==20&&!w(p+0x160c);
-   const int arena_fall=s->pending_damage_kind==0x3e&&w(take+0x4c)==30&&
-     s->pending_damage==23&&w(p+0x160c)==7;
+   /* Original EM03 selector15 uses power30 far and power60 close. */
+   const int arena_fall=s->pending_damage_kind==0x3e&&
+     ((w(take+0x4c)==30&&s->pending_damage==23&&w(p+0x160c)==7)||
+      (w(take+0x4c)==60&&s->pending_damage==45&&w(p+0x160c)==15));
    const int arena_em00=dependency==0x200&&(stamp==2||stamp==3)&&arena_short;
    const int arena_em03=dependency==0x203&&(stamp==6||stamp==7)&&(arena_short||arena_fall);
    const int arena_hit=arena_attack&&(arena_em00||arena_em03);
@@ -826,6 +837,10 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      (s->pending_damage_kind==0x37||(em0a_story&&s->pending_damage_kind==0x3c))&&
      s->pending_damage==20&&!override_bank&&half(take+0x44)==0xf6;
    const unsigned cue=half(take+0x44);
+   const uint32_t residual=w(p+0x160c);
+   const int em0a_wide=em0a_story&&dependency==0x20a&&half(source->bytes+0x2f4)==0x4500&&
+     source->bytes[0x2f6]==1&&!override_bank&&cue==0xf6&&s->pending_damage_kind==0x42&&
+     w(take+0x4c)==20&&s->pending_damage==15&&residual==5;
    const int r101_slash=cue==0x140&&
      ((s->pending_damage_kind==0x3b&&s->pending_damage==60)||
       (s->pending_damage_kind==0x3a&&s->pending_damage==40));
@@ -853,7 +868,7 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
        s->pending_damage_kind==0x3a&&s->pending_damage==20)||
       (source->bytes[0x2f6]==7&&w(source->bytes+0x188c)==0x3b&&half(source->bytes+0x1894)==0x11d&&
        s->pending_damage_kind==0x3b&&s->pending_damage==40));
-   if(override_bank!=UINT32_MAX&&!em0a_override&&!r101_weapon&&!armed47&&!r102_armed16)
+   if(override_bank!=UINT32_MAX&&!em0a_override&&!em0a_wide&&!r101_weapon&&!armed47&&!r102_armed16)
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
    const int stamp8_attack=b->work->room==0x100&&dependency==0x200&&stamp==8&&
      source->size>0x1650&&source->bytes[0x1650]==5&&source->bytes[0x2f4]==0&&
@@ -876,7 +891,6 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      ((s->pending_damage_kind==0x3d&&s->pending_damage==7)||
       (s->pending_damage_kind==0x37&&s->pending_damage==15));
    /* The two original EM03 kind3E rows split power30 and power60. */
-   const uint32_t residual=w(p+0x160c);
    const int em03_fall=r105&&dependency==0x203&&stamp==1&&s->pending_damage_kind==0x3e&&
      ((s->pending_damage==23&&residual==7)||(s->pending_damage==45&&residual==15));
    const int short_hit=s->pending_damage_kind==0x37&&
@@ -902,13 +916,19 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      ((s->pending_damage_kind==0x37&&!residual&&
        ((em0a_power==15&&s->pending_damage==15)||(em0a_power==20&&s->pending_damage==20)))||
       (em0a_power==15&&s->pending_damage_kind==0x3e&&s->pending_damage==12&&residual==3));
+   /* EM0A's original reverse kick falls through to Take 3E with zero power. */
+   const int em0a_reverse=em0a_story&&dependency==0x20a&&half(source->bytes+0x2f4)==0x4400&&
+     source->bytes[0x2f6]==1&&override_bank==UINT32_MAX&&!cue&&
+     s->pending_damage_kind==0x3e&&!em0a_power&&!s->pending_damage&&!residual;
    if(!r101_weapon&&!armed47&&!r102_armed16&&!r102_short_hit&&!area11_fall&&!r105_short_hit&&!r105_combo_hit&&
-      !em03_fall&&!arena_hit&&!em0a_override&&!em0a_kick&&(b->work->room!=0x100||(!short_hit&&!stamp19_fall)))
+      !em03_fall&&!arena_hit&&!em0a_override&&!em0a_kick&&!em0a_reverse&&!em0a_wide&&
+      (b->work->room!=0x100||(!short_hit&&!stamp19_fall)))
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   }
   gh_player_frame_status status=damage_hp_0012c0f8(s,s->pending_damage);
   if(status)return status;
-  s->damage_stage=5;
+  /* 109A10 bypasses the damage score when raw Take power is nonpositive. */
+  s->damage_stage=s->pending_damage>0?5:6;
  }
  if(s->damage_stage==5){
   const unsigned kind=s->pending_damage_kind;
@@ -972,18 +992,20 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
   s->damage_stage=13;
  }
  if(s->damage_stage==13){
-  if(s->pending_damage_kind==0x41){
+  if(s->pending_damage_kind==0x41||s->pending_damage_kind==0x42){
+   const int wide=s->pending_damage_kind==0x42;
+   const uint8_t variant=wide?2:1;
    uint32_t entry;
    if((int16_t)half(p+0x54a)<=0){
-    if(!elf_word(b,0x41ba98,&entry)||entry!=0x109e28u)
+    if(!elf_word(b,wide?0x41ba9c:0x41ba98,&entry)||entry!=(wide?0x109e40u:0x109e28u))
      return fail(s,0x109de8,GH_PLAYER_FRAME_UNSUPPORTED);
-    p[0x2f4]=2;p[0x2f5]=1;p[0x2f6]=0;p[0x2f7]=1;
+    p[0x2f4]=2;p[0x2f5]=1;p[0x2f6]=0;p[0x2f7]=variant;
    }else if(!(w(p+0x15f4)&0x800u)){
-    if(!elf_word(b,0x41bb18,&entry)||entry!=0x10a094u)
+    if(!elf_word(b,wide?0x41bb1c:0x41bb18,&entry)||entry!=(wide?0x10a0c4u:0x10a094u))
      return fail(s,0x109f80,GH_PLAYER_FRAME_UNSUPPORTED);
     put(p+0x5f8,w(p+0x5f8)+150u);
     put(p+0x5f4,w(p+0x5f4)+100u);
-    p[0x2f4]=1;p[0x2f5]=3;p[0x2f6]=0;p[0x2f7]=1;
+    p[0x2f4]=1;p[0x2f5]=3;p[0x2f6]=0;p[0x2f7]=variant;
    }
   }else if((int16_t)half(p+0x54a)<=0){
    const unsigned kind=s->pending_damage_kind;
@@ -1002,9 +1024,10 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
    p[0x2f4]=2;p[0x2f5]=(uint8_t)fall;p[0x2f6]=p[0x2f7]=0;
   }else if(!(w(p+0x15f4)&0x800u)){
    const int fall=s->pending_damage_kind==0x3e||s->pending_damage_kind==0x3b;
-   if((b->work->room==0x100||b->work->room==0x102)&&s->pending_damage_kind==0x3b){
+   if((b->work->room==0x102&&fall)||
+      (b->work->room==0x100&&s->pending_damage_kind==0x3b)){
     uint32_t target;
-    if(!elf_word(b,0x41bb00,&target)||target!=0x10a064u)
+    if(!elf_word(b,0x41baf0+4*(s->pending_damage_kind-0x37),&target)||target!=0x10a064u)
      return fail(s,0x109f80,GH_PLAYER_FRAME_UNSUPPORTED);
    }
    if(((b->work->room==0x100||b->work->room==0x102)&&s->pending_damage_kind==0x3a)||
@@ -2252,12 +2275,18 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
   if(s->hurt_phase==5){
    const size_t rows[]={0x158,0x4fc,0x164,0x504,0x50c};
    const int devil_fall=fall_pose&&b->work->room==0x100&&p[0x2f7]==1;
+   const int wide_fall=fall_pose&&b->work->room==0x102&&p[0x2f7]==2;
    if(!b->model||!b->resource||b->resource_bytes<(fall_pose?0x514u:0x174u)||
-      !b->initialize_motion||(p[0x2f7]&&!devil_fall))
+      !b->initialize_motion||(p[0x2f7]&&!devil_fall&&!wide_fall))
     return fail(s,fall_pose?0x123040:0x122d64,GH_PLAYER_FRAME_UNSUPPORTED);
    size_t row=0x16c;
    if(devil_fall)row=0x158; /* 122E90 variant 1 uses the fixed fall clip. */
-   else if(fall_pose){
+   else if(wide_fall){
+    uint32_t target;
+    if(!elf_word(b,0x41c798,&target)||target!=0x123000u)
+     return fail(s,0x123000,GH_PLAYER_FRAME_UNSUPPORTED);
+    row=0x4fc;
+   }else if(fall_pose){
     uint32_t value;
     if(gh_game_mt_next_0030f348(&b->init->random,&value))
      return fail(s,0x31cfe0,GH_PLAYER_FRAME_ARGUMENT);

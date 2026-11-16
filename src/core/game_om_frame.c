@@ -49,7 +49,7 @@ static int weapon(const gh_om_object*o){return o&&(o->source.type==0x382||paper(
 static int r101_item(const gh_om_object *o)
 {
  if(!o)return 0;
- if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c4||
+ if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c4||o->runtime_kind==0x3d0||
      (o->runtime_kind==0x3da&&o->view.bytes&&o->view.size>=0x690&&word(o->view.bytes+0x560)==0x905);
  return o->source.type>=0x3d3&&o->source.type<=0x3d5;
 }
@@ -1082,7 +1082,9 @@ static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_w
  if(!actor->alias_f0||actor->size<0x680||!s->runtime.scene_tables||!s->runtime.init)
   return fail(s,0x1c0678,f,GH_OBJSTEP_ARGUMENT);
  const unsigned kind=s->object->runtime_kind;
- const int dropped_item=s->object->runtime_created&&(((work->room==0x101||work->room==0x103)&&kind==0x3d6)||((work->room==0x102||work->room==0x103)&&kind==0x3c4));
+ const int16_t room=work->room;
+ const int dropped_item=s->object->runtime_created&&(((room==0x101||room==0x103)&&kind==0x3d6)||
+     ((room==0x102||room==0x103)&&kind==0x3c4)||(room==0x103&&kind==0x3d0));
  if(p[0x2f4]){
   if(p[0x2f4]==1&&dropped_item)
    return remove_object(s,f); /* Original PMF[1] 1C2260 -> 1B79B0. */

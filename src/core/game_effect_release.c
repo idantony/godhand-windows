@@ -33,6 +33,8 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
    if(!gh_effect_create_esp_at(b->effects,i,&view)&&view.payload==p&&
       (gh_effect_devil_esp_is_bound(b->effects,&view)||
        (kind==0&&(profile==0x002b0058u||profile==0x001d0058u)&&gh_effect_em00_attack_esp_is_bound(b->effects,&view))||
+       /* 306200 stops the original trail on EM03's interrupted attack. */
+       (kind==0&&profile==0x002d0058u&&gh_effect_attack_esp_is_bound(b->effects,&view))||
        (attached&&gh_effect_player_attachment_esp_is_bound(b->effects,&view)))&&actor&&view.actor->bytes==actor->bytes){
     e=gh_effect_create_esp_pause_002fbe50(b->effects,i,view.serial,f);
     if(e)return e;

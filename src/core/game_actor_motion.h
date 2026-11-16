@@ -35,6 +35,7 @@ typedef struct {gh_actor_motion_bindings b;gh_motion_view motion;size_t sequence
  * capturedlocalmatrices and438/43C counters, sameIKglobals binding. */
 /* Shared original nonzero start admission, before 2A84A8 releases old SEQ. */
 int gh_actor_motion_mirror_supported(const gh_actor_model *);
+unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *);
 int gh_actor_motion_seek_start(const gh_actor_motion_bindings *,uint32_t start_bits,
  uint32_t blend_frames,uint16_t flags);
 gh_actor_motion_status gh_actor_motion_begin_parameters_002a8578(gh_actor_motion *,const gh_actor_motion_bindings *,size_t motion_offset,size_t raw_a2_candidate_offset,uint32_t start_frame_bits,uint32_t blend_frames,uint16_t flags);
