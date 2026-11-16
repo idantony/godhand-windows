@@ -15,7 +15,9 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
   const int attached=kind==4||(kind==5&&profile==0x004e0000u)||(kind==3&&(profile==0x00040000u||profile==0x00250000u))||
       (kind==0&&(profile==0x00590058u||
       profile==0x005d0058u||(emitter&&profile==0x00420000u)));
-  const int boss_strike=kind==0&&(profile==0x00320058u||profile==0x002c0058u)&&
+  /* These authored mode-0 strikes can remain on the boss after the motion ends. */
+  const int boss_strike=kind==0&&(profile==0x002c0058u||profile==0x00320058u||
+      profile==0x00340058u||profile==0x004f0058u)&&
       actor&&actor->size>0x1650&&actor->original_vtable214==0x4479c8&&
       actor->bytes[0x1650]==15&&
       (rd(actor->bytes+0x564)==0x214||rd(actor->bytes+0x564)==0x215);

@@ -116,8 +116,12 @@ After confirming Retry, Gene returns to the arena at 100 HP and defeats both
 first-wave enemies. The original encounter ledger records both defeats. Gene
 has 56 HP after the second defeat. Direct3D presents 118 scene frames through
 the second defeat with zero renderer errors.
-A longer replay from the same save defeats both second-wave enemies as well.
-The encounter ledger records four defeats, and Gene still has 56 HP.
+A longer replay from the same save defeats all six enemies across the first
+three waves. The original encounter ledger records all six defeats. Gene
+enters the original twin-boss introduction with 24 HP. Both bosses have
+621 HP, and left-stick input moves Gene after the camera releases control.
+Direct3D presents 79 scene frames around the boss entrance with zero
+renderer errors.
 A native CPU replay loads an isolated R103 test save and uses original pad
 inputs to defeat all six enemies in the first three arena waves. Gene takes
 the original healing drop and enters the twin boss wave with 58 HP. The replay
@@ -372,7 +376,9 @@ R102 从零击败存档开始，经手柄回放完成开门所需的全部六次
 同一条连续路线还在 R103 进入原版 Game Over 菜单，确认重试后以 100 HP 回到竞技场，随后
 击败首波两名敌人。原版遭遇记录登记了两次击败，第二次击败后 Gene 还剩 56 HP。
 Direct3D 呈现了直到第二次击败的 118 个场景帧，渲染器报错为零。
-从同一份存档延长回放后，也击败了第二波的两名敌人。原版遭遇记录累计四次击败，Gene 仍有 56 HP。
+从同一份存档延长回放后，打完前三波共六名敌人，原版遭遇记录登记了全部六次击败。
+Gene 带着 24 HP 进入原版双头目入场，两名头目各有 621 HP。过场交还控制后，可用左摇杆移动 Gene。
+Direct3D 呈现了双头目入场前后的 79 帧，渲染器报错为零。
 原生 CPU 回放从独立的 R103 测试存档开始，用原版手柄输入击倒前三波共六名敌人。
 Gene 拿到原版恢复道具，以 58 HP 进入双头目战。回放提交两名头目的模型绘制指令，并运行到
 原版选招。静音 Direct3D 回放呈现了 6,908 个场景帧，覆盖原版头目入场，渲染器报错为零。

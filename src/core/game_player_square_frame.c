@@ -157,8 +157,12 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
    put(p+0x69c,0);
    e=gh_player_interact_target_0012b328(b->target_bindings,&found,&pc);
    if(e)return target_error(s,pc?pc:0x12b328,e);
-   if(found.handle)return stop(s,0x2dc108,GH_PLAYER_FRAME_UNSUPPORTED);
    put(p+0x6a4,0);
+   if(found.handle){
+    const gh_player_frame_status prompt=gh_game_player_interact_prompt_002dc108(
+        f->idle_input_bindings,&found,&pc);
+    if(prompt)return stop(s,pc?pc:0x2dc108,prompt);
+   }
    if(half(work+0x5b0)==0x608)return stop(s,0x2c2568,GH_PLAYER_FRAME_UNSUPPORTED);
   }
   if(p[0x61f]){
