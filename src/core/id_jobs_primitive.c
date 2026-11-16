@@ -8,10 +8,23 @@ gh_id_error gh_id_texture_quad_prepare(const gh_id_state *manager,const gh_id_ba
  if(!manager||!o||!e||!out)return GH_ID_ARGUMENT;
  const int tutorial=o->resource_number==0x1d&&
     (e->b8a==0x1d||(e->b8a==1&&e->b8b==1));
- if(e->kind!=0||e->b89>4||e->draw_rotation!=0||e->texture.bytes||
+ if(e->kind!=0||e->b89>4||e->draw_rotation!=0||
     (e->f80!=1&&(!tutorial||!isfinite(e->f80)||e->f80<=0||e->f80>2)))
     return GH_ID_UNSUPPORTED;
- error=gh_id_texture_open(manager,e->b8a,(uint32_t)e->b8b+1,&q.texture);if(error)return error;
+ if(e->texture.bytes){
+  /* Original 2AAEF0 uses the cockpit's selected EM14/EM15 name texture. */
+  if(o->resource_number!=0x0d||e->source_index!=2||e->b8a!=0x0d||e->b8b!=1||e->b89!=1)
+   return GH_ID_UNSUPPORTED;
+  error=GH_ID_UNSUPPORTED;
+  for(uint32_t name=2;name<=3;++name){
+   if(gh_id_texture_open(manager,0x0d,name,&q.texture)==GH_ID_OK&&
+      q.texture.source.bytes==e->texture.bytes&&q.texture.source.size==e->texture.size){
+    error=GH_ID_OK;
+    break;
+   }
+  }
+ }else error=gh_id_texture_open(manager,e->b8a,(uint32_t)e->b8b+1,&q.texture);
+ if(error)return error;
  width=e->f68*e->draw_scale_x;height=e->f6c*e->draw_scale_y;cx=e->draw_x+1;cy=e->draw_y+1;
  if(!isfinite(width)||!isfinite(height)||!isfinite(cx)||!isfinite(cy)||width<=0||height<=0)return GH_ID_UNSUPPORTED;
  switch(e->b89){

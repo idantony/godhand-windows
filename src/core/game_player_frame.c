@@ -488,6 +488,85 @@ static gh_player_frame_status hurt_reaction_0011aaa0(gh_game_player_frame *s)
  return hurt_input_00123938(s);
 }
 
+/* Original PL00 01/02 reaction after the boss's zero-power deflection. */
+static gh_player_frame_status hurt_deflect_0011ac80(gh_game_player_frame *s)
+{
+ enum { SOUND=1, MOTION, CAMERA, VIBRATE, RELEASE, SAMPLE, ROTATE, TRANSLATE, INPUT };
+ const gh_player_frame_bindings *b=&s->b;
+ gh_title_player_view *actor=&b->player->view;
+ uint8_t *p=actor->bytes;
+ uint32_t pc=0;
+ if(!s->hurt_phase){
+  if(b->work->room!=0x103||p[0x2f7]||p[0x2f6]>1)
+   return fail(s,0x11ac80,GH_PLAYER_FRAME_UNSUPPORTED);
+  s->hurt_phase=p[0x2f6]?SAMPLE:SOUND;
+ }
+ if(s->hurt_phase==SOUND){
+  gh_player_frame_status status=hurt_sound(s,0xcf);
+  if(status)return status;
+  put(p+0x54c,0x41200000u);
+  s->hurt_phase=MOTION;
+ }
+ if(s->hurt_phase==MOTION){
+  if(!b->initialize_motion||!b->model||!b->resource||b->resource_bytes<0x880||!b->rate)
+   return fail(s,0x2a8578,GH_PLAYER_FRAME_UNSUPPORTED);
+  const gh_player_motion_request request={.player=b->player,.model=b->model,.work=b->work,
+   .resource=b->resource,.resource_bytes=b->resource_bytes,.rate=b->rate,
+   .motion_offset=w(b->resource+0x878),.sequence_candidate_offset=w(b->resource+0x87c),
+   .blend_frames=1,.release_previous_sequence=1};
+  gh_player_init_status status=b->initialize_motion(b->motion_context,&request,&pc);
+  if(status)return fail(s,pc?pc:0x2a8578,status==GH_PLAYER_INIT_UNSUPPORTED?
+    GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE);
+  s->hurt_phase=CAMERA;
+ }
+ if(s->hurt_phase==CAMERA){
+  if(!b->damage_camera_exit)return fail(s,0x124f60,GH_PLAYER_FRAME_UNSUPPORTED);
+  gh_player_frame_status status=b->damage_camera_exit(b->damage_context,b,&pc);
+  if(status)return fail(s,pc?pc:0x124f60,status);
+  put(p+0x15f4,w(p+0x15f4)&~2u);
+  s->hurt_phase=VIBRATE;
+ }
+ if(s->hurt_phase==VIBRATE){
+  gh_player_frame_status status=hurt_vibration_0012c348(s,0);
+  if(status)return status;
+  s->hurt_phase=RELEASE;
+ }
+ if(s->hurt_phase==RELEASE){
+  gh_game_mt random=b->init->random;
+  uint32_t draw;
+  if(gh_game_mt_next_0030f348(&random,&draw))
+   return fail(s,0x31cfe0,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(draw&1u){
+   if(!b->auxiliary_bindings_known||b->aux_698||w(p+0x698))
+    return fail(s,0x12ac28,GH_PLAYER_FRAME_UNSUPPORTED);
+   if(b->aux_6a0||w(p+0x6a0))return fail(s,0x12b928,GH_PLAYER_FRAME_UNSUPPORTED);
+  }
+  b->init->random=random;
+  p[0x2f6]=1;
+  s->hurt_phase=SAMPLE;
+ }
+ if(s->hurt_phase==SAMPLE){
+  if(!b->advance_motion||!b->rate)return fail(s,0x157c18,GH_PLAYER_FRAME_UNSUPPORTED);
+  const gh_player_motion_request request={.player=b->player,.model=b->model,.work=b->work,
+   .resource=b->resource,.resource_bytes=b->resource_bytes,.rate=b->rate};
+  gh_player_frame_status status=b->advance_motion(b->motion_context,&request,&s->motion_ended,&pc);
+  if(status)return fail(s,pc?pc:0x157c18,status);
+  if(s->motion_ended)memset(p+0x2f4,0,4);
+  s->hurt_phase=ROTATE;
+ }
+ if(s->hurt_phase==ROTATE){
+  if(gh_player_root_rotation_0014f9f0(actor,b->work,GH_STATIC_BINARY32_REFERENCE,&pc))
+   return fail(s,pc?pc:0x14f9f0,GH_PLAYER_FRAME_UNSUPPORTED);
+  s->hurt_phase=TRANSLATE;
+ }
+ if(s->hurt_phase==TRANSLATE){
+  if(gh_player_root_translation_0014f928(actor,b->work,GH_STATIC_BINARY32_REFERENCE,&pc))
+   return fail(s,pc?pc:0x14f928,GH_PLAYER_FRAME_UNSUPPORTED);
+  s->hurt_phase=INPUT;
+ }
+ return hurt_input_00123938(s);
+}
+
 static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
 {
  const gh_player_frame_bindings *b=&s->b;
@@ -608,7 +687,7 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
   }else if(w(p+0x15b0)){
    const int32_t residual=(int32_t)w(p+0x160c);
    const int arena_residual=b->work->room==0x103&&
-     ((p[0x2f7]==1&&residual==10)||(!p[0x2f7]&&residual==3));
+     ((p[0x2f7]==1&&residual==10)||(!p[0x2f7]&&(residual==3||residual==5)));
    if(residual!=0&&residual!=15&&residual!=7&&!arena_residual&&!(b->work->room==0x102&&residual==3))
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
    gh_player_frame_status status=damage_hp_0012c0f8(s,residual);
@@ -863,8 +942,29 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      source->size>0x1650&&source->bytes[0x1650]==15&&half(source->bytes+0x2f4)==0x1500&&
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&arena_short&&w(take+0x4c)==20&&
      override_bank==UINT32_MAX&&!half(take+0x44);
+   /* EM14/15's 23D7D0 deflection passes a zero-power Give49 to Gene. */
+   const int boss_deflect=b->work->room==0x103&&source_kind==0x204&&stamp<2&&
+     dependency==0x214u+stamp&&source->size>0x1650&&source->bytes[0x1650]==15&&
+     half(source->bytes+0x2f4)==0x6f00&&source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&
+     s->pending_damage_kind==0x49&&!w(take+0x4c)&&!s->pending_damage&&!w(p+0x160c)&&
+     override_bank==UINT32_MAX&&!half(take+0x44);
+   /* EM14's default 21A654 row transmits the original boosted short Take37. */
+   const int em14_short=b->work->room==0x103&&source_kind==0x204&&dependency==0x214&&!stamp&&
+     source->size>=0x1896&&source->bytes[0x1650]==15&&half(source->bytes+0x2f4)==0x1500&&
+     source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&s->pending_damage_kind==0x37&&
+     w(source->bytes+0x1870)<=1&&w(source->bytes+0x1874)==20&&w(source->bytes+0x1878)==0x37&&
+     w(take+0x4c)==30&&s->pending_damage==30&&!w(p+0x160c)&&
+     override_bank==UINT32_MAX&&!half(take+0x44);
+   /* 22FAE0's two original paired kick rows both deliver the shared fall Take. */
+   const int boss_kick=b->work->room==0x103&&source_kind==0x204&&stamp<2&&
+     dependency==0x214u+stamp&&source->size>=0x1896&&source->bytes[0x1650]==15&&
+     half(source->bytes+0x2f4)==0x1700&&source->bytes[0x2f6]==1&&source->bytes[0x2f7]==1&&
+     (w(source->bytes+0x1870)==2||w(source->bytes+0x1870)==12)&&w(source->bytes+0x1874)==20&&
+     s->pending_damage_kind==0x3e&&override_bank==UINT32_MAX&&!half(take+0x44)&&
+     ((w(take+0x4c)==20&&s->pending_damage==15&&w(p+0x160c)==5)||
+      (w(take+0x4c)==30&&s->pending_damage==23&&w(p+0x160c)==7));
    const int arena_hit=(arena_attack&&(arena_em00||arena_em03||arena_em0a_short||arena_em0a_fall))||
-     arena_slide||arena_em0a_f6||arena_reverse||boss_melee||em15_short;
+     arena_slide||arena_em0a_f6||arena_reverse||boss_melee||em15_short||em14_short||boss_deflect||boss_kick;
    const int em14_sphere=b->work->room==0x103&&source_kind==0x204&&dependency==0x214&&!stamp&&
      source->size>=0x1896&&source->bytes[0x1650]==15&&half(source->bytes+0x2f4)==0x1500&&
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&s->pending_damage_kind==0x4e&&
@@ -1070,12 +1170,19 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
                        (kind==0x3d&&(b->work->room==0x103||b->work->room==0x105))||
                        (kind==0x3a&&(b->work->room==0x100||b->work->room==0x101||b->work->room==0x102))||
                        (kind==0x3c&&b->work->room==0x102)||
-                       (kind==0x4e&&b->work->room==0x103);
+                       ((kind==0x49||kind==0x4e)&&b->work->room==0x103);
    uint32_t target;
    if((!fall&&!short_hit)||!elf_word(b,0x41ba70+4*(kind-0x37),&target)||
       target!=(fall?0x109e10u:0x109f04u))
     return fail(s,0x109de8,GH_PLAYER_FRAME_UNSUPPORTED);
    p[0x2f4]=2;p[0x2f5]=(uint8_t)fall;p[0x2f6]=p[0x2f7]=0;
+  }else if(s->pending_damage_kind==0x49){
+   if(!(w(p+0x15f4)&0x800u)){
+    uint32_t target;
+    if(!elf_word(b,0x41bb38,&target)||target!=0x10a04cu)
+     return fail(s,0x109f80,GH_PLAYER_FRAME_UNSUPPORTED);
+    p[0x2f4]=1;p[0x2f5]=2;p[0x2f6]=p[0x2f7]=0;
+   }
   }else if(s->pending_damage_kind==0x4e){
    uint32_t target;
    if(!elf_word(b,0x41bb4c,&target)||target!=0x10a224u)
@@ -2525,14 +2632,14 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
  if(s->stage==14&&s->state_entry==0x11a820){
   uint32_t method,descriptor;
   const unsigned selector=p[0x2f5];
-  if(selector!=0&&selector!=1&&selector!=3&&selector!=4&&selector!=5&&selector!=6&&selector!=8&&selector!=0xa&&selector!=0xb&&selector!=0xf)
+  if(selector!=0&&selector!=1&&(selector!=2||b->work->room!=0x103)&&selector!=3&&selector!=4&&selector!=5&&selector!=6&&selector!=8&&selector!=0xa&&selector!=0xb&&selector!=0xf)
    return fail(s,0x11a820,GH_PLAYER_FRAME_UNSUPPORTED);
   if(!b->auxiliary_bindings_known||b->aux_6a0||w(p+0x6a0))
    return fail(s,0x12b928,GH_PLAYER_FRAME_UNSUPPORTED);
   p[0x648]=0;put(p+0x640,0);
   sh(p+0x5e0,0);sh(p+0x5e2,0);p[0x1603]=0;sh(p+0x1618,0);
   const uint32_t slot=0x3bd328+8*selector;
-  const uint32_t expected=selector==0?0x11a8f8:selector==1?0x11aaa0:selector==3?0x11add8:selector==4?0x11b280:
+  const uint32_t expected=selector==0?0x11a8f8:selector==1?0x11aaa0:selector==2?0x11ac80:selector==3?0x11add8:selector==4?0x11b280:
      selector==5?0x11b3e8:selector==6?0x11b5f8:selector==8?0x11baf8:selector==0xa?0x11c348:selector==0xb?0x11c608:0x11d4b0;
   if(!elf_word(b,slot,&descriptor)||!elf_word(b,slot+4,&method)||
      descriptor!=0xffff0000u||method!=expected)
@@ -2831,6 +2938,7 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
   s->stage=16;
  }
  if(s->stage==15&&s->state_entry==0x11aaa0){gh_player_frame_status e=hurt_reaction_0011aaa0(s);if(e)return e;s->stage=16;}
+ if(s->stage==15&&s->state_entry==0x11ac80){gh_player_frame_status e=hurt_deflect_0011ac80(s);if(e)return e;s->stage=16;}
  if(s->stage==15&&s->state_entry==0x11add8){gh_player_frame_status e=hurt_fall_0011add8(s);if(e)return e;s->stage=16;}
  if(s->stage==15&&s->state_entry==0x11b280){gh_player_frame_status e=hurt_rise_0011b280(s);if(e)return e;s->stage=16;}
  if(s->stage==15&&s->state_entry==0x11b5f8){gh_player_frame_status e=hurt_stagger_0011b5f8(s);if(e)return e;s->stage=16;}

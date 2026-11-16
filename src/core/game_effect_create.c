@@ -252,6 +252,12 @@ gh_effect_status gh_effect_create_enemy_boosted_impact_begin_00306838(gh_effect_
  return positioned_begin(call,0,0x40,world_xyz,0);
 }
 
+gh_effect_status gh_effect_create_enemy_deflect_begin_00306838(gh_effect_create_call *call,
+ const uint32_t world_xyz[3])
+{
+ return positioned_begin(call,0x58,0x11,world_xyz,0);
+}
+
 gh_effect_status gh_effect_create_enemy_counter_impact_begin_00306838(gh_effect_create_call *call,
  const uint32_t world_xyz[3])
 {
@@ -311,6 +317,28 @@ static int em00_family_attack_actor(const gh_title_player_view *actor)
  if(kind!=0x204||actor->size<=0x1650||actor->bytes[0x1650]!=24)return 0;
  const unsigned stamp=w(actor->bytes+0x640)&0xffffu;
  return stamp==2||stamp==3;
+}
+
+static int r103_paired_kick_actor(const gh_title_player_view *actor)
+{
+ if(!em00_family_attack_actor(actor))return 0;
+ const uint32_t dependency=w(actor->bytes+0x564);
+ return dependency==0x214||dependency==0x215;
+}
+
+static int r103_paired_kick_row(const uint8_t *row)
+{
+ if(row[0xbe]||row[0x128]||row[0x136])return 0;
+ switch(row[0x133]){
+ case 0:
+ case 0x1a:
+  return w(row)==0x1efe8010u&&w(row+4)==0x00c00000u&&
+     row[0x12e]==(row[0x133]==0x1a?132:0);
+ case 4:
+  return w(row)==0x1efe0010u&&w(row+4)==0x00802000u&&row[0x12e]==5;
+ default:
+  return 0;
+ }
 }
 
 static int em00_escape_effect_actor(const gh_title_player_view *actor)
@@ -377,7 +405,14 @@ static int stamp8_attack_actor(const gh_title_player_view *actor)
         actor->bytes[0x1650]==5;
 }
 
-static int stamp8_attack_effect_row(const uint8_t *row)
+static int16_t em00_slash_effect_room(const gh_title_player_view *actor)
+{
+ if(stamp8_attack_actor(actor))return 0x100;
+ if(!em00_family_attack_actor(actor)||w(actor->bytes+0x564)!=0x200)return 0;
+ return (w(actor->bytes+0x2fc)>>16)==0x204?0x103:0;
+}
+
+static int em00_slash_effect_row(const uint8_t *row)
 {
  const unsigned part=row[0xbe];
  if(row[0x128]||row[0x136]||w(row+4)!=0x00c00000u)return 0;
@@ -507,7 +542,7 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
      actor->bytes[0x2f5]!=0x1d||(escape_room==0x102&&actor->bytes[0x2f7]!=1))
    return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&request->index==0x2b&&!request->mode){
-  if(!stamp8_attack_actor(actor)||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x15)
+  if(!em00_slash_effect_room(actor)||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x15)
    return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&r103_em0a_slide_rows(request->index)&&!request->mode){
   const unsigned phase=request->index==0x15?1:request->index==0x16?3:7;
@@ -517,6 +552,9 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
   const int16_t room=em0a_attack_room(actor);
   if(!room||(request->index==0x1d&&room!=0x102&&room!=0x103)||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x15)
    return GH_EFFECT_UNSUPPORTED;
+ }else if(request->bank==0x58&&request->index==0x50&&!request->mode){
+  if(!r103_paired_kick_actor(actor)||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x17||
+     actor->bytes[0x2f6]!=1||actor->bytes[0x2f7]!=1)return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&request->index==0x5d&&!request->mode){
   if(!em0f_route_actor(actor))return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&request->index==0x3f&&!request->mode){
@@ -705,14 +743,25 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
       w(row+4)!=row_flags[i])return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   }
  }
+ if(c->request.bank==0x58&&c->request.index==0x50&&c->configuration_nested_scale){
+  static const uint8_t original_types[]={0x1a,0,4,4,0x1a,0};
+  if(b->work->room!=0x103||c->count!=sizeof(original_types)||!b->model||
+     b->model->work!=b->work||b->model->root.bytes!=c->request.actor->bytes)
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<c->count;i++){
+   const uint8_t *row=entry.bytes+16+i*0x2f0;
+   if(row[0x133]!=original_types[i]||!r103_paired_kick_row(row))
+    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  }
+ }
  if(c->request.bank==0x58&&c->request.index==0x2b&&c->configuration_nested_scale){
   static const uint8_t parts[]={25,24,21,20,24,21};
   static const uint8_t children[]={0x12,0x20,0x12,0x20,0x1a,0x1a};
-  if(c->count!=6||!b->work||b->work->room!=0x100)
+  if(c->count!=6||b->work->room!=em00_slash_effect_room(c->request.actor))
    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<6;i++){
    const uint8_t *row=entry.bytes+16+i*0x2f0;
-   if(!stamp8_attack_effect_row(row)||row[0xbe]!=parts[i]||row[0x133]!=children[i])
+   if(!em00_slash_effect_row(row)||row[0xbe]!=parts[i]||row[0x133]!=children[i])
     return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   }
  }
@@ -1285,10 +1334,13 @@ int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *v)
     w(v->payload+0x110)||v->payload[0x1ec]!=0xff)return 0;
  if(em27_attack_actor(v->actor)&&(!v->model->work||v->model->work->room!=0x105))return 0;
  const uint32_t profile=w(v->payload+0x18c);
+ if(profile==0x00500058u)
+  return v->model->work&&v->model->work->room==0x103&&r103_paired_kick_actor(v->actor)&&
+     v->model->part_count&&v->part==v->model->parts&&r103_paired_kick_row(v->record.bytes);
  if(profile==0x002b0058u){
   const unsigned part=v->record.bytes[0xbe];
-  return v->model->work&&v->model->work->room==0x100&&stamp8_attack_actor(v->actor)&&
-         stamp8_attack_effect_row(v->record.bytes)&&part<v->model->part_count&&
+  return v->model->work&&v->model->work->room==em00_slash_effect_room(v->actor)&&
+         em00_slash_effect_row(v->record.bytes)&&part<v->model->part_count&&
          v->part==v->model->parts+part;
  }
  const unsigned slide_group=profile>>16;
@@ -1646,6 +1698,15 @@ int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *owner,const gh_eff
  if(!v||!v->payload||v->payload_size!=0x400||v->actor!=v->selector||
     !v->record.bytes||v->record.size!=0x2f0)return 0;
  const uint32_t profile=w(v->payload+0x23a);
+ if(profile==0x00500058u&&r103_paired_kick_actor(v->actor)){
+  gh_effect_view est;
+  if(gh_effect_est_at_00306030(owner,0x58,0x50,&est)||!est.bytes||
+     est.size<16+6*0x2f0||w(est.bytes+4)!=6)return 0;
+  for(unsigned i=0;i<6;i++)
+   if(v->record.bytes==est.bytes+16+i*0x2f0)
+    return v->type==v->record.bytes[0x133]&&r103_paired_kick_row(v->record.bytes);
+  return 0;
+ }
  const unsigned slide_group=profile>>16;
  const unsigned slide_rows=(profile&0xffffu)==0x58?r103_em0a_slide_rows(slide_group):0;
  if(slide_rows&&r103_em0a_effect_actor(v->actor)){
@@ -1664,13 +1725,13 @@ int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *owner,const gh_eff
  if(!gh_effect_create_emitter_at(owner,v->emitter_slot,&emitter)&&emitter.serial==v->emitter_serial)
     return emitter.actor==v->actor&&emitter.selector==v->selector&&
        emitter.record.bytes==v->record.bytes&&gh_effect_em00_attack_emitter_is_bound(&emitter);
- if(index==0x2b&&stamp8_attack_actor(v->actor)){
+ if(index==0x2b&&em00_slash_effect_room(v->actor)){
   gh_effect_view est;
   if(gh_effect_est_at_00306030(owner,0x58,index,&est)||!est.bytes||
      est.size<16+6*0x2f0||w(est.bytes+4)!=6)return 0;
   for(unsigned i=0;i<6;i++)
    if(v->record.bytes==est.bytes+16+i*0x2f0)
-    return v->record.bytes[0x133]==v->type&&stamp8_attack_effect_row(v->record.bytes);
+    return v->record.bytes[0x133]==v->type&&em00_slash_effect_row(v->record.bytes);
   return 0;
  }
  if(index==0x1d||index==0x1e){
@@ -1787,7 +1848,7 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
  const unsigned child=r[0x133];
  const uint32_t attack_profile=w(source.payload+0x18c);
  const int attack=(((attack_profile&0xffffu)==0x58&&r103_em0a_slide_rows(attack_profile>>16))||child==9||child==0x12||child==0x1a||child==0x20||
-    (!child&&attack_profile==0x001d0058u))&&gh_effect_em00_attack_emitter_is_bound(&source);
+    (attack_profile==0x00500058u)||(!child&&attack_profile==0x001d0058u))&&gh_effect_em00_attack_emitter_is_bound(&source);
  const int knock=(r[0x133]==0||r[0x133]==9||
     (r[0x133]==0x1a&&(r[0xbe]==25||r[0xbe]==21)&&w(source.payload+0x18c)==0x002f0058u))&&
     gh_effect_knockdown_emitter_is_bound(&source);
@@ -1806,7 +1867,8 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
  unsigned i;for(i=0;i<1024;i++)if(!(w(b->esp+0x100000+(i>>5)*4)&(UINT32_C(0x80000000)>>(i&31))))break;if(i==1024)return GH_EFFECT_OK;
  unsigned type=source.record.bytes[0x133];uint32_t vtable=esp_vtable(type);
  if(!vtable||(type==0x1f&&!devil)){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}
- if(type==4&&(!player_attachment||w(source.payload+0x18c)!=0x003b006cu||
+ const int paired_kick=attack&&attack_profile==0x00500058u&&r103_paired_kick_row(r);
+ if(type==4&&!paired_kick&&(!player_attachment||w(source.payload+0x18c)!=0x003b006cu||
     w(source.payload+0x110)!=UINT32_MAX||
     (!r103_boss_throw_effect_row(r,10)&&!r103_boss_throw_effect_row(r,11)))){
   *f=0x2faca8;return GH_EFFECT_UNSUPPORTED;
@@ -1980,12 +2042,18 @@ gh_effect_status gh_effect_create_esp_commit_15(gh_game_effects *e,unsigned slot
  return GH_EFFECT_OK;
 }
 
+int gh_effect_model_esp_actor_is_bound(const gh_game_effects *e,const gh_effect_esp_view *view)
+{
+ return gh_effect_player_attachment_esp_is_bound(e,view)||
+        (view&&view->type==4&&gh_effect_em00_attack_esp_is_bound(e,view));
+}
+
 gh_effect_status gh_effect_create_esp_commit_14(gh_game_effects *e,unsigned slot,uint32_t serial){
  gh_effect_esp_view view;
  gh_effect_status status=gh_effect_create_esp_at(e,slot,&view);
  if(status||view.serial!=serial||(view.type!=4&&view.type!=0x14)||view.initialized||
     w(view.payload+0xf0)!=esp_vtable(view.type)||!view.globals||!view.globals->initialized||
-    ((view.actor||view.selector)&&!gh_effect_player_attachment_esp_is_bound(e,&view)))return GH_EFFECT_ARGUMENT;
+    ((view.actor||view.selector)&&!gh_effect_model_esp_actor_is_bound(e,&view)))return GH_EFFECT_ARGUMENT;
  e->native->esps[slot].initialized=1;
  return GH_EFFECT_OK;
 }
@@ -2276,12 +2344,13 @@ gh_effect_status gh_effect_create_esp_trail_edges_002f62f8(gh_game_effects *e,un
     view.type!=0x20||!gh_effect_esp_trail_is_bound(e,&view))return GH_EFFECT_ARGUMENT;
  const uint8_t *r=view.record.bytes;
  uint8_t *p=view.payload;
- const int stamp8=stamp8_attack_actor(view.actor)&&
+ const int slash=em00_slash_effect_room(view.actor)&&
+    view.payload[0x23c]==0x2b&&!view.payload[0x23d]&&
     gh_effect_em00_attack_esp_is_bound(e,&view);
- const unsigned count=stamp8?r[0x18d]:16;
+ const unsigned count=slash?r[0x18d]:16;
  const uint32_t trail_fields=w(r+0x18c);
  if(w(r+0x16c)||w(r+0x170)||w(r+0x148)||p[0x245]!=1||
-    (stamp8?(p[0x246]!=1||(trail_fields!=0x701&&trail_fields!=0x601)):
+    (slash?(p[0x246]!=1||(trail_fields!=0x701&&trail_fields!=0x601)):
              (p[0x246]!=2||trail_fields!=3))||
     w(p+0x2e0)||w(p+0x2dc)||w(p+0x2d4)!=0x3f800000u||view.parent_emitter<0)
   return GH_EFFECT_UNSUPPORTED;
@@ -2300,7 +2369,7 @@ gh_effect_status gh_effect_create_esp_trail_edges_002f62f8(gh_game_effects *e,un
  status=initialize_trail(e,slot,&view,work594,first,second,count,frontier);
  if(status)return status;
  /* 2EBD10 sets mask 1 for an atlas, 2F62F8 sets mask 4 for two edges. */
- ww(p+0x2e0,stamp8?4:5);
+ ww(p+0x2e0,slash?4:5);
  memcpy(p+0x2f0,offset,12);
  ww(p+0x300,0x3f800000u);
  return GH_EFFECT_OK;
@@ -2394,7 +2463,7 @@ gh_effect_status gh_effect_create_esp_check_hidden_14(gh_game_effects *e,unsigne
  unsigned off=(slot>>5)*4;
  uint32_t mask=UINT32_C(0x80000000)>>(slot&31);
  if(!(w(e->native->esp+0x100100+off)&mask))return GH_EFFECT_ARGUMENT;
- if(((v.actor||v.selector)&&!gh_effect_player_attachment_esp_is_bound(e,&v))||
+ if(((v.actor||v.selector)&&!gh_effect_model_esp_actor_is_bound(e,&v))||
     v.parent_emitter!=-1||v.previous!=-1||v.next!=-1||
     w(v.payload+4)||w(v.payload+8)||w(v.payload+0xc)||w(v.payload+0x10)||
     w(v.payload+0xf0)!=esp_vtable(v.type))return GH_EFFECT_UNSUPPORTED;

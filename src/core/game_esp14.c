@@ -515,7 +515,7 @@ gh_effect_status gh_esp04_initialize_002e64b0(gh_esp14_instance *s,
     *frontier = 0x2e64b0;
     *original = 0;
     if (!s || !b || !b->effects || !v || v->type != 4 || v->payload_size != 0x400 ||
-        v->record.size != 0x2f0 || !gh_effect_player_attachment_esp_is_bound(b->effects, v))
+        v->record.size != 0x2f0 || !gh_effect_model_esp_actor_is_bound(b->effects, v))
         return GH_EFFECT_ARGUMENT;
     uint8_t *p = v->payload;
     const uint8_t *r = v->record.bytes;

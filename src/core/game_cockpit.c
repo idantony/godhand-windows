@@ -1130,8 +1130,6 @@ static gh_id_error middle_boss_move_0013f5d0(gh_game_cockpit *s,const gh_boot_wo
   const volatile float hp=(float)current/(float)maximum;
   const unsigned flags=u32(s->fields+widget+0xa8+bank);
   if(flags&0x80000000u)return frame_stop(s,0x14016c);
-  if((flags&0x40000000u)&&frame_number(s->fields+widget+0x2e8+bank)!=hp)
-   return frame_stop(s,0x140718);
   gh_id_entry *position,*fill,*lag;
   TRY(work(s,bar,0,0,&position));
   TRY(work(s,bar,1,0,&fill));
@@ -1144,7 +1142,21 @@ static gh_id_error middle_boss_move_0013f5d0(gh_game_cockpit *s,const gh_boot_wo
    w32(s,widget+0x314+uv,em15?0x3e99db23u:0x3e2f9db2u);
    position->color_base=(position->color_base&0xffffffu)|(i?0x20000000u:0x80000000u);
    wf(s,widget+0x274+uv,root->pos_y);
+   wf(s,widget+0x2e8+bank,hp);
    w32(s,widget+0xa8+bank,flags|0x40000000u);
+  }
+  /* 140104 starts each damaged bar's independent 30-frame shadow timer.
+   * 140718 applies the 10-frame throttle to switching the selected label. */
+  gh_id_base *actor_bar=base(s,bar);
+  if(frame_number(s->fields+widget+0x2e8+bank)!=hp){
+   timer=30;
+   if(s->middle_boss_draw_order[0]!=actor_bar)
+    TRY(middle_boss_select_00140718(s,i,0));
+  }
+  if(s->middle_boss_draw_order[0]==actor_bar){
+   gh_id_entry *name;
+   TRY(work(s,widget,1,0,&name));
+   name->texture=s->middle_boss_names[i].source;
   }
   fill->f70[0]=frame_number(s->fields+widget+0x30c+uv);
   fill->f70[1]=frame_number(s->fields+widget+0x308+uv);
