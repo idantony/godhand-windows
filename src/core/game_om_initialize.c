@@ -121,7 +121,7 @@ gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *
  const int ticket=o->runtime_created&&b->work->room==0x102&&kind==0x3da&&w(o->view.bytes+0x560)==0x905;
  const int placed=!o->runtime_created&&b->work->room==0x101&&kind>=0x3d3&&kind<=0x3d5;
  const int16_t room=b->work->room;
- const int pickup=o->runtime_created&&(((room==0x101||room==0x103)&&kind==0x3d6)||
+ const int pickup=o->runtime_created&&(((room==0x101||room==0x102||room==0x103)&&kind==0x3d6)||
       ((room==0x102||room==0x103)&&kind==0x3c4)||(room==0x103&&(kind==0x3c8||kind==0x3d0))||
       (room==0x102&&kind==0x3df));
  if(!ticket&&!placed&&!pickup)return GH_PLACE_ARGUMENT;
@@ -176,7 +176,7 @@ gh_scene_placement_status gh_om_r101_item_collect_001c24e8(gh_om_init_state *s)
  const int16_t room=s->bindings->work->room;
  uint8_t *actor=item->view.bytes;
  uint8_t *save=s->bindings->save.bytes;
- if(!item->runtime_created||!(((room==0x101||room==0x103)&&kind==0x3d6)||
+ if(!item->runtime_created||!(((room==0x101||room==0x102||room==0x103)&&kind==0x3d6)||
     ((room==0x102||room==0x103)&&kind==0x3c4)||(room==0x103&&(kind==0x3c8||kind==0x3d0))||
     (room==0x102&&kind==0x3df))||
     !actor||item->view.size<0x690||

@@ -548,8 +548,10 @@ static gh_object_step_status box_fragments_spawn(gh_om_frame_state *s,uint32_t *
  uint32_t pc=0;
  const int kind304=s->object->source.type==0x304;
  const int kind33f=s->object->source.type==0x33f;
- const unsigned first=kind304?0:1, limit=kind304?6:kind33f?13:9;
- const uint32_t entry=kind304?0x188798:kind33f?0x19fb20:0x18cb18;
+ const int kind331=s->object->source.type==0x331;
+ const unsigned first=kind304?0:1, limit=(kind304||kind331)?6:kind33f?13:9;
+ const uint32_t entry=kind304?0x188798:kind331?0x19cfe0:kind33f?0x19fb20:
+  s->object->source.type==0x309?0x18bd10:0x18cb18;
  const unsigned count=model->part_count<limit?model->part_count:limit;
  /* 188798, 18CB18 and 19FB20 share the mesh/part changes but have different
   * starting indices and record storage. */
@@ -561,8 +563,18 @@ static gh_object_step_status box_fragments_spawn(gh_om_frame_state *s,uint32_t *
  if(fragment->common.hitarea_created&&
     gh_hitarea_object_set_active_001fd668(&fragment->common.hitarea,0,&pc))
   return fail(s,pc?pc:0x1fd668,f,GH_OBJSTEP_CALLEE);
- if(gh_actor_model_node_mask_flags(model,1,0x380,UINT32_MAX,0x2001u)||
-    gh_actor_model_node_mask_flags(model,0,0x380,~1u,0x2000u))
+ if(kind331){
+  /* 1B7280/1B7300 select the authored layer across the mesh list. */
+  for(unsigned i=0;i<model->script.mesh_count;i++){
+   const gh_actor_node_packets *packet;
+   if(gh_actor_model_packet_at(model,i,&packet))return fail(s,0x14b6f8,f,GH_OBJSTEP_CALLEE);
+   uint8_t *node=packet->node;
+   const uint32_t flags=word(node+0x380);
+   if(!node[0x40c])put(node+0x380,flags|0x2001u);
+   else if(node[0x40c]==0x40)put(node+0x380,(flags&~1u)|0x2000u);
+  }
+ }else if(gh_actor_model_node_mask_flags(model,1,0x380,UINT32_MAX,0x2001u)||
+          gh_actor_model_node_mask_flags(model,0,0x380,~1u,0x2000u))
   return fail(s,0x14b6f8,f,GH_OBJSTEP_CALLEE);
  put(actor+0x250,word(actor+0x250)|0x10000u);
  for(unsigned i=1;i<count;i++){
@@ -588,7 +600,7 @@ static gh_object_step_status box_fragments_spawn(gh_om_frame_state *s,uint32_t *
   uint8_t *part=model->parts[i].bytes,*record=fragment->segments+(size_t)i*0x60;
   float velocity[3],spin[3];
   velocity[0]=add(kick[0],mul(fragment_random(random,0),.2f));
-  velocity[1]=add(kick[1],mul(fragment_random(random,1),.4f));
+  velocity[1]=add(kick[1],mul(fragment_random(random,1),kind331?.2f:.4f));
   velocity[2]=add(kick[2],mul(fragment_random(random,0),.2f));
   for(unsigned j=0;j<3;j++)spin[j]=mul(fragment_random(random,0),.1f);
   memcpy(record,position[i],12);
@@ -649,12 +661,14 @@ static gh_object_step_status box_break(gh_om_frame_state *s,
  uint32_t pc=0;
  const int kind304=object->source.type==0x304;
  const int kind33f=object->source.type==0x33f;
- const uint32_t entry=kind304?0x1881f0:kind33f?0x19f588:0x18c580;
+ const int kind331=object->source.type==0x331;
+ const int kind309=object->source.type==0x309;
+ const uint32_t entry=kind304?0x1881f0:kind331?0x19ca58:kind309?0x18b778:kind33f?0x19f588:0x18c580;
  uint8_t *timer=actor+(kind304?0x600:0x654);
  const int arena_box=work->room==0x103&&
     ((object->source.type==0x30a&&object->view.original_vtable214==0x4238d8)||
      (kind33f&&object->view.original_vtable214==0x4267f8));
- if((work->room!=0x101&&!arena_box)||policy!=GH_STATIC_BINARY32_REFERENCE||!s->runtime_bound||
+ if((work->room!=((kind331||kind309)?0x102:0x101)&&!arena_box)||policy!=GH_STATIC_BINARY32_REFERENCE||!s->runtime_bound||
     !s->runtime.init||fragment->segments!=actor+(kind304?0x610:0x660)||!object->view.alias_f0)
   return fail(s,entry,f,GH_OBJSTEP_UNSUPPORTED);
  if(!actor[0x2f5]&&s->special_phase!=8){
@@ -668,7 +682,8 @@ static gh_object_step_status box_break(gh_om_frame_state *s,
   }
   if(s->special_phase==1){
    if(!s->runtime.break_sound)return fail(s,0x2cba48,f,GH_OBJSTEP_UNSUPPORTED);
-   s->break_sound=(gh_motion_sound_request){.model=&owner->model,.actor=&object->view,.bank=2,.program=0};
+   s->break_sound=(gh_motion_sound_request){.model=&owner->model,.actor=&object->view,
+    .bank=2,.program=kind331?0x10:0};
    uint32_t handle=0;
    gh_actor_motion_status status=s->runtime.break_sound(s->runtime.context,&s->break_sound,&handle,&pc);
    if(status)return fail(s,pc?pc:0x2cba48,f,
@@ -758,7 +773,7 @@ static gh_object_step_status box_break(gh_om_frame_state *s,
   }
   s->special_phase=8;
  }
- return fragment_tick(s,work,kind304?0:1,kind304?6:kind33f?13:9,f);
+ return fragment_tick(s,work,kind304?0:1,(kind304||kind331)?6:kind33f?13:9,f);
 }
 
 static gh_object_step_status flag_move(gh_om_frame_state *s,gh_static_transform_policy policy,uint32_t *f)
@@ -1083,7 +1098,7 @@ static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_w
   return fail(s,0x1c0678,f,GH_OBJSTEP_ARGUMENT);
  const unsigned kind=s->object->runtime_kind;
  const int16_t room=work->room;
- const int dropped_item=s->object->runtime_created&&(((room==0x101||room==0x103)&&kind==0x3d6)||
+ const int dropped_item=s->object->runtime_created&&(((room==0x101||room==0x102||room==0x103)&&kind==0x3d6)||
      ((room==0x102||room==0x103)&&kind==0x3c4)||(room==0x103&&(kind==0x3c8||kind==0x3d0))||
      (room==0x102&&kind==0x3df));
  if(p[0x2f4]){
@@ -1661,6 +1676,10 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
      if(!left||(left&0x8000u))p[0x2f4]=p[0x2f5]=p[0x2f6]=p[0x2f7]=0;
     }
     s->phase=4;
+   }else if(kind==0x331&&(phase==2||phase==3||s->special_phase==8)){
+    gh_object_step_status status=(phase==2||s->special_phase==8)?box_break(s,w,policy,f):remove_object(s,f);
+    if(status)return status;
+    s->phase=4;
    }else{
     if(phase)return fail(s,phase<4?methods[index][phase]:s->entry,f,GH_OBJSTEP_UNSUPPORTED);
     s->phase=3;
@@ -1689,6 +1708,7 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
    if (status) return status;
    s->phase = 4;
   } else if((s->object->source.type==0x30a||s->object->source.type==0x304||
+       (w->room==0x102&&s->object->source.type==0x309)||
        (w->room==0x103&&s->object->source.type==0x33f))&&
        (p[0x2f4]==2||p[0x2f4]==3||s->special_phase==8)){
    /* 18C8A8, 188528 and 19F8B0 share 1B79B0 -> 312708, VT+4C empty. */

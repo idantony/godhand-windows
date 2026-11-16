@@ -91,6 +91,12 @@ static int r102_em03_punch(const gh_enemy_actor *enemy, const uint8_t *actor, ui
         enemy->entry.b.work && enemy->entry.b.work->room == 0x102;
 }
 
+static int r102_at0b_em02_punch(const gh_enemy_actor *enemy,const uint8_t *actor,uint16_t effect)
+{
+    return effect==7&&word(actor+0x564)==0x202&&half(actor+0x640)==0x17&&
+        !actor[0x1650]&&word(actor+0x16c4)==2&&enemy->entry.b.work&&enemy->entry.b.work->room==0x102;
+}
+
 static int r102_east_em27_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
     return effect == 7 && enemy->entry.object.view.size > 0x1650 &&
         word(actor + 0x564) == 0x227 && half(actor + 0x640) == 4 && !actor[0x1650] &&
@@ -228,7 +234,9 @@ gh_actor_motion_status gh_enemy_counter_heat_002a9978(gh_enemy_actor *enemy, uin
     const gh_boot_work *work = enemy->entry.b.work;
     const int story = work && work->room == 0x102 && view->size > 0x1650 &&
         view->original_vtable214 == 0x4479c8 &&
-        ((stamp == 11 && p[0x1650] == 5) || (stamp == 3 && p[0x1650] == 1)) && p[0x2f4] == 1 &&
+        ((stamp == 11 && p[0x1650] == 5) || (stamp == 3 && p[0x1650] == 1) ||
+         (stamp == 7 && view->size >= 0x16c8 && !p[0x1650] && word(p + 0x16c4) == 2)) &&
+        p[0x2f4] == 1 &&
         p[0x2f5] == 0x1d && p[0x2f6] == 1 && p[0x2f7] == 1;
     if (word(p + 0x564) != 0x200 || (stamp != 20 && !story && !r103_first_wave_em00(enemy)))
         return stop(frontier, 0x2a9978);
@@ -276,8 +284,10 @@ static int scenery_reaction_enemy(const gh_enemy_actor *enemy, const uint8_t *ac
     const uint32_t dependency = word(actor + 0x564);
     /* Original 20A178 accepts effect 2E from scenery and maps the live
      * receiver to selector 11, including the exchanged R101 actor. */
+    const int r102_em27=dependency==0x227&&half(actor+0x640)==4&&!actor[0x1650]&&
+        enemy->entry.b.work&&enemy->entry.b.work->room==0x102;
     return dependency == 0x200 || dependency == 0x202 || dependency == 0x203 ||
-           r101_scenery_reaction_enemy(enemy, actor);
+           r101_scenery_reaction_enemy(enemy, actor) || r102_em27;
 }
 
 static uint32_t scenery_hit_vtable(unsigned kind)
@@ -735,7 +745,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int opening_pair = opening_203 || opening_200;
     const int ordinary_punch = room_unarmed_punch(enemy, p, effect);
     const int east_em27 = r102_east_em27_punch(enemy, p, effect);
-    const int hit_probe_selector = opening_pair || ordinary_punch;
+    const int hit_probe_selector = opening_pair || ordinary_punch || r102_at0b_em02_punch(enemy,p,effect);
     const int counter_selector = opening_200 || (ordinary_punch && dependency==0x200);
     const int arena_em0a=triangle&&r103_arena_em0a(enemy,p);
     const int arena_stun_airborne=arena_em0a&&effect==0x12&&number(p+0x17cc)>0;
@@ -847,6 +857,41 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             call->reacted = 1;
             call->phase = 5;
             return GH_ACTOR_MOTION_OK;
+        }
+        const int at0b_counter=r102_at0b_em02_punch(enemy,p,effect)&&half(p+0x2f4)==0x6900&&
+            p[0x2f6]==1&&p[0x2f7]==1&&(behavior&0x2000u)&&!(behavior&0x804020u)&&
+            !(status&0x182040u)&&!(flags&0x12cu)&&p[0x17bc]==1&&rank&&rank<=2;
+        if(at0b_counter&&!body->state->heat[0x10]&&!word(player->bytes+0x5fc)){
+            const gh_enemy_entry_bindings *binding=&enemy->entry.b;
+            const gh_title_player_view *receiver=&enemy->entry.object.view;
+            float origin[3],target[3],angle;
+            const float face=number(p+0x760),timer=number(p+0x173c);
+            if(!isfinite(face)||!isfinite(timer)||!receiver->alias_f0||!player->alias_f0)
+                return stop(frontier,0x20b140);
+            memcpy(origin,receiver->alias_f0,sizeof(origin));
+            memcpy(target,player->alias_f0,sizeof(target));
+            if(gh_player_target_angle_002da038(binding->boot_elf,binding->boot_elf_bytes,
+                origin,target,number(p+0x104),3.1415927f,&angle,frontier))return stop(frontier,0x2da038);
+            if(fabsf(angle)<=1.5707964f&&face<1.5707964f){
+                if(timer>0){
+                    /* 20B140's original selector1 draw occurs before it rejects Give07. */
+                    uint32_t draw;
+                    if(gh_game_mt_next_0030f348(&body->state->random,&draw))
+                        return stop(frontier,0x31cfe0);
+                    restore_counter_hp(p);
+                    p[0x2f4]=p[0x2f6]=0;
+                    p[0x2f5]=0x69;
+                    p[0x2f7]=1;
+                    call->phase=stamp2_counter_cue;
+                    goto counter_cue;
+                }
+                restore_counter_hp(p);
+                p[0x2f4]=p[0x2f6]=p[0x2f7]=0;
+                p[0x2f5]=0x6f;
+                call->reacted=1;
+                call->phase=5;
+                return GH_ACTOR_MOTION_OK;
+            }
         }
         /* 20BB58 dispatches effect 7 to the original 20BB80 dead-HP arm. */
         const int r102_em00 = r102_close_em00_punch(enemy, p, effect);
@@ -965,16 +1010,18 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                 const int stamp2=r102_stamp2_punch(enemy,p,effect);
                 const int east_em00=ordinary_punch&&dependency==0x200&&enemy->entry.b.work->room==0x102&&
                     half(p+0x640)==3&&p[0x1650]==1;
-                const int synchronous_counter=stamp2||east_em00||r102_em03_punch(enemy,p,effect);
+                const int at0b_em02=r102_at0b_em02_punch(enemy,p,effect);
+                const int synchronous_counter=stamp2||east_em00||r102_em03_punch(enemy,p,effect)||at0b_em02;
                 if(!triangle&&!r102_em00&&!synchronous_counter&&!r103_arena_punch_target(enemy,dependency)){
                     call->phase = 6;
                     return stop(frontier, 0x20d2a0);
                 }
-                uint32_t retry;
+                const int faces=number(p+0x760)<=1.5707964f;
+                uint32_t retry=UINT32_MAX;
                 gh_game_mt random_state = body->state->random;
-                if (gh_game_mt_next_0030f348(&random_state,&retry))
+                if ((!at0b_em02||faces)&&gh_game_mt_next_0030f348(&random_state,&retry))
                     return stop(frontier,0x31cfe0);
-                if(!(retry&3u)&&number(p+0x760)<=1.5707964f){
+                if(!(retry&3u)&&faces){
                     if(arena_em0a){
                         body->state->random=random_state;
                         restore_counter_hp(p);
@@ -1041,6 +1088,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         if(call->phase==3)call->phase=4;
     }
+counter_cue:
     if(call->phase==stamp2_counter_cue){
         gh_actor_motion_status status=environment_pressure_sound(call,enemy,0,0x7c,frontier);
         if(status)return status;
@@ -1141,7 +1189,8 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
          !r100_stamp20(enemy, p) && !triangle && !room_unarmed_punch(enemy, p, effect) &&
-         !r102_em03_punch(enemy, p, effect) && !r102_east_em27_punch(enemy, p, effect)) ||
+         !r102_em03_punch(enemy, p, effect) && !r102_east_em27_punch(enemy, p, effect) &&
+         !r102_at0b_em02_punch(enemy,p,effect)) ||
         (amplified && !(triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) ||
         r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p))) &&
          !r102_close_em00_punch(enemy, p, effect) && !r102_stamp2_punch(enemy, p, effect)))
@@ -1183,6 +1232,16 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         return stop(frontier, 0x271810);
     const uint32_t dependency = word(p + 0x564);
     const int manager_active = (int32_t)word(init->enemies + 0x514) > 0;
+    const uint32_t boost_timer=word(player->bytes+0x5fc);
+    const int boosted_scenery=call->effect==0x2e&&dependency==0x227&&half(p+0x640)==4&&
+        half(p+0x2f4)==0x1101;
+    const uint16_t take_effect=half(body->bytes+0x46);
+    const int boosted_at0b=take_effect==7&&word(p+0x16c4)==2&&half(p+0x2f4)==1&&
+        !p[0x2f6]&&!p[0x2f7]&&((dependency==0x200&&half(p+0x640)==7)||
+        r102_at0b_em02_punch(enemy,p,take_effect));
+    const int boosted_impact=!manager_active&&!init->heat[0x10]&&boost_timer&&boost_timer<=600&&
+        !p[0x1650]&&enemy->entry.b.work&&enemy->entry.b.work->room==0x102&&
+        (boosted_scenery||boosted_at0b);
     const int thrown_box=call->effect==0x36&&dependency==0x227&&half(p+0x640)==9&&
         enemy->entry.b.work&&enemy->entry.b.work->room==0x101;
     if (manager_active) {
@@ -1223,17 +1282,18 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
             !triangle_take_supported(enemy,p,call->effect) &&
             !room_unarmed_punch(enemy, p, half(body->bytes + 0x46)) &&
             !r102_em03_punch(enemy, p, half(body->bytes + 0x46)) &&
-            !r102_east_em27_punch(enemy, p, half(body->bytes + 0x46)))) ||
-        init->heat[0x10] || word(player->bytes + 0x5fc) ||
-        (!manager_active && (!save.bytes || save.size < 0xaf)))
+            !r102_east_em27_punch(enemy, p, half(body->bytes + 0x46)) &&
+            !r102_at0b_em02_punch(enemy,p,take_effect))) ||
+        init->heat[0x10] || (boost_timer&&!boosted_impact) ||
+        (!manager_active && !boosted_impact && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);
-    const unsigned costume = manager_active ? 0 : gh_core_save_costume(save);
+    const unsigned costume = manager_active||boosted_impact ? 0 : gh_core_save_costume(save);
     if (costume == 1 || costume == 3 || costume == 5 || costume == 7)
         return stop(frontier, 0x271e58);
     gh_actor_motion_status position_status=gh_enemy202_impact_position_00271518(enemy,call->impact.position,frontier);
     if(position_status)return position_status;
-    call->impact.bank=manager_active ? 0 : 0x58;
-    call->impact.index=manager_active ? 0xc : amplified ? 0x12 : 0x10;
+    call->impact.bank=manager_active||boosted_impact ? 0 : 0x58;
+    call->impact.index=manager_active ? 0xc : boosted_impact ? 0x40 : amplified ? 0x12 : 0x10;
     call->impact.scale=1;
     call->impact.mode=-1;
     /* 292F08 tests the original actor byte before the unbound effect. */

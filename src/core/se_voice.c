@@ -202,8 +202,8 @@ static int enemy_reaction_profile(const struct voice *v,int16_t bank,int16_t pro
   if(h(root->bytes+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!arena_em03&&!arena_em0a)return 0;
   dependency=w(root->bytes+0x564);
   if(!dependency)return 0;
-  const int east_reaction=r102_east_em27_voice(v,1,0)||
-      (v->combat_profile&&r102_east_em27_voice(v,1,1));
+  const int east_reaction=r102_east_em27_voice(v,1,0)||r102_east_em27_voice(v,0x1101,0)||
+      (v->combat_profile&&(r102_east_em27_voice(v,1,1)||r102_east_em27_voice(v,0x1101,1)));
   if(dependency==0x227&&!east_reaction&&
      (!v->model->work||v->model->work->room!=0x101||v->part_index!=-1||
       v->model->root.size<0x642||h(v->model->root.bytes+0x640)!=9))return 0;
@@ -481,6 +481,15 @@ static const uint8_t *r102_voice_actor(const struct voice *v)
  return h(actor+0x2fe)==0x202?actor:NULL;
 }
 
+static int r102_east_em27_route_voice(const struct voice *v,uint16_t state,unsigned variant)
+{
+ const uint8_t *actor=r102_voice_actor(v);
+ if(!actor||v->model->root.size<0x16c8||w(actor+0x564)!=0x227||h(actor+0x640)!=4||
+    actor[0x1650]||h(actor+0x2f4)!=state||actor[0x2f6]!=1||actor[0x2f7]!=variant)return 0;
+ const uint32_t mode=w(actor+0x16c4);
+ return mode==6||mode==8;
+}
+
 static const uint8_t *r102_em0a_voice_actor(const struct voice *v)
 {
  const uint8_t *actor=r102_voice_actor(v);
@@ -572,7 +581,8 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
   const unsigned stamp=h(actor+0x640),state=h(actor+0x2f4);
   const int fallen=state==2&&!h(actor+0x54a)&&
       ((stamp==0x10&&!actor[0x1650])||(stamp==11&&actor[0x1650]==5));
-  const int counter=stamp==11&&actor[0x1650]==5&&state==0x1d01&&actor[0x2f7]==1;
+  const int west=stamp==7&&v->model->root.size>=0x16c8&&!actor[0x1650]&&w(actor+0x16c4)==2;
+  const int counter=((stamp==11&&actor[0x1650]==5)||west)&&state==0x1d01&&actor[0x2f7]==1;
   return (fallen||counter)&&v->part_index==-1&&
     w(p)==0x00b40000u&&w(p+4)==0x0420006cu&&w(p+8)==0x25au&&w(p+12)==0x00200000u&&
     w(p+16)==0x00640064u&&w(p+20)==0x005a0040u&&w(p+24)==0x0080ff80u&&
@@ -620,7 +630,9 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
      !east[0x2f4]&&east[0x2f6]==1&&
      ((east[0x2f5]>=5&&east[0x2f5]<=8&&!east[0x2f7])||
       ((east[0x2f5]==7||east[0x2f5]==9)&&east[0x2f7]<=1));
-  if(!r105_em27_voice_source(v)&&!east_step&&!r102_east_em27_voice(v,0x1600,1))return 0;
+  const int east_route=ground_step&&(r102_east_em27_route_voice(v,0x1300,0)||
+      r102_east_em27_route_voice(v,0x0800,1));
+  if(!r105_em27_voice_source(v)&&!east_step&&!east_route&&!r102_east_em27_voice(v,0x1600,1))return 0;
  }else if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&
           !r102_em0f_voice_source(v)&&!ema2_step&&!arena_boss_step)return 0;
  unsigned alternate=program!=v->requested_program;
@@ -918,7 +930,7 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
   const int gate_em0a=em0a&&em0a[0x2f6]==1&&
       (h(em0a+0x2f4)==0x4b00||(h(em0a+0x2f4)==0x0800&&em0a[0x2f7]==1));
   const int east_em27=r102_east_em27_voice(v,0x6b00,1)||r102_east_em27_voice(v,0x6c00,1)||
-      r102_east_em27_voice(v,0x0800,1);
+      r102_east_em27_voice(v,0x0800,1)||r102_east_em27_route_voice(v,0x0800,1);
   if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&!gate_em0a&&!east_em27&&
      !r102_em0f_voice_source(v)&&!r105_em27_voice_source(v)&&!r100_em0a_formation_source(v)&&!arena_landing&&!arena_turn&&!boss_grab)return 0;
  }else if(!v->combat_profile)return 0;
@@ -955,7 +967,10 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
   const uint8_t *actor=r102_voice_actor(v);
   const int em03=actor&&w(actor+0x564)==0x203&&h(actor+0x640)==8&&!actor[0x1650];
   const int east_em00=actor&&w(actor+0x564)==0x200&&h(actor+0x640)==3&&actor[0x1650]==1;
-  const int source=(em03||east_em00||r102_em0a_voice_actor(v))&&h(actor+0x2f4)==0x6900&&actor[0x2f7]==1;
+  const int at0b_em02=actor&&v->model->root.size>=0x16c8&&w(actor+0x564)==0x202&&
+      h(actor+0x640)==0x17&&!actor[0x1650]&&w(actor+0x16c4)==2;
+  const int source=(em03||east_em00||r102_em0a_voice_actor(v)||at0b_em02)&&
+      h(actor+0x2f4)==0x6900&&actor[0x2f7]==1;
   return (source||(!v->model&&v->combat_profile))&&
      w(p+4)==0x04060054u&&w(p+8)==0x50u&&w(p+12)==0x00210000u&&
      w(p+16)==0x007f007fu&&w(p+20)==0x005a0040u&&w(p+24)==0x0100ff00u&&
@@ -1222,7 +1237,9 @@ static int em00_counter_voice_model(const struct voice *v)
  const unsigned stamp=h(actor+0x640);
  const int opening=model->work->room==0x100&&stamp==20;
  const int story=model->work->room==0x102&&model->root.size>0x1650&&
-    ((stamp==11&&actor[0x1650]==5)||(stamp==3&&actor[0x1650]==1))&&actor[0x2f6]==1&&actor[0x2f7]==1;
+    ((stamp==11&&actor[0x1650]==5)||(stamp==3&&actor[0x1650]==1)||
+     (stamp==7&&model->root.size>=0x16c8&&!actor[0x1650]&&w(actor+0x16c4)==2))&&
+    actor[0x2f6]==1&&actor[0x2f7]==1;
  const int ordinary=(opening||story)&&h(actor+0x2fe)==0x202&&w(actor+0x564)==0x200;
  return (ordinary||r103_em00_voice_actor(v))&&h(actor+0x2f4)==0x1d01;
 }
@@ -1448,7 +1465,7 @@ static int item_drop_profile(const struct voice *v)
  const unsigned kind=h(model->root.bytes+0x2fe);
  const int16_t room=model->work->room;
  const unsigned program=(unsigned)v->requested_program;
- const int drop=program==0xfa&&(((room==0x101||room==0x103)&&kind==0x3d6)||
+ const int drop=program==0xfa&&(((room==0x101||room==0x102||room==0x103)&&kind==0x3d6)||
     ((room==0x102||room==0x103)&&kind==0x3c4)||
     (room==0x103&&(kind==0x3d0||kind==0x3c8))||(room==0x102&&kind==0x3df));
  const int collect=program==0xfc&&room==0x102&&kind==0x3df&&model->root.bytes[0x2f6]==4;
@@ -1477,6 +1494,27 @@ static int r105_gate_close_descriptor(const uint8_t *p)
     w(p+12)==0x00200000u&&w(p+16)==0x00640078u&&w(p+20)==0x005a0040u&&
     !w(p+24)&&!w(p+28)&&w(p+32)==0x00030044u&&w(p+36)==0x300u&&
     w(p+40)==0xffffu&&!w(p+44);
+}
+
+static int r102_boost_impact_voice(const struct voice *v,int16_t bank,int16_t program,
+ const uint8_t *p,const uint8_t *sample)
+{
+ if(!v->source_owner||v->requested_bank||v->requested_program!=0x121||bank||program!=0x121||v->part_index!=-1)
+  return 0;
+ if(v->model){
+  const uint8_t *at0b=r102_voice_actor(v);
+  const int local=at0b&&v->model->root.size>=0x16c8&&
+      ((w(at0b+0x564)==0x200&&h(at0b+0x640)==7)||(w(at0b+0x564)==0x202&&h(at0b+0x640)==0x17))&&
+      !at0b[0x1650]&&w(at0b+0x16c4)==2&&h(at0b+0x2f4)==1&&!at0b[0x2f7]&&
+      (!at0b[0x2f6]||(v->combat_profile&&at0b[0x2f6]==1));
+  if(!local&&!r102_east_em27_voice(v,0x1101,0)&&
+     !(v->combat_profile&&r102_east_em27_voice(v,0x1101,1)))return 0;
+ }else if(!v->combat_profile)return 0;
+ return w(p)==0x01210000u&&w(p+4)==0x01000093u&&w(p+8)==0x64u&&
+    w(p+12)==0x00230000u&&w(p+16)==0x00780078u&&w(p+20)==0x005a0040u&&
+    w(p+24)==0x0080ff80u&&w(p+28)==0x00ff0000u&&w(p+32)==0x00060005u&&
+    !w(p+36)&&w(p+40)==0xffffu&&!w(p+44)&&
+    (!sample||(w(sample)==0x176d0u&&w(sample+4)==20000&&w(sample+8)==0x5fc080ffu&&!w(sample+12)));
 }
 
 static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,int16_t program,const uint8_t*p,struct voice*candidate,uint16_t selected_pitch){
@@ -1623,7 +1661,8 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  const int item_drop=item_drop_profile(candidate);
  if(item_drop&&(w(descriptor.data)!=(program==0xfc?0x8a7c0u:0x7ad70u)||w(descriptor.data+4)!=16000||
     w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))return unsupported(s,0x35fc);
- const uint32_t prop_sample=prop_break_room==0x100?0xf630u:prop_break_room==0x103?0x5570u:0xe710u;
+ const uint32_t prop_sample=prop_break_room==0x100?0xf630u:prop_break_room==0x102?0x113c0u:
+    prop_break_room==0x103?0x5570u:0xe710u;
  if(prop_break_room&&(w(descriptor.data)!=prop_sample||w(descriptor.data+4)!=16000||
     w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))return unsupported(s,0x35fc);
  if(door){
@@ -1739,7 +1778,10 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  const int attack_core=core_enemy_attack_profile(candidate,bank,program,p,NULL);
  if(attack_core&&!core_enemy_attack_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
- if(impact_voice||reaction_voice||ema2_voice||ema2_timer_voice||timed_voice||footstep||sequence_voice||attack_core||
+ const int boosted_impact=r102_boost_impact_voice(candidate,bank,program,p,NULL);
+ if(boosted_impact&&!r102_boost_impact_voice(candidate,bank,program,p,descriptor.data))
+  return unsupported(s,0x35fc);
+ if(boosted_impact||impact_voice||reaction_voice||ema2_voice||ema2_timer_voice||timed_voice||footstep||sequence_voice||attack_core||
     local_cue_voice||weapon_swing||weapon_contact||turn_core||attack_voice||death_voice||knockdown_core||player_hurt||recovery||
     devil_spawn||devil_rise||devil_idle||devil_ranged||devil_retreat||em0a_attack_voice||
     em0a_player_impact||hurt5_impact||r103_grab_impact||item_drop||player_weapon_impact||pressure_cue||ticket||mount_fall_sample)candidate->combat_profile=1;
@@ -2266,6 +2308,8 @@ static unsigned room_prop_break_profile(const struct voice *v)
  }else if(room==0x101){
   const int door=kind==0x313&&vtable==0x424128;
   if(!door&&!box&&!(kind==0x304&&vtable==0x423338))return 0;
+ }else if(room==0x102){
+  if(kind!=0x309||vtable!=0x4237e8)return 0;
  }else if(room==0x103){
   const int fixture=kind==0x33f&&vtable==0x4267f8;
   if(!box&&!fixture)return 0;
@@ -2348,6 +2392,7 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
      !r103_hurt5_impact_profile(candidate,candidate->descriptor,NULL)&&
      !r102_ticket_spawn_profile(candidate,candidate->descriptor)&&
      !enemy_scene_motion_sample(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)&&
+     !r102_boost_impact_voice(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_enemy_footstep_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_r102_weapon_contact(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !weapon_swing_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL))

@@ -738,6 +738,14 @@ static int core0b_radial_profile(gh_effect_view record)
            word(r+0x130)==1&&!word(r+0x134)&&!word(r+0x2a0);
 }
 
+static int core40_radial_profile(gh_effect_view record)
+{
+    if(!record.bytes||record.size!=0x2f0)return 0;
+    const uint8_t *r=record.bytes;
+    return word(r)==0x1efee010u&&word(r+4)==0x00a00000u&&word(r+0xbc)==0x00ff0201u&&
+           !r[0x128]&&r[0x12e]==1&&word(r+0x130)==1&&!word(r+0x134)&&!word(r+0x2a0);
+}
+
 int gh_effect_core0c_radial_record_bound(const gh_game_effects *effects,gh_effect_view record)
 {
     gh_effect_view group;
@@ -751,6 +759,9 @@ int gh_effect_core_radial_record_bound(const gh_game_effects *effects,gh_effect_
 {
     if(gh_effect_core0c_radial_record_bound(effects,record))return 1;
     gh_effect_view group;
+    if(effects&&core40_radial_profile(record)&&!gh_effect_est_at_00306030(effects,0,0x40,&group)&&
+       group.size>=16+6*0x2f0&&word(group.bytes+4)==6&&record.bytes==group.bytes+16+3*0x2f0)
+        return 1;
     return effects&&core0b_radial_profile(record)&&!gh_effect_est_at_00306030(effects,0,0xb,&group)&&
            group.size>=16+6*0x2f0&&word(group.bytes+4)==6&&record.bytes==group.bytes+16+4*0x2f0;
 }
@@ -781,7 +792,8 @@ gh_effect_status gh_effect_position_init_scaled_00301c20(uint8_t p[0x400], gh_ef
     if (!p || !record.bytes || record.size < 0x2f0 || !position) return GH_EFFECT_ARGUMENT;
     const uint8_t *r = record.bytes;
     if ((r[0x133] != 0x14 && r[0x133] != 9 && !gh_effect_esp08_screen_row(record)&& !gh_effect_player_stun_row(record) &&
-         !(amplitude_scale==1.0f && (core0b_radial_profile(record)||core0c_radial_profile(record)||ev04_radial_profile(record)))) || !isfinite(amplitude_scale) ||
+         !(amplitude_scale==1.0f && (core0b_radial_profile(record)||core0c_radial_profile(record)||
+           core40_radial_profile(record)||ev04_radial_profile(record)))) || !isfinite(amplitude_scale) ||
         !(word(r + 4) & 0x200000u)) return GH_EFFECT_UNSUPPORTED;
     uint32_t seed = word(p + 0x220);
     float random = take_random_signed(&seed);

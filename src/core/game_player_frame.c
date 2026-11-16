@@ -940,7 +940,8 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
    const int east_em27_combo_hit=b->work->room==0x102&&dependency==0x227&&stamp==4&&
      source->size>0x1650&&!source->bytes[0x1650]&&half(source->bytes+0x2f4)==0x1600&&
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&override_bank==UINT32_MAX&&!cue&&
-     s->pending_damage_kind==0x3d&&s->pending_damage==7&&!residual;
+     !residual&&((s->pending_damage_kind==0x3d&&s->pending_damage==7)||
+                 (s->pending_damage_kind==0x37&&s->pending_damage==15));
    /* The two original EM03 kind3E rows split power30 and power60. */
    const int em03_fall=r105&&dependency==0x203&&stamp==1&&s->pending_damage_kind==0x3e&&
      ((s->pending_damage==23&&residual==7)||(s->pending_damage==45&&residual==15));
@@ -1218,7 +1219,8 @@ static gh_player_frame_status hurt_grab_0011c348(gh_game_player_frame *s)
     attacker->original_vtable214==0x4479c8;
  const int r102_em00=b->work->room==0x102&&dependency==0x200&&
     attacker->size>0x1650&&attacker->original_vtable214==0x4479c8&&
-    ((stamp==11&&attacker->bytes[0x1650]==5)||(stamp==3&&attacker->bytes[0x1650]==1));
+    ((stamp==11&&attacker->bytes[0x1650]==5)||(stamp==3&&attacker->bytes[0x1650]==1)||
+     (stamp==7&&attacker->size>=0x16c8&&!attacker->bytes[0x1650]&&w(attacker->bytes+0x16c4)==2));
  const int arena=r103_grab_attacker(b->work,attacker,0x200);
  if(!em27&&!r102_em00&&!arena&&(b->work->room!=0x100||stamp!=20||dependency!=0x200))
   return fail(s,0x11c348,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -2038,7 +2040,9 @@ static gh_player_frame_status escape_grab_00117600(gh_game_player_frame *s)
  const int opening=b->work->room==0x100&&borrowed&&half(attacker->bytes+0x640)==20;
  const int story=b->work->room==0x102&&borrowed&&attacker->size>0x1650&&
     ((half(attacker->bytes+0x640)==11&&attacker->bytes[0x1650]==5)||
-     (half(attacker->bytes+0x640)==3&&attacker->bytes[0x1650]==1));
+     (half(attacker->bytes+0x640)==3&&attacker->bytes[0x1650]==1)||
+     (half(attacker->bytes+0x640)==7&&attacker->size>=0x16c8&&!attacker->bytes[0x1650]&&
+      w(attacker->bytes+0x16c4)==2));
  const int retired_pair=retired&&(b->work->room==0x100||b->work->room==0x102||b->work->room==0x103);
  if(!actor->alias_f0||(!retired_pair&&!opening&&!story&&!r103_grab_attacker(b->work,attacker,0x200)))
   return fail(s,0x117600,GH_PLAYER_FRAME_UNSUPPORTED);

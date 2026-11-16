@@ -183,7 +183,7 @@ gh_scene_placement_status gh_om_factory_create_0030fa98(gh_om_factory*f,gh_om_ru
  const int mount=kind==0x353&&room==0x102;
  const int ticket=kind==0x3da&&room==0x102;
  const int projectile=kind==0x3be&&room==0x100;
- const int item=(kind==0x3d6&&(room==0x101||room==0x103))||
+ const int item=(kind==0x3d6&&(room==0x101||room==0x102||room==0x103))||
                 (kind==0x3c4&&(room==0x102||room==0x103))||
                 ((kind==0x3c8||kind==0x3d0)&&room==0x103)||(kind==0x3df&&room==0x102);
  if(id!=0xffff||(kind!=0x3eb&&!paper&&!room_weapon&&!mount&&!projectile&&!item&&!ticket))
@@ -337,7 +337,7 @@ gh_scene_placement_status gh_om_factory_initialize_runtime_item_001c0128(gh_om_f
     f->bindings.initializer->work!=f->bindings.work)return GH_PLACE_ARGUMENT;
  const int16_t room=f->bindings.work->room;
  const uint16_t kind=o->runtime_kind;
- if(!(((room==0x101||room==0x103)&&kind==0x3d6)||
+ if(!(((room==0x101||room==0x102||room==0x103)&&kind==0x3d6)||
       ((room==0x102||room==0x103)&&kind==0x3c4)||(room==0x103&&(kind==0x3c8||kind==0x3d0))||
       (room==0x102&&kind==0x3df)))
   return GH_PLACE_ARGUMENT;

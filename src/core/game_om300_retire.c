@@ -627,8 +627,8 @@ gh_room_pool_status gh_om_destroy_detached_mode3(gh_om300_full_retirement *state
  gh_om_factory *factory=bindings->factory;
  if(!state->stage){
   gh_om_object *object=registered_om(factory,handle);
-  if(!object||(om_kind(object)!=0x300&&om_kind(object)!=0x304&&om_kind(object)!=0x305&&om_kind(object)!=0x30a&&
-      om_kind(object)!=0x33f&&
+  if(!object||(om_kind(object)!=0x300&&om_kind(object)!=0x304&&om_kind(object)!=0x305&&om_kind(object)!=0x309&&om_kind(object)!=0x30a&&
+      om_kind(object)!=0x331&&om_kind(object)!=0x33f&&
      om_kind(object)!=0x313&&om_kind(object)!=0x324&&om_kind(object)!=0x326&&om_kind(object)!=0x356&&om_kind(object)!=0x363&&
      om_kind(object)!=0x376&&om_kind(object)!=0x3be&&om_kind(object)!=0x3c4&&om_kind(object)!=0x3c8&&om_kind(object)!=0x3d0&&om_kind(object)!=0x3df&&om_kind(object)!=0x3d6)||
      object->view.bytes!=actor->bytes||object->view.size!=actor->size||

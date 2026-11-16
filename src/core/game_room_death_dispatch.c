@@ -141,7 +141,9 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
   const int paired_player=kind==0x100&&b->player.model&&b->player.model->work&&
      b->player.model->work->room==0x103&&(word(actor->bytes+0x2f4)&0xffffu)==0x0f01&&
      !(word(actor->bytes+0x548)>>16);
-  if(borrowed&&((kind!=0x2ad&&kind!=0x202&&kind!=0x220&&!paired_player)||b->enemy.effects!=b->effects||
+  const int r102_player=kind==0x100&&b->player.model&&b->player.model->work&&
+    b->player.model->work->room==0x102&&(flags&0xe0000000u)==0xe0000000u;
+  if(borrowed&&((kind!=0x2ad&&kind!=0x202&&kind!=0x220&&!r102_player&&!paired_player)||b->enemy.effects!=b->effects||
      gh_effect_create_quiesce_actor_room_exit(b->enemy.effects,actor)))
    return fail(state,handle,0x305b90);
   if(kind==0x100&&b->player.model&&b->player.attachment&&

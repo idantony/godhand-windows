@@ -101,9 +101,16 @@ armed encounter, and reaches the original Game Over menu after a lethal
 hit. Confirming Retry restores Gene to 100 HP in R100. A separate west-route
 replay reaches the original reinforcement area and lands two Triangle hits
 during its Devil encounter. A controller replay from a zero-defeat R102
-checkpoint records five of the six qualifying defeats. An original counter
-finishes the fifth enemy with Gene at 18 HP. The original item drop grants
-an attack boost, and Gene regains control and walks toward the sixth fight.
+checkpoint records all six qualifying defeats. Gene collects the original
+attack-boost drop after the fifth defeat and lands the sixth by escaping a
+grab and countering. With 9 HP, he continues through the original exit and
+confirms Continue on the save map. The same replay enters R103 and produces
+12 consecutive frames with native world and actor packets. The loaded save
+has the same SHA-256 before and after the run. An extended replay on the
+same source completes all 11 EV1A shots and verifies analog movement after
+the first arena wave starts. Direct3D presents 86 R102 and 10 R103 scene
+frames around the exit, plus eight consecutive arena frames after EV1A and
+its fade finish. Both Direct3D runs report zero renderer errors.
 A native CPU replay loads an isolated R103 test save and uses original pad
 inputs to defeat all six enemies in the first three arena waves. Gene takes
 the original healing drop and enters the twin boss wave with 58 HP. The replay
@@ -116,6 +123,8 @@ Gene's HP drops from 100 to 87. On the replay that clears all six enemies,
 the original paired throw lowers Gene's HP from 58 to 40. He gets back up
 and regains control. Pressing Square then lowers the second boss's HP from
 597 to 594. A muted Direct3D replay presents the original paired throw.
+A separate controller replay reaches Game Over after a lethal paired throw.
+Confirming Retry restores Gene to 100 HP and returns him to the R103 battle.
 Full boss clearance remains in development. Earlier Direct3D replays present the escape counter and the movement that
 follows it after entering R103 through the original door from R102.
 
@@ -340,15 +349,20 @@ R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101
 
 从新游戏开始的东侧回放打破原版木门，在后续持械战斗中被击倒，并在原版 Game Over 界面
 确认重试，以 100 HP 回到 R100。西侧回放进入原版增援区域，在恶魔遭遇期间打出两次三角攻击。
-R102 从零击败存档开始，经手柄回放完成开门所需的六次击败中的五次。Gene 用原版反击
-打倒第五名敌人，此时还剩 18 HP。他拾取原版掉落的攻击强化，恢复操作后继续向第六场战斗移动。
+R102 从零击败存档开始，经手柄回放完成开门所需的全部六次击败。Gene 拾取第五次击败后掉落的
+原版攻击强化，并用挣脱反击完成第六次击败。他带着 9 HP 走到原版出口，在保存地图确认继续。
+同一条回放进入 R103，连续生成 12 帧原生场景与角色绘制数据。载入的存档在回放前后哈希一致。
+延长回放播完 EV1A 的全部 11 个镜头，验证首波敌人启动后的摇杆移动。Direct3D 在转场附近
+呈现了 86 个 R102 场景帧和 10 个 R103 场景帧，在 EV1A 及淡出结束后又连续呈现了 8 个竞技场帧。
+两项 Direct3D 回放的渲染器报错均为零。
 原生 CPU 回放从独立的 R103 测试存档开始，用原版手柄输入击倒前三波共六名敌人。
 Gene 拿到原版恢复道具，以 58 HP 进入双头目战。回放提交两名头目的模型绘制指令，并运行到
 原版选招。静音 Direct3D 回放呈现了 6,908 个场景帧，覆盖原版头目入场，渲染器报错为零。
 另一项受控测试预置前三波已清场，验证首名头目连击三次命中，Gene 从 100 HP
 降到 87 HP。清完六名敌人的回放继续进入双头目战，原版合投让 Gene 从 58 HP 降到 40。
 Gene 起身恢复操作后，按方块将第二名头目的生命值从 597 降到 594。静音 Direct3D 回放
-呈现了合投过程。完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
+呈现了合投过程。另一条手柄回放在 Gene 被合投击倒后进入原版 Game Over 菜单，确认重试后
+以 100 HP 回到 R103 继续战斗。完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
 已呈现挣脱反击和随后的摇杆移动。
 
 另一次测试预置全场已清，并将 Gene 放到原版交互区域。用圆圈打开战后对白，叉键关闭，

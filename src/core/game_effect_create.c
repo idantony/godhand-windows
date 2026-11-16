@@ -246,6 +246,12 @@ gh_effect_status gh_effect_create_enemy_amplified_impact_begin_00306838(gh_effec
  return positioned_begin(call,0x58,0x12,world_xyz,0);
 }
 
+gh_effect_status gh_effect_create_enemy_boosted_impact_begin_00306838(gh_effect_create_call *call,
+ const uint32_t world_xyz[3])
+{
+ return positioned_begin(call,0,0x40,world_xyz,0);
+}
+
 gh_effect_status gh_effect_create_enemy_counter_impact_begin_00306838(gh_effect_create_call *call,
  const uint32_t world_xyz[3])
 {
@@ -263,6 +269,12 @@ gh_effect_status gh_effect_create_om30a_break_begin_0018c580(gh_effect_create_ca
 {
  return positioned_begin(call,0,7,world_xyz,0);
 }
+gh_effect_status gh_effect_create_om331_break_begin_0019ca58(gh_effect_create_call *call,
+ const uint32_t world_xyz[3])
+{
+ return positioned_begin(call,0,0xcc,world_xyz,0);
+}
+
 gh_effect_status gh_effect_create_om305_break_begin_001c2ce0(gh_effect_create_call *call,
  const uint32_t world_xyz[3])
 {
@@ -381,7 +393,8 @@ static int16_t em00_escape_effect_room(const gh_title_player_view *actor)
  const unsigned stamp=w(actor->bytes+0x640)&0xffffu;
  if(stamp==20)return 0x100;
  if(actor->size>0x1650&&((stamp==11&&actor->bytes[0x1650]==5)||
-    (stamp==3&&actor->bytes[0x1650]==1)))return 0x102;
+    (stamp==3&&actor->bytes[0x1650]==1)||
+    (stamp==7&&actor->size>=0x16c8&&!actor->bytes[0x1650]&&w(actor->bytes+0x16c4)==2)))return 0x102;
  return 0;
 }
 
@@ -832,6 +845,18 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
     return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   }
  }
+ if(c->configuration_positioned&&c->request.bank==0&&c->request.index==0xcc){
+  static const uint8_t textures[]={0,0,2,203};
+  if(b->work->room!=0x102||!b->model||!b->model->root.bytes||
+     b->model->root.original_vtable214!=0x425c78u||c->count!=sizeof(textures))
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<sizeof(textures);++i){
+   const uint8_t *row=entry.bytes+16+i*0x2f0;
+   if(w(row)!=(i==3?0x1ef46010u:0x1efee010u)||w(row+4)!=0x00c00000u||
+      row[0xbe]!=0xff||row[0x128]||row[0x133]||row[0x136]||row[0x12e]!=textures[i])
+    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  }
+ }
  if(c->configuration_positioned&&c->request.bank==0&&c->request.index==0x1b){
   static const uint8_t textures[]={11,51,36};
   if(c->count!=sizeof(textures))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
@@ -839,6 +864,17 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
    const uint8_t *row=entry.bytes+16+i*0x2f0;
    if(w(row)!=0x1efe8012u||w(row+4)!=0x00800000u||row[0xbe]!=0xff||row[0x128]||
       row[0x133]||row[0x136]||row[0x12e]!=textures[i])
+    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  }
+ }
+ if(c->configuration_positioned&&c->request.bank==0&&c->request.index==0x40){
+  static const uint8_t texture[]={11,57,51,1,76,15};
+  static const uint32_t flags[]={0x1efe8010,0x1efe8010,0x1efee010,0x1efee010,0x1efee010,0x1e3ea010};
+  if(b->work->room!=0x102||c->count!=sizeof(texture))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<sizeof(texture);++i){
+   const uint8_t *row=entry.bytes+16+i*0x2f0;
+   if(w(row)!=flags[i]||w(row+4)!=(i==3?0x00a00000u:0x00800000u)||row[0xbe]!=0xff||
+      row[0x128]||row[0x136]||row[0x133]!=(i==5?9:0)||row[0x12e]!=texture[i])
     return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   }
  }
@@ -2010,6 +2046,11 @@ int gh_effect_esp_trail_is_bound(const gh_game_effects *e,const gh_effect_esp_vi
  if(v->type==9){
   if(gh_effect_attack_esp_is_bound(e,v)||gh_effect_knockdown_esp_is_bound(e,v)||
      gh_effect_player_attachment_esp_is_bound(e,v))return 1;
+  if(v->payload&&v->payload_size==0x400&&w(v->payload+0x23a)==0x00400000u&&
+     !v->actor&&!v->selector&&!gh_effect_est_at_00306030(e,0,0x40,&est)&&
+     est.size>=16+6*0x2f0&&w(est.bytes+4)==6&&v->record.bytes==est.bytes+16+5*0x2f0&&
+     v->record.size==0x2f0&&w(v->record.bytes)==0x1e3ea010u&&
+     w(v->record.bytes+4)==0x00800000u&&w(v->record.bytes+0x18c)==0x00000801u) return 1;
   return v->payload&&v->payload_size==0x400&&w(v->payload+0x23a)==0x00050006u&&
      gh_effect_event_part_is_bound(v->record,v->actor,v->selector)&&
      !gh_effect_est_at_00306030(e,6,5,&est)&&est.bytes&&est.size>=16+7*0x2f0&&
@@ -2389,9 +2430,7 @@ gh_effect_status gh_effect_create_quiesce_actor_room_exit(gh_game_effects *effec
     actor->size<0x1560||(w(actor->bytes+0x250)&0xe0000000u)!=0xe0000000u)
   return GH_EFFECT_ARGUMENT;
  struct gh_effect_native *native=effects->native;
- const int paired_player=actor->original_vtable214==0x41d220u&&
-    w(actor->bytes+0x2fc)>>16==0x100&&(w(actor->bytes+0x2f4)&0xffffu)==0x0f01&&
-    !(w(actor->bytes+0x548)>>16);
+ const int player=actor->original_vtable214==0x41d220u&&w(actor->bytes+0x2fc)>>16==0x100;
  unsigned emitters[256],particles[1024],emitter_count=0,particle_count=0;
  for(unsigned i=0;i<256;i++){
   const unsigned off=(i>>5)*4;
@@ -2405,9 +2444,9 @@ gh_effect_status gh_effect_create_quiesce_actor_room_exit(gh_game_effects *effec
    return GH_EFFECT_UNSUPPORTED;
   const int devil=w(view.payload+0x18c)==0x00030058u&&
     gh_effect_devil_emitter_is_bound(effects,&view);
-  const int heat=paired_player&&w(view.payload+0x18c)==0x00250000u&&
+  const int heat_ready=player&&w(view.payload+0x18c)==0x00250000u&&
     gh_effect_player_attachment_emitter_is_bound(&view);
-  if(!devil&&!heat&&!gh_effect_emad_emitter_is_bound(effects,&view)&&
+  if(!devil&&!heat_ready&&!gh_effect_emad_emitter_is_bound(effects,&view)&&
      !gh_effect_enemy_light_emitter_is_bound(effects,&view))
    return GH_EFFECT_UNSUPPORTED;
   emitters[emitter_count++]=i;
@@ -2426,12 +2465,12 @@ gh_effect_status gh_effect_create_quiesce_actor_room_exit(gh_game_effects *effec
    return GH_EFFECT_UNSUPPORTED;
   const int devil=w(view.payload+0x23a)==0x00030058u&&
     (view.type==0||view.type==0x1f)&&gh_effect_devil_esp_is_bound(effects,&view);
-  const int heat=paired_player&&w(view.payload+0x23a)==0x00250000u&&
+  const int heat_ready=player&&w(view.payload+0x23a)==0x00250000u&&
     (view.type==0||view.type==9)&&gh_effect_player_attachment_esp_is_bound(effects,&view);
-  if(!devil&&!heat&&!gh_effect_emad_esp_is_bound(effects,&view)&&
+  if(!devil&&!heat_ready&&!gh_effect_emad_esp_is_bound(effects,&view)&&
      !gh_effect_enemy_light_esp_is_bound(effects,&view))return GH_EFFECT_UNSUPPORTED;
-  if(m->trail_pools&&((!(devil&&view.type==0x1f)&&!(heat&&view.type==9))||
-      m->trail_pools!=native->trail_pools))
+  const int known_trail=(devil&&view.type==0x1f)||(heat_ready&&view.type==9);
+  if(m->trail_pools&&(!known_trail||m->trail_pools!=native->trail_pools))
    return GH_EFFECT_UNSUPPORTED;
   particles[particle_count++]=i;
  }
