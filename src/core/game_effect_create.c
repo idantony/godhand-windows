@@ -291,9 +291,9 @@ static int em00_family_attack_actor(const gh_title_player_view *actor)
  if(!actor||!actor->bytes||actor->size<0x568||actor->original_vtable214!=0x4479c8)return 0;
  const unsigned kind=w(actor->bytes+0x2fc)>>16;
  const uint32_t dependency=w(actor->bytes+0x564);
- if(dependency==0x215)
+ if(dependency==0x214||dependency==0x215)
   return kind==0x204&&actor->size>0x1650&&actor->bytes[0x1650]==15&&
-      (w(actor->bytes+0x640)&0xffffu)==1;
+      (w(actor->bytes+0x640)&0xffffu)==dependency-0x214;
  if(dependency!=0x200)return 0;
  if(kind==0x202)return 1;
  if(kind!=0x204||actor->size<=0x1650||actor->bytes[0x1650]!=24)return 0;
@@ -2389,6 +2389,9 @@ gh_effect_status gh_effect_create_quiesce_actor_room_exit(gh_game_effects *effec
     actor->size<0x1560||(w(actor->bytes+0x250)&0xe0000000u)!=0xe0000000u)
   return GH_EFFECT_ARGUMENT;
  struct gh_effect_native *native=effects->native;
+ const int paired_player=actor->original_vtable214==0x41d220u&&
+    w(actor->bytes+0x2fc)>>16==0x100&&(w(actor->bytes+0x2f4)&0xffffu)==0x0f01&&
+    !(w(actor->bytes+0x548)>>16);
  unsigned emitters[256],particles[1024],emitter_count=0,particle_count=0;
  for(unsigned i=0;i<256;i++){
   const unsigned off=(i>>5)*4;
@@ -2402,7 +2405,9 @@ gh_effect_status gh_effect_create_quiesce_actor_room_exit(gh_game_effects *effec
    return GH_EFFECT_UNSUPPORTED;
   const int devil=w(view.payload+0x18c)==0x00030058u&&
     gh_effect_devil_emitter_is_bound(effects,&view);
-  if(!devil&&!gh_effect_emad_emitter_is_bound(effects,&view)&&
+  const int heat=paired_player&&w(view.payload+0x18c)==0x00250000u&&
+    gh_effect_player_attachment_emitter_is_bound(&view);
+  if(!devil&&!heat&&!gh_effect_emad_emitter_is_bound(effects,&view)&&
      !gh_effect_enemy_light_emitter_is_bound(effects,&view))
    return GH_EFFECT_UNSUPPORTED;
   emitters[emitter_count++]=i;
@@ -2421,9 +2426,12 @@ gh_effect_status gh_effect_create_quiesce_actor_room_exit(gh_game_effects *effec
    return GH_EFFECT_UNSUPPORTED;
   const int devil=w(view.payload+0x23a)==0x00030058u&&
     (view.type==0||view.type==0x1f)&&gh_effect_devil_esp_is_bound(effects,&view);
-  if(!devil&&!gh_effect_emad_esp_is_bound(effects,&view)&&
+  const int heat=paired_player&&w(view.payload+0x23a)==0x00250000u&&
+    (view.type==0||view.type==9)&&gh_effect_player_attachment_esp_is_bound(effects,&view);
+  if(!devil&&!heat&&!gh_effect_emad_esp_is_bound(effects,&view)&&
      !gh_effect_enemy_light_esp_is_bound(effects,&view))return GH_EFFECT_UNSUPPORTED;
-  if(m->trail_pools&&(!devil||view.type!=0x1f||m->trail_pools!=native->trail_pools))
+  if(m->trail_pools&&((!(devil&&view.type==0x1f)&&!(heat&&view.type==9))||
+      m->trail_pools!=native->trail_pools))
    return GH_EFFECT_UNSUPPORTED;
   particles[particle_count++]=i;
  }

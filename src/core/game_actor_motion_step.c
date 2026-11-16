@@ -23,12 +23,19 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
  if(model->root.size<0x568)return 0x40u;
  const unsigned kind=half(p+0x2fe);
  const uint32_t dependency=rd(p+0x564);
- if(kind==0x204&&model->work&&model->work->room==0x103&&
-    model->root.original_vtable214==0x4479c8&&model->root.size>0x1650&&
-    p[0x1650]==24&&p[0x2f4]==1&&!p[0x2f5]){
-  const unsigned stamp=half(p+0x640);
-  if((dependency==0x200&&(stamp==2||stamp==3))||
-     (dependency==0x203&&(stamp==6||stamp==7)))return 0x48u;
+ if(model->work&&model->work->room==0x103){
+  if(kind==0x204&&model->root.original_vtable214==0x4479c8&&
+     model->root.size>0x1650&&p[0x2f4]==1&&!p[0x2f5]){
+   const unsigned stamp=half(p+0x640);
+   const unsigned appearance=p[0x1650];
+   if((appearance==24&&((dependency==0x200&&(stamp==2||stamp==3))||
+       (dependency==0x203&&(stamp==6||stamp==7))))||
+      (appearance==15&&((dependency==0x214&&stamp==0)||(dependency==0x215&&stamp==1))))
+    return 0x48u;
+  }
+  /* The lethal 11D4B0 impact sets bit 8 until the paired clip ends. */
+  if(kind==0x100&&model->root.original_vtable214==0x41d220&&p[0x2f4]==1&&
+     p[0x2f5]==0xf&&p[0x2f6]==1&&!half(p+0x54a))return 0x48u;
  }
  if(kind!=0x202)return 0x40u;
  /* 25FA18 sets the same sample bit for the R100 transform death clip. */

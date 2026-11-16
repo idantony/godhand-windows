@@ -105,6 +105,9 @@ int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_
  const uint8_t *p=b->model->root.bytes;
  const uint16_t kind=half(p+0x2fe);
  const uint32_t dependency=rd(p+0x564);
+ if(kind==0x100&&b->work&&b->work->room==0x103&&b->model->root.original_vtable214==0x41d220&&
+    half(p+0x2f4)==0x0501&&!p[0x2f6]&&!p[0x2f7]&&blend_frames==2&&!flags)
+  return start_bits==0x41700000u; /* 11B3E8 starts the original PL00 270 row at 15. */
  if(kind==0x100&&b->model->root.original_vtable214==0x41d220&&b->model->root.size>=0x5e4&&
     half(p+0x2f4)==0x0b00&&!p[0x2f6]&&half(p+0x5e0)==3&&!half(p+0x5e2)&&
     flags==0x40u&&(blend_frames==5||blend_frames==7))
