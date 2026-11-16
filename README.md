@@ -107,7 +107,9 @@ A native CPU replay loads an isolated R103 test save and uses original pad
 inputs to defeat all six enemies in the first three arena waves. Gene takes
 the original healing drop and enters the twin boss wave with 58 HP. The replay
 submits render commands for the boss models and continues into their original
-attack selection. A separate controlled fight starts with the first three
+attack selection. A muted Direct3D replay presents 6,908 scene frames through
+the original boss entrance with zero renderer errors. A separate controlled
+fight starts with the first three
 waves cleared and verifies three hits from the first boss's original combo.
 Gene's HP drops from 100 to 87. Full boss clearance remains in development.
 Earlier Direct3D replays present the escape counter and the movement that
@@ -338,7 +340,8 @@ R102 从零击败存档开始，经手柄回放完成开门所需的六次击败
 原版场景机关攻击，Gene 用拳击打倒第四名敌人，此时还剩 18 HP。
 原生 CPU 回放从独立的 R103 测试存档开始，用原版手柄输入击倒前三波共六名敌人。
 Gene 拿到原版恢复道具，以 58 HP 进入双头目战。回放提交两名头目的模型绘制指令，并运行到
-原版选招。另一项受控测试预置前三波已清场，验证首名头目连击三次命中，Gene 从 100 HP
+原版选招。静音 Direct3D 回放呈现了 6,908 个场景帧，覆盖原版头目入场，渲染器报错为零。
+另一项受控测试预置前三波已清场，验证首名头目连击三次命中，Gene 从 100 HP
 降到 87 HP。完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
 已呈现挣脱反击和随后的摇杆移动。
 
