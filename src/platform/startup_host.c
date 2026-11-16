@@ -1292,8 +1292,9 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         const gh_scene_at_step_callbacks r100={.context=&h->r100_exit,.spawn=gh_r100_exit_spawn_001f7858};
         const gh_scene_at_step_callbacks r105={.context=h->services,.spawn=gh_game_services_r105_jump_offer};
         const gh_scene_at_step_callbacks r102={.context=h->services,.spawn=gh_game_services_r102_action_offer};
+        const gh_scene_at_step_callbacks r103={.context=h->services,.spawn=gh_game_services_r103_action_offer};
         const gh_scene_at_step_callbacks *callbacks=h->work.room==0x100?&r100:
-            h->work.room==0x105?&r105:h->work.room==0x102?&r102:NULL;
+            h->work.room==0x105?&r105:h->work.room==0x102?&r102:h->work.room==0x103?&r103:NULL;
         int original_return;
         gh_scene_at_status e=gh_scene_at_step_native_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,
             &h->work,callbacks,&original_return,frontier);
@@ -1800,18 +1801,20 @@ static gh_action_step_status room_r100_action(void *context,uint32_t entry,void 
     return gh_r100_exit_action_002c2138(&h->r100_exit,entry,argument,frontier);
 }
 
-static gh_action_step_status room_r102_action(void *context,uint32_t entry,void *argument,
+static gh_action_step_status room_r102_r103_action(void *context,uint32_t entry,void *argument,
     uint32_t *frontier)
 {
     gh_startup_host *host=context;
-    if(entry==0x2c2138)
+    if(host->work.room==0x102&&entry==0x2c2138)
         return gh_game_services_r102_ticket_action(host->services,entry,argument,frontier);
+    if(host->work.room==0x103&&entry==0x2c2330)
+        return gh_game_services_r103_message_action(host->services,argument,frontier);
     *frontier=entry;
     if(entry!=0x2c2078)return GH_ACTION_STEP_UNSUPPORTED;
     gh_game_services_scene_view scene;
     if(gh_game_services_get_scene_view(host->services,&scene))return GH_ACTION_STEP_ARGUMENT;
     const gh_game_door_bindings bindings=scene_door_bindings(host,&scene);
-    return gh_game_services_r102_jump_action(host->services,&bindings,argument,frontier);
+    return gh_game_services_room_jump_action(host->services,&bindings,argument,frontier);
 }
 
 static int update_state4(void *context,gh_game_loop *loop)
@@ -1827,7 +1830,7 @@ static int update_state4(void *context,gh_game_loop *loop)
         .init=&h->game_init,.auxiliary_binding_known=1,
         .callback=h->work.room==0x100?room_r100_action:
                   h->work.room==0x105?gh_game_services_r105_scenery_action:
-                  h->work.room==0x102?room_r102_action:
+                  (h->work.room==0x102||h->work.room==0x103)?room_r102_r103_action:
                   h->work.room==0x101?room_r101_action:NULL,
         .context=h->work.room==0x105?(void *)h->services:(void *)h};
     gh_game_scene_step_bindings b={.work=&h->work,.init=&h->game_init,.prepare=s.prepare,

@@ -40,7 +40,7 @@ gh_scene_at_status gh_scene_at_initialize_units_002c0f90(gh_scene_at_manager*s,c
  if(!s||!b||!heap||(reference!=0&&reference!=1))return GH_AT_ARGUMENT;
  struct gh_scene_at_units*t=s->native_units;
  if(!t){t=calloc(1,sizeof(*t));if(!t)return GH_AT_BOUNDS;t->heap=heap;t->source=b->bytes;t->room=room;t->reference=(uint8_t)reference;s->native_units=t;s->ready=0;s->frontier=0;s->detail=0;
-  static const char*names[]={"SCA","MEH","SCI","SCL"};size_t count=8;
+  static const char*names[]={"SCA","MEH","SCI","SCL"};size_t count=room==0x103?10:8;
   s->units[0]=(gh_at_unit_view){0};s->units[1]=(gh_at_unit_view){0};for(unsigned g=0;g<16;g++)s->heads[g]=(gh_at_link){g?GH_AT_LINK_SLOT:GH_AT_LINK_END,g?g-1:0};
   for(unsigned g=0;g<4;g++){gh_bundle_entry e={0};gh_bundle_error be=gh_bundle_find(b,names[g],0,&e);if(be&&be!=GH_BUNDLE_NOT_FOUND)return fail(s,0x31ccf0,g,GH_AT_BOUNDS);s->headers[g]=e;if(!e.bytes||e.size<8||h(e.bytes+4)!=0x100)continue;unsigned n=h(e.bytes+6);if(e.size<16||(size_t)n>(e.size-16)/0x9c)return fail(s,0x2c0f90,g,GH_AT_BOUNDS);count+=n;}
   t->nodes=calloc(count,sizeof(*t->nodes));if(!t->nodes)return GH_AT_BOUNDS;t->capacity=count;
@@ -135,6 +135,64 @@ static gh_scene_at_status walk_checked(gh_scene_at_manager*s,gh_at_link link,gh_
 gh_scene_at_status gh_scene_at_first_unit_002c30c0(gh_scene_at_manager*s,gh_at_native_unit*out){if(!s||!out||!s->ready)return GH_AT_ARGUMENT;return walk_checked(s,(gh_at_link){GH_AT_LINK_SLOT,15},out);}
 gh_scene_at_status gh_scene_at_next_unit_002c30c8(gh_scene_at_manager*s,gh_at_native_unit current,gh_at_native_unit*out){if(!s||!out||!own(s,current))return GH_AT_ARGUMENT;node*n=resolve(s->native_units,current.handle);return walk_checked(s,n->next,out);}
 size_t gh_scene_at_native_unit_count(const gh_scene_at_manager*s){return s&&s->native_units?s->native_units->count:0;}
+
+/* REL0670 transfers the two 9C-byte R103 room records to the AT owner. */
+gh_scene_at_status gh_scene_at_add_r103_messages_002c2f90(gh_scene_at_manager *s,
+ gh_r207_allocation memory,const float positions[2][3],gh_at_native_unit output[2])
+{
+ if(!s||!s->ready||!s->native_units||!memory.pointer||!memory.owner||!positions||!output)
+  return GH_AT_ARGUMENT;
+ struct gh_scene_at_units *units=s->native_units;
+ if(units->room!=0x103||!units->reference||units->count>units->capacity||
+    units->capacity-units->count<2)
+  return fail(s,0x2c2f90,0,GH_AT_UNSUPPORTED);
+
+ uint8_t records[2][0x9c]={{0}};
+ fenv_t prior;
+ if(feholdexcept(&prior))return fail(s,0x1f88a8,0,GH_AT_BOUNDS);
+ if(fesetround(FE_TONEAREST)){
+  (void)fesetenv(&prior);
+  return fail(s,0x1f88a8,0,GH_AT_BOUNDS);
+ }
+ int finite=1;
+ for(unsigned i=0;i<2;++i){
+  uint8_t *row=records[i];
+  const float *position=positions[i];
+  volatile float left=position[0]-1.0f,right=position[0]+1.0f;
+  volatile float near=position[2]-1.0f,far=position[2]+1.0f;
+  finite&=isfinite(left)&&isfinite(right)&&isfinite(near)&&isfinite(far)&&isfinite(position[1]);
+  row[4]=1;
+  row[5]=1;
+  wf(row+8,position[1]);
+  wf(row+12,2.0f);
+  wf(row+16,1.0f);
+  wf(row+20,left);wf(row+24,near);
+  wf(row+28,left);wf(row+32,far);
+  wf(row+36,right);wf(row+40,far);
+  wf(row+44,right);wf(row+48,near);
+  row[0x34]=3;
+  row[0x35]=4;
+  wh(row+0x36,0xffff);
+  row[0x38]=1;
+  row[0x39]=1;
+  row[0x3a]=2;
+  row[0x3b]=8;
+  wh(row+0x4c,0xffff);
+  row[0x54]=0x31;
+  wh(row+0x5e,(uint16_t)(0x1000u+i));
+ }
+ if(fesetenv(&prior)||!finite)return fail(s,0x1f88a8,0,GH_AT_BOUNDS);
+
+ memcpy(memory.pointer,records,sizeof(records));
+ for(unsigned i=0;i<2;++i){
+  node *entry=&units->nodes[units->count++];
+  if(!i)entry->owned=memory;
+  entry->view=(gh_at_native_unit){(uint8_t *)memory.pointer+i*0x9c,0x9c,(uint32_t)units->count};
+  insert(s,entry,1);
+  output[i]=entry->view;
+ }
+ return GH_AT_OK;
+}
 
 static float center_scalar(const void *p)
 {

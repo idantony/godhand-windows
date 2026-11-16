@@ -201,8 +201,11 @@ gh_action_step_status gh_game_services_r105_scenery_action(void *,uint32_t,void 
 /* Native R102 AT actions: ticket script 2C2138 and the default JMP2 door. */
 gh_scene_at_status gh_game_services_r102_action_offer(void *,const gh_scene_at_task_request *,uint32_t *);
 gh_action_step_status gh_game_services_r102_ticket_action(void *,uint32_t,void *,uint32_t *);
-gh_action_step_status gh_game_services_r102_jump_action(gh_game_services *,const gh_game_door_bindings *,
+gh_action_step_status gh_game_services_room_jump_action(gh_game_services *,const gh_game_door_bindings *,
  void *,uint32_t *);
+/* R103's post-battle messages and JMP1 action offer. */
+gh_scene_at_status gh_game_services_r103_action_offer(void *,const gh_scene_at_task_request *,uint32_t *);
+gh_action_step_status gh_game_services_r103_message_action(void *,void *,uint32_t *);
 /* Inspect native script errors immediately after a real Scenario visit. */
 gh_action_step_status gh_game_services_r100_tutorial_action(gh_game_services *,void *,
     uint32_t *frontier);

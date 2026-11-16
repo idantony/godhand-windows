@@ -45,7 +45,9 @@ gh_player_frame_status gh_game_player_interact_prompt_002dc108(
  *frontier=0;
  if(!target->handle)return GH_PLAYER_FRAME_OK;
  const gh_player_frame_bindings *b=&bindings->frame;
- if(!b->work||b->work->room!=0x101){*frontier=0x2dc108;return GH_PLAYER_FRAME_UNSUPPORTED;}
+ if(!b->work||(b->work->room!=0x101&&b->work->room!=0x102)){
+  *frontier=0x2dc108;return GH_PLAYER_FRAME_UNSUPPORTED;
+ }
  const gh_title_player_view *player=b->current_player;
  if(!player||!b->player||player->bytes!=b->player->view.bytes||
     !player->bytes||player->size<0x15f8||!b->init){

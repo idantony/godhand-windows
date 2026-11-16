@@ -102,6 +102,14 @@ static const uint8_t *r103_voice_actor(const struct voice *v, uint8_t appearance
  return h(actor+0x2fe)==0x204&&actor[0x1650]==appearance?actor:NULL;
 }
 
+static const uint8_t *r103_boss_voice_actor(const struct voice *v)
+{
+ const uint8_t *actor=r103_voice_actor(v,15);
+ if(!actor)return NULL;
+ const unsigned stamp=h(actor+0x640);
+ return stamp<2&&w(actor+0x564)==0x214u+stamp?actor:NULL;
+}
+
 static const uint8_t *r103_em00_voice_actor(const struct voice *v)
 {
  const uint8_t *actor=r103_voice_actor(v,24);
@@ -489,12 +497,11 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
  const int arena_foot=r103_em00_voice_actor(v)!=NULL;
  const uint16_t state=h(actor+0x2f4);
  const int arena_em03=r103_em03_voice_actor(v)!=NULL;
- const uint8_t *boss=r103_voice_actor(v,15);
+ const uint8_t *boss=r103_boss_voice_actor(v);
  const int arena_boss_step=ground_step&&boss&&v->model->root.size>=0x16c8&&
-    (dependency==0x214||dependency==0x215)&&h(boss+0x640)==dependency-0x214&&
     state==0x1300&&boss[0x2f6]==1&&w(boss+0x16c4)==3;
  const int arena_hold=(arena_foot&&(state==0x7500||state==0x4d00))||
-     (arena_em03&&state==0x7500);
+     (arena_em03&&state==0x7500)||(boss&&state==0x7500&&boss[0x2f6]==3);
  if(h(actor+0x2fe)!=0x202&&!ema2_step&&
     !(((arena_foot||arena_em03)&&(ground_step||hard_step))||
       (arena_hold&&hold_step)||arena_boss_step))return 0;
@@ -633,9 +640,8 @@ static uint32_t enemy_scene_motion_sample(const struct voice *v,int16_t bank,int
   {125,{0x5b60,0x7700}}
  };
  if(!v->source_owner||v->requested_bank!=bank)return 0;
- const uint8_t *boss=r103_voice_actor(v,15);
- const int boss_landing=boss&&h(boss+0x640)<2&&
-    w(boss+0x564)==0x214u+h(boss+0x640)&&h(boss+0x2f4)==0x7500;
+ const uint8_t *boss=r103_boss_voice_actor(v);
+ const int boss_landing=boss&&h(boss+0x2f4)==0x7500;
  /* The original bank group 214/215 resolves both landing cues to EM14.SES. */
  if(boss_landing&&boss[0x2f6]==1&&bank>=1&&bank!=2&&bank!=3&&v->requested_program==6&&program==6){
   return w(p)==(0x00060000u|(uint16_t)bank)&&w(p+4)==0x002a0005u&&w(p+8)==0x250u&&
@@ -830,8 +836,10 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
     h(p)||h(p+2)!=(unsigned)program)
   return 0;
  if(program==0x7c){
-  const uint8_t *actor=r102_em0a_voice_actor(v);
-  return ((actor&&h(actor+0x2f4)==0x6900&&actor[0x2f7]==1)||(!v->model&&v->combat_profile))&&
+  const uint8_t *actor=r102_voice_actor(v);
+  const int em03=actor&&w(actor+0x564)==0x203&&h(actor+0x640)==8&&!actor[0x1650];
+  const int source=(em03||r102_em0a_voice_actor(v))&&h(actor+0x2f4)==0x6900&&actor[0x2f7]==1;
+  return (source||(!v->model&&v->combat_profile))&&
      w(p+4)==0x04060054u&&w(p+8)==0x50u&&w(p+12)==0x00210000u&&
      w(p+16)==0x007f007fu&&w(p+20)==0x005a0040u&&w(p+24)==0x0100ff00u&&
      w(p+28)==0x00ff0000u&&w(p+32)==4u&&!w(p+36)&&w(p+40)==0xffff&&!w(p+44)&&
@@ -906,8 +914,11 @@ static int core_knockdown_profile(const struct voice *v,int16_t bank,int16_t pro
   const int gate_blowaway=em0a&&
      ((h(em0a+0x2f4)==0x0801&&em0a[0x2f6]==3&&em0a[0x2f7]==2)||
       (h(em0a+0x2f4)==0x0102&&em0a[0x2f6]==1&&!em0a[0x2f7]&&!h(em0a+0x54a)));
+  const uint8_t *em03=r102_voice_actor(v);
+  const int gate_em03=em03&&dep==0x203&&stamp==8&&!em03[0x1650]&&
+     h(em03+0x2f4)==2&&em03[0x2f6]==1&&!em03[0x2f7]&&!h(em03+0x54a);
   if(!arena_counter&&!arena_knockdown&&!((dep==0x203&&stamp==19)||(dep==0x200&&stamp==20)||
-       r100_em0a_formation_source(v)||stamp8_death||gate_blowaway))return 0;
+       r100_em0a_formation_source(v)||stamp8_death||gate_blowaway||gate_em03))return 0;
  }else if(!v->combat_profile)return 0;
  if(w(p+4)!=0x0420006cu||w(p+8)!=0x25a||w(p+12)!=0x00200000u||
     w(p+16)!=0x00640064u||w(p+20)!=0x005a0040u||w(p+24)!=0x0080ff80u||
@@ -1190,7 +1201,9 @@ static int enemy_death_cue_profile(const struct voice *v,int16_t bank,int16_t pr
       (v->combat_profile||(h(root->bytes+0x2f4)==0x0102&&root->bytes[0x2f6]==0));
   const uint8_t *em0a=r102_em0a_voice_actor(v);
   gate_em0a=em0a&&h(em0a+0x2f4)==0x0102&&em0a[0x2f6]<=1&&!em0a[0x2f7]&&!h(em0a+0x54a);
-  if(!opening&&!r102&&!arena&&!gate_em0a)return 0;
+  const uint8_t *em03=r102_voice_actor(v);
+  const int r102_em03=em03&&dependency==0x203&&stamp==8&&!em03[0x1650]&&h(em03+0x2f4)==2&&!h(em03+0x54a);
+  if(!opening&&!r102&&!arena&&!gate_em0a&&!r102_em03)return 0;
  }else if(!v->combat_profile)return 0;
  if(gate_em0a||(!v->model&&!w(p+24)))
   return w(p+4)==(program==8?0x012e0006u:0x012e0007u)&&w(p+8)==0x25f&&

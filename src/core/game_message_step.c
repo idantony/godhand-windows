@@ -278,34 +278,43 @@ static gh_scene_ui_status advance_english(uint8_t *p, gh_scene_message_sources *
         return GH_SCENE_UI_UNSUPPORTED;
     if (ev1b_timed_caption(source, work, timing))
         return advance_event_caption(p, source, ui, work, timing, frontier);
-    uint16_t current;
     *frontier = 0x2b3338;
-    if (!code_at(source, source->cursor_8c, &current)) return GH_SCENE_UI_BOUNDS;
-    if (!(current & 0x8000u)) {
-        uint16_t next;
-        if (!code_at(source, source->cursor_8c + 2, &next)) return GH_SCENE_UI_BOUNDS;
-        if (next != 0xa301) return GH_SCENE_UI_UNSUPPORTED;
-    } else if (current != 0xa301 && current != 0x8001) return GH_SCENE_UI_UNSUPPORTED;
-    if (current == 0x8001 && (word(p + 0xb4 - 0xc) || word(p + 0x40 - 0xc))) {
-        *frontier = 0x2b4428;
-        return GH_SCENE_UI_UNSUPPORTED;
-    }
-
     advance_message_budget(p, ui, work);
     uint8_t *budget = p + 0x68 - 0xc, *time = p + 0x90 - 0xc;
-    if (signed_word(budget) < signed_word(time)) return GH_SCENE_UI_OK;
-    if (!(current & 0x8000u)) {
-        /* No actor voice is present, so 2B33D8 returns before the glyph
-         * sound. 2B4768 advances one glyph and its original 30 timer units. */
-        source->cursor_8c += 2;
-        put(time, word(time) + 30);
-        if (signed_word(budget) < signed_word(time)) return GH_SCENE_UI_OK;
+    while (signed_word(budget) >= signed_word(time)) {
+        uint16_t code;
+        if (!code_at(source, source->cursor_8c, &code)) return GH_SCENE_UI_BOUNDS;
+        if (code >= 14 && code < 0x1000) {
+            source->cursor_8c += 2;
+            put(time, word(time) + 30);
+            continue;
+        }
+        if (code == 0xa101) {
+            /* 2B3A38 resets the page origin and timer, then 2B4768 advances
+             * past A101 at zero cost. The next glyph can appear in this tick. */
+            if (word(p + 0xb4 - 0xc) || word(p + 0x40 - 0xc)) {
+                *frontier = 0x2b3a38;
+                return GH_SCENE_UI_UNSUPPORTED;
+            }
+            source->cursor_8c += 2;
+            source->cursor_7c = source->cursor_8c;
+            put(budget, word(time));
+            put(p + 0x84 - 0xc, word(time));
+            ++p[0x30 - 0xc];
+            put(p + 0x14 - 0xc, word(p + 0x14 - 0xc) & ~6u);
+            continue;
+        }
+        if (code != 0xa301 && code != 0x8001) return GH_SCENE_UI_UNSUPPORTED;
+        if (code == 0x8001 && (word(p + 0xb4 - 0xc) || word(p + 0x40 - 0xc))) {
+            *frontier = 0x2b4428;
+            return GH_SCENE_UI_UNSUPPORTED;
+        }
+        /* Both commands return 2 and clamp the budget before consuming the code. */
+        p[0] = code == 0x8001 ? 6 : 3;
+        p[1] = p[2] = p[3] = 0;
+        put(budget, word(time));
+        break;
     }
-    /* A301 -> 2B3AD0 and 8001 -> 2B3B70 both return 2 without consuming
-     * the command. The latter enters the original six-tick close state. */
-    p[0] = current == 0x8001 ? 6 : 3;
-    p[1] = p[2] = p[3] = 0;
-    put(budget, word(time));
     return GH_SCENE_UI_OK;
 }
 

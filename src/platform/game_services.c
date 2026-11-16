@@ -120,6 +120,7 @@ struct gh_game_services {
 #endif
  gh_r102_room r102;
  gh_r207_allocation r103_work;uint32_t r103_task_frontier;uint8_t r103_initialized;
+ gh_at_native_unit r103_message_areas[2];
  gh_r207_allocation r101_work;uint8_t r101_init_stage;uint32_t r101_task_frontier;
  gh_om376_paper r105_paper;
  gh_enemy2ad_action r105_scenery_action;
@@ -217,6 +218,7 @@ static gh_game_services_status release_r103_room_init(gh_game_services *s)
  if(s->r103_work.pointer&&gh_heap_release(s->b.assets->heap,s->r103_work)!=GH_MEM_OK)
   return fail(s,GH_SERVICES_ASSET,0x30ee08,0);
  s->r103_work=(gh_r207_allocation){0};s->r103_task_frontier=0;s->r103_initialized=0;
+ memset(s->r103_message_areas,0,sizeof(s->r103_message_areas));
  return GH_SERVICES_OK;
 }
 
@@ -2321,7 +2323,7 @@ static void room_r102_ticket_wait_1d48(void *context,int32_t argument)
  if(gh_game_cockpit_set_ticket_visible(s->cockpit,1))s->r102.task_frontier=0x1da8;
 }
 
-static int room_r102_ticket_message(gh_game_services *s,uint16_t message)
+static int room_message_inline_002c41c8(gh_game_services *s,uint16_t message,uint32_t *frontier)
 {
  const gh_scene_scenario_view scene={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};
  /* 2C40C8 with a NULL camera and inline mode0. 2C41C8 opens the room
@@ -2330,28 +2332,30 @@ static int room_r102_ticket_message(gh_game_services *s,uint16_t message)
  w32(scene.bytes+0xdc,0);scene.bytes[0xe4]=scene.bytes[0xe5]=0;
  uint32_t pc=0;
  if(gh_scenario_message_open_002c42e0(scene,&s->scene_ui,s->b.work,message,&pc)){
-  s->r102.task_frontier=pc?pc:0x2c42e0;return 1;
+  *frontier=pc?pc:0x2c42e0;return 1;
  }
  const gh_soft_event_bindings soft={.scenario=scene,.work=s->b.work,
   .player_abort_00126770=room_soft_player_abort,.context=s};
  gh_soft_event_start start={0};
  if(gh_scenario_start_soft_event_002c39b0(&start,&soft,2)){
-  s->r102.task_frontier=start.frontier?start.frontier:0x2c39b0;return 1;
+  *frontier=start.frontier?start.frontier:0x2c39b0;return 1;
  }
  for(;;){
   int active;
   if(gh_scenario_message_active_002c4350(scene,&s->scene_ui,&active,&pc)){
-   s->r102.task_frontier=pc?pc:0x2c4350;return 1;
+   *frontier=pc?pc:0x2c4350;return 1;
   }
   if(!active)break;
-  if(room_r102_sleep(s))return 1;
+  if(gh_task_threads_sleep(s->scenario_threads,1)!=GH_THREAD_OK){
+   *frontier=0x2d5aa0;return 1;
+  }
  }
  if(gh_scenario_message_close_002c4390(scene,&s->scene_ui,&pc)){
-  s->r102.task_frontier=pc?pc:0x2c4390;return 1;
+  *frontier=pc?pc:0x2c4390;return 1;
  }
  gh_soft_event_end end={0};
  if(room_r100_end_live_soft(s,&end,&pc)){
-  s->r102.task_frontier=pc?pc:0x2c3c10;return 1;
+  *frontier=pc?pc:0x2c3c10;return 1;
  }
  return 0;
 }
@@ -2418,8 +2422,8 @@ static void room_r102_ticket_area_0eb8(void *context,int32_t argument)
  gh_game_services *s=context;
  (void)argument;
  uint8_t *flags=s->room_state.active+4;
- if(u32(flags)&0x08000000u){(void)room_r102_ticket_message(s,0x1001);return;}
- if(!(u32(flags)&0x02000000u)){(void)room_r102_ticket_message(s,0x1000);return;}
+ if(u32(flags)&0x08000000u){(void)room_message_inline_002c41c8(s,0x1001,&s->r102.task_frontier);return;}
+ if(!(u32(flags)&0x02000000u)){(void)room_message_inline_002c41c8(s,0x1000,&s->r102.task_frontier);return;}
  const gh_scene_scenario_view scene={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};
  uint32_t pc=0;
  if(gh_scenario_message_close_002c4390(scene,&s->scene_ui,&pc)){
@@ -2459,17 +2463,20 @@ static gh_scene_at_status room_r102_ticket_unit(gh_game_services *s,gh_at_native
  return GH_AT_OK;
 }
 
-static gh_scene_at_status room_r102_jump_unit(gh_game_services *services,
+static gh_scene_at_status room_action_jump_unit(gh_game_services *services,
  gh_at_native_unit *unit,uint32_t *frontier)
 {
  *frontier=0x2c2078;
- if(services->b.work->room!=0x102)return GH_AT_UNSUPPORTED;
- const gh_scene_at_status status=gh_scene_at_get_jump_002c2ae0(&services->scene_at,2,unit);
+ const uint16_t room=services->b.work->room;
+ if(room!=0x102&&room!=0x103)return GH_AT_UNSUPPORTED;
+ const uint8_t index=room==0x102?2:1;
+ const uint8_t kind=room==0x102?0:1;
+ const gh_scene_at_status status=gh_scene_at_get_jump_002c2ae0(&services->scene_at,index,unit);
  if(status){*frontier=0x2c2ae0;return status;}
  const uint8_t *bytes=unit->bytes;
  if(!bytes||unit->size!=0x9c||bytes[0x35]!=1||bytes[0x39]!=4||
     bytes[0x3a]!=0x20||bytes[0x3b]!=8||u32(bytes+0x3c)||u32(bytes+0x40)||
-    bytes[0x5e]||u32(bytes+0x70)||u32(bytes+0x74)||bytes[0x79]!=2||bytes[0x7a])
+    bytes[0x5e]!=kind||u32(bytes+0x70)||u32(bytes+0x74)||bytes[0x79]!=index||bytes[0x7a])
   return GH_AT_UNSUPPORTED;
  *frontier=0;
  return GH_AT_OK;
@@ -2485,7 +2492,7 @@ gh_scene_at_status gh_game_services_r102_action_offer(void *context,
  if((!jump&&request->entry_address!=0x2c2138)||request->argument_mode!=2||request->raw_argument||
     request->group!=4||request->mode!=(jump?0x20:2)){*frontier=0x1f7858;return GH_AT_UNSUPPORTED;}
  gh_at_native_unit unit;
- const gh_scene_at_status resolved=jump?room_r102_jump_unit(s,&unit,frontier):
+ const gh_scene_at_status resolved=jump?room_action_jump_unit(s,&unit,frontier):
     room_r102_ticket_unit(s,&unit,frontier);
  if(resolved)return resolved;
  if(request->unit.bytes!=unit.bytes||request->unit.size!=unit.size||request->unit.handle!=unit.handle){
@@ -2526,21 +2533,22 @@ gh_action_step_status gh_game_services_r102_ticket_action(void *context,uint32_t
  return GH_ACTION_STEP_OK;
 }
 
-gh_action_step_status gh_game_services_r102_jump_action(gh_game_services *services,
+gh_action_step_status gh_game_services_room_jump_action(gh_game_services *services,
  const gh_game_door_bindings *bindings,void *argument,uint32_t *frontier)
 {
  if(!services||!bindings||bindings->work!=services->b.work||!frontier)
   return GH_ACTION_STEP_ARGUMENT;
  gh_at_native_unit unit;
- if(room_r102_jump_unit(services,&unit,frontier))return GH_ACTION_STEP_UNSUPPORTED;
+ if(room_action_jump_unit(services,&unit,frontier))return GH_ACTION_STEP_UNSUPPORTED;
  if(unit.bytes!=argument){*frontier=0x2c2078;return GH_ACTION_STEP_UNSUPPORTED;}
  gh_boot_work *work=bindings->work;
  if(gh_scenario_clear_pad_0031b410(work)){*frontier=0x31b410;return GH_ACTION_STEP_CALLEE;}
  w32((uint8_t *)work+8,0);
  w32(unit.bytes+0x50,u32(unit.bytes+0x50)|0x02000000u);
- if(u32((const uint8_t *)work+0x584)&1u)return GH_ACTION_STEP_OK;
+ const uint32_t work_lock=work->room==0x103?8u:1u;
+ if(u32((const uint8_t *)work+0x584)&work_lock)return GH_ACTION_STEP_OK;
 
- /* Original 2C2078 uses the room's JMP bundle, with no REL callback for JMP2. */
+ /* Both door units have unset REL callbacks and resolve the current JMP bundle. */
  gh_bundle room;
  gh_bundle_entry jump;
  if(gh_game_room_pack_bundle(&services->room_pack,&room)||gh_bundle_find(&room,"JMP",0,&jump)){
@@ -2553,6 +2561,82 @@ gh_action_step_status gh_game_services_r102_jump_action(gh_game_services *servic
   *frontier=services->door.frontier?services->door.frontier:0x2004c8;
   return status==GH_DOOR_UNSUPPORTED?GH_ACTION_STEP_UNSUPPORTED:GH_ACTION_STEP_CALLEE;
  }
+ return GH_ACTION_STEP_OK;
+}
+
+static gh_at_native_unit room_r103_message_area(gh_game_services *s,const void *argument)
+{
+ for(unsigned i=0;i<2;++i){
+  const gh_at_native_unit unit=s->r103_message_areas[i];
+  if(!unit.bytes||unit.bytes!=argument||unit.size!=0x9c)continue;
+  const uint8_t *row=unit.bytes;
+  if((row[0x34]&1)&&row[0x35]==4&&row[0x39]==1&&row[0x3a]==2&&row[0x3b]==8&&
+     !u32(row+0x3c)&&row[0x5e]==i&&row[0x5f]==0x10&&!u32(row+0x68))return unit;
+ }
+ return (gh_at_native_unit){0};
+}
+
+gh_scene_at_status gh_game_services_r103_action_offer(void *context,
+ const gh_scene_at_task_request *request,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(!s||!request||!frontier)return GH_AT_ARGUMENT;
+ *frontier=0x1f7858;
+ if(s->b.work->room!=0x103||request->argument_mode!=2||request->raw_argument)
+  return GH_AT_UNSUPPORTED;
+ gh_at_native_unit unit;
+ if(request->entry_address==0x2c2078&&request->group==4&&request->mode==0x20){
+  const gh_scene_at_status status=room_action_jump_unit(s,&unit,frontier);
+  if(status)return status;
+ }else if(request->entry_address==0x2c2330&&request->group==1&&request->mode==2){
+  unit=room_r103_message_area(s,request->unit.bytes);
+ }else return GH_AT_UNSUPPORTED;
+ if(!unit.bytes||unit.bytes!=request->unit.bytes||unit.size!=request->unit.size||
+    unit.handle!=request->unit.handle){
+  *frontier=0x1f7858;return GH_AT_UNSUPPORTED;
+ }
+ const gh_action_set_request action={.priority=request->group,.life=request->mode,
+  .callback_id=request->entry_address,.argument=unit.bytes,.kind=2};
+ int emitted;
+ unsigned index;
+ *frontier=0;
+ if(gh_action_button_set_001f7858(&s->action_buttons,&action,&emitted,&index,frontier)){
+  if(!*frontier)*frontier=0x1f7858;
+  return GH_AT_UNSUPPORTED;
+ }
+ return GH_AT_OK;
+}
+
+static void room_r103_message_task_002c2368(void *context,int32_t message)
+{
+ gh_game_services *s=context;
+ (void)room_message_inline_002c41c8(s,(uint16_t)message,&s->r103_task_frontier);
+}
+
+gh_action_step_status gh_game_services_r103_message_action(void *context,void *argument,
+ uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(!s||!frontier)return GH_ACTION_STEP_ARGUMENT;
+ *frontier=0x2c2330;
+ if(s->b.work->room!=0x103)return GH_ACTION_STEP_UNSUPPORTED;
+ const gh_at_native_unit unit=room_r103_message_area(s,argument);
+ if(!unit.bytes)return GH_ACTION_STEP_UNSUPPORTED;
+ if(gh_scenario_clear_pad_0031b410(s->b.work)){
+  *frontier=0x31b410;return GH_ACTION_STEP_CALLEE;
+ }
+ w32((uint8_t *)s->b.work+8,0);
+ w32(unit.bytes+0x50,u32(unit.bytes+0x50)|0x02000000u);
+ /* 2C2330 schedules slot 1 via 2D5580, then clears its Scenario metadata. */
+ const gh_scene_scenario_view scene={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};
+ const uint16_t message=(uint16_t)(unit.bytes[0x5e]|(unsigned)unit.bytes[0x5f]<<8);
+ int32_t slot;
+ uint32_t pc=0;
+ if(gh_scenario_exec_002c3890(scene,s->scenario_threads,1,room_r103_message_task_002c2368,
+    s,message,&slot,&pc)){
+  *frontier=pc?pc:0x2c3920;return GH_ACTION_STEP_CALLEE;
+ }
+ *frontier=0;
  return GH_ACTION_STEP_OK;
 }
 
@@ -2981,6 +3065,61 @@ static int room_r103_boss_wave(gh_game_services *s)
  return 0;
 }
 
+static int room_r103_outro_1000(gh_game_services *s)
+{
+ float positions[2][3];
+ for(uint8_t stamp=0;stamp<2;++stamp){
+  gh_game_title_player *actor=NULL;
+  if(gh_enemy_manager_get_00290868(s->b.init,stamp,&actor)){
+   s->r103_task_frontier=0x295978;return 1;
+  }
+  if(actor&&actor->view.alias_f0)memcpy(positions[stamp],actor->view.alias_f0,12);
+  else if(!actor&&s->b.math_globals&&s->b.math_globals->loaded)
+   memcpy(positions[stamp],s->b.math_globals->zero_vector,12);
+  else{
+   s->r103_task_frontier=0x295ab8;return 1;
+  }
+ }
+ if(gh_scene_at_add_r103_messages_002c2f90(&s->scene_at,s->r103_work,positions,s->r103_message_areas)){
+  s->r103_task_frontier=s->scene_at.frontier?s->scene_at.frontier:0x2c2f90;return 1;
+ }
+ s->r103_work=(gh_r207_allocation){0};
+
+ float alpha=1.0f;
+ uint32_t pc=0;
+ do {
+  fenv_t saved;
+  if(feholdexcept(&saved)){
+   s->r103_task_frontier=0x1124;return 1;
+  }
+  if(fesetround(FE_TONEAREST)){
+   (void)fesetenv(&saved);
+   s->r103_task_frontier=0x1124;return 1;
+  }
+  volatile float next=alpha-0.02f;
+  alpha=next;
+  if(fesetenv(&saved)){
+   s->r103_task_frontier=0x1124;return 1;
+  }
+  if(gh_r100_scroll_layer_alpha_002db318(&s->pools,&s->meshes,1,alpha,&pc)){
+   s->r103_task_frontier=pc?pc:0x2db318;return 1;
+  }
+  if(room_r103_sleep(s,1))return 1;
+ } while(alpha>0.1f);
+ if(gh_r100_scroll_layer_002db2b0(&s->pools,&s->meshes,1,0,&pc)){
+  s->r103_task_frontier=pc?pc:0x2db2b0;return 1;
+ }
+ gh_at_native_unit jump;
+ if(gh_scene_at_get_jump_002c2ae0(&s->scene_at,1,&jump)){
+  s->r103_task_frontier=0x2c2ae0;return 1;
+ }
+ int enabled;
+ if(!jump.bytes||gh_scene_at_set_enabled(&s->scene_at,jump,1,&enabled)||!enabled){
+  s->r103_task_frontier=s->scene_at.frontier?s->scene_at.frontier:0x2c28f8;return 1;
+ }
+ return 0;
+}
+
 /* REL0670 starts the arena BGM and closes the return jump. */
 static void room_r103_arena_0670(void *context,int32_t argument)
 {
@@ -3071,7 +3210,7 @@ static void room_r103_arena_0670(void *context,int32_t argument)
  w32(saved,u32(saved)|0x40000000u);
  if(room_r103_sleep(s,30))return;
  s->b.sound_control->bgm_state_13c=0;
- s->r103_task_frontier=0x1000; /* Dynamic areas at the two death positions. */
+ (void)room_r103_outro_1000(s);
 }
 
 static void room_r103_entry_0538(void *context,int32_t argument)

@@ -31,6 +31,8 @@ typedef struct {gh_r207_allocation work;gh_heap *heap;uint16_t known_work_bytes;
  uint32_t stage,frontier,pending_script;uint8_t frontier_relative,ready;
  gh_r100_om_view roofs[2];gh_collision_scroll_mutation collision;
  uint16_t jump_callback_module;uint32_t jump_callback_relative;} gh_r100_init;
+gh_r100_init_status gh_r100_scroll_layer_alpha_002db318(gh_room_pools *,gh_scene_meshes *,
+ uint32_t layer,float alpha,uint32_t *frontier);
 gh_r100_init_status gh_r100_scroll_layer_002db2b0(gh_room_pools *,gh_scene_meshes *,uint32_t layer,int enabled,uint32_t *frontier);
 /* Ordered recoveredprefix. CurrentunconnectedScript9B0/BC0 andtutorial
  * remainprecisefrontiers; ready is neverinferredfromallocation/metadata. */

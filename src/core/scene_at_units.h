@@ -27,6 +27,10 @@ gh_scene_at_status gh_scene_at_next_unit_002c30c8(gh_scene_at_manager *,gh_at_na
 gh_scene_at_status gh_scene_at_find_id_002c3118(gh_scene_at_manager *,uint32_t id,gh_at_native_unit *);
 /* Original area center wrapper leaves the destination unchanged when inactive. */
 gh_scene_at_status gh_scene_at_center_002c0e78(gh_at_native_unit,float destination[3]);
+/* Register the two original post-arena message areas and take ownership
+ * of their 0x138-byte room allocation on success. */
+gh_scene_at_status gh_scene_at_add_r103_messages_002c2f90(gh_scene_at_manager *,
+ gh_r207_allocation,const float positions[2][3],gh_at_native_unit output[2]);
 size_t gh_scene_at_native_unit_count(const gh_scene_at_manager *);
 /* Native ownership cleanup at proven room lifetime boundary. Includes isolated
  * allocation made by originalself-destination JMP path; no destructor ack. */

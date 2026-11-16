@@ -12,6 +12,37 @@ gh_r100_init_status gh_r100_scroll_layer_002db2b0(gh_room_pools*p,gh_scene_meshe
  for(uint32_t i=0;i<v->count;i++){uint32_t handle=w((uint8_t*)v->allocation.pointer+(size_t)i*4);void*obj=NULL;(void)gh_room_object_lookup(p,handle,GH_ROOM_OBJECT_SCROLL_MESH,m,&obj);gh_scene_mesh_object*o=obj;uint8_t*b=o->allocation.pointer;if(b[0x2fd]==layer)ww(b+0x250,enabled?w(b+0x250)&~2u:w(b+0x250)|2u);}
  return GH_R100_INIT_OK;
 }
+gh_r100_init_status gh_r100_scroll_layer_alpha_002db318(gh_room_pools *p,
+ gh_scene_meshes *m,uint32_t layer,float alpha,uint32_t *frontier)
+{
+ if(!frontier||!p||!m)return GH_R100_INIT_ARGUMENT;
+ *frontier=0x2db318;
+ const gh_room_vector *objects;
+ if(gh_room_registry_view(p,0x754c38,&objects))return GH_R100_INIT_ARGUMENT;
+ for(uint32_t i=0;i<objects->count;++i){
+  const uint32_t handle=w((uint8_t *)objects->allocation.pointer+(size_t)i*4);
+  void *object=NULL;
+  if(gh_room_object_lookup(p,handle,GH_ROOM_OBJECT_SCROLL_MESH,m,&object))
+   return GH_R100_INIT_UNSUPPORTED;
+  const gh_scene_mesh_object *mesh=object;
+  if(!mesh->allocation.pointer||!mesh->constructor_complete)return GH_R100_INIT_UNSUPPORTED;
+ }
+ uint32_t alpha_bits;
+ memcpy(&alpha_bits,&alpha,sizeof(alpha_bits));
+ for(uint32_t i=0;i<objects->count;++i){
+  const uint32_t handle=w((uint8_t *)objects->allocation.pointer+(size_t)i*4);
+  void *object=NULL;
+  (void)gh_room_object_lookup(p,handle,GH_ROOM_OBJECT_SCROLL_MESH,m,&object);
+  const gh_scene_mesh_object *mesh=object;
+  uint8_t *record=mesh->allocation.pointer;
+  if(record[0x2fd]!=layer)continue;
+  ww(record+0x24c,alpha_bits);
+  ww(record+0x31c,alpha_bits);
+ }
+ *frontier=0;
+ return GH_R100_INIT_OK;
+}
+
 static gh_r100_init_status search(gh_r100_init*s,const gh_r100_init_bindings*b,const char*name,gh_r100_om_view*out){
  *out=(gh_r100_om_view){0};const gh_room_vector*v;if(gh_room_registry_view(b->pools,0x754c58,&v))return fail(s,0x14fd98,0,GH_R100_INIT_ARGUMENT);
  for(uint32_t i=0;i<v->count;i++){uint32_t handle=w((uint8_t*)v->allocation.pointer+(size_t)i*4),f=0;gh_r100_om_view view={0};if(!b->object_view)return fail(s,0x14fd98,0,GH_R100_INIT_UNSUPPORTED);gh_r100_init_status e=b->object_view(b->context,handle,&view,&f);if(e)return fail(s,f?f:0x14fd98,0,e);if(!view.bytes||view.size<0x540||!view.identity)return fail(s,0x14fd98,0,GH_R100_INIT_BOUNDS);uint16_t id=h(view.bytes+0x2fe);uint64_t n=(uint64_t)w(view.bytes+0x538)|(uint64_t)w(view.bytes+0x53c)<<32;if(id>0x2ff&&id<0x500&&n==key(name)){*out=view;return GH_R100_INIT_OK;}}

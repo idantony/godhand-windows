@@ -76,6 +76,12 @@ static int r102_close_em00_punch(const gh_enemy_actor *enemy, const uint8_t *act
     return (stamp==0x10&&!actor[0x1650])||(stamp==0x0b&&actor[0x1650]==5);
 }
 
+static int r102_em03_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
+    return effect == 7 && enemy->entry.object.view.size > 0x1650 &&
+        word(actor + 0x564) == 0x203 && half(actor + 0x640) == 8 && !actor[0x1650] &&
+        enemy->entry.b.work && enemy->entry.b.work->room == 0x102;
+}
+
 static int r102_stamp2(const gh_enemy_actor *enemy, const uint8_t *actor) {
     return enemy->entry.object.view.size > 0x1650 && word(actor + 0x564) == 0x20a && half(actor + 0x640) == 2 &&
         actor[0x1650] == 5 && enemy->entry.b.work && enemy->entry.b.work->room == 0x102;
@@ -657,7 +663,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     /* The R100 EM03 receivers have the same original 0203 reaction probes.
      * The west formation enters through the actual Triangle effect. */
     const uint32_t dependency = word(p + 0x564);
-    const int opening_203 = r100_stamp19(enemy,p)||(triangle&&
+    const int opening_203 = r100_stamp19(enemy,p)||r102_em03_punch(enemy,p,effect)||(triangle&&
         (r100_at2_em03(enemy,p)||(dependency==0x203&&r103_arena_punch_target(enemy,dependency))));
     const int opening_200 = r100_stamp20(enemy,p)||
         (triangle&&(r100_stamp8(enemy,p)||r103_first_wave_em00(enemy)));
@@ -832,7 +838,8 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             if (p[0x17bf] >= threshold) {
                 const int r102_em00 = r102_close_em00_punch(enemy, p, effect);
                 const int stamp2=r102_stamp2_punch(enemy,p,effect);
-                if(!triangle&&!r102_em00&&!stamp2&&!r103_arena_punch_target(enemy,dependency)){
+                const int synchronous_counter=stamp2||r102_em03_punch(enemy,p,effect);
+                if(!triangle&&!r102_em00&&!synchronous_counter&&!r103_arena_punch_target(enemy,dependency)){
                     call->phase = 6;
                     return stop(frontier, 0x20d2a0);
                 }
@@ -841,7 +848,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                 if (gh_game_mt_next_0030f348(&random_state,&retry))
                     return stop(frontier,0x31cfe0);
                 if(!(retry&3u)&&number(p+0x760)<=1.5707964f){
-                    if(r102_em00||stamp2){
+                    if(r102_em00||synchronous_counter){
                         /* 274238's ordinary dependency arm and 20D358's counter reset
                          * commit only once after the original ordered RNG draws. */
                         float duration=0;
@@ -869,7 +876,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                                 if(fesetenv(&env))return stop(frontier,0x274238);
                             }
                         }
-                        if(stamp2){
+                        if(synchronous_counter){
                             /* 20D348 selects variant 1 and its synchronous cue.
                              * 20D350 clears the pending bank only after the cue returns. */
                             body->state->random=random_state;
@@ -1000,7 +1007,8 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const int triangle = triangle_take_supported(enemy, p, effect);
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
-         !r100_stamp20(enemy, p) && !triangle && !room_unarmed_punch(enemy, p, effect)) ||
+         !r100_stamp20(enemy, p) && !triangle && !room_unarmed_punch(enemy, p, effect) &&
+         !r102_em03_punch(enemy, p, effect)) ||
         (amplified && !(triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) ||
         r103_first_wave_em00(enemy))) &&
          !r102_close_em00_punch(enemy, p, effect) && !r102_stamp2_punch(enemy, p, effect)))
@@ -1079,7 +1087,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     if ((!thrown_box && (call->effect == 0x2e ? !scenery_reaction_enemy(enemy,p) :
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
             !triangle_take_supported(enemy,p,call->effect) &&
-            !room_unarmed_punch(enemy, p, half(body->bytes + 0x46)))) ||
+            !room_unarmed_punch(enemy, p, half(body->bytes + 0x46)) &&
+            !r102_em03_punch(enemy, p, half(body->bytes + 0x46)))) ||
         init->heat[0x10] || word(player->bytes + 0x5fc) ||
         (!manager_active && (!save.bytes || save.size < 0xaf)))
         return stop(frontier, 0x271810);

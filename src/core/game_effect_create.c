@@ -61,6 +61,14 @@ static int r102_gate_em0a_ground_actor(const gh_title_player_view *actor)
  return p[0x2f4]==2||(p[0x2f4]==1&&p[0x2f5]==8&&p[0x2f6]==3&&p[0x2f7]==2);
 }
 
+static int r102_em03_death_actor(const gh_title_player_view *actor)
+{
+ const uint8_t *p=actor?actor->bytes:NULL;
+ return p&&actor->size>0x1650&&actor->original_vtable214==0x4479c8&&
+    (w(p+0x2fc)>>16)==0x202&&w(p+0x564)==0x203&&(w(p+0x640)&0xffffu)==8&&
+    !p[0x1650]&&p[0x2f4]==2;
+}
+
 gh_effect_status gh_effect_create_gate_guard_stun_part4_00306900(gh_effect_create_call *c,
  const gh_title_player_view *actor)
 {
@@ -1072,7 +1080,7 @@ static int em02_em03_attack_actor(const gh_title_player_view *actor)
  const int appearance0=actor->size>0x1650&&actor->original_vtable214==0x4479c8&&!actor->bytes[0x1650];
  const int west_em03=actor->size>=0x16c8&&actor->original_vtable214==0x4479c8&&
      actor->bytes[0x1650]==2&&w(actor->bytes+0x16c4)==6&&stamp==5;
- return (dependency==0x203&&(stamp==19||(stamp==1&&appearance0)||west_em03))||
+ return (dependency==0x203&&(stamp==19||((stamp==1||stamp==8)&&appearance0)||west_em03))||
         (dependency==0x202&&appearance0&&
          (stamp==0x17||(stamp==0x19&&actor->size>=0x16c8&&w(actor->bytes+0x16c4)==2)));
 }
@@ -1206,11 +1214,13 @@ static int enemy_landing_emitter(const gh_effect_emitter_view *v)
  if(!work||actor->size<=0x1650||actor->original_vtable214!=0x4479c8)return 0;
  const unsigned stamp=w(actor->bytes+0x640)&0xffffu,appearance=actor->bytes[0x1650];
  const uint32_t kind=w(actor->bytes+0x564),object=w(actor->bytes+0x2fc)>>16;
- if(work->room==0x103)
-  return object==0x204&&appearance==24&&
+ if(work->room==0x103){
+  const int boss=appearance==15&&stamp<2&&kind==0x214u+stamp;
+  const int reinforcement=appearance==24&&
      ((kind==0x200&&(stamp==2||stamp==3))||(kind==0x203&&(stamp==6||stamp==7))||
-      (kind==0x20a&&(stamp==4||stamp==5)))&&
-     w(v->payload+0x110)==UINT32_MAX;
+      (kind==0x20a&&(stamp==4||stamp==5)));
+  return object==0x204&&(boss||reinforcement)&&w(v->payload+0x110)==UINT32_MAX;
+ }
  if(work->room!=0x102||object!=0x202)return 0;
  if(!appearance)return stamp==7&&kind==0x200;
  static const uint16_t dependency[]={0x202,0x200,0x203};
@@ -1232,7 +1242,8 @@ int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *v)
  const unsigned stamp=w(actor+0x640)&0xffffu;
  const int gate_death=v->model->work&&v->model->work->room==0x102&&
     ((r102_gate_guard_effect_actor(v->actor)&&actor[0x2f4]==2)||
-     em00_escape_effect_room(v->actor)==0x102||r102_gate_em0a_ground_actor(v->actor))&&
+     em00_escape_effect_room(v->actor)==0x102||r102_gate_em0a_ground_actor(v->actor)||
+     r102_em03_death_actor(v->actor))&&
     w(v->payload+0x110)==UINT32_MAX&&v->record.bytes[0x133]==0x1a&&
     w(v->record.bytes+4)==0x00c00000u;
  return (dependency==0x203&&stamp==19)||(dependency==0x200&&stamp==20)||
@@ -2286,7 +2297,7 @@ gh_effect_status gh_effect_create_prepare_actor_retirement(gh_game_effects *e,
     (w(actor->bytes+0x2fc)>>16)==0x202&&w(actor->bytes+0x564)==0x203&&
     (w(actor->bytes+0x640)&0xffffu)==19;
  const int r102_ground=(r102_gate_guard_effect_actor(actor)||em00_escape_effect_room(actor)==0x102||
-    r102_gate_em0a_ground_actor(actor))&&actor->bytes[0x2f4]==2;
+    r102_gate_em0a_ground_actor(actor)||r102_em03_death_actor(actor))&&actor->bytes[0x2f4]==2;
  /* The ESP remains authenticated by the 58:02 ground emitter at allocation. */
  if((!opening&&!r102_ground)||(w(actor->bytes+0x250)&0xa0008000u)!=0xa0000000u)return GH_EFFECT_OK;
  gh_effect_view est={0};

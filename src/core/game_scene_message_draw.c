@@ -22,7 +22,9 @@ static int32_t signed_word(const uint8_t *p)
     return value;
 }
 
-enum { MESSAGE_PAGE_TOKENS=32 };
+enum { MESSAGE_PAGE_TOKENS=96 };
+
+typedef enum { MESSAGE_SCENERY_CHOICE, MESSAGE_TIMED_CAPTION, MESSAGE_ROOM_TEXT } message_page_kind;
 
 static float glyph_advance(const gh_font_glyph *glyph, float scale)
 {
@@ -32,17 +34,25 @@ static float glyph_advance(const gh_font_glyph *glyph, float scale)
 
 static gh_scene_ui_status message_page(const gh_scene_message_block *block,
     const gh_scene_message_sources *source,const gh_font_state *font,const gh_display_state *display,
-    gh_id_view palette,gh_scene_message_emit emit,void *context,int timed_caption,uint32_t *frontier)
+    gh_id_view palette,gh_scene_message_emit emit,void *context,
+    message_page_kind kind,uint32_t *frontier)
 {
     const uint8_t *p=block->payload;
     *frontier=0x2af728;
     const uint8_t *text=source->primary.bytes;
     const size_t start=source->cursor_7c;
-    if(!source->bound||source->ruby.bytes||source->ruby.size||!text||source->cursor_8c<start)
+    const int timed_caption=kind==MESSAGE_TIMED_CAPTION;
+    const int room_text=kind==MESSAGE_ROOM_TEXT;
+    if(!source->bound||source->ruby.bytes||source->ruby.size||!text||source->cursor_8c<start||
+       start>=source->primary.size||source->primary.size-start<2)
         return GH_SCENE_UI_UNSUPPORTED;
-    if(timed_caption ? source->primary.size<14||start!=10||half(text)!=0xe705 :
-       source->primary.size<46||(start!=4&&start!=46)||
-       half(text)!=0xa602||half(text+2)!=0||half(text+44)!=0xa001)
+    if(timed_caption&&(source->primary.size<14||start!=10||half(text)!=0xe705))
+        return GH_SCENE_UI_UNSUPPORTED;
+    if(room_text&&start&&(start<2||half(text+start-2)!=0xa101))
+        return GH_SCENE_UI_UNSUPPORTED;
+    if(kind==MESSAGE_SCENERY_CHOICE&&
+       (source->primary.size<46||(start!=4&&start!=46)||
+        half(text)!=0xa602||half(text+2)!=0||half(text+44)!=0xa001))
         return GH_SCENE_UI_UNSUPPORTED;
     if(!font||!display||!display->initialized||!palette.bytes||palette.size<84)
         return GH_SCENE_UI_ARGUMENT;
@@ -65,7 +75,15 @@ static gh_scene_ui_status message_page(const gh_scene_message_block *block,
     const unsigned selected=(word(p+0x14-0xc)&0x20u)?half(p+0x94-0xc):UINT16_MAX;
     while(offset+2<=source->primary.size){
         const uint16_t code=half(text+offset);
-        if(code==(start==4?0xa001:0x8001))break;
+        if(room_text&&code==0x8001)break;
+        if(room_text&&code==0xa301){
+            if(source->primary.size-offset<4)return GH_SCENE_UI_BOUNDS;
+            const uint16_t next=half(text+offset+2);
+            if(next!=0x8001&&next!=0xa101)return GH_SCENE_UI_UNSUPPORTED;
+            offset+=2;
+            break;
+        }
+        if(!room_text&&code==(start==4?0xa001:0x8001))break;
         if((code==0xa301&&start==46)||(code==0xe801&&timed_caption)){
             offset+=2;
             if(offset+2>source->primary.size||half(text+offset)!=0x8001)
@@ -112,7 +130,7 @@ static gh_scene_ui_status message_page(const gh_scene_message_block *block,
         offset+=2;
     }
     if(offset+2>source->primary.size||source->cursor_8c>offset||
-       (timed_caption?token_count==0:(start==4?token_count!=20:choice_count!=2)))
+       (kind==MESSAGE_SCENERY_CHOICE?(start==4?token_count!=20:choice_count!=2):token_count==0))
         return GH_SCENE_UI_UNSUPPORTED;
     if(!visible_count){*frontier=0;return GH_SCENE_UI_OK;}
 
@@ -193,10 +211,13 @@ gh_scene_ui_status gh_scene_message_render_002af028(gh_game_scene_ui *ui,
     const uint8_t *p = block->payload;
     if(work->language && work->room==0x105 && block->next==-1 && p[0xa4-0xc]==4 &&
        half(p+0x64-0xc)==0x3004)
-        return message_page(block,source,font,display,palette,emit,context,0,frontier);
+        return message_page(block,source,font,display,palette,emit,context,MESSAGE_SCENERY_CHOICE,frontier);
     if(work->language && work->room==0x102 && block->next==-1 && !p[0xa4-0xc] &&
        source->primary.bytes && source->primary.size>=2 && half(source->primary.bytes)==0xe705)
-        return message_page(block,source,font,display,palette,emit,context,1,frontier);
+        return message_page(block,source,font,display,palette,emit,context,MESSAGE_TIMED_CAPTION,frontier);
+    const uint16_t id=half(p+0x64-0xc);
+    if(work->language&&work->room==0x103&&block->next==-1&&!p[0xa4-0xc]&&(id==0x1000||id==0x1001))
+        return message_page(block,source,font,display,palette,emit,context,MESSAGE_ROOM_TEXT,frontier);
     if (!work->language || block->next != -1 || p[0xa4 - 0xc] || !source->bound ||
         source->ruby.bytes || source->ruby.size || !source->primary.bytes ||
         source->primary.size < 6 || source->cursor_7c || source->cursor_8c > 4)

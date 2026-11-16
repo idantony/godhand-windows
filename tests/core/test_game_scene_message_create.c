@@ -33,6 +33,7 @@ static uint8_t *load(gh_disc *disc, const char *path, size_t *bytes) {
 typedef struct {
     gh_scene_message_glyph_pair pair;
     unsigned calls;
+    size_t last_batch;
 } glyph_capture;
 
 static gh_scene_ui_status capture_glyph(void *context, const gh_scene_message_glyph_pair *pair,
@@ -40,6 +41,7 @@ static gh_scene_ui_status capture_glyph(void *context, const gh_scene_message_gl
 {
     glyph_capture *capture = context;
     capture->pair = *pair;
+    capture->last_batch = pair->count;
     ++capture->calls;
     *frontier = 0;
     return GH_SCENE_UI_OK;
@@ -349,6 +351,42 @@ int main(int argc, char **argv) {
     CHECK(!gh_scene_message_initialize_002aea18(&ui, &menu, &room, work.language));
     for (unsigned i = 0; i < 16; ++i) CHECK(!ui.sources[i].bound && !ui.sources[i].primary.bytes);
 
+    size_t arena_size;
+    uint8_t *arena_data = load(disc, "st1/r103.dat", &arena_size);
+    gh_bundle arena;
+    CHECK(!gh_bundle_open(arena_data, arena_size, &arena));
+    gh_boot_work arena_work = {.room = 0x103, .language = 1};
+    gh_game_scene_ui arena_ui = {0};
+    gh_menu_state arena_menu = menu;
+    arena_menu.timer = 30;
+    CHECK(!gh_scene_font_bind_002a4c38(&fonts, &arena, arena_work.language));
+    CHECK(!gh_scene_message_initialize_002aea18(&arena_ui, &arena_menu, &arena, arena_work.language));
+    for (uint16_t index = 0; index < 2; ++index) {
+        const uint16_t message_id = (uint16_t)(0x1000 + index);
+        uint16_t work_id;
+        CHECK(!gh_scene_message_create_002aeb68(&arena_ui, &arena_work, message_id, &work_id, &frontier));
+        CHECK(work_id != UINT16_MAX && !frontier);
+        size_t maximum[2] = {0};
+        unsigned confirms = 0;
+        for (unsigned tick = 0; tick < 240 && arena_ui.active_head >= 0; ++tick) {
+            const unsigned slot = (unsigned)arena_ui.active_head;
+            const int waiting = arena_ui.blocks[slot].payload[0] == 3;
+            put_word((uint8_t *)&arena_work + 0x178, waiting ? 0x10 : 0);
+            confirms += (unsigned)waiting;
+            CHECK(!gh_scene_message_update_002aefa8(&arena_ui, &arena_work, &frontier));
+            CHECK(!frontier);
+            if (arena_ui.active_head < 0) break;
+            const size_t origin = arena_ui.sources[slot].cursor_7c;
+            CHECK(origin == 0 || (index == 1 && origin == 94));
+            draw.last_batch = 0;
+            CHECK(!gh_scene_message_render_002af028(&arena_ui, &arena_work, &fonts, &display,
+                palette, capture_glyph, &draw, &frontier) && !frontier);
+            if (draw.last_batch > maximum[origin != 0]) maximum[origin != 0] = draw.last_batch;
+        }
+        CHECK(arena_ui.active_head == -1 && confirms == (unsigned)index + 1 &&
+            maximum[0] == 45 && maximum[1] == (index ? 36 : 0));
+    }
+    free(arena_data);
     free(lang_data);
     free(room_data);
     CHECK(!gh_game_event_resource_abort(&resource));
