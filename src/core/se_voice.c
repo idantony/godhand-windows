@@ -287,7 +287,10 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
 {
  const int16_t request=v->requested_program;
  const uint8_t *boss=r103_boss_voice_actor(v);
- if(boss&&h(boss+0x2f4)==0x6c00&&boss[0x2f6]==1&&!boss[0x2f7]&&v->source_owner&&
+ const unsigned boss_state=boss?h(boss+0x2f4):0;
+ if(boss&&v->source_owner&&!boss[0x2f7]&&
+    ((boss_state==0x6c00&&boss[0x2f6]==1)||
+     (boss_state==0x3b00&&(boss[0x2f6]==3||boss[0x2f6]==5)))&&
     v->part_index==-1&&bank>=1&&bank!=2&&bank!=3&&v->requested_bank==bank&&request==0x21&&program==0x21){
   return w(p)==(0x00210000u|(uint16_t)bank)&&w(p+4)==0x04230018u&&w(p+8)==0x264u&&
     w(p+12)==0x00210000u&&w(p+16)==0x00320032u&&w(p+20)==0x005a0040u&&!w(p+24)&&
@@ -374,12 +377,13 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8)return 0;
   dependency=w(root->bytes+0x564);
   const uint8_t *boss=r103_boss_voice_actor(v);
-  const int recovery=boss&&h(boss+0x2f4)==0x6c00&&boss[0x2f6]==1&&!boss[0x2f7];
-  const int throw_partner=boss&&dependency==0x214&&h(boss+0x2f4)==0x5200&&
+  const unsigned boss_state=boss?h(boss+0x2f4):0;
+  const int throw_partner=boss&&dependency==0x214&&boss_state==0x5200&&
      boss[0x2f6]==3&&!boss[0x2f7];
-  if((recovery||throw_partner)&&v->part_index==-1&&
-     v->requested_bank==bank&&program!=0x10){
-   /* 2744E0 and the EM14 partner SEQ use these EM14.SES exertion cues. */
+  const int recovery=boss&&boss_state==0x6c00&&boss[0x2f6]==1&&!boss[0x2f7];
+  const int pincer=boss&&(boss_state==0x3b00||boss_state==0x3c00)&&boss[0x2f6]<=1&&!boss[0x2f7];
+  if((recovery||throw_partner||pincer)&&v->part_index==-1&&v->requested_bank==bank&&program!=0x10){
+   /* Original EM14.SES exertion cues for recovery and paired moves. */
    const unsigned alternate=program==0x0b;
    return w(p+4)==0x022b0009u+alternate&&w(p+8)==0x255u&&w(p+12)==0x00200000u&&
       w(p+16)==0x00780078u&&w(p+20)==0x005a0040u&&w(p+24)==0x0064ff38u&&
@@ -569,6 +573,16 @@ static int r102_mount_voice_actor(const struct voice *v)
 /* The original AA, AC and hold AE footsteps keep the CORE bank through 2C7FD0.
  * SDE 3751B8 attenuates the first level and sets both levels to that
  * result in this mode, before the 37D558 pan split. */
+static int r103_pincer_flank_audio(const uint8_t *actor)
+{
+ return actor&&h(actor+0x2f4)==0x3c00&&actor[0x2f6]==7&&!actor[0x2f7];
+}
+
+static int r103_pincer_flank_withdrawal(const uint8_t *actor)
+{
+ return actor&&h(actor+0x2f4)==0x3c00&&actor[0x2f6]==17&&!actor[0x2f7];
+}
+
 static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
@@ -603,10 +617,13 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
       state==0x0900||(state==0x1600&&dependency==0x214)||state==0x1500||
       r103_boss_grab_attempt(boss)||r103_em15_throw_in_motion(boss)||
       ((state==0x6c00||state==0x6f00||state==0x0101)&&!boss[0x2f7])||
-      (state==0x0a00&&boss[0x2f7]==1)||r103_boss_paired_attack(boss)))||
-     (!state&&boss[0x2f6]==2));
+      (state==0x0a00&&boss[0x2f7]==1)||r103_boss_paired_attack(boss)||
+      state==0x3b00||state==0x3c00))||
+     (!state&&boss[0x2f6]==2)||
+     (state==0x3b00&&(boss[0x2f6]==3||boss[0x2f6]==5))||r103_pincer_flank_withdrawal(boss));
  const int arena_hold=(arena_foot&&(state==0x7500||state==0x4d00))||
      (arena_em03&&state==0x7500)||(boss&&state==0x7500&&boss[0x2f6]==3)||r103_boss_paired_attack(boss)||
+     (v->part_index==-1&&(r103_pincer_flank_audio(boss)||r103_pincer_flank_withdrawal(boss)))||
      (boss&&dependency==0x214&&state==0x5200&&boss[0x2f6]==3&&!boss[0x2f7]&&v->part_index==-1);
  if(h(actor+0x2fe)!=0x202&&!ema2_step&&
     !(((arena_foot||arena_em03)&&(ground_step||hard_step))||
@@ -822,7 +839,8 @@ static uint32_t enemy_scene_motion_sample(const struct voice *v,int16_t bank,int
     em03[0x2f6]==1;
  const int retreat=em0a&&h(em0a+0x2f4)==0x6c00&&em0a[0x2f6]==1;
  if(!bank&&(mount>=0||r102_obstacle_voice_actor(v)||retreat||arena_landing||arena_em03_landing||
-    arena_em0a_landing||boss_landing||boss_throw_partner||r103_boss_paired_attack(boss))&&
+    arena_em0a_landing||boss_landing||boss_throw_partner||r103_boss_paired_attack(boss)||
+    (v->part_index==-1&&r103_pincer_flank_audio(boss)))&&
     v->requested_program==0x8e&&program==0x8e)
   return w(p)==0x008e0000u&&w(p+4)==0x020b005du&&w(p+8)==0x246&&
     w(p+12)==0x00200000&&w(p+16)==0x005a005au&&w(p+20)==0x005a0040&&
@@ -962,8 +980,9 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
     r103_boss_paired_attack(boss);
   const int arena_turn=arena&&arena[0x2f6]==1&&v->part_index==-1&&
     ((arena_state==0x0800&&arena[0x2f7]==1)||(arena_state==0x1900&&!arena[0x2f7]));
+  const int flank_turn=v->part_index==-1&&r103_pincer_flank_withdrawal(r103_boss_voice_actor(v));
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8||
-     (h(root->bytes+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!r103_em03_voice_actor(v)&&!arena_landing&&!arena_turn&&!boss_turn))return 0;
+     (h(root->bytes+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!r103_em03_voice_actor(v)&&!arena_landing&&!arena_turn&&!boss_turn&&!flank_turn))return 0;
   const uint32_t dependency=w(root->bytes+0x564);
   const uint8_t *em0a=r102_em0a_voice_actor(v);
   const int gate_em0a=em0a&&em0a[0x2f6]==1&&
@@ -971,7 +990,7 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
   const int east_em27=r102_east_em27_voice(v,0x6b00,1)||r102_east_em27_voice(v,0x6c00,1)||
       r102_east_em27_voice(v,0x0800,1)||r102_east_em27_route_voice(v,0x0800,1);
   if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&!gate_em0a&&!east_em27&&
-     !r102_em0f_voice_source(v)&&!r105_em27_voice_source(v)&&!r100_em0a_formation_source(v)&&!arena_landing&&!arena_turn&&!boss_turn)return 0;
+     !r102_em0f_voice_source(v)&&!r105_em27_voice_source(v)&&!r100_em0a_formation_source(v)&&!arena_landing&&!arena_turn&&!boss_turn&&!flank_turn)return 0;
  }else if(!v->combat_profile)return 0;
  if(h(p+4)!=92||w(p+6)!=0x0246020bu||w(p+0xa)||h(p+0xe)!=0x20||
     w(p+0x10)!=0x00500050||w(p+0x14)!=0x005a0040||w(p+0x18)!=0x00800080||
@@ -1027,10 +1046,12 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8)return 0;
   const uint32_t dependency=w(root->bytes+0x564);
   const uint8_t *boss=r103_boss_voice_actor(v);
-  const int boss_attack=boss&&boss[0x2f6]==1&&v->part_index==-1&&
-      ((dependency==0x214&&h(boss+0x2f4)==0x1600&&(program==0x83||program84))||
-       (h(boss+0x2f4)==0x1500&&(program==0x83||program==0x85||program==0x87))||
-       (r103_boss_paired_attack(boss)&&program==0x83));
+  const int boss_attack=boss&&v->part_index==-1&&
+      ((boss[0x2f6]==1&&
+        ((dependency==0x214&&h(boss+0x2f4)==0x1600&&(program==0x83||program84))||
+         (h(boss+0x2f4)==0x1500&&(program==0x83||program==0x85||program==0x87))||
+         (r103_boss_paired_attack(boss)&&program==0x83)))||
+       (program84&&h(boss+0x2f4)==0x3b00&&(boss[0x2f6]==9||boss[0x2f6]==11)&&!boss[0x2f7]));
   if(h(root->bytes+0x2fe)!=0x202&&!boss_attack){
    const uint8_t *em00=r103_em00_voice_actor(v);
    const int arena_em00=em00&&(program==0x83||program==0x87||

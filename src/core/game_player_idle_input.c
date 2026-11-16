@@ -232,6 +232,13 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  if(s->phase==5){if(s->b.targets.player!=&b->player->view)return fail(s,0x129cc8,GH_PLAYER_FRAME_ARGUMENT);gh_player_target_status e=gh_player_small_object_gate_00129cc8(&s->b.targets,&pc);if(e)return target_status(s,e,pc);s->phase=6;}
  if(s->phase==6){/*2948C8's TWO original fields, notenemy_kept16. */if(w(b->init->enemies+0x5ac)||w(b->init->enemies+0x5b0))return fail(s,0x2948c8,GH_PLAYER_FRAME_UNSUPPORTED);s->phase=7;}
  if(s->phase==7&&mode==REACTION_INPUT)return done(s,out,0);
+ if(s->phase==7&&mode==IDLE_INPUT&&b->work->room==0x103&&p[0x623]&&
+    !(w(p+0x15f4)&0x8000u)&&(!p[0x61f]||num(p+0x608)<=2.3561945f)){
+  /* 123938 selects combo set 2 with its move cursor reset to zero.
+   * The result of 12C000 only gates the interruptible caller. */
+  put(p+0x5e0,0x00020000u);
+  return transition(s,out,0x0b,0);
+ }
  if(s->phase==7&&!p[0x623]&&p[0x622]){
   int selected;
   gh_player_frame_status e=gh_player_triangle_input_00123f44(&b->player->view,b->save,0,&selected,&pc);

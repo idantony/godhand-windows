@@ -27,7 +27,9 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
 
     const unsigned side = (flags & 1) ? 0 : 1;
     const unsigned shape_class = word(p + 0x1660 + side * 4);
-    if (shape_class > 1)
+    const int kick = shape_class == 0x19 && word(p + 0x5e8) == 0x25 &&
+        word(p + 0x1670 + side * 4) == 7;
+    if (shape_class > 1 && !kick)
         return stop(frontier, 0x10a608, GH_HITAREA_UNSUPPORTED);
     if (!give) return stop(frontier, 0x10a438, GH_HITAREA_ARGUMENT);
 
@@ -81,10 +83,28 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
     }
     if (gh_collision_pair_shape_offset_002bb258(&shapes[1], offset1, frontier) ||
         gh_collision_pair_shape_offset_002bb258(&shapes[2], offset2, frontier) ||
-        gh_collision_pair_shape_offset_002bb258(&shapes[4], base_box, frontier) ||
-        gh_collision_pair_shape_offset_002bb258(&shapes[4], active_box, frontier))
+        gh_collision_pair_shape_offset_002bb258(&shapes[4], base_box, frontier))
         return GH_HITAREA_UNSUPPORTED;
 
+    if (kick) {
+        /* 10AF4C configures the second Give cylinder for 1277AC's kick. */
+        const float raised[3] = {0.0f, 2.6f, 0.2f};
+        int16_t shape_index;
+        memcpy(&shape_index, p + 0x5bc, sizeof(shape_index));
+        if (gh_collision_pair_shape_offset_002bb258(&shapes[1], raised, frontier))
+            return GH_HITAREA_UNSUPPORTED;
+        uint8_t *cylinder = give[1].bytes;
+        memcpy(cylinder + 0x46, p + 0x1670 + side * 4, 2);
+        gh_hitarea_status status = gh_hitarea_object_set_active_001fd668(&give[1], 1, frontier);
+        if (status) return status;
+        status = gh_hitarea_object_set_node_scalar_001fd7b0(&give[1], shape_index, 0x3fc00000u, frontier);
+        if (status) return status;
+        memcpy(cylinder + 0x4c, &power, sizeof(power));
+        memcpy(cylinder + 0x10, rotation + 8, 12);
+        return GH_HITAREA_OK;
+    }
+    if (gh_collision_pair_shape_offset_002bb258(&shapes[4], active_box, frontier))
+        return GH_HITAREA_UNSUPPORTED;
     uint8_t *box = give[4].bytes;
     memcpy(box + 0x46, p + 0x1670 + side * 4, 2);
     gh_hitarea_status status = gh_hitarea_object_set_active_001fd668(&give[4], 1, frontier);

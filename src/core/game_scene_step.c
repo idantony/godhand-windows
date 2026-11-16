@@ -84,7 +84,18 @@ static gh_scene_step_status enemies(gh_game_scene_step*s,const gh_game_scene_ste
  }
  if(s->enemy_stage==2){static const unsigned pointers[]={0x500,0x560,0x564,0x568,0x56c,0x570,0x574,0x578,0x57c,0x580,0x584,0x588,0x58c,0x590,0x594,0x5ac,0x5b0};
   for(unsigned i=0;i<sizeof(pointers)/sizeof(*pointers);i++)if(w(e+pointers[i]))return fail(s,0x290250,GH_SCENE_STEP_UNSUPPORTED,(int)pointers[i]);for(unsigned i=0;i<16;i++)if(b->init->enemy_kept[i])return fail(s,0x290250,GH_SCENE_STEP_UNSUPPORTED,(int)i);
-  e[0x5a0]=e[0x5a1]=e[0x5a2]=0;
+  /* 2904B0 removes retired pair aliases before publishing 2904DC's signals. */
+  for(unsigned i=0;i<2;++i){
+   const gh_game_title_player *boss=b->init->enemy_r103_boss[i];
+   if(!boss)continue;
+   if(!boss->view.bytes||boss->view.size<0x254)
+    return fail(s,0x2904b0,GH_SCENE_STEP_ARGUMENT,(int)i);
+   if(w(boss->view.bytes+0x250)&0x80000000u)b->init->enemy_r103_boss[i]=NULL;
+  }
+  const int pair_live=b->init->enemy_r103_boss[0]&&b->init->enemy_r103_boss[1];
+  e[0x5a0]=(uint8_t)(pair_live&&e[0x5a3]==3);
+  e[0x5a1]=(uint8_t)(pair_live&&e[0x5a4]==3);
+  e[0x5a2]=(uint8_t)(pair_live&&e[0x5a5]);
   /* Actual125F38 immediately returns onplayer+165C==0. Constructor leaves
    * thisfieldunwritten, so only anexplicitprovided/zero-reference player may
    * establish the value; never read arbitrary hostallocation asguestpointer. */

@@ -435,11 +435,12 @@ static gh_effect_status packet_type12(gh_game_effects_trans*s,const gh_effect_es
  const gh_display_state*d=s->b.display;
  const uint32_t flags=word(p+0x11c);
  const int projected=(flags&0x1000000u)!=0;
+ const unsigned far=half(p+0x276);
  if(!d||!d->initialized)return fail(s,0x2f02b8,GH_EFFECT_ARGUMENT);
  if(d->screen_width!=512||d->screen_lines!=448||d->gs_y_origin!=1824||
     s->b.policy!=GH_STATIC_BINARY32_REFERENCE||s->b.cvt_policy!=GH_FRAME_CHOP_REFERENCE||
     word(p+0xf0)!=0x44eb70u||!v->target120_known_null||word(p+0x120)||
-    p[0x24a]||half(p+0x276)||p[0x24c]||p[0x2e0])
+    p[0x24a]||(far&&(!projected||p[0x24b]))||p[0x24c]||p[0x2e0])
     return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
  if(projected){
     if(p[0x2e2]||!v->actor||(!gh_effect_attack_esp_is_bound(s->b.storage.effects,v)&&
@@ -451,7 +452,8 @@ static gh_effect_status packet_type12(gh_game_effects_trans*s,const gh_effect_es
     gh_effect_status status=gh_effect_sprite_project_002fe0d8(s->b.storage.effects,s->esp_index,
        v->serial,&camera,&s->sprite,&frontier);
     if(status)return fail(s,frontier,status);
-    if(!s->sprite.visible)return GH_EFFECT_OK;
+    /* 2F03E8 uses original projected depth and doubles the far limit. */
+    if(!s->sprite.visible||(far&&s->sprite.original_depth>(int)(far*2u)))return GH_EFFECT_OK;
  }else if(v->parent_emitter!=-1||p[0x2e2]!=1){
     return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
  }

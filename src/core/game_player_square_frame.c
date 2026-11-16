@@ -200,7 +200,8 @@ static gh_player_frame_status body(gh_player_square_frame *s,const gh_player_squ
   if(e)return stop(s,pc?pc:0x10b2e8,GH_PLAYER_FRAME_CALLEE);
   if(recent&&word(p+0x5e8)==0x5d)return stop(s,0x2cba48,GH_PLAYER_FRAME_UNSUPPORTED);
   const uint32_t skill=word(p+0x5e8);
-  if(p[0x2f6]>1||(p[0x2f6]&&skill!=0&&skill!=4&&skill!=10&&skill!=13&&skill!=29))
+  const int kick=f->work->room==0x103&&skill==0x25;
+  if(p[0x2f6]>1||(p[0x2f6]&&skill!=0&&skill!=4&&skill!=10&&skill!=13&&skill!=29&&!kick))
    return stop(s,0x10d3a8,GH_PLAYER_FRAME_UNSUPPORTED);
   s->stage=p[0x2f6]?5:2;
  }

@@ -116,6 +116,8 @@ After confirming Retry, Gene returns to the arena at 100 HP and defeats both
 first-wave enemies. The original encounter ledger records both defeats. Gene
 has 56 HP after the second defeat. Direct3D presents 118 scene frames through
 the second defeat with zero renderer errors.
+A longer replay from the same save defeats both second-wave enemies as well.
+The encounter ledger records four defeats, and Gene still has 56 HP.
 A native CPU replay loads an isolated R103 test save and uses original pad
 inputs to defeat all six enemies in the first three arena waves. Gene takes
 the original healing drop and enters the twin boss wave with 58 HP. The replay
@@ -133,6 +135,10 @@ The boss then evades and lands the original roundhouse. A muted Direct3D
 replay presents the original paired throw.
 A separate controller replay reaches Game Over after a lethal paired throw.
 Confirming Retry restores Gene to 100 HP and returns him to the R103 battle.
+The coordinated flank attack also runs through contact and withdrawal.
+It lowers Gene's HP from 31 to 17 and then to 12 on the fall. A separate
+right-stick dodge avoids that attack and leaves Gene at 31 HP for the next
+exchange.
 Full boss clearance remains in development. Earlier Direct3D replays present the escape counter and the movement that
 follows it after entering R103 through the original door from R102.
 
@@ -366,6 +372,7 @@ R102 从零击败存档开始，经手柄回放完成开门所需的全部六次
 同一条连续路线还在 R103 进入原版 Game Over 菜单，确认重试后以 100 HP 回到竞技场，随后
 击败首波两名敌人。原版遭遇记录登记了两次击败，第二次击败后 Gene 还剩 56 HP。
 Direct3D 呈现了直到第二次击败的 118 个场景帧，渲染器报错为零。
+从同一份存档延长回放后，也击败了第二波的两名敌人。原版遭遇记录累计四次击败，Gene 仍有 56 HP。
 原生 CPU 回放从独立的 R103 测试存档开始，用原版手柄输入击倒前三波共六名敌人。
 Gene 拿到原版恢复道具，以 58 HP 进入双头目战。回放提交两名头目的模型绘制指令，并运行到
 原版选招。静音 Direct3D 回放呈现了 6,908 个场景帧，覆盖原版头目入场，渲染器报错为零。
@@ -374,7 +381,9 @@ Gene 拿到原版恢复道具，以 58 HP 进入双头目战。回放提交两�
 Gene 起身恢复操作后，方块路线将第二名头目的生命值从 597 降到 594。
 三角路线连续命中两次，将第二名头目的生命值从 597 降到 573，随后验证了头目的闪避和回旋踢。
 静音 Direct3D 回放呈现了合投过程。另一条手柄回放在 Gene 被合投击倒后进入原版 Game Over 菜单，确认重试后
-以 100 HP 回到 R103 继续战斗。完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
+以 100 HP 回到 R103 继续战斗。原版夹击已运行至侧翼命中和收招，Gene 的 HP 从 31 降到 17，
+倒地时再降到 12。另一条路线用右摇杆闪避这次攻击，以 31 HP 进入下一次交锋。
+完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
 已呈现挣脱反击和随后的摇杆移动。
 
 另一次测试预置全场已清，并将 Gene 放到原版交互区域。用圆圈打开战后对白，叉键关闭，
