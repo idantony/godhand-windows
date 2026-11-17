@@ -572,7 +572,8 @@ static gh_actor_motion_status heavy_walk_home_00286d10(gh_enemy_other_move *s,
 
 enum {
     HEAVY_IDLE_BIND=61, HEAVY_IDLE_STEP, HEAVY_IDLE_WORLD, HEAVY_IDLE_PROXIMITY,
-    HEAVY_IDLE_RISE_TURN, HEAVY_IDLE_RISE_STEP, HEAVY_IDLE_OFFER_WORLD, HEAVY_IDLE_OFFER_ITEM, HEAVY_IDLE_HOLD_WORLD
+    HEAVY_IDLE_RISE_TURN, HEAVY_IDLE_RISE_STEP, HEAVY_IDLE_OFFER_WORLD, HEAVY_IDLE_OFFER_ITEM, HEAVY_IDLE_HOLD_WORLD,
+    HEAVY_IDLE_RECOVER_CUE
 };
 
 /* 285F78 settles the west cEmA2 after its original walk home, then holds
@@ -605,15 +606,31 @@ static gh_actor_motion_status heavy_idle_00285f78(gh_enemy_other_move *s,
             if(status)return status;
             if(!found)p[0x2f6]=(word(p+0x15b0)&4u)?6:8;
         }
-        if(p[0x2f6]>5&&(p[0x2f6]<8||p[0x2f6]>=14)){
-            static const uint32_t phase_entry[]={0x2861d0,0x286208,0x28626c,0x286334,0x2863a4,
-                0x2863dc,0x2864c0,0x2864f8,0x286554,0x28658c};
-            if(p[0x2f6]<14)return stop(s,phase_entry[p[0x2f6]-4],GH_ACTOR_MOTION_UNSUPPORTED);
+        if(p[0x2f6]>=14){
             s->stage=12;
             return GH_ACTOR_MOTION_OK;
         }
-        if(p[0x2f6]==5||(p[0x2f6]>=9&&(p[0x2f6]&1u)))s->stage=HEAVY_IDLE_RISE_TURN;
+        if(p[0x2f6]==6){
+            /* 28626C selects one original clip before the 5D actor cue. */
+            uint32_t draw;
+            if(!prefix->bindings.random||gh_game_mt_next_0030f348(prefix->bindings.random,&draw))
+                return stop(s,0x31cfe0,GH_ACTOR_MOTION_ARGUMENT);
+            int32_t roll;
+            memcpy(&roll,&draw,sizeof(roll));
+            const int choice=roll%3;
+            s->reaction_resource_offset=choice==1?0xe8:choice==2?0xf0:0xe0;
+            s->sound_request=(gh_motion_sound_request){.model=&prefix->model.model,
+                .actor=prefix->root,.bank=1,.program=0x5d};
+            s->stage=HEAVY_IDLE_RECOVER_CUE;
+        }else if(p[0x2f6]>=5&&(p[0x2f6]&1u))s->stage=HEAVY_IDLE_RISE_TURN;
         else s->stage=(p[0x2f6]&1u)?HEAVY_IDLE_STEP:HEAVY_IDLE_BIND;
+    }
+    if(s->stage==HEAVY_IDLE_RECOVER_CUE){
+        if(!s->sound)return stop(s,0x2cba48,GH_ACTOR_MOTION_UNSUPPORTED);
+        uint32_t handle;
+        gh_actor_motion_status status=s->sound(s->sound_context,&s->sound_request,&handle,&pc);
+        if(status)return stop(s,pc?pc:0x2cba48,status);
+        s->stage=HEAVY_IDLE_BIND;
     }
     if(s->stage==HEAVY_IDLE_BIND){
         if(!s->motion.active){
@@ -621,24 +638,28 @@ static gh_actor_motion_status heavy_idle_00285f78(gh_enemy_other_move *s,
             b.effect=s->effect;b.context=s->effect_context;
             b.sound=s->sound;b.sound_context=s->sound_context;
             const unsigned phase=p[0x2f6];
-            const size_t row=phase>=8?0xf8u+4u*(phase-8u):phase==4?0x30:(phase?0x28:0x48);
+            const size_t row=phase>=8?0xf8u+4u*(phase-8u):phase==6?s->reaction_resource_offset:
+                phase==4?0x30:(phase?0x28:0x48);
             const uint32_t pc=phase>=8?phase==8?0x2863a4:phase==10?0x2864c0:0x286554:
-                phase==4?0x2861d0:phase?0x2860d0:0x286078;
+                phase==6?0x28626c:phase==4?0x2861d0:phase?0x2860d0:0x286078;
             if(!prefix->resource.bytes||prefix->resource.file_extent<row+8)
                 return stop(s,pc,GH_ACTOR_MOTION_BOUNDS);
+            const size_t motion=word(prefix->resource.bytes+row);
+            /* 286314 passes the motion pointer as the candidate too. */
+            const size_t candidate=phase==6?motion:word(prefix->resource.bytes+row+4);
             gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(
-                &s->motion,&prefix->motion,&b,word(prefix->resource.bytes+row),
-                word(prefix->resource.bytes+row+4),0,10,0,1);
+                &s->motion,&prefix->motion,&b,motion,candidate,0,10,0,1);
             if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
         }
         gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(&s->motion);
         if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
         ++p[0x2f6];
-        s->stage=(p[0x2f6]==5||p[0x2f6]>=9)?HEAVY_IDLE_RISE_TURN:HEAVY_IDLE_STEP;
+        s->stage=p[0x2f6]>=5?HEAVY_IDLE_RISE_TURN:HEAVY_IDLE_STEP;
     }
     if(s->stage==HEAVY_IDLE_RISE_TURN){
         /* 286208 turns towards Gene until the original SEQ bit 1. */
-        if(p[0x2f6]>=9||!(half(p+0x3ac)&2u)){
+        if(p[0x2f6]==7)put(p+0x15b0,word(p+0x15b0)|1u);
+        if(p[0x2f6]>=7||!(half(p+0x3ac)&2u)){
             const gh_player_target_bindings *bindings=s->target_bindings;
             const float rate=scalar(p+0x5a8);
             const float work_rate=scalar((const uint8_t *)work+0x55c);
@@ -656,7 +677,7 @@ static gh_actor_motion_status heavy_idle_00285f78(gh_enemy_other_move *s,
                 return stop(s,pc?pc:0x2a7498,GH_ACTOR_MOTION_UNSUPPORTED);
             put_float(p+0x104,next);
         }
-        s->stage=HEAVY_IDLE_RISE_STEP;
+        s->stage=p[0x2f6]==7&&scalar(p+0x618)>400.0f?12:HEAVY_IDLE_RISE_STEP;
     }
     if(s->stage==HEAVY_IDLE_RISE_STEP){
         if(!actor->pose.bindings.rate)return stop(s,0x157c18,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -665,7 +686,7 @@ static gh_actor_motion_status heavy_idle_00285f78(gh_enemy_other_move *s,
             *actor->pose.bindings.rate,prefix->bindings.policy,&ended,&pc);
         if(status)return stop(s,pc?pc:0x157c18,status);
         const unsigned phase=p[0x2f6];
-        if(ended&&phase!=11)p[0x2f6]=phase==9?10:phase==13?6:(word(p+0x15b0)&4u)?6:8;
+        if(ended&&phase!=7&&phase!=11)p[0x2f6]=phase==9?10:phase==13?6:(word(p+0x15b0)&4u)?6:8;
         s->stage=phase==9?HEAVY_IDLE_OFFER_WORLD:phase==11?HEAVY_IDLE_HOLD_WORLD:HEAVY_IDLE_WORLD;
     }
     if(s->stage==HEAVY_IDLE_HOLD_WORLD){
@@ -1121,7 +1142,7 @@ gh_actor_motion_status gh_enemy2a2_move_002856c0(gh_enemy_other_move *s,
         if(status)return status;
     }else if((s->stage==5&&!half(p+0x2f4)&&work->room==0x100&&
               word(p+0x564)==0x2a2&&half(p+0x640)==6)||
-             (s->stage>=HEAVY_IDLE_BIND&&s->stage<=HEAVY_IDLE_HOLD_WORLD)){
+             (s->stage>=HEAVY_IDLE_BIND&&s->stage<=HEAVY_IDLE_RECOVER_CUE)){
         gh_actor_motion_status status=heavy_idle_00285f78(s,actor);
         if(status)return status;
     }else if(s->stage<12||(s->stage>=HEAVY_TIMER_CONVERT&&s->stage<=HEAVY_TIMER_DRAW)||

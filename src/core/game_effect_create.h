@@ -57,6 +57,9 @@ gh_effect_status gh_effect_create_enemy_knockdown_002a8608(gh_effect_create_call
 gh_effect_status gh_effect_create_om307_break_begin_00306838(gh_effect_create_call *,uint32_t index);
 gh_effect_status gh_effect_create_om324_break_begin_001bfd28(gh_effect_create_call *,
  const uint32_t world_xyz[3],uint32_t yaw_bits);
+/* Original OM346 split plank puff, 1A1950 -> bank0/index7. */
+gh_effect_status gh_effect_create_om346_break_begin_00306838(gh_effect_create_call *,
+ const uint32_t world_xyz[3]);
 /* Original ordinary enemy impact 271810 -> 306838, bank58/index10,
  * actor NULL, unit scale, zero Euler, selector and mode -1. */
 /* Paired-counter collateral reaches the original positioned CORE0:C. */

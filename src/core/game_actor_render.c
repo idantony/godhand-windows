@@ -163,7 +163,10 @@ static gh_actor_model_status marker_draw(gh_actor_render_call *c,uint32_t leaf,u
   gh_actor_model_status status=gh_enemy_marker_quad_002ab360(b->camera,b->pivot_owner,
      b->marker_manager,base,&pending,&draw,f);
   if(status)return status;
-  if(!draw.visible)continue;
+  if(!draw.visible){
+   job->entry->color=pending.color;
+   continue;
+  }
   const gh_stage_material *material;
   if(gh_stage_tim2_marker_resolve_0015e0a0(b->textures,draw.texture.source.bytes,
      draw.texture.source.size,&material))return marker_stop(f,0x15e0a0);

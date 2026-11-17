@@ -30,8 +30,9 @@ static int r100_stamp19(const gh_enemy_actor *enemy, const uint8_t *actor) {
 
 static int r100_at2_em03(const gh_enemy_actor *enemy, const uint8_t *actor) {
     return enemy->entry.b.work && enemy->entry.b.work->room == 0x100 &&
-        half(actor + 0x640) == 5 && word(actor + 0x564) == 0x203 &&
-        actor[0x1650] == 2 && word(actor + 0x16c4) == 6;
+        word(actor + 0x564) == 0x203 && word(actor + 0x16c4) == 6 &&
+        ((half(actor + 0x640) == 5 && actor[0x1650] == 2) ||
+         (half(actor + 0x640) == 11 && actor[0x1650] == 5));
 }
 
 static int r100_west_em00(const gh_enemy_actor *enemy,const uint8_t *actor)
@@ -214,11 +215,20 @@ static int r100_amplified_triangle_receiver(const gh_enemy_actor *enemy,const ui
 static gh_actor_motion_status take_player_power_0028fb88(uint8_t *,const gh_title_player_view *,
     const gh_game_init_state *,int32_t,uint32_t *);
 
-static int r104_charge_punch(const gh_enemy_actor *enemy,const uint8_t *actor,uint16_t effect)
+static int r104_player_punch(const gh_enemy_actor *enemy,const uint8_t *actor,uint16_t effect)
 {
-    return effect==7&&gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)&&
-        half(actor+0x2fe)==0x203&&word(actor+0x564)==0x250&&
-        half(actor+0x2f4)==0x1a00&&(actor[0x2f6]==3||actor[0x2f6]==5)&&!actor[0x2f7];
+    if(effect!=7||!gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)||
+       half(actor+0x2fe)!=0x203||word(actor+0x564)!=0x250)return 0;
+    const uint16_t state=half(actor+0x2f4);
+    const unsigned phase=actor[0x2f6],variant=actor[0x2f7];
+    const uint16_t flags=half(actor+0x3ac);
+    const int amplified=(flags&0x100u)!=0;
+    if(state==0x0800)
+        return phase==1&&variant==1&&!amplified&&(word(actor+0x16d4)&1u);
+    return !variant&&((state==0x1a00&&(phase==3||phase==5))||
+        (state==0x1500&&phase==1&&(amplified||flags==0x800))||
+        (state==0x1600&&phase==1&&amplified)||
+        (state==0x2100&&phase==1&&!amplified&&(word(actor+0x16d0)&0x80e020u)==0x800000u));
 }
 
 gh_actor_motion_status gh_enemy202_damage_0028fb88(
@@ -232,7 +242,7 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
         word(view->bytes + 0x214) != view->original_vtable214 ||
         (half(view->bytes+0x2fe)!=0x202&&!r103_arena_punch_target(enemy,word(view->bytes+0x564))&&
          !r103_arena_em0a(enemy,view->bytes)&&!r103_boss_player_strike_target(enemy,view->bytes)&&
-         !r104_charge_punch(enemy,view->bytes,7)) ||
+         !r104_player_punch(enemy,view->bytes,7)) ||
         !enemy->hitareas.created[0])
         return stop(frontier, 0x20a5dc);
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
@@ -364,8 +374,12 @@ static int scenery_reaction_enemy(const gh_enemy_actor *enemy, const uint8_t *ac
      * receiver to selector 11, including the exchanged R101 actor. */
     const int r102_em27=dependency==0x227&&half(actor+0x640)==4&&!actor[0x1650]&&
         enemy->entry.b.work&&enemy->entry.b.work->room==0x102;
+    const uint32_t impact_power=word(actor+0x17b4);
+    const int west_em0a=dependency==0x20a&&!half(actor+0x640)&&actor[0x1650]==3&&
+        half(actor+0x2f4)==0x1101&&!actor[0x2f6]&&!actor[0x2f7]&&
+        (impact_power==0||impact_power==20)&&enemy->entry.b.work&&enemy->entry.b.work->room==0x100;
     return dependency == 0x200 || dependency == 0x202 || dependency == 0x203 ||
-           r101_scenery_reaction_enemy(enemy, actor) || r102_em27;
+           r101_scenery_reaction_enemy(enemy, actor) || r102_em27 || west_em0a;
 }
 
 static uint32_t scenery_hit_vtable(unsigned kind)
@@ -458,6 +472,12 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     const int recoil = enemy && r103_heavy_recoil_collateral(enemy,source,power);
     const int arena_counter = recoil || (enemy && r103_counter_collateral(enemy,source,power));
     const int devil_contact = enemy && r100_devil_contact(enemy,source,power);
+    const uint16_t receiver_state=half(p+0x2f4);
+    const int west_em0a = enemy && entry->b.work && entry->b.work->room==0x100 &&
+        word(p+0x564)==0x20a && !half(p+0x640) && p[0x1650]==3 && p[0x2f6]==1 &&
+        ((devil_contact && !receiver_state && !p[0x2f7]) ||
+         (source_kind==0x303 && !power && ((receiver_state==0x0700 && p[0x2f7]==1) ||
+                                           (receiver_state==0x1101 && !p[0x2f7]))));
     /* The summoned R100 EM20 shares the scenery Take handler and resource
      * family. Its runtime supplies the real OM303 body owner. */
     const int devil_scenery = !enemy && entry->b.work && entry->b.work->room == 0x100 &&
@@ -469,7 +489,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
         word(source->bytes + 0x214) != source_vtable ||
         actor->original_vtable214 != 0x4479c8 || word(p + 0x214) != 0x4479c8 ||
         (!devil_scenery && (!enemy || (half(p + 0x2fe) != 0x202 && !arena_counter) ||
-          (!barrel && !recoil && !scenery_reaction_enemy(enemy,p)))) ||
+          (!barrel && !recoil && !west_em0a && !scenery_reaction_enemy(enemy,p)))) ||
         word(body->bytes + 0x40) != UINT32_MAX)
         return stop(frontier, 0x20a178);
     if (source_kind == 0x202) {
@@ -1079,9 +1099,12 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int em27_punch = original_em27_punch(enemy, p, effect);
     const int boss_strike=(effect==7||triangle||heat_contact||back_circle)&&r103_boss_player_strike_target(enemy,p);
     const int hit_probe_selector = opening_pair || (ordinary_punch && !boss_strike) || r102_at0b_em02_punch(enemy,p,effect);
-    const int r104_punch=r104_charge_punch(enemy,p,effect)&&
+    const int r104_punch=r104_player_punch(enemy,p,effect)&&
         word(body->bytes+0x4c)==3&&rank==1&&!body->state->heat[0x10];
-    const int r104_recovery=r104_punch&&p[0x2f6]==5;
+    /* The charge recovery, rear turn and early melee reach the same ordinary dep0250 probes. */
+    const int r104_recovery=r104_punch&&(p[0x2f6]==5||p[0x2f5]==8||
+        (p[0x2f5]==0x15&&half(p+0x3ac)==0x800));
+    const int r104_braced=r104_punch&&p[0x2f5]==0x21;
     const int boss_recovery=r104_recovery||em27_punch;
     const int counter_selector = opening_200 || (ordinary_punch && dependency==0x200) || boss_strike;
     const int arena_em0a=triangle&&r103_arena_em0a(enemy,p);
@@ -1142,7 +1165,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         const int verified_motion = boss_heat || ((amplified_triangle || heat_contact || boss_square || opening_attack_contact || back_circle || r102_em00 || r101_square ||
             (r102_stamp2_punch(enemy, p, effect) && p[0x2f6] == 1)) && p[0x2f5] == 0x15) ||
             formation_capture || ((r102_em00 || r101_square) && p[0x2f5] == 0x4b && p[0x2f6] == 1);
-        if ((!verified_motion&&(!r104_punch||r104_recovery)) || p[0x2f4] || p[0x2f7] || !rank)
+        if ((!verified_motion&&(!r104_punch||r104_recovery||r104_braced)) || p[0x2f4] || p[0x2f7] || !rank)
             return stop(frontier, 0x20a4e8);
         /* 20A4CC adds a separate Heat gain before switching on the hit kind. */
         gh_actor_motion_status status = gain_heat_002a9978(&enemy->entry.b, rank == 5 ? 1.0f : 4.0f, frontier);
@@ -1192,6 +1215,16 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     if (call->phase == 3) {
         const uint16_t flags = half(p + 0x3ac);
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
+        if(r104_braced){
+            /* Give07 reaches 20AF20, then the live 20B390 recoil without changing Move. */
+            if((flags&0x12cu)||(status&0x04080040u)||!half(p+0x54a))
+                return stop(frontier,0x20af20);
+            put(p+0x16fc,p[0x1700]&1u?0x3e860a92u:0xbe860a92u);
+            p[0x1700]++;
+            call->reacted=1;
+            call->phase=5;
+            return GH_ACTOR_MOTION_OK;
+        }
         if(r104_punch&&!r104_recovery){
             /* Give07 reaches 20BCE8 on the standing amplified Take. */
             if(!(flags&0x100u)||(flags&0x2cu)||(behavior&0x806020u)||
@@ -1513,11 +1546,14 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                 const int key_carrier=r101_key_carrier_punch(enemy,p,effect);
                 const int synchronous_counter=stamp2||east_em00||r102_em03_punch(enemy,p,effect)||at0b_em02||
                     r101_side_arena_punch(enemy,p,effect)||key_carrier;
-                if(!triangle&&!r102_em00&&!synchronous_counter&&!r103_arena_punch_target(enemy,dependency)){
+                const int faces=number(p+0x760)<=1.5707964f;
+                /* 20D2A0 always draws before the face test. A rear turn cannot enter 274238 here. */
+                const int r104_rear_pressure=r104_recovery&&p[0x2f5]==8&&!faces;
+                if(!triangle&&!r102_em00&&!synchronous_counter&&!r103_arena_punch_target(enemy,dependency)&&
+                   !r104_rear_pressure){
                     call->phase = 6;
                     return stop(frontier, 0x20d2a0);
                 }
-                const int faces=number(p+0x760)<=1.5707964f;
                 uint32_t retry=UINT32_MAX;
                 gh_game_mt random_state = body->state->random;
                 if ((!at0b_em02||faces)&&gh_game_mt_next_0030f348(&random_state,&retry))
@@ -1739,7 +1775,8 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const int boss_square=effect==7&&r103_boss_player_strike_target(enemy,p);
     const int r104_punch=effect==7&&word(body->bytes+0x4c)==3&&
         gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)&&
-        (half(p+0x2f4)==0x0101||half(p+0x2f4)==0x0001)&&!p[0x2f6]&&!p[0x2f7];
+        (((half(p+0x2f4)==0x0101||half(p+0x2f4)==0x0001)&&!p[0x2f6]&&!p[0x2f7])||
+         (half(p+0x2f4)==0x2100&&r104_player_punch(enemy,p,effect)));
     if (!isfinite(timer) || (!shockwave && !r104_punch && word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
          !r100_stamp20(enemy, p) && !triangle && !heat_contact && !back_circle && !room_unarmed_punch(enemy, p, effect) &&
          !r102_em03_punch(enemy, p, effect) && !original_em27_punch(enemy, p, effect) &&
@@ -1944,7 +1981,18 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     const int heat_impact=(active_boss_strike||(call->effect==0x2a&&
         r103_heat_activation_contact(enemy,player,take_effect,take_power)))&&
         !gh_hitarea_object_last_hit_actor(body,&heat_source)&&heat_source==player;
-    if(heat_impact){
+    const gh_title_player_view *scenery_source=NULL;
+    const int west_heat_scenery=init->heat[0x10]&&!manager_active&&!boost_timer&&
+        enemy->entry.b.work&&enemy->entry.b.work->room==0x100&&dependency==0x203&&
+        half(p+0x640)==11&&p[0x1650]==5&&word(p+0x16c4)==6&&reaction==0x1101&&
+        !p[0x2f6]&&!p[0x2f7]&&call->effect==0x2e&&take_effect==0x2e&&!take_power&&
+        word(body->bytes+0x40)==UINT32_MAX&&
+        !gh_hitarea_object_last_hit_actor(body,&scenery_source)&&scenery_source&&
+        scenery_source->bytes&&scenery_source->size>=0x300&&
+        scenery_source->original_vtable214==scenery_hit_vtable(half(scenery_source->bytes+0x2fe))&&
+        scenery_source->original_vtable214&&
+        word(scenery_source->bytes+0x214)==scenery_source->original_vtable214;
+    if(heat_impact||west_heat_scenery){
         /* 271CA8 keeps the manager path distinct. The unmanaged original
          * 271DA8 Heat arm uses CORE0:40 at the 271518 point and CORE121. */
         if(manager_active)return stop(frontier,0x271ca8);
@@ -1999,7 +2047,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     const int boss_square=take_effect==7&&r103_boss_player_strike_target(enemy,p);
     const int r104_punch=take_effect==7&&!call->effect&&take_power==3&&
         gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)&&
-        (reaction==0x0101||reaction==0x0001)&&!p[0x2f6]&&!p[0x2f7];
+        (((reaction==0x0101||reaction==0x0001)&&!p[0x2f6]&&!p[0x2f7])||
+         (reaction==0x2100&&r104_player_punch(enemy,p,take_effect)));
     if (amplified && (manager_active ||
         (!amplified_triangle && !boss_square && !r104_punch && !back_circle && !r101_key_carrier_punch(enemy,p,take_effect) &&
          !r101_side_arena_punch(enemy,p,take_effect) && !r102_close_em00_punch(enemy, p, half(body->bytes + 0x46)) &&

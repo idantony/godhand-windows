@@ -128,7 +128,13 @@ static gh_actor_model_status project(const gh_game_pl_camera *camera,
  /* The PSMZ16S comparison saturates after interpolation. The existing
   * vertex format can preserve saturation when all four vertices exceed it. */
  if(saturated&&saturated!=4)return stop(f,0x15bcf0);
- if(base->h44==0)return stop(f,0x31a650);
+ /* 14FF00 computes bucket count - depth. The zero-depth bank 6
+  * packet lands beyond the chain initialized by 14FE78. */
+ if(base->h44==0){
+  entry->color=color;
+  *out=result;
+  return GH_ACTOR_MODEL_OK;
+ }
  result.order=(gh_ui_order_group){.bank=6,.depth=(uint32_t)(int32_t)base->h44};
  result.test=0x5000d;
  result.alpha=UINT64_C(0x8000000044);

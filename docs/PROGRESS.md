@@ -4,6 +4,29 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R104 Retry and ten R100 west defeats
+
+An original-format three-card R101 test save reaches R104 through the keycard
+gate. Recorded inputs exercise the boss's projectile, melee attacks, and Gene's
+lethal fall. The original Retry menu becomes actionable at tick 3,728. The
+recorded Cross input increments the Continue count, retires the old room and
+reloads the checkpoint. The replay returns to the fight with Gene at 100 HP
+and the boss at 1,000 HP. All 4,002 applied controller samples match the tape.
+A separate Direct3D replay presents the second hit on the boss with 991 HP.
+
+The fixed R100 west replay earns and activates Heat through the original
+controller input. The tenth defeat is recorded at tick 12,656 with Gene at
+12 HP. The original gate requires twelve defeats.
+
+一条原版格式的 R101 三钥匙卡测试档回放经钥匙卡门进入 R104，验证头目的发射、
+近身攻击和 Gene 的死亡动作。原版重试菜单在第 3,728 帧可以操作。回放中的叉键
+增加继续次数，触发旧场景清理，再加载检查点。Gene 以 100 HP 回到战斗，头目
+重新加载为 1,000 HP。4,002 条实际读取的手柄采样与回放一致。另一条 Direct3D
+回放呈现了第二次命中，头目血量降到 991。
+
+R100 西区的固定回放用原版手柄输入积攒并激活热血。第 12,656 帧记入第十次击倒，
+此时 Gene 保有 12 HP。原版门需要十二次击倒。
+
 ## R104 boss combat and R101 side arena
 
 Direct3D presents the boss taking a Triangle hit after R104's original intro.

@@ -172,6 +172,13 @@ In R101, the controller reaches the side arena from an unchanged zero-card
 save and lands a hit using the original attack and enemy reaction. The keycard
 collection route and the boss victories are still in development.
 
+The original R104 Retry menu now accepts a recorded Cross input after Gene's
+defeat. The native replay retires the old room, restores the checkpoint and
+resumes the fight with Gene at 100 HP and the boss at 1,000 HP. A separate
+Direct3D replay presents the second hit on the boss as its HP reaches 991.
+In R100's west area, a replay earns and activates Heat and records ten of the
+twelve defeats required by the original gate.
+
 - Read-only access to 1445 resources and 81 overlays from the user's patched
   NTSC-U `SLUS-21503` disc. All 81 overlay hashes match the pinned upstream
   manifest; the boot ELF and loaded image differ from its retail baseline.
@@ -471,6 +478,11 @@ Windows 端已能呈现 R104 头目战和 R101 支线竞技场的原版战斗。
 从发射、飞行到命中和清理的流程。Gene 中弹后从 100 HP 降到 80 HP，同一路线加一次
 右摇杆侧闪即可避开。R101 从未编辑的零钥匙卡存档进入支线竞技场，手柄攻击触发了原版
 命中和敌人受击。钥匙卡完整收集流程和头目胜利流程仍在开发中。
+
+R104 的原版重试菜单已经能在 Gene 战败后接收回放中的叉键。原生流程清理旧房间、
+恢复检查点并继续战斗，Gene 回到 100 HP，头目回到 1,000 HP。另一条 Direct3D
+回放呈现了第二次命中，头目血量降到 991。R100 西区的回放通过原版输入积攒并激活
+热血，已记入开门所需的十二次击倒中的十次。
 
 - 从用户补丁镜像只读索引 1445 项资源和 81 个动态模块。模块哈希与固定上游一致；
   补丁主程序和加载映像与上游零售版不同，不能照搬其匹配结论。

@@ -14,12 +14,28 @@ static gh_voice_status probe(void*opaque,const float*position,int check_seh,gh_s
  env.scene_tables=s->scene_tables;
  *out=env;return GH_VOICE_OK;}
 gh_voice_status gh_actor_attached_sound_bind(gh_actor_attached_sound*s,const gh_actor_attached_sound_bindings*b){if(!s||!b||!b->voices||!b->control||!b->scene||!b->work||!b->random||!b->control->initialized||!b->scene->startup_bound||b->scene->control!=b->control||!gh_se_voice_uses_registry(b->voices,b->scene->registry))return GH_VOICE_ARGUMENT;if(s->bound)return s->b.voices==b->voices&&s->b.control==b->control&&s->b.scene==b->scene&&s->b.work==b->work&&s->b.random==b->random?GH_VOICE_OK:GH_VOICE_ARGUMENT;s->b=*b;s->bound=1;s->frontier=0;return GH_VOICE_OK;}
-gh_actor_motion_status gh_actor_attached_sound_motion(void*opaque,const gh_motion_sound_request*r,uint32_t*handle,uint32_t*f){gh_actor_attached_sound*s=opaque;if(f)*f=0;if(handle)*handle=0;if(!s||!s->bound||!r||!handle||!f||!r->model||!r->actor||r->actor->bytes!=r->model->root.bytes||r->actor->size!=r->model->root.size||r->actor->alias_f0!=r->model->root.alias_f0||r->actor->size<0x300||r->other_actor)return GH_ACTOR_MOTION_ARGUMENT;s->frontier=0;int16_t bank=r->bank;
- unsigned actor_kind=(unsigned)r->actor->bytes[0x2fe]|(unsigned)r->actor->bytes[0x2ff]<<8;
+gh_actor_motion_status gh_actor_attached_sound_motion(void *opaque,const gh_motion_sound_request *r,
+ uint32_t *handle,uint32_t *f)
+{
+ gh_actor_attached_sound *s=opaque;
+ if(f)*f=0;
+ if(handle)*handle=0;
+ if(!s||!s->bound||!r||!handle||!f||!r->model||!r->actor||!r->actor->bytes||
+    r->actor->bytes!=r->model->root.bytes||r->actor->size!=r->model->root.size||
+    r->actor->alias_f0!=r->model->root.alias_f0||r->actor->size<0x300)
+  return GH_ACTOR_MOTION_ARGUMENT;
+ s->frontier=0;
+ int16_t bank=r->bank;
+ /* 2CBA48 uses the fifth argument for logical bank 1, while 2CDD18
+  * uses the fourth argument as the source position. */
+ const gh_title_player_view *bank_actor=r->other_actor?r->other_actor:r->actor;
+ if(r->other_actor&&(bank!=1||!bank_actor->bytes||bank_actor->size<0x568))
+  return GH_ACTOR_MOTION_ARGUMENT;
+ unsigned actor_kind=(unsigned)bank_actor->bytes[0x2fe]|(unsigned)bank_actor->bytes[0x2ff]<<8;
  if(actor_kind>=0x200&&actor_kind<=0x2ff&&bank!=0&&bank!=2){
     int32_t dependency,actual_bank;
-    if(r->actor->size<0x568){*f=s->frontier=0x2cb418;return GH_ACTOR_MOTION_BOUNDS;}
-    memcpy(&dependency,r->actor->bytes+0x564,4);
+    if(bank_actor->size<0x568){*f=s->frontier=0x2cb418;return GH_ACTOR_MOTION_BOUNDS;}
+    memcpy(&dependency,bank_actor->bytes+0x564,4);
     gh_enemy_se_status e=gh_enemy_se_resolve_002cb418(s->b.control->enemy_se_banks,dependency,&actual_bank);
     if(e){s->detail=e;*f=s->frontier=0x2cb418;return GH_ACTOR_MOTION_UNSUPPORTED;}
     if(actual_bank==-1)return GH_ACTOR_MOTION_OK;

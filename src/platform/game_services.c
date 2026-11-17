@@ -5661,6 +5661,12 @@ static gh_object_step_status om_break_effect(void *context,const gh_actor_model 
       (s->b.work->room==0x100&&(kind==0x3e0||kind==0x3e1))||(kind>=0x3d3&&kind<=0x3d7))
    opened=gh_effect_create_om_sparkle_begin_00306838(call,position);
   else if(kind==0x305)opened=gh_effect_create_om305_break_begin_001c2ce0(call,position);
+  else if(kind==0x346&&s->b.work->room==0x100&&model->root.original_vtable214==0x426e78&&
+          model->root.size>=0xda0){
+   if(u32(model->root.bytes+0x5b0)&2u)
+    opened=gh_effect_create_om307_break_begin_00306838(call,u32(model->root.bytes+0x5ec));
+   else opened=gh_effect_create_om346_break_begin_00306838(call,position);
+  }
   else if(kind==0x331&&s->b.work->room==0x102&&model->root.original_vtable214==0x425c78)
    opened=gh_effect_create_om331_break_begin_0019ca58(call,position);
   else if(kind==0x307&&s->b.work->room==0x100&&model->root.original_vtable214==0x423608&&
@@ -6294,7 +6300,8 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
  const int16_t room=s->b.work->room;
  const uint32_t kind=u32(item->bytes+0x2fc)>>16;
  const int full_heal=room==0x103&&kind==0x3d0;
- const int partial_heal=room==0x103&&kind==0x3c8;
+ const int west_held_heal=room==0x100&&item->bytes[0x660]==1&&u32(item->bytes+0x634)==10;
+ const int partial_heal=kind==0x3c8&&(room==0x103||west_held_heal);
  const int half_heal=room==0x103&&kind==0x3d1;
  const int boss_currency=room==0x103&&kind==0x3d7;
  const int heal=full_heal||partial_heal||half_heal;
@@ -7170,6 +7177,7 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services*s,const gh
      (q->original_entry==0x1a8730&&q->original_vtable==0x427880)||
      (q->original_entry==0x199df8&&q->original_vtable==0x4251c0)||
      (q->original_entry==0x19f130&&q->original_vtable==0x4267f8)||
+     (q->original_entry==0x1a0df0&&q->original_vtable==0x426e78)||
      (q->original_entry==0x1c91b0&&q->original_vtable==0x42aa98)||
      (q->original_entry==0x1b9030&&q->original_vtable==0x4290c8)))
   return destroy_om(s,q,f);
