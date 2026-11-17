@@ -237,9 +237,16 @@ fixed West route records nine original defeats by tick 10,208, with Gene at
 Direct3D 11 now presents the original R104 EV05 intro from an original-format
 R104 test save prepared before launch. After the original fade clears, the
 first shot shows Gene facing the boss. The fixed run renders through camera
-cut 9 with zero renderer, GPU, effect or window errors. The native CPU replay
-enters cut 10. Natural entry into R104 and player control after the intro
-remain in development.
+cut 9 with zero renderer, GPU, effect or window errors. A longer Direct3D
+replay verifies the original English captions. The native CPU replay finishes
+EV05 and enters R104's original boss initialization.
+
+A separate Windows replay starts from an original-format R101 test save
+prepared with three keycards and a test landing position. Recorded controller
+input opens the original door, selects Continue on the save map, and enters
+R104. Direct3D presents 1,170 scene frames across the run with zero graphics
+errors, including the R104 boss intro. Earning all three cards during play and
+controlling Gene after the R104 intro remain in development.
 
 Project evidence tools verify actual instruction bytes, calls, imports and
 static memory sites. Their generated reports remain private; see
@@ -490,8 +497,13 @@ R103 已运行原版增援并进入双头目战。手柄回放验证了强化启
 
 Direct3D 11 已能从启动前准备的原版格式 R104 测试存档呈现原版 EV05 过场。
 淡入结束后，首个镜头显示 Gene 面向头目。固定回放呈现到编号 9 的镜头，渲染器、
-GPU、特效和窗口均无报错。原生 CPU 回放进入编号 10 的镜头。
-自然进入 R104 和过场后的玩家操作仍在开发。
+GPU、特效和窗口均无报错。更长的 Direct3D 回放验证了原版英文字幕。原生 CPU 回放播完
+EV05，进入 R104 原版头目初始化。
+
+另一条 Windows 回放从预置三张钥匙卡与测试落点的 R101 原版格式存档开始。固定手柄输入
+打开原版门，在保存地图选择「继续」并进入 R104。Direct3D 在本次回放中呈现 1,170 个
+场景帧，包含 R104 的头目过场，图形相关报错为零。实战获取全部三张卡与过场后操作 Gene
+仍在开发。
 
 ### 构建与运行
 

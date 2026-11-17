@@ -1021,10 +1021,18 @@ static gh_game_event_status event_play_visit(void *context, uint32_t site, int *
         return status;
     }
     case 0x296ec8: {
+        int caption_alive=0;
+        const gh_event_message_play *caption=&host->event_message_play;
+        if(components->event_no==5&&caption->stage==2&&caption->message_id!=UINT16_MAX&&
+           gh_scene_message_work_live_002aee10(caption->ui,caption->work_id,&caption_alive)){
+            *frontier=0x81e0;
+            *relative=1;
+            return GH_EVENT_UNSUPPORTED;
+        }
         const gh_event_env_end_owners owners = {scene.title_player, scene.work5f8, scene.event_weapon};
         const gh_event_env_frame_bindings bindings = {
             .timing = &host->event_timing, .components = components, .data = data, .config = &host->event_config,
-            .work = &host->work, .fade = &host->fade, .display = &host->display, .end_owners = &owners
+            .work = &host->work, .fade = &host->fade, .display = &host->display, .end_owners = &owners, .caption_alive = caption_alive
         };
         return gh_event_env_calc_next_00005b78(&bindings, end, frontier, relative);
     }
@@ -1294,7 +1302,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     }else if(address==0x2c1618){
         const gh_scene_at_step_callbacks r100={.context=&h->r100_exit,.spawn=gh_r100_exit_spawn_001f7858};
         const gh_scene_at_step_callbacks r105={.context=h->services,.spawn=gh_game_services_r105_jump_offer};
-        const gh_scene_at_step_callbacks r101={.context=h->services,.spawn=gh_game_services_r101_action_offer};
+        const gh_scene_at_step_callbacks r101={.context=h->services,.dispatch=gh_game_services_r101_area_dispatch,.spawn=gh_game_services_r101_action_offer};
         const gh_scene_at_step_callbacks r102={.context=h->services,.spawn=gh_game_services_r102_action_offer};
         const gh_scene_at_step_callbacks r103={.context=h->services,.spawn=gh_game_services_r103_action_offer};
         const gh_scene_at_step_callbacks *callbacks=h->work.room==0x100?&r100:
@@ -1398,6 +1406,13 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     else if(address==0x2af028){
         gh_id_view palette={0};
         (void)gh_id_text_palette_from_elf(h->boot_reference,h->boot_reference_bytes,&palette);
+        if(h->work.room==0x104&&!s.scene_ui->caption_texture.bytes){
+            gh_bundle core;
+            const loaded_bundle *boot=&h->bundles[0];
+            if(boot->allocation.pointer==h->task.core_data&&
+               gh_bundle_open(boot->allocation.pointer,boot->bytes,&core)==GH_BUNDLE_OK)
+                (void)gh_bundle_find(&core,"TM3",0,&s.scene_ui->caption_texture);
+        }
         gh_scene_ui_status e=gh_scene_message_render_002af028(s.scene_ui,&h->work,&h->font,&h->display,
             palette,h->scene_ui.message,h->scene_ui.context,frontier);
         return e?GH_SCENE_STEP_CALLEE:GH_SCENE_STEP_OK;

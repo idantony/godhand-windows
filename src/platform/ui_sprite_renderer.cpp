@@ -52,8 +52,8 @@ int coordinate(int a,int b,uint numerator,uint denominator){
  int4 filtered=lerp4(lerp4(texel(x,y),texel(x+1,y),fu),lerp4(texel(x,y+1),texel(x+1,y+1),fu),fv);
  uint4 tint=uint4(info.x&255,(info.x>>8)&255,(info.x>>16)&255,info.x>>24);
  int alpha=min(255,(filtered.a*int(tint.a))>>7);
- if(dimensions.z==2){if(dimensions.w<outputDepth[p]){outputImage[p]=destination;return;}}
- else if(alpha<=1){outputImage[p]=destination;return;}
+ if(dimensions.z>=2&&dimensions.w<outputDepth[p]){outputImage[p]=destination;return;}
+ if(dimensions.z!=2&&alpha<=1){outputImage[p]=destination;return;}
  int3 source=min(int3(255,255,255),(filtered.rgb*int3(tint.rgb))>>7);
  int3 rgb=int3(destination.rgb)+(((source-int3(destination.rgb))*alpha)>>7);
  outputImage[p]=uint4(clamp(rgb,0,255),alpha);if(dimensions.z)outputDepth[p]=dimensions.w;
@@ -80,6 +80,7 @@ extern "C" gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *r,const gh_id_
  bool level=t->width==256&&t->height==128&&t->tex0==UINT64_C(0x20000001e1310000);
  bool radar=t->width==128&&t->height==256&&t->tex0==GH_ID_RADAR_TEX0;
  bool pad=t->width==128&&t->height==128&&t->tex0==GH_ID_PAD_ICON_TEX0;
+ bool caption=t->width==128&&t->height==64&&t->tex0==GH_ID_CAPTION_TEX0;
  bool t32=(t->width==512&&(t->height==256||t->height==512)&&((t->tex0>>20)&63)==19)||level||radar||pad;
  bool logo=t->width==512&&t->height==512&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==9&&((t->tex0>>30)&15)==9&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  bool cursor=t->width==32&&t->height==32&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==5&&((t->tex0>>30)&15)==5&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
@@ -91,7 +92,7 @@ extern "C" gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *r,const gh_id_
     ((t->width==128&&t->tex0==GH_ID_TIM2_128X64_PSMT4_TEX0)||
      (t->width==64&&(t->tex0==GH_ID_TIM2_64X64_PSMT4_TEX0||t->tex0==GH_ID_TIM2_64X64_PSMT8_TEX0)));
  bool number4=t->width==128&&t->height==128&&t->tex0==GH_ID_TIM2_128X128_PSMT4_TEX0;
- if((!t32&&!cursor&&!logo&&!loading&&!hud8&&!number4&&!tutorial)||bytes!=(size_t)t->width*t->height*4||((t->tex0>>35)&3)!=0)return GH_UI_UNSUPPORTED;
+ if((!t32&&!cursor&&!logo&&!loading&&!hud8&&!number4&&!tutorial&&!caption)||bytes!=(size_t)t->width*t->height*4||((t->tex0>>35)&3)!=0)return GH_UI_UNSUPPORTED;
  std::vector<unsigned char> raw;try{raw.assign(rgba,rgba+bytes);}catch(const std::bad_alloc&){return GH_UI_MEMORY;}
  for(size_t i=3;i<bytes;i+=4){if((raw[i]&1)&&raw[i]!=255)return GH_UI_UNSUPPORTED;raw[i]=raw[i]==255?128:(unsigned char)(raw[i]/2);}
  std::unique_ptr<SpriteTexture> texture(new(std::nothrow)SpriteTexture);if(!texture)return GH_UI_MEMORY;texture->width=t->width;texture->height=t->height;
@@ -110,7 +111,7 @@ static gh_ui_error parameters(const gh_ui_sprite_renderer *r,const gh_ui_sprite_
 }
 extern "C" gh_ui_error gh_ui_sprite_batch_with_depth(gh_ui_sprite_renderer *r,const gh_ui_sprite_state *s,const gh_ui_sprite_item *items,size_t count,const unsigned char *back,unsigned char *output,size_t bytes,const gh_ui_depth_write *depth){
  if(!r||!s||(!items&&count)||!back||!output||GetCurrentThreadId()!=r->thread||bytes<(size_t)r->width*r->height*4||count>1024)return GH_UI_ARGUMENT;
- const bool z_gequal=s->test==0x50000;
+ const bool z_gequal=s->test==0x50000||s->test==0x5001d;
  if(z_gequal&&(!depth||depth->z!=65535))return GH_UI_UNSUPPORTED;
  if(s->alpha!=UINT64_C(0x8000000044)||(!z_gequal&&s->test!=0x3001d)||s->prim!=0x54||s->tex1!=0x60||s->clamp||s->colclamp!=1||s->prmodecont!=1||s->pabe||s->fba||s->frame_mask)return GH_UI_UNSUPPORTED;
  for(size_t i=0;i<count;i++){SpriteParams p;gh_ui_error e=parameters(r,items[i],&p);if(e)return e;}
@@ -119,7 +120,7 @@ extern "C" gh_ui_error gh_ui_sprite_batch_with_depth(gh_ui_sprite_renderer *r,co
  ctx->UpdateSubresource(r->frame[0].p,0,nullptr,back,r->width*4,0);unsigned previous=0;
  ctx->CSSetShader(r->shader.p,nullptr,0);ctx->CSSetConstantBuffers(0,1,&r->constants.p);
  for(size_t i=0;i<count;i++){
-  SpriteParams p;parameters(r,items[i],&p);if(depth){p.dimensions[2]=z_gequal?2:1;p.dimensions[3]=depth->z;}unsigned next=previous^1;ctx->UpdateSubresource(r->constants.p,0,nullptr,&p,0,0);
+  SpriteParams p;parameters(r,items[i],&p);if(depth){p.dimensions[2]=s->test==0x5001d?3:z_gequal?2:1;p.dimensions[3]=depth->z;}unsigned next=previous^1;ctx->UpdateSubresource(r->constants.p,0,nullptr,&p,0,0);
   ID3D11ShaderResourceView *views[]={r->textures[items[i].texture-1]->view.p,r->frameview[previous].p};ctx->CSSetShaderResources(0,2,views);ID3D11UnorderedAccessView *targets[]={r->target[next].p,depth?r->depth.view():nullptr};ctx->CSSetUnorderedAccessViews(0,2,targets,nullptr);ctx->Dispatch((r->width+7)/8,(r->height+7)/8,1);
   ID3D11ShaderResourceView *nullviews[2]={};ID3D11UnorderedAccessView *nulltarget[2]={};ctx->CSSetShaderResources(0,2,nullviews);ctx->CSSetUnorderedAccessViews(0,2,nulltarget,nullptr);previous=next;
  }

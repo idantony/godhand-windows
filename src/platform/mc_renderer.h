@@ -61,6 +61,7 @@ gh_id_error gh_mc_renderer_queue_fade(gh_mc_renderer *,const gh_fade_draw *,cons
 gh_id_error gh_mc_renderer_queue_cover(gh_mc_renderer *,const gh_child_cover_quad *,gh_ui_ot_tag *);
 /* Original glyph and shadow groups. Publish two tags or none. Groups whose
  * samples all fail TEST have no color or depth writes. */
+gh_id_error gh_mc_renderer_queue_caption_panel(gh_mc_renderer *,const gh_scene_message_glyph_pair *,gh_ui_ot_tag tags[10]);
 gh_id_error gh_mc_renderer_queue_message(gh_mc_renderer *,const gh_scene_message_glyph_pair *,gh_ui_ot_tag tags[2]);
 /* Query the sorted groups before reading the world depth surface. Positive
  * glyphs require a tracked depth prefix; discard-only groups need no readback.

@@ -1,8 +1,21 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-17T08:35:35+00:00",
-  "stage": "native-windows-r104-ev05-and-later-combat",
+  "verified_utc": "2026-11-17T09:24:48+00:00",
+  "stage": "native-windows-r101-jmp1-to-r104-ev05",
   "playable": false,
+  "r101_r104_jmp1": {
+    "entry_fixture": "original-format R101 save prepared with three cards and a door-side landing position",
+    "original_door_verified": true,
+    "save_map_continue_verified": true,
+    "old_room_teardown_verified": true,
+    "target_room": "R104",
+    "cpu_replay_tick_limit": 1950,
+    "direct3d_replay_tick_limit": 1475,
+    "direct3d_scene_frames_across_run": 1170,
+    "direct3d_errors": 0,
+    "keycard_collection_during_play_verified": false,
+    "post_intro_player_control_verified": false
+  },
   "later_playback_observations": {
     "r104_ev05": {
       "entry": "direct title load from a pre-launch original-format R104 test save",

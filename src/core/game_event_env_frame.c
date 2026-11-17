@@ -159,7 +159,8 @@ gh_game_event_status gh_event_env_calc_next_00005b78(const gh_event_env_frame_bi
         return GH_EVENT_BOUNDS;
     gh_event_cut_timing *rows=b->timing->allocation.pointer;
     gh_event_cut_timing *row=&rows[cut];
-    if(row->kind){
+    const int caption_sync=row->kind==2&&b->timing->event_number==5&&cut==10;
+    if(row->kind&&!caption_sync){
         const uint32_t kind_pc[]={0x5ca8,0x5dd8,0x5e38,0x6098};
         *frontier=row->kind<4?kind_pc[row->kind]:0x5b78;
         return GH_EVENT_UNSUPPORTED;
@@ -179,11 +180,14 @@ gh_game_event_status gh_event_env_calc_next_00005b78(const gh_event_env_frame_bi
     else{
         next=(float)((uint32_t)current+1u);
         int end_at=(int)length-((b->config->flags&0x10)?0:30);
-        if(row->next_cut==UINT8_MAX && end_at>=0 && next>=(float)end_at){
+        if(!caption_sync&&row->next_cut==UINT8_MAX && end_at>=0 && next>=(float)end_at){
             status=end_request(b,&flags,0,frontier,relative);
             if(status)return status;
         }
-        if(next>(float)(length-1) && !(row->reserved_word&0x200u)){
+        /* 5E38 checks the live Message (81E0) only after the camera
+         * length. EV05 does not set the optional row synchronization bit0. */
+        const int keep_cut=caption_sync&&b->caption_alive;
+        if(next>(float)(length-1) && !keep_cut && !(row->reserved_word&0x200u)){
             if(row->next_cut==UINT8_MAX){
                 status=end_request(b,&flags,0,frontier,relative);
                 if(status)return status;

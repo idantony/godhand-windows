@@ -19,6 +19,8 @@ typedef struct {
  uint8_t bound,confirm_pending;
 } gh_scene_message_sources;
 typedef struct {gh_menu_state *root;gh_bundle_entry room_data;
+ gh_bundle_entry caption_texture;
+ float caption_width,caption_height;
  gh_scene_message_block blocks[16];int32_t active_head,free_head;uint16_t generation_bd8;
  uint8_t ready;uint32_t frontier;gh_scene_message_sources sources[16];
  uint32_t wait_frames_3c2550;} gh_game_scene_ui;

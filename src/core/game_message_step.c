@@ -273,7 +273,8 @@ static gh_scene_ui_status advance_english(uint8_t *p, gh_scene_message_sources *
 {
     if(p[0xa4-0xc]==4)return advance_scenery(p,source,ui,work,frontier);
     *frontier = 0x2b3240;
-    if (!work->language || p[0xa4 - 0xc] || word(p + 0x1c - 0xc) ||
+    const int r104_caption=work->room==0x104&&timing&&timing->event_number==5&&p[0xa4-0xc]==3&&half(p+0x64-0xc)==0x1000;
+    if (!work->language || (p[0xa4 - 0xc]&&!r104_caption) || word(p + 0x1c - 0xc) ||
         word(p + 0x6c - 0xc) != 0x3f800000u || p[1] > 1)
         return GH_SCENE_UI_UNSUPPORTED;
     if (ev1b_timed_caption(source, work, timing))
@@ -289,6 +290,7 @@ static gh_scene_ui_status advance_english(uint8_t *p, gh_scene_message_sources *
             put(time, word(time) + 30);
             continue;
         }
+        if(r104_caption&&code==0xa001){source->cursor_8c+=2;continue;}
         if (code == 0xa101) {
             /* 2B3A38 resets the page origin and timer, then 2B4768 advances
              * past A101 at zero cost. The next glyph can appear in this tick. */
@@ -384,6 +386,19 @@ static gh_scene_ui_status recycle_window(gh_game_scene_ui *ui, unsigned slot, ui
     return GH_SCENE_UI_OK;
 }
 
+gh_scene_ui_status gh_scene_message_work_live_002aee10(const gh_game_scene_ui *ui,
+    uint16_t work_id,int *live)
+{
+    if(!ui||!live)return GH_SCENE_UI_ARGUMENT;
+    *live=0;
+    unsigned slots[16],count;
+    gh_scene_ui_status status=active_slots(ui,slots,&count);
+    if(status)return status;
+    for(unsigned i=0;i<count;++i)
+        if(ui->blocks[slots[i]].flags==work_id){*live=1;break;}
+    return GH_SCENE_UI_OK;
+}
+
 gh_scene_ui_status gh_scene_message_find_002aed40(const gh_game_scene_ui *ui,
     uint16_t message_id,int *slot,uint32_t *frontier)
 {
@@ -442,7 +457,8 @@ static gh_scene_ui_status wait_english(uint8_t *p, gh_scene_message_sources *sou
     *frontier = 0x2b3d70;
     uint16_t command;
     if (!code_at(source, source->cursor_8c, &command)) return GH_SCENE_UI_BOUNDS;
-    if (command != 0xa301 || p[0xa4 - 0xc] || p[1] > 1) return GH_SCENE_UI_UNSUPPORTED;
+    const int r104_caption=work->room==0x104&&timing&&timing->event_number==5&&p[0xa4-0xc]==3&&half(p+0x64-0xc)==0x1000;
+    if (command != 0xa301 || (p[0xa4 - 0xc]&&!r104_caption) || p[1] > 1) return GH_SCENE_UI_UNSUPPORTED;
     uint32_t flags = word(p + 0x14 - 0xc);
     if (!p[1]) {
         if (half(p + 0x2e - 0xc)) return GH_SCENE_UI_OK;
@@ -516,25 +532,42 @@ static gh_scene_ui_status r104_wait_caption_prefix(uint8_t *p,
         source->cursor_8c=4;
         if(!code_at(source,4,command))return GH_SCENE_UI_BOUNDS;
     }
-    if(*command!=0xe403||source->cursor_8c!=4)return GH_SCENE_UI_OK;
-    uint16_t begin,end;
-    if(!code_at(source,6,&begin)||!code_at(source,8,&end)||begin!=10||end!=10)
-        return GH_SCENE_UI_BOUNDS;
-    *frontier=0x2b2bd8;
+    if(*command==0xe403&&source->cursor_8c==4){
+        uint16_t begin,end;
+        if(!code_at(source,6,&begin)||!code_at(source,8,&end)||begin!=10||end!=10)
+            return GH_SCENE_UI_BOUNDS;
+        *frontier=0x2b2bd8;
+        if(word((const uint8_t *)work+0x5e4)&0x20000000u){
+            const uint8_t *env;
+            gh_scene_ui_status status=event_message_env(timing,&env);
+            if(status)return status;
+            if(end>=timing->count)return GH_SCENE_UI_BOUNDS;
+            p[0x44-0xc]=(uint8_t)begin;
+            p[0x4c-0xc]=(uint8_t)end;
+            /* EV05 cut 10 has a nonzero primary camera, so REL6980 stores 2. */
+            ((gh_event_cut_timing *)timing->allocation.pointer)[end].kind=2;
+            *waiting=word(env+0x10)<begin;
+            if(*waiting)return GH_SCENE_UI_OK;
+        }
+        source->cursor_8c=10;
+        if(!code_at(source,10,command))return GH_SCENE_UI_BOUNDS;
+    }
+    if(*command!=0xe502||source->cursor_8c!=10)return GH_SCENE_UI_OK;
+    uint16_t start_frame;
+    if(!code_at(source,12,&start_frame)||start_frame!=42)return GH_SCENE_UI_BOUNDS;
+    *frontier=0x2b2c98;
     if(word((const uint8_t *)work+0x5e4)&0x20000000u){
         const uint8_t *env;
         gh_scene_ui_status status=event_message_env(timing,&env);
         if(status)return status;
-        if(end>=timing->count)return GH_SCENE_UI_BOUNDS;
-        p[0x44-0xc]=(uint8_t)begin;
-        p[0x4c-0xc]=(uint8_t)end;
-        /* EV05 cut 10 has a nonzero primary camera, so REL6980 stores 2. */
-        ((gh_event_cut_timing *)timing->allocation.pointer)[end].kind=2;
-        *waiting=word(env+0x10)<begin;
+        float frame;
+        memcpy(&frame,env+0x14,sizeof(frame));
+        if(!isfinite(frame)||frame<0)return GH_SCENE_UI_BOUNDS;
+        *waiting=frame<(float)start_frame;
         if(*waiting)return GH_SCENE_UI_OK;
     }
-    source->cursor_8c=10;
-    return code_at(source,10,command)?GH_SCENE_UI_OK:GH_SCENE_UI_BOUNDS;
+    source->cursor_8c=14;
+    return code_at(source,14,command)?GH_SCENE_UI_OK:GH_SCENE_UI_BOUNDS;
 }
 
 static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_message_sources *source,
@@ -556,7 +589,8 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
     }
     if (state == 7) goto finish;
     if (state > 1) return GH_SCENE_UI_UNSUPPORTED;
-    if ((p[0xa4 - 0xc] && p[0xa4 - 0xc] != 4) ||
+    const int r104_text=work->room==0x104&&timing&&timing->event_number==5&&half(p+0x64-0xc)==0x1000;
+    if ((p[0xa4 - 0xc] && p[0xa4 - 0xc] != 4 && !(r104_text&&p[0xa4-0xc]==3)) ||
         word(p + 0x18 - 0xc) || word(p + 0x1c - 0xc)) {
         *frontier = state == 0 ? 0x2b2e80 : 0x2b3078;
         return GH_SCENE_UI_UNSUPPORTED;
@@ -584,6 +618,22 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
             if (waiting) goto finish;
             if (!code_at(source, source->cursor_8c, &command)) return GH_SCENE_UI_BOUNDS;
         }
+        if(r104_text&&command==0x8504&&source->cursor_8c==14){
+            uint16_t parameter,x,y;
+            *frontier=0x2b2b08;
+            if(!code_at(source,16,&parameter)||!code_at(source,18,&x)||
+               !code_at(source,20,&y)||parameter!=1||x!=180||y!=300)
+                return GH_SCENE_UI_BOUNDS;
+            p[0x70-0xc]=2;
+            p[0xa4-0xc]=3;
+            p[0x3c-0xc]=0;
+            put(p+0x18-0xc,0);
+            put_half(p+0x62-0xc,parameter);
+            put_half(p+0xa6-0xc,x);
+            put_half(p+0xa8-0xc,y);
+            source->cursor_8c=22;
+            if(!code_at(source,22,&command))return GH_SCENE_UI_BOUNDS;
+        }
         if (command==0xa602) {
             *frontier=0x2b2b78;
             if (source->primary.size-source->cursor_8c<6) return GH_SCENE_UI_BOUNDS;
@@ -610,7 +660,27 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
         p[0] = 1;
         p[1] = p[2] = p[3] = 0;
     }
-    if (!p[1]) {
+    if(r104_text&&p[0xa4-0xc]==3){
+        /* 2B3158/3190 run a six-tick caption-window open. */
+        if(!p[1]){
+            put(p+0x10-0xc,0);
+            put(p+0x14-0xc,word(p+0x14-0xc)|8u);
+            p[1]=1;
+        }
+        const unsigned tick=word(p+0x10-0xc)+1;
+        put(p+0x10-0xc,tick);
+        const volatile float fraction=(float)tick/6.0f;
+        const volatile float square=(float)(tick*tick)/36.0f;
+        const float progress=(fraction+fraction)-square;
+        put_float(p+0x98-0xc,progress);
+        put_float(p+0x9c-0xc,progress);
+        put_float(p+0xa0-0xc,square);
+        if(tick==6){
+            put(p+0x14-0xc,word(p+0x14-0xc)|0x10u);
+            p[0]=2;
+            p[1]=p[2]=p[3]=0;
+        }
+    }else if (!p[1]) {
         /* 2B3078 mode 0 sets phase 2, then runs one original 2B3190
          * animation tick before the next call can take phase 2 directly. */
         put(p + 0x10 - 0xc, 1);
@@ -687,9 +757,20 @@ gh_scene_ui_status gh_scene_message_prepare_draw_002af028(gh_game_scene_ui *ui,
         const unsigned slot = slots[i];
         uint8_t *p = ui->blocks[slot].payload;
         const unsigned mode=p[0xa4-0xc];
-        if (!ui->sources[slot].bound || (mode && mode!=4)) {
+        const int r104_caption=work->room==0x104&&mode==3&&half(p+0x64-0xc)==0x1000;
+        if (!ui->sources[slot].bound || (mode && mode!=4 && !r104_caption)) {
             if (frontier) *frontier = 0x2b16f0;
             return GH_SCENE_UI_UNSUPPORTED;
+        }
+        if(r104_caption){
+            put_half(p+0xae - 0xc,half(p+0xa6-0xc));
+            put_half(p+0xb0-0xc,half(p+0xa8-0xc));
+            put(p+0x58-0xc,0x3f800000u);
+            put_half(p+0x5c-0xc,1);
+            put_half(p+0x5e - 0xc,0xffec);
+            put(p+0x54-0xc,0x3f800000u);
+            if(word(p+0x14-0xc)&0x10u){*frontier=0x2b1c80;return GH_SCENE_UI_UNSUPPORTED;}
+            continue;
         }
         put_half(p + 0xa6 - 0xc, 0x100);
         put_half(p + 0xa8 - 0xc, mode==4?0x170:0x182);

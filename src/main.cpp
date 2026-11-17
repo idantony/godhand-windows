@@ -260,6 +260,15 @@ static gh_scene_ui_status draw_scene_message(void *opaque,const gh_scene_message
     auto &app=*(NativeApp*)opaque;
     if(!app.frame_building||!app.building_scene)return GH_SCENE_UI_ARGUMENT;
     try{
+        if(pair&&pair->panel_count){
+            app.groups.reserve(app.groups.size()+pair->panel_count);
+            gh_ui_ot_tag panel[10]={};
+            const gh_id_error status=gh_mc_renderer_queue_caption_panel(app.renderer,pair,panel);
+            if(status){*frontier=0x15d168;return GH_SCENE_UI_UNSUPPORTED;}
+            for(const auto &tag:panel)app.groups.push_back({tag.bank,static_cast<uint32_t>(tag.depth),tag.index});
+            *frontier=0;
+            return GH_SCENE_UI_OK;
+        }
         app.groups.reserve(app.groups.size()+2);
         gh_ui_ot_tag tags[2]={};
         gh_id_error status=gh_mc_renderer_queue_message(app.renderer,pair,tags);

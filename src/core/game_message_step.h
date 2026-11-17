@@ -16,6 +16,7 @@ gh_scene_ui_status gh_scene_message_update_with_timing_002aefa8(gh_game_scene_ui
 /* Original lookup by generation at block+0, then immediate recycle on a match.
  * An already recycled work ID returns original false with native success. */
 /* Original 2AED40 searches resource IDs, distinct from work generation IDs. */
+gh_scene_ui_status gh_scene_message_work_live_002aee10(const gh_game_scene_ui *,uint16_t,int *);
 gh_scene_ui_status gh_scene_message_find_002aed40(const gh_game_scene_ui *,
     uint16_t message_id,int *slot,uint32_t *frontier);
 gh_scene_ui_status gh_scene_message_delete_by_id_002aec40(gh_game_scene_ui *,

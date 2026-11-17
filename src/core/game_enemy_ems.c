@@ -421,7 +421,7 @@ gh_scene_placement_status gh_enemy_ems_set_002952d0(gh_enemy_ems *owner,
     if(gh_enemy202_is_room_supported_profile(request,room)||gate_appearance3){
         status=enter_202(entry,owner->bindings,request,frontier);
         if(!entry->enemy202)return GH_PLACE_MEMORY;
-    }else if(heavy&&owner->bindings->names_2a2){
+    }else if((heavy||(room==0x101&&gh_enemy2a2_is_r101_entry(request)))&&owner->bindings->names_2a2){
         if(!entry->enemy2a2)entry->enemy2a2=calloc(1,sizeof(*entry->enemy2a2));
         if(!entry->enemy2a2)return GH_PLACE_MEMORY;
         status=enter_2a2(entry,owner->bindings,request,frontier);
@@ -1837,9 +1837,9 @@ static gh_actor_motion_status retire_weapon_hit(gh_enemy_weapon_init *held,unsig
     return GH_ACTOR_MOTION_OK;
 }
 
-gh_actor_motion_status gh_enemy_ems_retire_weapon_0030f8b0(gh_enemy_ems *owner,
+static gh_actor_motion_status retire_weapon_mode3(gh_enemy_ems *owner,
     gh_enemy_full_retirement *call,uint32_t handle,const gh_enemy_retire_bindings *bindings,
-    uint32_t *frontier)
+    int detached,uint32_t *frontier)
 {
     if(!owner||!call||!bindings||!frontier||!handle||owner->running||owner->closing||
        (call->stage&&(call->owner!=owner||call->handle!=handle||
@@ -1880,9 +1880,12 @@ gh_actor_motion_status gh_enemy_ems_retire_weapon_0030f8b0(gh_enemy_ems *owner,
             at=i;
             ++secondary_matches;
         }
-        if(primary_matches!=1||secondary_matches!=1)return retire_stop(frontier,0x30f9a4);
-        memmove(bytes+4*at,bytes+4*(at+1),4*(size_t)(secondary->count-at-1));
-        --pools->vectors[3].count;
+        if(primary_matches!=1||secondary_matches!=(unsigned)!detached)
+            return retire_stop(frontier,0x30f9a4);
+        if(!detached){
+            memmove(bytes+4*at,bytes+4*(at+1),4*(size_t)(secondary->count-at-1));
+            --pools->vectors[3].count;
+        }
         call->owner=owner;call->handle=handle;call->bindings=*bindings;call->stage=1;
     }
     if(call->stage==1){
@@ -1946,6 +1949,20 @@ gh_actor_motion_status gh_enemy_ems_retire_weapon_0030f8b0(gh_enemy_ems *owner,
     if(status)return retire_stop(frontier,0x1c91b0);
     call->stage=7;
     return GH_ACTOR_MOTION_OK;
+}
+
+gh_actor_motion_status gh_enemy_ems_retire_weapon_0030f8b0(gh_enemy_ems *owner,
+    gh_enemy_full_retirement *call,uint32_t handle,const gh_enemy_retire_bindings *bindings,
+    uint32_t *frontier)
+{
+    return retire_weapon_mode3(owner,call,handle,bindings,0,frontier);
+}
+
+gh_actor_motion_status gh_enemy_ems_destroy_detached_weapon_001c91b0(gh_enemy_ems *owner,
+    gh_enemy_full_retirement *call,uint32_t handle,const gh_enemy_retire_bindings *bindings,
+    uint32_t *frontier)
+{
+    return retire_weapon_mode3(owner,call,handle,bindings,1,frontier);
 }
 
 gh_actor_motion_status gh_enemy_ems_retire_0030f8b0(gh_enemy_ems *owner,gh_enemy_full_retirement *call,

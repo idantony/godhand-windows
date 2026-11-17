@@ -8,7 +8,7 @@ gh_scene_ui_status gh_scene_font_bind_002a4c38(gh_font_state*s,const gh_bundle*b
 }
 gh_scene_ui_status gh_scene_message_initialize_002aea18(gh_game_scene_ui*s,gh_menu_state*root,const gh_bundle*b,int32_t language){
  if(!s||!root||!b)return GH_SCENE_UI_ARGUMENT;if(s->root&&s->root!=root)return GH_SCENE_UI_ARGUMENT;
- s->root=root;gh_bundle_entry data={0};gh_bundle_error e=gh_bundle_find(b,"MSD",(unsigned)language,&data);
+ s->root=root;s->caption_width=s->caption_height=0;gh_bundle_entry data={0};gh_bundle_error e=gh_bundle_find(b,"MSD",(unsigned)language,&data);
  if(e&&e!=GH_BUNDLE_NOT_FOUND){s->frontier=0x31ccf0;return GH_SCENE_UI_BOUNDS;}s->room_data=data;
  for(unsigned i=0;i<16;i++){
   if(i<15)s->blocks[i+1].previous=(int32_t)i; /*2B22E8 firstwritesnext.prev*/

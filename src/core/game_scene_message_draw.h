@@ -15,6 +15,8 @@ typedef struct {
     uint32_t bank, depth, font_mode;
     const gh_id_text_glyph *normal_run,*shadow_run;
     size_t count; /* zero retains the existing single-glyph pair */
+    const gh_id_texture_quad *panel;
+    size_t panel_count;
 } gh_scene_message_glyph_pair;
 
 /* The provider inserts both original font groups atomically. 2AF728 submits

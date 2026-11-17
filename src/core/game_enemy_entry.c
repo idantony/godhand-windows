@@ -14,7 +14,8 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
  *ready=0;if(!r||kind< -1)return GH_ACTOR_MODEL_OK;
  if(profile==HEAVY_ENTRY){
   const int entry_r102=b->work->room==0x102&&gh_enemy2a2_is_r102_entry(r);
-  if(!entry_r102&&(r->object_kind!=0x2a2||r->appearance||r->flags||r->dependency_flags||
+  const int entry_r101=b->work->room==0x101&&gh_enemy2a2_is_r101_entry(r);
+  if(!entry_r101&&!entry_r102&&(r->object_kind!=0x2a2||r->appearance||r->flags||r->dependency_flags||
      !((r->dependency_kind==0x2a2&&r->entry_number==6)||
        (r->dependency_kind==0x2a3&&r->entry_number==14))))return fail(s,0x2905d0);
  }else if(profile==SCENERY_ENTRY){

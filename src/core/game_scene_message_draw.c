@@ -197,12 +197,127 @@ static gh_scene_ui_status message_page(const gh_scene_message_block *block,
     return status;
 }
 
+/* Bound US EV05 message 1000, mode3. 2B1830 supplies left/top alignment,
+ * original English scale .9 × 1, spacing 1 and inter-line spacing -20. */
+static gh_scene_ui_status r104_caption_text(gh_game_scene_ui *ui,const gh_scene_message_sources *source,
+    const uint8_t *p,const gh_font_state *font,const gh_display_state *display,gh_id_view palette,
+    gh_scene_message_emit emit,void *context,uint32_t *frontier)
+{
+    *frontier=0x2b1c80;
+    if(!source->bound||!source->primary.bytes||source->primary.size<148||
+       source->cursor_7c!=22||source->cursor_8c<22||source->cursor_8c>146||
+       source->ruby.bytes||!display||!display->initialized||!font||!palette.bytes||
+       palette.size<84||!emit)return GH_SCENE_UI_UNSUPPORTED;
+    const uint8_t *text=source->primary.bytes;
+    if(half(text+48)!=0xa001||half(text+96)!=0xa001||half(text+144)!=0xa301||
+       half(text+146)!=0x8001)return GH_SCENE_UI_UNSUPPORTED;
+    const float start_x=(float)(int16_t)half(p+0xae - 0xc);
+    float x=start_x,y=(float)(int16_t)half(p+0xb0-0xc),width=0,height=0;
+    const float line_height=(float)font->slots[0].cell_height+12.0f;
+    if(!(line_height>20))return GH_SCENE_UI_UNSUPPORTED;
+    gh_font_draw_state draw={.scale_x=0.9f,.scale_y=1.0f,.alignment_flags=9,
+        .screen_width=display->screen_width,.screen_height=display->screen_lines,.gs_y_origin=display->gs_y_origin};
+    gh_id_text_glyph normal[64],shadow[64];
+    const int32_t elapsed=signed_word(p+0x68-0xc),origin=signed_word(p+0x84-0xc);
+    unsigned count=0;
+    int32_t time=0;
+    float line_width=0;
+    for(size_t offset=22;offset<144;offset+=2){
+        const uint16_t code=half(text+offset);
+        if(code==0xa001){
+            if(line_width>width)width=line_width;
+            height+=line_height-20.0f;
+            x=start_x;y+=line_height-20.0f;
+            line_width=0;
+            continue;
+        }
+        gh_font_glyph glyph;
+        if(code<14||code>=0x1000||gh_font_glyph_at(font,code,&glyph)||glyph.width<=0)
+            return GH_SCENE_UI_UNSUPPORTED;
+        if(offset<=source->cursor_8c&&(int64_t)origin+time<=elapsed){
+            if(count>=sizeof(normal)/sizeof(normal[0]))return GH_SCENE_UI_BOUNDS;
+            normal[count]=(gh_id_text_glyph){.code=code,.x=x,.y=y+12.0f};
+            shadow[count]=(gh_id_text_glyph){.code=code,.x=x+2.0f,.y=y+14.0f};
+            draw.rgba=word(palette.bytes+80);
+            if(gh_font_draw_quad(font,&draw,code,normal[count].x,normal[count].y,65535,&normal[count].quad))
+                return GH_SCENE_UI_UNSUPPORTED;
+            draw.rgba=0xff000000u;
+            if(gh_font_draw_quad(font,&draw,code,shadow[count].x,shadow[count].y,65535,&shadow[count].quad))
+                return GH_SCENE_UI_UNSUPPORTED;
+            ++count;
+        }
+        const float advance=(float)glyph.width*0.9f+1.0f;
+        x+=advance;
+        line_width+=advance;
+        time+=30;
+    }
+    if(line_width>width)width=line_width;
+    ui->caption_width=width-1.0f;
+    ui->caption_height=height+line_height;
+    if(count){
+        const gh_scene_message_glyph_pair batch={.font=font->slots,.bank=6,.depth=2,.font_mode=0x21,
+            .normal_run=normal,.shadow_run=shadow,.count=count};
+        return emit(context,&batch,frontier);
+    }
+    *frontier=0;
+    return GH_SCENE_UI_OK;
+}
+
+/* Original 2B1890 passes all nine atlas tiles plus the directional tail
+ * to 2B2058. This bound prefix is the opening before original 2B1C80
+ * publishes measured text dimensions. */
+static gh_scene_ui_status r104_caption_panel(const gh_game_scene_ui *ui,const uint8_t *p,
+    gh_scene_message_emit emit,void *context,uint32_t *frontier)
+{
+    const uint32_t flags=word(p+0x14-0xc);
+    if(!(flags&8u))return GH_SCENE_UI_OK;
+    *frontier=0x2b1890;
+    if(!ui->caption_texture.bytes||!emit||half(p+0x62-0xc)!=1)return GH_SCENE_UI_UNSUPPORTED;
+    gh_id_texture texture;
+    const gh_id_view view={ui->caption_texture.bytes,ui->caption_texture.size,ui->caption_texture.offset};
+    if(gh_id_texture_open_view(&view,&texture)||
+       texture.tex0!=GH_ID_CAPTION_TEX0)return GH_SCENE_UI_UNSUPPORTED;
+    float progress_x,progress_y;
+    memcpy(&progress_x,p+0x98-0xc,4);
+    memcpy(&progress_y,p+0x9c-0xc,4);
+    if(!(progress_x>0&&progress_x<=1&&progress_y>0&&progress_y<=1))
+        return GH_SCENE_UI_UNSUPPORTED;
+    const float left=(float)(int16_t)half(p+0xa6-0xc)-12.0f;
+    const float top=(float)(int16_t)half(p+0xa8-0xc)-12.0f;
+    const float right=left+ui->caption_width+progress_x*24.0f,bottom=top+ui->caption_height+progress_y*24.0f;
+    const float x0[]={left,left+21.0f,right-21.0f},x1[]={left+21.0f,right-21.0f,right};
+    const float y0[]={top,top+21.0f,bottom-21.0f},y1[]={top+21.0f,bottom-21.0f,bottom};
+    const float u[]={0,0.1666f,0.3333f,0.5f},v[]={0,0.3333f,0.6666f,1.0f};
+    gh_id_texture_quad quads[10];
+    for(unsigned i=0;i<9;++i){
+        const unsigned x=i%3,y=i/3;
+        quads[i]=(gh_id_texture_quad){.texture=texture,.color=0x80808080u,.color_mode=6,.font_mode=5,
+            .x0=x0[x],.y0=y0[y],.x1=x1[x],.y1=y1[y],.u0=u[x],.v0=v[y],.u1=u[x+1],.v1=v[y+1]};
+    }
+    quads[9]=(gh_id_texture_quad){.texture=texture,.color=0x80808080u,.color_mode=6,.font_mode=5,
+        .x0=left-42.0f,.y0=top+21.0f,.x1=left-42.0f+progress_x*42.0f,.y1=top+21.0f+progress_y*42.0f,
+        .u0=0.5625f,.v0=0.0625f,.u1=0.9f,.v1=0.9f};
+    const gh_scene_message_glyph_pair batch={.bank=6,.depth=2,.panel=quads,.panel_count=10};
+    const gh_scene_ui_status status=emit(context,&batch,frontier);
+    if(!status)*frontier=0;
+    return status;
+}
+
 gh_scene_ui_status gh_scene_message_render_002af028(gh_game_scene_ui *ui,
     const gh_boot_work *work, const gh_font_state *font, const gh_display_state *display,
     gh_id_view palette, gh_scene_message_emit emit, void *context, uint32_t *frontier)
 {
     if (!frontier) return GH_SCENE_UI_ARGUMENT;
     gh_scene_ui_status status = gh_scene_message_prepare_draw_002af028(ui, work, frontier);
+    if(ui->active_head>=0&&work->language&&work->room==0x104){
+        const unsigned slot=(unsigned)ui->active_head;
+        const uint8_t *p=ui->blocks[slot].payload;
+        if(p[0xa4-0xc]==3&&half(p+0x64-0xc)==0x1000){
+            if(status==GH_SCENE_UI_UNSUPPORTED&&*frontier==0x2b1c80)
+                status=r104_caption_text(ui,ui->sources+slot,p,font,display,palette,emit,context,frontier);
+            return status?status:r104_caption_panel(ui,p,emit,context,frontier);
+        }
+    }
     if (status != GH_SCENE_UI_UNSUPPORTED || *frontier != 0x2b1c80) return status;
 
     const unsigned slot = (unsigned)ui->active_head;
@@ -216,7 +331,9 @@ gh_scene_ui_status gh_scene_message_render_002af028(gh_game_scene_ui *ui,
        source->primary.bytes && source->primary.size>=2 && half(source->primary.bytes)==0xe705)
         return message_page(block,source,font,display,palette,emit,context,MESSAGE_TIMED_CAPTION,frontier);
     const uint16_t id=half(p+0x64-0xc);
-    if(work->language&&work->room==0x103&&block->next==-1&&!p[0xa4-0xc]&&(id==0x1000||id==0x1001))
+    if(work->language&&block->next==-1&&!p[0xa4-0xc]&&
+       ((work->room==0x103&&(id==0x1000||id==0x1001))||
+        (work->room==0x101&&(id==0x3002||id==0x3003))))
         return message_page(block,source,font,display,palette,emit,context,MESSAGE_ROOM_TEXT,frontier);
     if (!work->language || block->next != -1 || p[0xa4 - 0xc] || !source->bound ||
         source->ruby.bytes || source->ruby.size || !source->primary.bytes ||

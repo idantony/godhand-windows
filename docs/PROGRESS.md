@@ -4,6 +4,24 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R101 gate and Windows R104 handoff
+
+The original-format R101 test save contains three keycards and a landing
+position prepared before launch. The recorded controller opens JMP1 and
+selects Continue on the save map. The port retires the original R101 objects
+and loads R104. Direct3D plays the R104 boss intro by tick 1,475 and presents
+1,170 scene frames across the run with zero renderer, GPU, effect or window
+errors. The matching native CPU run reaches R104 tick 1,950. Another native
+replay verifies complete EV05 playback and reaches the original boss setup.
+Collecting all three cards during play and controlling Gene after EV05 are
+the next verification points.
+
+R101 原版格式测试档在启动前预置了三张钥匙卡和测试落点。固定手柄输入打开 JMP1，
+在保存地图选择「继续」。移植版清理原版 R101 物件并载入 R104。到第 1,475 帧，
+Direct3D 正在播放 R104 头目过场，整个回放呈现 1,170 个场景帧，渲染器、GPU、
+特效和窗口均无报错。同一条原生 CPU 回放在 R104 运行到第 1,950 帧。另一条原生
+回放播完 EV05，进入头目初始化。接下来验证实战获取三张卡与 EV05 后的玩家操作。
+
 ## R104 intro presentation and later combat
 
 The Direct3D 11 replay loads an original-format R104 test save prepared

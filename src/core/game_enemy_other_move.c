@@ -2,6 +2,7 @@
 #include "game_model_texture_scroll.h"
 #include "game_event_player_reset.h"
 #include "game_actor_matrix.h"
+#include "game_actor_inverse.h"
 #include "game_scene_at_geometry.h"
 #include "game_enemy_timers.h"
 #include "frame_state.h"
@@ -888,6 +889,59 @@ static gh_actor_motion_status heavy_move_substate_002866f8(gh_enemy_other_move *
     return GH_ACTOR_MOTION_OK;
 }
 
+/* 2890A0 damps the selected model part against the previous root
+ * translation, using ema3's native world transform and joint fields. */
+static uint32_t heavy_part_spring_002890a0(gh_enemy2a2_init *prefix)
+{
+    gh_actor_model *model=&prefix->model.model;
+    if(model->part_count<=29)return 0;
+    gh_actor_part *part=model->parts+29;
+    if(!part->bytes)return 0;
+    uint8_t *p=prefix->root->bytes;
+    float matrix[16],inverse[16],local[4];
+    memcpy(matrix,part->bytes+0x80,sizeof(matrix));
+    uint32_t pc=0;
+    if(gh_actor_matrix_inverse_00147568(matrix,inverse,prefix->bindings.policy,&pc))
+        return pc?pc:0x147568;
+
+    fenv_t env;
+    if(!begin(&env))return 0x2890a0;
+    float carried[3];
+    memcpy(carried,p+0x15f0,sizeof(carried));
+    const uint8_t *position=prefix->root->alias_f0;
+    carried[0]=add(carried[0],sub(scalar(position),scalar(p+0x490)));
+    carried[2]=add(carried[2],sub(scalar(position+8),scalar(p+0x498)));
+    if(gh_scene_at_apply_world_001508d8(inverse,carried,local)){
+        (void)fesetenv(&env);
+        return 0x30a2b0;
+    }
+    const float horizontal=sqrtf(add(mul(local[0],local[0]),mul(local[2],local[2])));
+    float angle;
+    if(gh_game_angle_001f8180(local[1],horizontal,&angle,GH_CAMERA_NATIVE_BINARY32_REFERENCE,&pc)){
+        (void)fesetenv(&env);
+        return pc?pc:0x1f8180;
+    }
+    const float limit=scalar(&(const uint32_t){0x3f060a92});
+    const float speed=scalar(p+0x5a8);
+    angle=fminf(limit,fmaxf(-limit,-angle));
+    float pitch=add(scalar(part->bytes+0x100),mul(mul(angle,0.5f),speed));
+    float impulse=scalar(p+0x1600);
+    pitch=add(pitch,mul(impulse,speed));
+    if(pitch>limit||pitch< -limit){
+        pitch=fminf(limit,fmaxf(-limit,pitch));
+        impulse=0;
+    }
+    impulse=add(mul(impulse,sub(1.0f,mul(speed,0.2f))),mul(mul(-pitch,0.5f),speed));
+    const float follow[3]={0,0,0.015f};
+    const gh_scene_at_status transform=gh_scene_at_apply_world_001508d8(matrix,follow,local);
+    if(fesetenv(&env)||!isfinite(pitch)||!isfinite(impulse))return 0x2890a0;
+    if(transform)return 0x30a2b0;
+    put_float(part->bytes+0x100,pitch);
+    put_float(p+0x1600,impulse);
+    memcpy(p+0x15f0,local,12);
+    return 0;
+}
+
 static gh_actor_motion_status heavy_move_tail(gh_enemy_other_move *s,gh_enemy2a2_virtual_init *actor)
 {
     gh_enemy2a2_init *prefix=&actor->prefix;
@@ -942,8 +996,12 @@ static gh_actor_motion_status heavy_move_tail(gh_enemy_other_move *s,gh_enemy2a2
     if(s->stage==16){
         if(gh_actor_finish_model_resume_0014a038(&s->finish,model,policy))
             return stop(s,model->frontier?model->frontier:0x14a038,GH_ACTOR_MOTION_UNSUPPORTED);
-        if(word(p+0x564)==0x2a7||word(p+0x564)==0x2ab)
+        if(prefix->bindings.work->room==0x101&&gh_enemy2a2_is_r101_entry(&prefix->request)){
+            pc=heavy_part_spring_002890a0(prefix);
+            if(pc)return stop(s,pc,GH_ACTOR_MOTION_UNSUPPORTED);
+        }else if(word(p+0x564)==0x2a7||word(p+0x564)==0x2ab){
             return stop(s,0x2890a0,GH_ACTOR_MOTION_UNSUPPORTED);
+        }
         s->stage=17;
     }
     if(s->stage==17){

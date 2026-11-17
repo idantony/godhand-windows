@@ -28,10 +28,16 @@ gh_tm3_error gh_tm3_member(const gh_tm3_bundle*t,unsigned index,gh_tm3_picture*o
  size_t off=u32(t->bytes+16+index*4),end=t->size;
  if(off<16+(size_t)t->count*4||off>=end)return GH_TM3_BOUNDS;
  for(unsigned i=0;i<t->count;i++){uint32_t next=u32(t->bytes+16+i*4);if(next<16+(size_t)t->count*4||next>=t->size)return GH_TM3_BOUNDS;if(next>off&&next<end)end=next;}
- const uint8_t*b=t->bytes+off;if(end-off<64)return GH_TM3_BOUNDS;
+ return gh_tm3_picture_open(t->bytes+off,end-off,out);
+}
+gh_tm3_error gh_tm3_picture_open(const void *raw,size_t size,gh_tm3_picture *out)
+{
+ if(!raw||!out)return GH_TM3_ARGUMENT;
+ const uint8_t *b=raw;
+ if(size<64)return GH_TM3_BOUNDS;
  if(memcmp(b,"TIM3",4)||b[4]!=4||(b[5]!=0&&b[5]!=6)||u16(b+6)!=1)return GH_TM3_UNSUPPORTED;
  const uint8_t*p=b+16;uint32_t total=u32(p),clut=u32(p+4),image=u32(p+8);uint16_t head=u16(p+12),w=u16(p+20),h=u16(p+22);
- if(head<48||total<head||total>end-off-16||image>total-head||clut>total-head-image)return GH_TM3_BOUNDS;
+ if(head<48||total<head||total>size-16||image>total-head||clut>total-head-image)return GH_TM3_BOUNDS;
  uint64_t tex0=u64(p+24);unsigned tw=(unsigned)(tex0>>26)&15,th=(unsigned)(tex0>>30)&15;
  unsigned psm=(unsigned)(tex0>>20)&63;
  if((psm!=19&&psm!=20)||((tex0>>51)&63)||((tex0>>56)&31)||(1u<<tw)!=w||(1u<<th)!=h||p[17]!=1||p[18]!=3)return GH_TM3_UNSUPPORTED;
@@ -44,7 +50,7 @@ gh_tm3_error gh_tm3_member(const gh_tm3_bundle*t,unsigned index,gh_tm3_picture*o
  }
  else if(b[5]==0){if((w!=32&&w!=64&&w!=128)||(h!=16&&h!=32&&h!=64))return GH_TM3_UNSUPPORTED;}
  else if(!fast4_dimensions(w,h))return GH_TM3_UNSUPPORTED;
- *out=(gh_tm3_picture){b,p+head,p+head+image,end-off,image,clut,w,h,tex0,b[5]};return GH_TM3_OK;
+ *out=(gh_tm3_picture){b,p+head,p+head+image,size,image,clut,w,h,tex0,b[5]};return GH_TM3_OK;
 }
 static size_t addr4(unsigned x,unsigned y,unsigned pitch){
  unsigned bx=(x%128)/32,by=(y%128)/16,cx=x%32,cy=y%16;

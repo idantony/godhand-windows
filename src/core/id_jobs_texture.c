@@ -4,6 +4,7 @@
 #include "id_jobs.h"
 #include "../assets/font_texture.h"
 #include "../assets/tim2.h"
+#include "../assets/tm3.h"
 #include "../assets/gs_indexed_layout.h"
 #include <stdlib.h>
 #include <string.h>
@@ -47,6 +48,14 @@ static int tim2_tutorial4(const gh_tim2_picture *picture)
 gh_id_error gh_id_texture_open_view(const gh_id_view *source,gh_id_texture *out){
  if(!source||!source->bytes||!out)return GH_ID_ARGUMENT;
  gh_id_texture t={.source=*source};
+ if(source->size>=4&&!memcmp(source->bytes,"TIM3",4)){
+  gh_tm3_picture picture;
+  if(gh_tm3_picture_open(source->bytes,source->size,&picture)||picture.transfer_kind||
+     picture.width!=128||picture.height!=64||picture.tex0!=GH_ID_CAPTION_TEX0)
+   return GH_ID_UNSUPPORTED;
+  t.width=picture.width;t.height=picture.height;t.tex0=picture.tex0;*out=t;
+  return GH_ID_OK;
+ }
  if(t.source.size>=4&&!memcmp(t.source.bytes,"TIM2",4)){
   gh_tim2_picture picture;gh_tim2_error pe=gh_tim2_first(t.source.bytes,t.source.size,&picture);
   if(pe)return pe==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
@@ -87,6 +96,18 @@ static unsigned addr4(unsigned x,unsigned y){
 gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity){
  gh_font_slot slot;gh_font_transfer image,clut;unsigned *inverse;unsigned x,y,i,words,psm;unsigned char *out=rgba;
  if(!t||!rgba||!t->source.bytes)return GH_ID_ARGUMENT;if(capacity<(size_t)t->width*t->height*4)return GH_ID_CAPACITY;
+ if(t->source.size>=4&&!memcmp(t->source.bytes,"TIM3",4)){
+  gh_tm3_picture picture;
+  if(gh_tm3_picture_open(t->source.bytes,t->source.size,&picture)||picture.transfer_kind||
+     picture.width!=128||picture.height!=64||picture.tex0!=GH_ID_CAPTION_TEX0||
+     t->width!=picture.width||t->height!=picture.height||t->tex0!=picture.tex0||
+     gh_tm3_rgba_gs(&picture,rgba,capacity))return GH_ID_UNSUPPORTED;
+  for(size_t i=3;i<(size_t)t->width*t->height*4;i+=4){
+   if(out[i]>128)return GH_ID_UNSUPPORTED;
+   out[i]=out[i]==128?255:(unsigned char)(out[i]*2);
+  }
+  return GH_ID_OK;
+ }
  if(t->source.size>=4&&!memcmp(t->source.bytes,"TIM2",4)){
   gh_tim2_picture p;gh_tim2_error e=gh_tim2_first(t->source.bytes,t->source.size,&p);
   if(e)return e==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;

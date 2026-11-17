@@ -119,7 +119,11 @@ gh_actor_model_status gh_actor_model_retire_001496c0(gh_actor_model *model,
      model->root.original_vtable214!=0x4275c8&&
      model->root.original_vtable214!=0x427690&&
      model->root.original_vtable214!=0x428090&&
-     model->root.original_vtable214!=0x4237e8&&
+     model->root.original_vtable214!=0x4237e8&&model->root.original_vtable214!=0x423700&&
+     model->root.original_vtable214!=0x4239c8&&model->root.original_vtable214!=0x423ab8&&
+     model->root.original_vtable214!=0x4244d8&&model->root.original_vtable214!=0x4245c0&&
+     model->root.original_vtable214!=0x425b90&&model->root.original_vtable214!=0x427400&&
+     model->root.original_vtable214!=0x427a58&&
      model->root.original_vtable214!=0x4290c8&&
      model->root.original_vtable214!=0x4296f0&&
      model->root.original_vtable214!=0x429b88&&

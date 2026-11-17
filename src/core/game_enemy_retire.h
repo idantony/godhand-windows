@@ -68,6 +68,9 @@ typedef struct {
 /* The weapon stays in the original primary list after its parent mark. */
 gh_actor_motion_status gh_enemy_ems_retire_weapon_0030f8b0(gh_enemy_ems *,
     gh_enemy_full_retirement *,uint32_t handle,const gh_enemy_retire_bindings *,uint32_t *frontier);
+/* Trans has detached the secondary vector for original weapon destructor mode3. */
+gh_actor_motion_status gh_enemy_ems_destroy_detached_weapon_001c91b0(gh_enemy_ems *,
+    gh_enemy_full_retirement *,uint32_t handle,const gh_enemy_retire_bindings *,uint32_t *frontier);
 /* Standalone mode3 registry owner after 290770 and original flag aging.
  * Owns both vector compactions. A Trans callback with a detached secondary
  * vector must use a distinct caller adapter. */

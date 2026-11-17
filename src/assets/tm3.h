@@ -11,6 +11,7 @@ typedef struct {const uint8_t*source,*image,*clut;size_t source_bytes,image_byte
  uint16_t width,height;uint64_t tex0;uint8_t transfer_kind;} gh_tm3_picture;
 gh_tm3_error gh_tm3_open(const void *,size_t,gh_tm3_bundle *);
 /* Actual1522C0 zero-based selector; originalcaller supplies an8-bittexNo. */
+gh_tm3_error gh_tm3_picture_open(const void *,size_t,gh_tm3_picture *);
 gh_tm3_error gh_tm3_member(const gh_tm3_bundle *,unsigned,gh_tm3_picture *);
 /* Original151990 directPSMT4 or151CC0/151168 CT32-uploadedPSMT4/PSMT8.
  * Output alpha stays in raw GS byte domain (not normalized/saturated QA alpha).

@@ -220,7 +220,10 @@ gh_bgm_status gh_bgm_event_start_002d1d00(gh_bgm_requests *s,unsigned channel,ui
     }
     request *q=&s->requests[slot];
     if(!(u32(q->scalar+0x98)&1)){*original=1;return GH_BGM_OK;}
-    if(row || u32(q->scalar+0x94)!=4 || !q->event_prefetch_decoder || q->player ||
+    /* EV05 cut12 starts its second authored channel-1 member. */
+    const int ev05_second=row==1&&q->offset==0x202800u&&q->size==0x142462u&&
+        u16(q->row+2)==1&&q->row[0x11]==12;
+    if((row&&!ev05_second) || u32(q->scalar+0x94)!=4 || !q->event_prefetch_decoder || q->player ||
        gh_adx_tell(q->event_prefetch_decoder)!=0)
         return fail(s,0x2ccac8,GH_BGM_UNSUPPORTED);
     if(!s->event_output_enabled)return fail(s,0x3734f0,GH_BGM_UNSUPPORTED);

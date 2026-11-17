@@ -554,8 +554,83 @@ gh_scene_placement_status gh_om041c_move_0017baf0(gh_om041c_state *s,
     return GH_PLACE_OK;
 }
 
-/* The 0357 canopy scans original registry 754C58 before advancing cloth.
- * Contacts are required when an eligible actor is within the authored radius. */
+/* 136640 clamps the two closest coordinates, including degenerate edges. */
+static void canopy_segment_delta(const float a[3],const float b[3],
+    const float foot[3],float delta[3])
+{
+    const float head_y=add(foot[1],0x1.ccccccp+0f);
+    const float height=add(head_y,-foot[1]);
+    float edge[3],from_foot[3];
+    for(unsigned axis=0;axis<3;++axis){
+        edge[axis]=add(b[axis],-a[axis]);
+        from_foot[axis]=add(a[axis],-foot[axis]);
+    }
+    const float aa=add(add(mul(edge[0],edge[0]),mul(edge[1],edge[1])),mul(edge[2],edge[2]));
+    const float edge_dot=add(add(mul(edge[0],from_foot[0]),mul(edge[1],from_foot[1])),
+        mul(edge[2],from_foot[2]));
+    const float height_dot=mul(height,from_foot[1]);
+    const float bb=mul(height,height),ab=mul(edge[1],height);
+    float s=0,t;
+    if(aa>0.01f){
+        const float determinant=add(mul(aa,bb),-mul(ab,ab));
+        if(determinant!=0)
+            s=fminf(1.0f,fmaxf(0.0f,divide(add(mul(ab,height_dot),-mul(edge_dot,bb)),determinant)));
+    }
+    t=divide(add(mul(ab,s),height_dot),bb);
+    if(t<0.0f||t>1.0f){
+        t=fminf(1.0f,fmaxf(0.0f,t));
+        if(aa>0.01f)s=fminf(1.0f,fmaxf(0.0f,divide(add(mul(ab,t),-edge_dot),aa)));
+    }
+    for(unsigned axis=0;axis<3;++axis){
+        const float cloth=add(a[axis],mul(edge[axis],s));
+        const float person=axis==1?add(foot[1],mul(height,t)):foot[axis];
+        delta[axis]=add(cloth,-person);
+    }
+}
+
+/* 2ADC70 gathers up to 128 endpoint shifts. 2AE1C8 applies them in
+ * spring order after testing all springs against this actor's segment. */
+static uint32_t canopy_person_contact(const gh_om041c_state *s,uint8_t *root,
+    const uint8_t *translation)
+{
+    const float radius=0x1.666666p-2f;
+    float foot[3];
+    memcpy(foot,translation,sizeof(foot));
+    for(unsigned axis=0;axis<3;++axis)if(!isfinite(foot[axis]))return 0x2adc70;
+    struct {uint8_t a,b;float delta[3];} contact[38];
+    unsigned count=0;
+    for(unsigned i=0;i<38;++i){
+        const uint8_t *setup=s->spring_setup+5*i;
+        if(!spring(root,i)[0x14])continue;
+        const unsigned first=setup[0]+3*setup[1],second=setup[2]+3*setup[3];
+        float a[3],b[3],delta[3];
+        memcpy(a,point(root,first),sizeof(a));
+        memcpy(b,point(root,second),sizeof(b));
+        canopy_segment_delta(a,b,foot,delta);
+        const float square=add(add(mul(delta[0],delta[0]),mul(delta[1],delta[1])),
+            mul(delta[2],delta[2]));
+        if(!isfinite(square))return 0x2adc70;
+        if(square>=mul(radius,radius))continue;
+        const float length=sqrtf(square);
+        const float depth=add(radius,-length);
+        const float reciprocal=length>0?divide(1.0f,length):0;
+        contact[count].a=(uint8_t)first;
+        contact[count].b=(uint8_t)second;
+        for(unsigned axis=0;axis<3;++axis)
+            contact[count].delta[axis]=mul(mul(delta[axis],reciprocal),depth);
+        ++count;
+    }
+    for(unsigned i=0;i<count;++i){
+        uint8_t *a=point(root,contact[i].a),*b=point(root,contact[i].b);
+        for(unsigned axis=0;axis<3;++axis){
+            const float displacement=contact[i].delta[axis];
+            write_float(a+4*axis,add(value(a+4*axis),displacement));
+            write_float(b+4*axis,add(value(b+4*axis),displacement));
+        }
+    }
+    return 0;
+}
+
 gh_scene_placement_status gh_om357_move_001a8b38(gh_om041c_state *s,
     const gh_motion_ik_globals *globals,const gh_room_pools *pools,
     gh_object_move_resolve resolve,void *context,uint8_t *phase)
@@ -578,6 +653,8 @@ gh_scene_placement_status gh_om357_move_001a8b38(gh_om041c_state *s,
             return fail(s,0x1501d0,GH_PLACE_UNSUPPORTED);
     }
     if(!*phase){
+        uint32_t seed_status=seed_anchors(s,policy);
+        if(seed_status)return fail(s,seed_status,GH_PLACE_UNSUPPORTED);
         const gh_room_vector *actors;
         if(gh_room_registry_view(pools,0x754c58,&actors)||(!actors->allocation.pointer&&actors->count))
             return fail(s,0x1a8bc0,GH_PLACE_UNSUPPORTED);
@@ -588,17 +665,19 @@ gh_scene_placement_status gh_om357_move_001a8b38(gh_om041c_state *s,
             if(resolve(context,handle,&actor,&pc)||!actor.bytes||actor.size<0x300)
                 return fail(s,0x1a8bc0,GH_PLACE_UNSUPPORTED);
             const unsigned kind=half(actor.bytes+0x2fe);
-            const int person=(kind>=0x100&&kind<0x1ff)||(kind>=0x200&&kind<0x300);
+            const int person=(kind>=0x100&&kind<0x1ff)||(kind>=0x200&&kind<=0x2ff);
             if(!person&&!(kind>=0x300&&kind<0x500&&kind!=0x357))continue;
             if(!actor.alias_f0)return fail(s,0x1a8bc0,GH_PLACE_UNSUPPORTED);
             float dx=add(value(actor.alias_f0),-value(model->root.alias_f0));
             float dz=add(value(actor.alias_f0+8),-value(model->root.alias_f0+8));
             const float distance=add(mul(dx,dx),mul(dz,dz));
-            if(!isfinite(distance)||distance<2.25f)
-                return fail(s,person?0x2adc70:0x2adf50,GH_PLACE_UNSUPPORTED);
+            if(!isfinite(distance))return fail(s,0x1a8bc0,GH_PLACE_UNSUPPORTED);
+            if(distance>=2.25f)continue;
+            if(!person)return fail(s,0x2adf50,GH_PLACE_UNSUPPORTED);
+            pc=canopy_person_contact(s,root,actor.alias_f0);
+            if(pc)return fail(s,pc,GH_PLACE_UNSUPPORTED);
         }
-        uint32_t pc=seed_anchors(s,policy);
-        if(!pc)pc=integrate_cloth(s,root);
+        const uint32_t pc=integrate_cloth(s,root);
         if(pc)return fail(s,pc,GH_PLACE_UNSUPPORTED);
         *phase=1;
     }

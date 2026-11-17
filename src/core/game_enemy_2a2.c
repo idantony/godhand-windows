@@ -1,5 +1,6 @@
 #include "game_enemy_2a2.h"
 #include "game_enemy_row2.h"
+#include "game_actor_model_material.h"
 #include <string.h>
 
 static void put_word(uint8_t *bytes, uint32_t value)
@@ -14,6 +15,12 @@ static uint32_t word(const uint8_t *bytes)
     return value;
 }
 
+int gh_enemy2a2_is_r101_entry(const gh_enemy_request *r)
+{
+    return r && r->object_kind==0x2a3 && r->dependency_kind==0x2a7 && !r->appearance && !r->flags &&
+        ((r->entry_number==16 && r->dependency_flags==1) ||
+         (r->entry_number==17 && !r->dependency_flags));
+}
 int gh_enemy2a2_is_r102_entry(const gh_enemy_request *request)
 {
     return request && request->object_kind == 0x2a2 &&
@@ -87,7 +94,8 @@ gh_actor_model_status gh_enemy2a2_model_00288da8(gh_enemy_model *state,
     state->frontier=0;
     uint16_t kind;
     memcpy(&kind,root->bytes+0x2fe,sizeof(kind));
-    if (kind!=0x2a2 || root->original_vtable214!=0x448ca0) {
+    const int ema3=work->room==0x101 && kind==0x2a3 && word(root->bytes+0x564)==0x2a7;
+    if ((!ema3 && kind!=0x2a2) || root->original_vtable214!=0x448ca0) {
         state->frontier=0x288da8;
         return GH_ACTOR_MODEL_UNSUPPORTED;
     }
@@ -102,14 +110,27 @@ gh_actor_model_status gh_enemy2a2_model_00288da8(gh_enemy_model *state,
 
     if (!state->stage) {
         /* 1595E8 stores the dependency's original offset before SearchData. */
-        put_word(root->bytes+0x424,25u*occurrence);
-        gh_bundle bundle;
-        gh_bundle_error error=gh_bundle_open(resource->bytes,resource->file_extent,&bundle);
-        if (error) {state->frontier=0x31ccf0;return GH_ACTOR_MODEL_BOUNDS;}
-        error=gh_bundle_find(&bundle,"MD",occurrence,&state->geometry);
+        put_word(root->bytes+0x424,ema3?50u:25u*occurrence);
+        gh_bundle_error error=gh_enemy_bundle_find(resource->bytes,resource->file_extent,
+            "MD",occurrence,&state->geometry);
         if (error && error!=GH_BUNDLE_NOT_FOUND) {state->frontier=0x31ccf0;return GH_ACTOR_MODEL_BOUNDS;}
-        error=gh_bundle_find(&bundle,"TM3",occurrence,&state->texture);
+        error=gh_enemy_bundle_find(resource->bytes,resource->file_extent,
+            "TM3",occurrence,&state->texture);
         if (error && error!=GH_BUNDLE_NOT_FOUND) {state->frontier=0x31ccf0;return GH_ACTOR_MODEL_BOUNDS;}
+        if (ema3 && (word(root->bytes+0x155c)&1u)) {
+            gh_bundle_entry asset;
+            uint8_t replacement[16];
+            int applied;
+            state->frontier=0x149ad8;
+            error=gh_enemy_bundle_find(resource->bytes,resource->file_extent,"TXE",0,&asset);
+            if (error || resource->file_extent<0x20 ||
+                asset.offset!=word(resource->bytes+0x1c))
+                return GH_ACTOR_MODEL_UNSUPPORTED;
+            status=gh_actor_texture_exchange_00149ad8(&state->texture,&asset,0,replacement,&applied);
+            if (status || !applied) return status?status:GH_ACTOR_MODEL_UNSUPPORTED;
+            memcpy(root->bytes+0x2d4,replacement,sizeof(replacement));
+            put_word(root->bytes+0x254,word(root->bytes+0x254)|0x10000000u);
+        }
         state->resource=resource->bytes;
         state->occurrence=occurrence;
         state->stage=1;

@@ -1044,7 +1044,7 @@ def main():
     # Object-pool shutdown now owns real shape/list destruction too; use the
     # coherent core closure instead of maintaining a second partial link list.
     run("compile-game-init-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_game_init.c", "-o", output / "test_game_init.exe"])
-    id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "id_animation", "id_layout_rotation", "menu_state", "font_state", "font_texture", "core_bundle", "disc", "tim2")]
+    id_objects = [objects[name] for name in ("id_jobs", "id_jobs_texture", "id_jobs_primitive", "id_base", "id_path", "id_animation", "id_layout_rotation", "menu_state", "font_state", "font_texture", "core_bundle", "disc", "tim2", "tm3")]
     run("compile-id-jobs-tests", common + id_objects + ["tests/core/test_id_jobs.c", "-o", output / "test_id_jobs.exe"])
     run("compile-id-texture-tests", common + id_objects + ["tests/core/test_id_texture.c", "-o", output / "test_id_texture.exe"])
     run("compile-mc-control-tests", common + ["-Isrc/core"] + host_objects + ["tests/core/test_mc_control.c", "-o", output / "test_mc_control.exe"])

@@ -94,8 +94,9 @@ static int is_r105_appearance1_profile(const gh_enemy_request *request)
 
 static int is_r101_appearance1_profile(const gh_enemy_request *request)
 {
-    return request&&request->object_kind==0x202&&request->dependency_kind==0x203&&
-        !request->entry_number&&request->appearance==1&&!request->flags&&!request->dependency_flags;
+    return request&&request->object_kind==0x202&&request->appearance==1&&!request->dependency_flags&&
+        ((!request->entry_number&&request->dependency_kind==0x203&&!request->flags)||
+         (request->entry_number==7&&request->dependency_kind==0x20a&&request->flags==0x08000000u));
 }
 
 static int is_r101_appearance4_profile(const gh_enemy_request *request)
@@ -104,7 +105,7 @@ static int is_r101_appearance4_profile(const gh_enemy_request *request)
         return 0;
     switch(request->entry_number){
     case 5:return request->dependency_kind==0x202&&!request->dependency_flags;
-    case 9:return request->dependency_kind==0x200&&request->dependency_flags==1;
+    case 9:case 10:case 11:return request->dependency_kind==0x200&&request->dependency_flags==1;
     case 12:return request->dependency_kind==0x200&&!request->dependency_flags;
     default:return 0;
     }
@@ -241,6 +242,9 @@ gh_actor_model_status gh_enemy_model_occurrence_002ddea0(uint32_t kind,
         case 0x214: *occurrence=3; return GH_ACTOR_MODEL_OK;
         case 0x215: *occurrence=4; return GH_ACTOR_MODEL_OK;
         }
+    } else if (kind==0x2a3 && dependency==0x2a7) {
+        *occurrence=0;
+        return GH_ACTOR_MODEL_OK;
     } else if (kind==0x2a2 && dependency>=0x2a2 && dependency<=0x2a4) {
         *occurrence=(unsigned)(dependency-0x2a2);
         return GH_ACTOR_MODEL_OK;

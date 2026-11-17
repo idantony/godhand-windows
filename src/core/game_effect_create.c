@@ -2098,7 +2098,7 @@ int gh_effect_event_part_is_bound(gh_effect_view row,const gh_title_player_view 
   const uint32_t timing=w(row.bytes+0xc0);
   return flags==0x00800000u&&w(row.bytes)==0x1e3e8010u&&
      w(row.bytes+0xbc)==0xff1d0001u&&w(row.bytes+0x130)==0x09000001u&&
-     !w(row.bytes+0x134)&&(timing==0x000a0009u||timing==0x00070006u);
+     !w(row.bytes+0x134)&&(timing==0x000a0009u||timing==0x00070006u||timing==0x00060005u||timing==0x001f001eu||timing==0x00010000u);
  }
  /* EV05 EST05/06 retain the original ESP31 trail on EL10 part29. */
  if(kind==0x610&&part==29&&flags==0x00800000u&&row.bytes[0x133]==0x1f&&
@@ -2790,6 +2790,17 @@ int gh_effect_esp_trail_is_bound(const gh_game_effects *e,const gh_effect_esp_vi
  if(v->type==0x20&&gh_effect_em00_attack_esp_is_bound(e,v))return 1;
  gh_effect_view est;
  if(v->type==9){
+  if(v->payload&&v->payload_size==0x400&&e&&e->event_registered_41c&&
+     gh_effect_event_part_is_bound(v->record,v->actor,v->selector)){
+   const uint32_t tag=w(v->payload+0x23a);
+   const unsigned index=tag>>16;
+   if((tag&0xffffu)==6&&index>=14&&index<=16&&
+      !gh_effect_est_at_00306030(e,6,index,&est)&&est.bytes&&
+      est.size>=16+(index==15?7:5)*0x2f0&&w(est.bytes+4)==(index==15?7u:5u)){
+    if(index==15)return v->record.bytes==est.bytes+16+4*0x2f0;
+    return v->record.bytes==est.bytes+16+2*0x2f0||v->record.bytes==est.bytes+16+3*0x2f0;
+   }
+  }
   if(gh_effect_attack_esp_is_bound(e,v)||gh_effect_knockdown_esp_is_bound(e,v)||
      gh_effect_player_attachment_esp_is_bound(e,v)||gh_effect_devil_esp_is_bound(e,v))return 1;
   if(v->payload&&v->payload_size==0x400&&w(v->payload+0x23a)==0x00400000u&&
@@ -2987,7 +2998,8 @@ gh_effect_status gh_effect_create_esp_trail_init_002ebf98(gh_game_effects *e,uns
  if(gh_effect_create_esp_at(e,slot,&view)||view.serial!=serial||view.initialized||
     view.type!=9||!gh_effect_esp_trail_is_bound(e,&view)||!position)return GH_EFFECT_ARGUMENT;
  const uint8_t *r=view.record.bytes,*p=view.payload;
- const unsigned count=!r[0x18d]&&gh_effect_player_stun_row(view.record)?16u:r[0x18d];
+ /* 2EBF98 uses sixteen points for zero in the authored history byte. */
+ const unsigned count=r[0x18d]?r[0x18d]:16u;
  if(count<2||count>120||r[0x18e]||p[0x245]!=1||p[0x246]!=1||
     w(p+0x2e0)||w(p+0x2dc)||w(p+0x2d4)!=0x3f800000u||view.parent_emitter<0)
   return GH_EFFECT_UNSUPPORTED;

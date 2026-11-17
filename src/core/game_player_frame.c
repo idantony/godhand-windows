@@ -282,9 +282,22 @@ static gh_player_frame_status hurt_input_00123938(gh_game_player_frame *s)
   if(s->input_result)return GH_PLAYER_FRAME_OK;
  }
  if(animation&0x40u){
-  if(b->work->room==0x700||(w(work+0x5d8)&0x02000000u)||p[0x627]||p[0x61e]||
+  if(b->work->room==0x700||(w(work+0x5d8)&0x02000000u)||p[0x627]||
      !b->auxiliary_bindings_known||b->aux_698||b->aux_6a0||w(p+0x698)||w(p+0x6a0))
    return fail(s,0x123938,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(p[0x61e]){
+   /* 1240DC admits the original directional dodge during SEQ bit 40. */
+   put(p+0x15f4,w(p+0x15f4)|0x400u);
+   if(!b->camera||!b->camera->constructed||!b->camera->identity)
+    return fail(s,0x138f88,GH_PLAYER_FRAME_UNSUPPORTED);
+   if(((uint32_t)b->camera->identity->mode&1u)&&w(b->camera->fields+0x520))
+    return GH_PLAYER_FRAME_OK;
+   uint32_t pc=0;
+   const gh_player_frame_status status=gh_game_player_directional_dodge_00124154(&b->player->view,&pc);
+   if(status)return fail(s,pc?pc:0x124154,status);
+   s->input_result=1;
+   return GH_PLAYER_FRAME_OK;
+  }
   put(p+0x15f4,flags|0x500u);
  }
  if(animation&0x20u){
@@ -1169,7 +1182,11 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
    const int em0a_reverse=em0a_story&&dependency==0x20a&&half(source->bytes+0x2f4)==0x4400&&
      source->bytes[0x2f6]==1&&override_bank==UINT32_MAX&&!cue&&
      s->pending_damage_kind==0x3e&&!em0a_power&&!s->pending_damage&&!residual;
-   if(!r101_weapon&&!armed47&&!r102_armed16&&!r102_short_hit&&!east_em27_short_hit&&
+   const int r101_short=b->work->room==0x101&&dependency==0x200&&stamp==12&&
+     source->size>0x1650&&source->bytes[0x1650]==4&&half(source->bytes+0x2f4)==0x1500&&
+     source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&override_bank==UINT32_MAX&&!cue&&
+     s->pending_damage_kind==0x37&&s->pending_damage==20&&w(take+0x4c)==20&&!residual;
+   if(!r101_short&&!r101_weapon&&!armed47&&!r102_armed16&&!r102_short_hit&&!east_em27_short_hit&&
       !area11_fall&&!r105_short_hit&&!r105_combo_hit&&!east_em27_combo_hit&&
       !em03_fall&&!arena_hit&&!em14_sphere&&!em0a_override&&!em0a_kick&&!em0a_reverse&&!em0a_wide&&
       (b->work->room!=0x100||(!short_hit&&!stamp19_fall&&!wave_fall&&!west_formation_fall&&

@@ -26,6 +26,7 @@ typedef struct {
     gh_screen_fade *fade;
     const gh_display_state *display;
     const gh_event_env_end_owners *end_owners;
+    int caption_alive;
 } gh_event_env_frame_bindings;
 
 /* Publish the already scheduled current cut/frame before the ordered PLAY

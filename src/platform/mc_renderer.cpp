@@ -20,7 +20,7 @@ struct QueuedID {
     uint32_t entry_index,consumer;
     uint16_t z=0;bool z_known=false;
 };
-enum class CommandKind {ID,FAN,FADE,NUMBER,COVER,MESSAGE,RADAR,TITLE_TEXT,PAD_ICON,DEPTH_TEXT,TUTORIAL_PAD_ICON};
+enum class CommandKind {ID,FAN,FADE,NUMBER,COVER,MESSAGE,RADAR,CAPTION_PANEL,TITLE_TEXT,PAD_ICON,DEPTH_TEXT,TUTORIAL_PAD_ICON};
 struct QueuedMessage {
     gh_id_text_glyph glyph={};
     std::shared_ptr<const std::vector<uint8_t>> atlas;
@@ -60,7 +60,7 @@ struct gh_mc_renderer {
 static bool null_texture(const gh_id_render_view*s,const gh_id_entry*e)
 {return e->kind==0&&!e->texture.bytes&&(e->b8a==33||(e->b8a<32&&!s->manager->pair[e->b8a].texture_data.bytes));}
 static gh_id_error render_sprite(gh_mc_renderer *r,const gh_id_texture_quad &quad,
-    gh_ui_error *gpu,const gh_ui_depth_write *depth,bool original_icon=false)
+    gh_ui_error *gpu,const gh_ui_depth_write *depth,bool original_icon=false,bool caption_panel=false)
 {
     if(!r->sprite)*gpu=gh_ui_sprite_create(512,448,&r->sprite);
     if(*gpu!=GH_UI_OK)return GH_ID_UNSUPPORTED;
@@ -77,7 +77,7 @@ static gh_id_error render_sprite(gh_mc_renderer *r,const gh_id_texture_quad &qua
         if(*gpu!=GH_UI_OK)return GH_ID_UNSUPPORTED;
         r->textures.push_back({quad.texture.source.bytes,item.texture});
     }
-    const gh_ui_sprite_state state={UINT64_C(0x8000000044),original_icon?0x50000u:0x3001du,0x54,0x60,0,1,1,0,0,0};
+    const gh_ui_sprite_state state={UINT64_C(0x8000000044),caption_panel?0x5001du:original_icon?0x50000u:0x3001du,0x54,0x60,0,1,1,0,0,0};
     *gpu=gh_ui_sprite_batch_with_depth(r->sprite,&state,&item,1,r->frame.data(),r->next.data(),r->next.size(),depth);
     return *gpu==GH_UI_OK?GH_ID_OK:GH_ID_UNSUPPORTED;
 }
@@ -509,6 +509,33 @@ extern "C" gh_id_error gh_mc_renderer_queue_cover(gh_mc_renderer*r,const gh_chil
     try {QueuedCommand c;c.kind=CommandKind::COVER;c.cover=*cover;r->queued.push_back(c);*tag={6,5,r->queued.size()-1};return GH_ID_OK;}
     catch(const std::bad_alloc&){return GH_ID_MEMORY;}
 }
+extern "C" gh_id_error gh_mc_renderer_queue_caption_panel(gh_mc_renderer *r,
+    const gh_scene_message_glyph_pair *pair,gh_ui_ot_tag tags[10])
+{
+    if(!r||!r->begun||!pair||!pair->panel||pair->panel_count!=10||!tags)return GH_ID_ARGUMENT;
+    if(r->flushing||r->queue_failed||r->status.jobs)return GH_ID_BUSY;
+    if(pair->bank!=6||pair->depth!=2||r->queued.size()>8182)return GH_ID_UNSUPPORTED;
+    try{
+        r->queued.reserve(r->queued.size()+10);
+        for(unsigned i=0;i<10;++i){
+            QueuedCommand command;
+            command.kind=CommandKind::CAPTION_PANEL;
+            command.radar=pair->panel[i];
+            if(command.radar.x0>command.radar.x1){
+                std::swap(command.radar.x0,command.radar.x1);
+                std::swap(command.radar.u0,command.radar.u1);
+            }
+            if(command.radar.y0>command.radar.y1){
+                std::swap(command.radar.y0,command.radar.y1);
+                std::swap(command.radar.v0,command.radar.v1);
+            }
+            tags[i]={6,2,r->queued.size()};
+            r->queued.push_back(std::move(command));
+        }
+        return GH_ID_OK;
+    }catch(const std::bad_alloc&){return GH_ID_MEMORY;}
+}
+
 extern "C" gh_id_error gh_mc_renderer_queue_message(gh_mc_renderer *r,
     const gh_scene_message_glyph_pair *pair, gh_ui_ot_tag tags[2])
 {
@@ -589,7 +616,7 @@ static gh_id_error draw_fade(gh_mc_renderer*r,const gh_fade_draw&draw,const gh_u
 static bool tracks_depth(const QueuedCommand &command)
 {
     return command.kind==CommandKind::COVER || command.kind==CommandKind::MESSAGE ||
-        command.kind==CommandKind::RADAR || command.kind==CommandKind::FAN || command.kind==CommandKind::PAD_ICON ||
+        command.kind==CommandKind::RADAR || command.kind==CommandKind::CAPTION_PANEL || command.kind==CommandKind::FAN || command.kind==CommandKind::PAD_ICON ||
         command.kind==CommandKind::DEPTH_TEXT || command.kind==CommandKind::TUTORIAL_PAD_ICON ||
         ((command.kind==CommandKind::ID || command.kind==CommandKind::NUMBER) && command.id.z_known);
 }
@@ -612,7 +639,7 @@ extern "C" gh_id_error gh_mc_renderer_queued_message_depth(gh_mc_renderer *r,
     for(size_t i=0;i<count;++i){
         if(order[i]>=count)return GH_ID_ARGUMENT;
         const auto &command=r->queued[order[i]];
-        if(command.kind==CommandKind::TUTORIAL_PAD_ICON||command.kind==CommandKind::DEPTH_TEXT){
+        if(command.kind==CommandKind::TUTORIAL_PAD_ICON||command.kind==CommandKind::DEPTH_TEXT||command.kind==CommandKind::CAPTION_PANEL){
             if(!tracked)return message_depth_unavailable(r);
             needed=1;
         }
@@ -714,6 +741,17 @@ static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t cou
                 }
                 if(error==GH_ID_OK){r->status.glyphs+=command.message_glyph_count;++r->status.jobs;}
                 r->status.id_error=error;
+            }
+            else if(command.kind==CommandKind::CAPTION_PANEL){
+                gh_ui_error gpu=GH_UI_OK;
+                gh_ui_depth_write plane={depth_samples.data(),depth_samples.size(),65535};
+                error=depth_known?render_sprite(r,command.radar,&gpu,&plane,false,true):GH_ID_UNSUPPORTED;
+                r->status.consumer=0x15d168;
+                r->status.frontier=error?0x15d168:0;
+                r->status.opcode=0;
+                r->status.id_error=error;
+                r->status.gpu_error=static_cast<unsigned>(gpu);
+                if(!error){r->frame.swap(r->next);++r->status.jobs;}
             }
             else if(command.kind==CommandKind::RADAR){
                 gh_ui_error gpu=GH_UI_OK;

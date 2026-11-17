@@ -43,8 +43,10 @@ gh_actor_model_status gh_enemy2a2_initialize_prefix_00284af8(gh_enemy2a2_init *s
     uint8_t *bytes=root->bytes;
     uint16_t kind;
     memcpy(&kind,bytes+0x2fe,sizeof(kind));
-    if (kind!=0x2a2 || root->original_vtable214!=0x448ca0 || request->object_kind!=kind ||
-        request->dependency_kind<0x2a2 || request->dependency_kind>0x2a4) {
+    const int ema3=bindings->work->room==0x101 && gh_enemy2a2_is_r101_entry(request);
+    if (root->original_vtable214!=0x448ca0 || request->object_kind!=kind ||
+        (!ema3 && (kind!=0x2a2 || request->dependency_kind<0x2a2 ||
+         request->dependency_kind>0x2a4))) {
         s->frontier=0x284af8;
         return GH_ACTOR_MODEL_UNSUPPORTED;
     }
