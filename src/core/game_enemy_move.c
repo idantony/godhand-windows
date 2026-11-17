@@ -8784,7 +8784,10 @@ static gh_actor_motion_status advance_boss_pincer(gh_enemy202_move *s,uint8_t *p
     }
     if(s->substate67_stage==IMPACT_GIVE){
         if(half(p+0x3ac)&1u){
-            stamp19_attack_parameters(p,flank&&!recovery?30:40,0,flank?0x3e:0x3f);
+            /* 22D338 uses power30 for the opening flank. 22D464 uses 40
+             * once the charge begins, as do the original recovery rows. */
+            const unsigned power=flank&&!charging&&!recovery?30:40;
+            stamp19_attack_parameters(p,power,0,flank?0x3e:0x3f);
             const gh_actor_motion_status status=enemy_attack_area_00260b30(s,p);
             if(status)return status;
             if(flank&&recovery&&p[0x1864])p[0x2f6]=16;

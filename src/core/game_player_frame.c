@@ -976,7 +976,8 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
        w(source->bytes+0x1874)==30&&w(source->bytes+0x1878)==0x3e&&
        ((flank_take_power==30&&s->pending_damage==23&&flank_residual==7)||
         (flank_take_power==45&&s->pending_damage==34&&flank_residual==11)))||
-      (flank_phase>=13&&flank_phase<=16&&
+      (((flank_phase==11&&!w(source->bytes+0x1870)&&w(source->bytes+0x1874)==40&&
+         w(source->bytes+0x1878)==0x3e)||(flank_phase>=13&&flank_phase<=16))&&
        ((flank_take_power==40&&s->pending_damage==30&&flank_residual==10)||
         (flank_take_power==60&&s->pending_damage==45&&flank_residual==15&&
          w(source->bytes+0x1874)==40&&w(source->bytes+0x1878)==0x3e))));
