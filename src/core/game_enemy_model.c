@@ -36,7 +36,8 @@ gh_actor_model_status gh_enemy_model_initialize_00208268(gh_enemy_model*s,const 
  if(exchange)dependency=0x200;
  unsigned occurrence;
  if(kind==0x220&&dependency==0x220&&work->room==0x100)occurrence=0;
- else if((kind!=0x202&&!(kind==0x204&&work->room==0x103))||
+ else if((kind!=0x202&&!(kind==0x204&&work->room==0x103)&&
+          !(kind==0x203&&work->room==0x104&&dependency==0x250))||
      gh_enemy_model_occurrence_002ddea0(kind,dependency,&occurrence)){
   s->frontier=0x2ddea0;return GH_ACTOR_MODEL_UNSUPPORTED;
  }

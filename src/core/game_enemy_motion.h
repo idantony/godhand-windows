@@ -8,6 +8,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+void gh_enemy_start_action_00272570(uint8_t *actor);
 typedef struct {gh_enemy_hp *hp;gh_actor_motion motion;uint32_t stage,frontier;size_t motion_offset,sequence_offset;int initial_ended;} gh_enemy_motion;
 /* Actual2022D0 EM202/20A appearance0/default andactualR100appearance3
  * data selection, scalarwrites andshared2A8578. No animation sampleack. */

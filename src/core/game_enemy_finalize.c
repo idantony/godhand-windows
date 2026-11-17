@@ -13,7 +13,7 @@ gh_actor_motion_status gh_enemy_finalize_00207d40(gh_enemy_finalize*s,gh_enemy_h
     (e->request.dependency_flags&1u)&&
     gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room);
  if((!exchange&&word(p,0x564)!=e->request.dependency_kind)||!e->published||!e->object.view.alias_f0||
-    (!devil&&!gh_enemy204_is_r103_entry(&e->request,e->b.work->room)&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&
+    (!devil&&!gh_enemy203_is_r104_entry(&e->request,e->b.work->room)&&!gh_enemy204_is_r103_entry(&e->request,e->b.work->room)&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&
       !gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)))))return GH_ACTOR_MOTION_ARGUMENT;
  if(!s->stage){/* Actual26B9E8 only211 creates3B8;20Aguardreturnswithoutwrites. */
   s->hitareas=hitareas;put(p,0x560,0xffff);put(p,0x1728,0);put(p,0x17a4,0);put(p,0x17a8,0);p[0x17be]=0;put(p,0x624,0);

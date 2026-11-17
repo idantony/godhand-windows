@@ -4,6 +4,37 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R104 post-intro movement and R103 forward evade
+
+The original-format R101 test save contains three keycards and a door-side
+landing position. One native replay opens the original gate, enters R104,
+finishes EV05, and moves Gene with recorded left-stick input. All 3,041
+applied controller samples match the tape. At tick 3,041 Gene has 100 HP
+and is in the original walk state. The boss has 1,000 HP and attempts its
+next distinct attack. A separate Direct3D replay from the R104 test save
+shows the same walk state after the fade clears. The earlier caption
+capture remains pixel-identical, and the Direct3D replay reports zero
+graphics errors through its deliberate stop at tick 2,606.
+The extended Direct3D replay from the R101 test save presents 2,709 scene
+frames before an unported EM03 move at tick 3,022.
+
+In the R103 twin-boss fight, forward evades at ticks 9,496 and 9,546
+preserve Gene's 25 HP and award original Heat and level points. The first
+adds 1.5 Heat and raises level points from 582 to 657. The control run
+without the first evade drops to 16 HP and has no evade award. The
+two-evade run eventually ends in defeat.
+
+R101 原版格式测试档预置三张钥匙卡与门边落点。一条原生回放打开原版门，进入 R104，
+播完 EV05，并用左摇杆让 Gene 走动。实际读取的 3,041 条手柄采样逐条匹配。第 3,041 帧时
+Gene 保持 100 HP，处于原版行走状态。头目有 1,000 HP，准备下一招。另一条从 R104
+测试档开始的 Direct3D 回放呈现了淡出结束后的行走，字幕画面与此前逐像素相同，并且
+到第 2,606 帧主动停止时，所有图形错误计数为零。
+R101 测试档的跨房间 Direct3D 延长回放呈现了 2,709 个场景帧，在第 3,022 帧遇到一段待恢复的 EM03 动作。
+
+R103 双头目战里，第 9,496 和 9,546 帧的前闪都保住了 Gene 的 25 HP，并获得原版 Heat
+和段位分。第一次增加 1.5 点 Heat，段位分从 582 升到 657。省略第一次前闪的对照回放中
+Gene 掉到 16 HP，未触发奖励。两次前闪的回放最终战败。
+
 ## R101 gate and Windows R104 handoff
 
 The original-format R101 test save contains three keycards and a landing
@@ -13,14 +44,13 @@ and loads R104. Direct3D plays the R104 boss intro by tick 1,475 and presents
 1,170 scene frames across the run with zero renderer, GPU, effect or window
 errors. The matching native CPU run reaches R104 tick 1,950. Another native
 replay verifies complete EV05 playback and reaches the original boss setup.
-Collecting all three cards during play and controlling Gene after EV05 are
-the next verification points.
+Collecting all three cards during play remains a verification point.
 
 R101 原版格式测试档在启动前预置了三张钥匙卡和测试落点。固定手柄输入打开 JMP1，
 在保存地图选择「继续」。移植版清理原版 R101 物件并载入 R104。到第 1,475 帧，
 Direct3D 正在播放 R104 头目过场，整个回放呈现 1,170 个场景帧，渲染器、GPU、
 特效和窗口均无报错。同一条原生 CPU 回放在 R104 运行到第 1,950 帧。另一条原生
-回放播完 EV05，进入头目初始化。接下来验证实战获取三张卡与 EV05 后的玩家操作。
+回放播完 EV05，进入头目初始化。实战获取三张卡仍在验证。
 
 ## R104 intro presentation and later combat
 

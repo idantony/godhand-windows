@@ -23,7 +23,7 @@ gh_actor_motion_status gh_enemy_solids_initialize_00204b4c(gh_enemy_solids*s,gh_
  if(s->stage==2){
   const uint32_t xyz[]={0,0x3f000000,0};
   const uint32_t dependency=e->request.dependency_kind;
-  const uint32_t radius=dependency==0x20a?0x3f333333u:dependency==0x20f?0x3e99999au:0x3f000000u;
+  const uint32_t radius=(dependency==0x20a||dependency==0x250)?0x3f333333u:dependency==0x20f?0x3e99999au:0x3f000000u;
   gh_solid_unit_status status=gh_collision_solid_create_sphere_00134880(
       manager,&e->object.view,p+0x80,xyz,radius,&s->sphere,&s->frontier);
   if(status)return GH_ACTOR_MOTION_UNSUPPORTED;
@@ -37,6 +37,10 @@ gh_actor_motion_status gh_enemy_solids_initialize_00204b4c(gh_enemy_solids*s,gh_
    s->stage=5;
   }
   s->frontier=s->stage==4?0x14b730:0x306528;e->frontier=s->frontier;
+  return GH_ACTOR_MOTION_UNSUPPORTED;
+ }
+ if(s->stage==3&&gh_enemy203_is_r104_entry(&e->request,e->b.work->room)){
+  s->frontier=e->frontier=0x306528;
   return GH_ACTOR_MOTION_UNSUPPORTED;
  }
  if(s->stage==3&&boss_slot){

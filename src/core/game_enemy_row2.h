@@ -10,6 +10,7 @@ int gh_enemy202_is_row2_profile(const gh_enemy_request *);
 int gh_enemy202_is_r100_appearance2_profile(const gh_enemy_request *);
 int gh_enemy202_is_r100_supported_profile(const gh_enemy_request *);
 int gh_enemy202_is_room_supported_profile(const gh_enemy_request *,uint16_t room);
+int gh_enemy203_is_r104_entry(const gh_enemy_request *,uint16_t room);
 /* Live entries from the original R103 EMS. */
 int gh_enemy204_is_r103_entry(const gh_enemy_request *,uint16_t room);
 /* Original 2070CC default body radius, explicit bounded ChopZero. */

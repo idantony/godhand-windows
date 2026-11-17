@@ -56,6 +56,7 @@ struct gh_game_cockpit {
   uint8_t stage;
  } ticket,middle_boss,boss;
  gh_id_entry *boss_entries[5];
+ const gh_title_player_view *single_boss_actor;
  const gh_title_player_view *middle_boss_actors[5];
  gh_id_base *middle_boss_bars[5];
  gh_id_base *middle_boss_draw_order[5];
@@ -485,8 +486,28 @@ gh_id_error gh_game_cockpit_load_boss_0013c818(gh_game_cockpit *s,
  return GH_ID_OK;
 }
 
+/* 206FC0 supplies the native counterpart of Cockpit+1E5C. */
+gh_id_error gh_game_cockpit_register_r104_boss(gh_game_cockpit *s,
+ const gh_boot_work *work,const gh_title_player_view *actor)
+{
+ if(!s||!work||work->room!=0x104||!actor||!actor->bytes||actor->size<0x1652||
+    actor->original_vtable214!=0x4479c8||u32(actor->bytes+0x564)!=0x250)return GH_ID_ARGUMENT;
+ uint16_t kind;
+ memcpy(&kind,actor->bytes+0x2fe,sizeof(kind));
+ if(kind!=0x203)return GH_ID_ARGUMENT;
+ if(s->single_boss_actor&&s->single_boss_actor!=actor)return GH_ID_BUSY;
+ s->single_boss_actor=actor;
+ return GH_ID_OK;
+}
+
+void gh_game_cockpit_forget_r104_boss(gh_game_cockpit *s,const gh_title_player_view *actor)
+{
+ if(s&&s->single_boss_actor==actor)s->single_boss_actor=NULL;
+}
+
 static gh_id_error release_boss(gh_game_cockpit *s,int compact)
 {
+ s->single_boss_actor=NULL;
  if(!s->boss.stage)return GH_ID_OK;
  if(gh_dvd_check(s->boss.dvd,s->boss.job)&&!gh_dvd_cancel(s->boss.dvd,s->boss.job))
   return room_id_error(s,0x201018,GH_ID_BUSY);
@@ -1642,6 +1663,57 @@ static gh_id_error middle_boss_move(gh_game_cockpit *s,const gh_boot_work *work_
  return fesetenv(&environment)?GH_ID_UNSUPPORTED:status;
 }
 
+/* Original 13C950 for the R104 single boss. */
+static gh_id_error r104_boss_move(gh_game_cockpit *s,const uint8_t *work,
+ const gh_cockpit_frame_callbacks *callbacks)
+{
+ const unsigned widget=0x1dc0;
+ const uint8_t *actor=s->single_boss_actor->bytes;
+ int16_t maximum,current;
+ memcpy(&maximum,actor+0x548,sizeof(maximum));
+ memcpy(&current,actor+0x54a,sizeof(current));
+ if(!u32(s->fields+widget+0x94)||(u32(work+0x584)&8u)||
+    (u32(work+0x58c)&0x80000000u)||!maximum)return GH_ID_OK;
+ uint32_t flags=u32(s->fields+widget+0xa0);
+ if(u32(work+0x5e4)&0x20000000u){
+  w32(s,widget+0xa0,flags&~0x40000000u);
+  return GH_ID_OK;
+ }
+ gh_id_entry *fill=s->boss_entries[0],*trailing=s->boss_entries[1];
+ gh_id_entry *name=s->boss_entries[2],*vertical=s->boss_entries[3],*horizontal=s->boss_entries[4];
+ if(!fill||!trailing||!name||!vertical||!horizontal||!vertical->source||!horizontal->source)
+  return frame_stop(s,0x13c950);
+ const volatile float ratio=(float)current/(float)maximum;
+ if(!(flags&0x40000000u)){
+  wf(s,widget+0xb0,ratio);
+  wf(s,widget+0xac,ratio);
+  w32(s,widget+0xb8,1);
+  const uint32_t fill_uv[]={0x3e1eb852,0x3f000000,0x3e2f9db2,0x3f100000};
+  const uint32_t trailing_uv[]={0x3e1eb852,0x3f200000,0x3e2f9db2,0x3f300000};
+  memcpy(fill->f70,fill_uv,sizeof(fill_uv));
+  memcpy(trailing->f70,trailing_uv,sizeof(trailing_uv));
+  w16(s,widget+0xb4,0);
+  flags|=0x40000000u;
+  w32(s,widget+0xa0,flags);
+ }
+ unsigned hold=s->fields[widget+0xb4]|(unsigned)s->fields[widget+0xb5]<<8;
+ if(frame_number(s->fields+widget+0xac)!=ratio)hold=40;
+ fill->scale_x=ratio;
+ if(!hold){
+  const float before=frame_number(s->fields+widget+0xa8);
+  trailing->scale_x=before;
+  wf(s,widget+0xa8,add(before,-mul(add(before,-ratio),0.07f)));
+ }else{
+  w16(s,widget+0xb4,hold-1);
+ }
+ wf(s,widget+0xac,ratio);
+ vertical->pos_y=fminf(add(vertical->pos_y,10.0f),frame_number(vertical->source+0xc));
+ horizontal->pos_x=fminf(add(horizontal->pos_x,10.0f),frame_number(horizontal->source+8));
+ if(!(flags&0x20000000u))vertical->pos_y=horizontal->pos_x=-100.0f;
+ name->b8b=(uint8_t)(s->fields[widget+0xb8]-1);
+ return gameplay_move_base(s,widget,callbacks);
+}
+
 gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit*s,const gh_boot_work*work_state,const gh_cockpit_frame_callbacks*c){
  if(!s||!s->ready||!s->room_ready||!work_state)return GH_ID_ARGUMENT;const uint8_t*w=(const uint8_t*)work_state;s->frontier=0;
  if(!s->update_stage){if(u32(w+0x58c)&0x80000000)return GH_ID_OK;
@@ -1654,6 +1726,7 @@ gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit*s,const gh_boot_work*w
   if(!(s->hud_cold_known&1)||
      (s->boss.stage?(s->boss.stage!=2||!base(s,widget)->owns_run||u32(s->fields+widget+0x9c)):
       (u32(s->fields+widget+0x94)||base(s,widget)->owns_run)))return frame_stop(s,0x13c950);
+  if(s->single_boss_actor)TRY(r104_boss_move(s,w,c));
   s->update_stage=11;
  }
  if(s->update_stage==11){TRY(middle_boss_move(s,work_state,c));s->update_stage=12;}
@@ -1662,7 +1735,7 @@ gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit*s,const gh_boot_work*w
  if(s->update_stage==14){/* First true registeredwidget,unlessoriginal77 gate. */if(!s->fields[0x6e0+0x77])TRY(gameplay_radar(s,c));s->gameplay_index=1;s->update_stage=15;}
  if(s->update_stage==15){while(s->gameplay_index<11){unsigned i=s->gameplay_index;if(!s->fields[registry[i].offset+0x77]){if(i==1)TRY(gh_game_cockpit_heat_move_00142060(s,work_state,c));else TRY(gameplay_widget(s,i,work_state,c));}s->gameplay_index++;}s->update_stage=2;}
  if(s->update_stage==1){TRY(frame_move_base(s,0x1520,c));s->update_stage=2;}
- if(s->update_stage==2){int a=u32(s->fields+0x1e5c)&&(u32(s->fields+0x1e60)&0x20000000);int b=s->fields[0x21e8]&&(u32(s->fields+0x1f20)&0x80000000);int d=u32(s->fields+0x22bc)&&(u32(s->fields+0x22c0)&0x20000000);if(a||b||d)s->fields[0x1ca0]|=2;if(a||b)s->fields[0x1db4]|=1;else if(d)s->fields[0x1db4]|=2;s->update_stage=3;}
+ if(s->update_stage==2){int a=(s->single_boss_actor||u32(s->fields+0x1e5c))&&(u32(s->fields+0x1e60)&0x20000000);int b=s->fields[0x21e8]&&(u32(s->fields+0x1f20)&0x80000000);int d=u32(s->fields+0x22bc)&&(u32(s->fields+0x22c0)&0x20000000);if(a||b||d)s->fields[0x1ca0]|=2;if(a||b)s->fields[0x1db4]|=1;else if(d)s->fields[0x1db4]|=2;s->update_stage=3;}
  if(u32(w+0x584)&0x20000){if(!c||!c->set_draw_order)return frame_stop(s,0x2c7850);uint32_t f=0;gh_id_error e=c->set_draw_order(c->context,6,5,&f);if(e){s->frontier=f?f:0x2c7850;return e;}}
  s->update_stage=s->gameplay_index=s->radar_move_stage=s->radar_move_index=0;s->gameplay_error=GH_ID_OK;s->gameplay_error_frontier=0;return GH_ID_OK;
 }
@@ -2051,7 +2124,12 @@ gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit*s,const gh_boot_work*
   }
   if(u32(w+0x5e0)&0x2000000){if(u32(s->fields+0x15bc)!=0xffff)TRY(frame_trans(s,0x1520,c));return GH_ID_OK;}
   /* Four direct draw gates, in original order, before17registered slots. */
-  if(u32(s->fields+0x1e54)&&u32(s->fields+0x1e5c))return frame_stop(s,0x13cf20);
+  if(u32(s->fields+0x1e54)&&s->single_boss_actor&&!(u32(w+0x584)&8u)&&
+     !(u32(w+0x58c)&0x80000000u)&&(s->single_boss_actor->bytes[0x548]||
+     s->single_boss_actor->bytes[0x549])&&(u32(s->fields+0x1e60)&0x20000000u)){
+   if(!c||(c->save.bytes&&c->save.size<0xbbc))return frame_stop(s,0x1fc708);
+   if(!c->save.bytes||!(c->save.bytes[0xbba]&1))TRY(frame_trans(s,0x1dc0,c));
+  }else if(u32(s->fields+0x1e5c))return frame_stop(s,0x13cf20);
   TRY(middle_boss_draw_00140638(s,w,c));
   s->draw_stage=15;
  }

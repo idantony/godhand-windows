@@ -123,6 +123,7 @@ struct gh_game_services {
 #endif
  gh_r102_room r102;
  gh_r207_allocation r104_work;
+ gh_om_runtime_create r104_reward;
  uint32_t r104_task_frontier;
  uint8_t r104_initialized;
  gh_r207_allocation r103_work;uint32_t r103_task_frontier;uint8_t r103_initialized;
@@ -225,6 +226,7 @@ static gh_game_services_status release_r104_room_init(gh_game_services *s)
  if(s->r104_work.pointer&&gh_heap_release(s->b.assets->heap,s->r104_work)!=GH_MEM_OK)
   return fail(s,GH_SERVICES_ASSET,0x30ee08,0);
  s->r104_work=(gh_r207_allocation){0};
+ s->r104_reward=(gh_om_runtime_create){0};
  s->r104_task_frontier=0;
  s->r104_initialized=0;
  return GH_SERVICES_OK;
@@ -675,7 +677,8 @@ gh_game_services_status gh_game_services_enemy_set_all_00294ca0(gh_game_services
     .boot_elf=s->b.boot_elf,.boot_elf_bytes=s->b.boot_elf_bytes},
    .cockpit=s->cockpit,.ik=s->b.motion_ik_globals,.actors=&s->scene_tables,
    .atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL,.canonical_rate=&s->b.work->canonical_rate574,
-   .effect=enemy_motion_effect,.effect_context=s,.solids=&s->collision_solids,.default_heap=s->b.assets->heap,
+   .effect=enemy_motion_effect,.effect_context=s,.spawn_effect=&s->enemy_bindings.effects_2ad,
+   .solids=&s->collision_solids,.default_heap=s->b.assets->heap,
    .node_names=&s->enemy_nodes,.shapes={&s->collision_pairs,s->b.math_globals,GH_STATIC_BINARY32_REFERENCE},
    .numeric_policy=GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,.weapon_scroll=&s->r100.collision},
   .names_2a2=&s->enemy2a2_nodes,.action_buttons=&s->action_buttons,
@@ -3699,8 +3702,79 @@ static void room_r104_loop_0540(void *context,int32_t argument)
 {
  gh_game_services *s=context;
  (void)argument;
- /* The first authored operation creates OM 03DA via CreateObj(03DA,ffff). */
- s->r104_task_frontier=0x30fa98;
+ gh_om_object *reward;
+ if(gh_om_factory_create_0030fa98(&s->om_factory,&s->r104_reward,0x3da,0xffff,&reward)||
+    !reward){
+  s->r104_task_frontier=s->om_factory.frontier?s->om_factory.frontier:0x30fa98;
+  return;
+ }
+ if(gh_om_factory_initialize_runtime_ticket_001c0128(&s->om_factory,reward)){
+  s->r104_task_frontier=s->om_factory.frontier?s->om_factory.frontier:0x1c0128;
+  return;
+ }
+ const uint32_t reward_position[]={0xc17b3333,0x3e4ccccd,0xbe19999a};
+ const uint32_t reward_rotation[]={0,0xbfc90fdb,0};
+ if(gh_om_r101_item_position_001c2630(reward->initialization,(const uint8_t *)reward_position)){
+  s->r104_task_frontier=reward->initialization->frontier;
+  return;
+ }
+ memcpy(reward->view.bytes+0x100,reward_rotation,sizeof(reward_rotation));
+ w32(reward->view.bytes+0x5b8,u32(reward->view.bytes+0x5b8)|0x10u);
+ w32(reward->view.bytes+0x560,0xa5d);
+ reward->view.bytes[0x676]|=2;
+
+ const uint32_t player_position[]={0xbfb851ec,0,0x3e99999a};
+ const uint32_t player_rotation[]={0,0xbfbc28f6,0};
+ const gh_title_player_view *child=s->player_tail.active_child&&s->player_tail.child_original_return?
+  &s->player_child.object.view:NULL;
+ if(gh_title_player_set_script_pose_0012ce60(&s->title_player.view,child,player_position,player_rotation)){
+  s->r104_task_frontier=0x12ce60;
+  return;
+ }
+ if(gh_task_threads_sleep(s->scenario_threads,1)!=GH_THREAD_OK){
+  s->r104_task_frontier=0x2d5aa0;
+  return;
+ }
+ uint32_t pc=0;
+ if(gh_r100_scroll_layer_002db2b0(&s->pools,&s->meshes,3,1,&pc)){
+  s->r104_task_frontier=pc?pc:0x2db2b0;
+  return;
+ }
+ float alpha=0.1f;
+ do{
+  const volatile float step=alpha+0.04f;
+  alpha=step;
+  if(gh_r100_scroll_layer_alpha_002db318(&s->pools,&s->meshes,3,alpha,&pc)){
+   s->r104_task_frontier=pc?pc:0x2db318;
+   return;
+  }
+  if(gh_task_threads_sleep(s->scenario_threads,1)!=GH_THREAD_OK){
+   s->r104_task_frontier=0x2d5aa0;
+   return;
+  }
+ }while(alpha<1.0f);
+ if(gh_r100_scroll_layer_alpha_002db318(&s->pools,&s->meshes,3,1.0f,&pc)){
+  s->r104_task_frontier=pc?pc:0x2db318;
+  return;
+ }
+ for(;;){
+  gh_game_title_player *boss;
+  if(gh_enemy_manager_get_00290868(s->b.init,0,&boss)){
+   s->r104_task_frontier=0x295978;
+   return;
+  }
+  int dead=1;
+  if(boss&&gh_r100_enemy_dead_0028fb38(&s->room_state,boss,&dead)){
+   s->r104_task_frontier=0x28fb38;
+   return;
+  }
+  if(dead)break;
+  if(gh_task_threads_sleep(s->scenario_threads,1)!=GH_THREAD_OK){
+   s->r104_task_frontier=0x2d5aa0;
+   return;
+  }
+ }
+ s->r104_task_frontier=0x4b8;
 }
 
 static void room_r104_intro_0380(void *context,int32_t argument)
@@ -6284,8 +6358,9 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   move->death_item_spawn=enemy_drop_item_002923e8;
   move->death_item_context=s;
   gh_actor_motion_status e=gh_enemy202_move_bind_navigation(move,&s->step.nearcheck);
-  if(!e&&s->b.work->room==0x103&&enemy.enemy202->entry.request.object_kind==0x204&&
-     enemy.enemy202->entry.request.entry_number<2){
+  if(!e&&((s->b.work->room==0x103&&enemy.enemy202->entry.request.object_kind==0x204&&
+     enemy.enemy202->entry.request.entry_number<2)||
+     gh_enemy203_is_r104_entry(&enemy.enemy202->entry.request,s->b.work->room))){
    const gh_cloth_step_bindings cloth={.templates=s->b.cloth_templates,.globals=s->b.cloth_globals,
     .random=&s->b.init->random,.actors=&s->scene_tables,.matrix_policy=GH_STATIC_BINARY32_REFERENCE,
     .random_policy=GH_FRAME_CHOP_REFERENCE};
@@ -6412,6 +6487,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   .grab_attacker=grab_attacker,.grab_attacker_retired=grab_attacker_retired,.grab_resource=grab_resource,.grab_camera=player_grab_camera,.opacity_camera=&s->camera,.scenario={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario},.effects=&s->player_frame_effects,
   .current_player=&s->title_player.view,.elf=s->b.boot_elf,.elf_bytes=s->b.boot_elf_bytes,.numeric_policy=GH_CAMERA_NATIVE_BINARY32_REFERENCE,
   .scene_at=&s->scene_at,.take_object=&s->player_tail.take_object,.give_objects=s->player_tail.give_objects,.solids=&s->collision_solids,
+  .collision_pairs=&s->collision_pairs,
   .take_binding_known=1,.give_binding_known=1,.give_present_mask=31,
   .model=&s->player_model,.resource=s->player_factory.resource.bytes,.resource_bytes=s->player_factory.file_bytes,.rate=s->b.rate,
   .initialize_motion=player_motion_initialize,.advance_motion=player_frame_motion_advance,.motion_context=s,

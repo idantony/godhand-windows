@@ -31,6 +31,7 @@ gh_scene_placement_status gh_om_r101_item_construct_001c0068(void *,size_t,gh_ti
 gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *,gh_om_object *,
  const gh_om_initializer_bindings *,int *);
 gh_scene_placement_status gh_om_r101_item_collect_001c24e8(gh_om_init_state *);
+gh_scene_placement_status gh_om_r101_item_save_001fb1c0(gh_om_init_state *,const uint8_t *);
 gh_scene_placement_status gh_om_r101_item_position_001c2630(gh_om_init_state *,const uint8_t *);
 gh_scene_placement_status gh_om_r101_item_follow_001c2378(gh_om_init_state *);
 gh_scene_placement_status gh_om_initialize_abort(gh_om_init_state *);

@@ -275,7 +275,8 @@ static gh_scene_placement_status spawn(gh_enemy_ems *owner,uint32_t *frontier,in
                  (request.dependency_kind==0x20a&&(request.appearance==0||request.appearance==3)))) {
                 status=enter_202(entry,bindings,&request,frontier);
                 if(status&&!entry->enemy202)return GH_PLACE_MEMORY;
-            }else if(gh_enemy204_is_r103_entry(&request,bindings->actor.entry.work->room)){
+            }else if(gh_enemy204_is_r103_entry(&request,bindings->actor.entry.work->room)||
+                     gh_enemy203_is_r104_entry(&request,bindings->actor.entry.work->room)){
                 status=enter_202(entry,bindings,&request,frontier);
                 if(status&&!entry->enemy202)return GH_PLACE_MEMORY;
             }else if (bindings->names_2a2 &&
@@ -1221,12 +1222,6 @@ gh_actor_motion_status gh_enemy_ems_set_stamp_lock_off_00295c10(const gh_game_in
     return GH_ACTOR_MOTION_OK;
 }
 
-static void start_enemy_action_00272570(uint8_t *bytes)
-{
-    const uint32_t flags=object_word(bytes+0x16d0)|0x20000000u;
-    memcpy(bytes+0x16d0,&flags,4);
-}
-
 static void set_enemy_keep_position(const gh_title_player_view *view,const float destination[3])
 {
     if(view->original_kind4ac==0x42c7f0)memmove(view->bytes+0x1660,destination,12);
@@ -1266,7 +1261,7 @@ gh_actor_motion_status gh_enemy_ems_start_goto_at2(const gh_enemy_ems *owner,
     if(status)return status;
     *frontier=0x295ce8;
     if(!entry->enemy202||!suspend_view(view,0x4479c8,0x1978))return GH_ACTOR_MOTION_UNSUPPORTED;
-    start_enemy_action_00272570(view->bytes);
+    gh_enemy_start_action_00272570(view->bytes);
     status=set_enemy_goto(view,destination,0,0,0x497423feu,frontier);
     if(status)return status;
     set_enemy_keep_position(view,destination);
@@ -1290,7 +1285,7 @@ static gh_actor_motion_status start_goto_then_resume(const gh_enemy_ems *owner,u
        !suspend_view(&actor->view,0x4479c8,0x1978)){
         *frontier=0x295ce8;return GH_ACTOR_MOTION_UNSUPPORTED;
     }
-    start_enemy_action_00272570(actor->view.bytes);
+    gh_enemy_start_action_00272570(actor->view.bytes);
     status=set_enemy_goto(&actor->view,destination,mode,0,0x497423feu,frontier);
     if(status)return status;
     status=set_entry_suspend(entry,0,frontier);
@@ -1323,7 +1318,7 @@ gh_actor_motion_status gh_enemy_ems_start_stamp_action_00295ce8(const gh_enemy_e
         if(!entry->enemy202||!suspend_view(view,0x4479c8,0x1978)){
             *frontier=0x295ce8;return GH_ACTOR_MOTION_UNSUPPORTED;
         }
-        start_enemy_action_00272570(view->bytes);
+        gh_enemy_start_action_00272570(view->bytes);
     }
     *frontier=0;
     return GH_ACTOR_MOTION_OK;
@@ -1345,7 +1340,7 @@ gh_actor_motion_status gh_enemy_ems_start_goto_battle(const gh_enemy_ems *owner,
     }
     status=set_entry_suspend(entry,0,frontier);
     if(status)return status;
-    start_enemy_action_00272570(view->bytes);
+    gh_enemy_start_action_00272570(view->bytes);
     status=set_enemy_goto(view,destination,0,0,0x497423feu,frontier);
     if(!status)*frontier=0;
     return status;

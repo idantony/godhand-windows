@@ -291,8 +291,11 @@ extern "C" gh_id_error gh_mc_renderer_queue_view(gh_mc_renderer *r,const gh_id_r
             command.id.z=65535;
             command.id.z_known=true;
         }
-        if(view->base->resource_number==7&&job->entry->kind==0&&job->consumer_address==0x2aaef0){
-            // Chapter map 1640E8 -> 2AAC28 initializes its local +30 to zero.
+        const bool single_boss=view->base->resource_number==3&&view->base->id==0&&bank==6&&depth==5;
+        if((view->base->resource_number==7||single_boss)&&job->entry->kind==0&&
+           job->consumer_address==0x2aaef0){
+            // Chapter map 1640E8 and single-boss Trans 13CF20 call 2AAC28,
+            // which writes zero to its local draw environment +30.
             command.id.z=0;
             command.id.z_known=true;
         }

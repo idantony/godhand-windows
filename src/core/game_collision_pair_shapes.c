@@ -11,6 +11,7 @@ struct gh_collision_pair_shapes {gh_collision_pairs *owner;shape_row rows[GH_COL
 static uint32_t w(const uint8_t*p){uint32_t v;memcpy(&v,p,4);return v;}
 static void ww(uint8_t*p,uint32_t v){memcpy(p,&v,4);}
 static float value(uint32_t bits){float v;memcpy(&v,&bits,4);return v;}
+static unsigned collision_side(unsigned type){return type<9&&(type==0||(type&1));}
 static uint32_t bits(float f){uint32_t v;memcpy(&v,&f,4);return v;}
 static void vf0(uint8_t*p){memset(p,0,12);ww(p+12,0x3f800000);}
 static gh_pair_shape_status fail(uint32_t*f,uint32_t pc,gh_pair_shape_status e){if(f)*f=pc;return e;}
@@ -33,7 +34,7 @@ static gh_pair_shape_status create(gh_collision_pairs*m,const gh_collision_shape
  struct gh_collision_pair_shapes*registry=m->native_shapes;shape_row*row=&registry->rows[index];uint32_t next=row->next;int listed=0;size_t guard=0;for(uint32_t link=registry->first;link;link=registry->rows[link-1].next){if(link>m->count||++guard>m->count)return fail(f,0x2ba300,GH_PAIR_SHAPE_UNSUPPORTED);if(link==index+1){listed=1;break;}}
  if(!listed){next=registry->first;registry->first=index+1;}
  *row=(shape_row){0};row->inputs=*in;row->serial=++m->shape_serial;row->next=next;row->bound=1;
- uint8_t*r=(uint8_t*)m->records.pointer+(size_t)index*GH_COLLISION_RECORD_BYTES;ww(r,3);ww(r+4,0);ww(r+8,0x44baf8);r[0xd]=0;memset(r+0x14,0,32);ww(r+0x10,in->type);r[0xc]=(uint8_t)(in->type<9&&(in->type==0||(in->type&1)));
+ uint8_t*r=(uint8_t*)m->records.pointer+(size_t)index*GH_COLLISION_RECORD_BYTES;ww(r,3);ww(r+4,0);ww(r+8,0x44baf8);r[0xd]=0;memset(r+0x14,0,32);ww(r+0x10,in->type);r[0xc]=(uint8_t)collision_side(in->type);
  uint8_t*p=r+0xe0;ww(p+0x100,0x44bed0);p[4]=(uint8_t)(in->global_identity_matrix?0:2);vf0(p+0x50);vf0(p+0x60);vf0(p+0xd0);vf0(p+0xf0);ww(p+8,0);for(unsigned k=0;k<3;k++){ww(p+0x50+k*4,in->offset_xyz[k]);ww(p+0x60+k*4,rotation[k]);}
  
  if(offset){p[4]|=1;row->matrix=p+(in->global_identity_matrix?0x10:0x80);row->position=p+(in->global_identity_matrix?0x40:0xb0);}else{p[4]&=0xfe;row->matrix=in->matrix;row->position=in->matrix+0x30;}
@@ -47,6 +48,51 @@ gh_pair_shape_status gh_collision_pair_box_002ba020(gh_collision_pairs*m,const g
 int gh_collision_pair_shapes_have_live(const gh_collision_pairs*m){if(!m||!m->constructed)return 0;if(m->native_shapes&&m->native_shapes->first)return 1;if(m->records.pointer){if(m->count>GH_COLLISION_CAPACITY)return 1;for(unsigned i=0;i<m->count;i++)if(w((const uint8_t*)m->records.pointer+(size_t)i*GH_COLLISION_RECORD_BYTES)&0x603)return 1;}return 0;}
 gh_pair_shape_status gh_collision_pair_shape_source_matrix(const gh_collision_pair_shape*v,const uint8_t**out){if(!out||!valid(v))return GH_PAIR_SHAPE_ARGUMENT;*out=v->manager->native_shapes->rows[v->index].inputs.matrix;return GH_PAIR_SHAPE_OK;}
 gh_pair_shape_status gh_collision_pair_shape_position(const gh_collision_pair_shape*v,const uint8_t**out){if(!out||!valid(v))return GH_PAIR_SHAPE_ARGUMENT;*out=v->manager->native_shapes->rows[v->index].position;return GH_PAIR_SHAPE_OK;}
+gh_pair_shape_status gh_collision_pair_near_002b8e10(const gh_collision_pairs *manager,
+    unsigned type,const float origin[3],float radius,int *found,uint32_t *frontier)
+{
+    if(frontier)*frontier=0;
+    if(!manager||!manager->constructed||type>=32||!origin||!found||!frontier||
+       !isfinite(radius)||manager->count>GH_COLLISION_CAPACITY)
+        return fail(frontier,0x2b8e10,GH_PAIR_SHAPE_ARGUMENT);
+    for(unsigned axis=0;axis<3;++axis)
+        if(!isfinite(origin[axis]))return fail(frontier,0x2b8e10,GH_PAIR_SHAPE_ARGUMENT);
+    *found=0;
+    const struct gh_collision_pair_shapes *shapes=manager->native_shapes;
+    if(!shapes)return GH_PAIR_SHAPE_OK;
+    if(shapes->owner!=manager||!manager->records.pointer)
+        return fail(frontier,0x2b8e10,GH_PAIR_SHAPE_UNSUPPORTED);
+
+    fenv_t env;
+    if(feholdexcept(&env))return fail(frontier,0x2b8e10,GH_PAIR_SHAPE_UNSUPPORTED);
+    if(fesetround(FE_TONEAREST)){
+        (void)fesetenv(&env);
+        return fail(frontier,0x2b8e10,GH_PAIR_SHAPE_UNSUPPORTED);
+    }
+    const uint8_t *records=manager->records.pointer;
+    const unsigned side=collision_side(type);
+    const uint32_t mask=manager->pair_masks[type];
+    volatile float radius_squared=radius*radius;
+    unsigned visited=0;
+    int invalid=!isfinite(radius_squared);
+    for(uint32_t link=shapes->first;link&&!invalid;){
+        if(link>manager->count||++visited>manager->count){invalid=1;break;}
+        const shape_row *row=&shapes->rows[link-1];
+        const uint8_t *record=records+(size_t)(link-1)*GH_COLLISION_RECORD_BYTES;
+        link=row->next;
+        if((w(record)&0x203u)!=3u||record[0xc]==side||
+           !(mask&(UINT32_C(1)<<(w(record+0x10)&31u))))continue;
+        if(!row->bound||!row->position){invalid=1;break;}
+        volatile float x=value(w(row->position))-origin[0];
+        volatile float y=value(w(row->position+4))-origin[1];
+        volatile float z=value(w(row->position+8))-origin[2];
+        volatile float xx=x*x,yy=y*y,zz=z*z,xy=xx+yy,squared=xy+zz;
+        if(!isfinite(squared)){invalid=1;break;}
+        if(squared<radius_squared){*found=1;break;}
+    }
+    if(fesetenv(&env)||invalid)return fail(frontier,0x2b8e10,GH_PAIR_SHAPE_UNSUPPORTED);
+    return GH_PAIR_SHAPE_OK;
+}
 gh_pair_shape_status gh_collision_pair_shape_mode_pointer(const gh_collision_pair_shape*v,uint32_t**out){if(!out||!valid(v))return GH_PAIR_SHAPE_ARGUMENT;*out=(uint32_t*)(void*)(v->record+0x10);return GH_PAIR_SHAPE_OK;}
 gh_pair_shape_status gh_collision_pair_shape_offset_002bb258(
     const gh_collision_pair_shape *shape, const float offset[3], uint32_t *frontier) {

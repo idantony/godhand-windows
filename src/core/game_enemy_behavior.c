@@ -5,6 +5,7 @@ static uint32_t word(const uint8_t *p,size_t offset){uint32_t value;memcpy(&valu
 gh_actor_motion_status gh_enemy_behavior_initialize_002064fc(gh_enemy_behavior*s,gh_enemy_timers*timers){
  if(!s||!timers||timers->stage!=2||!timers->nodes||!timers->nodes->solids)return GH_ACTOR_MOTION_ARGUMENT;if(s->stage&&s->timers!=timers)return GH_ACTOR_MOTION_BUSY;
  gh_enemy_entry*e=timers->nodes->solids->shadow->pose->motion->hp->tail->entry;uint8_t*p=e->object.view.bytes;
+ const int r104_boss=gh_enemy203_is_r104_entry(&e->request,e->b.work->room);
  const int r103_boss=gh_enemy204_is_r103_entry(&e->request,e->b.work->room)&&e->request.entry_number<2;
  if(!s->stage){s->timers=timers;
   /* Actual42E8C0[20A-202]→20654C: SBzero17B9. Ghidra'scase3iswrong. */
@@ -20,6 +21,7 @@ gh_actor_motion_status gh_enemy_behavior_initialize_002064fc(gh_enemy_behavior*s
    p[0x17b8]=p[0x17ba]=p[0x17bb]=p[0x17bc]=0;
    p[0x17bd]=2;
   }
+  if(r104_boss){p[0x17b8]=p[0x17b9]=p[0x17ba]=p[0x17bc]=p[0x17bd]=2;}
   if(r103_boss){p[0x17b9]=1;p[0x17ba]=2;p[0x17bc]=0;}
   s->stage=1;
  }
@@ -31,7 +33,7 @@ gh_actor_motion_status gh_enemy_behavior_initialize_002064fc(gh_enemy_behavior*s
    if(level!=1){s->frontier=0x206cc8;return GH_ACTOR_MOTION_UNSUPPORTED;}
    speed=0x3fc00000;
   }
-  if(r103_boss){
+  if(r103_boss||r104_boss){
    uint32_t flags=word(p,0x16d4)|0x1000u; /* 274140 */
    memcpy(p+0x16d4,&flags,4);
    if(e->request.dependency_kind==0x214){
@@ -40,7 +42,7 @@ gh_actor_motion_status gh_enemy_behavior_initialize_002064fc(gh_enemy_behavior*s
     speed=0x3fc00000;
    }
   }
-  if(room==0x801)speed=0x3f800000;memcpy(p+0x76c,&speed,4);s->stage=2;
+  if(room==0x801||r104_boss)speed=0x3f800000;memcpy(p+0x76c,&speed,4);s->stage=2;
  }
  /* 20A skips theoriginalspecialboss Cockpitregistration switch. */
  s->frontier=0x1fe218;e->frontier=s->frontier;return GH_ACTOR_MOTION_UNSUPPORTED;

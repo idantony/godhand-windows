@@ -121,7 +121,7 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
   if(cash_item_destructor(om_kind(actor)))
    return actor->view.size>=0x690&&actor->initialization->stage==4?actor:NULL;
   if(om_kind(actor)==0x3da)
-   return actor->view.size>=0x690&&actor->initialization->stage==4&&word(actor->view.bytes+0x560)==0x905?actor:NULL;
+   return actor->view.size>=0x690&&actor->initialization->stage==4&&(word(actor->view.bytes+0x560)==0x905||word(actor->view.bytes+0x560)==0xa5d)?actor:NULL;
   return om_kind(actor)==0x3eb&&actor->view.size>=0x610&&
          actor->initialization->stage==3?actor:NULL;
  }

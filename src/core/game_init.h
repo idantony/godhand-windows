@@ -58,6 +58,9 @@ typedef struct gh_game_init_state {
  * save data must separately be system-initialized or loaded by its owner. */
 void gh_game_init_state_initialize(gh_game_init_state *);
 gh_init_status gh_game_heat_reset_002a9908(gh_game_init_state *,const gh_boot_work *,gh_core_save_view);
+/* 002A9978 argument1=0, positive increments below the full-Heat trigger. */
+gh_init_status gh_game_heat_gain_002a9978(gh_game_init_state *,const gh_boot_work *,
+ gh_core_save_view,float amount,uint32_t *frontier);
 /* Actual1FDEA8, also reached by later1FDF88. Same canonical actorpool/links
  * andrecordbanks ascase0, without enemy/Heat/RNG resets. Clears eachdamage
  * head BEFORE mode4, so priorlinks are dropped withouttraversal/free. */

@@ -245,8 +245,13 @@ A separate Windows replay starts from an original-format R101 test save
 prepared with three keycards and a test landing position. Recorded controller
 input opens the original door, selects Continue on the save map, and enters
 R104. Direct3D presents 1,170 scene frames across the run with zero graphics
-errors, including the R104 boss intro. Earning all three cards during play and
-controlling Gene after the R104 intro remain in development.
+errors, including the R104 boss intro. In a longer native replay from the same
+R101 save, the intro ends and left-stick input moves Gene using the original
+walk state. A separate Direct3D replay from the R104 test save shows Gene
+walking in the boss arena after the fade clears. The R103 twin-boss replay
+also verifies two forward evades that preserve health and award Heat and
+level points. Collecting all three cards during play and completing the boss
+fights remain in development.
 
 Project evidence tools verify actual instruction bytes, calls, imports and
 static memory sites. Their generated reports remain private; see
@@ -502,8 +507,10 @@ EV05，进入 R104 原版头目初始化。
 
 另一条 Windows 回放从预置三张钥匙卡与测试落点的 R101 原版格式存档开始。固定手柄输入
 打开原版门，在保存地图选择「继续」并进入 R104。Direct3D 在本次回放中呈现 1,170 个
-场景帧，包含 R104 的头目过场，图形相关报错为零。实战获取全部三张卡与过场后操作 Gene
-仍在开发。
+场景帧，包含 R104 的头目过场，图形相关报错为零。用同一份 R101 测试档延长回放，过场
+结束后左摇杆能通过原版行走状态移动 Gene。另一条从 R104 测试档开始的 Direct3D 回放在
+淡出结束后呈现了头目场景里的行走。R103 双头目战也验证了两次前闪成功保住血量，获得
+Heat 和段位分。实战收齐三张卡和完成头目战仍在开发。
 
 ### 构建与运行
 

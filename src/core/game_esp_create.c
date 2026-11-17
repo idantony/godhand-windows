@@ -53,7 +53,8 @@ static int authored_actor_scale(const gh_esp_create_call *c,float scale)
     gh_effect_r101_weapon_emitter_is_bound(&emitter)||
     gh_effect_player_attachment_emitter_is_bound(&emitter)||
     gh_effect_enemy_light_emitter_is_bound(c->b.storage.effects,&emitter)||
-    gh_effect_devil_emitter_is_bound(c->b.storage.effects,&emitter);
+    gh_effect_devil_emitter_is_bound(c->b.storage.effects,&emitter)||
+    gh_effect_em03_emitter_is_bound(c->b.storage.effects,&emitter);
 }
 static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const gh_effect_emitter_view *emitter){
  const uint8_t *r=emitter->record.bytes,*source=emitter->payload;

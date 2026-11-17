@@ -200,6 +200,14 @@ int gh_enemy202_is_room_supported_profile(const gh_enemy_request *request,uint16
                        is_r102_appearance6_profile(request)||is_r102_appearance9_profile(request)));
 }
 
+/* Original R104 EMS stamp zero, activated by EV05 release. */
+int gh_enemy203_is_r104_entry(const gh_enemy_request *request,uint16_t room)
+{
+    return room==0x104&&request&&request->object_kind==0x203&&
+        request->dependency_kind==0x250&&request->flags==0x80000&&
+        !request->entry_number&&!request->appearance&&!request->dependency_flags;
+}
+
 int gh_enemy204_is_r103_entry(const gh_enemy_request *request,uint16_t room)
 {
     static const uint16_t dependencies[]={0x214,0x215,0x200,0x200,0x20a,0x20a,0x203,0x203};
@@ -233,6 +241,9 @@ gh_actor_model_status gh_enemy_model_occurrence_002ddea0(uint32_t kind,
         case 0x20a: *occurrence=2; return GH_ACTOR_MODEL_OK;
         case 0x20f: *occurrence=3; return GH_ACTOR_MODEL_OK;
         }
+    } else if (kind==0x203 && dependency==0x250) {
+        *occurrence=0;
+        return GH_ACTOR_MODEL_OK;
     } else if (kind==0x204) {
         /* Original 2DDF54 table 44D980. The asset carries these in this order. */
         switch (dependency) {

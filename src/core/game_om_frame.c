@@ -51,7 +51,7 @@ static int r101_item(const gh_om_object *o)
 {
  if(!o)return 0;
  if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1||
-     (o->runtime_kind==0x3da&&o->view.bytes&&o->view.size>=0x690&&word(o->view.bytes+0x560)==0x905);
+     (o->runtime_kind==0x3da&&o->view.bytes&&o->view.size>=0x690&&(word(o->view.bytes+0x560)==0x905||word(o->view.bytes+0x560)==0xa5d));
  return o->source.type>=0x3d3&&o->source.type<=0x3d5;
 }
 static int fragment_cylinders(const gh_om_object *o)
@@ -1507,6 +1507,19 @@ static gh_object_step_status r101_item_save_position(gh_om_frame_state *s,uint32
  gh_title_player_view *actor=&s->object->view;
  uint8_t *p=actor->bytes;
  if(word(p+0x5b0)&0x20u)return GH_OBJSTEP_OK;
+ if(s->factory->bindings.work->room==0x104&&s->object->runtime_kind==0x3da&&
+    word(p+0x560)==0xa5d){
+  /* 1C0450 also synchronizes the authored ID, flags and fixed rotation. */
+  if(word(p+0x560)!=word(p+0x67c)||p[0x676]!=p[0x677]||
+     memcmp(p+0x490,actor->alias_f0,16)||((p[0x676]&2u)&&memcmp(p+0x5d0,p+0x100,16))){
+   gh_om_init_state *init=common(s);
+   if(gh_om_r101_item_save_001fb1c0(init,actor->alias_f0))
+    return fail(s,init->frontier?init->frontier:0x1fb1c0,f,GH_OBJSTEP_UNSUPPORTED);
+  }
+  put(p+0x67c,word(p+0x560));
+  p[0x677]=p[0x676];
+  return GH_OBJSTEP_OK;
+ }
  if(word(p+0x560)!=word(p+0x67c)||p[0x676]!=p[0x677]||(p[0x676]&2u))
   return fail(s,0x1c0450,f,GH_OBJSTEP_UNSUPPORTED);
  if(!memcmp(p+0x490,actor->alias_f0,16))return GH_OBJSTEP_OK;

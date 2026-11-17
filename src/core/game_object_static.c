@@ -78,7 +78,10 @@ gh_object_step_status gh_object_static_move_one(gh_game_object_step*s,gh_scene_m
  fenv_t env;if(feholdexcept(&env))return stop(f,0x318b58,GH_OBJSTEP_UNSUPPORTED);if(fesetround(FE_TONEAREST)){fesetenv(&env);return stop(f,0x318b58,GH_OBJSTEP_UNSUPPORTED);}
  if(!s->move_object_stage){
   if(!p[0x32c]){frontier=0x3187d8;goto unsupported;}
-  float alpha=rf(p+0x24c);if(!isfinite(alpha)||alpha<0||alpha>1){frontier=0x319d60;goto unsupported;}
+  const float alpha=rf(p+0x24c);
+  /* R104 REL0540 submits its last .04 increment and sleeps before setting 1. */
+  const float limit=work->room==0x104&&p[0x2fd]==3?1.04f:1.0f;
+  if(!isfinite(alpha)||alpha<0||alpha>limit){frontier=0x319d60;goto unsupported;}
   uint64_t test;
   if(info&0x08000000u)test=0x5100d;
   else if(info&0x800000u)test=0x5000d;

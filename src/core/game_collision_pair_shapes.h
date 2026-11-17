@@ -25,6 +25,9 @@ gh_pair_shape_status gh_collision_pair_box_002ba020(gh_collision_pairs *,const g
 int gh_collision_pair_shapes_have_live(const gh_collision_pairs *);
 gh_pair_shape_status gh_collision_pair_shape_source_matrix(const gh_collision_pair_shape *,const uint8_t **);
 gh_pair_shape_status gh_collision_pair_shape_position(const gh_collision_pair_shape *,const uint8_t **);
+/* 2B8E10 searches active collision centers in original list order. */
+gh_pair_shape_status gh_collision_pair_near_002b8e10(const gh_collision_pairs *,unsigned type,
+    const float origin[3],float radius,int *found,uint32_t *frontier);
 gh_pair_shape_status gh_collision_pair_shape_mode_pointer(const gh_collision_pair_shape *,uint32_t **);
 /* 2BB258 -> 2BB2D8 for a local offset on a native pair collider. */
 gh_pair_shape_status gh_collision_pair_shape_offset_002bb258(const gh_collision_pair_shape *,const float offset[3],uint32_t *frontier);

@@ -6,6 +6,12 @@
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
+/* Original 2DF950 writes these records for dependency 250/251. */
+const gh_cloth_sphere gh_cloth_250_spheres[2] = {
+    {0,18,18,1,.24f,0,{0,0,0,1},{0,0,0,1}},
+    {0,22,22,1,.24f,0,{0,0,0,1},{0,0,0,1}}
+};
+
 static uint32_t u32(const uint8_t*p){uint32_t v;memcpy(&v,p,4);return v;}
 static float rf(const uint8_t*p){float v;memcpy(&v,p,4);return v;}
 static float add(float a,float b){volatile float f=a+b;return f;}

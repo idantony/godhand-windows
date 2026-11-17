@@ -2,6 +2,8 @@
 #include "game_init.h"
 #include "game_hitarea_objects.h"
 #include "game_hitarea_shapes.h"
+#include <fenv.h>
+#include <math.h>
 #include <string.h>
 static void w16(uint8_t *b,size_t o,uint16_t v){b[o]=(uint8_t)v;b[o+1]=(uint8_t)(v>>8);}
 static void w32(uint8_t *b,size_t o,uint32_t v){for(unsigned i=0;i<4;i++)b[o+i]=(uint8_t)(v>>(i*8));}
@@ -113,6 +115,52 @@ gh_init_status gh_game_heat_reset_002a9908(gh_game_init_state *s,const gh_boot_w
  if(work->flags598&0x08000000u)save.bytes[0x155]=5;
  {float maximum=(float)((uint32_t)save.bytes[0x155]*30+120);uint32_t bits;memcpy(&bits,&maximum,4);
   w32(s->heat,0x14,0);w32(s->heat,0,bits);w32(s->heat,4,0);w32(s->heat,8,0);w32(s->heat,12,0x42f00000);}
+ return GH_INIT_OK;
+}
+
+gh_init_status gh_game_heat_gain_002a9978(gh_game_init_state *s,const gh_boot_work *work,
+ gh_core_save_view save,float amount,uint32_t *frontier)
+{
+ if(frontier)*frontier=0x2a9978;
+ if(!s||!work||!save.bytes||save.size<0x20||!isfinite(amount)||amount<=0.0f)
+  return GH_INIT_ARGUMENT;
+ uint8_t *heat=s->heat;
+ if(heat[0x10]){
+  if(frontier)*frontier=0;
+  return GH_INIT_OK;
+ }
+ float maximum,current,peak;
+ memcpy(&maximum,heat,4);
+ memcpy(&current,heat+4,4);
+ memcpy(&peak,heat+8,4);
+ if(!isfinite(maximum)||!isfinite(current)||!isfinite(peak))return GH_INIT_BOUNDS;
+ fenv_t saved;
+ if(feholdexcept(&saved))return GH_INIT_BOUNDS;
+ if(fesetround(FE_TOWARDZERO)){
+  (void)fesetenv(&saved);
+  return GH_INIT_BOUNDS;
+ }
+ const int easy=!(r32(save.bytes,0x14)&0x4000000u)&&!save.bytes[0x1f];
+ volatile float scaled=easy?amount*1.25f:amount;
+ if(scaled>=120.0f){
+  (void)fesetenv(&saved);
+  return GH_INIT_BOUNDS;
+ }
+ if(work->room==0x801)scaled=scaled*1.25f;
+ volatile float sum=current+scaled;
+ const float next=maximum<sum?maximum:sum;
+ volatile float delta=next-current;
+ volatile float peak_sum=peak+delta;
+ const float next_peak=maximum<peak_sum?maximum:peak_sum;
+ volatile float ratio=maximum!=0.0f?next/maximum:0.0f;
+ if(fesetenv(&saved)||!isfinite(ratio)){
+  if(frontier)*frontier=0x2a9c98;
+  return GH_INIT_BOUNDS;
+ }
+ memcpy(heat+4,&next,4);
+ memcpy(heat+8,&next_peak,4);
+ w32(heat,0x14,ratio<0.5f?0u:ratio<=0.75f?1u:2u);
+ if(frontier)*frontier=0;
  return GH_INIT_OK;
 }
 

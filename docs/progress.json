@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-17T09:24:48+00:00",
-  "stage": "native-windows-r101-jmp1-to-r104-ev05",
+  "verified_utc": "2026-11-17T10:01:08+00:00",
+  "stage": "native-windows-r104-post-ev05-control",
   "playable": false,
   "r101_r104_jmp1": {
     "entry_fixture": "original-format R101 save prepared with three cards and a door-side landing position",
@@ -14,7 +14,13 @@
     "direct3d_scene_frames_across_run": 1170,
     "direct3d_errors": 0,
     "keycard_collection_during_play_verified": false,
-    "post_intro_player_control_verified": false
+    "post_intro_player_control_verified": true,
+    "post_intro_cpu_matching_samples": 3041,
+    "post_intro_cpu_player_move": "0010C300",
+    "post_intro_cpu_next_boss_operation": "002269F0",
+    "extended_direct3d_final_tick": 3022,
+    "extended_direct3d_scene_frames": 2709,
+    "extended_direct3d_host_frontier": "0023B968"
   },
   "later_playback_observations": {
     "r104_ev05": {
@@ -27,7 +33,21 @@
       "cpu_entered_camera_cut_index": 10,
       "cpu_camera_cut_entry_tick": 1664,
       "natural_entry_verified": false,
-      "post_intro_player_control_verified": false
+      "post_intro_player_control_verified": true,
+      "post_intro_direct3d_final_tick": 2606,
+      "post_intro_direct3d_walk_capture_ticks": [2592, 2602],
+      "post_intro_direct3d_errors": 0,
+      "boss_victory_verified": false
+    },
+    "r103_forward_evade": {
+      "controller_ticks": [9496, 9546],
+      "award_ticks": [9505, 9555],
+      "player_hp_at_both_awards": 25,
+      "heat_after_each_award": [11.4, 12.9],
+      "level_points_after_each_award": [657, 732],
+      "first_evade_omitted_player_hp": 16,
+      "matching_controller_samples": 9900,
+      "victory_verified": false
     },
     "r103_full_hp_post_heat": {
       "start_boss_hp": [597, 597],

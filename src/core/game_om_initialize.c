@@ -120,7 +120,9 @@ gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *
  if(!s||!o||!b||!out||!b->work||!o->view.bytes||o->view.size<0x690)
   return GH_PLACE_ARGUMENT;
  const uint16_t kind=o->runtime_created?o->runtime_kind:(uint16_t)o->source.type;
- const int ticket=o->runtime_created&&b->work->room==0x102&&kind==0x3da&&w(o->view.bytes+0x560)==0x905;
+ const int ticket=o->runtime_created&&kind==0x3da&&
+    ((b->work->room==0x102&&w(o->view.bytes+0x560)==0x905)||
+     (b->work->room==0x104&&w(o->view.bytes+0x560)==0xffff));
  const int placed=!o->runtime_created&&b->work->room==0x101&&kind>=0x3d3&&kind<=0x3d5;
  const int16_t room=b->work->room;
  const int pickup=o->runtime_created&&gh_om_runtime_pickup_supported(room,kind);
@@ -214,19 +216,28 @@ gh_scene_placement_status gh_om_r101_item_collect_001c24e8(gh_om_init_state *s)
  return GH_PLACE_OK;
 }
 
+gh_scene_placement_status gh_om_r101_item_save_001fb1c0(gh_om_init_state *s,
+ const uint8_t *position)
+{
+ if(!s||s->stage!=4||!s->object||!s->bindings||!position)return GH_PLACE_ARGUMENT;
+ const uint8_t *actor=s->object->view.bytes;
+ uint8_t *save=s->bindings->save.bytes;
+ if(!save||s->bindings->save.size<GH_CORE_SAVE_BYTES)return fail(s,0x1fb1c0,GH_PLACE_ARGUMENT);
+ for(unsigned i=0;i<128;++i){
+  uint8_t *record=save+0x28a+i*16;
+  if(item_half(record)==0xffff||item_half(record+6)!=item_half(actor+0x662))continue;
+  return item_save_values(s,position,record,0x1fb1c0);
+ }
+ return GH_PLACE_OK;
+}
+
 gh_scene_placement_status gh_om_r101_item_position_001c2630(gh_om_init_state *s,const uint8_t *position)
 {
  if(!s||s->stage!=4||!s->object||!s->bindings||!position)return GH_PLACE_ARGUMENT;
  uint8_t *actor=s->object->view.bytes;
  if(!(w(actor+0x5b0)&0x20u)&&memcmp(actor+0x490,position,12)){
-  uint8_t *save=s->bindings->save.bytes;
-  for(unsigned i=0;i<128;++i){
-   uint8_t *record=save+0x28a+i*16;
-   if(item_half(record)==0xffff||item_half(record+6)!=item_half(actor+0x662))continue;
-   gh_scene_placement_status status=item_save_values(s,position,record,0x1fb1c0);
-   if(status)return status;
-   break;
-  }
+  gh_scene_placement_status status=gh_om_r101_item_save_001fb1c0(s,position);
+  if(status)return status;
  }
  memmove(s->object->view.alias_f0,position,12);
  memmove(actor+0x490,position,12);

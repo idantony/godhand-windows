@@ -32,11 +32,6 @@ static const gh_cloth_sphere paired_spheres[] = {
     {0,11,11,1,0.09f,0,{0.03f,-0.015f,0,1},{0.03f,-0.015f,0,1}},
 };
 
-static const gh_cloth_sphere ring_spheres[] = {
-    {0,18,18,1,.24f,0,{0,0,0,1},{0,0,0,1}},
-    {0,22,22,1,.24f,0,{0,0,0,1},{0,0,0,1}}
-};
-
 static const gh_cloth_sphere el26_spheres[] = {
     {0,4,4,1,.05f,0,{0,.12f,.08f,1},{0,.12f,.08f,1}},
     {0,4,4,1,.06f,0,{0,.08f,.08f,1},{0,.08f,.08f,1}},
@@ -72,8 +67,8 @@ gh_game_event_status gh_game_event_pendulum_002df860(gh_event_pendulum_call *cal
         parent = &actor->model;
         kind = 0x250;
         scratch = 0x61a9a0;
-        spheres = ring_spheres;
-        sphere_count = sizeof(ring_spheres)/sizeof(*ring_spheres);
+        spheres = gh_cloth_250_spheres;
+        sphere_count = sizeof(gh_cloth_250_spheres)/sizeof(*gh_cloth_250_spheres);
         break;
     case 0x616:
         profile = &extra->ev04_pendulums[1];

@@ -26,6 +26,7 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
      r->flags!=0x400000||r->entry_number!=0xff||r->appearance||r->dependency_flags||
      kind!=0||argument)return fail(s,0x2905d0);
  }else if(!gh_enemy204_is_r103_entry(r,b->work->room)&&
+     !gh_enemy203_is_r104_entry(r,b->work->room)&&
      (r->object_kind!=0x202||(r->dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(r,b->work->room))))
   return fail(s,0x2905d0);
  if(s->stage&&(s->b.init!=b->init||s->b.pools!=b->pools||s->b.work!=b->work||s->b.room_objects!=b->room_objects||s->b.global_objects!=b->global_objects||s->manager_kind!=kind||s->argument!=argument||s->b.room_heap!=b->room_heap||s->b.packet_heap!=b->packet_heap||s->b.factory_serial!=b->factory_serial||!same_request(&s->request,r)))return GH_ACTOR_MODEL_BUSY;
@@ -45,7 +46,7 @@ static gh_actor_model_status prepare_entry(gh_enemy_entry*s,const gh_enemy_entry
    factory=0x313820;
    e=gh_enemy2a2_allocate_00313820(&s->object,s->b.room_heap,s->b.work,&present);
   }else{
-   /* Original 30FEB8 sends both 202 and 204 to the same cEm00 factory. */
+   /* Original 30FEB8 sends 202, 203 and 204 to the same cEm00 factory. */
    factory=0x3130e0;
    e=gh_enemy202_allocate_003130e0(&s->object,s->b.room_heap,s->b.work,&present);
   }

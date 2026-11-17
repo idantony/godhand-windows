@@ -3,16 +3,26 @@
 #include <string.h>
 static uint32_t word(const uint8_t*p,size_t o){uint32_t v;memcpy(&v,p+o,4);return v;}
 static void put(uint8_t*p,size_t o,uint32_t v){memcpy(p+o,&v,4);}
+void gh_enemy_start_action_00272570(uint8_t *actor)
+{
+ put(actor,0x16d0,word(actor,0x16d0)|0x20000000u);
+}
+
 gh_actor_motion_status gh_enemy_motion_initialize_002036b0(gh_enemy_motion*s,gh_enemy_hp*hp,const struct gh_motion_ik_globals*ik,gh_motion_effect_consumer effects,void*context){
  if(!s||!hp||hp->stage!=1||!hp->tail||!hp->tail->entry)return GH_ACTOR_MOTION_ARGUMENT;
  if(s->stage&&s->hp!=hp)return GH_ACTOR_MOTION_BUSY;
  gh_enemy_entry*e=hp->tail->entry;uint8_t*p=e->object.view.bytes;
  const int r103=gh_enemy204_is_r103_entry(&e->request,e->b.work->room);
- if(!r103&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room))))return GH_ACTOR_MOTION_ARGUMENT;
+ const int r104=gh_enemy203_is_r104_entry(&e->request,e->b.work->room);
+ if(!r103&&!r104&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room))))return GH_ACTOR_MOTION_ARGUMENT;
  if(!s->stage){const gh_object_view*r=&e->resource;if(!r->bytes||!r->file_extent_known||r->file_extent>r->size||r->file_extent<0xc10)return GH_ACTOR_MOTION_BOUNDS;
   size_t a,b;
   uint8_t substate,detail=0;
-  if(r103){
+  if(r104){
+   /* 2036B0 uses the 250 rest pair. Appearance zero sets selector 00/01. */
+   if(r->file_extent<0x18f8){s->frontier=0x2036b0;return GH_ACTOR_MOTION_BOUNDS;}
+   a=word(r->bytes,0x18f0);b=word(r->bytes,0x18f4);substate=1;
+  }else if(r103){
    gh_enemy_initial_motion_selection selected;
    const gh_actor_model_status status=gh_enemy204_motion_select_002036b0(&e->request,r,&selected);
    if(status){
@@ -65,7 +75,12 @@ gh_actor_motion_status gh_enemy_motion_initial_step_00204abc(gh_enemy_motion*s,f
  gh_enemy_entry*e=s->hp->tail->entry;uint8_t*p=e->object.view.bytes;*ended=0;
  if(s->stage==2){gh_actor_motion_status status=gh_actor_motion_step_00157c18(&s->motion,rate,policy,ended,&s->frontier);if(status)return status;s->initial_ended=*ended;s->stage=3;}
  *ended=s->initial_ended;
- if(s->stage==3){if(word(p,0x1644)&0x80000){s->frontier=0x204ae8;return GH_ACTOR_MOTION_UNSUPPORTED;}
+ if(s->stage==3){if(word(p,0x1644)&0x80000){
+   if(!gh_enemy203_is_r104_entry(&e->request,e->b.work->room)){
+    s->frontier=0x204ae8;return GH_ACTOR_MOTION_UNSUPPORTED;
+   }
+   gh_enemy_start_action_00272570(p);
+  }
   gh_actor_model_status status=gh_actor_model_update_hierarchy_00149eb8(&e->initialize.model.model,policy);if(status){s->frontier=e->initialize.model.model.frontier;return GH_ACTOR_MOTION_UNSUPPORTED;}s->stage=4;
  }
  s->frontier=0x152a20;e->frontier=s->frontier;return GH_ACTOR_MOTION_UNSUPPORTED;

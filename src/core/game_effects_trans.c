@@ -539,7 +539,7 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
     !(gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||gh_effect_ev05_partless_is_bound(v.record,v.actor,v.selector)||gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector))&&
     !gh_effect_attack_esp_is_bound(b->storage.effects,&v)&&
     !gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_attachment_esp_is_bound(b->storage.effects,&v)&&!gh_effect_devil_esp_is_bound(b->storage.effects,&v)&&
-    !gh_effect_enemy_light_esp_is_bound(b->storage.effects,&v)&&!gh_effect_emad_esp_is_bound(b->storage.effects,&v))||
+    !gh_effect_enemy_light_esp_is_bound(b->storage.effects,&v)&&(!gh_effect_emad_esp_is_bound(b->storage.effects,&v)&&!gh_effect_em03_esp_is_bound(b->storage.effects,&v)))||
     word(v.payload+0x114))return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);
  if(!s->serial&&v.actor&&(word(v.actor->bytes+0x250)&0x8000u))continue;uint32_t flags=word((const uint8_t*)b->work+0x5e4),config=word(v.payload+0x104);if(!s->serial&&s->gate_10000&&!(config&2u)&&!((config&0x40u)?(flags&0x4000000u)!=0:(v.actor!=NULL||v.retired_actor.valid)))continue;if(!s->serial)s->serial=v.serial;
  if(!s->call_stage&&!s->pending&&(word(v.payload+0x11c)&0x800000u)){s->serial=s->call_stage=0;continue;}

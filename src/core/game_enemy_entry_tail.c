@@ -26,7 +26,7 @@ static gh_actor_model_status initialize_springs(gh_enemy_entry_tail *s)
  uint8_t *config=entry->object.view.bytes+0x17e0;
  memset(config,0,0x74); /* Original pointers are owned by the typed profile. */
  put(config,0,s->spring_profile.count);
- put(config,0x38,4);put(config,0x3c,0x3c75c28f);put(config,0x40,0x3f4ccccd);
+ put(config,0x38,entry->request.dependency_kind==0x250?2:4);put(config,0x3c,0x3c75c28f);put(config,0x40,0x3f4ccccd);
  put(config,0x44,1);put(config,0x4c,0x3dcccccd);put(config,0x50,0x3f000000);
  put(config,0x5c,0x100);put(config,0x70,0x3f860a92);
  if(gh_event_spring_records_001038e0(&s->spring_profile,model,s->spring_records.pointer,
@@ -48,7 +48,8 @@ static gh_actor_model_status continue_entry(gh_enemy_entry_tail*s,gh_enemy_entry
  if(!s||!e||e->stage!=8||!e->published||e->initialize.stage!=3||!e->initialize.model.model.ready||!e->b.init)return GH_ACTOR_MODEL_ARGUMENT;
  if(s->stage&&s->entry!=e)return GH_ACTOR_MODEL_BUSY;
  const int r103=gh_enemy204_is_r103_entry(&e->request,e->b.work->room);
- if(!devil&&!r103&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)))){s->frontier=0x2022d0;return GH_ACTOR_MODEL_UNSUPPORTED;}
+ const int r104=gh_enemy203_is_r104_entry(&e->request,e->b.work->room);
+ if(!devil&&!r103&&!r104&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)))){s->frontier=0x2022d0;return GH_ACTOR_MODEL_UNSUPPORTED;}
  if(!s->stage){s->entry=e;s->stage=1;}
  uint8_t*p=e->object.view.bytes;
  if(s->stage==1){int original=0;gh_actor_model_status status=gh_enemy_base_initialize_0028ebf0(&s->base,&e->object.view,&e->request,e->argument,c,&e->b.init->random,&original);if(status){s->frontier=s->base.frontier;return status;}if(original!=1)return GH_ACTOR_MODEL_ARGUMENT;s->stage=2;}
@@ -63,11 +64,12 @@ static gh_actor_model_status continue_entry(gh_enemy_entry_tail*s,gh_enemy_entry
       (e->request.dependency_kind==0x20a||e->request.dependency_kind==0x20f)?
        0x3f800000:scales[s->original_counter&7];
   if(r103)scale=e->request.entry_number<2?0x3f8ccccd:0x3f800000;
+  if(r104)scale=0x3f99999a;
   put(p,0x110,scale);put(p,0x118,scale);put(p,0x114,scale);s->stage=3;
  }
  /* Actual271410 dependency20A is another switchdefault with noallocations.
   * Next actualinstruction begins HPlookup; wholevirtualInit remainspending. */
- if(r103&&e->request.entry_number<2&&!s->springs_ready){
+ if((r104||(r103&&e->request.entry_number<2))&&!s->springs_ready){
   const gh_actor_model_status status=initialize_springs(s);
   if(status){e->frontier=s->frontier;return status;}
  }

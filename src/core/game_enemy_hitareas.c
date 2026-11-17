@@ -11,7 +11,7 @@ gh_actor_motion_status gh_enemy_hitareas_initialize_00207018(gh_enemy_hitareas*s
  uint32_t scale=word(p,0x118);
  const int devil=e->request.object_kind==0x220&&e->request.dependency_kind==0x220&&
      e->b.work->room==0x100&&e->request.flags==0x400000&&scale==0x3f99999a;
- if(scale!=0x3f800000&&!devil&&!gh_enemy204_is_r103_entry(&e->request,e->b.work->room)&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)){
+ if(scale!=0x3f800000&&!devil&&!gh_enemy203_is_r104_entry(&e->request,e->b.work->room)&&!gh_enemy204_is_r103_entry(&e->request,e->b.work->room)&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)){
   s->frontier=0x2070cc;return GH_ACTOR_MOTION_UNSUPPORTED;
  }
  if(!s->stage){s->behavior=behavior;s->b=*b;for(unsigned i=0;i<9;i++)s->indices[i]=-1;s->stage=1;}

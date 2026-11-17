@@ -44,6 +44,7 @@ typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_wo
  gh_core_save_view save;gh_scene_scenario_view scenario;const gh_effect_release_bindings *effects;
  const gh_title_player_view *current_player;const void *elf;size_t elf_bytes;gh_camera_numeric_policy numeric_policy;gh_player_frame_effect_create effect_create;void *effect_context;
  gh_scene_at_manager *scene_at;const gh_hitarea_object *take_object;gh_hitarea_object *give_objects;gh_game_collision_solids *solids;
+ gh_collision_pairs *collision_pairs; /* canonical original 005E8040 */
  uint8_t take_binding_known,give_binding_known,give_present_mask;
  /* SAME factory/model/rate; original idle Begin requires blendFrames10.
   * Provider must preserve oldSEQ/current pose; never substitute blend0. */

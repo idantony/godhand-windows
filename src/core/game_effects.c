@@ -133,6 +133,11 @@ static gh_effect_status register_embedded_effects(gh_game_effects *s,unsigned ki
     return reg(s,kind,&bundle);
 }
 
+gh_effect_status gh_game_effects_register_250_00305758(gh_game_effects *s,gh_effect_view data)
+{
+    return register_embedded_effects(s,0xa8,data);
+}
+
 gh_effect_status gh_game_effects_register_204_00305758(gh_game_effects *s,gh_effect_view data)
 {
     return register_embedded_effects(s,0x6c,data);
@@ -171,6 +176,11 @@ static gh_effect_status release_embedded_effects(gh_game_effects *s,unsigned kin
         return GH_EFFECT_OK;
     }
     return GH_EFFECT_ARGUMENT;
+}
+
+gh_effect_status gh_game_effects_release_250_00305778(gh_game_effects *s,gh_effect_view data)
+{
+    return release_embedded_effects(s,0xa8,data);
 }
 
 gh_effect_status gh_game_effects_release_204_00305778(gh_game_effects *s,gh_effect_view data)

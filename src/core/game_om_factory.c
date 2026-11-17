@@ -192,7 +192,7 @@ gh_scene_placement_status gh_om_factory_create_0030fa98(gh_om_factory*f,gh_om_ru
  const int paper=kind==0x376&&gh_om376_paper_room_supported(room);
  const int room_weapon=kind==0x363&&room==0x102;
  const int mount=kind==0x353&&room==0x102;
- const int ticket=kind==0x3da&&room==0x102;
+ const int ticket=kind==0x3da&&(room==0x102||room==0x104);
  const int projectile=kind==0x3be&&(room==0x100||room==0x103);
  const int item=gh_om_runtime_pickup_supported(room,kind)||(room==0x100&&(kind==0x3e0||kind==0x3e1));
  if(id!=0xffff||(kind!=0x3eb&&!paper&&!room_weapon&&!mount&&!projectile&&!item&&!ticket))
@@ -259,7 +259,7 @@ gh_scene_placement_status gh_om_factory_initialize_runtime_ticket_001c0128(gh_om
   if(!o->initialization)return GH_PLACE_MEMORY;
  }
  uint8_t *actor=o->view.bytes;
- put(actor,0x560,0x905);
+ if(bindings->work->room==0x102)put(actor,0x560,0x905);
  int returned=0;
  gh_scene_placement_status status=gh_om_r101_item_initialize_001c0128(o->initialization,o,bindings,&returned);
  return status||!returned?fail(f,o->initialization->frontier?o->initialization->frontier:0x1c0128,

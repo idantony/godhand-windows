@@ -270,41 +270,9 @@ static void put_half(uint8_t *p, uint16_t value) {
 }
 
 static gh_actor_motion_status gain_heat_002a9978(const gh_enemy_entry_bindings *b,float amount,uint32_t *frontier) {
-    gh_core_save_view save = b->save;
-    uint8_t *heat = b->init->heat;
-    if (!save.bytes || save.size < 0x20 || !b->work)
-        return stop(frontier, 0x2a9978);
-    if (heat[0x10]) return GH_ACTOR_MOTION_OK;
-
-    const float maximum = number(heat), current = number(heat + 4), peak = number(heat + 8);
-    if (!isfinite(maximum) || !isfinite(current) || !isfinite(peak))
-        return stop(frontier, 0x2a9978);
-    fenv_t saved;
-    if (feholdexcept(&saved)) return stop(frontier, 0x2a9978);
-    if (fesetround(FE_TOWARDZERO)) {
-        (void)fesetenv(&saved);
-        return stop(frontier, 0x2a9978);
-    }
-    const int easy = !(word(save.bytes + 0x14) & 0x4000000u) && !save.bytes[0x1f];
-    if (easy) {
-        volatile float increased = amount * 1.25f;
-        amount = increased;
-    }
-    if ((uint16_t)b->work->room == 0x801) {
-        volatile float increased = amount * 1.25f;
-        amount = increased;
-    }
-    volatile float sum = current + amount;
-    const float next = maximum < sum ? maximum : sum;
-    volatile float delta = next - current;
-    volatile float next_peak_sum = peak + delta;
-    const float next_peak = maximum < next_peak_sum ? maximum : next_peak_sum;
-    volatile float ratio = maximum != 0 ? next / maximum : 0;
-    if (fesetenv(&saved) || !isfinite(ratio)) return stop(frontier, 0x2a9c98);
-    memcpy(heat + 4, &next, 4);
-    memcpy(heat + 8, &next_peak, 4);
-    put(heat + 0x14, ratio < 0.5f ? 0u : ratio <= 0.75f ? 1u : 2u);
-    return GH_ACTOR_MOTION_OK;
+    uint32_t pc=0;
+    const gh_init_status status=gh_game_heat_gain_002a9978(b->init,b->work,b->save,amount,&pc);
+    return status?stop(frontier,pc):GH_ACTOR_MOTION_OK;
 }
 
 gh_actor_motion_status gh_enemy_counter_heat_002a9978(gh_enemy_actor *enemy, uint32_t *frontier) {
