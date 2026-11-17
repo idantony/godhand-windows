@@ -1,6 +1,8 @@
 #include "game_player_targets.h"
 #include "game_scene_at_geometry.h"
 #include "game_camera.h"
+#include "game_actor_inverse.h"
+#include "game_action_button_set.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -89,7 +91,36 @@ static float distance(const float*a,const float*b){float x=sub(a[0],b[0]),y=sub(
 static int pickup_kind(unsigned id){switch(id){case 0x361:case 0x362:case 0x363:case 0x368:case 0x36d:case 0x375:case 0x377:case 0x378:case 0x379:case 0x37b:case 0x380:case 0x390:case 0x3a8:case 0x3a9:case 0x3aa:case 0x3ab:case 0x3ad:case 0x3ae:case 0x3af:case 0x3b4:case 0x3b7:return 1;default:return 0;}}
 static gh_player_target_status query(const gh_player_target_bindings*b,int kind,gh_player_target*out,uint32_t*f){const gh_room_vector*v=NULL;if(!b->pools||gh_room_registry_view(b->pools,0x754c58,&v)||!v||v->count>v->capacity||(v->count&&!v->allocation.pointer))return fail(f,0x129cc8,GH_PLAYER_TARGET_ARGUMENT);gh_player_target selected={0};if(!v->count){*out=selected;return GH_PLAYER_TARGET_OK;}if(!b->resolve)return fail(f,kind==0?0x12a610:kind==1?0x12b328:0x129cc8,GH_PLAYER_TARGET_UNSUPPORTED);float origin[4],matrix[16],local[3]={0,0,kind==1?.8f:0},player_point[3],table[19];for(unsigned k=0;k<16;k++){matrix[k]=number(w(b->player->bytes+0x80+k*4));if(!isfinite(matrix[k]))return fail(f,0x30a2b0,GH_PLAYER_TARGET_NUMERIC);}if(!point(b->player,player_point))return fail(f,0x2db6b0,GH_PLAYER_TARGET_ARGUMENT);if(gh_scene_at_apply_world_001508d8(matrix,local,origin))return fail(f,0x30a2b0,GH_PLAYER_TARGET_NUMERIC);int have_constants=0;float nearest=2.25f;
  for(uint32_t i=0;i<v->count;i++){uint32_t handle=w((const uint8_t*)v->allocation.pointer+i*4);gh_title_player_view candidate={0};gh_player_target_status e=b->resolve(b->context,handle,&candidate,f);if(e)return e;if(!candidate.bytes||candidate.size<0x300)return fail(f,kind==0?0x12a610:kind==1?0x12b328:0x129cc8,GH_PLAYER_TARGET_ARGUMENT);uint32_t flags=w(candidate.bytes+0x250);if(flags&0x80008000u)continue;unsigned id=half(candidate.bytes+0x2fe);if(id<0x300||id>=0x500)continue;
-  if(kind==2){if(id!=0x364)continue;if(candidate.size<0x604)return fail(f,0x1b1620,GH_PLAYER_TARGET_ARGUMENT);if(w(candidate.bytes+0x600))continue;return fail(f,0x147568,GH_PLAYER_TARGET_UNSUPPORTED);}
+  if(kind==2){
+   if(id!=0x364)continue;
+   if(candidate.size!=0x680||candidate.original_vtable214!=0x4282f0)
+    return fail(f,0x1b1620,GH_PLAYER_TARGET_ARGUMENT);
+   if(w(candidate.bytes+0x600))continue;
+   if(b->player->size<0x6a4)return fail(f,0x129cc8,GH_PLAYER_TARGET_ARGUMENT);
+   if(w(b->player->bytes+0x6a0))break;
+   float inverse[16],position[3],relative[4];
+   uint32_t pc=0;
+   if(gh_actor_matrix_inverse_00147568(matrix,inverse,GH_STATIC_BINARY32_REFERENCE,&pc))
+    return fail(f,pc?pc:0x147568,GH_PLAYER_TARGET_NUMERIC);
+   if(!point(&candidate,position)||gh_scene_at_apply_world_001508d8(inverse,position,relative))
+    return fail(f,0x30a2b0,GH_PLAYER_TARGET_NUMERIC);
+   if(relative[0]>=-0.5f&&relative[0]<=0.5f&&relative[1]>=-0.5f&&relative[1]<=1.5f&&
+      relative[2]>=-0.5f&&relative[2]<=2.0f){
+    const uint8_t *player=b->player->bytes;
+    if(b->player->size<0x15f8||!b->init)return fail(f,0x2dba00,GH_PLAYER_TARGET_ARGUMENT);
+    if((int16_t)half(player+0x54a)>0&&!(w(player+0x15f4)&0x400000u)&&
+       (int32_t)w(b->init->enemies+0x514)<1&&!b->init->enemies[0x53c]){
+     if(!b->actions)return fail(f,0x2dba00,GH_PLAYER_TARGET_UNSUPPORTED);
+     const gh_action_set_request request={.priority=11,.life=3,.callback_id=0x2dba88};
+     int emitted;
+     unsigned slot;
+     if(gh_action_button_set_001f7858(b->actions,&request,&emitted,&slot,&pc))
+      return fail(f,pc?pc:0x1f7858,GH_PLAYER_TARGET_UNSUPPORTED);
+    }
+    break;
+   }
+   continue;
+  }
   if(kind==0){if(!pickup_kind(id))continue;if(candidate.size<0x666)return fail(f,0x1d07e0,GH_PLAYER_TARGET_ARGUMENT);if(!candidate.bytes[0x664])continue;}else {if(candidate.size<0x5b4)return fail(f,0x1b79d0,GH_PLAYER_TARGET_ARGUMENT);if(!(w(candidate.bytes+0x5b0)&8)||b->player->bytes[0x2f4]!=0)continue;}
   float target[3];if(!point(&candidate,target))return fail(f,0x1f7eb0,GH_PLAYER_TARGET_ARGUMENT);float squared=distance(origin,target);if(!isfinite(squared))return fail(f,0x1f7eb0,GH_PLAYER_TARGET_NUMERIC);if(squared>(kind==0?4:nearest))continue;float height=kind==0?sub(target[1],player_point[1]):fabsf(sub(player_point[1],target[1]));int lifted=kind==0&&candidate.bytes[0x665];if(lifted)height=sub(height,1);if(kind==0?(height>1.7f||height<-.5f):(height>.5f))continue;
   if(kind==1||lifted){if(!have_constants){if(!constants(b->elf,b->elf_bytes,table))return fail(f,0x3a1648,GH_PLAYER_TARGET_ARGUMENT);have_constants=1;}float delta;e=angle(table,player_point,target,number(w(b->player->bytes+0x104)),number(0x40490fdb),1,&delta);if(e)return fail(f,0x2da038,e);if(fabsf(delta)>(kind==0?number(0x3f060a92):number(0x3f860a92)))continue;}

@@ -1321,7 +1321,8 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         const gh_scene_at_step_callbacks r101={.context=h->services,.dispatch=gh_game_services_r101_area_dispatch,.spawn=gh_game_services_r101_action_offer};
         const gh_scene_at_step_callbacks r102={.context=h->services,.spawn=gh_game_services_r102_action_offer};
         const gh_scene_at_step_callbacks r103={.context=h->services,.spawn=gh_game_services_r103_action_offer};
-        const gh_scene_at_step_callbacks r200={.context=h->services,.dispatch=gh_game_services_r200_area_dispatch};
+        const gh_scene_at_step_callbacks r200={.context=h->services,.dispatch=gh_game_services_r200_area_dispatch,
+            .spawn=gh_game_services_r200_action_offer};
         const gh_scene_at_step_callbacks *callbacks=h->work.room==0x100?&r100:
             h->work.room==0x105?&r105:h->work.room==0x101?&r101:h->work.room==0x102?&r102:
             h->work.room==0x103?&r103:h->work.room==0x200?&r200:NULL;
@@ -1828,6 +1829,8 @@ static gh_action_step_status room_r101_action(void *context,uint32_t entry,void 
     uint32_t *frontier)
 {
     gh_startup_host *h=context;
+    if(entry==0x2db978)return gh_game_services_r101_placed_item_action(h->services,argument,frontier);
+    if(entry==0x2dba88)return gh_game_services_player_grenade_action_002dba88(h->services,argument,frontier);
     if(entry==0x2dc1d0)return gh_game_services_player_interact_action_002dc1d0(h->services,argument,frontier);
     if(entry==0x2c2138)return gh_game_services_r101_gate_action(h->services,argument,frontier);
     if(entry==0x2c2078){
@@ -1878,8 +1881,9 @@ static int update_state4(void *context,gh_game_loop *loop)
         .callback=h->work.room==0x100?room_r100_action:
                   h->work.room==0x105?gh_game_services_r105_scenery_action:
                   (h->work.room==0x102||h->work.room==0x103)?room_r102_r103_action:
-                  h->work.room==0x101?room_r101_action:NULL,
-        .context=h->work.room==0x105?(void *)h->services:(void *)h};
+                  h->work.room==0x101?room_r101_action:
+                  h->work.room==0x200?gh_game_services_r200_gate_action:NULL,
+        .context=(h->work.room==0x105||h->work.room==0x200)?(void *)h->services:(void *)h};
     gh_game_scene_step_bindings b={.work=&h->work,.init=&h->game_init,.prepare=s.prepare,
         .save={h->save_bytes,sizeof(h->save_bytes)},.collision=s.collision_pairs,.actors=s.scene_tables,
         .scenario={s.scenario_bytes,s.scenario_bytes_size,s.scenario},.main_threads=h->threads,
@@ -2576,7 +2580,7 @@ static gh_qa_enemy_status qa_enemy_status(const gh_title_player_view *view,uint3
     gh_qa_enemy_status result={0};
     if(!view->bytes||view->size<0x642||!view->alias_f0)return result;
     const uint8_t *actor=view->bytes;
-    if(actor[0x2fe]!=2||actor[0x2ff]!=2)return result;
+    if((actor[0x2fe]!=2&&actor[0x2fe]!=4)||actor[0x2ff]!=2)return result;
     result.handle=handle;
     memcpy(result.position,view->alias_f0,sizeof(result.position));
     memcpy(&result.stamp,actor+0x640,2);
@@ -2597,7 +2601,22 @@ gh_qa_enemy_status gh_startup_host_qa_enemy_status(const gh_startup_host *h,uint
     }
     return qa_enemy_status(&view,handle);
 }
-gh_qa_enemy_status gh_startup_host_qa_nearest_em00(const gh_startup_host *h,const float origin[3])
+gh_qa_enemy_status gh_startup_host_qa_enemy_stamp(const gh_startup_host *h,unsigned stamp)
+{
+    const gh_qa_enemy_status missing={0};
+    if(!h||!on_owner(h)||h->game_loop.game_state[0]!=4)return missing;
+    const gh_player_target_bindings targets=gh_game_services_scene_targets(h->services);
+    if(!targets.pools)return missing;
+    for(size_t i=0;i<targets.pools->object_slots;i++){
+        const gh_room_object_binding *binding=targets.pools->objects+i;
+        if(binding->kind!=GH_ROOM_OBJECT_ENEMY||!binding->object)continue;
+        const gh_game_title_player *enemy=binding->object;
+        const gh_qa_enemy_status actor=qa_enemy_status(&enemy->view,binding->handle);
+        if(actor.ready&&actor.stamp==stamp)return actor;
+    }
+    return missing;
+}
+gh_qa_enemy_status gh_startup_host_qa_nearest_enemy_dependency(const gh_startup_host *h,const float origin[3],uint32_t dependency_kind)
 {
     gh_qa_enemy_status nearest={0};
     if(!h||!origin||!on_owner(h)||h->game_loop.game_state[0]!=4)return nearest;
@@ -2612,7 +2631,7 @@ gh_qa_enemy_status gh_startup_host_qa_nearest_em00(const gh_startup_host *h,cons
         if(!actor.ready||!actor.hp||actor.hp>=0x8000||enemy->view.bytes[0x617])continue;
         uint32_t dependency;
         memcpy(&dependency,enemy->view.bytes+0x564,4);
-        if(dependency!=0x200)continue;
+        if(dependency!=dependency_kind)continue;
         const float dx=actor.position[0]-origin[0],dz=actor.position[2]-origin[2];
         const float dy=actor.position[1]-origin[1],distance=dx*dx+dz*dz;
         if(distance<best&&dy>=-1.25f&&dy<=1.25f){
@@ -2621,6 +2640,33 @@ gh_qa_enemy_status gh_startup_host_qa_nearest_em00(const gh_startup_host *h,cons
         }
     }
     return nearest;
+}
+
+int gh_startup_host_qa_r101_resources(const gh_startup_host *h, gh_qa_r101_resources *out)
+{
+    if(!h||!out||!h->services||h->work.room!=0x101)return 0;
+    *out=(gh_qa_r101_resources){0};
+    memcpy(&out->heat,h->game_init.heat+4,sizeof(out->heat));
+    memcpy(&out->threshold,h->game_init.heat+12,sizeof(out->threshold));
+    out->heat_active=h->game_init.heat[0x10];
+    memcpy(&out->key_cards,h->save_bytes+0x68,sizeof(out->key_cards));
+    const unsigned slots=h->save_bytes[0x156]<6?h->save_bytes[0x156]:6;
+    for(unsigned i=0;i<slots;++i)out->roulette_stock+=h->save_bytes[0xa8+i]!=0;
+    return 1;
+}
+
+int gh_startup_host_qa_heat_ready(const gh_startup_host *h)
+{
+    if(!h||!h->services||h->work.room!=0x103||h->game_init.heat[0x10])return 0;
+    float current,threshold;
+    memcpy(&current,h->game_init.heat+4,sizeof(current));
+    memcpy(&threshold,h->game_init.heat+12,sizeof(threshold));
+    return threshold>0&&current>=threshold;
+}
+
+gh_qa_enemy_status gh_startup_host_qa_nearest_em00(const gh_startup_host *h,const float origin[3])
+{
+    return gh_startup_host_qa_nearest_enemy_dependency(h,origin,0x200);
 }
 #endif
 gh_host_error gh_startup_host_set_fade_consumer(gh_startup_host *h,gh_host_fade_consumer consumer,void *context)

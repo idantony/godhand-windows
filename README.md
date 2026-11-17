@@ -189,7 +189,9 @@ bringing both from 96 to 72 HP. On a separate route, EM1A's attack takes
 Gene from 100 to 92 HP and triggers the original hurt animation.
 A longer Windows replay walks past the opening attackers and activates
 the original road trigger. It records the room flag change and starts the
-next two enemies while Gene stays at 100 HP.
+next two enemies while Gene stays at 100 HP. A follow-up replay presents
+1,446 Direct3D scene frames through the encounter. Original enemy hits take
+Gene from 89 to 78, 67 and then 56 HP, with no graphics errors recorded.
 
 The progression replay uses the earlier EV07 Start shortcut and sets the
 boss to 60 HP immediately before the original 80-point Shockwave. A separate
@@ -202,9 +204,10 @@ side arena. In R104, a recorded Triangle input hits the boss after the original
 intro. A second replay enters through the original keycard gate and verifies a
 boss projectile's launch, flight, hit and removal. Gene's HP drops from 100
 to 80 on contact. A right-stick evade on the same approach avoids the hit.
-In R101, the controller reaches the side arena from an unchanged zero-card
-save and lands a hit using the original attack and enemy reaction. The keycard
-collection route and the boss victories are still in development.
+In R101, a native CPU replay enters the side arena from an unchanged
+zero-card save, clears the four original waves and picks up the keycard
+after defeating the pair of bosses. The carried count changes from zero to
+one. Windows presentation of the later waves remains in development.
 
 The original R104 Retry menu now accepts a recorded Cross input after Gene's
 defeat. The native replay retires the old room, restores the checkpoint and
@@ -532,7 +535,8 @@ R003，并预读原版 EV08 音频。另一条回放用原版 Start 跳过 EV07�
 两名敌人各被命中两次，血量都从 96 HP 降到 72 HP。另一条路线中，EM1A 的攻击使
 Gene 从 100 HP 降到 92 HP，并触发了原版受击动作。
 一条更长的 Windows 回放走过开场交战区，触发了原版道路事件。房间进度标记随之写入，
-下一批两名敌人入场，Gene 保持 100 HP。
+下一批两名敌人入场，Gene 保持 100 HP。后续回放用 Direct3D 呈现了这场战斗的 1,446 帧，
+原版敌人的几次攻击让 Gene 的血量从 89 依次降到 78、67 和 56 HP。全程记录的图形错误为零。
 
 这条流程回放此前用了原版 Start 快捷键跳过 EV07，并在原版 80 点冲击波命中前将
 头目血量设为 60 HP。另一条满血战斗回放通过 L2 挑衅积攒斗气，闪避反击后命中两次。
@@ -541,8 +545,9 @@ Gene 从 100 HP 降到 92 HP，并触发了原版受击动作。
 Windows 端已能呈现 R104 头目战和 R101 支线竞技场的原版战斗。R104 播完原版过场后，
 回放中的三角键攻击命中头目。另一条回放经原版钥匙卡门进入 R104，验证了头目的普通弹
 从发射、飞行到命中和清理的流程。Gene 中弹后从 100 HP 降到 80 HP，同一路线加一次
-右摇杆侧闪即可避开。R101 从未编辑的零钥匙卡存档进入支线竞技场，手柄攻击触发了原版
-命中和敌人受击。钥匙卡完整收集流程和头目胜利流程仍在开发中。
+右摇杆侧闪即可避开。R101 的原生 CPU 回放从未编辑的零钥匙卡存档进入支线竞技场，
+打完原版四波、击败最后两名头目并拾起钥匙卡，持有数量从零变为一。后续几波的 Windows
+画面呈现仍在开发中。
 
 R104 的原版重试菜单已经能在 Gene 战败后接收回放中的叉键。原生流程清理旧房间、
 恢复检查点并继续战斗，Gene 回到 100 HP，头目回到 1,000 HP。另一条 Direct3D

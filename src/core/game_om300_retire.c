@@ -49,7 +49,7 @@ static int weapon_destructor(uint32_t kind)
 
 static int cash_item_destructor(unsigned kind)
 {
- return kind==0x3c4||kind==0x3c8||kind==0x3d0||kind==0x3d1||
+ return kind==0x3c3||kind==0x3c4||kind==0x3c8||kind==0x3d0||kind==0x3d1||
         kind==0x3d6||kind==0x3d7||kind==0x3df||kind==0x3e0||kind==0x3e1||kind==0x3e3;
 }
 
@@ -97,6 +97,7 @@ static uint32_t class_vtable(const gh_om_object *actor)
  if(om_kind(actor)==0x357)return 0x427a58;
  if(r101_placed_item(actor))return 0x429b88;
  if(weapon_destructor(om_kind(actor)))return 0x42aa98;
+ if(actor->runtime_created&&om_kind(actor)==0x364)return 0x4282f0;
  if(actor->runtime_created&&om_kind(actor)==0x3bd)return 0x428c20;
  if(actor->runtime_created&&om_kind(actor)==0x3be)return 0x4290c8;
  if(actor->runtime_created&&(cash_item_destructor(om_kind(actor))))return 0x429b88;
@@ -116,6 +117,8 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
  if(!vtable||actor->view.original_vtable214!=vtable)return NULL;
  if(actor->runtime_created&&om_kind(actor)==0x353)
   return actor->view.size>=0x630&&actor->initialization->stage==4?actor:NULL;
+ if(actor->runtime_created&&om_kind(actor)==0x364)
+  return actor->view.size==0x680&&((gh_om364_state *)actor->initialization)->setup_stage==8?actor:NULL;
  if(actor->runtime_created&&om_kind(actor)==0x3bd)
   return actor->view.size==0x640&&actor->initialization->stage==8?actor:NULL;
  if(actor->runtime_created&&om_kind(actor)==0x3be)
@@ -264,9 +267,10 @@ uint32_t gh_om_retire_entry(uint32_t kind)
  case 0x357:return 0x1a8930;
  case 0x3d3:case 0x3d4:case 0x3d5:return 0x1c00c8;
  case 0x363:case 0x376:case 0x382:return 0x1c91b0;
+ case 0x364:return 0x1b0d30;
  case 0x3bd:return 0x1b87f0;
  case 0x3be:return 0x1b9030;
- case 0x3c4:case 0x3c8:case 0x3d0:case 0x3d1:case 0x3d7:case 0x3df:case 0x3d6:case 0x3e0:case 0x3e1:case 0x3e3:return 0x1c00c8;
+ case 0x3c3:case 0x3c4:case 0x3c8:case 0x3d0:case 0x3d1:case 0x3d7:case 0x3df:case 0x3d6:case 0x3e0:case 0x3e1:case 0x3e3:return 0x1c00c8;
  case 0x3da:return 0x1c00c8;
  case 0x3eb:return 0x1bf4b8;
  default:return 0;
@@ -389,7 +393,7 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
   case 0x30a:case 0x33f:case 0x309:case 0x30b:case 0x30c:case 0x331:case 0x332:box_field=0x650;break;
   case 0x351:box_field=0x608;break;
   case 0x310:box_field=0x654;break;
-  case 0x3c4:case 0x3c8:case 0x3d0:case 0x3d1:case 0x3d7:case 0x3df:case 0x3d6:case 0x3e0:case 0x3e1:case 0x3e3:box_field=0x680;break;
+  case 0x3c3:case 0x3c4:case 0x3c8:case 0x3d0:case 0x3d1:case 0x3d7:case 0x3df:case 0x3d6:case 0x3e0:case 0x3e1:case 0x3e3:box_field=0x680;break;
   default:break;
   }
   if(om_kind(object)==0x41c||om_kind(object)==0x357){
@@ -410,6 +414,20 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
      return fail(&state->frontier,state->frontier?state->frontier:0x1fe148);
     init->catapult_attack_created=0;
     put(actor+0x620,0);
+   }
+  }else if(om_kind(object)==0x364){
+   gh_om364_state *grenade=(gh_om364_state *)init;
+   /* The elapsed fuse is stopped by 1B1070 before state3 destroys it. */
+   if(actor[0x2f4]!=3||word(actor+0x668))return fail(&state->frontier,0x2cbba0);
+   for(unsigned i=0;i<2;i++){
+    if(!grenade->areas_created[i])continue;
+    if(release_hitarea(&grenade->areas[i],&state->frontier))
+     return fail(&state->frontier,state->frontier?state->frontier:0x1fe148);
+    grenade->areas_created[i]=0;
+    grenade->areas[i]=(gh_hitarea_object){0};
+    grenade->sphere_indices[i]=-1;
+    put(actor+0x66c+4*i,0);
+    put(actor+0x674+4*i,UINT32_MAX);
    }
   }else if(om_kind(object)==0x3be){
    /* Original 1B9030 releases the two A-pool HitAreas before cOm's base. */
@@ -478,6 +496,10 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
        gh_scene_dynamic_box_abort(geometry->owner,geometry->box))
      return fail(&state->frontier,0x12ec58);
    }
+  }else if(om_kind(object)==0x364){
+   unsigned slot=0;
+   if(gh_game_effect_release_00306200(&bindings->effects,&object->view,7,2,&state->frontier,&slot))
+    return fail(&state->frontier,state->frontier?state->frontier:0x306200);
   }else if(om_kind(object)==0x3be){
    unsigned slot;
    if(gh_game_effect_release_00306200(&bindings->effects,&object->view,0,2,&state->frontier,&slot))
@@ -687,10 +709,13 @@ gh_room_pool_status gh_om_destroy_detached_mode3(gh_om300_full_retirement *state
  gh_om_factory *factory=bindings->factory;
  if(!state->stage){
   gh_om_object *object=registered_om(factory,handle);
-  if(!object||(om_kind(object)!=0x300&&om_kind(object)!=0x304&&om_kind(object)!=0x305&&om_kind(object)!=0x307&&om_kind(object)!=0x309&&om_kind(object)!=0x30a&&
+  const int r101_placed=object&&factory->bindings.initializer&&
+      factory->bindings.initializer->work&&factory->bindings.initializer->work->room==0x101&&
+      !object->runtime_created&&(om_kind(object)==0x330||om_kind(object)==0x3d3);
+  if(!object||(!r101_placed&&om_kind(object)!=0x300&&om_kind(object)!=0x304&&om_kind(object)!=0x305&&om_kind(object)!=0x307&&om_kind(object)!=0x309&&om_kind(object)!=0x30a&&
       om_kind(object)!=0x331&&om_kind(object)!=0x332&&om_kind(object)!=0x33f&&om_kind(object)!=0x346&&
      om_kind(object)!=0x313&&om_kind(object)!=0x324&&om_kind(object)!=0x326&&om_kind(object)!=0x356&&om_kind(object)!=0x363&&
-     om_kind(object)!=0x376&&om_kind(object)!=0x382&&om_kind(object)!=0x3bd&&om_kind(object)!=0x3be&&!cash_item_destructor(om_kind(object)))||
+     om_kind(object)!=0x376&&om_kind(object)!=0x382&&om_kind(object)!=0x3bd&&om_kind(object)!=0x364&&om_kind(object)!=0x3be&&!cash_item_destructor(om_kind(object)))||
      object->view.bytes!=actor->bytes||object->view.size!=actor->size||
      word(actor->bytes+0x214)!=class_vtable(object)||original!=gh_om_retire_entry(om_kind(object))||
      (word(actor->bytes+0x250)&0xa0000000u)!=0xa0000000u)

@@ -20,7 +20,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
       (profile>>16)>=0x29&&(profile>>16)<=0x2b;
   const int em03_effect=kind==0&&(profile&0xffffu)==0xa8u;
   const int catapult=kind==0&&profile==0x00130000u;
-  const int attached=kind==4||(kind==5&&profile==0x004e0000u)||(kind==3&&(profile==0x00040000u||profile==0x00210000u||profile==0x00250000u))||
+  const int attached=(kind==7&&profile==0x00050058u)||kind==4||(kind==5&&profile==0x004e0000u)||(kind==3&&(profile==0x00040000u||profile==0x00210000u||profile==0x00250000u))||
       forward_evade||(kind==0&&(profile==0x00590058u||
       profile==0x005d0058u||profile==0x00390000u||(emitter&&profile==0x00420000u)));
   /* These authored mode-0 strikes can remain on the boss after the motion ends. */
@@ -60,11 +60,11 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
          (em03_effect&&(gh_effect_em03_esp_is_bound(b->effects,&view)||
           gh_effect_attack_esp_is_bound(b->effects,&view)))||
          (((kind==0&&(profile==0x002b0058u||profile==0x002c0058u||profile==0x001d0058u||
-                      profile==0x00500058u||profile==0x00460058u||profile==0x00290058u||profile==0x005a0058u))||boss_strike)&&
+                      profile==0x00500058u||profile==0x00460058u||profile==0x00290058u||profile==0x005a0058u||profile==0x005c0058u))||boss_strike)&&
           gh_effect_em00_attack_esp_is_bound(b->effects,&view))||
          /* 306200 stops EM03's interrupted attack trail. */
          (kind==0&&profile==0x002d0058u&&gh_effect_attack_esp_is_bound(b->effects,&view))||
-       (kind==0&&(profile==0x00040058u||profile==0x00080058u)&&
+       (kind==0&&(profile==0x00040058u||profile==0x00080058u||profile==0x00480058u)&&
         gh_effect_knockdown_esp_is_bound(b->effects,&view))||
          (attached&&gh_effect_player_attachment_esp_is_bound(b->effects,&view)))))){
     e=gh_effect_create_esp_pause_002fbe50(b->effects,i,view.serial,f);

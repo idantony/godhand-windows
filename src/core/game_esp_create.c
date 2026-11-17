@@ -396,13 +396,16 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
   return GH_EFFECT_OK;
  }
  if(view.type==1&&c->stage==10){
-  /* Original virtual 2E16D8 copies its colour vector and packed modifier. */
-  memcpy(p+0x2b0,r+0x13c,16);
-  put(p+0x2c0,w(r+0x16c));
-  status=gh_effect_create_esp_commit_base(b->storage.effects,c->slot,c->serial);
+  if(w(p+0x23a)==0x00060058u){
+   status=gh_effect_create_esp_init_type1_002e16d8(b->storage.effects,c->slot,c->serial);
+  }else{
+   memcpy(p+0x2b0,r+0x13c,16);
+   put(p+0x2c0,w(r+0x16c));
+   status=gh_effect_create_esp_commit_base(b->storage.effects,c->slot,c->serial);
+  }
   if(status)return fail(c,0x2e16d8,status);
-  c->complete=1;
   c->stage=12;
+  c->complete=1;
   return GH_EFFECT_OK;
  }
  if(view.type==3&&c->stage==10){

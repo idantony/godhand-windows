@@ -49,7 +49,7 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
 /* Original 14FB48 -> 306900, attached 58:02 with explicit part0
  * and otherwise identity configuration. */
 gh_effect_status gh_effect_create_player_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
-gh_effect_status gh_effect_create_gate_guard_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
+gh_effect_status gh_effect_create_em00_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_em0a_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_enemy_death_part0_00306900(gh_effect_create_call *,
  const gh_title_player_view *,int32_t mode);
@@ -81,6 +81,7 @@ gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_c
  const uint32_t world_xyz[3]);
 /* Original 109928 part4 impact, bank0/index3, unit scale and zero Euler. */
 /* Original grounded item sparkle, bank 0 and index 1B. */
+gh_effect_status gh_effect_create_om364_blast_begin_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_om_sparkle_begin_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_om30a_break_begin_0018c580(gh_effect_create_call *,const uint32_t[3]);
 gh_effect_status gh_effect_create_r104_em03_ground_00306838(gh_effect_create_call *,
@@ -182,6 +183,7 @@ gh_effect_status gh_effect_create_bind_frame_globals(gh_game_effects *,struct gh
 gh_effect_status gh_effect_create_bind_frame_actors(gh_game_effects *,gh_game_scene_tables *);
 /* Called only after actualtype6 virtualInit computation has returned1. */
 gh_effect_status gh_effect_create_esp_commit_type5(gh_game_effects *,unsigned,uint32_t);
+gh_effect_status gh_effect_create_esp_init_type1_002e16d8(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_base(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_type6(gh_game_effects *,unsigned,uint32_t);
 /* R003 SSD bank3/index0 parentless class08, original 2FFC20/2EA908. */

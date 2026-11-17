@@ -35,6 +35,7 @@ typedef struct {gh_om_factory *factory;gh_om_object *object;uint16_t kind,resour
 gh_scene_placement_status gh_om_factory_initialize_runtime_mount_001a7820(gh_om_factory *,gh_om_object *);
 gh_scene_placement_status gh_om_factory_create_0030fa98(gh_om_factory *,gh_om_runtime_create *,uint16_t kind,uint16_t resource_id,gh_om_object **original_object);
 gh_scene_placement_status gh_om_factory_initialize_runtime_ticket_001c0128(gh_om_factory *,gh_om_object *);
+gh_scene_placement_status gh_om_factory_initialize_runtime_364(gh_om_factory *,gh_om_object *);
 gh_scene_placement_status gh_om_factory_initialize_runtime_3eb(gh_om_factory *,gh_om_object *,int *original_return);
 gh_scene_placement_status gh_om_factory_initialize_runtime_376(gh_om_factory *,gh_om_object *);
 gh_scene_placement_status gh_om_factory_initialize_runtime_3bd(gh_om_factory *,gh_om_object *);

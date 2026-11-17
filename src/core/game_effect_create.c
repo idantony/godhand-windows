@@ -54,6 +54,22 @@ static int r102_gate_guard_effect_actor(const gh_title_player_view *actor)
     (w(actor->bytes+0x640)&0xffffu)==0x10&&!actor->bytes[0x1650];
 }
 
+static int r101_side_em00_effect_actor(const gh_title_player_view *actor)
+{
+ const uint8_t *p=actor?actor->bytes:NULL;
+ return p&&actor->size>0x1650&&actor->original_vtable214==0x4479c8&&
+    (w(p+0x2fc)>>16)==0x202&&w(p+0x564)==0x200&&p[0x1650]==6&&
+    ((w(p+0x640)&0xffffu)==0x16||(w(p+0x640)&0xffffu)==0x18);
+}
+
+static int r101_side_em03_effect_actor(const gh_title_player_view *actor)
+{
+ const uint8_t *p=actor?actor->bytes:NULL;
+ return p&&actor->size>0x1650&&actor->original_vtable214==0x4479c8&&
+    (w(p+0x2fc)>>16)==0x202&&w(p+0x564)==0x203&&p[0x1650]==6&&
+    ((w(p+0x640)&0xffffu)==0x20||(w(p+0x640)&0xffffu)==0x28);
+}
+
 /* Targeted R102 EM0A that uses the same authored part-zero ground effect. */
 static int r102_gate_em0a_ground_actor(const gh_title_player_view *actor)
 {
@@ -72,10 +88,12 @@ static int r102_em03_death_actor(const gh_title_player_view *actor)
     !p[0x1650]&&p[0x2f4]==2;
 }
 
-gh_effect_status gh_effect_create_gate_guard_stun_part4_00306900(gh_effect_create_call *c,
+static int r101_wave4_em27_actor(const gh_title_player_view *actor);
+
+gh_effect_status gh_effect_create_em00_stun_part4_00306900(gh_effect_create_call *c,
  const gh_title_player_view *actor)
 {
- if(!r102_gate_guard_effect_actor(actor))return GH_EFFECT_ARGUMENT;
+ if(!r102_gate_guard_effect_actor(actor)&&!r101_side_em00_effect_actor(actor)&&!r101_wave4_em27_actor(actor))return GH_EFFECT_ARGUMENT;
  return create_stun_part4(c,actor,3);
 }
 
@@ -335,6 +353,12 @@ gh_effect_status gh_effect_create_enemy_counter_impact_begin_00306838(gh_effect_
 {
  return positioned_begin(call,0,0xc,world_xyz,0);
 }
+gh_effect_status gh_effect_create_om364_blast_begin_00306838(gh_effect_create_call *call,
+ const uint32_t world_xyz[3])
+{
+ return positioned_begin(call,0x58,6,world_xyz,0);
+}
+
 gh_effect_status gh_effect_create_om_sparkle_begin_00306838(gh_effect_create_call *call,
  const uint32_t world_xyz[3])
 {
@@ -373,8 +397,24 @@ static int em27_attack_actor(const gh_title_player_view *actor)
         !actor->bytes[0x1650];
 }
 
+static int r101_wave4_em27_actor(const gh_title_player_view *actor)
+{
+ if(!actor||!actor->bytes||actor->size<=0x1650||actor->original_vtable214!=0x4479c8||
+    (w(actor->bytes+0x2fc)>>16)!=0x202||w(actor->bytes+0x564)!=0x227||actor->bytes[0x1650]!=6)
+  return 0;
+ const unsigned stamp=w(actor->bytes+0x640)&0xffffu;
+ return stamp==30||stamp==38;
+}
+
 /* R105 EM27 selects the original EM00-family SEQ 58:2C or 58:5A.
  * The episode's TXE exchange leaves the shared MOT/SEQ resource in EM02.DAT. */
+static int r200_em01_trail_actor(const gh_title_player_view *actor)
+{
+ return actor&&actor->bytes&&actor->size>0x1650&&actor->original_vtable214==0x4479c8&&
+        (w(actor->bytes+0x2fc)>>16)==0x201&&w(actor->bytes+0x564)==0x201&&
+        (w(actor->bytes+0x640)&0xffffu)==7&&!actor->bytes[0x1650];
+}
+
 static int em00_family_attack_actor(const gh_title_player_view *actor)
 {
  if(em27_attack_actor(actor))return 1;
@@ -506,6 +546,8 @@ static int16_t wide_strike_effect_room(const gh_title_player_view *actor,unsigne
  if(stamp8_attack_actor(actor))return 0x100;
  if(r103_paired_kick_actor(actor)&&w(actor->bytes+0x564)==0x214)return 0x103;
  if(!em00_family_attack_actor(actor)||w(actor->bytes+0x564)!=0x200)return 0;
+ if(actor->size>0x1650&&actor->bytes[0x1650]==6&&
+    (w(actor->bytes+0x2fc)>>16)==0x202&&(w(actor->bytes+0x640)&0xffffu)==0x18)return 0x101;
  return (w(actor->bytes+0x2fc)>>16)==0x204?0x103:0;
 }
 
@@ -521,6 +563,7 @@ static int wide_strike_effect_row(const uint8_t *row)
 
 static int16_t em00_escape_effect_room(const gh_title_player_view *actor)
 {
+ if(r101_wave4_em27_actor(actor))return 0x101;
  if(!em00_family_attack_actor(actor)||actor->size<0x644||w(actor->bytes+0x564)!=0x200)return 0;
  const unsigned stamp=w(actor->bytes+0x640)&0xffffu;
  if(stamp==20)return 0x100;
@@ -614,11 +657,15 @@ static int devil_melee_effect_row(const uint8_t *row,unsigned index)
     row[0xbe]==9+index&&!row[0x128]&&row[0x133]==(index?0x12:0)&&!row[0x136];
 }
 
-static int em0f_route_actor(const gh_title_player_view *actor)
+static int16_t em0f_route_effect_room(const gh_title_player_view *actor)
 {
- return actor&&actor->bytes&&actor->size>0x1650&&actor->original_vtable214==0x4479c8&&
-    (w(actor->bytes+0x2fc)>>16)==0x202&&w(actor->bytes+0x564)==0x20f&&
-    (w(actor->bytes+0x640)&0xffffu)==0x12&&(actor->bytes[0x1650]==0||actor->bytes[0x1650]==4);
+ if(!actor||!actor->bytes||actor->size<=0x1650||actor->original_vtable214!=0x4479c8||
+    (w(actor->bytes+0x2fc)>>16)!=0x202||w(actor->bytes+0x564)!=0x20f)return 0;
+ const unsigned stamp=w(actor->bytes+0x640)&0xffffu;
+ const unsigned appearance=actor->bytes[0x1650];
+ if(stamp==0x12&&(appearance==0||appearance==4))return 0x102;
+ if(appearance==6&&(stamp==0x1a||stamp==0x1b||stamp==0x22||stamp==0x23))return 0x101;
+ return 0;
 }
 
 static int em0f_route_effect_row(const uint8_t *row)
@@ -626,6 +673,37 @@ static int em0f_route_effect_row(const uint8_t *row)
  return w(row)==0x1efe8010u&&w(row+4)==0x00800000u&&!row[0xbe]&&
     !row[0x128]&&row[0x133]==0x1a&&!row[0x136]&&row[0x12e]==132&&
     row[0x28f]==1&&row[0x290]==2&&row[0x291]==1&&row[0x292]==1;
+}
+
+static int om364_fuse_source(const gh_title_player_view *actor)
+{
+ return actor&&actor->bytes&&actor->size==0x680&&actor->original_vtable214==0x4282f0&&
+    (w(actor->bytes+0x2fc)>>16)==0x364&&w(actor->bytes+0x214)==0x4282f0;
+}
+
+static int om364_fuse_est(const uint8_t *row,unsigned index)
+{
+ static const uint8_t types[]={0,0,9,0},textures[]={14,8,25,132};
+ return index<4&&w(row)==(index?0x1efe8010u:0x1efee010u)&&w(row+4)==0x00800000u&&
+    row[0xbe]==1&&!row[0x128]&&!row[0x136]&&row[0x133]==types[index]&&
+    row[0x12e]==textures[index]&&row[0x28e]==1;
+}
+
+static int em0f_grenade_trail_row(const uint8_t *row)
+{
+ return row&&w(row)==0x1e3e8010u&&w(row+4)==0x00800000u&&row[0xbe]==4&&
+    !row[0x128]&&row[0x133]==9&&!row[0x136]&&row[0x28e]==24;
+}
+
+static int em0f_short_strike_row(const uint8_t *row,unsigned index)
+{
+ static const uint8_t parts[]={0,16,16,10,10,0};
+ static const uint8_t types[]={0x1a,0x12,9,0x12,9,0x1a};
+ static const uint8_t textures[]={132,0,25,0,25,0};
+ static const uint32_t flags[]={0x1efe8010u,0x1efe8010u,0x1e3e8010u,0x1efe8010u,0x1e3e8010u,0x1e3e8010u};
+ static const uint32_t flags4[]={0x00800000u,0x00c00000u,0x00800000u,0x00c00000u,0x00800000u,0x00c00000u};
+ return index<6&&w(row)==flags[index]&&w(row+4)==flags4[index]&&!row[0x128]&&
+    !row[0x136]&&row[0xbe]==parts[index]&&row[0x133]==types[index]&&row[0x12e]==textures[index];
 }
 
 /* CORE035 is the original attached EM0A hold impact on PL00. */
@@ -880,7 +958,7 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
  }else if(request->bank==0x58&&(request->index==0x27||request->index==0x59)&&!request->mode){
   const int16_t escape_room=em00_escape_effect_room(actor);
   if((!escape_room&&!em00_escape_effect_actor(actor))||actor->bytes[0x2f4]!=1||
-     actor->bytes[0x2f5]!=0x1d||(escape_room==0x102&&actor->bytes[0x2f7]!=1))
+     actor->bytes[0x2f5]!=0x1d||((escape_room==0x101||escape_room==0x102)&&actor->bytes[0x2f7]!=1))
    return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0xa8&&em03_melee_est_lines(request->index)&&!request->mode){
   if(!r104_charge_actor(actor)||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x15||
@@ -920,11 +998,21 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
      actor->bytes[0x2f6]!=1||actor->bytes[0x2f7]!=1)return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&r103_pincer_effect_rows(request->index)&&!request->mode){
   if(!r103_pincer_effect_actor(actor,request->index))return GH_EFFECT_UNSUPPORTED;
+ }else if(request->bank==0x58&&request->index==0x48&&!request->mode){
+  if(em0f_route_effect_room(actor)!=0x101||actor->size<0x17b8||
+     (w(actor->bytes+0x2f4)&0xffffu)!=0x0801||actor->bytes[0x2f6]!=1||
+     actor->bytes[0x2f7]!=2||w(actor->bytes+0x17b4)!=50)return GH_EFFECT_UNSUPPORTED;
+ }else if(request->bank==0x58&&request->index==0x5c&&!request->mode){
+  if(em0f_route_effect_room(actor)!=0x101||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x15||
+     actor->bytes[0x2f6]!=1||actor->bytes[0x2f7])return GH_EFFECT_UNSUPPORTED;
+ }else if(request->bank==0x58&&request->index==0x5f&&!request->mode){
+  if(em0f_route_effect_room(actor)!=0x101||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x63||
+     actor->bytes[0x2f6]!=3||actor->bytes[0x2f7])return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&request->index==0x66&&!request->mode){
   if(!r200_em1a_effect_actor(actor)||w(actor->bytes+0x2f4)!=0x00011500u)
    return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&request->index==0x5d&&!request->mode){
-  if(!em0f_route_actor(actor))return GH_EFFECT_UNSUPPORTED;
+  if(!em0f_route_effect_room(actor))return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&request->index==0x3f&&!request->mode){
   if(!devil_effect_actor(actor,actor))return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&devil_melee_effect_index(request->index)&&!request->mode){
@@ -940,7 +1028,11 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
  }else{
   if(request->bank!=0x58||(request->index!=0x2d&&request->index!=0x2c&&request->index!=0x5a)||
      request->mode)return GH_EFFECT_UNSUPPORTED;
-  if(request->index!=0x2d&&!em00_family_attack_actor(actor))return GH_EFFECT_UNSUPPORTED;
+  const int wave4_short=request->index==0x2c&&r101_wave4_em27_actor(actor)&&
+      (w(actor->bytes+0x2f4)&0x00ffffffu)==0x00011500u&&!actor->bytes[0x2f7];
+  if(request->index!=0x2d&&!wave4_short&&!em00_family_attack_actor(actor)&&
+     !(request->index==0x2c&&r200_em01_trail_actor(actor)&&w(actor->bytes+0x2f4)==0x00011500u))
+    return GH_EFFECT_UNSUPPORTED;
  }
  gh_effect_status status=gh_effect_create_begin(call,request);
  if(!status){
@@ -1057,7 +1149,8 @@ static int16_t door_break_actor_room(const gh_title_player_view *actor)
     actor->original_vtable214!=w(actor->bytes+0x214))return 0;
  const unsigned kind=w(actor->bytes+0x2fc)>>16;
  if(kind==0x300&&actor->original_vtable214==0x422f90u)return 0x100;
- if(kind==0x313&&actor->original_vtable214==0x424128u)return 0x101;
+ if((kind==0x313&&actor->original_vtable214==0x424128u)||
+    (kind==0x330&&actor->original_vtable214==0x425b90u))return 0x101;
  return 0;
 }
 
@@ -1126,9 +1219,19 @@ static int r104_em03_ground_record(const gh_game_effects *effects,gh_effect_view
 static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_create_bindings*b){
  uint32_t flags=w((const uint8_t*)b->work+0x5d8);if((flags&0x10000000u)||(!c->request.index&&c->request.bank!=3)){c->original_return=1;c->complete=1;return GH_EFFECT_OK;}
  if(c->request.bank==3){if(!c->configuration_305e88||c->request.actor||c->request.selector!=-1)return fail(c,0x305fb0,GH_EFFECT_UNSUPPORTED);return ambient_est(c);}
+ if(c->request.bank==0x58&&c->request.index==0x2c&&c->configuration_nested_scale&&
+    r101_wave4_em27_actor(c->request.actor)&&
+    (b->work->room!=0x101||!b->model||b->model->work!=b->work||
+     !b->model->parts_ready||b->model->root.bytes!=c->request.actor->bytes))
+  return fail(c,0x303a30,GH_EFFECT_UNSUPPORTED);
  if(c->request.bank==0x58&&(c->request.index==0x2c||c->request.index==0x5a)&&
     c->configuration_nested_scale&&em27_attack_actor(c->request.actor)&&
     (b->work->room!=0x105||!b->model||b->model->work!=b->work||
+     !b->model->parts_ready||b->model->root.bytes!=c->request.actor->bytes))
+  return fail(c,0x303a30,GH_EFFECT_UNSUPPORTED);
+ if(c->request.bank==0x58&&c->request.index==0x2c&&c->configuration_nested_scale&&
+    r200_em01_trail_actor(c->request.actor)&&
+    (b->work->room!=0x200||!b->model||b->model->work!=b->work||
      !b->model->parts_ready||b->model->root.bytes!=c->request.actor->bytes))
   return fail(c,0x303a30,GH_EFFECT_UNSUPPORTED);
  gh_effect_view entry;gh_effect_status status=lookup_est(c->owner,c->request.bank,c->request.index,&entry);
@@ -1199,13 +1302,14 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
   }
  }
  if(c->request.bank==0&&c->request.index==0x22&&c->configuration_nested_scale){
-  if((b->work->room!=0x100&&b->work->room!=0x102&&b->work->room!=0x103)||c->count!=21)return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  if(b->work->room<0x100||b->work->room>0x103||c->count!=21)
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<c->count;++i)
    if(!player_heat_activation_row(entry.bytes+16+i*0x2f0,i))
     return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
  }
  if(c->request.bank==0&&c->request.index==0x28&&c->configuration_nested_scale){
-  if((b->work->room!=0x100&&b->work->room!=0x102&&b->work->room!=0x103)||c->count!=12)
+  if((b->work->room<0x100||b->work->room>0x103)||c->count!=12)
    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<c->count;++i)
    if(!player_heat_finish_row(entry.bytes+16+i*0x2f0,i))
@@ -1216,7 +1320,7 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
   if(!actor||!actor->bytes||actor->size<0x15f8||actor->original_vtable214!=0x41d220||
      (w(actor->bytes+0x2fc)>>16)!=0x100||c->request.mode!=3||c->request.selector!=-1||
      actor->bytes[0x5f2]!=3||(w(actor->bytes+0x15f4)&0x20u)||c->count!=10||
-     (b->work->room!=0x100&&b->work->room!=0x102&&b->work->room!=0x103&&
+     ((b->work->room<0x100||b->work->room>0x103)&&
       !(b->work->room==0x104&&!actor->bytes[0x2f4]&&actor->bytes[0x2f5]==0x23&&
         actor->bytes[0x2f6]==1&&!actor->bytes[0x2f7])))
    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
@@ -1226,7 +1330,7 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
  }
  if(c->request.bank==0&&c->request.index==0x4e){
   const gh_title_player_view *actor=c->request.actor;
-  if(b->work->room!=0x102||!actor||!actor->bytes||actor->size<0x600||
+  if((b->work->room!=0x101&&b->work->room!=0x102)||!actor||!actor->bytes||actor->size<0x600||
      actor->original_vtable214!=0x41d220||(w(actor->bytes+0x2fc)>>16)!=0x100||
      w(actor->bytes+0x5fc)!=600||c->request.mode!=5||c->request.selector!=-1||c->count!=15)
    return fail(c,0x12c708,GH_EFFECT_UNSUPPORTED);
@@ -1301,6 +1405,33 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
     return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   }
  }
+ if(c->request.bank==0x58&&c->request.index==5){
+  if(c->count!=4||c->request.mode!=7||c->request.selector!=-1||b->work->room!=0x101||
+     !om364_fuse_source(c->request.actor)||!b->model||b->model->work!=b->work||
+     b->model->root.bytes!=c->request.actor->bytes)
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<4;++i)
+   if(!om364_fuse_est(entry.bytes+16+i*0x2f0,i))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+ }
+ if(c->request.bank==0x58&&c->request.index==0x48&&c->configuration_nested_scale){
+  if(b->work->room!=0x101||em0f_route_effect_room(c->request.actor)!=0x101||
+     c->request.mode||c->count!=1||!em0f_grenade_trail_row(entry.bytes+16))
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+ }
+ if(c->request.bank==0x58&&c->request.index==0x5c&&c->configuration_nested_scale){
+  if(c->count!=6||!b->work||b->work->room!=0x101||!b->model||b->model->work!=b->work||
+     em0f_route_effect_room(c->request.actor)!=0x101||
+     b->model->root.bytes!=c->request.actor->bytes)return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<6;i++)
+   if(!em0f_short_strike_row(entry.bytes+16+i*0x2f0,i))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+ }
+ if(c->request.bank==0x58&&c->request.index==0x5f&&c->configuration_nested_scale){
+  if(c->count!=2||!b->work||b->work->room!=0x101||!b->model||b->model->work!=b->work||
+     em0f_route_effect_room(c->request.actor)!=0x101||
+     b->model->root.bytes!=c->request.actor->bytes||
+     !em0f_route_effect_row(entry.bytes+16)||!em0f_route_effect_row(entry.bytes+16+0x2f0))
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+ }
  if(c->request.bank==0x58&&c->request.index==0x66){
   if(b->work->room!=0x200||c->count!=4||!c->configuration_nested_scale||
      !r200_em1a_effect_actor(c->request.actor)||!b->model||b->model->work!=b->work||
@@ -1310,7 +1441,8 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
   }
  }
  if(c->request.bank==0x58&&c->request.index==0x5d&&c->configuration_nested_scale){
-  if(c->count!=1||b->work->room!=0x102||!b->model||b->model->work!=b->work||
+  const int16_t room=em0f_route_effect_room(c->request.actor);
+  if(c->count!=1||!room||b->work->room!=room||!b->model||b->model->work!=b->work||
      !c->request.actor||b->model->root.bytes!=c->request.actor->bytes||
      !em0f_route_effect_row(entry.bytes+16))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
  }
@@ -1474,6 +1606,20 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
     return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   }
  }
+ if(c->configuration_positioned&&c->request.bank==0x58&&c->request.index==6){
+  static const uint8_t particles[]={7,0x18,0,1,1,1,0,0,0,1};
+  static const uint8_t seeds[]={0,0,2,25,25,25,17,17,0,25};
+  if(b->work->room!=0x101||!b->model||!om364_fuse_source(&b->model->root)||
+     c->count!=sizeof(particles))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<sizeof(particles);++i){
+   const uint8_t *row=entry.bytes+16+i*0x2f0;
+   const uint32_t flags=i<2?0x1e3e0010u:i==8?0x1ef46010u:0x1efee010u;
+   const uint32_t flags4=i<2?0x00800000u:i==2?0x00c01000u:0x00c00000u;
+   if(w(row)!=flags||w(row+4)!=flags4||row[0xbe]!=0xff||row[0x128]||
+      row[0x133]!=particles[i]||row[0x136]||row[0x28e]!=seeds[i])
+    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  }
+ }
  if(c->configuration_positioned&&c->request.bank==0x58&&c->request.index==0x12){
   static const uint8_t particles[]={7,0x18,0,0},textures[]={0,0,1,7};
   if(c->count!=sizeof(particles))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
@@ -1522,7 +1668,7 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
  if(c->configuration_positioned&&c->request.bank==0&&c->request.index==0x40){
   static const uint8_t texture[]={11,57,51,1,76,15};
   static const uint32_t flags[]={0x1efe8010,0x1efe8010,0x1efee010,0x1efee010,0x1efee010,0x1e3ea010};
-  if((b->work->room!=0x100&&b->work->room!=0x102&&b->work->room!=0x103)||c->count!=sizeof(texture))
+  if(b->work->room<0x100||b->work->room>0x103||c->count!=sizeof(texture))
    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<sizeof(texture);++i){
    const uint8_t *row=entry.bytes+16+i*0x2f0;
@@ -1812,16 +1958,25 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
  const gh_title_player_view *actor=view->actor;
  const uint8_t *record=view->record.bytes;
  const uint8_t *payload=view->payload;
+ if(om364_fuse_source(actor)&&actor==view->selector&&view->model&&view->model->work&&
+    view->model->work->room==0x101&&view->model->root.bytes==actor->bytes&&view->model->part_count>1&&
+    view->part==view->model->parts+1&&view->record.size==0x2f0&&record&&payload&&
+    view->payload_size==0x260&&w(payload+0x18c)==0x00050058u&&w(payload+0x110)==7){
+  for(unsigned i=0;i<4;++i)if(om364_fuse_est(record,i))return 1;
+  return 0;
+ }
  /* 58:5D uses the same part-attached ESP1A path and original unlink order. */
- if(em0f_route_actor(actor)&&actor==view->selector&&view->model&&view->model->work&&
-    view->model->work->room==0x102&&view->model->root.bytes==actor->bytes&&view->model->part_count&&
+ const int16_t route_room=em0f_route_effect_room(actor);
+ if(route_room&&actor==view->selector&&view->model&&view->model->work&&
+    view->model->work->room==route_room&&view->model->root.bytes==actor->bytes&&view->model->part_count&&
     view->part==view->model->parts&&view->record.size==0x2f0&&record&&payload&&view->payload_size==0x260&&
-    w(payload+0x18c)==0x005d0058u&&!w(payload+0x110)&&em0f_route_effect_row(record))return 1;
+    (w(payload+0x18c)==0x005d0058u||(route_room==0x101&&w(payload+0x18c)==0x005f0058u))&&
+    !w(payload+0x110)&&em0f_route_effect_row(record))return 1;
  /* 58:27 uses the same attached type7/1A pose and lifetime as PL00 0:42. */
  const int16_t escape_room=em00_escape_effect_room(actor);
  if(actor==view->selector&&view->model&&
     (escape_room==0x100||(view->model->work&&
-     ((escape_room==0x102&&view->model->work->room==0x102)||
+     (((escape_room==0x101||escape_room==0x102)&&view->model->work->room==escape_room)||
       (view->model->work->room==0x103&&em00_escape_effect_actor(actor)))))&&
     view->model->root.bytes==actor->bytes&&view->record.size==0x2f0&&
     record&&view->payload_size==0x260&&payload&&
@@ -1836,8 +1991,9 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
   return (part==2&&record[0x133]==7&&w(record+4)==0x00800000u)||
          (part==0&&record[0x133]==0x1a&&w(record+4)==0x00c00000u);
  }
- if((r102_gate_guard_effect_actor(actor)||r103_em0a_effect_actor(actor))&&actor==view->selector&&view->model&&view->model->work&&
-    ((view->model->work->room==0x102&&r102_gate_guard_effect_actor(actor))||
+ if(actor&&actor==view->selector&&view->model&&view->model->work&&
+    ((view->model->work->room==0x101&&(r101_side_em00_effect_actor(actor)||r101_wave4_em27_actor(actor)))||
+     (view->model->work->room==0x102&&r102_gate_guard_effect_actor(actor))||
      (view->model->work->room==0x103&&r103_em0a_effect_actor(actor)))&&view->model->root.bytes==actor->bytes&&view->model->part_count>4&&
     view->part==view->model->parts+4&&payload&&view->payload_size==0x260&&
     w(payload+0x18c)==0x00040000u&&w(payload+0x110)==3&&payload[0x1ec]==4)
@@ -1854,35 +2010,35 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
   return 0;
  }
  if(profile==0x00210000u&&w(payload+0x110)==3&&view->model->work&&
-    (view->model->work->room==0x100||view->model->work->room==0x102||
-     view->model->work->room==0x103||view->model->work->room==0x104)){
+    view->model->work->room>=0x100&&view->model->work->room<=0x104){
   const unsigned part=record[0xbe];
   if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
   for(unsigned i=0;i<10;++i)if(player_heat_active_row(record,i))return 1;
   return 0;
  }
  if(profile==0x00220000u&&w(payload+0x110)==UINT32_MAX&&view->model->work&&
-    (view->model->work->room==0x100||view->model->work->room==0x102||view->model->work->room==0x103)){
+    view->model->work->room>=0x100&&view->model->work->room<=0x103){
   const unsigned part=record[0xbe];
   if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
   for(unsigned i=0;i<21;++i)if(player_heat_activation_row(record,i))return 1;
   return 0;
  }
  if(profile==0x00280000u&&!w(payload+0x110)&&view->model->work&&
-    (view->model->work->room==0x100||view->model->work->room==0x102||view->model->work->room==0x103)){
+    view->model->work->room>=0x100&&view->model->work->room<=0x103){
   const unsigned part=record[0xbe];
   if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
   for(unsigned i=0;i<12;++i)if(player_heat_finish_row(record,i))return 1;
   return 0;
  }
- if(profile==0x004e0000u&&w(payload+0x110)==5&&view->model->work&&view->model->work->room==0x102){
+ if(profile==0x004e0000u&&w(payload+0x110)==5&&view->model->work&&
+    (view->model->work->room==0x101||view->model->work->room==0x102)){
   const unsigned part=record[0xbe];
   if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
   for(unsigned i=0;i<15;++i)if(player_attack_boost_row(record,i))return 1;
   return 0;
  }
  if(profile==0x00250000u&&w(payload+0x110)==3&&view->model->work&&
-    (view->model->work->room==0x100||view->model->work->room==0x102||view->model->work->room==0x103)){
+    view->model->work->room>=0x100&&view->model->work->room<=0x103){
   const unsigned part=record[0xbe],type=record[0x133];
   const uint32_t flags=w(record+4),header=w(record);
   if(part>=view->model->part_count||view->part!=view->model->parts+part||
@@ -2006,9 +2162,12 @@ static int em02_em03_attack_actor(const gh_title_player_view *actor)
      actor->bytes[0x1650]==24&&actor->original_vtable214==0x4479c8;
  if(kind!=0x202)return 0;
  const int appearance0=actor->size>0x1650&&actor->original_vtable214==0x4479c8&&!actor->bytes[0x1650];
+ const int side_em03=r101_side_em03_effect_actor(actor);
+ const int side_em02=dependency==0x202&&stamp==0x27&&actor->size>0x1650&&
+     actor->original_vtable214==0x4479c8&&actor->bytes[0x1650]==6;
  const int west_formation=actor->size>=0x16c8&&actor->original_vtable214==0x4479c8&&
      actor->bytes[0x1650]==2&&w(actor->bytes+0x16c4)==6&&((dependency==0x202&&stamp==4)||(dependency==0x203&&stamp==5));
- return west_formation||(dependency==0x203&&(stamp==19||((stamp==1||stamp==8)&&appearance0)))||
+ return side_em02||side_em03||west_formation||(dependency==0x203&&(stamp==19||((stamp==1||stamp==8)&&appearance0)))||
         (dependency==0x202&&appearance0&&
          (stamp==0x17||stamp==32||(stamp==0x19&&actor->size>=0x16c8&&w(actor->bytes+0x16c4)==2)));
 }
@@ -2020,8 +2179,9 @@ int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *v)
  const unsigned stamp=w(v->actor->bytes+0x640)&0xffffu;
  int16_t room=0x102;
  if(stamp==1)room=0x105;
- else if(stamp==4||stamp==5||stamp==32)room=0x100;
+ else if(stamp==4||stamp==5||(stamp==32&&!r101_side_em03_effect_actor(v->actor)))room=0x100;
  else if(stamp==6||stamp==7)room=0x103;
+ else if(stamp==0x20||stamp==0x27||stamp==0x28)room=0x101;
  if(stamp!=19&&(!v->model->work||v->model->work->room!=room))return 0;
  return v->selector==v->actor&&
         v->model->root.bytes==v->actor->bytes&&v->model->part_count>15&&
@@ -2061,6 +2221,14 @@ int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *v)
  if(profile==0x00290058u)
   return v->model->work&&v->model->work->room==0x100&&r100_em02_capture_actor(v->actor)&&
      r100_em02_capture_row(v->record.bytes)&&v->model->part_count>25&&v->part==v->model->parts+25;
+ if(profile==0x005c0058u){
+  const unsigned part=v->record.bytes[0xbe];
+  if(!v->model->work||v->model->work->room!=0x101||em0f_route_effect_room(v->actor)!=0x101||
+     part>=v->model->part_count||v->part!=v->model->parts+part)return 0;
+  for(unsigned i=0;i<6;i++)
+   if(em0f_short_strike_row(v->record.bytes,i))return 1;
+  return 0;
+ }
  if(profile==0x00500058u)
   return v->model->work&&v->model->work->room==0x103&&r103_paired_kick_actor(v->actor)&&
      v->model->part_count&&v->part==v->model->parts&&r103_paired_kick_row(v->record.bytes);
@@ -2097,7 +2265,11 @@ int gh_effect_em00_attack_emitter_is_bound(const gh_effect_emitter_view *v)
          part<v->model->part_count&&v->part==v->model->parts+part&&
          em0a_attack_effect_row(v->record.bytes,index);
  }
- if(!em00_family_attack_actor(v->actor)||(profile!=0x002c0058u&&profile!=0x005a0058u))return 0;
+ const int wave4_short=profile==0x002c0058u&&r101_wave4_em27_actor(v->actor)&&
+    v->model->work&&v->model->work->room==0x101;
+ const int r200_wave=profile==0x002c0058u&&r200_em01_trail_actor(v->actor)&&
+     v->model->work&&v->model->work->room==0x200;
+ if(!wave4_short&&!r200_wave&&(!em00_family_attack_actor(v->actor)||(profile!=0x002c0058u&&profile!=0x005a0058u)))return 0;
  const unsigned part=v->record.bytes[0xbe];
  const unsigned type=v->record.bytes[0x133];
  if(!((part==10&&type==0x12)||(part==0&&type==9)||((part==25||part==21)&&type==0x1a)))
@@ -2193,6 +2365,13 @@ int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *v)
 {
  if(!v||!v->payload||v->payload_size!=0x260)return 0;
  const uint32_t program=w(v->payload+0x18c);
+ if(program==0x00480058u){
+  return v->initialized&&v->actor==v->selector&&em0f_route_effect_room(v->actor)==0x101&&
+    v->model&&v->model->work&&v->model->work->room==0x101&&
+    v->model->root.bytes==v->actor->bytes&&v->model->part_count>4&&v->part==v->model->parts+4&&
+    v->record.size==0x2f0&&em0f_grenade_trail_row(v->record.bytes)&&
+    !w(v->payload+0x110)&&v->payload[0x1ec]==0xff;
+ }
  const int recoil=program==0x00040058u||program==0x00080058u;
  if((!recoil&&program!=0x002f0058u&&program!=0x00300058u)||!v->initialized||
     !v->actor||!v->actor->bytes||v->actor->size<0x644||v->actor!=v->selector||
@@ -2241,8 +2420,11 @@ static int enemy_landing_emitter(const gh_effect_emitter_view *v)
   return object==0x204&&(boss||reinforcement)&&w(v->payload+0x110)==UINT32_MAX;
  }
  if(work->room==0x101&&object==0x202&&appearance==6){
-  /* The first native side-arena wave uses the original 240548 dust SEQ. */
-  return ((stamp==0x16&&kind==0x200)||(stamp==0x20&&kind==0x203))&&
+  /* The authored side-arena spawns use the shared 240548 dust SEQ. */
+  const int em0f=kind==0x20f&&(stamp==0x1a||stamp==0x1b||stamp==0x22||stamp==0x23);
+  return ((kind==0x200&&(stamp==0x16||stamp==0x18))||
+     (kind==0x202&&stamp==0x27)||(kind==0x203&&(stamp==0x20||stamp==0x28))||
+     (kind==0x227&&(stamp==0x1e||stamp==0x26))||em0f)&&
      v->record.bytes[0x133]==0x1a&&w(v->record.bytes+4)==0x00c00000u&&
      w(v->payload+0x110)==UINT32_MAX;
  }
@@ -2855,6 +3037,14 @@ int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *owner,const gh_eff
   for(unsigned i=0;i<4;++i)
    if(v->record.bytes==est.bytes+16+i*0x2f0)
     return v->type==v->record.bytes[0x133]&&r200_em1a_melee_row(v->record.bytes,i);
+ }
+ if(profile==0x005c0058u&&em0f_route_effect_room(v->actor)==0x101){
+  gh_effect_view est;
+  if(gh_effect_est_at_00306030(owner,0x58,0x5c,&est)||!est.bytes||
+     est.size<16+6*0x2f0||w(est.bytes+4)!=6)return 0;
+  for(unsigned i=0;i<6;i++)
+   if(v->record.bytes==est.bytes+16+i*0x2f0)
+    return v->type==v->record.bytes[0x133]&&em0f_short_strike_row(v->record.bytes,i);
   return 0;
  }
  if(profile==0x00500058u&&r103_paired_kick_actor(v->actor)){
@@ -2891,7 +3081,9 @@ int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *owner,const gh_eff
  const int capture=profile==0x00290058u&&
      r100_em02_capture_actor(v->actor)&&(v->type==0||v->type==0x1a)&&
      r100_em02_capture_row(v->record.bytes);
- if(!capture&&!em00_family_attack_actor(v->actor)&&!em0a_attack_room(v->actor))return 0;
+ const int wave4_short=profile==0x002c0058u&&r101_wave4_em27_actor(v->actor);
+ const int r200_wave=profile==0x002c0058u&&r200_em01_trail_actor(v->actor);
+ if(!capture&&!wave4_short&&!r200_wave&&!em00_family_attack_actor(v->actor)&&!em0a_attack_room(v->actor))return 0;
  const unsigned index=v->payload[0x23c]|((unsigned)v->payload[0x23d]<<8);
  if(!capture&&v->type!=9&&v->type!=0x12&&v->type!=0x1a&&v->type!=0x20&&(index!=0x1d||v->type))return 0;
  gh_effect_emitter_view emitter;
@@ -2926,7 +3118,9 @@ int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *owner,const gh_eff
     return v->record.bytes[0x133]==v->type&&em0a_attack_effect_row(v->record.bytes,index);
   return 0;
  }
- if(!em00_family_attack_actor(v->actor)||(index!=0x2c&&index!=0x5a))return 0;
+ /* The original part 25/21 sprites detach from their positive-part emitters.
+  * Validate the official EST and actor below even after that detachment. */
+ if(!wave4_short&&!r200_wave&&(!em00_family_attack_actor(v->actor)||(index!=0x2c&&index!=0x5a)))return 0;
  gh_effect_view est;
  if(gh_effect_est_at_00306030(owner,0x58,index,&est)||!est.bytes||est.size<16+4*0x2f0)return 0;
  for(unsigned i=0;i<4;i++){
@@ -3025,6 +3219,18 @@ static int ev1a_esp08_emitter_bound(const gh_game_effects *e,const gh_effect_emi
     est.size>=16+2*0x2f0&&w(est.bytes+4)>=2&&source->record.bytes==est.bytes+16+0x2f0;
 }
 
+static int om364_blast_shaded_row(const gh_game_effects *effects,const uint8_t *row)
+{
+ gh_effect_view authored;
+ if(!row||gh_effect_est_at_00306030(effects,0x58,6,&authored)||
+    !authored.bytes||authored.size<16+10*0x2f0||w(authored.bytes+4)!=10||
+    row[0xbe]!=0xff||row[0x133]!=1||w(row+4)!=0x00c00000u)
+  return 0;
+ for(unsigned i=3;i<10;i++)
+  if(row==authored.bytes+16+i*0x2f0)return 1;
+ return 0;
+}
+
 gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_bindings*b,unsigned source_slot,uint32_t source_serial,unsigned*slot,uint32_t*serial,int*allocated,uint32_t*f){
  if(!b||!slot||!serial||!allocated||!f)return GH_EFFECT_ARGUMENT;*f=0;*allocated=0;*slot=0;*serial=0;
  gh_game_effects*e=b->effects;if(!e||!e->native||e->native->owner!=e||e->native->esp!=b->esp||e->native->emitters!=b->emitters||b->esp_bytes<0x100180||b->emitter_bytes<0x26060)return GH_EFFECT_ARGUMENT;
@@ -3074,10 +3280,14 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
        r==rows+4*0x2f0||r==rows+8*0x2f0;
   }
  }
- if(type==1&&!catapult&&!catapult_impact_gradient&&!(attack_profile==0x00010003u&&w(source.payload+0x110)==0x2201u&&
-    !source.actor&&!source.selector&&r[0xbe]==0xff&&r[0x12e]==132&&
-    (w(r)&~0x8000u)==0x1efe0010u&&w(r+4)==0x00800000u&&
-    gh_effect_ambient_row_is_bound(e,1,source.record))){
+ const int grenade_gradient=type==1&&attack_profile==0x00060058u&&
+    !source.actor&&!source.selector&&w(source.payload+0x110)==UINT32_MAX&&om364_blast_shaded_row(e,r);
+ const uint32_t ambient_index=attack_profile>>16;
+ const int ambient_gradient=(ambient_index==1||ambient_index==2)&&(attack_profile&0xffffu)==3&&
+    w(source.payload+0x110)==0x2200u+ambient_index&&!source.actor&&!source.selector&&
+    r[0xbe]==0xff&&r[0x12e]==132&&(w(r)&~0x8000u)==0x1efe0010u&&w(r+4)==0x00800000u&&
+    gh_effect_ambient_row_is_bound(e,ambient_index,source.record);
+ if(type==1&&!grenade_gradient&&!catapult&&!catapult_impact_gradient&&!ambient_gradient){
   *f=0x2faca8;return GH_EFFECT_UNSUPPORTED;
  }
  if(!vtable||(type==3&&!player_heat_root)||(type==0x1f&&!devil&&!event_trail&&!(player_attachment&&attack_profile==0x00210000u&&
@@ -3198,6 +3408,21 @@ gh_effect_status gh_effect_create_esp_commit_base(gh_game_effects*e,unsigned slo
  e->native->esps[slot].initialized=1;
  return GH_EFFECT_OK;
 }
+gh_effect_status gh_effect_create_esp_init_type1_002e16d8(gh_game_effects *effects,
+ unsigned slot,uint32_t serial)
+{
+ gh_effect_esp_view view;
+ if(gh_effect_create_esp_at(effects,slot,&view)||view.serial!=serial||view.type!=1||
+    view.initialized||w(view.payload+0xf0)!=0x44e090u||!view.globals||!view.globals->initialized||
+    view.actor||view.selector||w(view.payload+0x23a)!=0x00060058u||
+    !om364_blast_shaded_row(effects,view.record.bytes))
+  return GH_EFFECT_ARGUMENT;
+ memcpy(view.payload+0x2b0,view.record.bytes+0x13c,16);
+ ww(view.payload+0x2c0,w(view.record.bytes+0x16c));
+ effects->native->esps[slot].initialized=1;
+ return GH_EFFECT_OK;
+}
+
 gh_effect_status gh_effect_create_esp_commit_type6(gh_game_effects*e,unsigned slot,uint32_t serial){gh_effect_esp_view v;gh_effect_status status=gh_effect_create_esp_at(e,slot,&v);if(status||v.serial!=serial||v.type!=6||v.initialized||w(v.payload+0xf0)!=0x44e6d8u||!v.globals||!v.globals->initialized||v.actor||v.selector)return GH_EFFECT_ARGUMENT;e->native->esps[slot].initialized=1;return GH_EFFECT_OK;}
 gh_effect_status gh_effect_create_esp_commit_8(gh_game_effects *e,unsigned slot,uint32_t serial)
 {
@@ -3317,12 +3542,12 @@ int gh_effect_esp_type7_record_bound(const gh_game_effects *e,const gh_effect_es
      !gh_effect_est_at_00306030(e,6,index,&est)&&est.size>=16+count*0x2f0&&
      w(est.bytes+4)==count&&r==est.bytes+16+row*0x2f0;
  }
- if(tag==0x00340058u)return gh_effect_em00_attack_esp_is_bound(e,v);
+ if(tag==0x00340058u||tag==0x005c0058u)return gh_effect_em00_attack_esp_is_bound(e,v);
  if(tag==0x003f0058u||((tag&0xffffu)==0x58&&
     (devil_ranged_effect_rows(tag>>16)||devil_combo_effect_rows(tag>>16))))
   return gh_effect_devil_esp_is_bound(e,v);
  if(tag==0x003b006cu||tag==0x00350000u||tag==0x00420000u||tag==0x00270058u||tag==0x00590058u||
-    tag==0x005d0058u||tag==0x00170000u||tag==0x00220000u||tag==0x00280000u||tag==0x00190000u||
+    tag==0x005d0058u||tag==0x005f0058u||tag==0x00050058u||tag==0x00170000u||tag==0x00220000u||tag==0x00280000u||tag==0x00190000u||
     tag==0x002e0000u||tag==0x00390000u)
   return gh_effect_player_attachment_esp_is_bound(e,v);
  if(tag==0x00130006u){
@@ -3330,6 +3555,7 @@ int gh_effect_esp_type7_record_bound(const gh_game_effects *e,const gh_effect_es
  }else if(v->actor||v->selector)return 0;
  switch(tag){
  case 0x00030000u: /* Player impact. */
+ case 0x00060058u: /* Original OM364 blast distortion. */
  case 0x00120058u: /* Positioned amplified enemy impact. */
  case 0x000d0006u: /* EV02 cuts 12, 13, 15, 16, 17 and 25. */
  case 0x000e0006u:
@@ -4061,15 +4287,46 @@ gh_effect_status gh_effect_create_prepare_actor_retirement(gh_game_effects *e,
  struct gh_effect_native *n=e->native;
  if(n->owner!=e)return GH_EFFECT_ARGUMENT;
  detach_destroying_emitters(n,actor);
+ if(r101_wave4_em27_actor(actor)&&actor->bytes[0x2f4]==2){
+  /* 2FCB88 already detached this CORE04 trail's transform. Its world-space
+   * history and lifetime remain active after 30F5A0 frees the actor. */
+  for(unsigned i=0;i<1024;++i){
+   const unsigned off=(i>>5)*4;
+   const uint32_t bit=UINT32_C(0x80000000)>>(i&31);
+   if(!(w(n->esp+0x100000+off)&bit))continue;
+   esp_metadata *m=n->esps+i;
+   if(!m->associated||!m->initialized||!m->player_attachment||m->type!=9||
+      m->actor!=actor||m->selector!=actor||m->parent_emitter!=-1||m->previous!=-1||m->next!=-1)
+    continue;
+   const uint8_t *payload=n->esp+(size_t)i*0x400;
+   if(w(payload+0x23a)!=0x00040000u||w(payload+0x10c)!=3||
+      !(w(payload+0x11c)&0x8000u)||w(payload+0x114)||w(payload+0x120)||
+      !gh_effect_player_stun_row(m->record))continue;
+   const uint8_t *p=actor->bytes;
+   float tint;
+   memcpy(&tint,p+0x24c,4);
+   if(!isfinite(tint))return GH_EFFECT_UNSUPPORTED;
+   m->retired_actor=(gh_effect_retired_actor){
+    .flags=w(p+0x250),.tint_alpha=tint,.opacity={p[0x2b6],p[0x2b7],p[0x2bc]},.valid=1};
+   m->actor=m->selector=NULL;
+  }
+ }
  const int opening=actor->size>=0x644&&actor->original_vtable214==0x4479c8&&
     (w(actor->bytes+0x2fc)>>16)==0x202&&w(actor->bytes+0x564)==0x203&&
     (w(actor->bytes+0x640)&0xffffu)==19;
  const int r102_ground=(r102_gate_guard_effect_actor(actor)||em00_escape_effect_room(actor)==0x102||
     r102_gate_em0a_ground_actor(actor)||r102_em03_death_actor(actor))&&actor->bytes[0x2f4]==2;
+ /* The ESP remains authenticated by the 58:02 ground emitter at allocation. */
+ const int side_em02=actor->size>0x1650&&actor->original_vtable214==0x4479c8&&
+     (w(actor->bytes+0x2fc)>>16)==0x202&&w(actor->bytes+0x564)==0x202&&
+     (w(actor->bytes+0x640)&0xffffu)==0x27&&actor->bytes[0x1650]==6;
+ const int side_ground=(r101_side_em00_effect_actor(actor)||r101_side_em03_effect_actor(actor)||
+     side_em02||r101_wave4_em27_actor(actor))&&
+     actor->bytes[0x2f4]==2;
  const int em03_retained=r104_charge_actor(actor)&&actor->bytes[0x2f4]==2&&
     actor->bytes[0x2f5]==2&&actor->bytes[0x2f6]==6&&actor->bytes[0x2f7]==0&&
     (w(actor->bytes+0x250)&0xe0010000u)==0xe0010000u;
- if((!opening&&!r102_ground&&!em03_retained)||(w(actor->bytes+0x250)&0xa0008000u)!=0xa0000000u)
+ if((!opening&&!r102_ground&&!em03_retained&&!side_ground)||(w(actor->bytes+0x250)&0xa0008000u)!=0xa0000000u)
   return GH_EFFECT_OK;
  gh_effect_view est={0};
  unsigned rows=0;

@@ -57,6 +57,19 @@ gh_scene_placement_status gh_om3be_launch_001bb548(gh_om3be_state *,
 gh_scene_placement_status gh_om3be_launch_roulette_001bb548(gh_om3be_state *,
  const gh_title_player_view *shooter,const float origin[3],const float velocity[3],unsigned rank);
 gh_scene_placement_status gh_om3be_abort(gh_om3be_state *);
+typedef struct {
+ gh_om_init_state common;
+ gh_hitarea_object areas[2];
+ gh_effect_create_call effect,blast;
+ const gh_actor_model *parent;
+ uint32_t parent_handle;
+ int sphere_indices[2];
+ uint8_t setup_stage,areas_created[2],fuse_sound_submitted;
+} gh_om364_state;
+gh_scene_placement_status gh_om364_construct_001b0ce8(void *,size_t,gh_title_player_view *);
+gh_scene_placement_status gh_om364_initialize_001b0de8(gh_om364_state *,gh_om_object *,
+ const gh_om_initializer_bindings *);
+gh_scene_placement_status gh_om364_abort(gh_om364_state *);
 #ifdef __cplusplus
 }
 #endif

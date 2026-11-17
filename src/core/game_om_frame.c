@@ -1,6 +1,7 @@
 /* Readable original waiting-state Move for verified R100 OM classes.
  * Patched SLUS_215.03; semantic host pointers replace raw644/634/414. */
 #include "game_om_frame.h"
+#include "game_scene_at_geometry.h"
 #include "game_om_fragments.h"
 #include "game_actor_matrix.h"
 #include "game_actor_axis_rotation.h"
@@ -51,11 +52,15 @@ static int devil_projectile(const gh_om_object *o)
 {
  return o&&o->runtime_created&&o->runtime_kind==0x3be&&!o->source.bytes&&o->view.original_vtable214==0x4290c8;
 }
+static int em0f_throw(const gh_om_object *o)
+{
+ return o&&o->runtime_created&&o->runtime_kind==0x364&&!o->source.bytes&&o->view.original_vtable214==0x4282f0;
+}
 static int weapon(const gh_om_object*o){return o&&(o->source.type==0x382||paper(o)||(o->runtime_created&&o->runtime_kind==0x363&&!o->source.bytes));}
 static int r101_item(const gh_om_object *o)
 {
  if(!o)return 0;
- if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1||o->runtime_kind==0x3e3||
+ if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c3||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1||o->runtime_kind==0x3e3||
      (o->runtime_kind==0x3da&&o->view.bytes&&o->view.size>=0x690&&(word(o->view.bytes+0x560)==0x905||word(o->view.bytes+0x560)==0xa5d));
  return o->source.type>=0x3d3&&o->source.type<=0x3d5;
 }
@@ -68,7 +73,7 @@ static int simple(const gh_om_object*o){return o&&(o->source.type==0x30a||o->sou
 static int plain(const gh_om_object*o){return o&&(o->source.type==0x30e||o->source.type==0x324||o->source.type==0x326);}
 static int segments(const gh_om_object*o){return o&&(o->source.type==0x322||o->source.type==0x323||o->source.type==0x346);}
 static int door(const gh_om_object*o){return o&&(o->source.type==0x300||o->source.type==0x313||o->source.type==0x330||o->source.type==0x333||o->source.type==0x354);}
-static gh_om_init_state*common(const gh_om_frame_state*s){gh_om_object*o=s->object;if(!o)return NULL;if(tutorial(o)||mount(o)||catapult(o))return o->initialization;if(devil_projectile(o))return &((gh_om3be_state *)o->initialization)->common;if(weapon(o))return &((gh_om382_state*)o->initialization)->common;if(door(o)||r101_item(o)||o->source.type==0x351||o->source.type==0x355||o->source.type==0x356)return o->initialization;if(o->source.type==0x41c||o->source.type==0x357)return &((gh_om041c_state*)o->initialization)->common;if(o->source.type==0x35d)return &((gh_om35d_state*)o->initialization)->common;if(o->source.type==0x307)return &((gh_om307_state*)o->initialization)->common;if(o->source.type==0x311)return &((gh_om311_state*)o->initialization)->common;if(o->source.type==0x310)return &((gh_om310_state*)o->initialization)->base.common;if(o->source.type==0x322)return &((gh_om322_state*)o->initialization)->common;if(o->source.type==0x323)return &((gh_om323_state*)o->initialization)->common;if(o->source.type==0x346)return &((gh_om346_state*)o->initialization)->common;return fragments(o)||simple(o)||plain(o)||fragment_cylinders(o)?&((gh_om303_state*)o->initialization)->common:NULL;}
+static gh_om_init_state*common(const gh_om_frame_state*s){gh_om_object*o=s->object;if(!o)return NULL;if(tutorial(o)||mount(o)||catapult(o))return o->initialization;if(devil_projectile(o))return &((gh_om3be_state *)o->initialization)->common;if(em0f_throw(o))return &((gh_om364_state *)o->initialization)->common;if(weapon(o))return &((gh_om382_state*)o->initialization)->common;if(door(o)||r101_item(o)||o->source.type==0x351||o->source.type==0x355||o->source.type==0x356)return o->initialization;if(o->source.type==0x41c||o->source.type==0x357)return &((gh_om041c_state*)o->initialization)->common;if(o->source.type==0x35d)return &((gh_om35d_state*)o->initialization)->common;if(o->source.type==0x307)return &((gh_om307_state*)o->initialization)->common;if(o->source.type==0x311)return &((gh_om311_state*)o->initialization)->common;if(o->source.type==0x310)return &((gh_om310_state*)o->initialization)->base.common;if(o->source.type==0x322)return &((gh_om322_state*)o->initialization)->common;if(o->source.type==0x323)return &((gh_om323_state*)o->initialization)->common;if(o->source.type==0x346)return &((gh_om346_state*)o->initialization)->common;return fragments(o)||simple(o)||plain(o)||fragment_cylinders(o)?&((gh_om303_state*)o->initialization)->common:NULL;}
 static uint32_t state_entry(uint32_t kind,unsigned index){
  static const uint32_t entries[][5]={{0x307,0x1896e0,0x1897b8,0x189818,0x18a110},{0x30a,0x18c4a8,0x18c520,0x18c580,0x18c8a8},{0x310,0x18f5d0,0x18f618,0x18f858,0x18fbf0},{0x33f,0x19f4b0,0x19f528,0x19f588,0x19f8b0},{0x309,0x18b6a0,0x18b718,0x18b778,0x18baa0},{0x325,0x1993c8,0x199440,0x1994a0,0x1997c8},{0x30e,0x1bfc88,0x1bfce0,0x1bfd28,0x1bff48},{0x324,0x1bfc88,0x1bfce0,0x1bfd28,0x1bff48},{0x326,0x1bfc88,0x1bfce0,0x1bfd28,0x1bff48},{0x322,0x1968a0,0x196978,0x1969d8,0x197188},{0x323,0x197ec8,0x197fa0,0x198000,0x1987b0},{0x346,0x1a1690,0x1a1768,0x1a17c8,0x1a20a8}};
  for(unsigned i=0;i<sizeof(entries)/sizeof(entries[0]);i++)if(entries[i][0]==kind)return index<4?entries[i][index+1]:0;return 0;
@@ -95,7 +100,7 @@ static gh_object_step_status bind(gh_om_frame_state*s,const gh_om_factory*f,cons
  void*registered=NULL;if(!o||!o->registered||!o->initialization||!o->view.bytes||o->view.size<0x600||q->actor.bytes!=o->view.bytes||q->actor.size!=o->view.size||q->this_delta||gh_room_object_lookup(f->bindings.pools,q->handle,GH_ROOM_OBJECT_OM,f,&registered)||registered!=o)return fail(s,0x30f15c,pc,GH_OBJSTEP_ARGUMENT);
  if(s->bound)return s->factory==f&&s->object==o&&s->handle==q->handle&&s->entry==q->original_entry?GH_OBJSTEP_OK:fail(s,0x30f15c,pc,GH_OBJSTEP_ARGUMENT);
  const gh_om_fragment_profile *fragment=gh_om_fragment_profile_for(o->source.type);
- uint32_t expected=fragment?fragment->move:o->source.type==0x300?0x186928:o->source.type==0x313?0x191f30:o->source.type==0x330?0x19c518:(o->source.type==0x331||o->source.type==0x332)?0x19c848:o->source.type==0x333?0x19d538:o->source.type==0x355?0x1a85b8:o->source.type==0x356?0x1a8778:o->source.type==0x351?0x1a6188:o->source.type==0x354?0x1a82d8:o->source.type==0x303?0x187c18:o->source.type==0x304?0x187fe8:o->source.type==0x305?0x188c88:o->source.type==0x317?0x192ef8:o->source.type==0x318?0x193180:o->source.type==0x31a?0x1933f8:o->source.type==0x320?0x195e58:o->source.type==0x307?0x1895d8:o->source.type==0x30a?0x18c370:o->source.type==0x310?0x18f488:o->source.type==0x311?0x190948:o->source.type==0x338?0x19e150:o->source.type==0x339?0x19e3d8:o->source.type==0x33f?0x19f378:o->source.type==0x309?0x18b568:o->source.type==0x308?0x18a870:o->source.type==0x30b?0x18d160:o->source.type==0x30c?0x18df18:o->source.type==0x30e?0x18ee38:o->source.type==0x324?0x198f48:o->source.type==0x325?0x199290:o->source.type==0x326?0x199f60:o->source.type==0x322?0x1965f8:o->source.type==0x323?0x197c20:o->source.type==0x346?0x1a13e8:r101_item(o)?0x1c0378:weapon(o)?0x1c9860:o->source.type==0x35d?0x1aedb0:o->source.type==0x41c?0x17ba28:o->source.type==0x357?0x1a8a70:tutorial(o)?0x1bf518:mount(o)?0x1a7880:catapult(o)?0x1b8990:devil_projectile(o)?0x1b92f0:0;
+ uint32_t expected=fragment?fragment->move:o->source.type==0x300?0x186928:o->source.type==0x313?0x191f30:o->source.type==0x330?0x19c518:(o->source.type==0x331||o->source.type==0x332)?0x19c848:o->source.type==0x333?0x19d538:o->source.type==0x355?0x1a85b8:o->source.type==0x356?0x1a8778:o->source.type==0x351?0x1a6188:o->source.type==0x354?0x1a82d8:o->source.type==0x303?0x187c18:o->source.type==0x304?0x187fe8:o->source.type==0x305?0x188c88:o->source.type==0x317?0x192ef8:o->source.type==0x318?0x193180:o->source.type==0x31a?0x1933f8:o->source.type==0x320?0x195e58:o->source.type==0x307?0x1895d8:o->source.type==0x30a?0x18c370:o->source.type==0x310?0x18f488:o->source.type==0x311?0x190948:o->source.type==0x338?0x19e150:o->source.type==0x339?0x19e3d8:o->source.type==0x33f?0x19f378:o->source.type==0x309?0x18b568:o->source.type==0x308?0x18a870:o->source.type==0x30b?0x18d160:o->source.type==0x30c?0x18df18:o->source.type==0x30e?0x18ee38:o->source.type==0x324?0x198f48:o->source.type==0x325?0x199290:o->source.type==0x326?0x199f60:o->source.type==0x322?0x1965f8:o->source.type==0x323?0x197c20:o->source.type==0x346?0x1a13e8:r101_item(o)?0x1c0378:weapon(o)?0x1c9860:o->source.type==0x35d?0x1aedb0:o->source.type==0x41c?0x17ba28:o->source.type==0x357?0x1a8a70:tutorial(o)?0x1bf518:mount(o)?0x1a7880:catapult(o)?0x1b8990:devil_projectile(o)?0x1b92f0:em0f_throw(o)?0x1b0f70:0;
  if(!expected||q->original_entry!=expected)return fail(s,q->original_entry,pc,GH_OBJSTEP_UNSUPPORTED);
  /* Bind before first original Move; constructor1BBEB8 established these.
   * A nonzero guest pointer can never be silently adopted as host634. */
@@ -1267,12 +1272,14 @@ static gh_object_step_status door_break_spawn_001bcd70(gh_om_frame_state *s,
  uint32_t pc=0;
  const unsigned count=model->part_count<p[0x624]?model->part_count:p[0x624];
  if(!s->runtime.init||!s->runtime.fragment_atan_coeff||c->door_segments!=p+0x650||
-    p[0x624]>7||!count||model->part_count!=p[0x2b4]||model->script.mesh_count<2||
+    p[0x624]>7||!count||model->part_count!=p[0x2b4]||!model->script.mesh_count||
     word(p+0x600)||word(p+0x628))
   return fail(s,0x1bcd70,frontier,GH_OBJSTEP_UNSUPPORTED);
  if(c->hitarea_created&&gh_hitarea_object_set_active_001fd668(&c->hitarea,0,&pc))
   return fail(s,pc?pc:0x1fd668,frontier,GH_OBJSTEP_CALLEE);
- if(gh_actor_model_node_mask_flags(model,1,0x380,UINT32_MAX,0x2001u)||
+ /* 14B6F8 returns the first node when the requested link is absent. */
+ const unsigned fragment_mesh=model->script.mesh_count>1?1:0;
+ if(gh_actor_model_node_mask_flags(model,fragment_mesh,0x380,UINT32_MAX,0x2001u)||
     gh_actor_model_node_mask_flags(model,0,0x380,~1u,0x2000u))
   return fail(s,0x14b6f8,frontier,GH_OBJSTEP_CALLEE);
  put(p+0x250,word(p+0x250)|0x10000u);
@@ -1539,6 +1546,37 @@ static gh_object_step_status r101_item_wait_gate(gh_om_frame_state *s,
  }
  return GH_OBJSTEP_OK;
 }
+/* 2DB8B8 offers the original placed-item interaction at the two priorities. */
+static gh_object_step_status r101_placed_item_offer(gh_om_frame_state *s,
+ const gh_title_player_view *player,const float position[4],uint32_t *frontier)
+{
+ if(player->size<0x15f8)return fail(s,0x10b698,frontier,GH_OBJSTEP_ARGUMENT);
+ if((word(player->bytes+0x15f4)&0x400000u)||(int32_t)word(s->runtime.init->enemies+0x514)>0)
+  return GH_OBJSTEP_OK;
+ const gh_om_init_state *init=s->object->initialization;
+ if(!init||!init->bindings||!s->runtime.action_buttons)
+  return fail(s,0x1f7858,frontier,GH_OBJSTEP_ARGUMENT);
+ float from[3];
+ memcpy(from,player->alias_f0,sizeof(from));
+ const float x=add(position[0],-from[0]),z=add(position[2],-from[2]);
+ const float distance=add(mul(x,x),mul(z,z));
+ int direct=distance<=2.0f;
+ uint32_t pc=0;
+ if(direct&&distance>=0.5f){
+  float turn;
+  if(gh_player_target_angle_002da038(init->bindings->elf,init->bindings->elf_bytes,
+      from,position,number(player->bytes+0x104),3.1415927f,&turn,&pc))
+   return fail(s,pc?pc:0x2da038,frontier,GH_OBJSTEP_CALLEE);
+  direct=fabsf(turn)<0.2617994f;
+ }
+ const gh_action_set_request request={.priority=direct?8:7,.life=6,
+     .callback_id=0x2db978,.argument=s->object};
+ int emitted;
+ unsigned index;
+ if(gh_action_button_set_001f7858(s->runtime.action_buttons,&request,&emitted,&index,&pc))
+  return fail(s,pc?pc:0x1f7858,frontier,GH_OBJSTEP_CALLEE);
+ return GH_OBJSTEP_OK;
+}
 
 /* 1C0678's ordinary unattached idle/fall states. Unknown pickup
  * dispatch and active effect requests retain their original boundaries. */
@@ -1550,14 +1588,17 @@ static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_w
   return fail(s,0x1c0678,f,GH_OBJSTEP_ARGUMENT);
  const unsigned kind=s->object->runtime_kind;
  const int16_t room=work->room;
+ const int placed_item=!s->object->runtime_created&&room==0x101&&
+     (s->object->source.type==0x3d3||s->object->source.type==0x3d4)&&
+     half(p+0x2fe)==s->object->source.type&&actor->original_vtable214==0x429b88;
  const int dropped_item=s->object->runtime_created&&gh_om_runtime_pickup_supported(room,kind);
  if(p[0x2f4]){
-  if(p[0x2f4]==1&&dropped_item)
+  if(p[0x2f4]==1&&(dropped_item||placed_item))
    return remove_object(s,f); /* Original PMF[1] 1C2260 -> 1B79B0. */
   return fail(s,s->entry,f,GH_OBJSTEP_UNSUPPORTED);
  }
  if(s->special_phase)return GH_OBJSTEP_OK;
- if(dropped_item&&(p[0x2f6]==4||p[0x2f6]==5)){
+ if((dropped_item||placed_item)&&(p[0x2f6]==4||p[0x2f6]==5)){
   if(p[0x2f6]==4){
    if(!s->runtime.award_item)return fail(s,0x1c2408,f,GH_OBJSTEP_UNSUPPORTED);
    if(!s->pickup.stage){
@@ -1674,7 +1715,7 @@ static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_w
       distance=add(distance,mul(delta,delta));
      }
      if(distance<((p[0x676]&4u)?16.0f:4.0f)){
-      if(!dropped_item||word(p+0x670)!=0x31)
+      if((!dropped_item&&!placed_item)||word(p+0x670)!=0x31)
        return fail(s,0x1c20d8,f,GH_OBJSTEP_UNSUPPORTED);
       int blocked=0;
       if(p[0x676]&1u){
@@ -1685,7 +1726,11 @@ static gh_object_step_status r101_item_move(gh_om_frame_state *s,const gh_boot_w
        if(gh_scene_ray_query_00131e10(s->runtime.scene_tables,&ray,&blocked,&pc))
         return fail(s,pc?pc:0x131e10,f,GH_OBJSTEP_UNSUPPORTED);
       }
-      if(!blocked){
+      if(!blocked&&placed_item){
+       const gh_object_step_status status=r101_placed_item_offer(s,player,next,f);
+       if(status)return status;
+      }
+      if(!blocked&&dropped_item){
        gh_om_init_state *init=s->object->initialization;
        if(gh_om_r101_item_collect_001c24e8(init))
         return fail(s,init->frontier?init->frontier:0x1c24e8,f,GH_OBJSTEP_UNSUPPORTED);
@@ -2340,6 +2385,247 @@ static gh_object_step_status catapult_windup_001b8a50(gh_om_frame_state *s,
  return GH_OBJSTEP_OK;
 }
 
+/* 292F70 records the same positional warning as the original grenade. */
+static gh_object_step_status om364_warn_00292f70(gh_om_frame_state *frame,
+ const gh_om364_state *state,const float position[3],uint32_t *frontier)
+{
+ gh_game_init_state *init=frame->runtime.init;
+ const gh_title_player_view *player=frame->environment.current_player;
+ if(!init||!player||!player->bytes||player->size<0x108||!player->alias_f0||
+    !state->common.bindings)return fail(frame,0x292f70,frontier,GH_OBJSTEP_ARGUMENT);
+ float from[3];
+ memcpy(from,player->alias_f0,12);
+ const float dx=add(position[0],-from[0]),dz=add(position[2],-from[2]);
+ const float distance=add(mul(dx,dx),mul(dz,dz));
+ uint32_t pc=0;
+ if(distance>=3.2399998f&&distance<=25.0f){
+  float angle;
+  if(gh_player_target_angle_002da038(state->common.bindings->elf,state->common.bindings->elf_bytes,
+      from,position,number(player->bytes+0x104),3.1415927f,&angle,&pc))
+   return fail(frame,pc?pc:0x2da038,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const float abs_angle=fabsf(angle);
+  if(abs_angle>=0.7853982f)
+   put(init->enemies+(abs_angle>2.3561945f?0x550:angle>0?0x554:0x558),2);
+ }
+ memcpy(init->enemies+0x520,position,12);
+ put(init->enemies+0x530,2);
+ return GH_OBJSTEP_OK;
+}
+
+/* 1B1070 expires the fuse before publishing the original two attack groups. */
+static gh_object_step_status om364_blast_001b1070(gh_om_frame_state *frame,
+ gh_om364_state *state,uint32_t *frontier)
+{
+ uint8_t *actor=frame->object->view.bytes;
+ uint32_t pc=0;
+ if(!frame->runtime.stop_throw_voice||!frame->runtime.break_sound||
+    !frame->runtime.throw_blast_effect||!frame->runtime.release_effect)
+  return fail(frame,0x1b1070,frontier,GH_OBJSTEP_UNSUPPORTED);
+ if(frame->special_phase<3){
+  const gh_object_step_status status=frame->runtime.stop_throw_voice(
+      frame->runtime.context,word(actor+0x668),&pc);
+  if(status)return fail(frame,pc?pc:0x2cbba0,frontier,status);
+  put(actor+0x668,0);
+  frame->special_phase=3;
+ }
+ if(frame->special_phase==3){
+  const gh_motion_sound_request request={.model=&state->common.model,.actor=&frame->object->view,
+      .bank=0,.program=2};
+  uint32_t handle=0;
+  const gh_actor_motion_status status=frame->runtime.break_sound(
+      frame->runtime.context,&request,&handle,&pc);
+  if(status)return fail(frame,pc?pc:0x2cba48,frontier,
+      status==GH_ACTOR_MOTION_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);
+  frame->special_phase=4;
+ }
+ if(frame->special_phase==4){
+  const gh_object_step_status status=frame->runtime.throw_blast_effect(frame->runtime.context,state,&pc);
+  if(status)return fail(frame,pc?pc:0x306838,frontier,status);
+  frame->special_phase=5;
+ }
+ if(frame->special_phase==5){
+  for(unsigned i=0;i<2;++i){
+   sh(state->areas[i].bytes+0x46,i?0x48:0x30);
+   put(state->areas[i].bytes+0x4c,50);
+   if(gh_hitarea_object_set_active_001fd668(&state->areas[i],1,&pc))
+    return fail(frame,pc?pc:0x1fd668,frontier,GH_OBJSTEP_CALLEE);
+  }
+  frame->special_phase=6;
+ }
+ if(frame->special_phase==6){
+  const gh_actor_motion_status status=frame->runtime.release_effect(
+      frame->runtime.context,&frame->object->view,7,2,&pc);
+  if(status)return fail(frame,pc?pc:0x306200,frontier,
+      status==GH_ACTOR_MOTION_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);
+  actor[0x2f4]=3;
+  frame->special_phase=7;
+ }
+ return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status om364_flight_001b1070(gh_om_frame_state *frame,
+ gh_om364_state *state,uint32_t *frontier)
+{
+ uint8_t *p=frame->object->view.bytes;
+ uint8_t *world=frame->object->view.alias_f0;
+ const float rate=number(p+0x5a8);
+ float time=number(p+0x630);
+ uint32_t pc=0;
+ if(!world||!frame->runtime.init||!frame->runtime.scene_tables||!isfinite(time))
+  return fail(frame,0x1b1070,frontier,GH_OBJSTEP_ARGUMENT);
+ if(time<=0&&frame->special_phase!=1)return om364_blast_001b1070(frame,state,frontier);
+ if(!frame->special_phase){
+  float previous[3],position[3],velocity[3],rotation[4],spin[3],wrapped[4];
+  memcpy(previous,world,12);
+  memcpy(velocity,p+0x640,12);
+  memcpy(rotation,p+0x100,16);
+  memcpy(spin,p+0x650,12);
+  if(!frame->runtime.init->enemies[0x53c]&&
+     (int32_t)word(frame->runtime.init->enemies+0x514)<1)time=add(time,-rate);
+  for(unsigned i=0;i<3;++i)position[i]=add(previous[i],mul(velocity[i],rate));
+  velocity[1]=add(velocity[1],-mul(rate,0.026f));
+  const float horizontal=add(mul(velocity[0],velocity[0]),mul(velocity[2],velocity[2]));
+  for(unsigned i=0;i<3;++i)
+   rotation[i]=horizontal>0.000025f?add(rotation[i],mul(spin[i],rate)):
+      mul(rotation[i],add(1,-mul(rate,0.1f)));
+  if(gh_actor_euler_adjust_001f7da0(rotation,wrapped,GH_STATIC_BINARY32_REFERENCE,&pc))
+   return fail(frame,pc?pc:0x1f7da0,frontier,GH_OBJSTEP_UNSUPPORTED);
+  float hitpos[4],normal[4];
+  gh_scene_ray_request ray={
+    .from={position[0],previous[1],position[2],1},
+    .to={position[0],add(position[1],-10.5f),position[2],1},
+    .mask=2,.hit_position=hitpos,.hit_normal=normal};
+  int hit;
+  if(gh_scene_ray_query_00131e10(frame->runtime.scene_tables,&ray,&hit,&pc))
+   return fail(frame,pc?pc:0x131e10,frontier,GH_OBJSTEP_UNSUPPORTED);
+  int bounce=0;
+  if(hit&&position[1]<add(hitpos[1],0.2f)){
+   position[1]=add(hitpos[1],0.2f);
+   if(fabsf(velocity[1])<0.104f)memset(velocity,0,12);
+   else{
+    velocity[0]=mul(velocity[0],0.4f);
+    velocity[1]=mul(velocity[1],-0.5f);
+    velocity[2]=mul(velocity[2],0.4f);
+    for(unsigned i=0;i<3;++i)spin[i]=mul(spin[i],0.4f);
+    bounce=!p[0x666];
+   }
+  }
+  ray=(gh_scene_ray_request){.mask=1,.flags=4,.hit_position=hitpos,.hit_normal=normal};
+  memcpy(ray.from,previous,12);memcpy(ray.to,position,12);
+  ray.from[3]=ray.to[3]=1;
+  if(gh_scene_ray_query_00131e10(frame->runtime.scene_tables,&ray,&hit,&pc))
+   return fail(frame,pc?pc:0x131e10,frontier,GH_OBJSTEP_UNSUPPORTED);
+  if(hit){
+   float reflected[3];
+   for(unsigned i=0;i<3;++i){
+    float row[3];
+    for(unsigned j=0;j<3;++j)
+     row[j]=add(i==j?1.0f:0.0f,mul(mul(-2.0f,normal[i]),normal[j]));
+    reflected[i]=add(add(mul(row[0],velocity[0]),mul(row[1],velocity[1])),mul(row[2],velocity[2]));
+    spin[i]=mul(spin[i],0.4f);
+   }
+   memcpy(velocity,reflected,12);
+  }
+  gh_object_step_status status=om364_warn_00292f70(frame,state,position,frontier);
+  if(status)return status;
+  memcpy(world,position,12);
+  memcpy(p+0x630,&time,4);
+  memcpy(p+0x640,velocity,12);
+  memcpy(p+0x650,spin,12);
+  memcpy(p+0x100,wrapped,12);
+  frame->special_phase=bounce?1:2;
+ }
+ if(frame->special_phase==1){
+  if(!frame->runtime.break_sound)return fail(frame,0x2cba48,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const gh_motion_sound_request request={.model=&state->common.model,.actor=&frame->object->view,
+      .bank=0,.program=0x118};
+  uint32_t handle=0;
+  const gh_actor_motion_status status=frame->runtime.break_sound(frame->runtime.context,&request,&handle,&pc);
+  if(status)return fail(frame,pc?pc:0x2cba48,frontier,
+      status==GH_ACTOR_MOTION_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);
+  p[0x666]=1;
+  frame->special_phase=2;
+ }
+ if(number(p+0x630)<=0)return om364_blast_001b1070(frame,state,frontier);
+ return GH_OBJSTEP_OK;
+}
+
+
+/* 1B0F70 keeps both collision groups inactive before the original
+ * per-state move, then 1B1630 updates the held object's parent transform. */
+static gh_object_step_status om364_move_001b0f70(gh_om_frame_state *frame,uint32_t *frontier)
+{
+ gh_om364_state *state=(gh_om364_state *)frame->object->initialization;
+ uint8_t *p=frame->object->view.bytes;
+ if(!state||state->setup_stage!=8||!frame->runtime_bound||!frame->runtime.canonical_rate)
+  return fail(frame,0x1b0f70,frontier,GH_OBJSTEP_UNSUPPORTED);
+ if(p[0x2f4]&&p[0x2f4]!=3)return fail(frame,0x1b0f70,frontier,GH_OBJSTEP_UNSUPPORTED);
+ uint32_t pc=0;
+ for(unsigned i=0;i<2;++i){
+  if(!state->areas_created[i]||gh_hitarea_object_set_active_001fd668(&state->areas[i],0,&pc))
+   return fail(frame,pc?pc:0x1fd668,frontier,GH_OBJSTEP_UNSUPPORTED);
+  sh(state->areas[i].bytes+0x46,0);
+  put(state->areas[i].bytes+0x4c,0);
+ }
+ if(p[0x2f4]==3){
+  p[0x531]=0xff;
+  return remove_object(frame,frontier);
+ }
+ const float rate=*frame->runtime.canonical_rate;
+ if(!isfinite(rate)||rate<0)return fail(frame,0x292f50,frontier,GH_OBJSTEP_UNSUPPORTED);
+ memcpy(p+0x5a8,&rate,4);
+ p[0x531]=2;
+ if(!word(p+0x600)){
+  const gh_object_step_status status=om364_flight_001b1070(frame,state,frontier);
+  if(status)return status;
+ }
+ const gh_actor_part *part;
+ if(gh_actor_model_part_at(&state->common.model,1,&part))
+  return fail(frame,0x1b1938,frontier,GH_OBJSTEP_ARGUMENT);
+ float factor=mul(number(p+0x630),0.006666667f);
+ if(factor>1)factor=1;
+ if(factor<0)factor=0;
+ const float fold=mul(add(1,-factor),1.5707964f);
+ memcpy(part->bytes+0x108,&fold,4);
+ if(!word(p+0x600))return GH_OBJSTEP_OK;
+ if(!state->parent||!frame->runtime.resolve_actor||word(p+0x600)!=state->parent_handle)
+  return fail(frame,0x1b1630,frontier,GH_OBJSTEP_ARGUMENT);
+ gh_title_player_view parent;
+ if(frame->runtime.resolve_actor(frame->runtime.context,state->parent_handle,&parent,&pc)||
+    parent.bytes!=state->parent->root.bytes||parent.size!=state->parent->root.size)
+  return fail(frame,pc?pc:0x1b1630,frontier,GH_OBJSTEP_ARGUMENT);
+
+ if(gh_actor_model_part_at(state->parent,word(p+0x604),&part))
+  return fail(frame,0x1b1630,frontier,GH_OBJSTEP_ARGUMENT);
+ const float offset[3]={number(p+0x610),number(p+0x614),number(p+0x618)};
+ float matrix[16],position[4];
+ memcpy(matrix,part->bytes+0x80,sizeof(matrix));
+ if(gh_scene_at_apply_world_001508d8(matrix,offset,position))
+  return fail(frame,0x30a2b0,frontier,GH_OBJSTEP_UNSUPPORTED);
+ memcpy(frame->object->view.alias_f0,position,12);
+ put(p+0x24c,word(parent.bytes+0x24c));
+ put(p+0x250,(word(p+0x250)&~0x10u)|(word(parent.bytes+0x250)&0x10u));
+ if(!p[0x667]){
+  if(!frame->runtime.throw_fuse_effect)return fail(frame,0x306528,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const gh_object_step_status status=frame->runtime.throw_fuse_effect(frame->runtime.context,state,&pc);
+  if(status)return fail(frame,pc?pc:0x306528,frontier,status);
+  p[0x667]=1;
+ }
+ if(!state->fuse_sound_submitted){
+  if(!frame->runtime.break_sound)return fail(frame,0x2cba48,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const gh_motion_sound_request request={.model=&state->common.model,
+      .actor=&frame->object->view,.bank=0,.program=0x117};
+  uint32_t handle=0;
+  const gh_actor_motion_status status=frame->runtime.break_sound(frame->runtime.context,&request,&handle,&pc);
+  if(status)return fail(frame,pc?pc:0x2cba48,frontier,
+      status==GH_ACTOR_MOTION_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);
+  put(p+0x668,handle);
+  state->fuse_sound_submitted=1;
+ }
+ return GH_OBJSTEP_OK;
+}
+
+
 static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_static_transform_policy policy,uint32_t*f){
  uint8_t*p=s->object->view.bytes;gh_om_init_state*c=common(s);
  if(!s->phase){if(word((const uint8_t*)w+0x5d8)&0x20000000u){s->complete=1;return GH_OBJSTEP_OK;}put(p+0x5b4,0);s->phase=1;}
@@ -2350,6 +2636,11 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
  }
  if(s->phase==1&&catapult(s->object)){
   gh_object_step_status status=catapult_windup_001b8a50(s,policy,f);
+  if(status)return status;
+  s->phase=4;
+ }
+ if(s->phase==1&&em0f_throw(s->object)){
+  gh_object_step_status status=om364_move_001b0f70(s,f);
   if(status)return status;
   s->phase=4;
  }
@@ -2530,7 +2821,7 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
   else if(simple(s->object)||plain(s->object)||segments(s->object)||s->object->source.type==0x307){if(p[0x2f4]){uint32_t pc=state_entry(s->object->source.type,p[0x2f4]);return fail(s,pc?pc:s->entry,f,GH_OBJSTEP_UNSUPPORTED);}}
   else{
    if(((s->object->source.type==0x300&&w->room==0x100)||
-       (s->object->source.type==0x313&&w->room==0x101))&&
+       ((s->object->source.type==0x313||s->object->source.type==0x330)&&w->room==0x101))&&
       (p[0x2f4]==2||p[0x2f4]==3||s->special_phase==8)){
     gh_object_step_status status=(p[0x2f4]==2||s->special_phase==8)?
       door_break_001bc748(s,c,w,policy,f):remove_object(s,f);
@@ -2674,7 +2965,7 @@ gh_object_step_status gh_om_frame_bind_runtime(gh_om_frame_state*s,const gh_om_f
   return old->init==b->init&&old->canonical_rate==b->canonical_rate&&old->solids==b->solids&&
    old->context==b->context&&old->break_effect==b->break_effect&&old->break_sound==b->break_sound&&
    old->break_collision==b->break_collision&&old->remove_sound==b->remove_sound&&old->ik_globals==b->ik_globals&&
-   old->release_effect==b->release_effect&&old->fragment_atan_coeff==b->fragment_atan_coeff&&
+   old->throw_fuse_effect==b->throw_fuse_effect&&old->release_effect==b->release_effect&&old->fragment_atan_coeff==b->fragment_atan_coeff&&
    old->action_buttons==b->action_buttons&&old->resolve_actor==b->resolve_actor&&
    old->scene_tables==b->scene_tables&&old->drop_item==b->drop_item&&old->award_item==b->award_item&&
    old->mount_release==b->mount_release?

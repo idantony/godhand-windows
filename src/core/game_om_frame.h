@@ -55,6 +55,9 @@ typedef struct {
  gh_om_box_drop_item drop_item;
  gh_om_pickup_award award_item;
  gh_om_mount_release mount_release;
+ gh_object_step_status (*throw_fuse_effect)(void *,gh_om364_state *,uint32_t *);
+ gh_object_step_status (*throw_blast_effect)(void *,gh_om364_state *,uint32_t *);
+ gh_object_step_status (*stop_throw_voice)(void *,uint32_t,uint32_t *);
 } gh_om_frame_runtime;
 typedef struct {const gh_om_factory *factory;gh_om_object *object;
  const gh_title_player_view *contact634;uint32_t handle,entry,frontier;

@@ -74,7 +74,21 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
   return stop(s,0x123938,GH_PLAYER_FRAME_UNSUPPORTED);
  if(sequence&0x10){
   put(p+0x15f4,flags|0x400u);
-  if(pressed&2)return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(pressed&2u){
+   if(f->work->room!=0x101)return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
+   uint8_t *heat=f->init->heat;
+   if(!heat[0x10]){
+    const float current=value(heat+4),threshold=value(heat+12);
+    if(!isfinite(current)||!isfinite(threshold))return stop(s,0x2a9bc0,GH_PLAYER_FRAME_NUMERIC);
+    const int ready=!(current<threshold);
+    put(heat+0x14,(uint32_t)ready);
+    if(ready){
+     p[0x2f4]=p[0x2f6]=p[0x2f7]=0;p[0x2f5]=8;
+     s->input_result=1;
+     return GH_PLAYER_FRAME_OK;
+    }
+   }
+  }
   const int back_circle=(f->work->room==0x103||f->work->room==0x104)&&p[0x623]&&p[0x61f]&&
       value(p+0x608)>2.3561945f;
   if(p[0x623]&&!back_circle)return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -179,7 +193,16 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
    return GH_PLAYER_FRAME_OK;
   }
  }
- if((sequence&0x10)&&(pressed&4))return stop(s,0x124244,GH_PLAYER_FRAME_UNSUPPORTED);
+ if((sequence&0x10)&&(pressed&4)){
+  if(f->work->room!=0x101||!f->init->heat[0x10])
+   return stop(s,0x124244,GH_PLAYER_FRAME_UNSUPPORTED);
+  /* Original 124244 marks the link and starts the L1 turn. */
+  put(p+0x15f4,word(p+0x15f4)|0x400u);
+  p[0x2f4]=p[0x2f6]=p[0x2f7]=0;
+  p[0x2f5]=4;
+  s->input_result=1;
+  return GH_PLAYER_FRAME_OK;
+ }
  if(sequence&0x40)put(p+0x15f4,word(p+0x15f4)|0x100u);
  if(sequence&0x20){
   /* 1242E0 opens original movement and interaction handling at a permitted link. */

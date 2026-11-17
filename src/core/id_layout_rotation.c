@@ -30,7 +30,7 @@ static gh_id_error cosine_polynomial(float theta,float*out){
   * Polynomial sum order is cubic, quintic, septic, nonic, exactly as VU. */
  static const uint32_t coeff[4]={0x362e9c14,0xb94fb21f,0x3c08873e,0xbe2aaaa4};
  float t,t2,p,v[4];unsigned i;
- if(!normal(theta)||fabsf(theta)>bits(0x40490fdb))return GH_ID_UNSUPPORTED;
+ if(!normal(theta)||fabsf(theta)>bits(0x40491000))return GH_ID_UNSUPPORTED;
  t=theta<0?add(bits(0x3fc90fdb),theta):add(bits(0x3fc90fdb),-theta);t2=mul(t,t);
  for(i=0;i<4;i++)v[i]=mul(mul(bits(coeff[i]),t),t2);
  for(i=0;i<3;i++)v[i]=mul(v[i],t2);p=add(t,v[3]);
@@ -41,6 +41,7 @@ static gh_id_error cosine_polynomial(float theta,float*out){
  return GH_ID_OK;
 }
 static gh_id_error sincos_original(float theta,float*s,float*c){
+ if(fabsf(theta)>bits(0x40490fdb))return GH_ID_UNSUPPORTED;
  float p;
  gh_id_error status=cosine_polynomial(theta,&p);
  if(status)return status;
@@ -59,6 +60,8 @@ gh_id_error gh_id_cos_reference_001f7fb8(float theta,float*out)
  float cosine;
  if(!out)return GH_ID_ARGUMENT;
  if(!enter(&env))return GH_ID_UNSUPPORTED;
+ /* 1F7D48's binary32 reduction can reach 0xC0491000 from the
+  * original static-object pulse in 318B58. 1F7FB8 evaluates it directly. */
  const gh_id_error status=cosine_polynomial(theta,&cosine);
  if(fesetenv(&env))return GH_ID_UNSUPPORTED;
  /* Original 1F806C VADDY overwrites the temporary signed SQRT in vf4.x

@@ -290,7 +290,9 @@ static gh_scene_ui_status advance_english(uint8_t *p, gh_scene_message_sources *
             put(time, word(time) + 30);
             continue;
         }
-        if(r104_caption&&code==0xa001){source->cursor_8c+=2;continue;}
+        const int r200_key_notice=work->room==0x200&&!p[0xa4-0xc]&&
+            half(p+0x64-0xc)==0x1000&&source->cursor_8c==38;
+        if((r104_caption||r200_key_notice)&&code==0xa001){source->cursor_8c+=2;continue;}
         if (code == 0xa101) {
             /* 2B3A38 resets the page origin and timer, then 2B4768 advances
              * past A101 at zero cost. The next glyph can appear in this tick. */

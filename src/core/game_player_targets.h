@@ -4,6 +4,7 @@
 #include "game_ray_query.h"
 #include "game_title_player.h"
 #include "game_init.h"
+#include "game_action_buttons.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -11,6 +12,7 @@ typedef enum {GH_PLAYER_TARGET_OK,GH_PLAYER_TARGET_ARGUMENT,GH_PLAYER_TARGET_NUM
 typedef gh_player_target_status (*gh_player_target_resolve)(void *,uint32_t handle,gh_title_player_view *,uint32_t *frontier);
 typedef struct {gh_room_pools *pools;gh_game_scene_tables *actors;const gh_title_player_view *player;
  gh_player_target_resolve resolve;void *context;const void *elf;size_t elf_bytes;
+ const gh_game_init_state *init; gh_game_action_buttons *actions;
 } gh_player_target_bindings;
 typedef struct {uint32_t handle;gh_title_player_view view;} gh_player_target;
 /* Same754C58 registry, source flags/ID filters BEFORE class-specific fields.

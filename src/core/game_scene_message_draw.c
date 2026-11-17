@@ -70,12 +70,19 @@ static gh_scene_ui_status message_page(const gh_scene_message_block *block,
     size_t token_count=0,visible_count=0,offset=start;
     const int32_t elapsed=signed_word(p+0x68-0xc),start_time=signed_word(p+0x84-0xc);
     uint32_t time=0;
-    unsigned choice_count=0;
+    unsigned choice_count=0,line=0;
+    size_t second_line=MESSAGE_PAGE_TOKENS;
     float scale=1.0f, peak_scale=0.0f;
     const unsigned selected=(word(p+0x14-0xc)&0x20u)?half(p+0x94-0xc):UINT16_MAX;
     while(offset+2<=source->primary.size){
         const uint16_t code=half(text+offset);
         if(room_text&&code==0x8001)break;
+        if(room_text&&code==0xa001){
+            if(!token_count||second_line!=MESSAGE_PAGE_TOKENS)return GH_SCENE_UI_UNSUPPORTED;
+            second_line=token_count;
+            offset+=2;
+            continue;
+        }
         if(room_text&&code==0xa301){
             if(source->primary.size-offset<4)return GH_SCENE_UI_BOUNDS;
             const uint16_t next=half(text+offset+2);
@@ -141,21 +148,24 @@ static gh_scene_ui_status message_page(const gh_scene_message_block *block,
         return GH_SCENE_UI_UNSUPPORTED;
     }
     const volatile float spacing=2.0f*0.9f,baseline=12.0f*1.1f;
-    volatile float line_width=0;
+    volatile float line_width[2]={0,0};
     const volatile float choice_width=(0.9f*0.9f)*40.0f;
     for(size_t i=0;i<token_count;i++){
+        if(i==second_line)line=1;
         if(tokens[i].code==0xa804){
-            line_width=line_width+choice_width;
+            line_width[line]=line_width[line]+choice_width;
         }else{
-            line_width=line_width+spacing;
-            line_width=line_width+glyph_advance(&tokens[i].metrics,tokens[i].scale);
+            line_width[line]=line_width[line]+spacing;
+            line_width[line]=line_width[line]+glyph_advance(&tokens[i].metrics,tokens[i].scale);
         }
     }
-    line_width=line_width-spacing;
+    line_width[0]=line_width[0]-spacing;
+    if(line)line_width[1]=line_width[1]-spacing;
     const gh_font_slot *atlas=font->slots;
     const volatile float line_height=(float)atlas->cell_height*peak_scale*1.1f+baseline;
-    volatile float x=(float)half(p+0xae - 0x0c)-line_width*0.5f;
-    const volatile float y=((float)half(p+0xb0-0x0c)-line_height*0.5f)+baseline;
+    const float center_x=(float)half(p+0xae - 0xc);
+    volatile float x=center_x-line_width[0]*0.5f;
+    volatile float y=((float)half(p+0xb0-0xc)-line_height*(line?1.0f:0.5f))+baseline;
     gh_font_draw_state draw={.scale_x=0.9f*0.9f,.scale_y=1.1f,.alignment_flags=9,
         .screen_width=display->screen_width,.screen_height=display->screen_lines,
         .gs_y_origin=display->gs_y_origin};
@@ -164,6 +174,10 @@ static gh_scene_ui_status message_page(const gh_scene_message_block *block,
     size_t count=0;
     for(size_t token=0;token<token_count;token++){
         if((int64_t)start_time+tokens[token].time>elapsed)break;
+        if(token==second_line){
+            x=center_x-line_width[1]*0.5f;
+            y=y+line_height;
+        }
         const uint16_t code=tokens[token].code;
         if(code==0xa804){
             x=x+(choice_width+spacing);
@@ -333,7 +347,10 @@ gh_scene_ui_status gh_scene_message_render_002af028(gh_game_scene_ui *ui,
     const uint16_t id=half(p+0x64-0xc);
     if(work->language&&block->next==-1&&!p[0xa4-0xc]&&
        ((work->room==0x103&&(id==0x1000||id==0x1001))||
-        (work->room==0x101&&(id==0x3002||id==0x3003))))
+        (work->room==0x101&&(id==0x3002||id==0x3003))||
+        (work->room==0x200&&id==0x1000&&source->primary.bytes&&source->primary.size>=110&&
+         half(source->primary.bytes+38)==0xa001&&half(source->primary.bytes+106)==0xa301&&
+         half(source->primary.bytes+108)==0x8001)))
         return message_page(block,source,font,display,palette,emit,context,MESSAGE_ROOM_TEXT,frontier);
     if (!work->language || block->next != -1 || p[0xa4 - 0xc] || !source->bound ||
         source->ruby.bytes || source->ruby.size || !source->primary.bytes ||

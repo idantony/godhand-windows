@@ -238,6 +238,11 @@ gh_actor_motion_status gh_enemy_destroy_prefix_mode3(gh_enemy_destructor *state,
             const int r102_runner=dependency==0x20f&&entry.model->work&&
                 entry.model->work->room==0x102&&(word(bytes+0x640)&0xffffu)==0x12&&
                 (bytes[0x1650]==0||bytes[0x1650]==4);
+            const unsigned stamp=word(bytes+0x640)&0xffffu;
+            const int r101_grenade=dependency==0x20f&&entry.model->work&&
+                entry.model->work->room==0x101&&bytes[0x1650]==6&&
+                (stamp==0x1a||stamp==0x1b||stamp==0x22||stamp==0x23)&&
+                !(word(bytes+0x548)>>16)&&word(bytes+0x17b4)==50;
             /* 0200/0202/0203 lie below the switch; 020A/0227 jump to 2022A0.
              * R104's kind0203 also branches directly there at 202094. */
             if(r103&&(dependency==0x214||dependency==0x215)){
@@ -245,7 +250,7 @@ gh_actor_motion_status gh_enemy_destroy_prefix_mode3(gh_enemy_destructor *state,
                     return stop(frontier,0x305778);
             }else if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&
                dependency!=0x20a&&dependency!=0x227&&!(r104&&dependency==0x250)&&
-               !r102_runner&&!devil)return stop(frontier,0x202098);
+               !r102_runner&&!r101_grenade&&!devil)return stop(frontier,0x202098);
         }else if(heavy){
             if(word(bytes+0x15c4))return stop(frontier,0x1c2370);
         }else{

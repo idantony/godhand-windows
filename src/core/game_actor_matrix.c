@@ -21,4 +21,30 @@ gh_actor_matrix_status gh_actor_euler_adjust_001f7da0(const float*in,float*out,g
 
 gh_actor_matrix_status gh_actor_matrix_rotation_00147728(const float*angle,unsigned mode,float*out,gh_static_transform_policy policy,uint32_t*f){if(!angle||!out||!f)return GH_ACTOR_MATRIX_ARGUMENT;*f=0;if(policy!=GH_STATIC_BINARY32_REFERENCE){*f=0x147728;return GH_ACTOR_MATRIX_UNSUPPORTED;}if(mode<6)for(unsigned k=0;k<3;k++)if(!normal(angle[k])){*f=0x147728;return GH_ACTOR_MATRIX_UNSUPPORTED;}fenv_t saved;if(fegetenv(&saved)||fesetround(FE_TONEAREST)){*f=0x147728;return GH_ACTOR_MATRIX_UNSUPPORTED;}float m[16];gh_actor_matrix_status result=rotation_body(angle,mode,m,f);if(fesetenv(&saved)){*f=0x147728;return GH_ACTOR_MATRIX_UNSUPPORTED;}if(!result)memcpy(out,m,64);return result;}
 
-gh_actor_matrix_status gh_actor_matrix_product_00147548(const float*a,const float*b,float*out,gh_static_transform_policy policy,uint32_t*f){if(!a||!b||!out||!f)return GH_ACTOR_MATRIX_ARGUMENT;*f=0;if(policy!=GH_STATIC_BINARY32_REFERENCE){*f=0x147548;return GH_ACTOR_MATRIX_UNSUPPORTED;}for(unsigned k=0;k<16;k++)if(!normal(a[k])||!normal(b[k])){*f=0x30a2e0;return GH_ACTOR_MATRIX_UNSUPPORTED;}fenv_t saved;if(feholdexcept(&saved)){*f=0x147548;return GH_ACTOR_MATRIX_UNSUPPORTED;}if(fesetround(FE_TONEAREST)){fesetenv(&saved);*f=0x147548;return GH_ACTOR_MATRIX_UNSUPPORTED;}float m[16];product(m,a,b);gh_actor_matrix_status e=GH_ACTOR_MATRIX_OK;for(unsigned k=0;k<16;k++)if(!normal(m[k])){*f=0x30a2e0;e=GH_ACTOR_MATRIX_UNSUPPORTED;break;}if(fesetenv(&saved)){*f=0x147548;return GH_ACTOR_MATRIX_UNSUPPORTED;}if(!e)memcpy(out,m,64);return e;}
+gh_actor_matrix_status gh_actor_matrix_product_00147548(const float *a,const float *b,
+ float *out,gh_static_transform_policy policy,uint32_t *f)
+{
+ if(!a||!b||!out||!f)return GH_ACTOR_MATRIX_ARGUMENT;
+ *f=0;
+ if(policy!=GH_STATIC_BINARY32_REFERENCE){*f=0x147548;return GH_ACTOR_MATRIX_UNSUPPORTED;}
+ float first[16],second[16];
+ for(unsigned k=0;k<16;k++){
+  if(!isfinite(a[k])||!isfinite(b[k])){*f=0x30a2e0;return GH_ACTOR_MATRIX_UNSUPPORTED;}
+  /* 30A2E0 uses VU0 multiplication and accumulation. In the original
+   * finite exponent-zero operand domain, preserve the sign of zero. */
+  first[k]=fabsf(a[k])<FLT_MIN?copysignf(0,a[k]):a[k];
+  second[k]=fabsf(b[k])<FLT_MIN?copysignf(0,b[k]):b[k];
+ }
+ fenv_t saved;
+ if(feholdexcept(&saved)){*f=0x147548;return GH_ACTOR_MATRIX_UNSUPPORTED;}
+ if(fesetround(FE_TONEAREST)){fesetenv(&saved);*f=0x147548;return GH_ACTOR_MATRIX_UNSUPPORTED;}
+ float matrix[16];
+ product(matrix,first,second);
+ gh_actor_matrix_status status=GH_ACTOR_MATRIX_OK;
+ for(unsigned k=0;k<16;k++){
+  if(!normal(matrix[k])){*f=0x30a2e0;status=GH_ACTOR_MATRIX_UNSUPPORTED;break;}
+ }
+ if(fesetenv(&saved)){*f=0x147548;return GH_ACTOR_MATRIX_UNSUPPORTED;}
+ if(!status)memcpy(out,matrix,64);
+ return status;
+}

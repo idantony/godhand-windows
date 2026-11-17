@@ -204,6 +204,13 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
       p[0x2f6]==1&&!p[0x2f7];
   const int buffered_triangle=(b->work->room==0x100||r104_backflip||r104_taunt)&&(seq&0x10u)&&
       p[0x622]&&!p[0x621]&&!p[0x623]&&!p[0x624]&&!(pressed&3u);
+  /* SEQ bit 10 enables the original 123ACC path during state 06 get-up. */
+  const int active_heat_square=p[0x2f5]==8&&p[0x2f6]==1&&!p[0x2f7]&&
+      (w(p+0x15f4)&0x10u)&&heat[0x10];
+  const int finish_heat_square=p[0x2f5]==9&&p[0x2f6]==1&&!p[0x2f7]&&!heat[0x10];
+  const int buffered_reaction_square=b->work->room==0x101&&!p[0x2f4]&&
+      (p[0x2f5]==6||active_heat_square||finish_heat_square)&&
+      (seq&0x10u)&&p[0x621]&&!p[0x622]&&!p[0x623]&&!p[0x624]&&!(pressed&7u);
   if(seq&0x40u){
    if(b->work->room==0x700)return fail(s,0x1169d8,GH_PLAYER_FRAME_UNSUPPORTED);
    if(w(work+0x5d8)&0x2000000u){
@@ -219,7 +226,7 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
       p[0x2f6]==1&&(p[0x2f7]==2||p[0x2f7]==3);
   const int buffered_square=(r104_backflip||r104_side_dodge||r104_taunt)&&(seq&0x10u)&&p[0x621]&&
        !p[0x622]&&!p[0x623]&&!p[0x624]&&!(pressed&7u);
-  const int buffered_attack=buffered_triangle||buffered_square;
+  const int buffered_attack=buffered_triangle||buffered_square||buffered_reaction_square;
   if(buffered_attack)s->phase=4;
   else if(seq&0x40u){
    /* 123AB8 bypasses the attack dispatch while this taunt frame lacks bit10. */

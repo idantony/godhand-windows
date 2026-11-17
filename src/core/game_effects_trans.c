@@ -75,6 +75,9 @@ static gh_effect_status project_screen_sprite(gh_game_effects_trans*s,const gh_e
 static gh_effect_status packet_sprite(gh_game_effects_trans*s,const gh_effect_esp_view*v){
  const uint8_t*p=v->payload;uint32_t flags=word(p+0x11c);
  const int gradient=v->type==1;
+ const int grenade_gradient=gradient&&word(p+0x23a)==0x00060058u;
+ if(grenade_gradient&&(v->actor||v->selector||word(v->record.bytes+4)!=0x00c00000u))
+  return fail(s,0x2e1730,GH_EFFECT_UNSUPPORTED);
  const uint32_t vtable=gradient?0x44e090u:v->type==0x15?0x44ef08u:v->type==0x1a?0x44f270u:0x44fad0u;
  if(word(p+0xf0)!=vtable)return fail(s,0x2feb18,GH_EFFECT_UNSUPPORTED);
  if(!s->call_stage){
@@ -83,8 +86,8 @@ static gh_effect_status packet_sprite(gh_game_effects_trans*s,const gh_effect_es
   if((actor_flags&2u)&&!(flags&0x80u)){
    s->call_stage=3;return GH_EFFECT_OK;
   }
-  if(!gradient&&number(p+0x194)<0.001f){s->call_stage=3;return GH_EFFECT_OK;}if(!v->target120_known_null||word(p+0x120))return fail(s,0x2fec38,GH_EFFECT_UNSUPPORTED);gh_effect_status status;
- if(!(flags&0x1000000u)){if(v->type&&!gradient)return fail(s,0x2fe8a0,GH_EFFECT_UNSUPPORTED);status=project_screen_sprite(s,v);if(status)return status;}
+  if(grenade_gradient?(flags&0x800000u)!=0:!gradient&&number(p+0x194)<0.001f){s->call_stage=3;return GH_EFFECT_OK;}if(!v->target120_known_null||word(p+0x120))return fail(s,0x2fec38,GH_EFFECT_UNSUPPORTED);gh_effect_status status;
+ if(!(flags&0x1000000u)){if(v->type&&(!gradient||grenade_gradient))return fail(s,0x2fe8a0,GH_EFFECT_UNSUPPORTED);status=project_screen_sprite(s,v);if(status)return status;}
  else {gh_effect_sprite_camera camera={s->b.camera,s->b.init,s->b.display,s->b.policy,s->b.cvt_policy};uint32_t f=0;
   status=gh_effect_sprite_project_track_uv_002fe0d8(s->b.storage.effects,s->esp_index,v->serial,
     &camera,&s->sprite,s->b.globals->sprite_uv_q_61b7a8,&f);if(status)return fail(s,f,status);}
@@ -110,7 +113,7 @@ static gh_effect_status packet_sprite(gh_game_effects_trans*s,const gh_effect_es
    }
   }
  }
- gh_effect_trans_packet packet={0};packet.original_callee=gradient?0x2e1a08:0x2fec38;packet.slot=s->esp_index;packet.serial=v->serial;packet.kind=GH_EFFECT_PASS_SPRITE;packet.source=GH_EFFECT_SURFACE_MATERIAL;packet.destination=GH_EFFECT_SURFACE_SCENE_COLOR;packet.prim=gradient?0x5c:0x54;packet.writes_tex0=1;packet.tex0=m->source_tex0;packet.inherited_sampler=1;packet.writes_clamp=1;packet.clamp=0;packet.material=m;packet.frame_mask=(word(v->record.bytes+4)&0x1000u)?0:0xff000000u;int cls=(int8_t)p[0x101];packet.test=((flags&0x1000u)||cls==4?0x30000u:0x50000u)|0xdu;packet.zbuf=UINT64_C(0x3a0000f8)|((flags&0x80000u)?0:UINT64_C(1)<<32);static const uint64_t alpha[]={0x8000000044,0x8000000048,0x80000000a1,0x8000000041,0x8000000049,0x8000000068,0x8000000009,0x8000000046,0x80000000a4,0x8000000042,0x8000000006};if(p[0x247]>10)return fail(s,0x2d9f68,GH_EFFECT_UNSUPPORTED);packet.alpha=alpha[p[0x247]];packet.restores_scene_target=1;packet.restore_zbuf=0x3a0000f8;packet.quad_count=1;packet.quads[0].vertex_count=4;const float uv[4][2]={{u,t},{add(u,du),t},{u,add(t,dv)},{add(u,du),add(t,dv)}};for(unsigned k=0;k<4;k++){gh_effect_trans_vertex*out=packet.quads[0].vertices+k;out->x12_4=s->sprite.xyz_fixed4[k][0];out->y12_4=s->sprite.xyz_fixed4[k][1];out->z=(uint32_t)s->sprite.xyz_fixed4[k][2]>>4;out->rgba=vertex_rgba[k];out->q=s->sprite.q[k];out->s=multiply(uv[k][0],out->q);out->t=multiply(uv[k][1],out->q);}
+ gh_effect_trans_packet packet={0};packet.original_callee=gradient?0x2e1a08:0x2fec38;packet.slot=s->esp_index;packet.serial=v->serial;packet.kind=GH_EFFECT_PASS_SPRITE;packet.source=GH_EFFECT_SURFACE_MATERIAL;packet.destination=GH_EFFECT_SURFACE_SCENE_COLOR;packet.prim=gradient&&!grenade_gradient?0x5c:0x54;packet.writes_tex0=1;packet.tex0=m->source_tex0;packet.inherited_sampler=1;packet.writes_clamp=1;packet.clamp=0;packet.material=m;packet.frame_mask=(word(v->record.bytes+4)&0x1000u)?0:0xff000000u;int cls=(int8_t)p[0x101];packet.test=((flags&0x1000u)||cls==4?0x30000u:0x50000u)|0xdu;packet.zbuf=UINT64_C(0x3a0000f8)|((flags&0x80000u)?0:UINT64_C(1)<<32);static const uint64_t alpha[]={0x8000000044,0x8000000048,0x80000000a1,0x8000000041,0x8000000049,0x8000000068,0x8000000009,0x8000000046,0x80000000a4,0x8000000042,0x8000000006};if(p[0x247]>10)return fail(s,0x2d9f68,GH_EFFECT_UNSUPPORTED);packet.alpha=alpha[p[0x247]];packet.restores_scene_target=1;packet.restore_zbuf=0x3a0000f8;packet.quad_count=1;packet.quads[0].vertex_count=4;const float uv[4][2]={{u,t},{add(u,du),t},{u,add(t,dv)},{add(u,du),add(t,dv)}};for(unsigned k=0;k<4;k++){gh_effect_trans_vertex*out=packet.quads[0].vertices+k;out->x12_4=s->sprite.xyz_fixed4[k][0];out->y12_4=s->sprite.xyz_fixed4[k][1];out->z=(uint32_t)s->sprite.xyz_fixed4[k][2]>>4;out->rgba=vertex_rgba[k];out->q=s->sprite.q[k];out->s=multiply(uv[k][0],out->q);out->t=multiply(uv[k][1],out->q);}
  uint32_t bank=2;int depth=s->sprite.original_depth;if(!(flags&0x1000000u)){bank=4;switch(cls){case -2:depth=12;break;case -1:depth=11;break;case 0:depth=10;break;case 1:depth=9;break;case 2:depth=8;break;case 3:bank=6;depth=7;break;case 4:bank=6;depth=3;break;default:return fail(s,0x2ff748,GH_EFFECT_UNSUPPORTED);}}else {if(depth>1020)depth=1020;if(depth<0)depth=0;}if(flags&0x2000u){bank=3;depth=flags&0x4000u?1:2;}else if(flags&0x4000u){bank=3;depth=5;}if(cls>2){if(cls==3){bank=6;depth=7;}else if(cls==4){bank=6;depth=3;}}if(depth==0)return fail(s,0x14ff00,GH_EFFECT_UNSUPPORTED);packet.order=(gh_ui_order_group){.bank=bank,.depth=(uint32_t)depth,.identity=((uint64_t)v->serial<<32)|((uint64_t)s->esp_index<<8)|s->sprite_instance};s->packet=packet;s->pending=1;}
  return GH_EFFECT_OK;
 }

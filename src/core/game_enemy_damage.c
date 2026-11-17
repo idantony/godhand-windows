@@ -106,7 +106,9 @@ static int r101_side_arena_punch(const gh_enemy_actor *enemy,const uint8_t *acto
     return effect==7&&enemy->entry.b.work&&enemy->entry.b.work->room==0x101&&
         enemy->entry.object.view.size>0x1650&&actor[0x1650]==6&&
         enemy->entry.request.entry_number==stamp&&enemy->entry.request.dependency_kind==dependency&&
-        ((stamp==0x16&&dependency==0x200)||(stamp==0x20&&dependency==0x203));
+        ((dependency==0x200&&(stamp==0x16||stamp==0x18))||
+         (stamp==0x27&&dependency==0x202)||(dependency==0x203&&(stamp==0x20||stamp==0x28))||
+         (dependency==0x20f&&(stamp==0x1a||stamp==0x1b||stamp==0x22||stamp==0x23)));
 }
 
 static int room_unarmed_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect)
@@ -142,12 +144,22 @@ static int r101_key_carrier_punch(const gh_enemy_actor *enemy,const uint8_t *act
         half(actor+0x640)==9&&actor[0x1650]==4&&word(actor+0x560)==0x3e3;
 }
 
+static int r101_wave4_em27(const gh_enemy_actor *enemy,const uint8_t *actor)
+{
+    const unsigned stamp=half(actor+0x640);
+    return enemy->entry.b.work&&enemy->entry.b.work->room==0x101&&
+        enemy->entry.object.view.size>0x1650&&enemy->entry.object.view.original_vtable214==0x4479c8&&
+        word(actor+0x564)==0x227&&half(actor+0x2fe)==0x202&&actor[0x1650]==6&&
+        (stamp==0x1e||stamp==0x26);
+}
+
 static int original_em27_punch(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
     if(effect!=7||enemy->entry.object.view.size<=0x1650||
        word(actor+0x564)!=0x227||!enemy->entry.b.work)return 0;
     const unsigned room=enemy->entry.b.work->room;
     const unsigned stamp=half(actor+0x640);
-    return r101_key_carrier_punch(enemy,actor,effect)||(room==0x102&&stamp==4&&!actor[0x1650]);
+    return r101_key_carrier_punch(enemy,actor,effect)||r101_wave4_em27(enemy,actor)||
+        (room==0x102&&stamp==4&&!actor[0x1650]);
 }
 
 static int r102_stamp2(const gh_enemy_actor *enemy, const uint8_t *actor) {
@@ -205,8 +217,10 @@ static int r103_heat_activation_contact(const gh_enemy_actor *enemy,
     const gh_title_player_view *player,uint16_t effect,int32_t power)
 {
     const uint8_t *target=enemy->entry.object.view.bytes;
-    return effect==0x2a&&power==5&&
-        (r103_first_wave_em00(enemy)||r103_boss_player_strike_target(enemy,target))&&
+    const int side_em02=enemy->entry.b.work&&enemy->entry.b.work->room==0x101&&
+        enemy->entry.request.appearance==6&&enemy->entry.request.entry_number==0x27&&
+        enemy->entry.request.dependency_kind==0x202&&word(target+0x564)==0x202&&half(target+0x640)==0x27;
+    return effect==0x2a&&power==5&&(r103_first_wave_em00(enemy)||r103_boss_player_strike_target(enemy,target)||side_em02||r101_wave4_em27(enemy,target))&&
         player->size>0x1684&&half(player->bytes+0x2f4)==0x0800&&
         player->bytes[0x1684]==1&&enemy->entry.b.init->heat[0x10]&&
         (word(player->bytes+0x15f4)&0x10u);
@@ -227,7 +241,13 @@ static int r103_heat_exhaustion_contact(const gh_enemy_actor *enemy,
     const gh_title_player_view *player,uint16_t effect,int32_t power)
 {
     const uint8_t *target=enemy->entry.object.view.bytes;
-    return effect==0x2a&&power==5&&r103_boss_player_strike_target(enemy,target)&&player->size>0x1684&&
+    const int side_em00=enemy->entry.b.work&&enemy->entry.b.work->room==0x101&&
+        enemy->entry.request.appearance==6&&enemy->entry.request.entry_number==0x18&&
+        enemy->entry.request.dependency_kind==0x200&&word(target+0x564)==0x200&&half(target+0x640)==0x18;
+    const int side_em03=enemy->entry.b.work&&enemy->entry.b.work->room==0x101&&
+        enemy->entry.request.appearance==6&&enemy->entry.request.entry_number==0x28&&
+        enemy->entry.request.dependency_kind==0x203&&word(target+0x564)==0x203&&half(target+0x640)==0x28;
+    return effect==0x2a&&power==5&&(r103_boss_player_strike_target(enemy,target)||side_em00||side_em03)&&player->size>0x1684&&
         word(player->bytes+0x2f4)==0x00010900u&&player->bytes[0x1684]==1&&
         !enemy->entry.b.init->heat[0x10];
 }
@@ -380,7 +400,11 @@ gh_actor_motion_status gh_enemy_counter_heat_002a9978(gh_enemy_actor *enemy, uin
          (stamp == 7 && view->size >= 0x16c8 && !p[0x1650] && word(p + 0x16c4) == 2)) &&
         p[0x2f4] == 1 &&
         p[0x2f5] == 0x1d && p[0x2f6] == 1 && p[0x2f7] == 1;
-    if (word(p + 0x564) != 0x200 || (stamp != 20 && !story && !r103_first_wave_em00(enemy)))
+    const int wave4 = work && work->room == 0x101 && view->size > 0x1650 &&
+        view->original_vtable214 == 0x4479c8 && word(p + 0x564) == 0x227 &&
+        half(p + 0x2fe) == 0x202 && p[0x1650] == 6 && (stamp == 30 || stamp == 38) &&
+        p[0x2f4] == 1 && p[0x2f5] == 0x1d && p[0x2f6] == 1 && p[0x2f7] == 1;
+    if (!wave4 && (word(p + 0x564) != 0x200 || (stamp != 20 && !story && !r103_first_wave_em00(enemy))))
         return stop(frontier, 0x2a9978);
     return gain_heat_002a9978(&enemy->entry.b, 10.0f, frontier);
 }
@@ -521,6 +545,19 @@ static int r200_catapult_contact(const gh_enemy_actor *enemy,const gh_hitarea_ob
 }
 
 /* Original scenery Give paths set the environment flag in 20A5DC's VT+AC call. */
+static int r101_grenade_contact(const gh_enemy_actor *enemy,const gh_title_player_view *source,
+    uint16_t effect,uint32_t power)
+{
+    if(effect!=0x30||power!=50||!source||!source->bytes||source->size!=0x680||
+       source->original_vtable214!=0x4282f0||word(source->bytes+0x214)!=0x4282f0||
+       half(source->bytes+0x2fe)!=0x364||source->bytes[0x2f4]!=3||
+       !enemy->entry.b.work||enemy->entry.b.work->room!=0x101)return 0;
+    const uint8_t *actor=enemy->entry.object.view.bytes;
+    const unsigned stamp=half(actor+0x640);
+    return word(actor+0x564)==0x20f&&actor[0x1650]==6&&
+        (stamp==0x1a||stamp==0x1b||stamp==0x22||stamp==0x23);
+}
+
 static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     const gh_enemy_entry *entry, const gh_hitarea_object *body, gh_enemy_actor *enemy,
     const gh_title_player_view *source, unsigned rank, uint32_t *frontier)
@@ -536,6 +573,8 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     const int barrel = enemy && effect == 0x52 && source_kind == 0x310 && source->size >= 0x920 &&
         r102_stamp2(enemy, p) && power == 80 && !half(body->bytes + 0x44) &&
         !word(source->bytes + 0x2f4);
+    const int grenade=r101_grenade_contact(enemy,source,effect,power);
+    const int explosive=barrel||grenade;
     /* R200's catapult impact sphere gives the original effect 52 with power 20. */
     const int catapult = r200_catapult_contact(enemy,body,source);
     const int recoil = enemy && r103_heavy_recoil_collateral(enemy,source,power);
@@ -552,19 +591,19 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     const int devil_scenery = !enemy && entry->b.work && entry->b.work->room == 0x100 &&
         half(p + 0x2fe) == 0x220 && word(p + 0x564) == 0x220 &&
         half(p + 0x640) == 0xff && !power && source_kind == 0x303;
-    const uint32_t source_vtable = catapult ? 0x428c20u : barrel ? 0x423e48u :
+    const uint32_t source_vtable = catapult ? 0x428c20u : grenade ? 0x4282f0u : barrel ? 0x423e48u :
         source_kind == 0x202 || arena_counter ? 0x4479c8u : devil_contact ? 0x4290c8u : scenery_hit_vtable(source_kind);
-    if ((effect != 0x2e && !barrel && !catapult) || !source_vtable || source->original_vtable214 != source_vtable ||
+    if ((effect != 0x2e && !explosive && !catapult) || !source_vtable || source->original_vtable214 != source_vtable ||
         word(source->bytes + 0x214) != source_vtable ||
         actor->original_vtable214 != 0x4479c8 || word(p + 0x214) != 0x4479c8 ||
         (!devil_scenery && (!enemy || (half(p + 0x2fe) != 0x202 && !arena_counter && !catapult) ||
-          (!barrel && !catapult && !recoil && !west_em0a && !scenery_reaction_enemy(enemy,p)))) ||
+          (!explosive && !catapult && !recoil && !west_em0a && !scenery_reaction_enemy(enemy,p)))) ||
         word(body->bytes + 0x40) != UINT32_MAX)
         return stop(frontier, 0x20a178);
     if (source_kind == 0x202) {
         if (!r100_counter_collateral(enemy,p,source,power))
             return stop(frontier, 0x20a178);
-    } else if (power && !arena_counter && !barrel && !catapult && !devil_contact) {
+    } else if (power && !arena_counter && !explosive && !catapult && !devil_contact) {
         return stop(frontier, 0x20a178);
     }
 
@@ -691,7 +730,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
 
         /* Dead 2E uses 20BB80 while dead 52 uses the 20BC44 knockdown. */
         const int dead=!half(p+0x54a);
-        if(power&&dead&&!barrel&&!catapult){
+        if(power&&dead&&!explosive&&!catapult){
             p[0x2f4]=2;
             p[0x2f5]=(flags&8u)?1:0;
             p[0x2f6]=p[0x2f7]=0;
@@ -702,16 +741,16 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
 
         /* For original 2E/52, only 20CAC8 draws once for selector 1.
          * The remaining counter tables reject these effects before RNG. */
-        if ((effect != 0x52 || !dead) && p[0x17bc] == 1) {
+        if (((effect != 0x52 && !grenade) || !dead) && p[0x17bc] == 1) {
             uint32_t random;
             if (gh_game_mt_next_0030f348(&body->state->random, &random))
                 return stop(frontier, 0x31cfe0);
         }
         p[0x2f4] = 1;
         /* Live kind52 selects 20C74C, the variant2 knockdown. */
-        p[0x2f5] = effect == 0x52 ? 8 : 0x11;
+        p[0x2f5] = (effect == 0x52 || grenade) ? 8 : 0x11;
         p[0x2f6] = 0;
-        p[0x2f7] = effect == 0x52 ? 2 : 0;
+        p[0x2f7] = (effect == 0x52 || grenade) ? 2 : 0;
         call->reacted = 1;
         call->phase = 5;
     }
@@ -1149,7 +1188,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         return GH_ACTOR_MOTION_OK;
 
     const uint16_t effect = half(body->bytes + 0x46);
-    if (effect == 0x2e || effect == 0x52)
+    if (effect == 0x2e || effect == 0x30 || effect == 0x52)
         return environment_hit(call, &enemy->entry, body, enemy, source, rank, frontier);
     if(effect==0x36)return r101_box_hit(call,enemy,source,rank,frontier);
     if(effect==0x27)return roulette_shockwave_hit(call,enemy,source,rank,frontier);
@@ -1171,13 +1210,15 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         (heat_contact&&r103_first_wave_em00(enemy))||west_em00;
     const int opening_pair = opening_203 || opening_200;
     const int ordinary_punch = room_unarmed_punch(enemy, p, effect);
+    const int side_em0f=dependency==0x20f&&r101_side_arena_punch(enemy,p,effect);
     const int em27_punch = original_em27_punch(enemy, p, effect);
     const int boss_strike=(effect==7||triangle||heat_contact||back_circle)&&r103_boss_player_strike_target(enemy,p);
+    const int side_heat=heat_contact&&enemy->entry.b.work->room==0x101;
     const int r200_triangle=triangle&&r200_em02_triangle(enemy,p)&&
         word(body->bytes+0x4c)==12&&half(body->bytes+0x44)==0xa&&rank==1&&
         word(player->bytes+0x2f4)==0x00010b00u;
     const int hit_probe_selector = opening_pair || (ordinary_punch && !boss_strike) ||
-        r102_at0b_em02_punch(enemy,p,effect)||r200_triangle;
+        r102_at0b_em02_punch(enemy,p,effect)||r200_triangle||side_heat;
     const int r104_punch=r104_player_punch(enemy,p,effect)&&
         word(body->bytes+0x4c)==3&&rank==1&&!body->state->heat[0x10];
     /* The charge recovery, rear turn and early melee reach the same ordinary dep0250 probes. */
@@ -1271,14 +1312,15 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             p[0x2f6]==1 && (half(p+0x3ac)&0x80u);
         const int r102_em00 = r102_close_em00_punch(enemy, p, effect);
         const int r101_square=p[0x2f6]==1&&
-            (r101_key_carrier_punch(enemy,p,effect)||r101_side_arena_punch(enemy,p,effect));
+            (r101_key_carrier_punch(enemy,p,effect)||(em27_punch&&enemy->entry.b.work->room==0x101)||r101_side_arena_punch(enemy,p,effect));
         const int formation_capture = amplified_triangle && dependency == 0x202 &&
             r100_west_em02_em03(enemy,p) && p[0x2f5] == 0x18 && p[0x2f6] == 1;
         const int boss_heat=heat_contact&&boss_strike&&p[0x2f6]==1&&
             (p[0x2f5]==0x4b||(dependency==0x214&&p[0x2f5]==0x16));
         const int verified_motion = (r200_triangle&&p[0x2f5]==0x15&&p[0x2f6]==1) || (r104_triangle&&em03_combo) || boss_heat || ((amplified_triangle || heat_contact || boss_square || opening_attack_contact || back_circle || r102_em00 || r101_square ||
             (r102_stamp2_punch(enemy, p, effect) && p[0x2f6] == 1)) && p[0x2f5] == 0x15) ||
-            formation_capture || ((r102_em00 || r101_square) && p[0x2f5] == 0x4b && p[0x2f6] == 1);
+            formation_capture || ((r102_em00 || r101_square) && p[0x2f5] == 0x4b && p[0x2f6] == 1) ||
+            (effect==7&&r101_wave4_em27(enemy,p)&&p[0x2f5]==0x16&&p[0x2f6]==1);
         if ((!verified_motion&&(!r104_punch||r104_recovery||r104_braced)) || p[0x2f4] || p[0x2f7] || !rank)
             return stop(frontier, 0x20a4e8);
         /* 20A4CC adds a separate Heat gain before switching on the hit kind. */
@@ -1378,19 +1420,30 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         if(heat_contact){
             /* 20CAC8 selector1 draws before the active-Heat early return.
-             * Both twins use selector0 and reach the standing Take at 20C920. */
+             * 20C8D8 uses the standing Take on the admitted original contacts. */
             const int em14_activation=boss_strike&&dependency==0x214&&
                 half(player->bytes+0x2f4)==0x0800;
             const int em15_expiry_evade=boss_strike&&dependency==0x215&&
                 half(player->bytes+0x2f4)==0x0900&&p[0x2f5]==9&&p[0x2f6]==1&&p[0x2f7]==1;
             const uint8_t action=boss_strike?(em14_activation?0x16:0x4b):0x15;
             const uint32_t status_mask=boss_strike?0x01401000u:0x01401400u;
-            if(rank!=1||p[0x17bd]!=1||p[0x17bc]!=(boss_strike?0:1)||(int32_t)word(p+0x17ac)<=0||
-                !half(p+0x54a)||p[0x2f4]||(p[0x2f5]!=action&&!em15_expiry_evade)||
-                (em14_activation&&(p[0x2f6]!=1||p[0x2f7]))||
-                (flags&0x2cu)||(behavior&0x80e020u)||(status&status_mask)!=(boss_strike?0x1000u:0x400u))
+            const int running_em00=side_heat&&dependency==0x200;
+            const int recoiling_em03=side_heat&&dependency==0x203&&half(p+0x2f4)==1&&
+                p[0x2f6]==1&&!p[0x2f7];
+            /* 20CAC8 selector 2 reaches the active-Heat return without an MT draw.
+             * Give2A then uses the original 20C8D8 standing reaction for 0227. */
+            const int wave4=r101_wave4_em27(enemy,p)&&half(p+0x2f4)==0x0900&&
+                p[0x2f6]==1&&p[0x2f7]==1&&p[0x17b9]==2&&p[0x17ba]==2&&
+                p[0x17bb]==1&&p[0x17bc]==2&&p[0x17bd]==2;
+            const int ordinary=(p[0x17bd]==1&&p[0x17bc]==(boss_strike?0:1)&&
+                (recoiling_em03||(!p[0x2f4]&&(p[0x2f5]==(running_em00?6:action)||em15_expiry_evade)))&&
+                (!em14_activation||(p[0x2f6]==1&&!p[0x2f7]))&&
+                (status&status_mask)==((running_em00||recoiling_em03)?0u:boss_strike?0x1000u:0x400u));
+            if(rank!=1||(int32_t)word(p+0x17ac)<=0||!half(p+0x54a)||
+                (flags&0x2cu)||(behavior&0x80e020u)||
+                (wave4?(status&0x01401400u)!=0:!ordinary))
                 return stop(frontier,0x20bce8);
-            if(p[0x17bc]){
+            if(p[0x17bc]==1){
                 uint32_t random;
                 if(gh_game_mt_next_0030f348(&body->state->random,&random))
                     return stop(frontier,0x31cfe0);
@@ -1494,9 +1547,12 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         /* The original dead-HP table sends effect 07 to 20BB80 and
          * effect 12 to 20BBB0. Both bosses use this cEm00 table. */
         const int r102_em00 = r102_close_em00_punch(enemy, p, effect);
-        if ((opening_pair || r102_em00 || arena_em0a || boss_strike || r101_side_arena_punch(enemy,p,effect)) &&
+        const int lethal_wave4=effect==7&&r101_wave4_em27(enemy,p)&&half(p+0x2f4)==0x0f01&&
+            p[0x2f6]==1&&!p[0x2f7]&&word(p+0x17b4)==3&&p[0x17bd]==2;
+        if ((opening_pair || r102_em00 || arena_em0a || boss_strike ||
+             r101_side_arena_punch(enemy,p,effect) || lethal_wave4) &&
             !half(p + 0x54a) && rank &&
-            (triangle||rank < 3) && p[0x17bd] == 1 &&
+            (triangle||rank < 3) && (p[0x17bd] == 1 || lethal_wave4) &&
             !(flags & 0x2cu) && !(behavior & 0x806020u) &&
             !(status & 0x180040u) && !(p[0x2f4] == 1 && p[0x2f5] == 0x16)) {
             p[0x2f4] = triangle ? 1 : 2;
@@ -1605,18 +1661,18 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         const uint32_t ignored=(recover||guard_counter)?0x2000u:0u;
         /* 20A7D0 suppresses the ordinary pressure gain for EM27 at rank one. */
-        if(em27_punch&&p[0x17bd]==2&&rank>=2)return stop(frontier,0x26ecd0);
-        if (!rank || p[0x17bd] != (boss_recovery ? 2u : 1u) || !half(p + 0x54a) || (flags & 0x2cu) ||
+        if((em27_punch||side_em0f)&&p[0x17bd]==2&&rank>=2)return stop(frontier,0x26ecd0);
+        if (!rank || p[0x17bd] != ((boss_recovery||side_em0f) ? 2u : 1u) || !half(p + 0x54a) || (flags & 0x2cu) ||
             (behavior & (opening_pair ? 0x806020u : 0x802020u) & ~ignored) ||
             (status & 0x80040u) || (p[0x2f4] == 1 && p[0x2f5] == 0x16))
             return stop(frontier, 0x20a7e0);
         /* Both bosses use 20CAC8 selector0, 20D398 selector2, and 20CD00 selector1.
          * At rank one the original probes decline Give07 and Give12 without MT. */
-        const unsigned hit_probe=boss_recovery?2u:boss_strike?0u:(unsigned)hit_probe_selector;
-        const unsigned dodge_probe=(boss_recovery||boss_strike)?2u:(unsigned)hit_probe_selector;
+        const unsigned hit_probe=boss_recovery?2u:(boss_strike||side_em0f)?0u:(unsigned)hit_probe_selector;
+        const unsigned dodge_probe=(boss_recovery||boss_strike)?2u:side_em0f?0u:(unsigned)hit_probe_selector;
         const unsigned counter_kind=boss_recovery?2u:(unsigned)counter_selector;
         if (p[0x17bc] != hit_probe || p[0x17ba] != dodge_probe ||
-            p[0x17b9] != counter_kind || p[0x17bb] != 1)
+            p[0x17b9] != counter_kind || p[0x17bb] != (side_em0f?0u:1u))
             return stop(frontier, 0x20cac8);
         /* 20D138 returns 0. With selector 1, 20CAC8 draws once before
          * rejecting effect 7. 20D398 requires selector 3 for effect 7,
@@ -1627,7 +1683,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         if (!triangle && counter_selector && rank >= 2)
             return stop(frontier, 0x20cd00);
         /* Selector 2 validates the east EM27 row without the selector 1 draw. */
-        if (hit_probe_selector) {
+        if (hit_probe_selector && !side_em0f) {
             gh_game_mt mt=body->state->random;
             uint32_t probe_random;
             if (gh_game_mt_next_0030f348(&mt, &probe_random))
@@ -1669,7 +1725,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         /* 20D218 returns before the counter RNG on the amplified effect-7 Take. */
         const int skip_counter = (flags & 0x100u) && (r104_triangle||(boss_strike&&effect==7) || r102_close_em00_punch(enemy, p, effect) ||
             r102_stamp2_punch(enemy, p, effect));
-        if (!skip_counter && !word(player->bytes + 0x5fc) && block <= 0 &&
+        if (p[0x17bb] && !skip_counter && !word(player->bytes + 0x5fc) && block <= 0 &&
             !body->state->heat[0x10] && !(number(p + 0x17cc) > 0)) {
             uint32_t random;
             if (gh_game_mt_next_0030f348(&body->state->random, &random))
@@ -1693,7 +1749,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                     !half(p+0x3ac);
                 const int r104_counter=(r104_triangle&&grab_windup)||r104_turn_counter;
                 const int synchronous_counter=stamp2||east_em00||r102_em03_punch(enemy,p,effect)||at0b_em02||
-                    r101_side_arena_punch(enemy,p,effect)||key_carrier||r104_counter;
+                    r101_side_arena_punch(enemy,p,effect)||key_carrier||(em27_punch&&enemy->entry.b.work->room==0x101)||r104_counter;
                 const int faces=number(p+0x760)<=1.5707964f;
                 /* 20D2A0 always draws before the face test. A rear turn cannot enter 274238 here. */
                 const int r104_rear_pressure=r104_recovery&&p[0x2f5]==8&&!faces;
@@ -1724,7 +1780,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                             static const float em27_delay[]={0,15,13,12,12,10};
                             if(rank>5)return stop(frontier,0x274238);
                             /* 447260 dispatches dep0250 to the 10-unit rank-one timer. */
-                            duration=r104_counter?10.0f:key_carrier?em27_delay[rank]:delay[rank];
+                            duration=r104_counter?10.0f:(key_carrier||(em27_punch&&enemy->entry.b.work->room==0x101))?em27_delay[rank]:delay[rank];
                             if(rank<5){
                                 uint32_t jitter;
                                 fenv_t env;
@@ -1915,11 +1971,12 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
     const uint16_t effect = body->bytes && body->size >= 0x48 ? half(body->bytes + 0x46) : 0;
     const gh_title_player_view *source=NULL;
-    const int has_source=(effect==0x2a||effect==0x0f)&&body->bytes&&body->size>=0x50&&
+    const int has_source=(effect==0x2a||effect==0x0f||effect==0x30)&&body->bytes&&body->size>=0x50&&
         !gh_hitarea_object_last_hit_actor(body,&source)&&source&&source->bytes&&source->size>=0x600;
     const int heat_contact=has_source&&
         r103_heat_transition_contact(enemy,source,effect,(int32_t)word(body->bytes+0x4c));
     const int back_circle=has_source&&back_circle_contact(enemy,source,effect);
+    const int grenade=has_source&&r101_grenade_contact(enemy,source,effect,word(body->bytes+0x4c));
     const int triangle = triangle_take_supported(enemy, p, effect);
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     const int shockwave=effect==0x27&&(word(p+0x564)==0x214||word(p+0x564)==0x215||r104_em03_damage_receiver(enemy,p));
@@ -1931,18 +1988,19 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
         gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)&&
         (((half(p+0x2f4)==0x0101||half(p+0x2f4)==0x0001)&&!p[0x2f6]&&!p[0x2f7])||
          (half(p+0x2f4)==0x2100&&r104_player_punch(enemy,p,effect)));
-    if (!isfinite(timer) || (!catapult && !shockwave && !r104_punch && word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
+    if (!isfinite(timer) || (!catapult && !grenade && !shockwave && !r104_punch && word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
          !r100_stamp20(enemy, p) && !triangle && !heat_contact && !back_circle && !room_unarmed_punch(enemy, p, effect) &&
          !r102_em03_punch(enemy, p, effect) && !original_em27_punch(enemy, p, effect) &&
          !r102_at0b_em02_punch(enemy,p,effect)) ||
-        (amplified && !shockwave && !heat_contact && !back_circle && !boss_square && !r104_punch &&
-         !r101_key_carrier_punch(enemy,p,effect) && !r101_side_arena_punch(enemy,p,effect) &&
+        (amplified && !grenade && !shockwave && !heat_contact && !back_circle && !boss_square && !r104_punch &&
+         !r101_key_carrier_punch(enemy,p,effect) &&
+         !(enemy->entry.b.work->room==0x101&&original_em27_punch(enemy,p,effect)) && !r101_side_arena_punch(enemy,p,effect) &&
          !(triangle && (r200_em02_triangle_recoil(enemy,p)||r100_amplified_triangle_receiver(enemy,p) ||
         r104_amplified_triangle_fall(enemy,p) || r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p) || r103_boss_player_strike_target(enemy,p))) &&
          !r102_close_em00_punch(enemy, p, effect) && !r102_stamp2_punch(enemy, p, effect)))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
-    if (triangle || effect == 0x52 || heat_contact || shockwave || back_circle) {
+    if (triangle || effect == 0x52 || grenade || heat_contact || shockwave || back_circle) {
         uint32_t random;
         if (gh_game_mt_next_0030f348(&enemy->entry.b.init->random, &random))
             return stop(frontier, 0x31cfe0);
@@ -2135,7 +2193,12 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     const int exhausted_impact=call->effect==0x2a&&reaction==0x0101&&
         r103_heat_exhaustion_contact(enemy,player,take_effect,take_power)&&
         !gh_hitarea_object_last_hit_actor(body,&heat_source)&&heat_source==player;
-    const int heat_impact=(active_boss_strike||(call->effect==0x2a&&
+    const int active_side_square=!call->effect&&take_power==3&&
+        (reaction==0x0001||(reaction==0x0002&&!half(p+0x54a)))&&
+        (r101_side_arena_punch(enemy,p,take_effect)||
+         (take_effect==7&&r101_wave4_em27(enemy,p)))&&!p[0x2f6]&&!p[0x2f7]&&
+        init->heat[0x10]&&player->size>=0x15f8&&(word(player->bytes+0x15f4)&0x10u);
+    const int heat_impact=(active_boss_strike||active_side_square||(call->effect==0x2a&&
         r103_heat_activation_contact(enemy,player,take_effect,take_power)))&&
         !gh_hitarea_object_last_hit_actor(body,&heat_source)&&heat_source==player;
     const gh_title_player_view *scenery_source=NULL;
@@ -2168,6 +2231,10 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         return GH_ACTOR_MOTION_OK;
     }
     const int shockwave=call->effect==0x27&&(dependency==0x214||dependency==0x215||r104_em03_damage_receiver(enemy,p));
+    const gh_title_player_view *grenade_source=NULL;
+    const int grenade=call->effect==0x30&&take_effect==0x30&&
+        !gh_hitarea_object_last_hit_actor(body,&grenade_source)&&
+        r101_grenade_contact(enemy,grenade_source,take_effect,(uint32_t)take_power);
     const int thrown_box=call->effect==0x36&&dependency==0x227&&half(p+0x640)==9&&
         enemy->entry.b.work&&enemy->entry.b.work->room==0x101;
     const gh_title_player_view *recoil_source=NULL;
@@ -2180,7 +2247,7 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         r200_catapult_contact(enemy,body,catapult_source);
     if (manager_active) {
         const gh_title_player_view *source = NULL;
-        if ((call->effect != 0x2e && !thrown_box && !shockwave && !catapult) ||
+        if ((call->effect != 0x2e && !thrown_box && !grenade && !shockwave && !catapult) ||
             gh_hitarea_object_last_hit_actor(body,&source) || !source || !source->bytes || source->size < 0x300)
             return stop(frontier, 0x271810);
         const uint32_t power = word(body->bytes + 0x4c);
@@ -2193,7 +2260,7 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
             source->original_vtable214==0x4238d8&&word(source->bytes+0x214)==0x4238d8;
         const int arena_counter = word(body->bytes + 0x40) == UINT32_MAX &&
             r103_counter_collateral(enemy,source,power);
-        if (!scenery && !box && !shockwave && !catapult && !r100_counter_collateral(enemy,p,source,power) && !arena_counter && !recoil &&
+        if (!scenery && !box && !grenade && !shockwave && !catapult && !r100_counter_collateral(enemy,p,source,power) && !arena_counter && !recoil &&
             !(word(body->bytes + 0x40) == UINT32_MAX && r100_devil_contact(enemy,source,power)))
             return stop(frontier, 0x271810);
         /* The positive manager arm always creates CORE0:C. Only active
@@ -2213,13 +2280,14 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
          (reaction==0x2100&&r104_player_punch(enemy,p,take_effect)));
     if (amplified && (manager_active ||
         (!amplified_triangle && !boss_square && !r104_punch && !back_circle && !r101_key_carrier_punch(enemy,p,take_effect) &&
+         !(enemy->entry.b.work->room==0x101&&original_em27_punch(enemy,p,take_effect)) &&
          !r101_side_arena_punch(enemy,p,take_effect) && !r102_close_em00_punch(enemy, p, half(body->bytes + 0x46)) &&
          !r102_stamp2_punch(enemy, p, half(body->bytes + 0x46)))))
         return stop(frontier, 0x271cf8);
     if (amplified && ((word((const uint8_t *)enemy->entry.b.work + 0x590) & 0x800u) ||
                       (word(p + 0x16d4) & 0x8000u)))
         return stop(frontier, 0x271d7c);
-    if ((!thrown_box && !shockwave && !catapult && !exhausted_impact && !r104_punch && (call->effect == 0x2e ? !recoil && !scenery_reaction_enemy(enemy,p) :
+    if ((!thrown_box && !grenade && !shockwave && !catapult && !exhausted_impact && !r104_punch && (call->effect == 0x2e ? !recoil && !scenery_reaction_enemy(enemy,p) :
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
             !triangle_take_supported(enemy,p,call->effect) && !back_circle &&
             !room_unarmed_punch(enemy, p, half(body->bytes + 0x46)) &&

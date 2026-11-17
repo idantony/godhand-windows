@@ -80,14 +80,21 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
  const int em27_reaction=dependency==0x227&&model->root.size>0x1650&&model->work&&
     p[0x2f6]==1&&!p[0x2f7]&&
     ((model->work->room==0x102&&half(p+0x640)==4&&!p[0x1650])||
-     (model->work->room==0x101&&half(p+0x640)==9&&p[0x1650]==4));
+     (model->work->room==0x101&&((half(p+0x640)==9&&p[0x1650]==4)||
+      ((half(p+0x640)==0x1e||half(p+0x640)==0x26)&&p[0x1650]==6))));
  const unsigned stamp=model->root.size>0x1650?half(p+0x640):UINT16_MAX;
  const int r101_wave=model->root.size>0x1650&&model->work&&model->work->room==0x101&&
     p[0x1650]==6&&p[0x2f6]==1&&!p[0x2f7]&&
-    ((stamp==0x16&&dependency==0x200)||(stamp==0x20&&dependency==0x203));
+    ((dependency==0x200&&(stamp==0x16||stamp==0x18))||
+     (stamp==0x27&&dependency==0x202)||(dependency==0x203&&(stamp==0x20||stamp==0x28)));
+ const int r101_em0f=dependency==0x20f&&model->root.size>0x1650&&
+    model->root.original_vtable214==0x4479c8&&model->work&&model->work->room==0x101&&
+    p[0x1650]==6&&p[0x2f6]==1&&!p[0x2f7]&&
+    (stamp==0x1a||stamp==0x1b||stamp==0x22||stamp==0x23);
  const int allowed=(p[0x2f4]==1&&(dependency==0x20a||stamp19||stamp20||r102_em00||r102_em03||
-                       em27_reaction||at0b_em02||r101_wave))||
-                   (p[0x2f4]==2&&(stamp19||stamp20||r102_death||(r102_em03&&!half(p+0x54a))));
+                       em27_reaction||at0b_em02||r101_wave||r101_em0f))||
+                   (p[0x2f4]==2&&(stamp19||stamp20||r102_death||
+                       ((r102_em03||r101_wave)&&!half(p+0x54a))));
  return allowed?0x48u:0x40u;
 }
 static gh_actor_motion_status track_value(gh_actor_motion*s,unsigned index,float time,int cached,float*out,uint32_t*f){
