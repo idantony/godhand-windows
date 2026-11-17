@@ -1107,14 +1107,17 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      !w(p+0x160c)&&override_bank==UINT32_MAX&&!half(take+0x44);
    /* The timed 21FB34 strike publishes Give3D/15 or Give37/20.
     * 260C20 applies the live scale before Take reads power. */
-   const int r200_em1a_timed=b->work->room==0x200&&source_kind==0x201&&dependency==0x21a&&!stamp&&
+   const int r200_em1a=dependency==0x21a&&!stamp&&w(source->bytes+0x5f4)==1;
+   const int r200_wave=dependency==0x201&&(stamp==6||stamp==7)&&!w(source->bytes+0x5f4)&&
+     s->pending_damage_kind==0x37;
+   const int r200_short=b->work->room==0x200&&source_kind==0x201&&(r200_em1a||r200_wave)&&
      source->size>=0x1884&&!source->bytes[0x1650]&&w(source->bytes+0x2f4)==0x00011500u&&
-     w(source->bytes+0x5f4)==1&&!w(source->bytes+0x1870)&&w(source->bytes+0x187c)==UINT32_MAX&&
+     !w(source->bytes+0x1870)&&w(source->bytes+0x187c)==UINT32_MAX&&
      !half(source->bytes+0x1880)&&override_bank==UINT32_MAX&&!half(take+0x44)&&!residual&&
      s->pending_damage==(int32_t)w(take+0x4c)&&s->pending_damage_kind==w(source->bytes+0x1878)&&
      ((s->pending_damage_kind==0x3d&&w(source->bytes+0x1874)==15&&s->pending_damage==18)||
       (s->pending_damage_kind==0x37&&w(source->bytes+0x1874)==20&&s->pending_damage==24));
-   if(source_kind!=0x202&&!arena_hit&&!em14_sphere&&!devil_melee&&!devil_combo&&!r104_strike&&!r200_em1a_timed)
+   if(source_kind!=0x202&&!arena_hit&&!em14_sphere&&!devil_melee&&!devil_combo&&!r104_strike&&!r200_short)
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
    const int em0a_story=source->size>=0x16c8&&b->work->room==0x102&&stamp==2&&
      source->bytes[0x1650]==5&&!w(source->bytes+0x16c4)&&!source->bytes[0x2f7];
@@ -1304,7 +1307,7 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      half(source->bytes+0x2f4)==0x1500&&
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&override_bank==UINT32_MAX&&!cue&&
      s->pending_damage_kind==0x37&&s->pending_damage==20&&w(take+0x4c)==20&&!residual;
-   if(!r200_em1a_timed&&!r101_short&&!r101_weapon&&!armed47&&!r102_armed16&&!r102_short_hit&&!east_em27_short_hit&&
+   if(!r200_short&&!r101_short&&!r101_weapon&&!armed47&&!r102_armed16&&!r102_short_hit&&!east_em27_short_hit&&
       !area11_fall&&!r105_short_hit&&!r105_combo_hit&&!east_em27_combo_hit&&!r104_strike&&
       !em03_fall&&!arena_hit&&!em14_sphere&&!em0a_override&&!em0a_kick&&!em0a_reverse&&!em0a_wide&&
       !west_em0a_timed&&!west_em0a_reverse&&!west_em0a_face_kick&&

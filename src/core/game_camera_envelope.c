@@ -89,7 +89,9 @@ static gh_camera_status finish(gh_camera_envelope*s,gh_camera_follow*follow,
     const int r200=kind==0x201&&s->player_model&&s->player_model->work&&
        s->player_model->work->room==0x200&&target.size>=0x168c&&
        ((word(target.bytes+0x564)==0x202&&(word(target.bytes+0x640)&0xffffu)==1)||
-        (word(target.bytes+0x564)==0x21a&&!(word(target.bytes+0x640)&0xffffu)));
+        (word(target.bytes+0x564)==0x21a&&!(word(target.bytes+0x640)&0xffffu))||
+        (word(target.bytes+0x564)==0x201&&!target.bytes[0x1650]&&
+         ((word(target.bytes+0x640)&0xffffu)==6||(word(target.bytes+0x640)&0xffffu)==7)));
     if(target.original_vtable214!=0x4479c8||(kind!=0x202&&!arena&&!west_devil&&!r104&&!r200))
      return fail(f,0x13a73c,GH_CAMERA_UNSUPPORTED);
     float point[3];

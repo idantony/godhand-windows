@@ -213,8 +213,11 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
     return transition(s,out,0,0);
    }
   }
-  /* 123AB8 reaches 123ACC for an attack buffered during the R104 backflip. */
-  const int buffered_square=(r104_backflip||r104_taunt)&&(seq&0x10u)&&p[0x621]&&
+  /* Dodge 10CD38 uses 10D0B8 for the backflip and both lateral selectors.
+   * 123AB8 permits the same buffered Square when their motion sets bit 10. */
+  const int r104_side_dodge=b->work->room==0x104&&h(p+0x2f4)==0x0600&&
+      p[0x2f6]==1&&(p[0x2f7]==2||p[0x2f7]==3);
+  const int buffered_square=(r104_backflip||r104_side_dodge||r104_taunt)&&(seq&0x10u)&&p[0x621]&&
        !p[0x622]&&!p[0x623]&&!p[0x624]&&!(pressed&7u);
   const int buffered_attack=buffered_triangle||buffered_square;
   if(buffered_attack)s->phase=4;
