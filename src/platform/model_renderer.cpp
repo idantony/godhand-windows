@@ -172,9 +172,10 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
  bool trail_packet=false){
  if(!s||!input||!indices||!r->begun||r->thread!=GetCurrentThreadId()||count>1024||n>4096||!count||n%3)return GH_MODEL_GPU_ARGUMENT;
  const bool flat_strip = s->primitive == 0x54;
+ const bool gouraud_strip = s->primitive == 0x5c;
  unsigned prim=s->primitive&7;if((prim!=3&&prim!=4&&prim!=5)||(!(s->primitive&8)&&!flat_strip)||!(s->primitive&16)||(s->primitive&~0x7fu)||!s->native_float_reference||s->frame_psm||s->zbuf_psm!=58||s->dthe||s->colclamp!=1||s->clamp||s->fba>1||s->pabe>1||s->z_write>1||s->xy_offset_x16>65535||s->xy_offset_y16>65535||(s->texture_function!=0&&s->texture_function!=3))return GH_MODEL_GPU_UNSUPPORTED;
  if(s->frame_mask && s->frame_mask != UINT32_MAX &&
-    ((!flat_strip&&!scene_warp) || s->frame_mask != 0xff000000u))return GH_MODEL_GPU_UNSUPPORTED;
+    ((!flat_strip&&!gouraud_strip&&!scene_warp) || s->frame_mask != 0xff000000u))return GH_MODEL_GPU_UNSUPPORTED;
  if(trail_packet){
   if(!flat_strip||count!=n||count>GH_EFFECT_TRANS_TRAIL_VERTEX_CAPACITY)return GH_MODEL_GPU_UNSUPPORTED;
   for(size_t i=0;i<n;++i){
@@ -182,14 +183,14 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
    const auto &color=input[i-i%3].rgba;
    if(!std::equal(color,color+4,input[i].rgba))return GH_MODEL_GPU_UNSUPPORTED;
   }
- }else if (flat_strip) {
-  // The original packet is one four-vertex strip with the same RGBA on all
-  // vertices, so provoking-vertex selection cannot change its flat color.
+ }else if (flat_strip || (gouraud_strip&&s->frame_mask == 0xff000000u)) {
+  // The masked ESP sprite paths submit one original four-vertex strip.
+  // A flat packet must also satisfy its original uniformly shaded vertices.
   if (count != 4 || n != 6 || indices[0] != 0 || indices[1] != 1 || indices[2] != 2 || indices[5] != 3 ||
       !((indices[3] == 2 && indices[4] == 1) || (indices[3] == 1 && indices[4] == 2))) {
    return GH_MODEL_GPU_UNSUPPORTED;
   }
-  for (size_t vertex = 1; vertex < count; ++vertex) {
+  for (size_t vertex = 1; flat_strip && vertex < count; ++vertex) {
    if (!std::equal(input[0].rgba, input[0].rgba + 4, input[vertex].rgba)) return GH_MODEL_GPU_UNSUPPORTED;
   }
  }

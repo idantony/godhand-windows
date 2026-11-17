@@ -124,6 +124,8 @@ gh_effect_status gh_effect_create_actor_match(void *effects,int emitter,unsigned
  const gh_title_player_view *,int *match,uint32_t *frontier);
 /* The admitted EV01 bank-6 sprites borrow an actor root.
  * The emitter retains the selected part through a separate typed binding. */
+int gh_effect_r200_catapult_part_is_bound(gh_effect_view,
+ const gh_title_player_view *,const gh_title_player_view *);
 int gh_effect_r101_door_break_part_is_bound(gh_effect_view,const gh_title_player_view *,
  const gh_title_player_view *);
 int gh_effect_ev05_partless_is_bound(gh_effect_view,const gh_title_player_view *,const gh_title_player_view *);

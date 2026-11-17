@@ -1036,6 +1036,18 @@ static int16_t door_break_actor_room(const gh_title_player_view *actor)
  return 0;
 }
 
+int gh_effect_r200_catapult_part_is_bound(gh_effect_view row,
+ const gh_title_player_view *actor,const gh_title_player_view *selector)
+{
+ if(!actor||!actor->bytes||actor->size!=0x640||actor->original_vtable214!=0x428c20||
+    (w(actor->bytes+0x2fc)>>16)!=0x3bd||selector!=actor||!row.bytes||row.size!=0x2f0)
+  return 0;
+ const uint8_t *r=row.bytes;
+ /* Three original CORE00:13 rows, all attached to the catapult model root. */
+ return w(r)==0x1efe8010u&&w(r+4)==0x00c01000u&&!r[0xbe]&&!r[0x128]&&
+     r[0x133]==1&&!r[0x136]&&(r[0x12e]==10||r[0x12e]==132);
+}
+
 int gh_effect_r101_door_break_part_is_bound(gh_effect_view row,
  const gh_title_player_view *actor,const gh_title_player_view *selector)
 {
@@ -2258,6 +2270,7 @@ int gh_effect_r100_om307_esp04_is_bound(const gh_game_effects *owner,const gh_ef
 static uint32_t esp_vtable(unsigned type){
  switch(type){
  case 0: return 0x44fad0u;
+ case 1: return 0x44e090u;
  case 3: return GH_ESP03_VTABLE;
  case 4: return GH_ESP04_VTABLE;
  case 5: return 0x44e640u;
@@ -2757,7 +2770,8 @@ static int sprite_binding(gh_effect_view row,const gh_title_player_view *actor,
  const gh_title_player_view *selector){
  return gh_esp14_nested_sprite_is_bound(row,actor,selector)||gh_effect_event_part_is_bound(row,actor,selector)||
     gh_effect_ev05_partless_is_bound(row,actor,selector)||
-        gh_effect_r101_door_break_part_is_bound(row,actor,selector);
+        gh_effect_r101_door_break_part_is_bound(row,actor,selector)||
+        gh_effect_r200_catapult_part_is_bound(row,actor,selector);
 }
 
 static int authenticated_esp(const gh_game_effects *e,const gh_effect_esp_view *v,int player_attachment)
@@ -2982,7 +2996,8 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
  const int enemy_light=gh_effect_enemy_light_emitter_is_bound(e,&source);
  const int event_part=enemy_light||emad||stamp19||weapon||player_attachment||
     attack||knock||death_ground||gh_effect_event_part_is_bound(source.record,source.actor,source.selector)||
-    gh_effect_r101_door_break_part_is_bound(source.record,source.actor,source.selector);
+    gh_effect_r101_door_break_part_is_bound(source.record,source.actor,source.selector)||
+    gh_effect_r200_catapult_part_is_bound(source.record,source.actor,source.selector);
  const int devil=gh_effect_devil_emitter_is_bound(e,&source);
  const int bound=devil||enemy_light||emad||stamp19||weapon||player_attachment||attack||knock||death_ground||player_heat_root||gh_effect_r103_slide_camera_emitter_is_bound(&source)||
     sprite_binding(source.record,source.actor,source.selector);
@@ -2992,6 +3007,14 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
  const int event_trail=type==0x1f&&(attack_profile==0x00050006u||attack_profile==0x00060006u||
     attack_profile==0x00070006u||attack_profile==0x00090006u||attack_profile==0x000d0006u)&&
     gh_effect_event_part_is_bound(source.record,source.actor,source.selector);
+ const int catapult=attack_profile==0x00130000u&&!w(source.payload+0x110)&&
+     gh_effect_r200_catapult_part_is_bound(source.record,source.actor,source.selector);
+ if(type==1&&!catapult&&!(attack_profile==0x00010003u&&w(source.payload+0x110)==0x2201u&&
+    !source.actor&&!source.selector&&r[0xbe]==0xff&&r[0x12e]==132&&
+    (w(r)&~0x8000u)==0x1efe0010u&&w(r+4)==0x00800000u&&
+    gh_effect_ambient_row_is_bound(e,1,source.record))){
+  *f=0x2faca8;return GH_EFFECT_UNSUPPORTED;
+ }
  if(!vtable||(type==3&&!player_heat_root)||(type==0x1f&&!devil&&!event_trail&&!(player_attachment&&attack_profile==0x00210000u&&
     (player_heat_active_row(r,8)||player_heat_active_row(r,9))))){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}
  const int paired_kick=attack&&attack_profile==0x00500058u&&r103_paired_kick_row(r);
@@ -3101,8 +3124,8 @@ gh_effect_status gh_effect_create_esp_commit_type5(gh_game_effects *e,unsigned s
 gh_effect_status gh_effect_create_esp_commit_base(gh_game_effects*e,unsigned slot,uint32_t serial){
  gh_effect_esp_view view;
  gh_effect_status status=gh_effect_create_esp_at(e,slot,&view);
- if(status||view.serial!=serial||view.type||view.initialized||
-    w(view.payload+0xf0)!=esp_vtable(0)||!view.globals||!view.globals->initialized||
+ if(status||view.serial!=serial||view.type>1||view.initialized||
+    w(view.payload+0xf0)!=esp_vtable(view.type)||!view.globals||!view.globals->initialized||
     (view.parent_emitter>=0&&!(w(view.payload+0x11c)&0x01000000u)))return GH_EFFECT_ARGUMENT;
  if((view.actor||view.selector)&&!sprite_binding(view.record,view.actor,view.selector)&&!gh_effect_attack_esp_is_bound(e,&view)&&!gh_effect_knockdown_esp_is_bound(e,&view)&&!gh_effect_player_attachment_esp_is_bound(e,&view)&&!gh_effect_devil_esp_is_bound(e,&view)&&
     !gh_effect_enemy_light_esp_is_bound(e,&view)&&(!gh_effect_emad_esp_is_bound(e,&view)&&!gh_effect_em03_esp_is_bound(e,&view)))

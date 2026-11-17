@@ -464,7 +464,7 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
         const bool trail=p.original_callee==0x2ec398||p.original_callee==0x2edf70;
         const bool wave=p.original_callee==0x2eaf70;
         const bool aura=p.original_callee==0x2e4e70;
-        if(!p.writes_clamp||p.clamp||!p.writes_tex0||p.prim!=(aura?0x5b:0x54)||
+        if(!p.writes_clamp||p.clamp||!p.writes_tex0||p.prim!=(aura?0x5b:p.original_callee==0x2e1a08?0x5c:0x54)||
             p.source!=GH_EFFECT_SURFACE_MATERIAL||p.destination!=GH_EFFECT_SURFACE_SCENE_COLOR||
             !p.material||p.tex0!=p.material->source_tex0||
             (trail?p.quad_count>GH_EFFECT_TRANS_QUAD_CAPACITY:

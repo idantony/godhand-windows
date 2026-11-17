@@ -6487,6 +6487,10 @@ static gh_object_step_status om_break_effect(void *context,const gh_actor_model 
   if(kind==0x313||(kind==0x300&&s->b.work->room==0x100)){
    const gh_effect_create_request door={.bank=0,.index=0x1a,.actor=&model->root,.mode=-1,.selector=-1};
    opened=gh_effect_create_begin(call,&door);
+  }else if(kind==0x3bd&&s->b.work->room==0x200&&model->root.original_vtable214==0x428c20){
+   const gh_effect_create_request catapult={.bank=0,.index=0x13,
+       .actor=&model->root,.mode=0,.selector=-1};
+   opened=gh_effect_create_begin(call,&catapult);
   }else if(kind==0x30a||kind==0x304||kind==0x33f||
       (kind==0x309&&s->b.work->room==0x102&&model->root.original_vtable214==0x4237e8))opened=gh_effect_create_om30a_break_begin_0018c580(call,position);
   else if(kind==0x363||kind==0x3c4||kind==0x3c8||kind==0x3d0||kind==0x3d1||kind==0x3df||
@@ -7583,7 +7587,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   if(!e)e=gh_enemy202_move_bind_opacity(move,&s->enemy_opacity);
   if(!e)e=gh_enemy202_move_bind_near_sound(move,enemy_ema2_near_sound,s);
   if(!e)e=gh_enemy202_move_bind_room_state(move,&s->room_state);
-  if(!e&&(s->b.work->room>=0x101&&s->b.work->room<=0x105)){
+  if(!e&&((s->b.work->room>=0x101&&s->b.work->room<=0x105)||s->b.work->room==0x200)){
    gh_bundle room;
    if(gh_game_room_pack_bundle(&s->room_pack,&room)){*f=0x31ccf0;return GH_SERVICES_ASSET;}
    e=gh_enemy202_move_bind_scene_jump(move,&s->scene_at,&room);

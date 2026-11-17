@@ -17,9 +17,9 @@ static gh_effect_status body(gh_game_effects*e,unsigned slot,uint32_t serial,con
  if(!e||!b||!out||!f)return GH_EFFECT_ARGUMENT;*f=0;if(b->policy!=GH_STATIC_BINARY32_REFERENCE)return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);if(!b->camera||!b->init||!b->camera->constructed||b->camera->identity!=b->init->active_camera||b->camera->policy!=GH_CAMERA_NATIVE_BINARY32_REFERENCE)return fail(f,0x147528,GH_EFFECT_ARGUMENT);if(!b->display||!b->display->initialized)return fail(f,0x2fe0d8,GH_EFFECT_ARGUMENT);const gh_display_state*d=b->display;if(d->screen_width<=0||d->screen_width>2048||d->screen_lines<=0||d->screen_lines>2048)return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  gh_effect_esp_view v;
  if(gh_effect_create_esp_at(e,slot,&v)||v.serial!=serial||!v.initialized||
-    (v.type!=0x1a&&v.type!=0x15&&v.type!=0x12&&v.type!=0)||v.payload_size!=0x400)
+    (v.type!=0x1a&&v.type!=0x15&&v.type!=0x12&&v.type!=0&&v.type!=1)||v.payload_size!=0x400)
     return fail(f,0x2fe0d8,GH_EFFECT_ARGUMENT);
- const uint32_t table=v.type==0x1a?0x44f270u:v.type==0x15?0x44ef08u:v.type==0x12?0x44eb70u:0x44fad0u;
+ const uint32_t table=v.type==1?0x44e090u:v.type==0x1a?0x44f270u:v.type==0x15?0x44ef08u:v.type==0x12?0x44eb70u:0x44fad0u;
  if(word(v.payload+0xf0)!=table)return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  const int em00_attack=gh_effect_attack_esp_is_bound(e,&v);
  const int player_attachment=gh_effect_player_attachment_esp_is_bound(e,&v);
@@ -28,7 +28,8 @@ static gh_effect_status body(gh_game_effects*e,unsigned slot,uint32_t serial,con
     return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  if(v.type==0x12&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v)&&!player_attachment&&!devil)return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  if((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&
-    !(gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||gh_effect_ev05_partless_is_bound(v.record,v.actor,v.selector)||gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector))&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v)&&!player_attachment&&!devil&&!gh_effect_enemy_light_esp_is_bound(e,&v)&&!gh_effect_emad_esp_is_bound(e,&v)&&!gh_effect_em03_esp_is_bound(e,&v))
+    !(gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||gh_effect_ev05_partless_is_bound(v.record,v.actor,v.selector)||gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector)||
+      gh_effect_r200_catapult_part_is_bound(v.record,v.actor,v.selector))&&!em00_attack&&!gh_effect_knockdown_esp_is_bound(e,&v)&&!player_attachment&&!devil&&!gh_effect_enemy_light_esp_is_bound(e,&v)&&!gh_effect_emad_esp_is_bound(e,&v)&&!gh_effect_em03_esp_is_bound(e,&v))
     return fail(f,0x2fe0d8,GH_EFFECT_UNSUPPORTED);
  uint8_t*p=v.payload;uint32_t flags=word(p+0x11c);float projection[16],view[16],transform[16],world[16];
  memcpy(projection,b->camera->fields+0x100,64);memcpy(view,b->camera->fields+0x140,64);

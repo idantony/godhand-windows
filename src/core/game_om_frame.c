@@ -95,7 +95,7 @@ static gh_object_step_status bind(gh_om_frame_state*s,const gh_om_factory*f,cons
  void*registered=NULL;if(!o||!o->registered||!o->initialization||!o->view.bytes||o->view.size<0x600||q->actor.bytes!=o->view.bytes||q->actor.size!=o->view.size||q->this_delta||gh_room_object_lookup(f->bindings.pools,q->handle,GH_ROOM_OBJECT_OM,f,&registered)||registered!=o)return fail(s,0x30f15c,pc,GH_OBJSTEP_ARGUMENT);
  if(s->bound)return s->factory==f&&s->object==o&&s->handle==q->handle&&s->entry==q->original_entry?GH_OBJSTEP_OK:fail(s,0x30f15c,pc,GH_OBJSTEP_ARGUMENT);
  const gh_om_fragment_profile *fragment=gh_om_fragment_profile_for(o->source.type);
- uint32_t expected=fragment?fragment->move:o->source.type==0x300?0x186928:o->source.type==0x313?0x191f30:o->source.type==0x330?0x19c518:(o->source.type==0x331||o->source.type==0x332)?0x19c848:o->source.type==0x333?0x19d538:o->source.type==0x355?0x1a85b8:o->source.type==0x356?0x1a8778:o->source.type==0x351?0x1a6188:o->source.type==0x354?0x1a82d8:o->source.type==0x303?0x187c18:o->source.type==0x304?0x187fe8:o->source.type==0x305?0x188c88:o->source.type==0x317?0x192ef8:o->source.type==0x318?0x193180:o->source.type==0x31a?0x1933f8:o->source.type==0x320?0x195e58:o->source.type==0x307?0x1895d8:o->source.type==0x30a?0x18c370:o->source.type==0x310?0x18f488:o->source.type==0x311?0x190948:o->source.type==0x338?0x19e150:o->source.type==0x339?0x19e3d8:o->source.type==0x33f?0x19f378:o->source.type==0x309?0x18b568:o->source.type==0x308?0x18a870:o->source.type==0x30b?0x18d160:o->source.type==0x30c?0x18df18:o->source.type==0x30e?0x18ee38:o->source.type==0x324?0x198f48:o->source.type==0x325?0x199290:o->source.type==0x326?0x199f60:o->source.type==0x322?0x1965f8:o->source.type==0x323?0x197c20:o->source.type==0x346?0x1a13e8:r101_item(o)?0x1c0378:weapon(o)?0x1c9860:o->source.type==0x35d?0x1aedb0:o->source.type==0x41c?0x17ba28:o->source.type==0x357?0x1a8a70:tutorial(o)?0x1bf518:mount(o)?0x1a7880:devil_projectile(o)?0x1b92f0:0;
+ uint32_t expected=fragment?fragment->move:o->source.type==0x300?0x186928:o->source.type==0x313?0x191f30:o->source.type==0x330?0x19c518:(o->source.type==0x331||o->source.type==0x332)?0x19c848:o->source.type==0x333?0x19d538:o->source.type==0x355?0x1a85b8:o->source.type==0x356?0x1a8778:o->source.type==0x351?0x1a6188:o->source.type==0x354?0x1a82d8:o->source.type==0x303?0x187c18:o->source.type==0x304?0x187fe8:o->source.type==0x305?0x188c88:o->source.type==0x317?0x192ef8:o->source.type==0x318?0x193180:o->source.type==0x31a?0x1933f8:o->source.type==0x320?0x195e58:o->source.type==0x307?0x1895d8:o->source.type==0x30a?0x18c370:o->source.type==0x310?0x18f488:o->source.type==0x311?0x190948:o->source.type==0x338?0x19e150:o->source.type==0x339?0x19e3d8:o->source.type==0x33f?0x19f378:o->source.type==0x309?0x18b568:o->source.type==0x308?0x18a870:o->source.type==0x30b?0x18d160:o->source.type==0x30c?0x18df18:o->source.type==0x30e?0x18ee38:o->source.type==0x324?0x198f48:o->source.type==0x325?0x199290:o->source.type==0x326?0x199f60:o->source.type==0x322?0x1965f8:o->source.type==0x323?0x197c20:o->source.type==0x346?0x1a13e8:r101_item(o)?0x1c0378:weapon(o)?0x1c9860:o->source.type==0x35d?0x1aedb0:o->source.type==0x41c?0x17ba28:o->source.type==0x357?0x1a8a70:tutorial(o)?0x1bf518:mount(o)?0x1a7880:catapult(o)?0x1b8990:devil_projectile(o)?0x1b92f0:0;
  if(!expected||q->original_entry!=expected)return fail(s,q->original_entry,pc,GH_OBJSTEP_UNSUPPORTED);
  /* Bind before first original Move; constructor1BBEB8 established these.
   * A nonzero guest pointer can never be silently adopted as host634. */
@@ -2098,11 +2098,45 @@ static gh_object_step_status mount_visit_001a7a28(gh_om_frame_state *s,uint32_t 
  return mount_turn_lids(s,frontier);
 }
 
+static gh_object_step_status catapult_windup_001b8a50(gh_om_frame_state *s,uint32_t *frontier)
+{
+ uint8_t *actor=s->object->view.bytes;
+ if(actor[0x2f4])return fail(s,0x1b8990,frontier,GH_OBJSTEP_UNSUPPORTED);
+ if(!actor[0x2f5]){
+  if(!s->runtime_bound||!s->runtime.break_effect||!s->object->view.alias_f0)
+   return fail(s,0x306528,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const uint32_t position[3]={word(s->object->view.alias_f0),
+   word(s->object->view.alias_f0+4),word(s->object->view.alias_f0+8)};
+  uint32_t pc=0;
+  gh_object_step_status status=s->runtime.break_effect(s->runtime.context,
+      &common(s)->model,position,0,&pc);
+  if(status)return fail(s,pc?pc:0x306528,frontier,status);
+  memcpy(actor+0x600,position,sizeof(position));
+  sh(actor+0x628,actor[0x630]?180:90);
+  actor[0x630]=1;
+  actor[0x2f5]=1;
+  actor[0x2f6]=actor[0x2f7]=0;
+ }
+ if(actor[0x2f5]!=1)return fail(s,0x1b8a50,frontier,GH_OBJSTEP_UNSUPPORTED);
+ const uint16_t counter=(uint16_t)half(actor+0x628);
+ if((int16_t)counter>0){
+  sh(actor+0x628,(uint16_t)(counter-1u));
+  return GH_OBJSTEP_OK;
+ }
+ if(word(actor+0x5b8)&1u)return fail(s,0x1b8b68,frontier,GH_OBJSTEP_UNSUPPORTED);
+ return GH_OBJSTEP_OK;
+}
+
 static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_static_transform_policy policy,uint32_t*f){
  uint8_t*p=s->object->view.bytes;gh_om_init_state*c=common(s);
  if(!s->phase){if(word((const uint8_t*)w+0x5d8)&0x20000000u){s->complete=1;return GH_OBJSTEP_OK;}put(p+0x5b4,0);s->phase=1;}
  if(s->phase==1&&s->object->source.type==0x311){
   gh_object_step_status status=om311_move(s,policy,f);
+  if(status)return status;
+  s->phase=4;
+ }
+ if(s->phase==1&&catapult(s->object)){
+  gh_object_step_status status=catapult_windup_001b8a50(s,f);
   if(status)return status;
   s->phase=4;
  }

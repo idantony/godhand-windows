@@ -2598,8 +2598,11 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  const int gate_loop=!candidate->source_owner&&bank==2&&program==0x10&&r105_gate_loop_descriptor(p);
  const int ts_loop=candidate->ts_environment!=NULL;
  if(emad_loop||gate_loop||ts_loop){
-  const size_t extent=ts_loop?13440u:emad_loop?12736u:13040u;
-  if(w(descriptor.data)!=(ts_loop?0xdf40u:emad_loop?0:0x2b80u)||w(descriptor.data+4)!=16000||
+  const int lava=ts_loop&&bank==2&&(program==0x18||program==0x19);
+  const unsigned rate=lava&&program==0x18?18000u:16000u;
+  const size_t extent=lava?(program==0x18?14080u:17872u):ts_loop?13440u:emad_loop?12736u:13040u;
+  const uint32_t offset=lava?(program==0x18?0x8cf0u:0xc3f0u):ts_loop?0xdf40u:emad_loop?0:0x2b80u;
+  if(w(descriptor.data)!=offset||w(descriptor.data+4)!=rate||
      adsr1!=0x80ff||adsr2!=(emad_loop?0x5fcb:0x5fc0)||w(descriptor.data+12)!=1||
      (emad_loop?tail.size!=extent:tail.size<extent))return unsupported(s,0x35fc);
   result=gh_audio_decode_ps_adpcm_loop(tail.data,extent,&candidate->pcm);
@@ -2609,13 +2612,15 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
   }
   /* The stable PCM repeat is appended after the full first pass.
    * Authored ADPCM block 197 marks its source, not its host PCM position. */
-  if(ts_loop&&(candidate->pcm.source_bytes!=extent||candidate->pcm.loop_first!=840u*28u||
-               candidate->pcm.loop_frames!=(840u-197u)*28u)){
+  const size_t repeat_block=lava?(program==0x18?223u:58u):197u;
+  const size_t blocks=extent/16;
+  if(ts_loop&&(candidate->pcm.source_bytes!=extent||candidate->pcm.loop_first!=blocks*28u||
+               candidate->pcm.loop_frames!=(blocks-repeat_block)*28u)){
    gh_audio_pcm_release(&candidate->pcm);return unsupported(s,0x35fc);
   }
   /* Bake key-on in source sample time. The repeating tail uses the
    * sustain level at loop entry in this native DSP reference. */
-  const uint16_t pitch=selected_pitch?selected_pitch:1365;
+  const uint16_t pitch=selected_pitch?selected_pitch:(uint16_t)(rate*4096u/48000u);
   keyon_envelope env={.phase=1};
   uint64_t next_sample=0;
   for(uint64_t i=0;next_sample<candidate->pcm.loop_first;i++){
@@ -2632,7 +2637,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
   candidate->info.stop_current=0x7f00;
   candidate->base_gain=gate_loop?(uint16_t)((uint64_t)s->mix.se_level_q8*(h(p+0x10)<<8)/0x7f00u):0;
   candidate->info.level_q14=candidate->base_gain/2;
-  candidate->info.rate=16000;candidate->info.sample_slot=slot;
+  candidate->info.rate=rate;candidate->info.sample_slot=slot;
   candidate->info.frames=(uint32_t)candidate->pcm.frames;
   candidate->info.adsr1=adsr1;candidate->info.adsr2=adsr2;
   candidate->info.program=program;candidate->info.bank=bank;
@@ -3210,6 +3215,18 @@ static int ts_voice_program(const uint8_t *p)
   w(p+32)==4&&w(p+36)==0x300u&&w(p+40)==0xffffu&&!w(p+44);
 }
 
+static int r200_ts_voice_program(const gh_audio_registry *registry,int16_t program,const uint8_t *p)
+{
+ const char *archive=NULL;
+ if((program!=0x18&&program!=0x19)||gh_audio_external_path(registry,2,&archive)||
+    strcmp(archive,"se/r200.afs"))return 0;
+ const int large=program==0x19;
+ return w(p+4)==(large?0x04140004u:0x08160003u)&&w(p+8)==(large?0x7au:0x27cu)&&
+  w(p+12)==0x00200000u&&w(p+16)==(large?0x00280028u:0x005a005au)&&
+  w(p+20)==0x005a0040u&&!w(p+24)&&w(p+28)==(large?0:0x00040000u)&&
+  w(p+32)==0x00060004u&&w(p+36)==0x300u&&w(p+40)==0xffffu&&!w(p+44);
+}
+
 gh_voice_status gh_se_voice_request_ts_002cb968(gh_se_voice_engine *s,int16_t bank,int16_t program,
  const float position[4],const gh_se_attached_environment *environment,uint32_t *handle)
 {
@@ -3222,7 +3239,8 @@ gh_voice_status gh_se_voice_request_ts_002cb968(gh_se_voice_engine *s,int16_t ba
  gh_audio_status result=gh_audio_get_program(s->registry,bank,program,0,candidate.descriptor);
  if(result==GH_AUDIO_NOT_FOUND||result==GH_AUDIO_DISABLED||result==GH_AUDIO_BOUNDS)return GH_VOICE_OK;
  if(result)return unsupported(s,0x374cb8);
- if(bank!=2||program!=0x22||!ts_voice_program(candidate.descriptor))return unsupported(s,0x2cdff0);
+ if(bank!=2||(!(program==0x22&&ts_voice_program(candidate.descriptor))&&
+    !r200_ts_voice_program(s->registry,program,candidate.descriptor)))return unsupported(s,0x2cdff0);
  for(unsigned axis=0;axis<4;++axis)if(!isfinite(position[axis]))return unsupported(s,0x2cde28);
  memcpy(candidate.info.source_position,position,16);
  candidate.info.source_position[1]+=1.3f;
