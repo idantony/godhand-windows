@@ -482,6 +482,19 @@ static gh_actor_motion_status enemy_receive_sound(gh_enemy202_hit_call *call,
     return GH_ACTOR_MOTION_OK;
 }
 
+static int r200_catapult_contact(const gh_enemy_actor *enemy,const gh_hitarea_object *body,
+ const gh_title_player_view *source)
+{
+    if(!enemy||!body||!body->bytes||body->size<0x50||!source||!source->bytes||source->size!=0x640)
+        return 0;
+    const gh_enemy_entry *entry=&enemy->entry;
+    const uint8_t *p=entry->object.view.bytes;
+    return gh_enemy201_is_r200_entry(&entry->request,entry->b.work->room)&&
+        word(p+0x564)==0x21a&&!half(p+0x640)&&source->original_vtable214==0x428c20&&
+        half(source->bytes+0x2fe)==0x3bd&&word(source->bytes+0x2f4)==0x00000300u&&
+        !half(body->bytes+0x44)&&half(body->bytes+0x46)==0x52&&word(body->bytes+0x4c)==20;
+}
+
 /* Original scenery Give paths set the environment flag in 20A5DC's VT+AC call. */
 static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     const gh_enemy_entry *entry, const gh_hitarea_object *body, gh_enemy_actor *enemy,
@@ -498,6 +511,8 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     const int barrel = enemy && effect == 0x52 && source_kind == 0x310 && source->size >= 0x920 &&
         r102_stamp2(enemy, p) && power == 80 && !half(body->bytes + 0x44) &&
         !word(source->bytes + 0x2f4);
+    /* R200's catapult impact sphere gives the original effect 52 with power 20. */
+    const int catapult = r200_catapult_contact(enemy,body,source);
     const int recoil = enemy && r103_heavy_recoil_collateral(enemy,source,power);
     const int arena_counter = recoil || (enemy && r103_counter_collateral(enemy,source,power));
     const int devil_contact = enemy && r100_devil_contact(enemy,source,power);
@@ -512,19 +527,19 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
     const int devil_scenery = !enemy && entry->b.work && entry->b.work->room == 0x100 &&
         half(p + 0x2fe) == 0x220 && word(p + 0x564) == 0x220 &&
         half(p + 0x640) == 0xff && !power && source_kind == 0x303;
-    const uint32_t source_vtable = barrel ? 0x423e48u :
+    const uint32_t source_vtable = catapult ? 0x428c20u : barrel ? 0x423e48u :
         source_kind == 0x202 || arena_counter ? 0x4479c8u : devil_contact ? 0x4290c8u : scenery_hit_vtable(source_kind);
-    if ((effect != 0x2e && !barrel) || !source_vtable || source->original_vtable214 != source_vtable ||
+    if ((effect != 0x2e && !barrel && !catapult) || !source_vtable || source->original_vtable214 != source_vtable ||
         word(source->bytes + 0x214) != source_vtable ||
         actor->original_vtable214 != 0x4479c8 || word(p + 0x214) != 0x4479c8 ||
-        (!devil_scenery && (!enemy || (half(p + 0x2fe) != 0x202 && !arena_counter) ||
-          (!barrel && !recoil && !west_em0a && !scenery_reaction_enemy(enemy,p)))) ||
+        (!devil_scenery && (!enemy || (half(p + 0x2fe) != 0x202 && !arena_counter && !catapult) ||
+          (!barrel && !catapult && !recoil && !west_em0a && !scenery_reaction_enemy(enemy,p)))) ||
         word(body->bytes + 0x40) != UINT32_MAX)
         return stop(frontier, 0x20a178);
     if (source_kind == 0x202) {
         if (!r100_counter_collateral(enemy,p,source,power))
             return stop(frontier, 0x20a178);
-    } else if (power && !arena_counter && !barrel && !devil_contact) {
+    } else if (power && !arena_counter && !barrel && !catapult && !devil_contact) {
         return stop(frontier, 0x20a178);
     }
 
@@ -651,7 +666,7 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
 
         /* Dead 2E uses 20BB80 while dead 52 uses the 20BC44 knockdown. */
         const int dead=!half(p+0x54a);
-        if(power&&dead&&!barrel){
+        if(power&&dead&&!barrel&&!catapult){
             p[0x2f4]=2;
             p[0x2f5]=(flags&8u)?1:0;
             p[0x2f6]=p[0x2f7]=0;
@@ -662,16 +677,16 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
 
         /* For original 2E/52, only 20CAC8 draws once for selector 1.
          * The remaining counter tables reject these effects before RNG. */
-        if ((!barrel || !dead) && p[0x17bc] == 1) {
+        if ((effect != 0x52 || !dead) && p[0x17bc] == 1) {
             uint32_t random;
             if (gh_game_mt_next_0030f348(&body->state->random, &random))
                 return stop(frontier, 0x31cfe0);
         }
         p[0x2f4] = 1;
         /* Live kind52 selects 20C74C, the variant2 knockdown. */
-        p[0x2f5] = barrel ? 8 : 0x11;
+        p[0x2f5] = effect == 0x52 ? 8 : 0x11;
         p[0x2f6] = 0;
-        p[0x2f7] = barrel ? 2 : 0;
+        p[0x2f7] = effect == 0x52 ? 2 : 0;
         call->reacted = 1;
         call->phase = 5;
     }
@@ -1839,11 +1854,14 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     const int shockwave=effect==0x27&&(word(p+0x564)==0x214||word(p+0x564)==0x215||r104_em03_damage_receiver(enemy,p));
     const int boss_square=effect==7&&r103_boss_player_strike_target(enemy,p);
+    const gh_title_player_view *catapult_source=NULL;
+    const int catapult=effect==0x52&&!gh_hitarea_object_last_hit_actor(body,&catapult_source)&&
+        r200_catapult_contact(enemy,body,catapult_source);
     const int r104_punch=effect==7&&word(body->bytes+0x4c)==3&&
         gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)&&
         (((half(p+0x2f4)==0x0101||half(p+0x2f4)==0x0001)&&!p[0x2f6]&&!p[0x2f7])||
          (half(p+0x2f4)==0x2100&&r104_player_punch(enemy,p,effect)));
-    if (!isfinite(timer) || (!shockwave && !r104_punch && word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
+    if (!isfinite(timer) || (!catapult && !shockwave && !r104_punch && word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
          !r100_stamp20(enemy, p) && !triangle && !heat_contact && !back_circle && !room_unarmed_punch(enemy, p, effect) &&
          !r102_em03_punch(enemy, p, effect) && !original_em27_punch(enemy, p, effect) &&
          !r102_at0b_em02_punch(enemy,p,effect)) ||
@@ -2086,9 +2104,13 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     const int recoil=call->effect==0x2e&&word(body->bytes+0x40)==UINT32_MAX&&
         !gh_hitarea_object_last_hit_actor(body,&recoil_source)&&
         r103_heavy_recoil_collateral(enemy,recoil_source,word(body->bytes+0x4c));
+    const gh_title_player_view *catapult_source=NULL;
+    const int catapult=call->effect==0x52&&reaction==0x0801&&!p[0x2f6]&&p[0x2f7]==2&&
+        !gh_hitarea_object_last_hit_actor(body,&catapult_source)&&
+        r200_catapult_contact(enemy,body,catapult_source);
     if (manager_active) {
         const gh_title_player_view *source = NULL;
-        if ((call->effect != 0x2e && !thrown_box && !shockwave) ||
+        if ((call->effect != 0x2e && !thrown_box && !shockwave && !catapult) ||
             gh_hitarea_object_last_hit_actor(body,&source) || !source || !source->bytes || source->size < 0x300)
             return stop(frontier, 0x271810);
         const uint32_t power = word(body->bytes + 0x4c);
@@ -2101,7 +2123,7 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
             source->original_vtable214==0x4238d8&&word(source->bytes+0x214)==0x4238d8;
         const int arena_counter = word(body->bytes + 0x40) == UINT32_MAX &&
             r103_counter_collateral(enemy,source,power);
-        if (!scenery && !box && !shockwave && !r100_counter_collateral(enemy,p,source,power) && !arena_counter && !recoil &&
+        if (!scenery && !box && !shockwave && !catapult && !r100_counter_collateral(enemy,p,source,power) && !arena_counter && !recoil &&
             !(word(body->bytes + 0x40) == UINT32_MAX && r100_devil_contact(enemy,source,power)))
             return stop(frontier, 0x271810);
         /* The positive manager arm always creates CORE0:C. Only active
@@ -2127,7 +2149,7 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     if (amplified && ((word((const uint8_t *)enemy->entry.b.work + 0x590) & 0x800u) ||
                       (word(p + 0x16d4) & 0x8000u)))
         return stop(frontier, 0x271d7c);
-    if ((!thrown_box && !shockwave && !exhausted_impact && !r104_punch && (call->effect == 0x2e ? !recoil && !scenery_reaction_enemy(enemy,p) :
+    if ((!thrown_box && !shockwave && !catapult && !exhausted_impact && !r104_punch && (call->effect == 0x2e ? !recoil && !scenery_reaction_enemy(enemy,p) :
             dependency != 0x20a && !r100_stamp19(enemy, p) && !r100_stamp20(enemy, p) &&
             !triangle_take_supported(enemy,p,call->effect) && !back_circle &&
             !room_unarmed_punch(enemy, p, half(body->bytes + 0x46)) &&

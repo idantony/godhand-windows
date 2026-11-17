@@ -260,6 +260,7 @@ static int enemy_reaction_profile(const struct voice *v,int16_t bank,int16_t pro
   {0x203,0x00c8ff38,{0x8bf0,0x9230,0x98f0},{110,125,125},1},
   {0x20a,0,{0xdca0,0xe580,0xf040},{125,120,120},2},
   {0x214,0x00c8ff38,{0x12f90,0x13750,0x14070},{127,127,127},2},
+  {0x21a,0x00c8ff38,{0x43a0,0x4aa0,0x5250},{127,127,127},1},
   {0x227,0x00c8ff38,{0xbe80,0xc560,0xccc0},{127,125,125},1},
  };
  if(!v->source_owner||bank<1||bank==2||bank==3||v->requested_program!=0||program<0||program>2||
@@ -284,7 +285,12 @@ static int enemy_reaction_profile(const struct voice *v,int16_t bank,int16_t pro
        (state==0x1101&&phase<=1&&!root->bytes[0x2f7]&&root->size>=0x17b8&&
         w(root->bytes+0x564)==0x214&&w(root->bytes+0x17b4)==10)||
        r103_em14_hold_voice(v,root->bytes,7));
-  if(h(root->bytes+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!arena_em03&&!arena_em0a&&!arena_boss)return 0;
+  const uint8_t *actor=root->bytes;
+  const int catapult=bank==1&&v->part_index==-1&&v->model->work&&v->model->work->room==0x200&&
+     root->original_vtable214==0x4479c8&&root->size>=0x17b8&&h(actor+0x2fe)==0x201&&
+     w(actor+0x564)==0x21a&&!h(actor+0x640)&&state==0x0801&&phase<=1&&
+     actor[0x2f7]==2&&w(actor+0x17b4)==20;
+  if(!catapult&&h(actor+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!arena_em03&&!arena_em0a&&!arena_boss)return 0;
   dependency=arena_boss?0x214:w(root->bytes+0x564);
   if(!dependency)return 0;
   const int east_reaction=r102_east_em27_voice(v,1,0)||r102_east_em27_voice(v,0x1101,0)||
@@ -647,6 +653,23 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
     w(p+32)==0x00010085u&&w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
     (!sample||(w(sample)==0xd040u&&w(sample+4)==11025u&&w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
  }
+ if(bank==7&&(program==0xa||program==0xb||program==0x10)&&v->source_owner&&
+    v->requested_bank==bank&&v->requested_program==program&&v->part_index==-1&&v->model&&
+    v->model->work&&v->model->work->room==0x200){
+  const gh_title_player_view *root=&v->model->root;
+  const uint8_t *a=root->bytes;
+  if(a&&root->size>=0x642&&root->original_vtable214==0x4479c8&&
+     h(a+0x2fe)==0x201&&w(a+0x564)==0x202&&h(a+0x640)==1&&w(a+0x2f4)==0x00016b00u){
+   unsigned slot=program==0x10?11u:program==0xb?9u:8u;
+   const unsigned gain=program==0x10?0x007d007du:0x00730073u;
+   const uint32_t offset=program==0x10?0x11010u:program==0xb?0xe360u:0xc9f0u;
+   return h(p)==7&&h(p+2)==(unsigned)program&&w(p+4)==(0x022d0000u|slot)&&
+     w(p+8)==0x255u&&w(p+12)==0x00200000u&&w(p+16)==gain&&w(p+20)==0x005a0040u&&
+     w(p+24)==0x0064ff38u&&w(p+28)==0x00030000u&&w(p+32)==0x00010085u&&
+     w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
+     (!sample||(w(sample)==offset&&w(sample+4)==11025u&&w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
+  }
+ }
  /* Both original West capture clips request their dependency-specific 1E row. */
  if(program==0x1e){
   const gh_actor_model *model=v->model;
@@ -1002,7 +1025,11 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
      (arena_em03&&state==0x7500)||(boss&&state==0x7500&&boss[0x2f6]==3)||r103_boss_paired_attack(boss)||
      (v->part_index==-1&&(r103_pincer_flank_audio(boss)||r103_pincer_flank_withdrawal(boss)))||
      (boss&&dependency==0x214&&state==0x5200&&boss[0x2f6]==3&&!boss[0x2f7]&&v->part_index==-1);
- if(h(actor+0x2fe)!=0x202&&!ema2_step&&!paired_death&&!recoil_step&&
+ const gh_title_player_view *root=&v->model->root;
+ const int r200_step=root->size>0x1650&&v->model->work&&v->model->work->room==0x200&&
+    v->part_index==-1&&other_surface&&h(actor+0x2fe)==0x201&&dependency==0x21a&&
+    !h(actor+0x640)&&!actor[0x1650]&&w(actor+0x2f4)==0x00016b00u;
+ if(h(actor+0x2fe)!=0x202&&!r200_step&&!ema2_step&&!paired_death&&!recoil_step&&
     !(((arena_foot||arena_em03)&&(ground_step||hard_step))||
       (arena_hold&&hold_step)||arena_boss_step))return 0;
  if(gate_death_step){
@@ -1032,9 +1059,10 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
  if(r101_step){
   const gh_title_player_view *root=&v->model->root;
   const unsigned alt=program==0xb1||program==0xb7;
-  if(root->size<=0x1650||!v->model->work||v->model->work->room!=0x101||v->part_index!=-1)return 0;
+  if(root->size<=0x1650||!v->model->work||v->part_index!=-1)return 0;
   const unsigned stamp=h(root->bytes+0x640);
   const unsigned appearance=root->bytes[0x1650];
+  if(v->model->work->room!=0x101&&!r200_step)return 0;
   const int armed=dependency==0x203&&stamp==13&&appearance==0;
   const int scenery=dependency==0x227&&stamp==9&&appearance==4&&other_surface;
   const int r101_gate_step=dependency==0x227&&(stamp==10||stamp==11)&&appearance==4&&
@@ -1066,7 +1094,7 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
   const int side_step=appearance==6&&actor[0x2f6]==1&&!actor[0x2f7]&&!other_surface&&
     ((stamp==0x20&&dependency==0x203&&(state==0x0800||state==0x1500))||
      (stamp==0x16&&dependency==0x200&&state==0x1500));
-  if(!armed&&!scenery&&!r101_gate_step&&!r101_em00&&!r101_walk&&!r101_em02&&!r101_em03&&
+  if(!r200_step&&!armed&&!scenery&&!r101_gate_step&&!r101_em00&&!r101_walk&&!r101_em02&&!r101_em03&&
      !side_run&&!side_step)return 0;
   return !h(p)&&h(p+2)==(unsigned)program&&h(p+4)==(other_surface?109u:105u)+alt&&
     w(p+6)==0x023c021c&&!w(p+0xa)&&h(p+0xe)==0x10&&w(p+0x10)==(other_surface?0x00500032u:0x00500028u)&&

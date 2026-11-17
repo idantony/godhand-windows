@@ -53,6 +53,11 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
     rd(p+0x1644)==0x80000&&!half(p+0x640)&&!p[0x1650]&&!p[0x1651]&&
     p[0x2f4]==1&&p[0x2f6]==1&&!p[0x2f7]&&
     (!p[0x2f5]||(p[0x2f5]==3&&model->root.size>=0x17b8&&rd(p+0x17b4)==80)))return 0x48u;
+ /* 254C8C sets sample bit 8 while the Stage 2 catapult victim is airborne. */
+ if(kind==0x201&&dependency==0x21a&&model->work&&model->work->room==0x200&&
+    model->root.original_vtable214==0x4479c8&&model->root.size>=0x17b8&&!half(p+0x640)&&
+    half(p+0x2f4)==0x0801&&p[0x2f7]==2&&p[0x2f6]<=4&&rd(p+0x17b4)==20)
+  return 0x48u;
  if(kind!=0x202)return 0x40u;
  /* 25FA18 sets the same sample bit for the R100 transform death clip. */
  if(model->root.size>=0x642&&dependency==0x200&&half(p+0x640)==8&&

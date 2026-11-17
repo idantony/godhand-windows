@@ -107,7 +107,11 @@ unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *b)
  /* Original 276468 supplies the EM03 mirror bit to movement, recoil and
   * get-up. Only callers that request bit 2 use the mirrored pose. */
  const int boss_mirror=(r103_boss||r104_em03)&&p[0x17c3];
- return (blowaway||east_rear||boss_mirror||gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
+ const int r200_blowaway=p&&root->size>=0x17c4&&b->work&&b->work->room==0x200&&
+    root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x201&&rd(p+0x564)==0x21a&&
+    !half(p+0x640)&&half(p+0x2f4)==0x0801&&p[0x2f7]==2&&rd(p+0x17b4)==20&&p[0x17c3];
+ return (blowaway||east_rear||boss_mirror||r200_blowaway||
+      gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
 }
 
 int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_bits,
