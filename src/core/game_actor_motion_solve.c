@@ -74,12 +74,49 @@ static const uint8_t*parent_matrix(const gh_actor_model*m,unsigned index){const 
   if(s->stage==5){if(!b->ik_globals||!b->atan_coeff){result=fail(s,f,0x153158);break;}result=gh_actor_two_bone_00153158(m,i,b->work,b->ik_globals,b->atan_coeff,policy,f);if(result){s->frontier=*f;break;}s->stage=6;}
   if(s->stage==6){const uint8_t*parent=parent_matrix(m,i);if(!parent){result=GH_ACTOR_MOTION_BOUNDS;break;}uint8_t inv[64],saved[12];transpose_inverse(inv,parent);memcpy(saved,m->parts[i].alias_d0,12);product(a,inv,a+0x80);memcpy(m->parts[i].alias_d0,saved,12);s->stage=7;}
   if(s->stage==7){result=gh_actor_part_extract_rebuild_00147c88(m,i,b->atan_coeff,policy,f);if(result){s->frontier=*f;break;}s->stage=8;}
-  if(s->stage==8){unsigned target=(rd(a+0x154)&0x4000)?i+2:i+1;uint8_t*q=m->parts[target].bytes;const uint8_t*parent=parent_matrix(m,target);if(!parent){result=GH_ACTOR_MOTION_BOUNDS;break;}uint8_t inv[64],saved[12];transpose_inverse(inv,parent);
-   if(rd(a+0x154)&0x4000){float diff[4],point[4];for(unsigned j=0;j<3;j++)diff[j]=sub(rf(middle+0xc0+j*4),rf(q+0xc0+j*4));diff[3]=1;transform(point,parent,(const uint8_t*)diff);memcpy(m->parts[target].alias_f0,point,16);product(q,inv,q+0x80);}
-   else{memcpy(saved,m->parts[target].alias_d0,12);product(q,inv,q+0x80);memcpy(m->parts[target].alias_d0,saved,12);}s->stage=9;
+  if(s->stage==8){
+   /* 152F90..152FC8 converts the solved middle joint even when the
+    * chain also controls the toe. Preserve its authored local offset. */
+   const uint8_t *parent=parent_matrix(m,i+1);
+   if(!parent){result=GH_ACTOR_MOTION_BOUNDS;break;}
+   uint8_t inverse[64],saved[12];
+   transpose_inverse(inverse,parent);
+   memcpy(saved,m->parts[i+1].alias_d0,12);
+   product(middle,inverse,middle+0x80);
+   memcpy(m->parts[i+1].alias_d0,saved,12);
+   s->stage=9;
   }
-  if(s->stage==9){unsigned target=(rd(a+0x154)&0x4000)?i+2:i+1;result=gh_actor_part_extract_rebuild_00147c88(m,target,b->atan_coeff,policy,f);if(result){s->frontier=*f;break;}wr(last->bytes+0x154,rd(last->bytes+0x154)&~0x200000u);s->stage=10;}
-  if(s->stage==10){if(rd(a+0x154)&0x4000){unsigned child=i+3;result=gh_actor_part_rebuild_00150138(m,child,policy,f);if(result){s->frontier=*f;break;}const uint8_t*parent=parent_matrix(m,child);if(!parent){result=GH_ACTOR_MOTION_BOUNDS;break;}if(gh_actor_part_world_001501d0(&m->parts[child],parent,rd(p+0x250),policy,f)){result=fail(s,f,*f?*f:0x1501d0);break;}}s->stage=0;s->index++;}
+  if(s->stage==9){
+   /* 152FF8/153000 commit the knee before the final hierarchy pass. */
+   result=gh_actor_part_extract_rebuild_00147c88(m,i+1,b->atan_coeff,policy,f);
+   if(result){s->frontier=*f;break;}
+   s->stage=10;
+  }
+  if(s->stage==10){
+   const uint8_t *parent=parent_matrix(m,i+2);
+   if(!parent){result=GH_ACTOR_MOTION_BOUNDS;break;}
+   uint8_t *q=last->bytes;
+   uint8_t inverse[64];
+   transpose_inverse(inverse,parent);
+   if(rd(a+0x154)&0x4000){
+    float diff[4],point[4];
+    for(unsigned j=0;j<3;j++)diff[j]=sub(rf(middle+0xc0+j*4),rf(q+0xc0+j*4));
+    diff[3]=1;
+    transform(point,parent,(const uint8_t*)diff);
+    memcpy(last->alias_f0,point,16);
+   }
+   product(q,inverse,q+0x80);
+   s->stage=11;
+  }
+  if(s->stage==11){
+   if(rd(a+0x154)&0x4000){
+    result=gh_actor_part_extract_rebuild_00147c88(m,i+2,b->atan_coeff,policy,f);
+    if(result){s->frontier=*f;break;}
+   }
+   wr(last->bytes+0x154,rd(last->bytes+0x154)&~0x200000u);
+   s->stage=12;
+  }
+  if(s->stage==12){if(rd(a+0x154)&0x4000){unsigned child=i+3;result=gh_actor_part_rebuild_00150138(m,child,policy,f);if(result){s->frontier=*f;break;}const uint8_t*parent=parent_matrix(m,child);if(!parent){result=GH_ACTOR_MOTION_BOUNDS;break;}if(gh_actor_part_world_001501d0(&m->parts[child],parent,rd(p+0x250),policy,f)){result=fail(s,f,*f?*f:0x1501d0);break;}}s->stage=0;s->index++;}
  }
  if(!result)memset(s,0,sizeof(*s));if(fesetenv(&env))return fail(s,f,0x152a20);return result;
 }

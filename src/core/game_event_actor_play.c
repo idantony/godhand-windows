@@ -201,6 +201,41 @@ static gh_game_event_status activate_related(gh_event_actor_play *s, gh_actor_mo
     return GH_EVENT_OK;
 }
 
+/* REL3258 samples signed part -1 on channels 0..3. The original
+ * 157498 rounds the nonnegative alpha to the nearest 1/128. */
+static gh_game_event_status actor_tint_track(const gh_event_data_prefix *data,
+    const gh_event_actor_play_row *row,uint8_t *actor)
+{
+    if (data->components->event_no != 6 ||
+        (row->secondary_offset != 0x87090 && row->secondary_offset != 0xa4d30))
+        return GH_EVENT_UNSUPPORTED;
+    gh_motion_view motion;
+    if (gh_motion_open_mtb3(data->data,data->bytes,row->secondary_offset,&motion))
+        return GH_EVENT_FORMAT;
+    float frame;
+    memcpy(&frame,&row->secondary_frame_bits,sizeof(frame));
+    float value[4] = {0.0f,0.0f,0.0f,1.0f};
+    unsigned present = 0;
+    for (unsigned i=0;i<motion.count;++i) {
+        gh_motion_track track;
+        if (gh_motion_track_at(&motion,i,&track)) return GH_EVENT_FORMAT;
+        if (track.part != UINT8_MAX || track.channel >= 4 ||
+            (present & (1u << track.channel))) continue;
+        gh_motion_cache cache;
+        uint32_t pc = 0;
+        if (gh_motion_sample_reference(&motion,i,frame,&value[track.channel],&cache,&pc))
+            return GH_EVENT_UNSUPPORTED;
+        present |= 1u << track.channel;
+    }
+    if (value[3] < 0.0f || value[3] > 1.0f) return GH_EVENT_UNSUPPORTED;
+    for (unsigned i=0;i<3;++i) value[i] = fmaxf(1.0f-value[i],0.0f);
+    value[3] = floorf(value[3]*128.0f+0.5f)/128.0f;
+    memcpy(actor+0x240,value,sizeof(value));
+    const uint32_t flags = word(actor+0x250);
+    put(actor+0x250,value[3] == 1.0f ? flags & ~0x10u : flags | 0x10u);
+    return GH_EVENT_OK;
+}
+
 static gh_game_event_status move_active(gh_event_actor_play *s, gh_actor_model *model,
     const uint8_t *row, size_t cut_offset, float frame, uint32_t *frontier) {
     const gh_event_actor_play_bindings *b = &s->bindings;
@@ -260,10 +295,15 @@ static gh_game_event_status move_active(gh_event_actor_play *s, gh_actor_model *
     }
     if (s->row_stage == 5) {
         if (!(row[0x24] & 2)) {
-            if (play_row->secondary_offset) return fail(s, frontier, 0x3258, 1, GH_EVENT_UNSUPPORTED);
-            static const uint32_t tint[] = {0x3f800000, 0x3f800000, 0x3f800000, 0x3f800000};
-            if (gh_actor_model_set_all_node_tints(model, tint)) return fail(s, frontier, 0x3258, 1, GH_EVENT_CALLEE);
-            put(p + 0x250, word(p + 0x250) & ~0x10u);
+            if (play_row->secondary_offset) {
+                const gh_game_event_status status = actor_tint_track(data,play_row,p);
+                if (status) return fail(s,frontier,0x3258,1,status);
+            } else {
+                static const uint32_t tint[] = {0x3f800000, 0x3f800000, 0x3f800000, 0x3f800000};
+                if (gh_actor_model_set_all_node_tints(model, tint))
+                    return fail(s,frontier,0x3258,1,GH_EVENT_CALLEE);
+                put(p + 0x250, word(p + 0x250) & ~0x10u);
+            }
         }
         s->row_stage = 6;
     }

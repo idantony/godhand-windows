@@ -176,7 +176,7 @@ gh_scene_placement_status gh_om_factory_object_view(const gh_om_factory*f,uint32
 
 int gh_om_runtime_pickup_supported(int16_t room,uint16_t kind)
 {
- return (kind==0x3d6&&room>=0x100&&room<=0x103)||
+ return (kind==0x3d6&&room>=0x100&&room<=0x104)||
         (kind==0x3c4&&(room==0x100||room==0x102||room==0x103))||
         (room==0x100&&kind==0x3c8)||
         (room==0x103&&(kind==0x3c8||kind==0x3d0||kind==0x3d1||kind==0x3d7))||
@@ -194,7 +194,7 @@ gh_scene_placement_status gh_om_factory_create_0030fa98(gh_om_factory*f,gh_om_ru
  const int mount=kind==0x353&&room==0x102;
  const int ticket=kind==0x3da&&(room==0x102||room==0x104);
  const int projectile=kind==0x3be&&(room==0x100||room==0x103||room==0x104);
- const int item=gh_om_runtime_pickup_supported(room,kind)||(room==0x100&&(kind==0x3e0||kind==0x3e1));
+ const int item=gh_om_runtime_pickup_supported(room,kind)||((room==0x100||room==0x104)&&(kind==0x3e0||kind==0x3e1));
  if(id!=0xffff||(kind!=0x3eb&&!paper&&!room_weapon&&!mount&&!projectile&&!item&&!ticket))
   return fail(f,0x30fe68,kind,GH_PLACE_UNSUPPORTED);
  const int weapon=paper||room_weapon;
@@ -346,7 +346,7 @@ gh_scene_placement_status gh_om_factory_initialize_runtime_item_001c0128(gh_om_f
     f->bindings.initializer->work!=f->bindings.work)return GH_PLACE_ARGUMENT;
  const int16_t room=f->bindings.work->room;
  const uint16_t kind=o->runtime_kind;
- if(!gh_om_runtime_pickup_supported(room,kind)&&(room!=0x100||(kind!=0x3e0&&kind!=0x3e1)))
+ if(!gh_om_runtime_pickup_supported(room,kind)&&((room!=0x100&&room!=0x104)||(kind!=0x3e0&&kind!=0x3e1)))
   return GH_PLACE_ARGUMENT;
  void *same=NULL;
  if(gh_room_object_lookup(f->bindings.pools,o->handle,GH_ROOM_OBJECT_OM,f,&same)||same!=o)return GH_PLACE_ARGUMENT;

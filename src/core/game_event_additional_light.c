@@ -6,7 +6,8 @@
 enum {
     COMPONENT = 14, ROW_SIZE = 0x44, RECORD_SIZE = 0x70, RECORDS = 256,
     EV01_CUTS = 10, EV01_ROWS = 42, EV02_CUTS = 28, EV02_ROWS = 90,
-    EV04_CUTS = 24, EV04_ROWS = 70, EV05_CUTS = 18, EV05_ROWS = 52, EV1A_CUTS = 11, EV1A_ROWS = 33,
+    EV04_CUTS = 24, EV04_ROWS = 70, EV05_CUTS = 18, EV05_ROWS = 52, EV06_CUTS = 14, EV06_ROWS = 41,
+    EV1A_CUTS = 11, EV1A_ROWS = 33,
     EV1B_CUTS = 12, EV1B_ROWS = 36
 };
 
@@ -57,12 +58,12 @@ static gh_game_event_status track_at(gh_event_link *link, const gh_event_data_pr
     if (status) return status;
     if (word(component->bytes + 0x14) != track->count) return GH_EVENT_FORMAT;
     const unsigned event = link->components.event_no;
-    if (event != 1 && event != 2 && event != 4 && event != 5 && event != 0x1a && event != 0x1b)
+    if (event != 1 && event != 2 && event != 4 && event != 5 && event != 6 && event != 0x1a && event != 0x1b)
         return GH_EVENT_UNSUPPORTED;
     const unsigned cuts = event == 1 ? EV01_CUTS : event == 2 ? EV02_CUTS :
-        event == 4 ? EV04_CUTS : event == 5 ? EV05_CUTS : event == 0x1a ? EV1A_CUTS : EV1B_CUTS;
+        event == 4 ? EV04_CUTS : event == 5 ? EV05_CUTS : event == 6 ? EV06_CUTS : event == 0x1a ? EV1A_CUTS : EV1B_CUTS;
     const unsigned rows = event == 1 ? EV01_ROWS : event == 2 ? EV02_ROWS :
-        event == 4 ? EV04_ROWS : event == 5 ? EV05_ROWS : event == 0x1a ? EV1A_ROWS : EV1B_ROWS;
+        event == 4 ? EV04_ROWS : event == 5 ? EV05_ROWS : event == 6 ? EV06_ROWS : event == 0x1a ? EV1A_ROWS : EV1B_ROWS;
     if (data->camera_count != cuts || track->count != rows || track->stride != ROW_SIZE ||
         track->bytes != rows * ROW_SIZE || !track->records)
         return GH_EVENT_UNSUPPORTED;
@@ -98,7 +99,7 @@ static gh_game_event_status map_keys(const gh_event_data_prefix *data,
             cut_start[cut] + frame < last_time ||
             key[0x0c] || (key[0x0d] & ~key_flags) ||
             (key[0x0e] != 2 && (event == 1 || key[0x0e] != 1) &&
-             ((event != 4 && event != 5 && event != 0x1a) || key[0x0e])) || key[0x0f] ||
+             ((event != 4 && event != 5 && event != 6 && event != 0x1a) || key[0x0e])) || key[0x0f] ||
             id < 1 || (id > 3 && !ev05_extra) || (event==5&&key[0x0d]&&!ev05_extra))
             return GH_EVENT_UNSUPPORTED;
         if (event == 0x1a && (cut != i / 3 || frame || id != i % 3 + 1 ||

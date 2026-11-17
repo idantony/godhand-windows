@@ -14,6 +14,8 @@ typedef struct {const uint8_t *bytes;size_t size;uint32_t kind,state,flags,file_
  * run1FE6C8: originalcase1 must still reset the shared manager. */
 gh_object_status gh_game_objects_create(gh_stage_slots *canonical_slots,int room,gh_game_objects **);
 void gh_game_objects_destroy(gh_game_objects *);
+typedef gh_object_status (*gh_object_source_borrowed)(void *,const void *,size_t,int *);
+void gh_game_objects_bind_source_borrower(gh_game_objects *,gh_object_source_borrowed,void *);
 /* Concrete1FECE0 ->1FEE00/1FEC90/1FEEA0/1FF470. Immutable asset source is
  * borrowed and must outlive registry. State2 is original holder readiness,
  * not model relocation, GPU upload or render completion. */

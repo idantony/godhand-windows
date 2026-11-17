@@ -21,6 +21,7 @@ typedef gh_object_step_status (*gh_om_mount_release)(void *,gh_om_object *,uint8
 typedef struct {
  gh_om_runtime_create create;
  gh_motion_sound_request sound;
+ uint16_t selected_kind;
  uint8_t stage;
 } gh_om_box_item_drop;
 typedef struct {

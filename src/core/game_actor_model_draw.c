@@ -282,7 +282,10 @@ static gh_actor_model_status draw(gh_actor_draw_call *call,uint32_t *frontier) {
   alpha=product(alpha,quotient((float)root[0x2b6],255));
   alpha=product(alpha,quotient((float)root[0x2b7],255));
   alpha=product(alpha,quotient((float)root[0x2bc],255));alpha=product(alpha,128);
-  if(!isfinite(alpha)||alpha<0||alpha>=2147483648.0f)return fail(frontier,0x14ad54,GH_ACTOR_MODEL_UNSUPPORTED);
+  if(!isfinite(alpha)||alpha<=-2147483648.0f||alpha>=2147483648.0f)
+   return fail(frontier,0x14ad54,GH_ACTOR_MODEL_UNSUPPORTED);
+  /* 14AD54 converts alpha before SUB1 and clears nonpositive REFs. A
+   * fading effect can cross zero and still uses the original REF0. */
   int32_t threshold=(int32_t)alpha-1;if(threshold<1)threshold=0;
   uint64_t test=((uint64_t)(uint32_t)threshold<<4)|((word(root+0x250)&0x10)?0x5000du:0x5100du);
   for(unsigned i=0;i<root[0x2b1];i++) {

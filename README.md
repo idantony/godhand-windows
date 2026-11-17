@@ -163,6 +163,15 @@ messages pass drawing and dismissal checks.
 
 ### Verified progress
 
+The R104 victory replay now presents the original Stage Clear screen in R021.
+The test lowers the boss to 60 HP immediately before an original 80-point
+Shockwave. Native code applies the hit, plays all 14 EV06 shots and releases
+the arena before entering R021. Direct3D presents the clear time, Continue,
+villager and enemy tallies through the planned stop at tick 4,710. A separate
+CPU replay verifies all 4,712 controller samples and reaches the original total
+payout routine. A full-health boss victory and the complete confirmation and
+save flow remain in development.
+
 The Windows port now renders combat in both the R104 boss arena and the R101
 side arena. In R104, a recorded Triangle input hits the boss after the original
 intro. A second replay enters through the original keycard gate and verifies a
@@ -480,6 +489,12 @@ Gene 以 100 HP 回到 R103，场景继续运行。
 两条原版英文战后对白均通过绘制和关闭测试。
 
 ### 已验证的进展
+
+R104 的胜利回放已在 R021 呈现原版结算画面。测试在原版 80 点冲击波命中前将头目血量
+调到 60 HP。原生程序处理命中，播放 EV06 全部 14 个镜头，清理竞技场并进入 R021。
+Direct3D 呈现结算时间、继续次数、村民和敌人击杀统计，到第 4,710 帧按计划结束。
+独立的 CPU 回放核对全部 4,712 个手柄采样，并到达原版总奖金流程。满血头目战的完整
+胜利路线、确认和保存流程仍在开发。
 
 Windows 端已能呈现 R104 头目战和 R101 支线竞技场的原版战斗。R104 播完原版过场后，
 回放中的三角键攻击命中头目。另一条回放经原版钥匙卡门进入 R104，验证了头目的普通弹

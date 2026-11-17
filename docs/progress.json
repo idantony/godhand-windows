@@ -1,8 +1,31 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-17T13:25:32+00:00",
-  "stage": "native-r104-hold-escape-and-equipped-combat",
+  "verified_utc": "2026-11-17T15:43:01+00:00",
+  "stage": "native-r104-victory-event-and-r021-stage-clear",
   "playable": false,
+  "r104_victory_to_r021_stage_clear": {
+    "entry_fixture": "original-format R104 test save; boss health set to 60 before an original 80-point Shockwave hit",
+    "all_ev06_cuts_executed": 14,
+    "results_room": "R021",
+    "direct3d_results_capture_ticks": [
+      4615,
+      4630,
+      4650,
+      4690,
+      4705
+    ],
+    "direct3d_final_tick": 4710,
+    "direct3d_scene_frames_total": 725,
+    "frontier_at_direct3d_cap": "00000000",
+    "renderer_errors": 0,
+    "world_gpu_errors": 0,
+    "effect_post_errors": 0,
+    "window_errors": 0,
+    "native_cpu_matching_samples": 4712,
+    "native_cpu_frontier": "R021 REL 0908 total payout",
+    "natural_full_health_boss_victory_verified": false,
+    "results_confirmation_and_save_verified": false
+  },
   "native_cpu_r104_hold_combat": {
     "entry_fixture": "original-format three-card R101 test save through the original gate and Retry",
     "escape_phase_tick": 4018,

@@ -1270,7 +1270,7 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     if(gh_game_services_get_scene_view(h->services,&s))return GH_SCENE_STEP_ARGUMENT;
     gh_game_pl_camera *camera=active_scene_camera(h,s.pl_camera);
     gh_scene_aux_status aux=GH_AUX_OK;
-    if(address==0x125f38&&argument==14&&h->work.room==0x103)
+    if(address==0x125f38&&argument==14&&(h->work.room==0x103||h->work.room==0x104))
         return gh_game_services_roulette_command_00125f38(h->services,argument,frontier);
     if(address==0x306528&&argument==9&&h->work.room==0x100){
         gh_effect_create_call *effect=&h->enemy_light_effect;
@@ -1758,6 +1758,7 @@ static int service_state(gh_startup_host *h,unsigned state)
         b.event=&h->event;b.event_reserve=&h->event_reserve;
         b.begin_event_room_jump=scene_request_room_jump;b.event_room_context=h;
         b.display=&h->display;
+        b.screen_state_5cae40=&h->screen_state_5cae40;
         b.title_callbacks=(gh_r020_move_callbacks){.context=h,.draw_entry=scene_title_draw,.logo_se=scene_logo_se,
             .program_se=scene_program_se,.begin_room_jump=scene_begin_room_jump,.open_load=scene_open_load};
         b.title_reference_profile=&h->title_reference;

@@ -102,6 +102,7 @@ gh_voice_status gh_se_voice_request_stop_00375050(gh_se_voice_engine *,uint32_t 
  * Original void ignores queue-full; accepted48-command bound is preserved. */
 gh_voice_status gh_se_voice_stop_bank_002cbc58(gh_se_voice_engine *,int16_t bank,int16_t ticks);
 /* Original ascending bank0..51 stops10 plus pending EE-node removal. */
+void gh_se_voice_discard_unsubmitted_bank_002cbe68(gh_se_voice_engine *,int16_t bank);
 unsigned gh_se_voice_bank_nodes(const gh_se_voice_engine *,int16_t bank);
 gh_voice_status gh_se_voice_scene_exit_begin(gh_se_voice_engine *);
 int gh_se_voice_uses_registry(const gh_se_voice_engine *,const gh_audio_registry *);

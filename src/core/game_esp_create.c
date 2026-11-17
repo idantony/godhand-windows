@@ -120,7 +120,14 @@ static float random_range(uint8_t*p,float minimum,float maximum){float half=mul(
 static gh_effect_status initial_transform(gh_esp_create_call*c,uint8_t*p,const gh_effect_emitter_view*emitter){
  const uint8_t *r=emitter->record.bytes,*source=emitter->payload;
  if(r[0x291]>1||r[0x292]>1)return fail(c,0x30187c,GH_EFFECT_UNSUPPORTED);int part=(int8_t)r[0xbe],override=(int8_t)source[0x1ec];if(override>=-3&&override!=-1)part=override;/* With source bit 23 set, screen-space rows keep their authored origin. */if(part==-4&&!(w(r+4)&0x800000u))return fail(c,0x301bf8,GH_EFFECT_UNSUPPORTED);
- for(unsigned offset=0x48;offset<=0x90;offset+=4)if(!isfinite(floating(r+offset)))return fail(c,0x30187c,GH_EFFECT_UNSUPPORTED);const float scale=floating(source+0x1e0);if(!authored_actor_scale(c,scale)||(scale!=1.0f&&part<0))return fail(c,0x301cf4,GH_EFFECT_UNSUPPORTED);if(w(p+8)||w(p+0x10))return fail(c,0x2b6370,GH_EFFECT_UNSUPPORTED);
+ /* 301964 and 301B40 read only the active variation operands. The
+  * authored EL10 trail uses a non-float sentinel in velocity W at +60. */
+ for(unsigned offset=0x48;offset<=0x90;offset+=4){
+  if(offset==0x60||(offset>=0x6c&&offset<=0x78&&!r[0x292])||
+     (offset==0x90&&!r[0x291]))continue;
+  if(!isfinite(floating(r+offset)))return fail(c,0x30187c,GH_EFFECT_UNSUPPORTED);
+ }
+ const float scale=floating(source+0x1e0);if(!authored_actor_scale(c,scale)||(scale!=1.0f&&part<0))return fail(c,0x301cf4,GH_EFFECT_UNSUPPORTED);if(w(p+8)||w(p+0x10))return fail(c,0x2b6370,GH_EFFECT_UNSUPPORTED);
  uint8_t next[0x400];memcpy(next,p,sizeof(next));float angles[3],velocity[3],position[3];memcpy(angles,r+0x48,12);memcpy(velocity,r+0x54,12);memcpy(position,r+0x7c,12);uint32_t first=w(r);int mirrored=(source[0x1e8]&0x80u)!=0;
  if(!r[0x292]){float variation=random_range(next,floating(r+0x64),floating(r+0x68));for(unsigned axis=0;axis<3;axis++)if(first&(0x40u>>axis))angles[axis]=add(angles[axis],variation);}else {for(unsigned axis=0;axis<3;axis++)angles[axis]=add(angles[axis],mul(random_signed(next),floating(r+0x64+axis*4)));for(unsigned axis=0;axis<3;axis++)velocity[axis]=add(velocity[axis],mul(random_signed(next),floating(r+0x70+axis*4)));}
  if(mirrored){velocity[1]=-velocity[1];velocity[2]=-velocity[2];angles[1]=-angles[1];angles[2]=-angles[2];}

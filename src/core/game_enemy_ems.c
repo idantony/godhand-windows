@@ -1739,6 +1739,8 @@ static gh_actor_motion_status retire_mode3(gh_enemy_ems *owner,gh_enemy_full_ret
          * the native manager borrow before freeing that same wrapper. */
         if(actor->published&&!unlink_slot(actor->b.init,actor,1))
             return retire_stop(frontier,0x290988);
+        if(entry->enemy202)
+            gh_game_cockpit_forget_r104_boss(entry->enemy202->b.cockpit,&actor->object.view);
         if(gh_game_title_player_release(&actor->object))return retire_stop(frontier,0x30f5a0);
         call->stage=6;
     }

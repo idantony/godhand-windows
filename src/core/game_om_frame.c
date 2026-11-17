@@ -550,7 +550,7 @@ static gh_object_step_status box_fragments_spawn(gh_om_frame_state *s,uint32_t *
  uint32_t pc=0;
  const int kind304=s->object->source.type==0x304;
  const int kind33f=s->object->source.type==0x33f;
- const int kind331=s->object->source.type==0x331;
+ const int kind331=s->object->source.type==0x331||s->object->source.type==0x332;
  const unsigned first=kind304?0:1, limit=(kind304||kind331)?6:kind33f?13:9;
  const uint32_t entry=kind304?0x188798:kind331?0x19cfe0:kind33f?0x19fb20:
   s->object->source.type==0x309?0x18bd10:0x18cb18;
@@ -618,6 +618,53 @@ static gh_object_step_status box_fragments_spawn(gh_om_frame_state *s,uint32_t *
  return GH_OBJSTEP_OK;
 }
 
+/* 292650 continues the parameter-zero lottery after the pity gate. */
+static gh_object_step_status gong_drop_choice_00292650(
+    gh_om_frame_state *s,unsigned rank,unsigned difficulty,uint32_t *frontier)
+{
+ gh_game_init_state *init=s->runtime.init;
+ gh_game_mt random=init->random;
+ const float primary=fragment_random(&random,1);
+ uint16_t kind;
+ if(primary>=.9f){
+  /* 2927DC can use a live nearby enemy before final selection. */
+  return fail(s,0x291010,frontier,GH_OBJSTEP_UNSUPPORTED);
+ }else if(primary>=.85f){
+  kind=0x3e2;
+ }else if(primary>=.5f){
+  const float secondary=fragment_random(&random,1);
+  kind=secondary>=.95f?0x3de:secondary>=.75f?0x3e1:0x3e0;
+ }else{
+  const float secondary=fragment_random(&random,1);
+  kind=secondary>=.95f?0x3d0:secondary>=.85f?0x3d1:secondary>=.55f?0x3c8:0x3c1;
+  if(kind==0x3d0&&rank>=3){
+   uint32_t draw;
+   if(gh_game_mt_next_0030f348(&random,&draw))
+    return fail(s,0x31cfe0,frontier,GH_OBJSTEP_CALLEE);
+   if(draw&1u)kind=0x3d1;
+  }
+ }
+ const float final=fragment_random(&random,1);
+ if(init->continue_count>=4&&difficulty!=2){
+  if(final>=.8f){
+   const float recovery=fragment_random(&random,1);
+   kind=recovery>=.95f?0x3d0:recovery>=.85f?0x3d1:recovery>=.55f?0x3c8:0x3c1;
+  }
+ }else if(final>=.8f){
+  kind=final>=.95f?0x3d8:0x3d7;
+ }
+ if(word(init->enemies+0x5a8)==kind){
+  uint32_t draw;
+  if(gh_game_mt_next_0030f348(&random,&draw))
+   return fail(s,0x31cfe0,frontier,GH_OBJSTEP_CALLEE);
+  kind=(draw&1u)?0x3c1:0x3c8;
+ }
+ init->random=random;
+ s->box_item_drop.selected_kind=kind;
+ s->special_phase=7;
+ return GH_OBJSTEP_OK;
+}
+
 static gh_object_step_status fragment30a_drop_002923e8(gh_om_frame_state *s,uint32_t *f)
 {
  const gh_om_initializer_bindings *initializer=s->factory->bindings.initializer;
@@ -649,6 +696,8 @@ static gh_object_step_status fragment30a_drop_002923e8(gh_om_frame_state *s,uint
   return GH_OBJSTEP_OK;
  }
  put(init->enemies+0x534,0);
+ if(initializer->work->room==0x104&&s->object->source.type==0x332)
+  return gong_drop_choice_00292650(s,rank,difficulty,f);
  s->special_phase=9;
  return fail(s,0x31d000,f,GH_OBJSTEP_UNSUPPORTED);
 }
@@ -663,7 +712,9 @@ static gh_object_step_status box_break(gh_om_frame_state *s,
  uint32_t pc=0;
  const int kind304=object->source.type==0x304;
  const int kind33f=object->source.type==0x33f;
- const int kind331=object->source.type==0x331;
+ const int r104_om332=work->room==0x104&&object->source.type==0x332&&
+     object->view.original_vtable214==0x425c78u;
+ const int kind331=object->source.type==0x331||r104_om332;
  const int kind309=object->source.type==0x309;
  const uint32_t entry=kind304?0x1881f0:kind331?0x19ca58:kind309?0x18b778:kind33f?0x19f588:0x18c580;
  uint8_t *timer=actor+(kind304?0x600:0x654);
@@ -672,7 +723,7 @@ static gh_object_step_status box_break(gh_om_frame_state *s,
      (kind33f&&object->view.original_vtable214==0x4267f8));
  const int west_box=work->room==0x100&&object->source.type==0x30a&&
     object->view.original_vtable214==0x4238d8;
- if((work->room!=((kind331||kind309)?0x102:0x101)&&!arena_box&&!west_box)||policy!=GH_STATIC_BINARY32_REFERENCE||!s->runtime_bound||
+ if((work->room!=((kind331||kind309)?0x102:0x101)&&!arena_box&&!west_box&&!r104_om332)||policy!=GH_STATIC_BINARY32_REFERENCE||!s->runtime_bound||
     !s->runtime.init||fragment->segments!=actor+(kind304?0x610:0x660)||!object->view.alias_f0)
   return fail(s,entry,f,GH_OBJSTEP_UNSUPPORTED);
  if(!actor[0x2f5]&&s->special_phase!=8){
@@ -1761,7 +1812,7 @@ static gh_object_step_status projectile_move_001b93e8(gh_om_frame_state *frame,
  gh_om3be_state *state=(gh_om3be_state *)frame->object->initialization;
  uint8_t *p=frame->object->view.bytes,*position=frame->object->view.alias_f0;
  const uint32_t kind=word(p+0x610);
- const int roulette=kind==0x2c&&work->room==0x103&&state->shooter;
+ const int roulette=kind==0x2c&&(work->room==0x103||work->room==0x104)&&state->shooter;
  const int devil=kind==3&&work->room==0x100;
  const int em03=kind==0&&work->room==0x104&&state->shooter;
  const int uses_contact=devil||em03;
@@ -2128,7 +2179,9 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
    const unsigned index=kind==0x308?0:kind==0x30b?1:kind==0x30c?2:3;
    if(kind!=0x308&&(word(p+0x5b0)&4u))
     return fail(s,0x1c7e30,f,GH_OBJSTEP_UNSUPPORTED);
-   if(kind==0x331&&phase==1){
+   const int layered=kind==0x331||(kind==0x332&&w->room==0x104&&
+       s->object->view.original_vtable214==0x425c78u);
+   if(layered&&phase==1){
     /* 19C9F8 starts the fifteen-tick wait and decrements immediately. */
     if(!p[0x2f5]){
      sh(p+0x654,15);
@@ -2141,7 +2194,7 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
      if(!left||(left&0x8000u))p[0x2f4]=p[0x2f5]=p[0x2f6]=p[0x2f7]=0;
     }
     s->phase=4;
-   }else if(kind==0x331&&(phase==2||phase==3||s->special_phase==8)){
+   }else if(layered&&(phase==2||phase==3||s->special_phase==8)){
     gh_object_step_status status=(phase==2||s->special_phase==8)?box_break(s,w,policy,f):remove_object(s,f);
     if(status)return status;
     s->phase=4;

@@ -3,6 +3,7 @@
 #include "game_actor_motion_step.h"
 #include "game_actor_motion_solve.h"
 #include "game_actor_two_bone.h"
+#include "game_actor_finish_model.h"
 #include "game_camera_envelope.h"
 #include <math.h>
 #include <fenv.h>
@@ -77,6 +78,29 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  uint8_t solvedA[64],solvedB[64];memcpy(solvedA,model.parts[18].bytes+0x80,64);memcpy(solvedB,model.parts[19].bytes+0x80,64);
  for(unsigned rounding=0;rounding<4;rounding++){memcpy(model.parts[18].bytes+0x80,beforeA,64);memcpy(model.parts[19].bytes+0x80,beforeB,64);C(!fesetround(modes[rounding]));C(!gh_actor_two_bone_00153158(&model,18,&work,&globals,envelope.atan_coeff,GH_STATIC_BINARY32_REFERENCE,&frontier)&&fegetround()==modes[rounding]);C(!memcmp(solvedA,model.parts[18].bytes+0x80,64)&&!memcmp(solvedB,model.parts[19].bytes+0x80,64));}C(!fesetround(FE_TONEAREST)); memcpy(model.parts[18].bytes+0x80,beforeA,64);memcpy(model.parts[19].bytes+0x80,beforeB,64);solve_b.ik_globals=&globals;solve_b.atan_coeff=envelope.atan_coeff;queries=actors.ray.native_queries;
  C(!gh_actor_motion_solve_00152a20(&solve,&solve_b,GH_STATIC_BINARY32_REFERENCE,&frontier)&&!frontier&&!solve.stage&&!solve.model&&actors.ray.native_queries>queries);
+ /* 152F90..153004 converts the solved knee back to local space before
+  * 14A038 rebuilds world transforms. Use the independently observed
+  * world hip and knee from 153158 as the rotation oracle. */
+ float solved_hip[16],solved_knee[16],local_knee[16];
+ memcpy(solved_hip,solvedA,64);
+ memcpy(solved_knee,solvedB,64);
+ memcpy(local_knee,model.parts[19].bytes,64);
+ long double deviation_from_straight=0;
+ for(unsigned col=0;col<3;col++){
+  for(unsigned row=0;row<3;row++){
+   long double expected=0;
+   for(unsigned k=0;k<3;k++)expected+=(long double)solved_hip[row*4+k]*solved_knee[col*4+k];
+   deviation_from_straight+=fabsl(expected-(row==col?1:0));
+   C(fabsl(local_knee[col*4+row]-expected)<.0003L);
+  }
+ }
+ C(deviation_from_straight>.05L);
+ C(!gh_actor_finish_model_0014a038(&model,GH_STATIC_BINARY32_REFERENCE));
+ float final_knee[16];
+ memcpy(final_knee,model.parts[19].bytes+0x80,64);
+ for(unsigned col=0;col<3;col++)
+  for(unsigned row=0;row<3;row++)
+   C(fabsl((long double)final_knee[col*4+row]-solved_knee[col*4+row])<.0004L);
  C(!(rd(model.parts[18].bytes+0x154)&0x400000)&&!(rd(model.parts[22].bytes+0x154)&0x400000)&&!(rd(model.parts[20].bytes+0x154)&0x200000)&&!(rd(model.parts[24].bytes+0x154)&0x200000));
  for(unsigned i=0;i<32;i++)for(unsigned k=0;k<16;k++){float x;memcpy(&x,model.parts[i].bytes+0x80+k*4,4);C(isfinite(x));} /* Independent longdouble Rz*Ry*Rx oracle for original147C88 mode0,
   * exercising rationalasinf below/above.5 and nearitsendpoint. */

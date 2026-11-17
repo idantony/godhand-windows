@@ -78,7 +78,7 @@ static gh_game_event_status prefetch_verified_row(gh_event_audio_channel1 *s,
     /* Original EV05 has exactly one prefetch at each request key, even
      * though its AFD owns two members (cut 0 and cut 12). */
     const int single=(s->event_no==1||s->event_no==2||s->event_no==4||s->event_no==0x1a||
-        s->event_no==0x1b)&&rows==1&&!row_index&&key==UINT32_MAX;
+        s->event_no==0x1b||s->event_no==6)&&rows==1&&!row_index&&key==UINT32_MAX;
     const int ev05=s->event_no==5&&rows==2&&
         ((!row_index&&key==UINT32_MAX&&row[0x11]==0)||
          (row_index==1&&key==11&&row[0x11]==12))&&

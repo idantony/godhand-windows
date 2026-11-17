@@ -42,7 +42,7 @@ static void decrement_half(uint8_t*p){uint16_t n;memcpy(&n,p,2);if(n){n=(uint16_
 static void history_clear(uint8_t*p){memset(p+0x1644,0,20);}
 static void history_push(uint8_t*p,uint32_t value){for(unsigned i=0;i<5;i++)if(!w(p+0x1644+i*4)){put(p+0x1644+i*4,value);put(p+0x1658,15);return;}}
 gh_player_frame_status gh_game_player_button_history_00126820(gh_title_player_view*v,const gh_boot_work*work){if(!v||!v->bytes||v->size<0x165c||!work)return GH_PLAYER_FRAME_ARGUMENT;uint8_t*p=v->bytes;uint32_t pressed=w((const uint8_t*)work+8);if(!(pressed&0x90)){uint32_t n=w(p+0x1658);if(!n)history_clear(p);else put(p+0x1658,n-1);}else if(pressed&0x10){history_clear(p);history_push(p,2);}else history_push(p,1);return GH_PLAYER_FRAME_OK;}
-static int same(const gh_player_frame_bindings*a,const gh_player_frame_bindings*b){return a->player==b->player&&a->work==b->work&&a->init==b->init&&a->camera==b->camera&&a->opacity_camera==b->opacity_camera&&a->save.bytes==b->save.bytes&&a->save.size==b->save.size&&a->scenario.bytes==b->scenario.bytes&&a->scenario.size==b->scenario.size&&a->effects==b->effects&&a->current_player==b->current_player&&a->elf==b->elf&&a->elf_bytes==b->elf_bytes&&a->numeric_policy==b->numeric_policy&&a->effect_create==b->effect_create&&a->effect_context==b->effect_context&&a->scene_at==b->scene_at&&a->take_object==b->take_object&&a->give_objects==b->give_objects&&a->solids==b->solids&&a->collision_pairs==b->collision_pairs&&a->take_binding_known==b->take_binding_known&&a->give_binding_known==b->give_binding_known&&a->give_present_mask==b->give_present_mask&&a->model==b->model&&a->resource==b->resource&&a->resource_bytes==b->resource_bytes&&a->rate==b->rate&&a->initialize_motion==b->initialize_motion&&a->advance_motion==b->advance_motion&&a->motion_context==b->motion_context&&a->death_fade==b->death_fade&&a->grab_camera==b->grab_camera&&a->grab_attacker==b->grab_attacker&&a->grab_attacker_retired==b->grab_attacker_retired&&a->grab_resource.bytes==b->grab_resource.bytes&&a->grab_resource.size==b->grab_resource.size&&a->aux_698==b->aux_698&&a->aux_6a0==b->aux_6a0&&a->auxiliary_bindings_known==b->auxiliary_bindings_known&&a->idle_input==b->idle_input&&a->idle_input_bindings==b->idle_input_bindings&&a->node_cache==b->node_cache&&a->door_probe==b->door_probe&&a->door_context==b->door_context&&a->actors==b->actors&&a->ground_globals==b->ground_globals&&a->ik_globals==b->ik_globals&&a->atan_coeff==b->atan_coeff&&a->opacity_globals==b->opacity_globals&&a->aux_68c==b->aux_68c&&a->auxiliary_68c_binding_known==b->auxiliary_68c_binding_known&&a->target_644==b->target_644&&a->cockpit_flags_1ca0==b->cockpit_flags_1ca0&&a->square_attack==b->square_attack&&a->square_context==b->square_context&&a->damage_sound==b->damage_sound&&a->damage_sound_context==b->damage_sound_context&&a->damage_effect==b->damage_effect&&a->damage_abort==b->damage_abort&&a->damage_camera_exit==b->damage_camera_exit&&a->damage_context==b->damage_context&&a->damage_vibration_rows==b->damage_vibration_rows&&a->paper_release==b->paper_release&&a->paper_context==b->paper_context&&a->interact_prop==b->interact_prop&&a->throw_prop==b->throw_prop&&a->roulette_time_scale==b->roulette_time_scale&&a->roulette_projectile==b->roulette_projectile;}
+static int same(const gh_player_frame_bindings*a,const gh_player_frame_bindings*b){return a->player==b->player&&a->work==b->work&&a->init==b->init&&a->camera==b->camera&&a->opacity_camera==b->opacity_camera&&a->save.bytes==b->save.bytes&&a->save.size==b->save.size&&a->scenario.bytes==b->scenario.bytes&&a->scenario.size==b->scenario.size&&a->effects==b->effects&&a->current_player==b->current_player&&a->elf==b->elf&&a->elf_bytes==b->elf_bytes&&a->numeric_policy==b->numeric_policy&&a->effect_create==b->effect_create&&a->effect_context==b->effect_context&&a->scene_at==b->scene_at&&a->take_object==b->take_object&&a->give_objects==b->give_objects&&a->solids==b->solids&&a->collision_pairs==b->collision_pairs&&a->take_binding_known==b->take_binding_known&&a->give_binding_known==b->give_binding_known&&a->give_present_mask==b->give_present_mask&&a->model==b->model&&a->resource==b->resource&&a->resource_bytes==b->resource_bytes&&a->rate==b->rate&&a->initialize_motion==b->initialize_motion&&a->advance_motion==b->advance_motion&&a->motion_context==b->motion_context&&a->death_fade==b->death_fade&&a->grab_camera==b->grab_camera&&a->grab_attacker==b->grab_attacker&&a->grab_attacker_retired==b->grab_attacker_retired&&a->grab_resource.bytes==b->grab_resource.bytes&&a->grab_resource.size==b->grab_resource.size&&a->aux_698==b->aux_698&&a->aux_6a0==b->aux_6a0&&a->auxiliary_bindings_known==b->auxiliary_bindings_known&&a->idle_input==b->idle_input&&a->idle_input_bindings==b->idle_input_bindings&&a->node_cache==b->node_cache&&a->door_probe==b->door_probe&&a->door_context==b->door_context&&a->actors==b->actors&&a->ground_globals==b->ground_globals&&a->ik_globals==b->ik_globals&&a->atan_coeff==b->atan_coeff&&a->opacity_globals==b->opacity_globals&&a->aux_68c==b->aux_68c&&a->auxiliary_68c_binding_known==b->auxiliary_68c_binding_known&&a->target_644==b->target_644&&a->cockpit_flags_1ca0==b->cockpit_flags_1ca0&&a->square_attack==b->square_attack&&a->square_context==b->square_context&&a->damage_sound==b->damage_sound&&a->damage_sound_context==b->damage_sound_context&&a->damage_effect==b->damage_effect&&a->damage_abort==b->damage_abort&&a->damage_camera_exit==b->damage_camera_exit&&a->damage_context==b->damage_context&&a->damage_vibration_rows==b->damage_vibration_rows&&a->paper_release==b->paper_release&&a->paper_context==b->paper_context&&a->interact_prop==b->interact_prop&&a->throw_prop==b->throw_prop&&a->roulette_target_owner==b->roulette_target_owner&&a->roulette_time_scale==b->roulette_time_scale&&a->roulette_projectile==b->roulette_projectile;}
 static int elf_word(const gh_player_frame_bindings*b,uint32_t address,uint32_t*out){const uint8_t*p=b->elf;size_t n=b->elf_bytes;if(!p||n<52||memcmp(p,"\177ELF\1\1\1",7))return 0;uint32_t ph=w(p+28);uint16_t size,count;memcpy(&size,p+42,2);memcpy(&count,p+44,2);if(size!=32||count>128||ph>n||(size_t)count*32>n-ph)return 0;for(unsigned i=0;i<count;i++){const uint8_t*q=p+ph+i*32;uint32_t base=w(q+8),off=w(q+4),files=w(q+16);if(w(q)!=1||address<base||(uint64_t)address+4>(uint64_t)base+files)continue;uint64_t o=(uint64_t)off+address-base;if(o>n||4>n-o)return 0;*out=w(p+(size_t)o);return 1;}return 0;}
 static unsigned half(const uint8_t*p){return p[0]|(unsigned)p[1]<<8;}
 static void sh(uint8_t*p,uint16_t n){memcpy(p,&n,2);}
@@ -606,7 +606,8 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
   put(p+0x54c,0x41700000);
   const int projectile_fall=(b->work->room==0x100||b->work->room==0x104)&&p[0x2f7]==1;
   const int charge_fall=b->work->room==0x104&&p[0x2f7]==2;
-  if(p[0x2f6]>1||(p[0x2f7]&&!projectile_fall&&!charge_fall))
+  const int sweep_fall=b->work->room==0x104&&p[0x2f7]==5;
+  if(p[0x2f6]>1||(p[0x2f7]&&!projectile_fall&&!charge_fall&&!sweep_fall))
    return fail(s,0x11add8,GH_PLAYER_FRAME_UNSUPPORTED);
   if(p[0x2f6])s->hurt_phase=8;
   else{
@@ -614,9 +615,16 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
    static const uint16_t rows[]={0x158,0x4fc,0x164,0x504,0x50c};
    if(!b->model||!b->resource||b->resource_bytes<0x514||!b->initialize_motion)
     return fail(s,0x2a8578,GH_PLAYER_FRAME_UNSUPPORTED);
-   /* Original 41C5B0 variants 1 and 2 directly bind 158/15C and 4FC/500. */
-   unsigned row=charge_fall?0x4fc:0x158;
-   if(!projectile_fall&&!charge_fall){
+   /* Original 41C5B0 variants 1, 2 and 5 select fixed PL00 clips. */
+   unsigned row=0x158;
+   if(charge_fall)row=0x4fc;
+   if(sweep_fall){
+    uint32_t target;
+    if(!elf_word(b,0x41c5c4,&target)||target!=0x11af2cu)
+     return fail(s,0x11af2c,GH_PLAYER_FRAME_UNSUPPORTED);
+    row=0x504;
+   }
+   if(!p[0x2f7]){
     if(gh_game_mt_next_0030f348(&b->init->random,&draw))
      return fail(s,0x31cfe0,GH_PLAYER_FRAME_UNSUPPORTED);
     row=rows[draw%5u];
@@ -721,7 +729,8 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
      ((p[0x2f7]<=1&&(residual==10||residual==11))||(!p[0x2f7]&&(residual==3||residual==5)));
    const int combo_residual=(b->work->room==0x100||b->work->room==0x104)&&residual==10;
    if(residual!=0&&residual!=15&&residual!=7&&!arena_residual&&
-      !combo_residual&&!(b->work->room==0x100&&!p[0x2f7]&&residual==5)&&!(b->work->room==0x102&&residual==3))
+      !combo_residual&&!(b->work->room==0x104&&p[0x2f7]==5&&residual>0)&&
+      !(b->work->room==0x100&&!p[0x2f7]&&residual==5)&&!(b->work->room==0x102&&residual==3))
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
    gh_player_frame_status status=damage_hp_0012c0f8(s,residual);
    if(status)return status;
@@ -967,7 +976,18 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      w(source->bytes+0x1874)==40&&w(source->bytes+0x1878)==0x42&&!w(source->bytes+0x187c)&&
      half(source->bytes+0x1880)==0xf5&&!override_bank&&half(take+0x44)==0xf5&&
      s->pending_damage_kind==0x42&&w(take+0x4c)==40&&s->pending_damage==30&&residual==10;
-   const int r104_strike=r104_combo||r104_melee||r104_charge;
+   /* 21A538's 924 motion writes the original unsplit Give3C. */
+   const int r104_punch=r104_close&&source_move==0x1500&&source->size>=0x1882&&
+     !w(source->bytes+0x1870)&&w(source->bytes+0x1874)==60&&w(source->bytes+0x1878)==0x3c&&
+     w(source->bytes+0x187c)==1&&half(source->bytes+0x1880)==0x28&&
+     s->pending_damage_kind==0x3c&&w(take+0x4c)==60&&s->pending_damage==60&&!residual;
+   /* 232500 publishes the R104 EM03 sweep's shape 1B, Take45 and default sound. */
+   const int r104_sweep=r104_em03&&source_move==0x4500&&source->bytes[0x2f6]==1&&
+     source->size>=0x1882&&w(source->bytes+0x1870)==0x1b&&w(source->bytes+0x1874)==50&&
+     w(source->bytes+0x1878)==0x45&&w(source->bytes+0x187c)==UINT32_MAX&&
+     !half(source->bytes+0x1880)&&override_bank==UINT32_MAX&&!half(take+0x44)&&
+     s->pending_damage_kind==0x45&&s->pending_damage>0;
+   const int r104_strike=r104_combo||r104_melee||r104_charge||r104_punch||r104_sweep;
    /* The long EM20 Give's original kind3E splits power 40 into 30 and 10. */
    const int devil_melee=b->work->room==0x100&&source_kind==0x220&&dependency==0x220&&stamp==0xff&&
      source->size>0x1651&&w(source->bytes+0x1644)==0x400000u&&source->bytes[0x1651]==0xff&&
@@ -1340,23 +1360,25 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
   s->damage_stage=13;
  }
  if(s->damage_stage==13){
-  if(s->pending_damage_kind==0x41||s->pending_damage_kind==0x42){
-   const int wide=s->pending_damage_kind==0x42;
-   const uint8_t variant=wide?2:1;
+  const unsigned kind=s->pending_damage_kind;
+  if(kind==0x41||kind==0x42||kind==0x45){
+   static const uint32_t lethal_entries[]={0,0x109e28,0x109e40,0,0,0x109e90};
+   static const uint32_t living_entries[]={0,0x10a094,0x10a0c4,0,0,0x10a15c};
+   const uint8_t variant=(uint8_t)(kind-0x40);
+   const unsigned slot=4*(kind-0x37);
    uint32_t entry;
    if((int16_t)half(p+0x54a)<=0){
-    if(!elf_word(b,wide?0x41ba9c:0x41ba98,&entry)||entry!=(wide?0x109e40u:0x109e28u))
+    if(!elf_word(b,0x41ba70+slot,&entry)||entry!=lethal_entries[variant])
      return fail(s,0x109de8,GH_PLAYER_FRAME_UNSUPPORTED);
     p[0x2f4]=2;p[0x2f5]=1;p[0x2f6]=0;p[0x2f7]=variant;
    }else if(!(w(p+0x15f4)&0x800u)){
-    if(!elf_word(b,wide?0x41bb1c:0x41bb18,&entry)||entry!=(wide?0x10a0c4u:0x10a094u))
+    if(!elf_word(b,0x41baf0+slot,&entry)||entry!=living_entries[variant])
      return fail(s,0x109f80,GH_PLAYER_FRAME_UNSUPPORTED);
     put(p+0x5f8,w(p+0x5f8)+150u);
     put(p+0x5f4,w(p+0x5f4)+100u);
     p[0x2f4]=1;p[0x2f5]=3;p[0x2f6]=0;p[0x2f7]=variant;
    }
   }else if((int16_t)half(p+0x54a)<=0){
-   const unsigned kind=s->pending_damage_kind;
    const int fall=(kind==0x3e&&(b->work->room==0x100||b->work->room==0x102||
        b->work->room==0x103||b->work->room==0x104||b->work->room==0x105))||
        (kind==0x3b&&(b->work->room==0x100||b->work->room==0x101||b->work->room==0x102));
@@ -1365,7 +1387,7 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
                        (kind==0x3d&&(b->work->room==0x100||b->work->room==0x103||
                         b->work->room==0x104||b->work->room==0x105))||
                        (kind==0x3a&&(b->work->room==0x100||b->work->room==0x101||b->work->room==0x102))||
-                       (kind==0x3c&&b->work->room==0x102)||
+                       (kind==0x3c&&(b->work->room==0x102||b->work->room==0x104))||
                        ((kind==0x49||kind==0x4e)&&b->work->room==0x103)||
                        (kind==0x53&&b->work->room==0x100);
    uint32_t target;
@@ -1412,7 +1434,7 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      return fail(s,0x109f80,GH_PLAYER_FRAME_UNSUPPORTED);
    }
    if(((b->work->room==0x100||b->work->room==0x102)&&s->pending_damage_kind==0x3a)||
-      (b->work->room==0x102&&s->pending_damage_kind==0x3c)){
+      ((b->work->room==0x102||b->work->room==0x104)&&s->pending_damage_kind==0x3c)){
     uint32_t target;
     if(!elf_word(b,0x41baf0+4*(s->pending_damage_kind-0x37),&target)||target!=0x109facu)
      return fail(s,0x109f80,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -2359,7 +2381,7 @@ static gh_player_frame_status roulette_00114608(gh_game_player_frame *s)
  uint8_t *p=actor->bytes;
  const gh_player_idle_input_bindings *input=b->idle_input_bindings;
  uint32_t pc=0;
- if(b->work->room!=0x103||p[0x2f7]||p[0x2f6]>1)
+ if((b->work->room!=0x103&&b->work->room!=0x104)||p[0x2f7]||p[0x2f6]>1)
   return fail(s,0x114608,GH_PLAYER_FRAME_UNSUPPORTED);
  if(!input||input->targets.player!=actor||!actor->alias_f0)
   return fail(s,0x124540,GH_PLAYER_FRAME_ARGUMENT);
@@ -2441,7 +2463,9 @@ static gh_player_frame_status roulette_00114608(gh_game_player_frame *s)
     const gh_game_title_player *boss=b->init->enemy_r103_boss[i];
     if(boss&&boss->view.bytes==target.view.bytes)owner=&boss->view;
    }
-   if(!owner)return fail(s,0x12cc70,GH_PLAYER_FRAME_UNSUPPORTED);
+   if(!owner&&b->work->room==0x104&&b->roulette_target_owner)
+    owner=b->roulette_target_owner(b->effect_context,target.handle);
+   if(!owner||owner->bytes!=target.view.bytes)return fail(s,0x12cc70,GH_PLAYER_FRAME_UNSUPPORTED);
    put(p+0x644,target.handle);
    slot->view=owner;
    slot->expected_guest_token=target.handle;
@@ -2563,7 +2587,7 @@ static gh_player_frame_status roulette_shot_00112a48(gh_game_player_frame *s)
  gh_title_player_view *actor=&b->player->view;
  uint8_t *p=actor->bytes;
  uint32_t pc=0;
- if(b->work->room!=0x103||p[0x2f7]||actor->size<0x1685)
+ if((b->work->room!=0x103&&b->work->room!=0x104)||p[0x2f7]||actor->size<0x1685)
   return fail(s,0x112a48,GH_PLAYER_FRAME_UNSUPPORTED);
  if(!s->hurt_phase){
   put(p+0x54c,0x41f00000);
@@ -3687,8 +3711,9 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
    const size_t rows[]={0x158,0x4fc,0x164,0x504,0x50c};
    const int devil_fall=fall_pose&&b->work->room==0x100&&p[0x2f7]==1;
    const int wide_fall=fall_pose&&b->work->room==0x102&&p[0x2f7]==2;
+   const int sweep_fall=fall_pose&&b->work->room==0x104&&p[0x2f7]==5;
    if(!b->model||!b->resource||b->resource_bytes<(fall_pose?0x514u:0x174u)||
-      !b->initialize_motion||(p[0x2f7]&&!devil_fall&&!wide_fall))
+      !b->initialize_motion||(p[0x2f7]&&!devil_fall&&!wide_fall&&!sweep_fall))
     return fail(s,fall_pose?0x123040:0x122d64,GH_PLAYER_FRAME_UNSUPPORTED);
    size_t row=0x16c;
    if(devil_fall)row=0x158; /* 122E90 variant 1 uses the fixed fall clip. */
@@ -3697,6 +3722,11 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
     if(!elf_word(b,0x41c798,&target)||target!=0x123000u)
      return fail(s,0x123000,GH_PLAYER_FRAME_UNSUPPORTED);
     row=0x4fc;
+   }else if(sweep_fall){
+    uint32_t target;
+    if(!elf_word(b,0x41c7a4,&target)||target!=0x123030u)
+     return fail(s,0x123030,GH_PLAYER_FRAME_UNSUPPORTED);
+    row=0x504;
    }else if(fall_pose){
     uint32_t value;
     if(gh_game_mt_next_0030f348(&b->init->random,&value))
@@ -4055,7 +4085,7 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
        entry[1]==0x35&&mode==UINT32_MAX&&flags==1&&r103_grab_attacker(b->work,b->grab_attacker,0x20a);
      const int boss_throw=b->work->room==0x103&&s->state_entry==0x11d4b0&&
        p[0x2f6]==1&&p[0x2f7]==1&&entry[0]==0x6c&&entry[1]==0x3b&&mode==UINT32_MAX&&flags==1;
-     const int roulette_launch=b->work->room==0x103&&s->state_entry==0x112a48&&
+     const int roulette_launch=(b->work->room==0x103||b->work->room==0x104)&&s->state_entry==0x112a48&&
        p[0x2f6]==1&&!p[0x2f7]&&entry[1]==0x39&&mode==0;
      const int heat=entry[1]==0x22&&mode==UINT32_MAX&&s->state_entry==0x114120&&flags==1&&
        (b->work->room==0x100||b->work->room==0x102||b->work->room==0x103);

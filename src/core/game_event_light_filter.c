@@ -136,15 +136,18 @@ static gh_game_event_status mapped_keys(const gh_event_data_prefix *data,
     const unsigned event = data->components->event_no;
     const int object_light = index == OBJECT_LIGHT;
     const int ev05 = event == 5;
+    const int ev06 = event == 6;
     const int ev1a = event == 0x1a;
     const int ev1b = event == 0x1b;
-    if ((!ev05 && !ev1a && !ev1b && event != 1 && event != 2 && event != 4) ||
-        data->camera_count != (ev05 ? 18 : ev1a ? 11 : ev1b ? 12 : event == 1 ? 10 : event == 2 ? 28 : 24))
+    if ((!ev05 && !ev06 && !ev1a && !ev1b && event != 1 && event != 2 && event != 4) ||
+        data->camera_count != (ev05 ? 18 : ev06 ? 14 : ev1a ? 11 : ev1b ? 12 : event == 1 ? 10 : event == 2 ? 28 : 24))
         return GH_EVENT_UNSUPPORTED;
     static const uint8_t ev1b_light_cuts[] = {0, 6, 7, 8, 11};
     static const uint8_t ev1b_filter_cuts[] = {1, 2, 4, 5, 7, 8, 9, 10, 11};
     static const uint8_t ev05_filter_cuts[] = {1,7,8,9,12,15,16};
+    static const uint8_t ev06_filter_cuts[] = {0,1,2,3,5,7,8,9,10,11,12,13};
     const unsigned count = ev05 ? (object_light ? 1 : sizeof(ev05_filter_cuts)) :
+        ev06 ? (object_light ? 1 : sizeof(ev06_filter_cuts)) :
         ev1a ? (object_light ? 1 : 8) :
         ev1b ? (object_light ? sizeof(ev1b_light_cuts) : sizeof(ev1b_filter_cuts)) :
         event == 4 ? (object_light ? 10 : 29) : (object_light ? event : event == 1 ? 10 : 25);
@@ -155,6 +158,7 @@ static gh_game_event_status mapped_keys(const gh_event_data_prefix *data,
         const uint8_t *key = track->records + i * stride;
         unsigned cut = i;
         if (ev05) cut = object_light ? 0 : ev05_filter_cuts[i];
+        else if (ev06) cut = object_light ? 0 : ev06_filter_cuts[i];
         else if (ev1b) cut = object_light ? ev1b_light_cuts[i] : ev1b_filter_cuts[i];
         else if (ev1a && !object_light) {
             static const uint8_t cuts[] = {0, 1, 2, 3, 4, 5, 8, 9};

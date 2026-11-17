@@ -82,6 +82,7 @@ typedef struct {
  gh_sound_scene *sound_scene; /*RootONEearlycSndextraowner,borrowed*/
  gh_game_event *event; /*RootONE586AF0fromactualmappedbootELF*/
  gh_display_state *display; /*RootONEcanonicaldisplay/font/projectionglobals*/
+ uint16_t *screen_state_5cae40;
  gh_r020_move_callbacks title_callbacks; /*borrowRootfrontend/providercontext*/
  const gh_r020_reference_profile *title_reference_profile; /*borrowuntilactualR020Initcopiesit*/
  uint8_t *factory_serial; /*ONEpersistent3C3D18byte, importedfromactualELF*/

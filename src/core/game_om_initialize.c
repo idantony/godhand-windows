@@ -126,8 +126,8 @@ gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *
  const int placed=!o->runtime_created&&b->work->room==0x101&&kind>=0x3d3&&kind<=0x3d5;
  const int16_t room=b->work->room;
  const int pickup=o->runtime_created&&gh_om_runtime_pickup_supported(room,kind);
- const int west_unscaled=o->runtime_created&&room==0x100&&(kind==0x3e0||kind==0x3e1);
- if(!ticket&&!placed&&!pickup&&!west_unscaled)return GH_PLACE_ARGUMENT;
+ const int unscaled=o->runtime_created&&(room==0x100||room==0x104)&&(kind==0x3e0||kind==0x3e1);
+ if(!ticket&&!placed&&!pickup&&!unscaled)return GH_PLACE_ARGUMENT;
  *out=0;
  int original=0;
  gh_scene_placement_status status=gh_om_common_initialize_001b6fb8(s,o,b,&original);

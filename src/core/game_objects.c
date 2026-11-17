@@ -1,7 +1,11 @@
 #include "game_objects.h"
 #include <stdlib.h>
 #include <string.h>
+typedef struct {gh_r207_allocation allocation;size_t bytes;} gh_object_deferred_source;
 struct gh_game_objects {
+ gh_object_source_borrowed source_borrowed;
+ void *source_borrowed_context;
+ gh_object_deferred_source deferred[32];
  uint32_t release_cursor,release_sound;uint8_t releasing;
  gh_stage_slots *slots;uint8_t records[80][0x5c];
  struct {const uint8_t *bytes;size_t size,file_extent;uint8_t file_extent_known;
@@ -22,11 +26,59 @@ gh_object_status gh_game_objects_create(gh_stage_slots *slots,int room,gh_game_o
  s=calloc(1,sizeof(*s));if(!s)return GH_OBJECT_MEMORY;s->slots=slots;slots->records=&s->records[0][0];slots->count=room?32:80;
  slots->bytes=(size_t)slots->count*0x5c;slots->heap_handle=NULL;slots->configured=1;*out=s;return GH_OBJECT_OK;
 }
+void gh_game_objects_bind_source_borrower(gh_game_objects *s,gh_object_source_borrowed probe,void *context)
+{
+ if(!s)return;
+ s->source_borrowed=probe;
+ s->source_borrowed_context=context;
+}
+
+/* Native leases keep a live EST row readable after the original record is
+ * removed. They neither hold the old object slot nor block the event task. */
+static gh_object_status retire_source(gh_game_objects *s,unsigned i)
+{
+ const gh_r207_allocation allocation=s->source[i].allocation;
+ const size_t size=s->source[i].size;
+ int borrowed=0;
+ if(s->source_borrowed){
+  gh_object_status status=s->source_borrowed(s->source_borrowed_context,allocation.pointer,size,&borrowed);
+  if(status)return status;
+ }
+ if(!borrowed)return gh_heap_release(s->source[i].heap,allocation)?GH_OBJECT_BUSY:GH_OBJECT_OK;
+ for(unsigned slot=0;slot<sizeof(s->deferred)/sizeof(s->deferred[0]);++slot){
+  if(s->deferred[slot].allocation.pointer)continue;
+  s->deferred[slot]=(gh_object_deferred_source){allocation,size};
+  return GH_OBJECT_OK;
+ }
+ return GH_OBJECT_CAPACITY;
+}
+
+static gh_object_status recycle_sources(gh_game_objects *s)
+{
+ if(!s->source_borrowed)return GH_OBJECT_OK;
+ for(unsigned i=0;i<sizeof(s->deferred)/sizeof(s->deferred[0]);++i){
+  gh_object_deferred_source *source=&s->deferred[i];
+  if(!source->allocation.pointer)continue;
+  int borrowed;
+  gh_object_status status=s->source_borrowed(s->source_borrowed_context,
+      source->allocation.pointer,source->bytes,&borrowed);
+  if(status)return status;
+  if(borrowed)continue;
+  if(gh_heap_release(source->allocation.owner,source->allocation))return GH_OBJECT_BUSY;
+  *source=(gh_object_deferred_source){0};
+ }
+ return GH_OBJECT_OK;
+}
+
 void gh_game_objects_destroy(gh_game_objects *s){if(!s)return;
  /* Native abort only: no async native DMA, cancel before actualownedfree.
   * Managers must be destroyed before their borrowed DVD/heap owners. */
  for(unsigned i=0;i<80;i++)if(s->source[i].allocation.pointer){if(s->source[i].dvd&&s->source[i].job)gh_dvd_cancel(s->source[i].dvd,s->source[i].job);(void)gh_heap_release(s->source[i].heap,s->source[i].allocation);}
-if(s->slots->records==&s->records[0][0])memset(s->slots,0,sizeof(*s->slots));free(s);}
+ for(unsigned i=0;i<sizeof(s->deferred)/sizeof(s->deferred[0]);++i){
+  const gh_r207_allocation allocation=s->deferred[i].allocation;
+  if(allocation.pointer)(void)gh_heap_release(allocation.owner,allocation);
+ }
+ if(s->slots->records==&s->records[0][0])memset(s->slots,0,sizeof(*s->slots));free(s);}
 gh_object_status gh_game_objects_add_pinned_001fece0(gh_game_objects *s,uint32_t kind,const void *bytes,size_t size,int *original){
  int old,index=-1;uint8_t *p;
  if(original)*original=0;if(!manager_valid(s)||!bytes||!size)return GH_OBJECT_ARGUMENT;
@@ -87,7 +139,8 @@ static int event_release_valid(const gh_game_objects*s,unsigned i,const uint8_t*
 static gh_object_status finish_event_release(gh_game_objects*s,unsigned i,uint32_t*f){
  uint8_t*p=s->slots->records+(size_t)i*0x5c;
  if(!s->source[i].release_prepared){
-  if(gh_heap_release(s->source[i].heap,s->source[i].allocation)){if(f)*f=0x2a9680;return GH_OBJECT_BUSY;}
+  gh_object_status status=retire_source(s,i);
+  if(status){if(f)*f=0x2a9680;return status;}
   s->source[i].allocation=(gh_r207_allocation){0};s->source[i].bytes=NULL;s->source[i].size=0;
   s->source[i].file_extent=0;s->source[i].file_extent_known=0;s->source[i].release_prepared=1;
   w32(p+4,0);w32(p+8,0);w32(p+0x10,0);w32(p+0xc,UINT32_MAX);w32(p+0x1c,0);w32(p+0x18,0);
@@ -121,7 +174,10 @@ gh_object_status gh_game_objects_update_bound_001fe748(gh_game_objects*s,const g
   gh_object_status status=finish_event_release(s,n-1,f);if(status)return status;
   memcpy(plan[n-1],s->slots->records+(size_t)(n-1)*0x5c,0x5c);
  }
- memcpy(s->slots->records,plan,(size_t)s->slots->count*0x5c);return GH_OBJECT_OK;
+ memcpy(s->slots->records,plan,(size_t)s->slots->count*0x5c);
+ gh_object_status status=recycle_sources(s);
+ if(status&&f)*f=0x2a9680;
+ return status;
 }
 gh_object_status gh_game_objects_update_001fe748(gh_game_objects*s,uint32_t*f){return gh_game_objects_update_bound_001fe748(s,NULL,f);}
 
@@ -153,7 +209,8 @@ gh_object_status gh_game_objects_release_nonpinned_001fef30(gh_game_objects*s,gh
   }
   w32(p+4,0);w32(p+8,0);
   if(token){
-   if(gh_heap_release(heap,allocation)){if(f)*f=0x2a9680;return GH_OBJECT_BUSY;}
+   gh_object_status status=retire_source(s,i);
+   if(status){if(f)*f=0x2a9680;return status;}
    w32(p+0x10,0);
   }
   memset(&s->source[i],0,sizeof(s->source[i]));

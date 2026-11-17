@@ -21,6 +21,9 @@ typedef struct {
  gh_se_voice_engine *voices;
  gh_enemy_ems *enemies;
  gh_enemy_retire_bindings enemy;
+ gh_room_pool_status (*retire_effect_model)(void *,uint32_t handle,int closing,
+     int *handled,int *retired,uint32_t *frontier);
+ void *effect_context;
 } gh_room_death_bindings;
 
 typedef struct {

@@ -101,7 +101,12 @@ unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *b)
     half(p+0x640)<2&&rd(p+0x564)==0x214u+half(p+0x640);
  /* 276468 returns bit 2 from actor+17C3. The recovered caller passes that
   * bit with the selected clip across recoils, recovery and movement. */
- const int boss_mirror=r103_boss&&p[0x17c3];
+ const int r104_em03=p&&root->size>=0x17c4&&b->work&&b->work->room==0x104&&
+    root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x203&&rd(p+0x564)==0x250&&
+    !half(p+0x640);
+ /* Original 276468 supplies the EM03 mirror bit to movement, recoil and
+  * get-up. Only callers that request bit 2 use the mirrored pose. */
+ const int boss_mirror=(r103_boss||r104_em03)&&p[0x17c3];
  return (blowaway||east_rear||boss_mirror||gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
 }
 

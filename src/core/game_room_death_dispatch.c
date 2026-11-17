@@ -103,6 +103,15 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
     kind=live.held_weapon?0x363:live.devil?0x220:live.enemy202?0x202:live.enemy2a2?0x2a2:live.enemy2ad?0x2ad:0;
    }
   }
+  if(!actor&&b->retire_effect_model){
+   int handled=0,retired=0;
+   status=b->retire_effect_model(b->effect_context,handle,closing,&handled,&retired,&frontier);
+   if(status)return fail(state,handle,frontier?frontier:0x312708);
+   if(handled){
+    if(!retired)++state->scan.cursor;
+    continue;
+   }
+  }
   if(!actor||!actor->bytes||actor->size<0x254)return fail(state,handle,0x312708);
   uint32_t flags=word(actor->bytes+0x250);
   if(kind!=0x100&&kind!=0x101&&kind!=0x363&&!enemy_kind(kind)&&!gh_om_retire_entry(kind))
@@ -140,7 +149,7 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
    * the last destruction bit, depending on the disk request's timing. */
   const gh_boot_work *work=b->player.model?b->player.model->work:NULL;
   /* 30F8B0 retires the player after the global stop regardless of HP. */
-  const int exiting_player=kind==0x100&&work&&(work->room==0x102||work->room==0x103)&&
+  const int exiting_player=kind==0x100&&work&&(work->room==0x102||work->room==0x103||work->room==0x104)&&
       (flags&0xe0000000u)==0xe0000000u;
   if(borrowed&&((kind!=0x2ad&&kind!=0x202&&kind!=0x220&&!exiting_player)||b->enemy.effects!=b->effects||
      gh_effect_create_quiesce_actor_room_exit(b->enemy.effects,actor)))

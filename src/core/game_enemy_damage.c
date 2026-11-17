@@ -159,7 +159,7 @@ static int r102_stamp2_punch(const gh_enemy_actor *enemy, const uint8_t *actor, 
     return effect == 7 && r102_stamp2(enemy, actor);
 }
 
-static int r104_equipped_triangle_receiver(const gh_enemy_actor *enemy,const uint8_t *actor)
+static int r104_em03_damage_receiver(const gh_enemy_actor *enemy,const uint8_t *actor)
 {
     return gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)&&
         half(actor+0x2fe)==0x203&&word(actor+0x564)==0x250;
@@ -167,7 +167,7 @@ static int r104_equipped_triangle_receiver(const gh_enemy_actor *enemy,const uin
 
 static int triangle_take_supported(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
     return effect==0x12&&(r100_stamp19(enemy,actor)||r100_stamp20(enemy,actor)||
-        r100_stamp8(enemy,actor)||r100_at2_em03(enemy,actor)||r104_equipped_triangle_receiver(enemy,actor)||
+        r100_stamp8(enemy,actor)||r100_at2_em03(enemy,actor)||r104_em03_damage_receiver(enemy,actor)||
         r100_west_em00(enemy,actor)||r100_west_em02_em03(enemy,actor)||
         r103_arena_punch_target(enemy,word(actor+0x564))||r103_arena_em0a(enemy,actor)||
         r103_boss_player_strike_target(enemy,actor));
@@ -249,7 +249,7 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
         (half(view->bytes+0x2fe)!=0x202&&!r103_arena_punch_target(enemy,word(view->bytes+0x564))&&
          !r103_arena_em0a(enemy,view->bytes)&&!r103_boss_player_strike_target(enemy,view->bytes)&&
          !r104_player_punch(enemy,view->bytes,7)&&
-         !(r104_equipped_triangle_receiver(enemy,view->bytes)&&word(player->bytes+0x5e8)==29&&power==12)) ||
+         !(r104_em03_damage_receiver(enemy,view->bytes)&&word(player->bytes+0x5e8)==29&&power==12)) ||
         !enemy->hitareas.created[0])
         return stop(frontier, 0x20a5dc);
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
@@ -862,12 +862,18 @@ static gh_actor_motion_status roulette_shockwave_hit(gh_enemy202_hit_call *call,
     if (!source || !source->bytes || source->size!=0x630 ||
         source->original_vtable214!=0x4290c8 || word(source->bytes+0x214)!=0x4290c8 ||
         half(source->bytes+0x2fe)!=0x3be || word(source->bytes+0x610)!=0x2c ||
-        (dependency!=0x214&&dependency!=0x215) || p[0x1650]!=15 ||
-        enemy->entry.request.dependency_kind!=dependency ||
-        !enemy->entry.b.work ||
-        !gh_enemy204_is_r103_entry(&enemy->entry.request,enemy->entry.b.work->room) ||
+        enemy->entry.request.dependency_kind!=dependency || !enemy->entry.b.work ||
         word(p+0x214)!=0x4479c8 || power!=80 || !rank || rank>5)
         return stop(frontier,0x20a178);
+    const int arena=(dependency==0x214||dependency==0x215)&&p[0x1650]==15&&
+        gh_enemy204_is_r103_entry(&enemy->entry.request,enemy->entry.b.work->room);
+    const unsigned move=half(p+0x2f4);
+    const int charge_recovery=move==0x1a00&&p[0x2f6]==5&&!p[0x2f7];
+    /* 20A178 takes the same projectile hit for either authored turn side. */
+    const int turn=move==0x0800&&p[0x2f6]==1&&p[0x2f7]<=1;
+    const int em03=r104_em03_damage_receiver(enemy,p)&&(call->phase||
+        ((charge_recovery||turn)&&rank==1));
+    if(!arena&&!em03)return stop(frontier,0x20a178);
     if (call->phase==0) {
         const float drain=number(p+0x770), cooldown=number(p+0x54c);
         const float block=number(p+0x1740), armor=number(p+0x1734);
@@ -1112,9 +1118,16 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int r104_recovery=r104_punch&&(p[0x2f6]==5||p[0x2f5]==8||
         (p[0x2f5]==0x15&&half(p+0x3ac)==0x800));
     const int r104_braced=r104_punch&&p[0x2f5]==0x21;
-    /* Authored default set1 ID29 produces Give12 on the rear of the charge. */
-    const int r104_triangle=triangle&&r104_equipped_triangle_receiver(enemy,p)&&
-        ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||(half(p+0x2f4)==0x0101&&p[0x2f6]==3))&&
+    /* Give12 from default set1 ID29 uses the same original dep0250 probes
+     * at the rear of the charge and during the melee ending contact. */
+    const int melee_end=half(p+0x2f4)==0x1600&&p[0x2f6]==1&&half(p+0x3ac)==0x10;
+    const int fast_melee=half(p+0x2f4)==0x1500&&p[0x2f6]==1&&half(p+0x3ac)==0x800&&
+        (word(p+0x16d4)&0x400u);
+    const int r104_triangle_recoil=half(p+0x2f4)==0x0101&&
+        (p[0x2f6]==3||(p[0x2f6]==1&&!half(p+0x3ac)));
+    const int idle_move=!half(p+0x2f4)&&p[0x2f6]==1&&!half(p+0x3ac);
+    const int r104_triangle=triangle&&r104_em03_damage_receiver(enemy,p)&&
+        ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||melee_end||fast_melee||idle_move)&&
         !p[0x2f7]&&word(player->bytes+0x5e8)==29&&
         word(body->bytes+0x4c)==12&&rank==1&&!body->state->heat[0x10];
     const int boss_recovery=r104_recovery||r104_triangle||em27_punch;
@@ -1783,7 +1796,7 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const int back_circle=has_source&&r103_back_circle_contact(enemy,source,effect);
     const int triangle = triangle_take_supported(enemy, p, effect);
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
-    const int shockwave=effect==0x27&&(word(p+0x564)==0x214||word(p+0x564)==0x215);
+    const int shockwave=effect==0x27&&(word(p+0x564)==0x214||word(p+0x564)==0x215||r104_em03_damage_receiver(enemy,p));
     const int boss_square=effect==7&&r103_boss_player_strike_target(enemy,p);
     const int r104_punch=effect==7&&word(body->bytes+0x4c)==3&&
         gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)&&
@@ -2022,7 +2035,7 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         call->phase=10;
         return GH_ACTOR_MOTION_OK;
     }
-    const int shockwave=call->effect==0x27&&(dependency==0x214||dependency==0x215);
+    const int shockwave=call->effect==0x27&&(dependency==0x214||dependency==0x215||r104_em03_damage_receiver(enemy,p));
     const int thrown_box=call->effect==0x36&&dependency==0x227&&half(p+0x640)==9&&
         enemy->entry.b.work&&enemy->entry.b.work->room==0x101;
     const gh_title_player_view *recoil_source=NULL;

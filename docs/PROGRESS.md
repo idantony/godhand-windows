@@ -4,6 +4,28 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R104 victory event and R021 Stage Clear
+
+The R104 victory replay now presents the original Stage Clear screen in R021.
+The test lowers the boss to 60 HP immediately before an original 80-point
+Shockwave. Native code applies the hit, plays all 14 EV06 shots and releases
+the arena before entering R021. Direct3D presents the clear time, Continue,
+villager and enemy tallies through the planned stop at tick 4,710. A separate
+CPU replay verifies all 4,712 controller samples and reaches the original total
+payout routine. A full-health boss victory and the complete confirmation and
+save flow remain in development.
+
+The Direct3D replay presents 725 scene frames overall. Captured R021 frames at
+4,615, 4,650 and 4,705 show the original result interface and its tally
+animation. The renderer, world GPU, effect post-processing and window each
+report zero errors through tick 4,710.
+
+R104 的胜利回放已在 R021 呈现原版结算画面。测试在原版 80 点冲击波命中前将头目血量
+调到 60 HP。原生程序处理命中，播放 EV06 全部 14 个镜头，清理竞技场并进入 R021。
+Direct3D 呈现结算时间、继续次数、村民和敌人击杀统计，到第 4,710 帧按计划结束。
+独立的 CPU 回放核对全部 4,712 个手柄采样，并到达原版总奖金流程。满血头目战的完整
+胜利路线、确认和保存流程仍在开发。
+
 ## R104 hold, escape and New Game equipment
 
 Two native CPU replays continue the original R104 boss fight after Retry.

@@ -44,7 +44,12 @@ static gh_static_mesh_status calculate(const gh_skinned_mesh_stream*s,const gh_s
   for(unsigned k=0;k<4;k++){
    float color=mul((float)raw.color[k],in->normal_light[12+k]);
    color=mul(color,k==3?in->light_color[15]:light[k]);
-   if(!isfinite(color)||color<0)return bad(f,0x458);if(color>255)color=255;vertex.rgba[k]=(uint32_t)color;
+   if(!isfinite(color))return bad(f,0x458);
+   if(color>255)color=255;
+   /* VU 4B8 converts signed, then 4D8 writes a PACKED RGBAQ lane.
+    * The GIF consumes the low byte of each converted word. */
+   const int32_t packed=color<=-2147483648.0f?INT32_MIN:(int32_t)color;
+   vertex.rgba[k]=(uint8_t)packed;
   }
   int32_t fog;if(!fixed(in->fog,&fog)||fog<0||fog>4080)return bad(f,0x418);vertex.fog_fixed4=(uint16_t)fog;
   if(i>=2){vertex.triangle_tested=1;
