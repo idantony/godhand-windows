@@ -695,7 +695,8 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
  const int ema2_step=dependency==0x2a2&&v->part_index==-1&&
      v->model->root.original_vtable214==0x448ca0&&h(actor+0x2fe)==0x2a2&&
      v->model->work&&v->model->work->room==0x100&&
-     ((ground_step&&((state==0x0200&&phase==3)||(state==0x0400&&(phase==1||phase==3))))||
+     ((ground_step&&((state==0x0200&&phase==3)||(state==0x0400&&(phase==1||phase==3))||
+                     (!state&&phase==5&&v->model->root.size>=0x642&&h(actor+0x640)==6)))||
       (gate_death_step&&state==0x0400&&phase==3));
  const int paired_death=gate_death_step&&(r103_hold_death_player_voice(v)||
     (v->model->work&&v->model->work->room==0x100&&
@@ -1021,20 +1022,23 @@ static int core_r101_weapon_player_impact_profile(const struct voice *v,int16_t 
 }
 
 /* Original 26ECD0 plays CORE F7, then the attached enemy 14/15 variant. */
-static int r101_enemy_pressure_profile(const struct voice *v,int16_t bank,int16_t program,
+static int enemy_pressure_cue_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
  if(!v->source_owner||v->part_index!=-1||!v->model||!v->model->work||
-    v->model->work->room!=0x101||v->requested_bank!=bank)return 0;
+    v->requested_bank!=bank)return 0;
  const gh_title_player_view *actor=&v->model->root;
  if(!actor->bytes||actor->size<=0x1650||actor->original_vtable214!=0x4479c8||
     h(actor->bytes+0x2fe)!=0x202)return 0;
  const uint32_t dependency=w(actor->bytes+0x564);
  const unsigned stamp=h(actor->bytes+0x640);
  const unsigned appearance=actor->bytes[0x1650];
- const int em03=dependency==0x203&&stamp==13&&!appearance;
- const int em27=dependency==0x227&&stamp==9&&appearance==4;
- if(!em03&&!em27)return 0;
+ const int16_t room=v->model->work->room;
+ const int em00=room==0x100&&dependency==0x200&&stamp==10&&appearance==5;
+ const int em03=dependency==0x203&&
+    ((room==0x101&&stamp==13&&!appearance)||(room==0x100&&stamp==11&&appearance==5));
+ const int em27=room==0x101&&dependency==0x227&&stamp==9&&appearance==4;
+ if(!em00&&!em03&&!em27)return 0;
  if(h(p)!=(unsigned)bank||h(p+2)!=(unsigned)program||w(p+12)!=0x00200000||
     w(p+20)!=0x005a0040||w(p+40)!=0xffff||w(p+44))return 0;
  if(!bank&&v->requested_program==0xf7&&program==0xf7)
@@ -1046,10 +1050,13 @@ static int r101_enemy_pressure_profile(const struct voice *v,int16_t bank,int16_
  const int variant=program==0x15;
  static const uint32_t em03_offsets[]={0x23e0,0x38d0};
  static const uint32_t em27_offsets[]={0x5680,0x6300};
- const uint32_t *offsets=em03?em03_offsets:em27_offsets;
- const uint32_t base_gain=em03?0x007d007d:0x00780078;
- return w(p+4)==(variant?0x022d000e:0x022d000d)&&w(p+8)==0x264&&
-        w(p+16)==(variant?0x00730073:base_gain)&&w(p+24)==0x0064ff9c&&
+ static const uint32_t em00_offsets[]={0,0xc80};
+ const uint32_t *offsets=em00?em00_offsets:em03?em03_offsets:em27_offsets;
+ const uint32_t base_gain=em00||em03?0x007d007d:0x00780078;
+ const uint32_t alternate_gain=em00?0x00780078:0x00730073;
+ const uint32_t tone=em00?0x02280000u:0x022d0000u;
+ return w(p+4)==(tone|(variant?0xeu:0xdu))&&w(p+8)==0x264&&
+        w(p+16)==(variant?alternate_gain:base_gain)&&w(p+24)==0x0064ff9c&&
         w(p+28)==0x00050000&&w(p+32)==(variant?0x00010045:0x00010145)&&
         w(p+36)==0x400&&
         (!sample||(w(sample)==offsets[variant]&&w(sample+4)==11025&&
@@ -1802,7 +1809,7 @@ static int item_drop_profile(const struct voice *v)
  const int drop=program==0xfa&&(((room==0x101||room==0x102||room==0x103)&&kind==0x3d6)||
     ((room==0x102||room==0x103)&&kind==0x3c4)||
     (room==0x103&&(kind==0x3d0||kind==0x3c8||kind==0x3d1||kind==0x3d7))||(room==0x102&&kind==0x3df)||
-    (room==0x100&&(kind==0x3c4||kind==0x3d6||kind==0x3e0||kind==0x3e1)));
+    (room==0x100&&(kind==0x3c4||kind==0x3c8||kind==0x3d6||kind==0x3e0||kind==0x3e1)));
  const int collect=program==0xfc&&room==0x102&&kind==0x3df&&model->root.bytes[0x2f6]==4;
  if(!drop&&!collect)return 0;
  return !h(p)&&h(p+2)==program&&h(p+4)==(collect?0x7cu:0x7au)&&
@@ -1849,7 +1856,7 @@ static int boost_impact_voice(const struct voice *v,int16_t bank,int16_t program
   const uint32_t dependency=arena_boss?w(arena_boss+0x564):0;
   const int heat_receiver=r103_em00_voice_actor(v)||arena_boss;
   const uint32_t power=heat_receiver&&v->model->root.size>=0x17b8?w(actor+0x17b4):0;
-  const int heat_contact=(power==12&&arena_boss)||(power==5&&dependency!=0x214);
+  const int heat_contact=(power==12&&arena_boss)||power==5;
   const int standing_hit=heat_contact&&h(actor+0x2f4)==0x0101;
   const int em15_square=dependency==0x215&&power==3&&h(actor+0x2f4)==0x0001;
   const int active_impact=(standing_hit||em15_square)&&
@@ -2191,8 +2198,8 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
   candidate->info.pending=1;candidate->info.channel=NONE;
   return GH_VOICE_OK;
  }
- const int pressure_cue=r101_enemy_pressure_profile(candidate,bank,program,p,NULL);
- if(pressure_cue&&!r101_enemy_pressure_profile(candidate,bank,program,p,descriptor.data))
+ const int pressure_cue=enemy_pressure_cue_profile(candidate,bank,program,p,NULL);
+ if(pressure_cue&&!enemy_pressure_cue_profile(candidate,bank,program,p,descriptor.data))
   return unsupported(s,0x35fc);
  const int roulette_motion_voice=r103_roulette_motion_voice_profile(candidate,bank,program,p,descriptor.data);
  if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!roulette_motion_voice&&!pressure_cue&&!ema2_timer_voice&&!square_voice&&!back_circle_voice&&!triangle_voice&&!escape_voice&&!player_cc&&!player_cd&&!hurt_voice&&!player_death&&!fall_grunt&&!pickup_voice&&!impact_voice&&!em0a_attack_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!local_cue_voice&&!attack_voice&&!death_voice&&!mount_fall_sample)||w(descriptor.data+12))return unsupported(s,0x35fc);
@@ -2917,7 +2924,7 @@ static gh_voice_status attached_duplicate(gh_se_voice_engine *s,struct voice *ca
      !r100_formation_core_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !em0a_timed_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor)&&
      !core_r101_weapon_player_impact_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
-     !r101_enemy_pressure_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
+     !enemy_pressure_cue_profile(candidate,candidate->info.bank,candidate->info.program,candidate->descriptor,NULL)&&
      !core_fall_impact_profile(candidate,candidate->descriptor)&&
      !core_grab_impact_profile(candidate,candidate->descriptor)&&
      !r103_grab_impact_profile(candidate,candidate->descriptor)&&

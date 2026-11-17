@@ -622,6 +622,14 @@ gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor
         default: break;
         }
     }
+    if (request->data&&request->data->components&&request->data->components->event_no==5&&
+        gh_event_actor_ev05_source_kind(request->actor_index,request->source_kind)) {
+        if (request->source_kind==0x610)
+            return extra_el10(s,request,handle,original_success,frontier);
+        if (request->source_kind==0x611||request->source_kind==0x612)
+            return attach_el_pair(s,request,handle,original_success,frontier);
+        return extra_standalone(s,request,handle,original_success,frontier);
+    }
     /* EV1B's first actor takes the original ExtraInitialize default for EL40. */
     if (request->source_kind == 0x640 && request->actor_index == 0 && request->data &&
         request->data->components && request->data->components->event_no == 0x1b) {

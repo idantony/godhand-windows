@@ -1,6 +1,7 @@
 #ifndef GH_GAME_ENEMY_OTHER_MOVE_H
 #define GH_GAME_ENEMY_OTHER_MOVE_H
 #include "game_enemy_2a2_final.h"
+#include "game_om_frame.h"
 #include "game_enemy_weapon.h"
 #include "game_player_targets.h"
 #include "game_object_opacity.h"
@@ -11,6 +12,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef gh_actor_motion_status (*gh_enemy2a2_offer_item)(void *,gh_om_box_item_drop *,
+    const gh_actor_model *,uint32_t,uint32_t *);
 
 typedef struct {
     const void *owner;
@@ -36,6 +40,10 @@ typedef struct {
     uint8_t stage, original_returned, nearby;
     uint16_t reaction_resource_offset;
     gh_motion_sound_request sound_request;
+    gh_enemy2a2_offer_item offer_item;
+    const gh_om_factory *offer_factory;
+    gh_om_box_item_drop offer;
+    uint32_t actor_handle;
 } gh_enemy_other_move;
 
 /* Borrow the same room/player resolver and ELF as ordinary player target queries. */
@@ -44,6 +52,8 @@ gh_actor_motion_status gh_enemy_other_move_bind_targets(gh_enemy_other_move *,
 gh_actor_motion_status gh_enemy_other_move_bind_2a2_services(gh_enemy_other_move *,
     const gh_object_opacity_environment *,gh_motion_effect_consumer,void *,
     gh_motion_sound_consumer,void *);
+gh_actor_motion_status gh_enemy_other_move_bind_2a2_offer(gh_enemy_other_move *,
+    gh_enemy2a2_offer_item,const gh_om_factory *,uint32_t);
 gh_actor_motion_status gh_enemy_other_move_bind_navigation(gh_enemy_other_move *,
     const gh_scene_nearcheck *);
 /* Stable per-invocation cursors. Borrow existing EMS factory owners. */

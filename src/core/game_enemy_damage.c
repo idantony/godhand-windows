@@ -152,8 +152,8 @@ static int r103_heat_activation_contact(const gh_enemy_actor *enemy,
     const gh_title_player_view *player,uint16_t effect,int32_t power)
 {
     const uint8_t *target=enemy->entry.object.view.bytes;
-    const int em15=word(target+0x564)==0x215&&r103_boss_player_strike_target(enemy,target);
-    return effect==0x2a&&power==5&&(r103_first_wave_em00(enemy)||em15)&&
+    return effect==0x2a&&power==5&&
+        (r103_first_wave_em00(enemy)||r103_boss_player_strike_target(enemy,target))&&
         player->size>0x1684&&half(player->bytes+0x2f4)==0x0800&&
         player->bytes[0x1684]==1&&enemy->entry.b.init->heat[0x10]&&
         (word(player->bytes+0x15f4)&0x10u);
@@ -173,8 +173,7 @@ static int r103_heat_exhaustion_contact(const gh_enemy_actor *enemy,
     const gh_title_player_view *player,uint16_t effect,int32_t power)
 {
     const uint8_t *target=enemy->entry.object.view.bytes;
-    return effect==0x2a&&power==5&&word(target+0x564)==0x215&&
-        r103_boss_player_strike_target(enemy,target)&&player->size>0x1684&&
+    return effect==0x2a&&power==5&&r103_boss_player_strike_target(enemy,target)&&player->size>0x1684&&
         word(player->bytes+0x2f4)==0x00010900u&&player->bytes[0x1684]==1&&
         !enemy->entry.b.init->heat[0x10];
 }
@@ -534,7 +533,13 @@ static gh_actor_motion_status environment_hit(gh_enemy202_hit_call *call,
                 if (!enemy) return stop(frontier, 0x26ecd0);
                 const int em03 = word(p + 0x564) == 0x203 && half(p + 0x640) == 13 &&
                     !p[0x1650] && enemy->entry.b.work && enemy->entry.b.work->room == 0x101;
-                if (!em03 && !r101_scenery_reaction_enemy(enemy, p))
+                const unsigned stamp=half(p+0x640), state=half(p+0x2f4);
+                const uint32_t dependency=word(p+0x564);
+                const int west_patrol=entry->b.work->room==0x100&&effect==0x2e&&
+                    source_kind==0x303&&!power&&p[0x1650]==5&&p[0x2f6]==1&&!p[0x2f7]&&
+                    ((dependency==0x200&&stamp==10&&(state==0x1101||state==0x1300))||
+                     (dependency==0x203&&stamp==11&&state==0x1300));
+                if (!west_patrol && !em03 && !r101_scenery_reaction_enemy(enemy, p))
                     return stop(frontier, 0x26ecd0);
                 call->phase = PRESSURE_CORE_SOUND;
             }
@@ -1131,7 +1136,9 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         const int r102_em00 = r102_close_em00_punch(enemy, p, effect);
         const int formation_capture = amplified_triangle && dependency == 0x202 &&
             r100_west_em02_em03(enemy,p) && p[0x2f5] == 0x18 && p[0x2f6] == 1;
-        const int verified_motion = ((amplified_triangle || heat_contact || boss_square || opening_attack_contact || back_circle || r102_em00 ||
+        const int boss_heat=heat_contact&&boss_strike&&p[0x2f6]==1&&
+            (p[0x2f5]==0x4b||(dependency==0x214&&p[0x2f5]==0x16));
+        const int verified_motion = boss_heat || ((amplified_triangle || heat_contact || boss_square || opening_attack_contact || back_circle || r102_em00 ||
             (r102_stamp2_punch(enemy, p, effect) && p[0x2f6] == 1)) && p[0x2f5] == 0x15) ||
             formation_capture || (r102_em00 && p[0x2f5] == 0x4b && p[0x2f6] == 1);
         if (!verified_motion || p[0x2f4] || p[0x2f7] || !rank)
@@ -1145,7 +1152,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         put(p + 0x17ac, half(p + 0x54a));
         uint32_t power_bits = word(body->bytes + 0x4c);
         if (call->phase == amplified_power_ready) {
-            /* Give2A selects 20A578 directly, after the default power doubling. */
+            /* Give2A jumps to 20A578 and skips the default power doubling. */
             if(!heat_contact)power_bits <<= 1;
             put(p + 0x16d0, word(p + 0x16d0) & ~0x800000u);
         }
@@ -1202,14 +1209,17 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         if(heat_contact){
             /* 20CAC8 selector1 draws before the active-Heat early return.
-             * EM15's selector0 exits immediately. Both authored 20C8D8
-             * dependencies choose the standing Take once the other probes decline.
-             * The EM15 spell-start flag 400 does not affect that dispatch. */
-            const int em15=boss_strike&&dependency==0x215;
-            const uint32_t status_mask=em15?0x01401000u:0x01401400u;
-            if(rank!=1||p[0x17bd]!=1||p[0x17bc]!=(em15?0:1)||(int32_t)word(p+0x17ac)<=0||
-                !half(p+0x54a)||p[0x2f4]||p[0x2f5]!=(em15?0x4b:0x15)||
-                (flags&0x2cu)||(behavior&0x80e020u)||(status&status_mask)!=(em15?0x1000u:0x400u))
+             * Both twins use selector0 and reach the standing Take at 20C920. */
+            const int em14_activation=boss_strike&&dependency==0x214&&
+                half(player->bytes+0x2f4)==0x0800;
+            const int em15_expiry_evade=boss_strike&&dependency==0x215&&
+                half(player->bytes+0x2f4)==0x0900&&p[0x2f5]==9&&p[0x2f6]==1&&p[0x2f7]==1;
+            const uint8_t action=boss_strike?(em14_activation?0x16:0x4b):0x15;
+            const uint32_t status_mask=boss_strike?0x01401000u:0x01401400u;
+            if(rank!=1||p[0x17bd]!=1||p[0x17bc]!=(boss_strike?0:1)||(int32_t)word(p+0x17ac)<=0||
+                !half(p+0x54a)||p[0x2f4]||(p[0x2f5]!=action&&!em15_expiry_evade)||
+                (em14_activation&&(p[0x2f6]!=1||p[0x2f7]))||
+                (flags&0x2cu)||(behavior&0x80e020u)||(status&status_mask)!=(boss_strike?0x1000u:0x400u))
                 return stop(frontier,0x20bce8);
             if(p[0x17bc]){
                 uint32_t random;

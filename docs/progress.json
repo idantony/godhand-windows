@@ -1,8 +1,39 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-17T07:44:24+00:00",
-  "stage": "native-windows-r100-west-and-r103-combat",
+  "verified_utc": "2026-11-17T08:35:35+00:00",
+  "stage": "native-windows-r104-ev05-and-later-combat",
   "playable": false,
+  "later_playback_observations": {
+    "r104_ev05": {
+      "entry": "direct title load from a pre-launch original-format R104 test save",
+      "clear_intro_fade_tick": 607,
+      "direct3d_final_tick": 1630,
+      "direct3d_last_camera_cut_index": 9,
+      "direct3d_scene_frames_across_run": 1326,
+      "direct3d_errors": 0,
+      "cpu_entered_camera_cut_index": 10,
+      "cpu_camera_cut_entry_tick": 1664,
+      "natural_entry_verified": false,
+      "post_intro_player_control_verified": false
+    },
+    "r103_full_hp_post_heat": {
+      "start_boss_hp": [597, 597],
+      "triangle_contacts_per_boss": 2,
+      "final_boss_hp": [450, 383],
+      "final_player_hp": 7,
+      "final_tick": 9650,
+      "matching_controller_samples": 9650,
+      "victory_verified": false
+    },
+    "r100_west_ninth": {
+      "credited_defeats": 9,
+      "ninth_present_by_tick": 10208,
+      "gate_required_defeats": 12,
+      "final_tick": 10250,
+      "player_hp": 1,
+      "exit_verified": false
+    }
+  },
   "merged_combat_observation": {
     "r100_west": {
       "registered_defeats": 8,

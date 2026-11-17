@@ -321,7 +321,7 @@ static gh_bgm_status complete_event_prefetch(gh_bgm_requests *s,request *q)
     if(gh_adx_inspect(q->event_prefetch_decoder,&info)||gh_adx_tell(q->event_prefetch_decoder)!=0)
         return fail(s,0x373fa0,GH_BGM_NATIVE);
     /* 373FA0/32B188 set cold pause/priming before 32BB48 associates archive
-     * member0. The native decoder already borrows this complete owned member. */
+     * member. The native decoder already borrows this complete owned member. */
     uint32_t capacity=(q->work_bytes-2u*0x40c0u-0x124u)/2048u;
     uint32_t sectors=(2u*info.sample_rate/32u*info.channels*18u)/2048u;
     if(sectors>capacity)sectors=capacity;
@@ -354,21 +354,25 @@ gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
 {
     if(!own(s)||!source||source->registry!=s->registry||source->disc!=s->disc)return GH_BGM_ARGUMENT;
     const uint8_t *row=source->afd_row;
-    if(source->archive_id!=0x81 || source->row_index || u16(row+2) || row[10]!=1 || row[11]!=9 ||
+    const uint32_t row_index=source->row_index;
+    const uint16_t member=u16(row+2);
+    if(source->archive_id!=0x81 || member!=row_index || row[10]!=1 || row[11]!=9 ||
        row[15]!=3 || row[16] || u16(row+4) || u16(row+8)!=48000 || !row[12])
         return fail(s,0x373158,GH_BGM_UNSUPPORTED);
     uint64_t offset,size;
-    if(gh_audio_event_afs_member(s->registry,source->archive_owner,0,&offset,&size)||
+    if(gh_audio_event_afs_member(s->registry,source->archive_owner,member,&offset,&size)||
        offset!=source->member_offset||size!=source->member_size)
         return fail(s,0x32bb48,GH_BGM_BOUNDS);
-    /* The channel ID is shared by the admitted single-member event archives.
-     * Verify the indexed member belongs to the admitted disc asset before
-     * looking up or retiring an earlier request on the same channel. */
+    /* Authenticate the channel 1 asset and its original member span. */
     const char *path;
+    uint64_t authored_offset=0x800;
+    uint16_t authored_member=0;
     switch(source->member_size){
     case 0x21ae3a: path="se/ev/ev01.afs";break;
     case 0x4e303a: path="se/ev/ev02.afs";break;
     case 0x5ceb3a: path="se/ev/ev04.afs";break;
+    case 0x201d06: path="se/ev/ev05.afs";break;
+    case 0x142462: path="se/ev/ev05.afs";authored_offset=0x202800;authored_member=1;break;
     case 0x18008e: path="se/ev/ev1a.afs";break;
     case 0x1ad45a: path="se/ev/ev1b.afs";break;
     default:return fail(s,0x32bb48,GH_BGM_DISC);
@@ -376,13 +380,15 @@ gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
     gh_disc_entry archive;
     size_t archive_index;
     if(gh_disc_find(s->disc,path,&archive_index)||archive_index!=source->archive_index||
-       gh_disc_entry_at(s->disc,archive_index,&archive)||source->member_offset!=0x800||
+       gh_disc_entry_at(s->disc,archive_index,&archive)||member!=authored_member||
+       source->member_offset!=authored_offset||
        source->member_offset+source->member_size>archive.size)
         return fail(s,0x32bb48,GH_BGM_DISC);
     for(unsigned i=0;i<16;++i){
         request *pending=&s->requests[i];
         if(!pending->occupied||pending->linked)continue;
-        if(pending->source_loaded && u32(pending->scalar+0x8c)==0x81 && pending->offset==source->member_offset &&
+        if(pending->source_loaded && u32(pending->scalar+0x8c)==0x81 &&
+           u32(pending->scalar+0x90)==row_index && pending->offset==source->member_offset &&
            pending->size==source->member_size && !memcmp(pending->row,row,32))
             return pending->event_prefetch_decoder?complete_event_prefetch(s,pending):fail(s,0x329438,GH_BGM_UNSUPPORTED);
         return fail(s,s->frontier?s->frontier:0x2d2228,GH_BGM_BUSY);
@@ -390,7 +396,7 @@ gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
     /* 2D22B0 finds a linked request by archive and row, never by room track. */
     for(int i=s->head;i>=0;i=s->requests[i].next){
         request *old=&s->requests[i];
-        if(u32(old->scalar+0x8c)==0x81 && u32(old->scalar+0x90)==0){
+        if(u32(old->scalar+0x8c)==0x81 && u32(old->scalar+0x90)==row_index){
             if(!old->event_prefetch_decoder||old->player||u32(old->scalar+0x98)!=1)
                 return fail(s,0x2ccb10,GH_BGM_UNSUPPORTED);
             gh_bgm_status status=clear_stream(s,old);
@@ -426,7 +432,7 @@ gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
        memcmp(encoded+0x22,"(c)CRI",6))goto release;
     next.adx_channels=encoded[7];next.adx_version=encoded[18];next.adx_flags=encoded[19];
     next.occupied=next.source_loaded=1;
-    w32(next.scalar+0x8c,0x81);w32(next.scalar+0x94,4);
+    w32(next.scalar+0x8c,0x81);w32(next.scalar+0x90,row_index);w32(next.scalar+0x94,4);
     w32(next.scalar+0x98,1);w32(next.scalar+0x9c,UINT32_MAX);
     w32(next.scalar+0x48,1);w32(next.scalar+0x74,0x81);w32(next.scalar+0x4c,1);
     w32(next.scalar+0x58,row[10]);w32(next.scalar+0x54,row[11]&3);

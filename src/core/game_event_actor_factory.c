@@ -94,7 +94,10 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
     const int ev1b_prop = ((request->actor_index == 5 && source == 0x338) ||
         (request->actor_index == 6 && source == 0x3bc)) && request->data &&
         request->data->components && request->data->components->event_no == 0x1b;
-    if ((!ev04_actor && !ev1b_el40 && !packed_enemy && !ev1b_prop &&
+    const int ev05_actor=request->data&&request->data->components&&request->info&&
+        request->data->components->event_no==5&&!request->info[4]&&
+        gh_event_actor_ev05_source_kind(request->actor_index,source);
+    if ((!ev04_actor && !ev05_actor && !ev1b_el40 && !packed_enemy && !ev1b_prop &&
         (source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60d) &&
         (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x634 && source != 0x639 &&
         source != 0x641 && source != 0x642 && source != 0x646 && source != 0x647 &&

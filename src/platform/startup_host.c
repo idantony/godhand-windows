@@ -1294,10 +1294,12 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     }else if(address==0x2c1618){
         const gh_scene_at_step_callbacks r100={.context=&h->r100_exit,.spawn=gh_r100_exit_spawn_001f7858};
         const gh_scene_at_step_callbacks r105={.context=h->services,.spawn=gh_game_services_r105_jump_offer};
+        const gh_scene_at_step_callbacks r101={.context=h->services,.spawn=gh_game_services_r101_action_offer};
         const gh_scene_at_step_callbacks r102={.context=h->services,.spawn=gh_game_services_r102_action_offer};
         const gh_scene_at_step_callbacks r103={.context=h->services,.spawn=gh_game_services_r103_action_offer};
         const gh_scene_at_step_callbacks *callbacks=h->work.room==0x100?&r100:
-            h->work.room==0x105?&r105:h->work.room==0x102?&r102:h->work.room==0x103?&r103:NULL;
+            h->work.room==0x105?&r105:h->work.room==0x101?&r101:h->work.room==0x102?&r102:
+            h->work.room==0x103?&r103:NULL;
         int original_return;
         gh_scene_at_status e=gh_scene_at_step_native_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,
             &h->work,callbacks,&original_return,frontier);
@@ -1794,6 +1796,13 @@ static gh_action_step_status room_r101_action(void *context,uint32_t entry,void 
 {
     gh_startup_host *h=context;
     if(entry==0x2dc1d0)return gh_game_services_player_interact_action_002dc1d0(h->services,argument,frontier);
+    if(entry==0x2c2138)return gh_game_services_r101_gate_action(h->services,argument,frontier);
+    if(entry==0x2c2078){
+        gh_game_services_scene_view scene;
+        if(gh_game_services_get_scene_view(h->services,&scene))return GH_ACTION_STEP_ARGUMENT;
+        const gh_game_door_bindings bindings=scene_door_bindings(h,&scene);
+        return gh_game_services_room_jump_action(h->services,&bindings,argument,frontier);
+    }
     *frontier=entry;
     return GH_ACTION_STEP_UNSUPPORTED;
 }

@@ -54,7 +54,8 @@ struct gh_game_cockpit {
   gh_bundle_entry image;
   uint32_t job;
   uint8_t stage;
- } ticket,middle_boss;
+ } ticket,middle_boss,boss;
+ gh_id_entry *boss_entries[5];
  const gh_title_player_view *middle_boss_actors[5];
  gh_id_base *middle_boss_bars[5];
  gh_id_base *middle_boss_draw_order[5];
@@ -424,6 +425,94 @@ void gh_game_cockpit_forget_middle_boss(gh_game_cockpit *s,const gh_title_player
  for(unsigned i=0;i<5;++i)if(s->middle_boss_actors[i]==actor){
   s->middle_boss_actors[i]=NULL;s->middle_boss_bars[i]=NULL;
  }
+}
+
+/* R104's single boss widget is Cockpit+1DC0, bank 3. */
+gh_id_error gh_game_cockpit_load_boss_0013c818(gh_game_cockpit *s,
+ gh_id_state *manager,gh_dvd_jobs *dvd,gh_heap *heap)
+{
+ static const char path[]="id/idbossstage.idd";
+ const unsigned widget=0x1dc0;
+ if(!s||!s->ready||!manager||s->manager!=manager||!dvd||!dvd->disc||!heap)return GH_ID_ARGUMENT;
+ s->frontier=0;
+ if(s->boss.stage&&(s->boss.manager!=manager||s->boss.dvd!=dvd||s->boss.heap!=heap))
+  return room_id_error(s,0x13c818,GH_ID_ARGUMENT);
+ if(!s->boss.stage){
+  if(manager->pair[3].bound)return room_id_error(s,0x2accf8,GH_ID_BUSY);
+  size_t index;
+  gh_disc_entry entry;
+  if(gh_disc_find(dvd->disc,path,&index)||gh_disc_entry_at(dvd->disc,index,&entry))
+   return room_id_error(s,0x2acfa8,GH_ID_NOT_FOUND);
+  s->boss.job=gh_dvd_read_alloc(dvd,path,&s->boss.resource,heap,0,0,0,0);
+  if(!s->boss.job)return room_id_error(s,0x200cb0,GH_ID_MEMORY);
+  s->boss.manager=manager;
+  s->boss.dvd=dvd;
+  s->boss.heap=heap;
+  s->boss.image=(gh_bundle_entry){.bytes=s->boss.resource.pointer,.size=(size_t)entry.size};
+  w32(s,widget+0x98,s->boss.job);
+  s->boss.stage=1;
+ }
+ if(s->boss.stage==1){
+  while(gh_dvd_check(dvd,s->boss.job))
+   if(gh_dvd_pump(dvd))return room_id_error(s,0x201160,GH_ID_FORMAT);
+  if(dvd->failed_id==s->boss.job)return room_id_error(s,0x201160,GH_ID_FORMAT);
+  if(gh_id_set_data_002accf8(manager,3,&s->boss.image))
+   return room_id_error(s,0x2accf8,GH_ID_FORMAT);
+  s->boss.stage=2;
+ }
+ gh_id_base *id=base(s,widget);
+ if(!id->owns_run){
+  if(s->owned_count>=BASES)return room_id_error(s,0x2a9ea0,GH_ID_CAPACITY);
+  int original;
+  gh_id_error error=gh_id_base_initialize_002a9ea0(s->runtime,id,3,0,rnd,s->random,&original);
+  if(id->owns_run)s->owned[s->owned_count++]=id;
+  if(error)return room_id_error(s,id->first_unported?id->first_unported:0x2a9ea0,error);
+  if(original!=1)return room_id_error(s,0x2a9ea0,GH_ID_NOT_FOUND);
+ }
+ TRY(restart(s,widget));
+ id->playing=1;
+ w32(s,widget+0x94,1);
+ w32(s,widget+0xa0,0x20000000);
+ w32(s,widget+0xa4,0x3f800000);
+ w16(s,widget+0xb4,0);
+ w32(s,widget+0xb8,0);
+ for(unsigned i=0;i<5;++i){
+  gh_id_entry *entry;
+  gh_id_error error=gh_id_base_get_work_002aa410(s->runtime,id,i,&entry,NULL);
+  if(error||!entry)return room_id_error(s,0x2aa410,error?error:GH_ID_NOT_FOUND);
+  s->boss_entries[i]=entry;
+ }
+ return GH_ID_OK;
+}
+
+static gh_id_error release_boss(gh_game_cockpit *s,int compact)
+{
+ if(!s->boss.stage)return GH_ID_OK;
+ if(gh_dvd_check(s->boss.dvd,s->boss.job)&&!gh_dvd_cancel(s->boss.dvd,s->boss.job))
+  return room_id_error(s,0x201018,GH_ID_BUSY);
+ gh_id_base *id=base(s,0x1dc0);
+ if(id->owns_run){
+  int original,freed;
+  gh_id_error error=compact?gh_id_base_detach_for_compaction(s->runtime,id):
+   gh_id_base_release_002aa078(s->runtime,id,&original,&freed);
+  if(error||(!compact&&!freed))return room_id_error(s,0x2aa078,error?error:GH_ID_BUSY);
+  for(unsigned i=0;i<s->owned_count;++i)if(s->owned[i]==id){
+   --s->owned_count;
+   memmove(s->owned+i,s->owned+i+1,(s->owned_count-i)*sizeof(*s->owned));
+   break;
+  }
+ }
+ if(s->boss.stage>=2)s->boss.manager->pair[3]=(gh_id_pair){0};
+ if(gh_heap_release(s->boss.heap,s->boss.resource))return room_id_error(s,0x30ee40,GH_ID_MEMORY);
+ memset(&s->boss,0,sizeof(s->boss));
+ memset(s->boss_entries,0,sizeof(s->boss_entries));
+ w32(s,0x1dc0+0x94,0);
+ return GH_ID_OK;
+}
+
+gh_id_error gh_game_cockpit_abort_boss(gh_game_cockpit *s)
+{
+ return s?release_boss(s,0):GH_ID_ARGUMENT;
 }
 
 static gh_id_error release_middle_boss(gh_game_cockpit *s,int compact)
@@ -1559,7 +1648,14 @@ gh_id_error gh_game_cockpit_move_00140e58(gh_game_cockpit*s,const gh_boot_work*w
   if(!(u32(w+0x5d8)&0x40000)){s->update_stage=10;}
   else{if(u32(s->fields+0x15bc)!=0xffff){gh_id_entry*a,*b;TRY(gh_game_cockpit_entry_at(s,0x15b0,&a));TRY(gh_game_cockpit_entry_at(s,0x15b4,&b));uint32_t n=u32(s->fields+0x15bc)&0xffff;a->seed=(a->seed&0xffff0000)|n;b->seed=(b->seed&0xffff0000)|n;}s->update_stage=1;}
  }
- if(s->update_stage==10){/* Actual13C808 constructor-established resourceNULL. */if(!(s->hud_cold_known&1)||u32(s->fields+0x1dc0+0x94)||base(s,0x1dc0)->owns_run)return frame_stop(s,0x13c950);s->update_stage=11;}
+ if(s->update_stage==10){
+  /* Original 13C950 returns for a cold widget or when the boss pointer is NULL. */
+  const unsigned widget=0x1dc0;
+  if(!(s->hud_cold_known&1)||
+     (s->boss.stage?(s->boss.stage!=2||!base(s,widget)->owns_run||u32(s->fields+widget+0x9c)):
+      (u32(s->fields+widget+0x94)||base(s,widget)->owns_run)))return frame_stop(s,0x13c950);
+  s->update_stage=11;
+ }
  if(s->update_stage==11){TRY(middle_boss_move(s,work_state,c));s->update_stage=12;}
  if(s->update_stage==12){if(!(s->hud_cold_known&4)||u32(s->fields+0x2220+0x94)||base(s,0x2220)->owns_run)return frame_stop(s,0x13e970);s->update_stage=13;}
  if(s->update_stage==13){if(u32(s->fields+0x1a20+0xb0)){unsigned state=s->fields[0x1a20+0xb8];if(!s->gameplay_error&&state>=1&&state<=5)TRY(gh_game_cockpit_tutorial_move_001471f0(s));TRY(gameplay_move_base(s,0x1a20,c));}s->update_stage=14;}
@@ -2185,6 +2281,7 @@ gh_id_error gh_game_cockpit_room_quit_00141628(gh_game_cockpit*s,gh_core_save_vi
  /*13E400,13C930,13F510 then13E908,147188,1434A8->Heat141CE8. */
  TRY(release_ticket(s,1));
  TRY(release_middle_boss(s,1));
+ TRY(release_boss(s,1));
  w32(s,0x1910+0x90,0);unsigned o=0x1dc0;w32(s,o+0xb8,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);w32(s,o+0xa0,0);
  o=0x1e90;for(unsigned i=0;i<5;i++){w32(s,o+0x260-4*i,0);w32(s,o+0x2d0-4*i,0x3f800000);w32(s,o+0xb8-4*i,0);}s->fields[o+0x384]=0;w32(s,o+0xa0,0);s->fields[o+0x358]=0;
  o=0x2220;if(u32(s->fields+o+0x94)){s->frontier=0x2aa078;return GH_ID_UNSUPPORTED;}w32(s,o+0xa0,0);w32(s,o+0xa4,0x3f800000);w32(s,o+0x94,0);w32(s,o+0x9c,0);

@@ -500,6 +500,43 @@ static gh_scene_ui_status event_caption_start_002b2d88(uint8_t *p, gh_scene_mess
     return GH_SCENE_UI_OK;
 }
 
+/* R104's English message 1000 begins with SkipOff and an original
+ * cut-sync command. At cut 0 it leaves the message window unopened. */
+static gh_scene_ui_status r104_wait_caption_prefix(uint8_t *p,
+    gh_scene_message_sources *source,const gh_boot_work *work,gh_event_timing *timing,
+    uint16_t *command,int *waiting,uint32_t *frontier)
+{
+    *waiting=0;
+    if(work->room!=0x104||!timing||timing->event_number!=5||
+       half(p+0x64-0xc)!=0x1000)return GH_SCENE_UI_OK;
+    uint16_t word_at;
+    if(*command==0x8702&&source->cursor_8c==0){
+        if(!code_at(source,2,&word_at)||word_at!=0x5a)return GH_SCENE_UI_BOUNDS;
+        put(p+0x34-0xc,1);
+        source->cursor_8c=4;
+        if(!code_at(source,4,command))return GH_SCENE_UI_BOUNDS;
+    }
+    if(*command!=0xe403||source->cursor_8c!=4)return GH_SCENE_UI_OK;
+    uint16_t begin,end;
+    if(!code_at(source,6,&begin)||!code_at(source,8,&end)||begin!=10||end!=10)
+        return GH_SCENE_UI_BOUNDS;
+    *frontier=0x2b2bd8;
+    if(word((const uint8_t *)work+0x5e4)&0x20000000u){
+        const uint8_t *env;
+        gh_scene_ui_status status=event_message_env(timing,&env);
+        if(status)return status;
+        if(end>=timing->count)return GH_SCENE_UI_BOUNDS;
+        p[0x44-0xc]=(uint8_t)begin;
+        p[0x4c-0xc]=(uint8_t)end;
+        /* EV05 cut 10 has a nonzero primary camera, so REL6980 stores 2. */
+        ((gh_event_cut_timing *)timing->allocation.pointer)[end].kind=2;
+        *waiting=word(env+0x10)<begin;
+        if(*waiting)return GH_SCENE_UI_OK;
+    }
+    source->cursor_8c=10;
+    return code_at(source,10,command)?GH_SCENE_UI_OK:GH_SCENE_UI_BOUNDS;
+}
+
 static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_message_sources *source,
     gh_game_scene_ui *ui, const gh_boot_work *work, gh_event_timing *timing,
     const unsigned *slots, unsigned count, uint32_t *frontier)
@@ -534,6 +571,11 @@ static gh_scene_ui_status opening(gh_scene_message_block *block, gh_scene_messag
         p[1] = 1; /* 2B2580 is the original empty phase-0 initializer. */
         if (same_group >= 2) goto finish;
         uint16_t command=half(source->primary.bytes+source->cursor_8c);
+        int r104_waiting;
+        gh_scene_ui_status r104_caption=r104_wait_caption_prefix(p,source,work,timing,
+            &command,&r104_waiting,frontier);
+        if(r104_caption)return r104_caption;
+        if(r104_waiting)goto finish;
         const int timed_caption = command == 0xe705 && ev1b_timed_caption(source, work, timing);
         if (timed_caption) {
             int waiting;

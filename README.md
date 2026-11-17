@@ -228,6 +228,19 @@ with Gene alive at tick 9,000. Direct3D presents 462 frames across the first
 two attacks with zero renderer errors. The complete full-HP fight remains in
 development.
 
+The next fixed controller replay activates Heat after both Shockwaves.
+Heat expiry hits both bosses, and a later Triangle hits each twice. At
+tick 9,650 the bosses have 450 and 383 HP, with Gene at 7 HP. A separate
+fixed West route records nine original defeats by tick 10,208, with Gene at
+1 HP. The active West gate calls for twelve defeats.
+
+Direct3D 11 now presents the original R104 EV05 intro from an original-format
+R104 test save prepared before launch. After the original fade clears, the
+first shot shows Gene facing the boss. The fixed run renders through camera
+cut 9 with zero renderer, GPU, effect or window errors. The native CPU replay
+enters cut 10. Natural entry into R104 and player control after the intro
+remain in development.
+
 Project evidence tools verify actual instruction bytes, calls, imports and
 static memory sites. Their generated reports remain private; see
 [Evidence tools / 证据工具](docs/EVIDENCE_TOOLS.md).
@@ -469,6 +482,16 @@ R103 已运行原版增援并进入双头目战。手柄回放验证了强化启
 第一发轮盘冲击波各造成 80 点伤害。第二发冲击波及其击飞碰撞后，两名头目分别剩余
 412 和 487 HP，Gene 在第 9,000 帧仍然存活。Direct3D 呈现了前两招的 462 帧，
 渲染器无报错。完整血量的双头目实战仍在验证。
+
+下一条固定手柄回放在两发冲击波之后启动强化。强化耗尽时命中两名头目，随后三角键
+对两名头目各命中两次。第 9,650 帧两名头目剩余 450 和 383 HP，Gene 剩余 7 HP。
+另一条西区固定回放到第 10,208 帧已登记九次原版击倒，Gene 剩余 1 HP。
+当前西区出口条件要求十二次击倒。
+
+Direct3D 11 已能从启动前准备的原版格式 R104 测试存档呈现原版 EV05 过场。
+淡入结束后，首个镜头显示 Gene 面向头目。固定回放呈现到编号 9 的镜头，渲染器、
+GPU、特效和窗口均无报错。原生 CPU 回放进入编号 10 的镜头。
+自然进入 R104 和过场后的玩家操作仍在开发。
 
 ### 构建与运行
 

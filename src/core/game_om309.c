@@ -66,7 +66,7 @@ static gh_scene_placement_status initialize_fragment_cylinder(gh_om309_state*s,g
  if(s->stage==2){
   half(p,0x548,1);half(p,0x54a,1);
   gh_actor_model *model=&s->common.model;
-  const int layered=kind==0x30b||kind==0x30c||kind==0x331;
+  const int layered=kind==0x30b||kind==0x30c||kind==0x331||kind==0x332;
   if(layered){
    for(unsigned i=0;i<model->script.mesh_count;++i){
     const gh_actor_node_packets *node;
@@ -121,6 +121,13 @@ gh_scene_placement_status gh_om331_initialize_0019c670(gh_om309_state *s,gh_om_o
  const gh_om_initializer_bindings *b,int *out)
 {
  return initialize_fragment_cylinder(s,o,b,out,0x331,0x650,0x660);
+}
+
+/* Factory 314F60 uses this original Init for authored type 0332. */
+gh_scene_placement_status gh_om332_initialize_0019c670(gh_om309_state *s,gh_om_object *o,
+ const gh_om_initializer_bindings *b,int *out)
+{
+ return initialize_fragment_cylinder(s,o,b,out,0x332,0x650,0x660);
 }
 
 gh_scene_placement_status gh_om309_abort(gh_om309_state*s){return gh_om303_abort(s);}

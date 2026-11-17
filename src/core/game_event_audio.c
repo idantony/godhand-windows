@@ -72,13 +72,18 @@ gh_game_event_status gh_event_audio_channel1_bind_lifecycle(gh_event_audio_chann
     return GH_EVENT_OK;
 }
 
-static gh_game_event_status prefetch_single_row(gh_event_audio_channel1 *s,
+static gh_game_event_status prefetch_verified_row(gh_event_audio_channel1 *s,
     uint32_t rows,uint32_t row_index,const uint8_t *row,uint32_t key,uint32_t *frontier)
 {
-    /* Only the verified single-row call can currently resume without a
-     * per-row cursor when a provider reaches a later boundary. */
-    if((s->event_no!=1 && s->event_no!=2 && s->event_no!=4 && s->event_no!=0x1a && s->event_no!=0x1b) ||
-       rows!=1 || row_index || key!=UINT32_MAX || row[0x10]){
+    /* Original EV05 has exactly one prefetch at each request key, even
+     * though its AFD owns two members (cut 0 and cut 12). */
+    const int single=(s->event_no==1||s->event_no==2||s->event_no==4||s->event_no==0x1a||
+        s->event_no==0x1b)&&rows==1&&!row_index&&key==UINT32_MAX;
+    const int ev05=s->event_no==5&&rows==2&&
+        ((!row_index&&key==UINT32_MAX&&row[0x11]==0)||
+         (row_index==1&&key==11&&row[0x11]==12))&&
+        row[2]==row_index&&!row[3]&&!row[0x12];
+    if((!single&&!ev05)||row[0x10]){
         *frontier=0x2d1c78;
         return GH_EVENT_UNSUPPORTED;
     }
@@ -156,7 +161,7 @@ gh_game_event_status gh_event_audio_channel1_service(void *context,gh_event_audi
                 continue; /* CutSet ignores the original return from Start. */
             }
             if(row[0x12]?row[0x12]==key:row[0x11]==key+1u)
-                return prefetch_single_row(s,rows,i,row,key,frontier);
+                return prefetch_verified_row(s,rows,i,row,key,frontier);
         }
         return GH_EVENT_OK;
     }

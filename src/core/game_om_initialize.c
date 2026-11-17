@@ -7,6 +7,7 @@
 #include <string.h>
 #include <math.h>
 #include "game_om_base.h"
+#include "game_scene_at_geometry.h"
 #include "frame_state.h"
 #include "game_camera.h"
 static uint32_t w(const uint8_t*p){uint32_t v;memcpy(&v,p,4);return v;}static void put(uint8_t*p,size_t o,uint32_t v){memcpy(p+o,&v,4);}
@@ -36,7 +37,7 @@ static gh_scene_placement_status select_placement_texture(gh_om_init_state *s,
 gh_scene_placement_status gh_om_common_initialize_001b6fb8(gh_om_init_state*s,gh_om_object*o,const gh_om_initializer_bindings*b,int*out){
  if(!s||!o||!b||!out||!b->work||!b->packet_heap||!b->fog_rgb||!o->registered||!o->view.bytes||o->view.size<0x5f8||!o->resource.bytes||!o->resource.file_extent_known||!o->resource.file_extent||o->resource.file_extent>o->resource.size)return GH_PLACE_ARGUMENT;
  int runtime=o->runtime_created&&(o->runtime_kind==0x3eb||o->runtime_kind==0x376||o->runtime_kind==0x363||o->runtime_kind==0x353||o->runtime_kind==0x3be||o->runtime_kind==0x3d6||o->runtime_kind==0x3da||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1)&&!o->source.bytes;
- if(!runtime&&!gh_om_fragment_profile_for(o->source.type)&&(o->source.type!=0x300&&o->source.type!=0x303&&o->source.type!=0x304&&o->source.type!=0x305&&o->source.type!=0x307&&o->source.type!=0x30a&&o->source.type!=0x30e&&o->source.type!=0x310&&o->source.type!=0x311&&o->source.type!=0x313&&o->source.type!=0x317&&o->source.type!=0x318&&o->source.type!=0x31a&&o->source.type!=0x320&&o->source.type!=0x322&&o->source.type!=0x323&&o->source.type!=0x324&&o->source.type!=0x326&&o->source.type!=0x330&&o->source.type!=0x331&&o->source.type!=0x333&&o->source.type!=0x338&&o->source.type!=0x339&&o->source.type!=0x351&&o->source.type!=0x33f&&o->source.type!=0x346&&o->source.type!=0x354&&o->source.type!=0x355&&o->source.type!=0x356&&o->source.type!=0x357&&o->source.type!=0x35d&&o->source.type!=0x382&&o->source.type!=0x308&&o->source.type!=0x309&&o->source.type!=0x30b&&o->source.type!=0x30c&&o->source.type!=0x3d3&&o->source.type!=0x3d4&&o->source.type!=0x3d5&&o->source.type!=0x41c))return GH_PLACE_ARGUMENT;
+ if(!runtime&&!gh_om_fragment_profile_for(o->source.type)&&(o->source.type!=0x300&&o->source.type!=0x303&&o->source.type!=0x304&&o->source.type!=0x305&&o->source.type!=0x307&&o->source.type!=0x30a&&o->source.type!=0x30e&&o->source.type!=0x310&&o->source.type!=0x311&&o->source.type!=0x313&&o->source.type!=0x317&&o->source.type!=0x318&&o->source.type!=0x31a&&o->source.type!=0x320&&o->source.type!=0x322&&o->source.type!=0x323&&o->source.type!=0x324&&o->source.type!=0x326&&o->source.type!=0x330&&o->source.type!=0x331&&o->source.type!=0x332&&o->source.type!=0x333&&o->source.type!=0x338&&o->source.type!=0x339&&o->source.type!=0x351&&o->source.type!=0x33f&&o->source.type!=0x346&&o->source.type!=0x354&&o->source.type!=0x355&&o->source.type!=0x356&&o->source.type!=0x357&&o->source.type!=0x35d&&o->source.type!=0x382&&o->source.type!=0x308&&o->source.type!=0x309&&o->source.type!=0x30b&&o->source.type!=0x30c&&o->source.type!=0x3d3&&o->source.type!=0x3d4&&o->source.type!=0x3d5&&o->source.type!=0x41c))return GH_PLACE_ARGUMENT;
  if(!runtime&&(!o->source.bytes||o->source.size<0x2e))return GH_PLACE_BOUNDS;
  if(runtime&&w(o->view.bytes+0x5e0))return fail(s,0x1b7de8,GH_PLACE_UNSUPPORTED);
  *out=0;s->frontier=0;
@@ -165,6 +166,24 @@ gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *
  }
  s->frontier=0;
  *out=1;
+ return GH_PLACE_OK;
+}
+
+gh_scene_placement_status gh_om_r101_item_follow_001c2378(gh_om_init_state *s)
+{
+ if(!s||!s->object||!s->item_attachment_owner)return GH_PLACE_ARGUMENT;
+ const gh_title_player_view *root=&s->object->view;
+ const gh_actor_part *part=NULL;
+ if(!root->bytes||root->size<0x690||!root->alias_f0||!w(root->bytes+0x630)||
+    gh_actor_model_part_at(s->item_attachment_owner,w(root->bytes+0x634),&part))
+  return fail(s,0x1c2378,GH_PLACE_UNSUPPORTED);
+ float matrix[16],offset[3],position[4];
+ memcpy(matrix,part->bytes+0x80,sizeof(matrix));
+ memcpy(offset,root->bytes+0x640,sizeof(offset));
+ if(gh_scene_at_apply_world_001508d8(matrix,offset,position))
+  return fail(s,0x30a2b0,GH_PLACE_UNSUPPORTED);
+ memcpy(root->alias_f0,position,sizeof(position));
+ s->frontier=0;
  return GH_PLACE_OK;
 }
 

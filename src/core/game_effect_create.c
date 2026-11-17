@@ -1982,6 +1982,62 @@ static void construct_esp_base(uint8_t*p,unsigned type,uint32_t vtable){
  const unsigned unit[]={0x188,0x18c,0x190,0x194,0x1f8,0x1fc,0x200,0x204,0x210,0x240};for(unsigned i=0;i<sizeof(unit)/sizeof(unit[0]);i++)ww(p+unit[i],0x3f800000);
  half(p+0x238,0xffff);p[0x246]=p[0x23e]=p[0x23f]=p[0x245]=1;vf0(p+0x280);vf0(p+0x290);ww(p+0x11c,0x06000000);ww(p+0xf0,vtable);p[0x102]=(uint8_t)type;
 }
+/* The verified EV05 EL10 sprite rows differ in data, while all use the
+ * same original 302BB4 or 302B58 attachment selected by the EST flag. */
+static int ev05_el10_sprite_row(const uint8_t *record,unsigned part)
+{
+ static const struct {
+  uint32_t header,flags,texture,timing,children;
+  unsigned part;
+ } known[]={
+  {0x1eee8010u,0xc00000u,0x40701u,0x180000u,0x2u,4},
+  {0x1e308010u,0x800000u,0xff1d0001u,0x10000u,0x1u,29},
+  {0x1e3e8010u,0x800000u,0xff1d0001u,0x10000u,0x1u,29},
+  {0x1eee0010u,0xc00000u,0x61d0801u,0x0u,0x2u,29},
+  {0x1eee0010u,0x800000u,0x1d0801u,0x0u,0x2u,29},
+  {0x1eee0010u,0xc00000u,0x40801u,0x73000fu,0x2u,4},
+  {0x1eee0010u,0xc00000u,0x40801u,0xeb0000u,0x2u,4},
+  {0x1eee0010u,0xc00000u,0x40002u,0x3d0037u,0x2u,4},
+  {0x1eee0010u,0xc00000u,0x40201u,0x3c0032u,0x2u,4},
+  {0x1eee0010u,0x800000u,0x40201u,0x3e0032u,0x2u,4},
+  {0x1eae0010u,0xc00000u,0x11d0601u,0x0u,0x2u,29},
+  {0x1ee60010u,0xc00000u,0x11d0101u,0x40000u,0x2u,29},
+  {0x1eee0010u,0xc00000u,0x11d0101u,0x140012u,0x2u,29},
+  {0x1e3e0010u,0x800000u,0xff1d0003u,0x30002u,0x1u,29},
+  {0x1e3e8010u,0x800000u,0xff1d0002u,0x20001u,0x1u,29},
+  {0x1e3e8010u,0x800000u,0xff1d0001u,0x40003u,0x1u,29},
+  {0x1e308010u,0x800000u,0xff1d0001u,0x790078u,0x1u,29},
+  {0x1e3e8010u,0x800000u,0xff1d0001u,0x790078u,0x1u,29},
+  {0x1ebe8010u,0x800000u,0x1d0201u,0x7c0078u,0x1u,29},
+  {0x1eee0010u,0x800000u,0x31d0801u,0xffff0085u,0x2u,29},
+  {0x1eee8010u,0x800000u,0x61d0201u,0xffff0000u,0x2u,29},
+  {0x1e3e8010u,0x800000u,0xff1d0002u,0x10000u,0x1u,29},
+  {0x1eee0010u,0x800000u,0x41d0201u,0xffff0000u,0x2u,29},
+  {0x1eee8010u,0x800000u,0x21d0201u,0x560030u,0x2u,29},
+  {0x1eee8010u,0x800000u,0x61d0401u,0xffff0000u,0x2u,29},
+ };
+ if(w(record+0x134))return 0;
+ for(unsigned i=0;i<sizeof(known)/sizeof(known[0]);++i){
+  if(known[i].part==part&&known[i].header==w(record)&&known[i].flags==w(record+4)&&
+     known[i].texture==w(record+0xbc)&&known[i].timing==w(record+0xc0)&&
+     known[i].children==w(record+0x130))return 1;
+ }
+ return 0;
+}
+
+/* EST06's part -1 keeps the event actor for lifetime but uses the
+ * unattached cNode transform, as in 303A30 and 302B24. */
+int gh_effect_ev05_partless_is_bound(gh_effect_view row,const gh_title_player_view *actor,
+ const gh_title_player_view *selector)
+{
+ return row.bytes&&row.size==0x2f0&&actor&&!selector&&actor->bytes&&actor->size>=0x300&&
+    actor->original_vtable214==0x44b528u&&(w(actor->bytes+0x2fc)>>16)==0x610u&&
+    w(row.bytes)==0x1e3e8010u&&w(row.bytes+4)==0x00800000u&&
+    w(row.bytes+0xbc)==0xffff0001u&&w(row.bytes+0xc0)==0x00070003u&&
+    w(row.bytes+0x128)==0xff000100u&&w(row.bytes+0x130)==1u&&!w(row.bytes+0x134)&&
+    w(row.bytes+0x2a0)==0x06100000u;
+}
+
 int gh_effect_event_part_is_bound(gh_effect_view row,const gh_title_player_view *actor,
  const gh_title_player_view *selector){
  if(!row.bytes||row.size!=0x2f0||!actor||selector||!actor->bytes||actor->size<0x300||
@@ -2017,6 +2073,7 @@ int gh_effect_event_part_is_bound(gh_effect_view row,const gh_title_player_view 
    return flags==0x00c00000u&&part==10&&
       w(row.bytes)==0x1e3e8010u&&w(row.bytes+0xbc)==0x000a0004u&&
       w(row.bytes+0x130)==1&&w(row.bytes+0x134)==0;
+  if(kind==0x610&&ev05_el10_sprite_row(row.bytes,part))return 1;
   /* EV04 bank6 uses EL10 part29 with 302BB4's full part basis or
    * 302B58's root basis/part position. EL11 uses its own part4. */
   if((kind==0x610&&part==29)||(kind==0x611&&part==4)){
@@ -2043,6 +2100,17 @@ int gh_effect_event_part_is_bound(gh_effect_view row,const gh_title_player_view 
      w(row.bytes+0xbc)==0xff1d0001u&&w(row.bytes+0x130)==0x09000001u&&
      !w(row.bytes+0x134)&&(timing==0x000a0009u||timing==0x00070006u);
  }
+ /* EV05 EST05/06 retain the original ESP31 trail on EL10 part29. */
+ if(kind==0x610&&part==29&&flags==0x00800000u&&row.bytes[0x133]==0x1f&&
+    w(row.bytes)==0x1ebea010u&&w(row.bytes+0xbc)==0xff1d0001u&&
+    w(row.bytes+0x130)==0x1f000001u&&!w(row.bytes+0x134)){
+  const uint32_t timing=w(row.bytes+0xc0);
+  return timing==0x001f001eu||timing==0x004c004bu||timing==0x00010000u;
+ }
+ /* EV05 EST03 row 6 begins at authored cut 2/frame 242. */
+ if(kind==0x610&&part==2&&row.bytes[0x133]==7&&flags==0x00802000u)
+  return w(row.bytes)==0x1e3e0010u&&w(row.bytes+0xbc)==0xff020001u&&
+     w(row.bytes+0xc0)==0x00f300f2u&&w(row.bytes+0x130)==0x07000001u&&!w(row.bytes+0x134);
  /* EV02 cut12 EL59 trail, bank6 entry13 row1. */
  if(row.bytes[0x133]==0x20)
   return kind==0x659&&flags==0x00800000u&&!part&&
@@ -2143,6 +2211,7 @@ int gh_effect_emad_esp_is_bound(const gh_game_effects *owner,const gh_effect_esp
 static int sprite_binding(gh_effect_view row,const gh_title_player_view *actor,
  const gh_title_player_view *selector){
  return gh_esp14_nested_sprite_is_bound(row,actor,selector)||gh_effect_event_part_is_bound(row,actor,selector)||
+    gh_effect_ev05_partless_is_bound(row,actor,selector)||
         gh_effect_r101_door_break_part_is_bound(row,actor,selector);
 }
 
@@ -2370,7 +2439,9 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
  if((!bound&&(source.actor||source.selector))||((event_part||devil)?(!source.model||!source.part):(source.model||source.part))){*f=0x2faa88;return GH_EFFECT_UNSUPPORTED;}
  unsigned i;for(i=0;i<1024;i++)if(!(w(b->esp+0x100000+(i>>5)*4)&(UINT32_C(0x80000000)>>(i&31))))break;if(i==1024)return GH_EFFECT_OK;
  unsigned type=source.record.bytes[0x133];uint32_t vtable=esp_vtable(type);
- if(!vtable||(type==3&&!player_heat_root)||(type==0x1f&&!devil&&!(player_attachment&&attack_profile==0x00210000u&&
+ const int ev05_trail=type==0x1f&&(attack_profile==0x00050006u||attack_profile==0x00060006u)&&
+    gh_effect_event_part_is_bound(source.record,source.actor,source.selector);
+ if(!vtable||(type==3&&!player_heat_root)||(type==0x1f&&!devil&&!ev05_trail&&!(player_attachment&&attack_profile==0x00210000u&&
     (player_heat_active_row(r,8)||player_heat_active_row(r,9))))){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}
  const int paired_kick=attack&&attack_profile==0x00500058u&&r103_paired_kick_row(r);
  const int roulette_charge=player_attachment&&w(source.payload+0x18c)==0x00190000u&&
@@ -2523,6 +2594,13 @@ int gh_effect_esp_type7_record_bound(const gh_game_effects *e,const gh_effect_es
      w(r+0x130)==0x07000001u&&!w(r+0x134)&&
      !gh_effect_est_at_00306030(e,0,0xf,&est)&&est.size>=16+2*0x2f0&&
      w(est.bytes+4)==2&&r==est.bytes+16;
+ }
+ if(tag==0x00030006u){
+  gh_effect_view est;
+  /* Original EV05 cut 2/frame 242 distortion attaches to EL10 part 2. */
+  return e&&e->event_registered_41c&&gh_effect_event_part_is_bound(v->record,v->actor,v->selector)&&
+     !gh_effect_est_at_00306030(e,6,3,&est)&&est.size>=16+8*0x2f0&&
+     w(est.bytes+4)==8&&v->record.bytes==est.bytes+16+6*0x2f0;
  }
  if(tag==0x00150006u){
   gh_effect_view est;
@@ -2694,6 +2772,18 @@ gh_effect_status gh_effect_create_esp_unlink_002b5ec0(gh_game_effects*e,unsigned
 int gh_effect_esp_trail_is_bound(const gh_game_effects *e,const gh_effect_esp_view *v)
 {
  if(!v)return 0;
+ if(v->type==0x1f&&v->payload&&v->payload_size==0x400){
+  const uint32_t tag=w(v->payload+0x23a);
+  if((tag==0x00050006u||tag==0x00060006u)&&e&&e->event_registered_41c&&
+     gh_effect_event_part_is_bound(v->record,v->actor,v->selector)){
+   gh_effect_view est;
+   if(!gh_effect_est_at_00306030(e,6,tag>>16,&est)&&est.size>=16+8*0x2f0&&w(est.bytes+4)==8){
+    if(tag==0x00050006u)
+     return v->record.bytes==est.bytes+16+4*0x2f0||v->record.bytes==est.bytes+16+7*0x2f0;
+    return v->record.bytes==est.bytes+16+2*0x2f0;
+   }
+  }
+ }
  if(v->type==0x1f)return gh_effect_devil_esp_is_bound(e,v)||
     (gh_effect_player_attachment_esp_is_bound(e,v)&&w(v->payload+0x23a)==0x00210000u&&
      (player_heat_active_row(v->record.bytes,8)||player_heat_active_row(v->record.bytes,9)));

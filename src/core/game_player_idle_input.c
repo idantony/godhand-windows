@@ -237,7 +237,7 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  }
  if(mode==REACTION_INPUT&&!s->phase){
   if(!(h(p+0x3ac)&0x10u))return fail(s,0x123acc,GH_PLAYER_FRAME_ARGUMENT);
-  if((w(work+8)&7u)||p[0x621]||p[0x622]||p[0x623]||p[0x624])
+  if((w(work+8)&7u)||p[0x622]||p[0x623]||p[0x624])
    return fail(s,0x123acc,GH_PLAYER_FRAME_UNSUPPORTED);
   s->phase=4;
  }
@@ -301,7 +301,7 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  }
  if(s->phase==5){if(s->b.targets.player!=&b->player->view)return fail(s,0x129cc8,GH_PLAYER_FRAME_ARGUMENT);gh_player_target_status e=gh_player_small_object_gate_00129cc8(&s->b.targets,&pc);if(e)return target_status(s,e,pc);s->phase=6;}
  if(s->phase==6){/*2948C8's TWO original fields, notenemy_kept16. */if(w(b->init->enemies+0x5ac)||w(b->init->enemies+0x5b0))return fail(s,0x2948c8,GH_PLAYER_FRAME_UNSUPPORTED);s->phase=7;}
- if(s->phase==7&&mode==REACTION_INPUT)return done(s,out,0);
+ if(s->phase==7&&mode==REACTION_INPUT&&!p[0x621])return done(s,out,0);
  if(s->phase==7&&mode==IDLE_INPUT&&b->work->room==0x103&&p[0x623]&&
     !(w(p+0x15f4)&0x8000u)){
   /* 123938 selects Circle set 2 or back+Circle set 5. The 12C000
@@ -319,9 +319,9 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  }
  if(s->phase==7&&!p[0x623]&&!p[0x622]&&p[0x621]){
   int selected;
-  gh_player_frame_status e=gh_player_square_input_00123fc8(&b->player->view,b->save,b->init,0,&selected,&pc);
+  gh_player_frame_status e=gh_player_square_input_00123fc8(&b->player->view,b->save,b->init,mode!=IDLE_INPUT,&selected,&pc);
   if(e)return fail(s,pc,e);
-  if(selected)return done(s,out,1);
+  if(selected||mode==REACTION_INPUT)return done(s,out,selected);
  }
  if(s->phase==7){if(p[0x623]||p[0x621]){if(p[0x61f]&&num(p+0x608)>2.3561945f)return fail(s,0x12c000,GH_PLAYER_FRAME_UNSUPPORTED);if(w(p+0x15f4)&0x8000)return transition(s,out,12,p[0x623]?2:0);return fail(s,0x12c000,GH_PLAYER_FRAME_UNSUPPORTED);}if(w(work+8)&1){if(!p[0x2f4]&&p[0x2f5]==10)return done(s,out,0);return transition(s,out,10,0);}put(p+0x15f4,w(p+0x15f4)|0x400);if(p[0x627])return transition(s,out,6,0);if(p[0x61e]){if(!b->camera||!b->camera->constructed||!b->camera->identity)return fail(s,0x138f88,GH_PLAYER_FRAME_UNSUPPORTED);if(((uint32_t)b->camera->identity->mode&1u)&&w(b->camera->fields+0x520))return done(s,out,0);
   const gh_player_frame_status status=gh_game_player_directional_dodge_00124154(&b->player->view,&pc);

@@ -4,6 +4,32 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R104 intro presentation and later combat
+
+The Direct3D 11 replay loads an original-format R104 test save prepared
+before launch. The original fade clears at tick 607, and camera cut 9 is
+still playing at tick 1,630. The graphics replay presents 1,326 scene
+frames across the run with zero renderer, GPU, effect and window errors.
+The CPU replay enters original EV05 cut 10 at tick 1,664. Player control
+after the intro and the natural R101 gate into R104 remain in development.
+
+The R103 replay starts with both bosses at 597 HP. After two Shockwaves,
+Heat activates and its expiry hits both bosses. A Triangle follow-up
+hits each twice. The run reaches tick 9,650 with Gene at 7 HP and the
+bosses at 450 and 383 HP. The fixed R100 West route independently shows
+nine credited defeats by tick 10,208, with Gene alive at 1 HP. The active
+gate requires twelve defeats.
+
+Direct3D 11 回放从标题读取启动前准备的 R104 原版格式测试存档。第 607 帧淡入结束，
+到第 1,630 帧仍在播放原版编号 9 的镜头。整个回放共呈现 1,326 个场景帧，渲染器、
+GPU、特效和窗口均无报错。CPU 回放在第 1,664 帧进入 EV05 编号 10 的镜头。
+过场后的玩家操作与从 R101 自然进入 R104 仍在开发。
+
+R103 回放从两名 597 HP 的头目开始。两发冲击波之后启动强化，强化耗尽时命中两名头目。
+随后的三角键各命中两次。回放到第 9,650 帧，Gene 剩余 7 HP，两名头目分别剩余
+450 和 383 HP。独立的 R100 西区固定回放在第 10,208 帧已经登记九次击倒，Gene 仍有
+1 HP。当前出口条件要求十二次击倒。
+
 ## Joint R100 west and R103 combat
 
 The merged source passes the fixed original R100 west route and records an

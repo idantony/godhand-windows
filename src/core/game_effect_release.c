@@ -49,7 +49,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
        (actor&&view.actor&&view.actor->bytes==actor->bytes&&
         (gh_effect_devil_esp_is_bound(b->effects,&view)||
          (((kind==0&&(profile==0x002b0058u||profile==0x002c0058u||profile==0x001d0058u||
-                      profile==0x00500058u||profile==0x00460058u||profile==0x00290058u))||boss_strike)&&
+                      profile==0x00500058u||profile==0x00460058u||profile==0x00290058u||profile==0x005a0058u))||boss_strike)&&
           gh_effect_em00_attack_esp_is_bound(b->effects,&view))||
          /* 306200 stops EM03's interrupted attack trail. */
          (kind==0&&profile==0x002d0058u&&gh_effect_attack_esp_is_bound(b->effects,&view))||

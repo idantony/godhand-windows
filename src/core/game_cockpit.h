@@ -38,6 +38,8 @@ gh_id_error gh_game_cockpit_set_ticket_visible(gh_game_cockpit *,int visible);
 /* Host shutdown after cancelling the Scenario fibers, before the ID-pool watermark check. */
 gh_id_error gh_game_cockpit_abort_ticket(gh_game_cockpit *);
 /* Original R103 stage-1 arena HUD data. The room initially keeps it disabled. */
+gh_id_error gh_game_cockpit_load_boss_0013c818(gh_game_cockpit *,gh_id_state *,gh_dvd_jobs *,gh_heap *);
+gh_id_error gh_game_cockpit_abort_boss(gh_game_cockpit *);
 gh_id_error gh_game_cockpit_load_middle_boss_0013f330(gh_game_cockpit *,gh_id_state *,gh_dvd_jobs *,gh_heap *);
 gh_id_error gh_game_cockpit_show_middle_boss(gh_game_cockpit *);
 gh_id_error gh_game_cockpit_hide_middle_boss(gh_game_cockpit *);

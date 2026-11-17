@@ -5067,7 +5067,6 @@ static gh_actor_motion_status advance_rear_evade_00214de0(gh_enemy202_move *s,ui
         if(word(p+0x6e4)||word(p+0x6e8))return stop(s,0x26a938,GH_ACTOR_MOTION_UNSUPPORTED);
         if(word(p+0x6f0))return stop(s,0x1d04d0,GH_ACTOR_MOTION_UNSUPPORTED);
         if(word(p+0x708))return stop(s,0x1d05c0,GH_ACTOR_MOTION_UNSUPPORTED);
-        if(p[0x17c3])return stop(s,0x276468,GH_ACTOR_MOTION_UNSUPPORTED);
         gh_actor_motion_call *call=&s->substate67_motion;
         if(!call->active){
             const gh_object_view *resource=&enemy->entry.resource;
@@ -5077,7 +5076,8 @@ static gh_actor_motion_status advance_rear_evade_00214de0(gh_enemy202_move *s,ui
             put(p+0x604,0x3f19999a);
             put(p+0x600,0x40a00000);
             gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(
-                call,motion,&motion->b,word(resource->bytes+0xec),word(resource->bytes+0xf0),0,3,0x40,1);
+                call,motion,&motion->b,word(resource->bytes+0xec),word(resource->bytes+0xf0),0,3,
+                0x40u|(p[0x17c3]?2u:0u),1);
             if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
         }
         gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(call);

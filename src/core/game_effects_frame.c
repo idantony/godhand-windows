@@ -108,7 +108,8 @@ static gh_effect_status emitter_transform(gh_game_effects_frame*s,uint8_t*p,cons
     return fail(s,pc?pc:0x302bc8,GH_EFFECT_UNSUPPORTED);
  }else{
   if((v->actor&&!gh_effect_r103_slide_camera_emitter_is_bound(v)&&
-      !gh_effect_player_heat_root_emitter_is_bound(v))||v->part||
+      !gh_effect_player_heat_root_emitter_is_bound(v)&&
+      !gh_effect_ev05_partless_is_bound(v->record,v->actor,v->selector))||v->part||
      w(p+4)||w(p+8)||w(p+0x10))return fail(s,0x2b61b0,GH_EFFECT_UNSUPPORTED);
   status=gh_effect_node_world_matrix_native(s->b.storage.effects,1,s->emitter_index,
     s->emitter_serial,world,s->b.policy,&pc);
@@ -317,7 +318,8 @@ static gh_effect_status emitter_update(gh_game_effects_frame*s,unsigned i){
     !gh_effect_player_attachment_emitter_is_bound(&current)&&!gh_effect_devil_emitter_is_bound(s->b.storage.effects,&current)&&
   !gh_effect_emad_emitter_is_bound(s->b.storage.effects,&current)&&
   !gh_effect_player_heat_root_emitter_is_bound(&current)&&!gh_effect_r103_slide_camera_emitter_is_bound(&current)&&
-  (((current.actor||current.selector)&&!gh_esp14_nested_sprite_is_bound(current.record,current.actor,current.selector))||current.model||current.part))return fail(s,0x2b5cf0,GH_EFFECT_UNSUPPORTED);
+  (((current.actor||current.selector)&&!gh_esp14_nested_sprite_is_bound(current.record,current.actor,current.selector)&&
+    !gh_effect_ev05_partless_is_bound(current.record,current.actor,current.selector))||current.model||current.part))return fail(s,0x2b5cf0,GH_EFFECT_UNSUPPORTED);
   if(w(p+8))return fail(s,0x2b5e58,GH_EFFECT_UNSUPPORTED);if(w(p+4))return fail(s,0x2b5cf0,GH_EFFECT_UNSUPPORTED);unsigned off=(i>>5)*4;uint8_t*mask=s->b.storage.emitters+0x26020+off;put(mask,w(mask)|(UINT32_C(0x80000000)>>(i&31)));return GH_EFFECT_OK;}
   const int scaled=scaled_emitter_clock(s,p,r);
   float time,elapsed;
@@ -412,7 +414,7 @@ static gh_effect_status esps(gh_game_effects_frame*s){uint8_t*base=s->b.storage.
   status=provider->destroy_hidden(provider->context,&hidden,i,&f);
  }else status=gh_effect_create_esp_destroy_hidden_native(s->b.storage.effects,i,hidden.serial,&f);if(status)return fail(s,f?f:0x2fb0e8,status);put(base+0x100000+off,w(base+0x100000+off)&~mask);continue;}if(w(base+0x100080+off)&mask){put(base+0x100100+off,w(base+0x100100+off)|mask);continue;}gh_effect_esp_view v={0};if(gh_effect_create_esp_at(s->b.storage.effects,i,&v)||v.payload!=base+(size_t)i*0x400||!v.initialized||v.globals!=s->b.globals||!esp_update_class(&v))return fail(s,0x2fb2b0,GH_EFFECT_UNSUPPORTED);if(!s->esp_stage){/* Original2FB0E8 gate precedes VT+24=2FBE88; native pointer
  * tokens are resolved only through SAME creator metadata. */
- if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&!(gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector))&&!gh_effect_attack_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_knockdown_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_player_attachment_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_devil_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_enemy_light_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_emad_esp_is_bound(s->b.storage.effects,&v))||w(v.payload+0x114))
+ if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&!(gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||gh_effect_ev05_partless_is_bound(v.record,v.actor,v.selector)||gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector))&&!gh_effect_attack_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_knockdown_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_player_attachment_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_devil_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_enemy_light_esp_is_bound(s->b.storage.effects,&v)&&!gh_effect_emad_esp_is_bound(s->b.storage.effects,&v))||w(v.payload+0x114))
     return fail(s,0x2fb0e8,GH_EFFECT_UNSUPPORTED);
  if(v.actor&&(w(v.actor->bytes+0x250)&0x8000u))continue;
  uint32_t work_flags=w((const uint8_t*)s->b.work+0x5e4),config=w(v.payload+0x104);

@@ -200,6 +200,8 @@ gh_scene_at_status gh_game_services_r105_jump_offer(void *,
 gh_scene_step_status gh_game_services_roulette_command_00125f38(gh_game_services *,unsigned,uint32_t *);
 gh_action_step_status gh_game_services_player_interact_action_002dc1d0(gh_game_services *,void *,uint32_t *);
 gh_action_step_status gh_game_services_r105_scenery_action(void *,uint32_t,void *,uint32_t *);
+gh_scene_at_status gh_game_services_r101_action_offer(void *,const gh_scene_at_task_request *,uint32_t *);
+gh_action_step_status gh_game_services_r101_gate_action(gh_game_services *,void *,uint32_t *);
 /* Native R102 AT actions: ticket script 2C2138 and the default JMP2 door. */
 gh_scene_at_status gh_game_services_r102_action_offer(void *,const gh_scene_at_task_request *,uint32_t *);
 gh_action_step_status gh_game_services_r102_ticket_action(void *,uint32_t,void *,uint32_t *);

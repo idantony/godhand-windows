@@ -5,6 +5,9 @@
 #include <string.h>
 static uint32_t w(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}static void put(uint8_t*p,size_t o,uint32_t n){memcpy(p+o,&n,4);}
 static const gh_om_fragment_profile profiles[]={
+    /* 314E10 -> 19BE28/19BF10. The Move wrapper delegates to 1C29D0. */
+    {0x32f,0x920,0x314e10,0x4259d8,0x19beb0,0x19c030,
+     0,{0x3fb33333,0x400ccccd,0x3fb33333},8,0},
     /* 193468/193550, 19D9C0/19DAA8, 19DC48/19DD30. */
     {0x31b,0x800,0x3145c0,0x424790,0x1934f0,0x1936a8,
      0x3eab851f,{0x3f970a3d,0x3fce147b,0x3f2b851f},5,1},
