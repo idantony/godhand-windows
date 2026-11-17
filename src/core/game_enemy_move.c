@@ -6168,7 +6168,9 @@ static gh_actor_motion_status advance_substate6b_or_6c(gh_enemy202_move *s,uint8
     const unsigned stamp=half(p+0x640);
     const int opening_actor=(dependency==0x203&&stamp==19)||(dependency==0x200&&stamp==20);
     const int substate6c=s->pending_ai_pc==0x23c620;
-    const int r200_recovery=!substate6c&&!p[0x2f7]&&
+    /* Original 43AF40 selects 23C998 for EM1A. Its unarmed 6C
+     * bind uses the same rows as 6B with the original t1 zero. */
+    const int r200_recovery=(!substate6c||dependency==0x21a)&&!p[0x2f7]&&
         gh_enemy201_is_r200_entry(&runtime->entry->request,work->room);
     const int devil=!enemy&&!substate6c&&work->room==0x100&&dependency==0x220&&
         half(p+0x2fe)==0x220&&stamp==0xff&&!p[0x2f7];
@@ -6257,7 +6259,7 @@ static gh_actor_motion_status advance_substate6b_or_6c(gh_enemy202_move *s,uint8
             /* 43AC78 -> 23BDD8 draws the low bit once. */
             s->reaction_resource_offset=(uint16_t)(0x1f98+8*(random&1u));
         }else if(r200_recovery&&dependency==0x21a){
-            /* 43ACB0 -> 23BBF4 selects the reverse row order. */
+            /* 23BBF4 and 23C998 both draw once and reverse the row order. */
             s->reaction_resource_offset=(uint16_t)((random&1u)?0x13e8:0x13f0);
         }else if(west_em0a){
             /* 23C9F8 divides the original signed MT word. Negative remainders select B84. */

@@ -652,7 +652,8 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
   const uint8_t *a=root->bytes;
   if(a&&root->size>0x1650&&root->original_vtable214==0x4479c8&&
      h(a+0x2fe)==0x201&&w(a+0x564)==0x21a&&!h(a+0x640)&&!a[0x1650]&&
-     w(a+0x2f4)==0x00016b00u){
+     (w(a+0x2f4)==0x00016b00u||
+      (program==0x10&&w(a+0x2f4)==0x00016c00u))){
    const unsigned slot=program==0x10?12u:(unsigned)program-2u;
    const unsigned gain=program==0x10?0x007d007du:0x00780078u;
    const uint32_t offset=program==0x10?0x151d0u:program==0xb?0x12830u:0x101a0u;

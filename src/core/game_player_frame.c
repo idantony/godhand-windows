@@ -1105,14 +1105,15 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&s->pending_damage_kind==0x4e&&
      w(source->bytes+0x1870)==0x11&&w(take+0x4c)==30&&s->pending_damage==30&&
      !w(p+0x160c)&&override_bank==UINT32_MAX&&!half(take+0x44);
-   /* Original 21FB34 writes the timed EM1A Give3D with base power15.
-    * Its live 260C20 attack scale produces the observed power18 Take. */
+   /* The timed 21FB34 strike publishes Give3D/15 or Give37/20.
+    * 260C20 applies the live scale before Take reads power. */
    const int r200_em1a_timed=b->work->room==0x200&&source_kind==0x201&&dependency==0x21a&&!stamp&&
      source->size>=0x1884&&!source->bytes[0x1650]&&w(source->bytes+0x2f4)==0x00011500u&&
-     w(source->bytes+0x5f4)==1&&!w(source->bytes+0x1870)&&w(source->bytes+0x1874)==15&&
-     w(source->bytes+0x1878)==0x3d&&w(source->bytes+0x187c)==UINT32_MAX&&!half(source->bytes+0x1880)&&
-     override_bank==UINT32_MAX&&!half(take+0x44)&&s->pending_damage_kind==0x3d&&
-     w(take+0x4c)==18&&s->pending_damage==18&&!residual;
+     w(source->bytes+0x5f4)==1&&!w(source->bytes+0x1870)&&w(source->bytes+0x187c)==UINT32_MAX&&
+     !half(source->bytes+0x1880)&&override_bank==UINT32_MAX&&!half(take+0x44)&&!residual&&
+     s->pending_damage==(int32_t)w(take+0x4c)&&s->pending_damage_kind==w(source->bytes+0x1878)&&
+     ((s->pending_damage_kind==0x3d&&w(source->bytes+0x1874)==15&&s->pending_damage==18)||
+      (s->pending_damage_kind==0x37&&w(source->bytes+0x1874)==20&&s->pending_damage==24));
    if(source_kind!=0x202&&!arena_hit&&!em14_sphere&&!devil_melee&&!devil_combo&&!r104_strike&&!r200_em1a_timed)
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
    const int em0a_story=source->size>=0x16c8&&b->work->room==0x102&&stamp==2&&
