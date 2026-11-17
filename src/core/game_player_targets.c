@@ -168,7 +168,7 @@ static gh_player_target_status consider_focus(const gh_player_target_bindings *b
  return GH_PLAYER_TARGET_OK;
 }
 
-enum focus_mode { FOCUS_ORDINARY, FOCUS_FALLBACK, FOCUS_THROW, FOCUS_DROP_NEARBY };
+enum focus_mode { FOCUS_ORDINARY, FOCUS_FALLBACK, FOCUS_THROW, FOCUS_DROP_NEARBY, FOCUS_ROULETTE };
 
 static gh_player_target_status enemy_focus(const gh_player_target_bindings *b,
  const gh_game_init_state *init,const float origin[3],float heading,float range,float cone,
@@ -194,7 +194,7 @@ static gh_player_target_status enemy_focus(const gh_player_target_bindings *b,
   const unsigned kind=half(p+0x2fe);
   if(kind<0x200||kind>=0x280||(mode!=FOCUS_FALLBACK&&p[0x617]))continue;
   if(view->original_vtable214!=0x4479c8)return fail(f,0x29117c,GH_PLAYER_TARGET_UNSUPPORTED);
-  if(mode!=FOCUS_FALLBACK&&(int16_t)half(p+0x54a)<1&&(mode==FOCUS_THROW||!(half(p+0x3ac)&4u)))continue;
+  if(mode!=FOCUS_FALLBACK&&(int16_t)half(p+0x54a)<1&&(mode==FOCUS_THROW||mode==FOCUS_ROULETTE||!(half(p+0x3ac)&4u)))continue;
 
   const unsigned dependency=w(p+0x564);
   const int extended=dependency==0x260||dependency==0x264||dependency==0x265||dependency==0x26a;
@@ -457,10 +457,14 @@ static gh_player_target_status attack_target_00124540(const gh_player_target_bin
   static const struct attack_probe thrown[]={
    {3,0x3f490fdb,FOCUS_THROW},{6,0x3f490fdb,FOCUS_THROW},
    {9,0x3f490fdb,FOCUS_THROW},{12,0x3f490fdb,FOCUS_THROW},{20,0x3f060a92,FOCUS_THROW}};
+  static const struct attack_probe roulette[]={
+   {2,0x3f490fdb,FOCUS_ROULETTE},{4,0x40490fdb,FOCUS_ROULETTE},
+   {30,0x40490fdb,FOCUS_ROULETTE}};
   const int dodge=mode==5;
   const int alternate=w(b->player->bytes+0x5d8)==4;
-  const struct attack_probe *probes=mode==4?thrown:dodge?lateral:alternate?special:ordinary;
-  const size_t count=mode==4?sizeof(thrown)/sizeof(*thrown):dodge?sizeof(lateral)/sizeof(*lateral):
+  const struct attack_probe *probes=mode==3?roulette:mode==4?thrown:dodge?lateral:alternate?special:ordinary;
+  const size_t count=mode==3?sizeof(roulette)/sizeof(*roulette):
+   mode==4?sizeof(thrown)/sizeof(*thrown):dodge?sizeof(lateral)/sizeof(*lateral):
    alternate?sizeof(special)/sizeof(*special):sizeof(ordinary)/sizeof(*ordinary);
   for(size_t i=0;i<count&&!current->handle;i++){
    status=focus(b,init,probes[i].range,number(probes[i].cone),probes[i].fallback,NULL,current,f);
@@ -478,6 +482,12 @@ gh_player_target_status gh_player_attack_target_00124540(const gh_player_target_
  const gh_game_init_state *init,gh_player_target *current,uint32_t *f)
 {
  return attack_target_00124540(b,init,current,0,f);
+}
+
+gh_player_target_status gh_player_roulette_target_00124540(const gh_player_target_bindings *b,
+ const gh_game_init_state *init,gh_player_target *current,uint32_t *f)
+{
+ return attack_target_00124540(b,init,current,3,f);
 }
 
 gh_player_target_status gh_player_dodge_target_00124540(const gh_player_target_bindings *b,

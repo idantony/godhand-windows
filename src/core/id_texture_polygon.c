@@ -17,7 +17,7 @@ gh_id_error gh_id_polygon_texture_open(const gh_id_state*m,uint32_t slot,uint32_
  view.source=(gh_id_view){t->bytes+off,end-off,off};view.width=64;view.height=64;view.tex0=p.tex0;*out=view;return GH_ID_OK;
 }
 gh_id_error gh_id_polygon_texture_rgba(const gh_id_texture*t,void*out,size_t bytes){gh_tim2_picture p;gh_tim2_error e;if(!t||!out)return GH_ID_ARGUMENT;
- if(t->width!=64||t->height!=64)return gh_id_texture_rgba(t,out,bytes);
+ if(t->width!=64||t->height!=64||((t->tex0>>20)&63)!=20)return gh_id_texture_rgba(t,out,bytes);
  e=gh_tim2_first(t->source.bytes,t->source.size,&p);if(e)return GH_ID_UNSUPPORTED;if(p.width!=64||p.height!=64||p.tex0!=t->tex0)return GH_ID_UNSUPPORTED;
  e=gh_tim2_rgba4(&p,out,bytes);return e==GH_TIM2_OK?GH_ID_OK:e==GH_TIM2_BOUNDS?GH_ID_BOUNDS:GH_ID_UNSUPPORTED;
 }

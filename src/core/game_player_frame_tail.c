@@ -1,3 +1,4 @@
+#include "game_effect_create.h"
 #include "game_player_frame_tail.h"
 #include <string.h>
 #include <math.h>
@@ -19,6 +20,24 @@ static gh_player_frame_tail_status release_effects(gh_game_player_frame_tail*s,u
   for(;s->effect_index<count;s->effect_index++){unsigned i=s->effect_index,off=(i>>5)*4;uint32_t mask=UINT32_C(0x80000000)>>(i&31);
    if(!(word(base+bits+off)&mask)||(word(base+bits+bank+off)&mask)||(word(base+bits+bank*2+off)&mask))continue;
    const uint8_t*p=base+(size_t)i*stride;if(half(p+group)||half(p+group+2)!=kind)continue;
+   if(kind==0x61&&emitter){
+    gh_effect_emitter_view view;
+    if(!gh_effect_create_emitter_at(b->effects,i,&view)&&view.payload==p&&
+       gh_effect_enemy_light_emitter_is_bound(b->effects,&view)){
+     put(view.payload+0x114,word(p+0x114)|0x40000000u);
+     continue;
+    }
+   }
+   if(kind==0x61&&!emitter){
+    gh_effect_esp_view view;
+    if(!gh_effect_create_esp_at(b->effects,i,&view)&&view.payload==p&&view.type==5&&
+       gh_effect_enemy_light_esp_is_bound(b->effects,&view)){
+     uint32_t pc=0;
+     const gh_effect_status status=gh_effect_create_esp_pause_002fbe50(b->effects,i,view.serial,&pc);
+     if(status)return fail(s,pc?pc:0x2fbe50,GH_PLAYER_TAIL_UNSUPPORTED);
+     continue;
+    }
+   }
    return fail(s,emitter?0x302918:0x2fbe50,GH_PLAYER_TAIL_UNSUPPORTED);
   }
  }

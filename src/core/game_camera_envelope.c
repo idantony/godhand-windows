@@ -77,7 +77,10 @@ static gh_camera_status finish(gh_camera_envelope*s,gh_camera_follow*follow,
         (dependency==0x203&&(stamp==6||stamp==7))))||
         (appearance==15&&((dependency==0x214&&stamp==0)||(dependency==0x215&&stamp==1)));
     }
-    if(target.original_vtable214!=0x4479c8||(kind!=0x202&&!arena))
+    const int west_devil=kind==0x220&&s->player_model&&s->player_model->work&&
+       s->player_model->work->room==0x100&&target.size>=0x644&&
+       word(target.bytes+0x564)==0x220&&(word(target.bytes+0x640)&0xffffu)==0xff;
+    if(target.original_vtable214!=0x4479c8||(kind!=0x202&&!arena&&!west_devil))
      return fail(f,0x13a73c,GH_CAMERA_UNSUPPORTED);
     float point[3];
     if(gh_enemy_target_position_00275978(&target,point))return fail(f,0x275978,GH_CAMERA_UNSUPPORTED);

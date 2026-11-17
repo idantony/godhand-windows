@@ -5,6 +5,73 @@ static uint32_t u32(const uint8_t*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(ui
 static void w(uint8_t*p,uint32_t x){memcpy(p,&x,4);}
 static void vf0(uint8_t*p){memset(p,0,12);w(p+12,0x3f800000);}
 static gh_light_status fail(gh_game_world_light*s,uint32_t a,int d,gh_light_status e){s->frontier=a;s->detail=d;return e;}
+static uint16_t light_half(const uint8_t *p)
+{
+ return (uint16_t)(p[0]|(unsigned)p[1]<<8);
+}
+
+static uint8_t *light_record(gh_game_world_light *s,unsigned index)
+{
+ return s->scalar+0x80+(size_t)index*0x70;
+}
+
+uint8_t *gh_game_world_light_find_owned_002d9038(gh_game_world_light *s,uint16_t id,const void *owner)
+{
+ if(!s||!s->ready||!owner||!id)return NULL;
+ const unsigned count=u32(s->scalar+0x78);
+ if(count>256)return NULL;
+ for(unsigned i=0;i<count;i++){
+  uint8_t *p=light_record(s,i);
+  if(s->native_light_owners[i]==owner&&light_half(p+2)==id&&light_half(p)!=0xff)return p;
+ }
+ return NULL;
+}
+
+gh_light_status gh_game_world_light_remove_owned_002d9158(gh_game_world_light *s,uint16_t id,const void *owner)
+{
+ if(!s||!s->ready||!owner||!id)return GH_LIGHT_ARGUMENT;
+ unsigned count=u32(s->scalar+0x78);
+ if(count>256)return GH_LIGHT_BOUNDS;
+ uint8_t *entry=gh_game_world_light_find_owned_002d9038(s,id,owner);
+ if(!entry)return GH_LIGHT_OK;
+ unsigned i=(unsigned)(entry-light_record(s,0))/0x70;
+ for(;i+1<count;i++){
+  uint8_t *dest=light_record(s,i);
+  const uint8_t *src=light_record(s,i+1);
+  memcpy(dest,src,8);
+  for(unsigned v=0;v<3;v++)memcpy(dest+0x10+v*0x10,src+0x10+v*0x10,12);
+  memcpy(dest+0x40,src+0x40,0x24);
+  s->native_light_owners[i]=s->native_light_owners[i+1];
+ }
+ const uint16_t empty=0xff;
+ memcpy(light_record(s,--count),&empty,2);
+ s->native_light_owners[count]=NULL;
+ w(s->scalar+0x78,count);
+ return GH_LIGHT_OK;
+}
+
+gh_light_status gh_game_world_light_insert_owned_002d90b0(gh_game_world_light *s,
+ const uint8_t entry[0x70],const void *owner)
+{
+ if(!s||!s->ready||!entry||!owner||!light_half(entry+2))return GH_LIGHT_ARGUMENT;
+ const unsigned count=u32(s->scalar+0x78);
+ if(count>256)return GH_LIGHT_BOUNDS;
+ if(count==256)return GH_LIGHT_OK; /* The original returns false when full. */
+ /* 2D8810 keeps live named lights ahead of the current room preset. */
+ unsigned index=0;
+ while(index<count&&light_half(light_record(s,index)+2))++index;
+ const unsigned trailing=count-index;
+ if(trailing){
+  memmove(light_record(s,index+1),light_record(s,index),(size_t)trailing*0x70);
+  memmove(s->native_light_owners+index+1,s->native_light_owners+index,
+      (size_t)trailing*sizeof(s->native_light_owners[0]));
+ }
+ memcpy(light_record(s,index),entry,0x70);
+ s->native_light_owners[index]=owner;
+ w(s->scalar+0x78,count+1);
+ return GH_LIGHT_OK;
+}
+
 gh_light_status gh_game_world_light_construct_002d6d80(gh_game_world_light*s){
  if(!s||s->constructed)return GH_LIGHT_ARGUMENT;
  memset(s,0,sizeof(*s));uint8_t*p=s->scalar;

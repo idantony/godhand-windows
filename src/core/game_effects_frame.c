@@ -84,7 +84,8 @@ static gh_effect_status emitter_transform(gh_game_effects_frame*s,uint8_t*p,cons
  if((gh_effect_event_part_is_bound(v->record,v->actor,v->selector)||gh_effect_r101_door_break_part_is_bound(v->record,v->actor,v->selector))||gh_effect_stamp19_death_part_is_bound(v)||
     gh_effect_knockdown_emitter_is_bound(v)||gh_effect_enemy_light_emitter_is_bound(s->b.storage.effects,v)||gh_effect_em00_attack_emitter_is_bound(v)||gh_effect_stamp19_attack_part_is_bound(v)||
     gh_effect_r101_weapon_emitter_is_bound(v)||
-    gh_effect_player_attachment_emitter_is_bound(v)||gh_effect_devil_emitter_is_bound(s->b.storage.effects,v)||
+    (gh_effect_player_attachment_emitter_is_bound(v))||
+    gh_effect_devil_emitter_is_bound(s->b.storage.effects,v)||
     gh_effect_emad_emitter_is_bound(s->b.storage.effects,v)){
   if(!v->model||!v->part||v->model->root.bytes!=v->actor->bytes||!v->part->bytes||
      w(p+4)||w(p+8)||w(p+0x10))return fail(s,0x302b58,GH_EFFECT_UNSUPPORTED);
@@ -387,6 +388,7 @@ static int esp_update_class(const gh_effect_esp_view *view)
  switch(view->type){
  case 0: return vtable==0x44fad0;
  case 3: return vtable==GH_ESP03_VTABLE;
+ case 5: return vtable==0x44e640;
  case 6: return vtable==0x44e6d8;
  case 7: return vtable==0x44e770;
  case 0x1f: return vtable==0x44f448;
@@ -419,6 +421,33 @@ static gh_effect_status esps(gh_game_effects_frame*s){uint8_t*base=s->b.storage.
  /* Original wrapper2FBE88 counts the call but skips virtualUpdate whenfrozen. */
  if(!s->esp_update.identity&&(w(v.payload+0x11c)&0x10000u)){s->esp_stage=0;continue;}gh_esp_update_bindings b={.storage=s->b.storage,.work=s->b.work,.globals=s->b.globals,.atan_coeff=s->b.atan_coeff,.policy=s->b.policy,.camera=s->b.camera,.display=s->b.display,
  .active_camera=s->b.init?s->b.init->active_camera:NULL};gh_effect_status status=gh_game_esp_update_002fbed0(&s->esp_update,&b,i,v.serial);if(status)return fail(s,s->esp_update.frontier,status);if(!s->esp_update.complete)return fail(s,0x2fbed0,GH_EFFECT_ARGUMENT);
+ if(v.type==5&&!s->esp_update.retired){
+  if(!v.light_part||!v.light_part->alias_f0||!v.actor||
+     !gh_effect_enemy_light_esp_is_bound(s->b.storage.effects,&v))
+   return fail(s,0x2e7e10,GH_EFFECT_UNSUPPORTED);
+  uint8_t *light=gh_game_world_light_find_owned_002d9038(s->b.globals->world_light,
+      (uint16_t)h(v.payload+0x2b2),v.actor->bytes);
+  if(light){
+   float angles[3],offset[3],local[4],matrix[16],position[3];
+   memcpy(angles,v.payload+0x300,sizeof(angles));
+   memcpy(offset,v.payload+0x2f0,sizeof(offset));
+   uint32_t pc=0;
+   const volatile float increment=(float)v.payload[0x2cc]*0x1.1df46ap-6f;
+   const volatile float next=angles[1]+increment;
+   if(gh_id_angle_reference_001f7d48(next,angles+1)||
+      gh_actor_matrix_rotation_00147728(angles,0,matrix,s->b.policy,&pc)||
+      gh_scene_at_apply_world_001508d8(matrix,offset,local))
+    return fail(s,pc?pc:0x2e7e10,GH_EFFECT_UNSUPPORTED);
+   for(unsigned axis=0;axis<3;axis++){
+    position[axis]=number(v.light_part->alias_f0+4*axis)+local[axis];
+    if(!isfinite(position[axis]))return fail(s,0x2e7e10,GH_EFFECT_UNSUPPORTED);
+   }
+   gh_effect_status status=gh_effect_node_set_position_native(s->b.storage.effects,0,i,v.serial,local,&pc);
+   if(status)return fail(s,pc?pc:0x2b6288,status);
+   memcpy(v.payload+0x300,angles,sizeof(angles));
+   memcpy(light+0x10,position,sizeof(position));
+  }
+ }
  if(v.type==4||v.type==0x14){
   const uint32_t move_pc=v.type==4?0x2e6868:0x2f2250;
   const gh_esp14_provider *provider=s->b.model_effect;

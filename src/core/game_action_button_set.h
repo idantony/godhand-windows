@@ -12,6 +12,9 @@ typedef struct {int32_t priority,life,unknown20;uint32_t callback_id;void *argum
  * Callback ID is only identity, never cast/invoked by this publisher. */
 gh_action_set_status gh_action_button_set_001f7858(gh_game_action_buttons *,const gh_action_set_request *,
  int *emitted,unsigned *entry_index,uint32_t *frontier);
+/* Copy the original three option columns into the canonical action manager. */
+gh_action_set_status gh_action_roulette_open_001f7900(gh_game_action_buttons *,
+ const gh_roulette_option *,unsigned count,const float *player_matrix,uint32_t *handle,uint32_t *frontier);
 /* Original list starts at header15, and both kinds' +4 are nextlinks. */
 gh_action_set_status gh_action_button_first(const gh_game_action_buttons *,gh_action_link *);
 gh_action_set_status gh_action_button_next(const gh_game_action_buttons *,gh_action_link,gh_action_link *);

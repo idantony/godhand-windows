@@ -3,6 +3,7 @@
 #include "game_player_attack_recent.h"
 #include "game_player_square_input.h"
 #include "game_player_idle_input.h"
+#include "game_player_idle_target.h"
 #include "game_player_root_delta.h"
 #include "id_layout_rotation.h"
 #include <string.h>
@@ -73,19 +74,45 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
   return stop(s,0x123938,GH_PLAYER_FRAME_UNSUPPORTED);
  if(sequence&0x10){
   put(p+0x15f4,flags|0x400u);
-  if((pressed&2)||p[0x623])return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(pressed&2)return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
+  const int back_circle=f->work->room==0x103&&p[0x623]&&p[0x61f]&&
+      value(p+0x608)>2.3561945f;
+  if(p[0x623]&&!back_circle)return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
   if(!b->target_bindings)return stop(s,0x129cc8,GH_PLAYER_FRAME_UNSUPPORTED);
   uint32_t pc=0;
   if(p[0x622]){
-   /* 123BA8 bypasses the close action scan for an existing combo.
-    * 123CE4 refreshes the actual attack target even on the branch that
-    * rejects a repeat of Triangle until the SEQ allows the link. */
-   if(!half(p+0x5e0)||p[0x624]||!b->target_640)
-    return stop(s,0x123ba8,GH_PLAYER_FRAME_UNSUPPORTED);
+   /* 123BA8 checks close actions before the first link. An existing
+    * combo bypasses the scan and goes straight to 123CE4. */
+   if(p[0x624]||!b->target_640)return stop(s,0x123ba8,GH_PLAYER_FRAME_UNSUPPORTED);
+   if(!half(p+0x5e0)){
+    if(f->work->room!=0x100)return stop(s,0x123ba8,GH_PLAYER_FRAME_UNSUPPORTED);
+    gh_player_idle_target_result close;
+    const gh_player_target_status status=gh_player_scan_close_action_00123ba8(
+        b->target_bindings,f->init,b->action_buttons,&close,&pc);
+    if(status)return target_error(s,pc?pc:0x123ba8,status);
+    if(close.transitioned){
+     *b->target_640=close.target_640;
+     put(p+0x640,close.target_640.handle);
+     s->input_result=1;
+     return GH_PLAYER_FRAME_OK;
+    }
+   }
    const gh_player_target_status target=gh_player_attack_target_00124540(
        b->target_bindings,f->init,b->target_640,&pc);
    if(target)return target_error(s,pc?pc:0x124540,target);
-   if(b->target_640->handle){
+   if(b->target_640->handle&&f->work->room==0x100){
+    int variant;
+    const gh_player_target_status status=gh_player_attack_height_00123d04(
+        &f->player->view,&b->target_640->view,&variant,&pc);
+    if(status)return target_error(s,pc,status);
+    if(variant>=0){
+     p[0x2f4]=p[0x2f6]=0;
+     p[0x2f5]=0x10;
+     p[0x2f7]=(uint8_t)variant;
+     s->input_result=1;
+     return GH_PLAYER_FRAME_OK;
+    }
+   }else if(b->target_640->handle){
     float xyz[3];
     const gh_player_frame_status status=target_position(s,b,xyz);
     if(status)return status;
@@ -102,6 +129,16 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
   if(e)return target_error(s,pc?pc:0x129cc8,e);
   if(word(f->init->enemies+0x5ac)||word(f->init->enemies+0x5b0))
    return stop(s,0x12a108,GH_PLAYER_FRAME_UNSUPPORTED);
+  if(back_circle){
+   /* 123E18 uses 12C000(set5) before clearing the attack cursor. */
+   if(!f->save.bytes||f->save.size<GH_CORE_SAVE_BYTES)return stop(s,0x1fb830,GH_PLAYER_FRAME_UNSUPPORTED);
+   if(half(p+0x5e2)==5&&half(p+0x5e0)>=word(f->save.bytes+0x284)&&!(sequence&0x20))
+    return GH_PLAYER_FRAME_OK;
+   sh(p+0x5e2,5);sh(p+0x5e0,0);
+   p[0x2f4]=p[0x2f6]=p[0x2f7]=0;p[0x2f5]=0xb;
+   s->input_result=1;
+   return GH_PLAYER_FRAME_OK;
+  }
   if(p[0x622]){
    const gh_player_frame_status status=gh_player_triangle_input_00123f44(
        &f->player->view,f->save,1,&s->input_result,&pc);
@@ -206,7 +243,7 @@ static gh_player_frame_status body(gh_player_square_frame *s,const gh_player_squ
   if(e)return stop(s,pc?pc:0x10b2e8,GH_PLAYER_FRAME_CALLEE);
   if(recent&&word(p+0x5e8)==0x5d)return stop(s,0x2cba48,GH_PLAYER_FRAME_UNSUPPORTED);
   const uint32_t skill=word(p+0x5e8);
-  const int kick=f->work->room==0x103&&skill==0x25;
+  const int kick=f->work->room==0x103&&(skill==0x25||skill==52);
   if(p[0x2f6]>1||(p[0x2f6]&&skill!=0&&skill!=4&&skill!=10&&skill!=13&&skill!=29&&!kick))
    return stop(s,0x10d3a8,GH_PLAYER_FRAME_UNSUPPORTED);
   s->stage=p[0x2f6]?5:2;

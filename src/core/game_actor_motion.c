@@ -96,11 +96,13 @@ unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *b)
  const int east_rear=p&&root->size>0x1650&&b->work&&b->work->room==0x102&&
     root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x202&&rd(p+0x564)==0x200&&
     half(p+0x640)==3&&p[0x1650]==1&&p[0x2f4]==1&&!p[0x2f5]&&p[0x2f6]==2&&!p[0x2f7];
- const int boss_rear=p&&root->size>0x17c3&&b->work&&b->work->room==0x103&&
+ const int r103_boss=p&&root->size>0x17c3&&b->work&&b->work->room==0x103&&
     root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x204&&p[0x1650]==15&&
-    half(p+0x640)<2&&rd(p+0x564)==0x214u+half(p+0x640)&&
-    half(p+0x2f4)==0x0101&&p[0x2f6]==2&&!p[0x2f7]&&p[0x17c3];
- return (blowaway||east_rear||boss_rear||gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
+    half(p+0x640)<2&&rd(p+0x564)==0x214u+half(p+0x640);
+ /* 276468 returns bit 2 from actor+17C3. The recovered caller passes that
+  * bit with the selected clip across recoils, recovery and movement. */
+ const int boss_mirror=r103_boss&&p[0x17c3];
+ return (blowaway||east_rear||boss_mirror||gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
 }
 
 int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_bits,
@@ -134,6 +136,12 @@ int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_
   return start_bits==0x40000000u; /* 21821C starts the original retreat at frame 2. */
  if(kind!=0x202)return 0;
  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a)return 0;
+ if(b->work&&b->work->room==0x100&&b->model->root.size>0x1650&&!p[0x1650]&&
+    !p[0x2f4]&&p[0x2f5]==0x70&&!p[0x2f6]&&!p[0x2f7]&&blend_frames==2&&!(flags&~2u)){
+  const unsigned stamp=half(p+0x640);
+  if(((stamp==29||stamp==32)&&dependency==0x202)||((stamp==19||stamp==30)&&dependency==0x203)||(stamp==31&&dependency==0x200))
+   return start_bits==0x40000000u; /* The original 23E6B0 counter starts at sample two. */
+ }
  if(!p[0x2f4]&&p[0x2f5]==0x71&&!p[0x2f6]&&blend_frames==10&&!flags)
   return start_bits==0x41a00000u||start_bits==0x42700000u;
  const int east_rear=dependency==0x200&&b->work&&b->work->room==0x102&&

@@ -19,12 +19,33 @@ static float add(float a,float b){volatile float n=a+b;return n;}
 static float mul(float a,float b){volatile float n=a*b;return n;}
 static float divide(float a,float b){volatile float n=a/b;return n;}
 static gh_effect_status stop(gh_esp_update_call*c,uint32_t f,gh_effect_status s){c->frontier=f;return s;}
-/* New timing domains only admit exact CVT.W.S inputs, pending EE fractional
- * conversion evidence; no host rounding-mode dependent cast is substituted. */
-static int integer(float x,int*out){if(!isfinite(x)||x < -2147483648.0f||x>=2147483648.0f)return 0;int n=(int)x;if((float)n!=x)return 0;*out=n;return 1;}
+/* EE CVT.W.S here chops finite in-range values; keep the float clock
+ * separate from the integer frame fields used for the subsequent dispatch. */
+static int integer(float x,int*out)
+{
+ if(!isfinite(x)||x < -2147483648.0f||x>=2147483648.0f)return 0;
+ *out=(int)x;
+ return 1;
+}
 static int same(const gh_esp_update_bindings*a,const gh_esp_update_bindings*b){return a->storage.effects==b->storage.effects&&a->storage.esp==b->storage.esp&&a->storage.emitters==b->storage.emitters&&a->storage.esp_bytes==b->storage.esp_bytes&&a->storage.emitter_bytes==b->storage.emitter_bytes&&a->work==b->work&&a->globals==b->globals&&a->atan_coeff==b->atan_coeff&&a->policy==b->policy&&a->camera==b->camera&&a->active_camera==b->active_camera&&a->display==b->display;}
 static int scaled(const gh_esp_update_call*c,const uint8_t*p,const uint8_t*r){return (!(w(r+4)&0x2000u)&&(w(p+0x11c)&0x100u))||(w((const uint8_t*)c->b.work+0x5e4)&0x20000u);}
-static int advance(gh_esp_update_call*c,float old,int scale,float*out){if(!isfinite(old))return 0;if(!scale){*out=add(old,1);return isfinite(*out);}float hundred=mul(old,100);if(!isfinite(hundred)||hundred < -2147483648.0f||hundred>=2147483648.0f)return 0;int whole;if(!integer(hundred,&whole))return 0;float speed=mul(mul(rf(&c->b.globals->factor_741dc0),rf((const uint8_t*)c->b.work+0x574)),100);int delta;if(!integer(speed,&delta))return 0;int64_t total=(int64_t)whole+delta;if(total<INT32_MIN||total>INT32_MAX)return 0;*out=divide((float)(int32_t)total,100);return isfinite(*out);}
+/* 2FA350 increments the chopped centiframe base if the conversion
+ * changed it, then adds the chopped product of the two live rates. */
+static int advance(gh_esp_update_call*c,float old,int scale,float*out)
+{
+ if(!isfinite(old))return 0;
+ if(!scale){*out=add(old,1);return isfinite(*out);}
+ const float hundred=mul(old,100);
+ const float speed=mul(mul(rf(&c->b.globals->factor_741dc0),
+                         rf((const uint8_t*)c->b.work+0x574)),100);
+ int whole,delta;
+ if(!integer(hundred,&whole)||!integer(speed,&delta))return 0;
+ const uint32_t total=(uint32_t)whole+(hundred!=(float)whole)+(uint32_t)delta;
+ int32_t frame;
+ memcpy(&frame,&total,sizeof(frame));
+ *out=divide((float)frame,100);
+ return isfinite(*out);
+}
 static gh_effect_status retire(gh_esp_update_call*c){uint32_t f;gh_effect_status s=gh_effect_create_esp_pause_002fbe50(c->b.storage.effects,c->slot,c->serial,&f);if(s)return stop(c,f?f:0x2fbe50,s);c->retired=1;c->stage=15;return GH_EFFECT_OK;}
 
 /* 2FD378 keeps the integrated scale and the sinusoid's output separate. */
@@ -171,7 +192,7 @@ static gh_effect_status update_07(gh_esp_update_call *c,uint8_t *p)
 
 static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b,unsigned slot,uint32_t serial){
  if(!c||!b||!b->work||!b->globals||!b->globals->initialized||!b->storage.effects||!b->storage.esp||!b->storage.emitters||b->storage.esp_bytes<0x100180||b->storage.emitter_bytes<0x26060)return GH_EFFECT_ARGUMENT;if(c->identity&&(c->identity!=c||c->slot!=slot||c->serial!=serial||!same(&c->b,b)))return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);if(b->policy!=GH_STATIC_BINARY32_REFERENCE)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);c->frontier=0;if(c->complete)return GH_EFFECT_OK;
- gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,slot,&v)||v.serial!=serial||!v.initialized||v.globals!=b->globals||v.payload!=b->storage.esp+(size_t)slot*0x400||v.payload_size!=0x400||v.record.size!=0x2f0)return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;const uint8_t*r=v.record.bytes;uint32_t vtable=v.type==0?0x44fad0u:v.type==3?GH_ESP03_VTABLE:v.type==4?GH_ESP04_VTABLE:v.type==6?0x44e6d8u:v.type==7?0x44e770u:v.type==8?0x44e820u:v.type==9?0x44e8c8u:v.type==0x12?0x44eb70u:v.type==0x13?0x44ec68u:v.type==0x14?GH_ESP14_VTABLE:v.type==0x15?0x44ef08u:v.type==0x18?0x44f078u:v.type==0x1a?0x44f270u:v.type==0x1f?0x44f448u:v.type==0x20?0x44f4f8u:0;
+ gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,slot,&v)||v.serial!=serial||!v.initialized||v.globals!=b->globals||v.payload!=b->storage.esp+(size_t)slot*0x400||v.payload_size!=0x400||v.record.size!=0x2f0)return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;const uint8_t*r=v.record.bytes;uint32_t vtable=v.type==0?0x44fad0u:v.type==3?GH_ESP03_VTABLE:v.type==4?GH_ESP04_VTABLE:v.type==5?0x44e640u:v.type==6?0x44e6d8u:v.type==7?0x44e770u:v.type==8?0x44e820u:v.type==9?0x44e8c8u:v.type==0x12?0x44eb70u:v.type==0x13?0x44ec68u:v.type==0x14?GH_ESP14_VTABLE:v.type==0x15?0x44ef08u:v.type==0x18?0x44f078u:v.type==0x1a?0x44f270u:v.type==0x1f?0x44f448u:v.type==0x20?0x44f4f8u:0;
  if(!vtable||w(p+0xf0)!=vtable)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);
  /* 2F01B8 calls the base Move before three optional oscillations. */
  if(v.type==0x12&&(rf(p+0x2c8)!=0.0f||rf(p+0x2cc)!=0.0f||rf(p+0x2dc)!=0.0f))
@@ -217,7 +238,9 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
  const int event_scale=v.type==0&&uh(p+0x23a)==6&&
     (gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||
      (uh(p+0x23c)==7&&r[0xbe]==10&&gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector)));
- if(c->stage==9&&(v.type==8||event_scale)&&p[0x140]==1&&(w(p+0x11c)&0x400000u)){
+ const int roulette_scale=v.type==0&&w(p+0x23a)==0x00390000u&&r[0xbe]==0&&
+    gh_effect_player_attachment_esp_is_bound(b->storage.effects,&v);
+ if(c->stage==9&&(v.type==8||event_scale||roulette_scale)&&p[0x140]==1&&(w(p+0x11c)&0x400000u)){
   float factor;
   if(!key_curve(p,0x14c,1,sh(p+0x238),0,&factor))return stop(c,0x2fd078,GH_EFFECT_UNSUPPORTED);
   float scale[3]={mul(rf(p+0x144),factor),mul(rf(p+0x148),factor),rf(p+0x28)};

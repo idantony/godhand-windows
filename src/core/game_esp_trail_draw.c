@@ -44,7 +44,7 @@ static int xyz(const float view[16],const float p[3],float out[4]){
  return !gh_scene_at_apply_world_001508d8(view,p,out);
 }
 static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
- const gh_effect_esp_view*v,gh_effect_trans_packet*out,uint32_t*f){
+ const gh_effect_esp_view*v,unsigned batch,gh_effect_trans_packet*out,uint32_t*f){
  if(!b||!v||!out||!v->payload)return GH_EFFECT_ARGUMENT;
  const uint8_t *p=v->payload;
  const int two_edges=v->type==0x20;
@@ -66,10 +66,15 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
  const float *history=NULL,*other_history=NULL;
  unsigned count=0;
  if(gh_effect_create_esp_trail_view_edges(b->storage.effects,slot,v->serial,&history,&other_history,&count)||
-    count<2||count>GH_EFFECT_TRANS_QUAD_CAPACITY+1||(stride!=1&&((count-1)/stride?((count-1)/stride+2):3)>=count))
+    count<2||count>120||(stride!=1&&((count-1)/stride?((count-1)/stride+2):3)>=count))
   return reject(f,0x2edea0,GH_EFFECT_UNSUPPORTED);
- float camera[16],eye[3],points[GH_EFFECT_TRANS_QUAD_CAPACITY+1][3],
-  other_points[GH_EFFECT_TRANS_QUAD_CAPACITY+1][3];
+ const unsigned batches=(count-2)/GH_EFFECT_TRANS_QUAD_CAPACITY+1;
+ if(batch>=batches)return reject(f,pc,GH_EFFECT_ARGUMENT);
+ /* The original GIF draws one connected strip. Submit the later chunks
+  * first because equal-depth OT entries execute in reverse insertion order. */
+ const unsigned begin=1+(batches-1-batch)*GH_EFFECT_TRANS_QUAD_CAPACITY;
+ const unsigned end=begin+GH_EFFECT_TRANS_QUAD_CAPACITY;
+ float camera[16],eye[3],points[120][3],other_points[120][3];
  memcpy(camera,b->camera->fields,64);memcpy(eye,b->camera->fields+0x210,12);
  for(unsigned i=0;i<count;i++){
   centre(history,i,stride,points[i]);
@@ -137,7 +142,7 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
  if(flags&0x2000u){bank=3;depth=flags&0x4000u?1:2;}
  else if(flags&0x4000u){bank=3;depth=5;}
  packet.order=(gh_ui_order_group){.bank=bank,.depth=depth,
-  .identity=((uint64_t)v->serial<<32)|((uint64_t)slot<<8)};
+  .identity=((uint64_t)v->serial<<32)|((uint64_t)slot<<8)|batch};
  for(unsigned i=0;i<count;i++){
   if(i){width=add(width,(mode&2)&&i>=count/2?-step:step);if((mode&2)&&i>=count/2&&width<0)width=0;}
   const float *point=points[i],*next=points[i?i:1],*prev=points[i?i-1:0];
@@ -172,19 +177,19 @@ static gh_effect_status prepare(const gh_effects_trans_bindings*b,unsigned slot,
    prior[0]=prior[1];prior[1]=current;
    kick_history=(kick_history&0x7fu)<<1;
   }
-  if(segment.vertex_count)packet.quads[packet.quad_count++]=segment;
+  if(segment.vertex_count&&i>=begin&&i<end)packet.quads[packet.quad_count++]=segment;
  }
  *out=packet;
  return GH_EFFECT_OK;
 }
 gh_effect_status gh_esp09_draw_002ec398(const gh_effects_trans_bindings*b,unsigned slot,
- const gh_effect_esp_view*v,gh_effect_trans_packet*out,uint32_t*f){
+ const gh_effect_esp_view*v,unsigned batch,gh_effect_trans_packet*out,uint32_t*f){
  if(!f)return GH_EFFECT_ARGUMENT;
  *f=0;
  fenv_t env;
  if(feholdexcept(&env))return reject(f,0x2ec398,GH_EFFECT_UNSUPPORTED);
  if(fesetround(FE_TONEAREST)){(void)fesetenv(&env);return reject(f,0x2ec398,GH_EFFECT_UNSUPPORTED);}
- gh_effect_status s=prepare(b,slot,v,out,f);
+ gh_effect_status s=prepare(b,slot,v,batch,out,f);
  if(fesetenv(&env))return reject(f,0x2ec398,GH_EFFECT_UNSUPPORTED);
  return s;
 }

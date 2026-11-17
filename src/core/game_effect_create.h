@@ -38,6 +38,7 @@ gh_effect_status gh_effect_create_r101_weapon_002a8608(gh_effect_create_call *,
 gh_effect_status gh_effect_create_nested_begin_002f1d3c(gh_effect_create_call *,
  const gh_effect_create_request *,uint8_t group,uint32_t scale,uint32_t flags);
 gh_effect_status gh_effect_create_ambient_begin_00305e88(gh_effect_create_call *,uint32_t index);
+int gh_effect_ambient_row_is_bound(gh_game_effects *,uint32_t index,gh_effect_view);
 /* Original 14FB48 explicit configuration for the 58:2D part15 attack. */
 gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call *,
  const gh_effect_create_request *,uint32_t scale);
@@ -53,6 +54,7 @@ gh_effect_status gh_effect_create_enemy_knockdown_002a8608(gh_effect_create_call
  const gh_title_player_view *,uint32_t index);
 /* Original OM324 break, 1BFD28 -> 306528 with bank0/index1C, no actor.
  * Caller supplies the 84 virtual world position and 1F8180 yaw as binary32. */
+gh_effect_status gh_effect_create_om307_break_begin_00306838(gh_effect_create_call *,uint32_t index);
 gh_effect_status gh_effect_create_om324_break_begin_001bfd28(gh_effect_create_call *,
  const uint32_t world_xyz[3],uint32_t yaw_bits);
 /* Original ordinary enemy impact 271810 -> 306838, bank58/index10,
@@ -124,7 +126,7 @@ typedef struct {
  float tint_alpha;
  uint8_t opacity[3],valid;
 } gh_effect_retired_actor;
-typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;
+typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;const gh_actor_part *light_part;
  uint8_t *payload;size_t payload_size;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t initialized,type;struct gh_effects_frame_globals *globals;gh_game_scene_tables *scene_actors;int32_t parent_emitter,previous,next;uint32_t parent_serial;/* Snapshot of known300458-zeroed source218, not a removedtoken test. */uint8_t target120_known_null;gh_effect_retired_actor retired_actor;} gh_effect_esp_view;
 int gh_effect_attack_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_em00_attack_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
@@ -136,6 +138,7 @@ gh_effect_status gh_effect_create_esp_devil_trail_move_002f5bf8(gh_game_effects 
 int gh_effect_devil_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_enemy_light_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_emad_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
+int gh_effect_r100_om307_esp04_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_player_attachment_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_knockdown_esp_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
 int gh_effect_esp_trail_is_bound(const gh_game_effects *,const gh_effect_esp_view *);
@@ -162,6 +165,7 @@ gh_effect_status gh_effect_create_esp_abort_partial(gh_game_effects *,unsigned,u
 gh_effect_status gh_effect_create_bind_frame_globals(gh_game_effects *,struct gh_effects_frame_globals *);
 gh_effect_status gh_effect_create_bind_frame_actors(gh_game_effects *,gh_game_scene_tables *);
 /* Called only after actualtype6 virtualInit computation has returned1. */
+gh_effect_status gh_effect_create_esp_commit_type5(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_base(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_type6(gh_game_effects *,unsigned,uint32_t);
 /* R003 SSD bank3/index0 parentless class08, original 2FFC20/2EA908. */

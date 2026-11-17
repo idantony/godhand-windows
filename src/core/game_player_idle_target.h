@@ -14,6 +14,14 @@ typedef struct {
     int transitioned, prompt_emitted;
 } gh_player_idle_target_result;
 
+gh_player_target_status gh_player_attack_height_00123d04(
+    const gh_title_player_view *player,const gh_title_player_view *target,
+    int *variant,uint32_t *frontier);
+
+gh_player_target_status gh_player_scan_close_action_00123ba8(
+    const gh_player_target_bindings *targets,const gh_game_init_state *init,
+    gh_game_action_buttons *buttons,gh_player_idle_target_result *result,uint32_t *frontier);
+
 gh_player_target_status gh_player_idle_target_00123bf0(
     const gh_title_player_view *player,const gh_player_target *nearby,
     const gh_game_init_state *init,gh_game_action_buttons *buttons,

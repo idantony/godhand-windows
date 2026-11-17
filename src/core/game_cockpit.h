@@ -119,6 +119,11 @@ gh_id_error gh_game_cockpit_trans_001410a8(gh_game_cockpit *,const gh_boot_work 
 /* Borrowed SAME original1414..1467 fields for actual1F75B0/1F7680.
  * Byte pointers avoid inventing pointer-bearing guest layout/alignment. */
 typedef struct {uint8_t *flags,*icon,*screen_x,*screen_y,*message;const void *identity;} gh_cockpit_action_view;
+gh_id_error gh_game_cockpit_roulette_start_00144fd8(gh_game_cockpit *,const gh_bundle *,
+ const int32_t *,const uint16_t *,const uint8_t *,unsigned,uint16_t);
+int gh_game_cockpit_roulette_result_001451e0(const gh_game_cockpit *);
+void gh_game_cockpit_roulette_flag(gh_game_cockpit *,uint32_t);
+uint16_t gh_game_cockpit_roulette_counter(const gh_game_cockpit *);
 gh_id_error gh_game_cockpit_action_view_001f7680(gh_game_cockpit *,gh_cockpit_action_view *);
 #ifdef __cplusplus
 }

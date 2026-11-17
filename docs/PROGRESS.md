@@ -4,6 +4,23 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Joint R100 west and R103 combat
+
+The merged source passes the fixed original R100 west route and records an
+eighth defeat at tick 9,296 with Gene alive at 1 HP. The run reaches tick
+9,775 without an unsupported call. R103 raw controller input starts with two
+full-HP bosses, lands Back + Circle, and uses the original wheel to select
+Shockwave twice. The later replay reaches tick 9,000 with Gene at 2 HP and the
+bosses at 412 and 487. A separate Direct3D replay presents the first two moves
+over 462 frames. The existing controlled R103 victory-return proof still
+presents R102 at scene 8,241 on the merged runtime.
+
+合并源码通过了 R100 西区固定手柄回放，第 9,296 帧登记第八次击倒，Gene 剩余 1 HP。
+回放到第 9,775 帧没有遇到未实现调用。R103 的原始手柄回放从两名完整血量的头目开始，
+命中后＋圆圈，再从原版轮盘两次选中冲击波。到第 9,000 帧，Gene 剩余 2 HP，两名头目
+各剩余 412 和 487 HP。独立 Direct3D 回放呈现了前两招的 462 帧。合并构建也通过了
+受控的 R103 胜利返回验证，在第 8,241 个场景帧显示 R102。
+
 ## New Game Retry and original arena combat
 
 On the east route from New Game, the recorded controller input wins the

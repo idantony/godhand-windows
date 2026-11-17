@@ -515,14 +515,21 @@ gh_effect_status gh_esp04_initialize_002e64b0(gh_esp14_instance *s,
     *frontier = 0x2e64b0;
     *original = 0;
     if (!s || !b || !b->effects || !v || v->type != 4 || v->payload_size != 0x400 ||
-        v->record.size != 0x2f0 || !gh_effect_model_esp_actor_is_bound(b->effects, v))
+        v->record.size != 0x2f0)
+        return GH_EFFECT_ARGUMENT;
+    const int om307=gh_effect_r100_om307_esp04_is_bound(b->effects,v);
+    if (!om307 && !gh_effect_model_esp_actor_is_bound(b->effects,v))
         return GH_EFFECT_ARGUMENT;
     uint8_t *p = v->payload;
     const uint8_t *r = v->record.bytes;
+    const int charge = word(p + 0x23a) == 0x00190000u &&
+        !word(r + 0x16c) && (r[0xbe] == 8 || r[0xbe] == 9) &&
+        r[0x12e] >= 7 && r[0x12e] <= 9;
     const int paired_throw = word(r + 0x16c) == 2 && r[0x12e] == 5;
     const int heat_activation = word(p + 0x23a) == 0x00220000u &&
         !word(r + 0x16c) && r[0x12e] >= 7 && r[0x12e] <= 9;
-    if (!v->target120_known_null || word(p + 0x120) || (!paired_throw && !heat_activation) ||
+    const int debris = om307 && word(r + 0x16c) == 2 && r[0x12e] == 2;
+    if (!v->target120_known_null || word(p + 0x120) || (!paired_throw && !heat_activation && !charge && !debris) ||
         word(r + 0x170) || r[0x174] || word(r + 0x18c) || r[0x190] || r[0x191] || r[0x192])
         return GH_EFFECT_UNSUPPORTED;
     if (s->stage && (s->effects != b->effects || s->slot != slot || s->serial != v->serial))
@@ -862,6 +869,14 @@ int gh_effect_ev04_radial_record_bound(const gh_game_effects *effects,gh_effect_
     return 0;
 }
 
+int gh_effect_roulette_release_radial_row(gh_effect_view record)
+{
+ if(!record.bytes||record.size!=0x2f0)return 0;
+ const uint8_t *r=record.bytes;
+ return word(r)==0x1efe8010u&&word(r+4)==0x00e00000u&&
+     word(r+0xbc)==0xff090003u&&!r[0x133]&&!r[0x136]&&r[0x12e]==14;
+}
+
 gh_effect_status gh_effect_position_init_scaled_00301c20(uint8_t p[0x400], gh_effect_view record,
     int mirrored,float amplitude_scale,float position[3],uint32_t *frontier) {
     if (!frontier) return GH_EFFECT_ARGUMENT;
@@ -869,6 +884,7 @@ gh_effect_status gh_effect_position_init_scaled_00301c20(uint8_t p[0x400], gh_ef
     if (!p || !record.bytes || record.size < 0x2f0 || !position) return GH_EFFECT_ARGUMENT;
     const uint8_t *r = record.bytes;
     if ((r[0x133] != 0x14 && r[0x133] != 9 && !gh_effect_esp08_screen_row(record)&& !gh_effect_player_stun_row(record) &&
+         !gh_effect_roulette_release_radial_row(record)&&
          !(amplitude_scale==1.0f && (core0b_radial_profile(record)||core0c_radial_profile(record)||
            core40_radial_profile(record)||ev04_radial_profile(record)))) || !isfinite(amplitude_scale) ||
         !(word(r + 4) & 0x200000u)) return GH_EFFECT_UNSUPPORTED;
@@ -956,7 +972,10 @@ static gh_effect_status position_move(gh_game_effects *effects, unsigned slot,
     const int collateral=v->type==0&&!v->actor&&!v->selector&&
         (gh_effect_core_radial_record_bound(effects,v->record)||
          gh_effect_ev04_radial_record_bound(effects,v->record));
-    int supported=v->type==0x14||collateral||
+    const int roulette=word(v->payload+0x23a)==0x002e0000u&&
+        gh_effect_roulette_release_radial_row(v->record)&&
+        gh_effect_player_attachment_esp_is_bound(effects,v);
+    int supported=v->type==0x14||collateral||roulette||
         (v->type==0&&gh_effect_player_stun_row(v->record)&&gh_effect_player_attachment_esp_is_bound(effects,v))||(v->type==9&&gh_effect_esp_trail_is_bound(effects,v))||
         (v->type==8&&gh_effect_esp08_screen_row(v->record)&&!v->actor&&!v->selector&&v->parent_emitter==-1);
     if (!supported || (flags & 0x10200000u) != 0x00200000u || (flags & 0x100000u))
@@ -1100,10 +1119,16 @@ gh_effect_status gh_esp14_move_after_base_002f2250(gh_esp14_instance *s,
 
 int gh_esp14_nested_sprite_is_bound(gh_effect_view record, const gh_title_player_view *actor,
     const gh_title_player_view *selector) {
-    if (!record.bytes || record.size < 0x2f0 || record.bytes[0x133] != 0 ||
+    if (!record.bytes || record.size < 0x2f0 ||
         record.bytes[0x136] != 1 || record.bytes[0xbe] != 0xfe ||
         !actor || !selector || actor != selector || !actor->bytes || actor->size < 0x4e0)
         return 0;
+    const uint8_t *r=record.bytes;
+    /* CORE39's group1 class1A rows inherit the same OM500 root transform
+     * before their own original ground projection. */
+    const int ground_splash=r[0x133]==0x1a&&r[0x12e]==132&&
+        word(r)==0x1efe0010u&&word(r+4)==0x00802000u;
+    if(r[0x133]&&!ground_splash)return 0;
     const uint32_t vtable = word(actor->bytes + 0x214);
     const int retained = vtable == 0x41eca0 && (word(actor->bytes + 0x250) & 0x80000000u);
     return actor->original_vtable214 == 0x44b840 && (vtable == 0x44b840 || retained) &&

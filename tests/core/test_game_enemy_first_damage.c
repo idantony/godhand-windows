@@ -1910,7 +1910,7 @@ static int triangle_ledger(const gh_enemy_actor_bindings *b, gh_enemy_actor *ene
                                 !gh_effect_create_esp_trail_view(effect->storage.effects,slot,v.serial,&history,&count)&&
                                 count==6&&history[3]==1);
                             gh_effect_trans_packet packet={0};
-                            gh_effect_status rendered=gh_esp09_draw_002ec398(&draw,slot,&v,&packet,&pc);
+                            gh_effect_status rendered=gh_esp09_draw_002ec398(&draw,slot,&v,0,&packet,&pc);
                             fprintf(stderr,"knockdown type09 %u stride%u draw status%d pc%08x count%u\n",
                                 e[0x640],word(v.payload+0x2e4),rendered,pc,packet.quad_count);
                             CHECK(!rendered&&!pc&&packet.original_callee==0x2edf70&&packet.quad_count==5&&
@@ -2145,7 +2145,7 @@ static int em00_attack_effect(gh_enemy_actor *enemy,gh_game_title_player *player
             const float *pos=NULL;unsigned count=0;
             CHECK(!gh_effect_create_esp_trail_view(effects->storage.effects,slot,child.serial,&pos,&count)&&
                 count==20&&pos[3]==1&&pos[79]==1&&child.parent_emitter>=0&&word(child.payload+0x2e4)==4);
-            fprintf(stderr,"trail %08x %08x flags %08x widths %08x %08x bias %08x opacity %u %u mode %u\n",word(child.payload+0x2e0),word(child.payload+0x2e4),word(child.payload+0x11c),word(child.payload+0x20),word(child.payload+0x24),word(child.payload+0x254),child.payload[0x24c],child.payload[0x24d],child.payload[0x247]); gh_effect_trans_packet pkt; uint32_t drawpc=0; gh_effect_status drawstatus=gh_esp09_draw_002ec398(&draw,slot,&child,&pkt,&drawpc); CHECK(!drawstatus&&!drawpc&&pkt.original_callee==0x2edf70&&pkt.quad_count==19&&
+            fprintf(stderr,"trail %08x %08x flags %08x widths %08x %08x bias %08x opacity %u %u mode %u\n",word(child.payload+0x2e0),word(child.payload+0x2e4),word(child.payload+0x11c),word(child.payload+0x20),word(child.payload+0x24),word(child.payload+0x254),child.payload[0x24c],child.payload[0x24d],child.payload[0x247]); gh_effect_trans_packet pkt; uint32_t drawpc=0; gh_effect_status drawstatus=gh_esp09_draw_002ec398(&draw,slot,&child,0,&pkt,&drawpc); CHECK(!drawstatus&&!drawpc&&pkt.original_callee==0x2edf70&&pkt.quad_count==19&&
                 pkt.order.bank==2&&pkt.quads[0].vertex_count==6&&pkt.prim==0x54&&
                 pkt.alpha==UINT64_C(0x8000000048)&&pkt.test==0x5000d&&pkt.zbuf==UINT64_C(0x10a0000f8)&&
                 !pkt.frame_mask&&pkt.material&&pkt.material->source==child.texture.bytes);
@@ -2208,8 +2208,8 @@ typedef struct {
     const gh_effect_create_bindings *effect;
     const gh_motion_sound_request *pending;
     unsigned calls;
-    gh_motion_sound_request rise_cue[2];
-    unsigned rise_calls;
+    gh_motion_sound_request rise_cue[2], approach_cue;
+    unsigned rise_calls, approach_calls;
 } ems_devil_fixture;
 
 static gh_actor_motion_status ems_devil_cue(void *context,const gh_motion_sound_request *cue,
@@ -2226,6 +2226,17 @@ static gh_actor_motion_status ems_devil_cue(void *context,const gh_motion_sound_
             *frontier=0;
             return GH_ACTOR_MOTION_OK;
         }
+    }
+    if(fixture->calls==2&&fixture->rise_calls==2&&!fixture->approach_calls&&
+        cue->model&&cue->actor&&cue->actor->size>=0x642&&cue->model->root.bytes==cue->actor->bytes&&
+        cue->actor->bytes[0x2f5]==0x12&&cue->bank==1&&
+        cue->program==(int16_t)((word(cue->actor->bytes+0x424)&0xffffu)+10u)&&
+        !cue->part&&!cue->other_actor&&!cue->argument7&&!cue->argument8){
+        fixture->approach_cue=*cue;
+        fixture->approach_calls++;
+        *handle=1;
+        *frontier=0;
+        return GH_ACTOR_MOTION_OK;
     }
     if(!cue->model||!cue->actor||cue->model->root.bytes!=cue->actor->bytes||
         cue->bank||cue->program!=5||cue->part||cue->other_actor||cue->argument7||cue->argument8)
@@ -3869,10 +3880,22 @@ static int first_punch(gh_disc *disc, const gh_bundle *room_bundle, const uint8_
             status,rise_pc,word(rise+0x2f4),word(rise+0x430),paused_rise,live_rise_count);
         CHECK(!status&&!rise_pc&&ems_fixture.rise_calls==2&&
             word(rise+0x2f4)==0x00001200&&word(rise+0x430)==0x3f800000&&paused_rise>0);
-        CHECK(gh_enemy_ems_devil_step_00208be0(owner,child_handle,&camera,&restore,&opacity,
-            navigation,&spawn,&player.view,elf,elf_size,&rise_pc)==GH_ACTOR_MOTION_UNSUPPORTED&&
-            rise_pc==0x2180b0&&word(rise+0x2f4)==0x00001200&&
-            (word(rise+0x16d0)&0x08000400u)==0x08000400u); /* Selector12 reaches its alternate approach arm. */
+        status=gh_enemy_ems_devil_step_00208be0(owner,child_handle,&camera,&restore,&opacity,
+            navigation,&spawn,&player.view,elf,elf_size,&rise_pc);
+        fprintf(stderr,"Devil selector12 status%d pc%08x state%08x sample%08x approach cues%u\n",
+            status,rise_pc,word(rise+0x2f4),word(rise+0x430),ems_fixture.approach_calls);
+        CHECK(!status&&!rise_pc&&rise[0x2f4]==0&&rise[0x2f5]==0x12&&rise[0x2f6]==1&&
+            rise[0x2f7]<=3&&word(rise+0x430)==0x3f800000&&
+            (word(rise+0x16d0)&0x08000400u)==0x08000400u&&ems_fixture.approach_calls==1&&
+            ems_fixture.approach_cue.model==transformed.model&&
+            ems_fixture.approach_cue.actor==&pending_actor->view);
+        /* 2181B4 picks the authored EMA20 approach row for the turn quadrant. */
+        const unsigned variant=rise[0x2f7];
+        const size_t approach_row=variant==0?0x1be8:variant==1?0x1bf8:
+            ((variant==2)==(rise[0x17c3]==0)?0x1c08:0x1c18);
+        const gh_actor_motion *approach=transformed.devil_motion;
+        CHECK(approach&&approach->motion.offset==word(approach->b.resource+approach_row)&&
+            approach->sequence_offset==word(approach->b.resource+approach_row+4));
         puts("PASS actual Devil selector00 after rise, live effect pause, first EM20 idle sample and approach selector12");
         puts("PASS 220 actual Devil Move, Effects Update, camera and Draw frames through 124F60");
         gh_game_devil_camera_detach(&camera,init);

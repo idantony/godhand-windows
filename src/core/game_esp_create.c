@@ -41,20 +41,27 @@ static int authored_actor_scale(const gh_esp_create_call *c,float scale)
 {
  if(scale==1.0f)return 1;
  gh_effect_emitter_view emitter;
- return isfinite(scale)&&scale>0&&
-    !gh_effect_create_emitter_at(c->b.storage.effects,c->emitter_slot,&emitter)&&
-    emitter.serial==c->emitter_serial&&(gh_effect_em00_attack_emitter_is_bound(&emitter)||
+ if(!isfinite(scale)||scale<=0||
+    gh_effect_create_emitter_at(c->b.storage.effects,c->emitter_slot,&emitter)||
+    emitter.serial!=c->emitter_serial)return 0;
+ const uint32_t program=w(emitter.payload+0x18c);
+ /* The mirrored 2A8608 recoil carries the original actor scale into 301554. */
+ const int mirrored_recoil=(program==0x00040058u||program==0x00080058u)&&
+    (w(emitter.payload+0x1e8)&0x80u)&&gh_effect_knockdown_emitter_is_bound(&emitter);
+ return mirrored_recoil||gh_effect_em00_attack_emitter_is_bound(&emitter)||
     gh_effect_stamp19_attack_part_is_bound(&emitter)||
     gh_effect_r101_weapon_emitter_is_bound(&emitter)||
     gh_effect_player_attachment_emitter_is_bound(&emitter)||
     gh_effect_enemy_light_emitter_is_bound(c->b.storage.effects,&emitter)||
-    gh_effect_devil_emitter_is_bound(c->b.storage.effects,&emitter));
+    gh_effect_devil_emitter_is_bound(c->b.storage.effects,&emitter);
 }
 static gh_effect_status initial_scale(gh_esp_create_call*c,uint8_t*p,const gh_effect_emitter_view *emitter){
  const uint8_t *r=emitter->record.bytes,*source=emitter->payload;
  const int event_scale=h(source+0x18c)==6&&r[0x133]==0&&
     gh_effect_event_part_is_bound(emitter->record,emitter->actor,emitter->selector);
- if(r[0x290]==1&&(gh_effect_r003_esp08_row(emitter->record)||event_scale)){
+ const int roulette_scale=w(source+0x18c)==0x00390000u&&r[0x133]==0&&r[0xbe]==0&&
+    gh_effect_player_attachment_emitter_is_bound(emitter);
+ if(r[0x290]==1&&(gh_effect_r003_esp08_row(emitter->record)||event_scale||roulette_scale)){
   /* 301648–301878 scale mode1 seeds the local transform from the first
    * authored scale key and the curve magnitude from two RNG draws. */
   for(unsigned offset=0x18;offset<=0x44;offset+=4)
@@ -122,8 +129,11 @@ static gh_effect_status initial_transform(gh_esp_create_call*c,uint8_t*p,const g
      !emitter->model&&!emitter->part&&
      (gh_effect_core_radial_record_bound(c->b.storage.effects,emitter->record)||
       gh_effect_ev04_radial_record_bound(c->b.storage.effects,emitter->record));
+  const int roulette_release=w(emitter->payload+0x18c)==0x002e0000u&&
+      gh_effect_roulette_release_radial_row(emitter->record)&&
+      gh_effect_player_attachment_emitter_is_bound(emitter);
   uint32_t f=0;
-  gh_effect_status status=(r[0x133]==9||r[0x133]==8||gh_effect_player_stun_row(emitter->record)||collateral)?
+  gh_effect_status status=(r[0x133]==9||r[0x133]==8||gh_effect_player_stun_row(emitter->record)||collateral||roulette_release)?
      gh_effect_position_init_scaled_00301c20(next,emitter->record,mirrored,scale,position,&f):
      gh_esp14_position_init_00301c20(next,emitter->record,mirrored,position,&f);
   if(status)return fail(c,f?f:0x301c20,status);
@@ -182,7 +192,8 @@ static gh_effect_status initialize_12(gh_esp_create_call*c,uint8_t*p,const uint8
     gh_effect_esp_view child;
     if(gh_effect_create_esp_at(c->b.storage.effects,c->slot,&child)||child.serial!=c->serial||
        (!gh_effect_attack_esp_is_bound(c->b.storage.effects,&child)&&
-        !gh_effect_player_attachment_esp_is_bound(c->b.storage.effects,&child)))
+        !gh_effect_player_attachment_esp_is_bound(c->b.storage.effects,&child)&&
+        !gh_effect_devil_esp_is_bound(c->b.storage.effects,&child)))
        return fail(c,0x2f00e0,GH_EFFECT_UNSUPPORTED);
  }
 
@@ -359,6 +370,36 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
   status=gh_effect_create_esp_heat_aura_init_002e35c0(b->storage.effects,c->slot,c->serial,
      w((const uint8_t *)b->work+0x594),&pc);
   if(status)return fail(c,pc?pc:0x2e35c0,status);
+  c->stage=12;c->complete=1;
+  return GH_EFFECT_OK;
+ }
+ if(view.type==5&&c->stage==10){
+  if(!b->globals||!b->globals->world_light||!view.light_part||
+     !gh_effect_enemy_light_esp_is_bound(b->storage.effects,&view)||
+     w(p+0xf0)!=0x44e640u||w(r+0x174)||w(r+0x178)!=1||
+     w(r+0x7c)||w(r+0x80)||w(r+0x84)!=0x3f000000u||w(r+0x18c))
+   return fail(c,0x2e7750,GH_EFFECT_UNSUPPORTED);
+  /* The authored 2E7750 branch is a priority point light attached to part0. */
+  if(!view.light_part->alias_f0)return fail(c,0x2e7a34,GH_EFFECT_UNSUPPORTED);
+  uint8_t light[0x70]={0};
+  half(light,1);half(light+2,(uint16_t)h(r+0x170));
+  memcpy(light+0x10,view.light_part->alias_f0,12);
+  put(light+0x1c,0x3f800000u);
+  memcpy(light+0x20,r+0x148,12);
+  put(light+0x2c,0x3f800000u);
+  memcpy(light+0x30,p+0x188,12);
+  put(light+0x3c,0x3f800000u);
+  memcpy(light+0x40,r+0x13c,12);
+  put(light+0x50,w(r+0x178));put(light+0x58,0x08040000u);
+  if(gh_game_world_light_remove_owned_002d9158(b->globals->world_light,100,view.actor->bytes)||
+     gh_game_world_light_insert_owned_002d90b0(b->globals->world_light,light,view.actor->bytes))
+   return fail(c,0x2d90b0,GH_EFFECT_UNSUPPORTED);
+  half(p+0x2b0,1);half(p+0x2b2,100);
+  p[0x2c8]=1;p[0x2ca]=1;p[0x2cc]=30;p[0x2cf]=0xff;
+  memcpy(p+0x2f0,r+0x7c,12);
+  memcpy(p+0x360,light,sizeof(light) - 0xc);
+  status=gh_effect_create_esp_commit_type5(b->storage.effects,c->slot,c->serial);
+  if(status)return fail(c,0x2e7750,status);
   c->stage=12;c->complete=1;
   return GH_EFFECT_OK;
  }

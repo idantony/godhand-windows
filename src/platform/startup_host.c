@@ -815,6 +815,7 @@ static gh_effects_frame_bindings effects_frame_bindings(gh_startup_host *h,
     const gh_game_services_scene_view *scene)
 {
     gh_game_pl_camera *camera = active_scene_camera(h,scene->pl_camera);
+    h->effects_globals.world_light=scene->world_light;
     return (gh_effects_frame_bindings){
         .storage = {.effects = scene->effects, .esp = scene->scene_buffer_a,
             .esp_bytes = scene->scene_buffer_a_size, .emitters = scene->scene_buffer_b,
@@ -1254,6 +1255,8 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
     if(gh_game_services_get_scene_view(h->services,&s))return GH_SCENE_STEP_ARGUMENT;
     gh_game_pl_camera *camera=active_scene_camera(h,s.pl_camera);
     gh_scene_aux_status aux=GH_AUX_OK;
+    if(address==0x125f38&&argument==14&&h->work.room==0x103)
+        return gh_game_services_roulette_command_00125f38(h->services,argument,frontier);
     if(address==0x306528&&argument==9&&h->work.room==0x100){
         gh_effect_create_call *effect=&h->enemy_light_effect;
         if(!effect->active||effect->complete){
@@ -1720,6 +1723,7 @@ static int service_state(gh_startup_host *h,unsigned state)
         memset(&b,0,sizeof(b));b.assets=&h->game_assets;b.loop=&h->game_loop;b.init=&h->game_init;
         b.stage=&h->game_stage;b.children=&h->game_children;
         b.save=(gh_core_save_view){h->save_bytes,sizeof(h->save_bytes)};b.rate=&h->game_rate;
+        b.effects_globals=&h->effects_globals;
         b.work=&h->work;b.threads=h->threads;b.id=&h->id;b.id_global=&h->id_global;b.runtime=&h->id_runtime;
         b.font=&h->font;b.menu=&h->menu;b.core_bin=h->bundles[0].allocation.pointer;
         b.core_bin_size=h->bundles[0].bytes;b.language=&language->view;
@@ -1826,6 +1830,7 @@ static int update_state4(void *context,gh_game_loop *loop)
         .scenario={s.scenario_bytes,s.scenario_bytes_size,s.scenario},.threads=s.scenario_threads,
         .event_work=&h->event_reserve,.begin_room=scene_request_room_jump,.context=h};
     if(!s.step->action_frame.active||s.step->action_frame.complete)h->action_bindings=(gh_action_step_bindings){
+        .roulette_language=&language_bundle(h,&h->task)->view,
         .buttons=s.action_buttons,.work=&h->work,.cockpit=s.cockpit,.current_player=&s.title_player->view,
         .init=&h->game_init,.auxiliary_binding_known=1,
         .callback=h->work.room==0x100?room_r100_action:

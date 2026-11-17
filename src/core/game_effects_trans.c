@@ -1,5 +1,6 @@
 #include "game_effects_trans.h"
 #include "game_esp_trail_draw.h"
+#include "../assets/static_mesh_vu_numeric.h"
 #include "game_esp14.h"
 #include "game_esp03.h"
 #include "game_effect_node.h"
@@ -359,8 +360,7 @@ static gh_effect_status packet_type7(gh_game_effects_trans *s,const gh_effect_es
     s->b.work->mode!=0||s->b.policy!=GH_STATIC_BINARY32_REFERENCE||
     s->b.cvt_policy!=GH_FRAME_CHOP_REFERENCE||
     !gh_effect_esp_type7_record_bound(s->b.storage.effects,v)||!v->target120_known_null||
-    word(p+0x120)||p[0x2ce]>(((word(p+0x23a)==0x00090000u||word(p+0x23a)==0x004e0000u||
-       word(p+0x23a)==0x00220000u||word(p+0x23a)==0x00280000u)&&v->record.bytes[0x170]==5)?6:5)||p[0x247]>10||
+    word(p+0x120)||p[0x2ce]>6||p[0x2ce]!=v->record.bytes[0x170]+1u||p[0x247]>10||
     (flags&0x01000000u)||cls<-2||cls>4)
     return fail(s,0x2e9d48,GH_EFFECT_UNSUPPORTED);
 
@@ -448,13 +448,14 @@ static gh_effect_status packet_type12(gh_game_effects_trans*s,const gh_effect_es
     return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
  if(projected){
     if(p[0x2e2]||!v->actor||(!gh_effect_attack_esp_is_bound(s->b.storage.effects,v)&&
-       !gh_effect_player_attachment_esp_is_bound(s->b.storage.effects,v)))
+       !gh_effect_player_attachment_esp_is_bound(s->b.storage.effects,v)&&
+       !gh_effect_devil_esp_is_bound(s->b.storage.effects,v)))
        return fail(s,0x2f02b8,GH_EFFECT_UNSUPPORTED);
     if(!(flags&0x80u)&&(word(v->actor->bytes+0x250)&2u))return GH_EFFECT_OK;
     const gh_effect_sprite_camera camera={s->b.camera,s->b.init,d,s->b.policy,s->b.cvt_policy};
     uint32_t frontier=0;
-    gh_effect_status status=gh_effect_sprite_project_002fe0d8(s->b.storage.effects,s->esp_index,
-       v->serial,&camera,&s->sprite,&frontier);
+    gh_effect_status status=gh_effect_sprite_project_track_uv_002fe0d8(s->b.storage.effects,s->esp_index,
+       v->serial,&camera,&s->sprite,s->b.globals->sprite_uv_q_61b7a8,&frontier);
     if(status)return fail(s,frontier,status);
     /* 2F03E8 uses original projected depth and doubles the far limit. */
     if(!s->sprite.visible||(far&&s->sprite.original_depth>(int)(far*2u)))return GH_EFFECT_OK;
@@ -541,7 +542,8 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
     !gh_effect_enemy_light_esp_is_bound(b->storage.effects,&v)&&!gh_effect_emad_esp_is_bound(b->storage.effects,&v))||
     word(v.payload+0x114))return fail(s,0x2fb310,GH_EFFECT_UNSUPPORTED);
  if(!s->serial&&v.actor&&(word(v.actor->bytes+0x250)&0x8000u))continue;uint32_t flags=word((const uint8_t*)b->work+0x5e4),config=word(v.payload+0x104);if(!s->serial&&s->gate_10000&&!(config&2u)&&!((config&0x40u)?(flags&0x4000000u)!=0:(v.actor!=NULL||v.retired_actor.valid)))continue;if(!s->serial)s->serial=v.serial;
- if(!s->call_stage&&!s->pending&&(word(v.payload+0x11c)&0x800000u)){s->serial=s->call_stage=0;continue;}if(v.type==4||v.type==0x14){
+ if(!s->call_stage&&!s->pending&&(word(v.payload+0x11c)&0x800000u)){s->serial=s->call_stage=0;continue;}
+ if(v.type==4||v.type==0x14){
    const uint32_t trans_pc=v.type==4?0x2e6af8:0x2f2758;
    const gh_esp14_provider *provider=b->model_effect;
    if(!provider||!provider->trans)return fail(s,trans_pc,GH_EFFECT_UNSUPPORTED);
@@ -583,16 +585,22 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
      s->serial=s->call_stage=0;
      continue;
    }
-   if(!s->pending){
-      uint32_t frontier=0;
-      gh_effect_status status=gh_esp09_draw_002ec398(&s->b,index,&v,&s->packet,&frontier);
-      if(status)return fail(s,frontier?frontier:0x2ec398,status);
-      s->pending=1;
+   const unsigned count=v.payload[0x249];
+   if(count<2)return fail(s,0x2edea0,GH_EFFECT_UNSUPPORTED);
+   const unsigned batches=(count-2)/GH_EFFECT_TRANS_QUAD_CAPACITY+1;
+   while(s->call_stage<batches){
+      if(!s->pending){
+         uint32_t frontier=0;
+         gh_effect_status status=gh_esp09_draw_002ec398(&s->b,index,&v,s->call_stage,&s->packet,&frontier);
+         if(status)return fail(s,frontier?frontier:0x2ec398,status);
+         s->pending=1;
+      }
+      if(!b->emit)return fail(s,s->packet.original_callee,GH_EFFECT_UNSUPPORTED);
+      gh_effect_status status=b->emit(b->context,&s->packet);
+      if(status)return fail(s,s->packet.original_callee,status);
+      s->pending=0;s->enqueued++;s->call_stage++;
    }
-   if(!b->emit)return fail(s,s->packet.original_callee,GH_EFFECT_UNSUPPORTED);
-   gh_effect_status status=b->emit(b->context,&s->packet);
-   if(status)return fail(s,s->packet.original_callee,status);
-   s->pending=0;s->enqueued++;s->serial=s->call_stage=0;continue;
+   s->serial=s->call_stage=0;continue;
  }
  if(v.type==0x15){
   const gh_effect_status status=draw_sprite_copies_002f2a00(s,&v);
@@ -613,6 +621,10 @@ static gh_effect_status body(gh_game_effects_trans*s,const gh_effects_trans_bind
  }
  if(v.type==0x1a||v.type==0){gh_effect_status status=packet_sprite(s,&v);if(status)return status;if(s->pending){if(!b->emit)return fail(s,s->packet.original_callee,GH_EFFECT_UNSUPPORTED);status=b->emit(b->context,&s->packet);if(status)return fail(s,s->packet.original_callee,status);s->pending=0;s->enqueued++;}s->serial=s->call_stage=0;s->sprite_material=NULL;continue;}if((v.type==0x13&&word(v.payload+0xf0)==0x44ec68u)||
     (v.type==0x18&&word(v.payload+0xf0)==0x44f078u)){s->serial=s->call_stage=0;continue;}
+ if(v.type==5&&word(v.payload+0xf0)==0x44e640u&&
+     !v.payload[0x2cb]&&gh_effect_enemy_light_esp_is_bound(b->storage.effects,&v)){
+  s->serial=s->call_stage=0;continue;
+ }
  if(v.type==0x12){
    const unsigned calls=(word(v.payload+0x11c)&0x1000000u)?1:2;
    while(s->call_stage<calls){

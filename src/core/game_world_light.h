@@ -24,6 +24,11 @@ gh_light_status gh_game_world_light_initialize_002d6f40(gh_game_world_light *,co
 gh_light_status gh_game_world_light_initialize_with_heap_002d6f40(gh_game_world_light *,const gh_bundle *,gh_heap *);
 gh_light_status gh_game_world_light_release_presets(gh_game_world_light *);
 gh_light_status gh_game_world_light_preset_records(const gh_game_world_light *,unsigned,const uint8_t **,size_t *count);
+/* 2D9038/2D90B0/2D9158 operate on the live dense WorldLight records. */
+uint8_t *gh_game_world_light_find_owned_002d9038(gh_game_world_light *,uint16_t,const void *);
+gh_light_status gh_game_world_light_insert_owned_002d90b0(gh_game_world_light *,
+ const uint8_t record[0x70],const void *);
+gh_light_status gh_game_world_light_remove_owned_002d9158(gh_game_world_light *,uint16_t,const void *);
 /* Actual Getplayer parts input: owneridentity is required when the source
  * light requests a player attachment; zero parts is legitimate onlywith a
  * real known owner. Native part references never enter guestpointerwords. */

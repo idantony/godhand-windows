@@ -37,6 +37,49 @@ static gh_player_target_status height_vector(const gh_title_player_view *target,
     }
 }
 
+/* 123D04 calls the attack target's position method, then 1F7EB0
+ * measures only XZ when testing the airborne Triangle transition. */
+gh_player_target_status gh_player_attack_height_00123d04(
+    const gh_title_player_view *player,const gh_title_player_view *target,
+    int *variant,uint32_t *f)
+{
+    if(!player||!player->bytes||player->size<=0x61f||!player->alias_f0||!variant||!f)
+        return GH_PLAYER_TARGET_ARGUMENT;
+    *f=0;
+    *variant=-1;
+    float xyz[3];
+    const gh_player_target_status status=gh_enemy_target_position_00275978(target,xyz);
+    if(status)return stop(f,0x123d04,status);
+    const uint8_t *p=player->bytes,*origin=player->alias_f0;
+    if(!p[0x61f])return GH_PLAYER_TARGET_OK;
+    const float angle=number(p+0x608);
+    fenv_t env;
+    if(feholdexcept(&env))return stop(f,0x1f7eb0,GH_PLAYER_TARGET_NUMERIC);
+    if(fesetround(FE_TOWARDZERO)){
+        (void)fesetenv(&env);
+        return stop(f,0x1f7eb0,GH_PLAYER_TARGET_NUMERIC);
+    }
+    volatile float dx=xyz[0]-number(origin),dz=xyz[2]-number(origin+8);
+    volatile float dx2=dx*dx,dz2=dz*dz,distance=dx2+dz2;
+    volatile float height=xyz[1]-number(origin+4);
+    if(fesetenv(&env)||!isfinite(distance)||!isfinite(height)||!isfinite(angle))
+        return stop(f,0x123d80,GH_PLAYER_TARGET_NUMERIC);
+    if(height>1.2f&&distance<4.0f)*variant=angle>2.3561945f;
+    return GH_PLAYER_TARGET_OK;
+}
+
+gh_player_target_status gh_player_scan_close_action_00123ba8(
+    const gh_player_target_bindings *targets,const gh_game_init_state *init,
+    gh_game_action_buttons *buttons,gh_player_idle_target_result *result,uint32_t *f)
+{
+    if(!targets||!init||!result||!f)return GH_PLAYER_TARGET_ARGUMENT;
+    gh_player_target nearby;
+    gh_player_target_status status=gh_player_enemy_target_00291010(
+        targets,init,2.5f,1.57079637f,&nearby,f);
+    if(status)return status;
+    return gh_player_idle_target_00123bf0(targets->player,&nearby,init,buttons,0,0,result,f);
+}
+
 gh_player_target_status gh_player_idle_target_00123bf0(
     const gh_title_player_view *player,const gh_player_target *nearby,
     const gh_game_init_state *init,gh_game_action_buttons *buttons,

@@ -59,6 +59,7 @@ typedef struct {gh_id_texture texture;float x0,y0,x1,y1,u0,v0,u1,v1;
  * f80=1 and default drawInit scales/shift(+1,+1), clip reset0 by Trans.
  * Coordinates remain original pre-GS UI units; renderer scaling/state follows.
  * Caller runs Move first and preserves layer ordering from visible jobs. */
+gh_id_error gh_id_roulette_option_texture(const gh_id_base *,const gh_id_entry *,gh_id_texture *);
 gh_id_error gh_id_texture_quad_prepare(const gh_id_state *,const gh_id_base *,
  const gh_id_entry *,gh_id_texture_quad *);
 #ifdef __cplusplus

@@ -2,6 +2,7 @@
 #define GH_GAME_PLAYER_SQUARE_FRAME_H
 #include "game_player_square_attack.h"
 #include "game_player_targets.h"
+#include "game_action_buttons.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,6 +18,7 @@ typedef struct {
  const gh_player_frame_bindings *frame;
  const gh_player_target_bindings *target_bindings;
  gh_player_target *target_640;
+ gh_game_action_buttons *action_buttons;
  gh_square_frame_hit_area hit_area_0010a438;
  gh_square_frame_input input_mode1_00123938;
  gh_square_frame_camera camera_exit_00124f60;

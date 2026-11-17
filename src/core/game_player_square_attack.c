@@ -64,10 +64,11 @@ gh_player_frame_status gh_player_square_attack_begin_00126918(
   };
   const int triangle=set==1&&!slot&&skill==29;
   const int kick=b->work->room==0x103&&set==2&&!slot&&skill==0x25;
-  if(!triangle&&!kick&&(set||slot>=sizeof(square)/sizeof(square[0])||skill!=square[slot].skill))
+  const int back_circle=b->work->room==0x103&&set==5&&!slot&&skill==52;
+  if(!triangle&&!kick&&!back_circle&&(set||slot>=sizeof(square)/sizeof(square[0])||skill!=square[slot].skill))
    return stop(s,0x1269e0,GH_PLAYER_FRAME_UNSUPPORTED);
-  const uint32_t expected=kick?0x1277ac:triangle?0x12749c:square[slot].entry;
-  const size_t motion_row=kick?0x2f8:triangle?0x110:square[slot].motion_row;
+  const uint32_t expected=back_circle?0x127d24:kick?0x1277ac:triangle?0x12749c:square[slot].entry;
+  const size_t motion_row=back_circle?0x574:kick?0x2f8:triangle?0x110:square[slot].motion_row;
   uint32_t dispatch,power;
   if(!elf_word(b,0x41cb80+skill*4,&dispatch)||dispatch!=expected||
      !elf_word(b,0x3bc7d0+skill*0x14,&power))
@@ -94,8 +95,8 @@ gh_player_frame_status gh_player_square_attack_begin_00126918(
   p[0x1684]=0;
   /* The two original 10A408/10A420 calls configure both sides. */
   for(unsigned i=0;i<2;i++){
-   put(p+0x1660+i*4,kick?0x19u:(uint32_t)triangle);put(p+0x1668+i*4,power);
-   put(p+0x1670+i*4,triangle?0x12u:7u);put(p+0x1678+i*4,0);sh(p+0x1680+i*2,kick||triangle||skill==13?10:100);
+   put(p+0x1660+i*4,back_circle?6u:kick?0x19u:(uint32_t)triangle);put(p+0x1668+i*4,power);
+   put(p+0x1670+i*4,back_circle?0x0fu:triangle?0x12u:7u);put(p+0x1678+i*4,0);sh(p+0x1680+i*2,back_circle||kick||triangle||skill==13?10:100);
   }
   s->stage=1;
  }

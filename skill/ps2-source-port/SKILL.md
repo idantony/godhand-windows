@@ -157,6 +157,13 @@ can drift across decoder and device runs. Reuse the same tape on the
 packet-only and device replay paths, and compare their original state
 transitions before chasing presentation differences.
 
+When reusing a QA observer from an older snapshot, transplant only its
+guarded inspection code into the current platform host. Verify the host
+outside that block matches production before replaying. Confirm the input
+recorded immediately before mapping matches the selected tape through the
+last consumed sample. A matching path or input hash alone cannot show that
+the probe actually read the tape.
+
 If identical inputs diverge at the first gameplay update, compare original
 random state at the same boot, menu and event transitions. The original frame
 loop may consume random numbers while a native movie or input prompt waits.

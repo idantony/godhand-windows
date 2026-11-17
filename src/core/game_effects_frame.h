@@ -5,6 +5,7 @@
 #include "game_esp_update.h"
 #include "game_scene_tables.h"
 #include "game_scene_aux.h"
+#include "game_world_light.h"
 #include "game_scene_at_geometry.h"
 #include "../assets/static_mesh_transform.h"
 #ifdef __cplusplus
@@ -18,6 +19,8 @@ typedef struct gh_effects_frame_globals {uint32_t factor_741dc0,region_mask_741d
  uint8_t distortion_ready_61b644;
  /* 2FE0D8/2FE8A0 store sprite Q, which the original ESP03 GIF builder reads. */
  float sprite_uv_q_61b7a8[4];
+ gh_game_world_light *world_light;
+ uint32_t canonical_ratio_754c48;
 } gh_effects_frame_globals;
 gh_effect_status gh_effects_frame_globals_from_elf(gh_effects_frame_globals *,const void *,size_t);
 /* Actual292F38 writes three distinct canonical fields. */

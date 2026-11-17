@@ -29,9 +29,11 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
     const unsigned shape_class = word(p + 0x1660 + side * 4);
     const int kick = shape_class == 0x19 && word(p + 0x5e8) == 0x25 &&
         word(p + 0x1670 + side * 4) == 7;
+    const int back_circle = shape_class == 6 && word(p + 0x5e8) == 52 &&
+        word(p + 0x1670 + side * 4) == 0x0f;
     const int heat = shape_class == 0x17 && player->size > 0x1684 && p[0x1684] == 1 &&
         word(p + 0x1670 + side * 4) == 0x2a && word(p + 0x1668 + side * 4) == 5;
-    if (shape_class > 1 && !kick && !heat)
+    if (shape_class > 1 && !kick && !back_circle && !heat)
         return stop(frontier, 0x10a608, GH_HITAREA_UNSUPPORTED);
     if (!give) return stop(frontier, 0x10a438, GH_HITAREA_ARGUMENT);
 
@@ -90,13 +92,16 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
         gh_collision_pair_shape_offset_002bb258(&shapes[4], base_box, frontier))
         return GH_HITAREA_UNSUPPORTED;
 
-    if (kick) {
-        /* 10AF4C configures the second Give cylinder for 1277AC's kick. */
-        const float raised[3] = {0.0f, 2.6f, 0.2f};
+    if (kick || back_circle) {
+        /* 10AF4C raises the Circle cylinder. Back+Circle enters 10AF5C
+         * directly and keeps the common 1.3m offset written above. */
+        if (kick) {
+            const float raised[3] = {0.0f, 2.6f, 0.2f};
+            if (gh_collision_pair_shape_offset_002bb258(&shapes[1], raised, frontier))
+                return GH_HITAREA_UNSUPPORTED;
+        }
         int16_t shape_index;
         memcpy(&shape_index, p + 0x5bc, sizeof(shape_index));
-        if (gh_collision_pair_shape_offset_002bb258(&shapes[1], raised, frontier))
-            return GH_HITAREA_UNSUPPORTED;
         uint8_t *cylinder = give[1].bytes;
         memcpy(cylinder + 0x46, p + 0x1670 + side * 4, 2);
         gh_hitarea_status status = gh_hitarea_object_set_active_001fd668(&give[1], 1, frontier);

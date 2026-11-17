@@ -69,7 +69,7 @@ static gh_player_frame_status player_action_prompt(
  *frontier=0;
  if(!target->handle)return GH_PLAYER_FRAME_OK;
  const gh_player_frame_bindings *b=&bindings->frame;
- if(!b->work||(b->work->room!=0x101&&b->work->room!=0x102&&b->work->room!=0x103)){
+ if(!b->work||(b->work->room!=0x100&&b->work->room!=0x101&&b->work->room!=0x102&&b->work->room!=0x103)){
   *frontier=entry;return GH_PLAYER_FRAME_UNSUPPORTED;
  }
  const gh_title_player_view *player=b->current_player;
@@ -197,6 +197,8 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  if(mode==DODGE_INPUT&&!s->phase){
   const unsigned seq=h(p+0x3ac);
   const unsigned pressed=w(work+8);
+  /* With SEQ bit 10, the original dodge caller enters 123ACC for a buffered kick. */
+  const int buffered_triangle=b->work->room==0x100&&(seq&0x10u)&&p[0x622]&&!p[0x621]&&!p[0x623]&&!p[0x624]&&!(pressed&3u);
   if(seq&0x40u){
    if(b->work->room==0x700)return fail(s,0x1169d8,GH_PLAYER_FRAME_UNSUPPORTED);
    if(w(work+0x5d8)&0x2000000u){
@@ -205,6 +207,9 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
     if(e)return e;
     return transition(s,out,0,0);
    }
+  }
+  if(buffered_triangle)s->phase=4;
+  else if(seq&0x40u){
    if(pressed&3u||p[0x621]||p[0x622]||p[0x623]||p[0x624])
     return fail(s,0x123acc,GH_PLAYER_FRAME_UNSUPPORTED);
    if(!b->auxiliary_bindings_known||b->aux_698||b->aux_6a0||w(p+0x698)||w(p+0x6a0))
@@ -219,14 +224,16 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
     return status?fail(s,pc,status):done(s,out,1);
    }
   }
-  if(seq&0x10u){
+  if(!buffered_triangle){
+   if(seq&0x10u){
+    put(p+0x15f4,w(p+0x15f4)|0x400u);
+    if(pressed&4u)return transition(s,out,4,0);
+   }
+   if((seq&0x40u)&&!w(p+0x698)&&!w(p+0x6a0))put(p+0x15f4,w(p+0x15f4)|0x100u);
+   if(!(seq&0x20u))return done(s,out,0);
    put(p+0x15f4,w(p+0x15f4)|0x400u);
-   if(pressed&4u)return transition(s,out,4,0);
+   s->phase=8;
   }
-  if((seq&0x40u)&&!w(p+0x698)&&!w(p+0x6a0))put(p+0x15f4,w(p+0x15f4)|0x100u);
-  if(!(seq&0x20u))return done(s,out,0);
-  put(p+0x15f4,w(p+0x15f4)|0x400u);
-  s->phase=8;
  }
  if(mode==REACTION_INPUT&&!s->phase){
   if(!(h(p+0x3ac)&0x10u))return fail(s,0x123acc,GH_PLAYER_FRAME_ARGUMENT);
@@ -262,11 +269,9 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  }
  if(s->phase==13){
   if(!h(p+0x5e0)){
-   gh_player_target nearby;
-   gh_player_target_status e=gh_player_enemy_target_00291010(&s->b.targets,b->init,2.5f,1.57079637f,&nearby,&pc);
-   if(e)return target_status(s,e,pc);
    gh_player_idle_target_result result;
-   e=gh_player_idle_target_00123bf0(&b->player->view,&nearby,b->init,s->b.action_buttons,0,0,&result,&pc);
+   const gh_player_target_status e=gh_player_scan_close_action_00123ba8(
+       &s->b.targets,b->init,s->b.action_buttons,&result,&pc);
    if(e)return target_status(s,e,pc);
    if(result.transitioned){
     put(p+0x640,result.target_640.handle);
@@ -277,9 +282,6 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  }
  if(s->phase==14){
   if(p[0x622]){
-   /* 123CE4 first selects the real current attack target. The analog
-    * target-height transition remains outside this neutral Triangle route. */
-   if(p[0x61f])return fail(s,0x123d80,GH_PLAYER_FRAME_UNSUPPORTED);
    gh_player_target selected={.handle=w(p+0x640)};
    if(selected.handle&&(int8_t)p[0x648]>0){
     if(!s->b.targets.resolve)return fail(s,0x124540,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -289,10 +291,10 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
    gh_player_target_status e=gh_player_attack_target_00124540(&s->b.targets,b->init,&selected,&pc);
    if(e)return target_status(s,e,pc?pc:0x124540);
    if(selected.handle){
-    /* Original +6C is 275978 for cEm00. It also writes actor+1680. */
-    float xyz[3];
-    e=gh_enemy_target_position_00275978(&selected.view,xyz);
-    if(e)return target_status(s,e,0x123d04);
+    int variant;
+    e=gh_player_attack_height_00123d04(&b->player->view,&selected.view,&variant,&pc);
+    if(e)return target_status(s,e,pc);
+    if(variant>=0)return transition(s,out,0x10,(unsigned)variant);
    }
   }
   s->phase=5;
@@ -301,17 +303,19 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  if(s->phase==6){/*2948C8's TWO original fields, notenemy_kept16. */if(w(b->init->enemies+0x5ac)||w(b->init->enemies+0x5b0))return fail(s,0x2948c8,GH_PLAYER_FRAME_UNSUPPORTED);s->phase=7;}
  if(s->phase==7&&mode==REACTION_INPUT)return done(s,out,0);
  if(s->phase==7&&mode==IDLE_INPUT&&b->work->room==0x103&&p[0x623]&&
-    !(w(p+0x15f4)&0x8000u)&&(!p[0x61f]||num(p+0x608)<=2.3561945f)){
-  /* 123938 selects combo set 2 with its move cursor reset to zero.
-   * The result of 12C000 only gates the interruptible caller. */
-  put(p+0x5e0,0x00020000u);
+    !(w(p+0x15f4)&0x8000u)){
+  /* 123938 selects Circle set 2 or back+Circle set 5. The 12C000
+   * exhaustion result applies only to the interruptible caller. */
+  const unsigned set=p[0x61f]&&num(p+0x608)>2.3561945f?5:2;
+  put(p+0x5e0,set<<16);
   return transition(s,out,0x0b,0);
  }
  if(s->phase==7&&!p[0x623]&&p[0x622]){
   int selected;
-  gh_player_frame_status e=gh_player_triangle_input_00123f44(&b->player->view,b->save,0,&selected,&pc);
+  gh_player_frame_status e=gh_player_triangle_input_00123f44(&b->player->view,b->save,
+      mode==DODGE_INPUT,&selected,&pc);
   if(e)return fail(s,pc,e);
-  if(selected)return done(s,out,1);
+  if(selected||mode==DODGE_INPUT)return done(s,out,selected);
  }
  if(s->phase==7&&!p[0x623]&&!p[0x622]&&p[0x621]){
   int selected;

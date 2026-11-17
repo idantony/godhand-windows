@@ -31,6 +31,14 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     gh_enemy202_hit_call *, gh_enemy_actor *, const gh_title_player_view *current_player,
     unsigned save_rank, uint32_t *frontier);
 
+gh_actor_motion_status gh_enemy_devil_hit_0020a178(gh_enemy202_hit_call *,
+    const gh_enemy_entry *,const gh_enemy_hitareas *,gh_game_scene_tables *,
+    const gh_title_player_view *,unsigned save_rank,uint32_t *frontier);
+
+gh_actor_motion_status gh_enemy_devil_take_post_00208be0(gh_enemy202_hit_call *,
+    const gh_enemy_entry *,const gh_enemy_hitareas *,const gh_title_player_view *,
+    const uint8_t *thresholds,uint32_t *frontier);
+
 /* 208BE0 result-1 continuation for first effect 7. Thresholds are the
  * original CoreSave rank words at 3BF160. */
 gh_actor_motion_status gh_enemy202_hit_rank_001fa280(

@@ -25,10 +25,11 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
  const uint32_t dependency=rd(p+0x564);
  if(model->work&&model->work->room==0x103){
   if(kind==0x204&&model->root.original_vtable214==0x4479c8&&
-     model->root.size>0x1650&&p[0x2f4]==1&&!p[0x2f5]){
+     model->root.size>0x1650&&p[0x2f4]==1&&(!p[0x2f5]||p[0x2f5]==3||p[0x2f5]==4)){
    const unsigned stamp=half(p+0x640);
    const unsigned appearance=p[0x1650];
-   if((appearance==24&&((dependency==0x200&&(stamp==2||stamp==3))||
+   /* 25002C and 251614 set the same bit for the two original boss recoil clips. */
+   if((!p[0x2f5]&&appearance==24&&((dependency==0x200&&(stamp==2||stamp==3))||
        (dependency==0x203&&(stamp==6||stamp==7))))||
       (appearance==15&&((dependency==0x214&&stamp==0)||(dependency==0x215&&stamp==1))))
     return 0x48u;
@@ -38,6 +39,10 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
      ((p[0x2f5]==0xf&&p[0x2f6]==1)||(p[0x2f5]==0xb&&p[0x2f6]==5))&&
      !half(p+0x54a))return 0x48u;
  }
+ /* 11C608's paired lethal clip sets the original sample bit before Step. */
+ if(kind==0x100&&model->work&&model->work->room==0x100&&
+    model->root.original_vtable214==0x41d220&&half(p+0x2f4)==0x0b01&&
+    p[0x2f6]==5&&!half(p+0x54a))return 0x48u;
  if(kind!=0x202)return 0x40u;
  /* 25FA18 sets the same sample bit for the R100 transform death clip. */
  if(model->root.size>=0x642&&dependency==0x200&&half(p+0x640)==8&&

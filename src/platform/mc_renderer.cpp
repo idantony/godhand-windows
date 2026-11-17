@@ -102,7 +102,7 @@ static gh_id_error zero_texture(gh_mc_renderer*r,const gh_id_render_view*s,const
     /* Current canonical finite geometry only. No inference from guest heap
      * initialization and no substitute visibility/color policy. */
     // The original rotated quad paths collapse coincident corners before rasterization.
-    if(e->kind||e->f80!=1||e->texture.bytes||e->b89>4||!std::isfinite(e->draw_rotation)||
+    if(e->kind||e->f80!=1||e->b89>4||!std::isfinite(e->draw_rotation)||
        (e->draw_rotation!=0&&e->b89!=0&&e->b89!=3)||
        !std::isfinite(e->f68)||!std::isfinite(e->f6c)||!std::isfinite(e->draw_scale_x)||!std::isfinite(e->draw_scale_y)||!std::isfinite(e->draw_x)||!std::isfinite(e->draw_y))return GH_ID_UNSUPPORTED;
     float w=e->f68*e->draw_scale_x,h=e->f6c*e->draw_scale_y;if(!std::isfinite(w)||!std::isfinite(h)||(w!=0&&h!=0))return GH_ID_UNSUPPORTED;
@@ -110,6 +110,13 @@ static gh_id_error zero_texture(gh_mc_renderer*r,const gh_id_render_view*s,const
     /* CLAMP0 permits repeat coordinates outside0..1; no sample is taken for
      * zero coverage, but nonfinite serialized ST remains unsupported. */
     for(float uv:e->f70)if(!std::isfinite(uv))return GH_ID_UNSUPPORTED;
+    if(e->texture.bytes){
+        gh_id_texture texture={};
+        const auto error=gh_id_roulette_option_texture(s->base,e,&texture);
+        if(error)return error;
+        r->next=r->frame;
+        return GH_ID_OK;
+    }
     if(e->b8a>=32)return GH_ID_BOUNDS;
     const auto&table=s->manager->pair[e->b8a].texture_data;
     auto word=[](const unsigned char*p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;};
@@ -332,7 +339,7 @@ static gh_id_error append_tutorial_glyph(gh_mc_renderer *r,const gh_font_slot &f
 static gh_id_error queue_text_groups(gh_mc_renderer *r,const gh_id_render_view *view,
     const gh_id_draw_job *job,uint16_t chapter_message,gh_ui_ot_tag *tags,size_t capacity,size_t *count)
 {
-    if(!view->font||!view->menu||!view->messages)return GH_ID_ARGUMENT;
+    if(!view->font||!view->menu)return GH_ID_ARGUMENT;
     gh_id_text_result result={};
     const gh_id_text_context context={r->language,512,448,1824,{r->palette.data(),r->palette.size(),0}};
     gh_id_error status=gh_id_text_prepare_with_chapter(view->base,job->entry,view->menu,view->messages,view->font,
@@ -405,6 +412,9 @@ extern "C" gh_id_error gh_mc_renderer_queue_view_groups_with_chapter(gh_mc_rende
         return queue_text_groups(r,view,job,0,tags,capacity,count);
     if(chapter_message&&job->entry->kind==2&&view->base->resource_number==7&&job->entry->message==0x2022)
         return queue_text_groups(r,view,job,chapter_message,tags,capacity,count);
+    if(job->entry->kind==2&&view->base->id==25&&view->base->resource_number==1&&
+       job->entry->source_index==3&&job->consumer_address==0x2ab0b8)
+        return queue_text_groups(r,view,job,0,tags,capacity,count);
     if(job->entry->kind!=1){if(!capacity)return GH_ID_CAPACITY;if(!tags)return GH_ID_ARGUMENT;gh_ui_ot_tag tag;gh_id_error e=gh_mc_renderer_queue_view(r,view,job,&tag);if(e)return e;tags[0]=tag;*count=1;return GH_ID_OK;}
     gh_id_texture_quad digits[10];size_t n=0;gh_id_error e=gh_id_number_prepare(view->manager,view->base,job->entry,digits,10,&n,&r->status.frontier);if(e)return e;
     if(n>capacity||n>8192-r->queued.size())return GH_ID_CAPACITY;if(n&&!tags)return GH_ID_ARGUMENT;

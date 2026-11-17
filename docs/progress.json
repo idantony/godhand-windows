@@ -1,8 +1,26 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-15T21:29:57+00:00",
-  "stage": "native-windows-new-game-retry-and-r103-second-wave",
+  "verified_utc": "2026-11-17T07:44:24+00:00",
+  "stage": "native-windows-r100-west-and-r103-combat",
   "playable": false,
+  "merged_combat_observation": {
+    "r100_west": {
+      "registered_defeats": 8,
+      "eighth_at_tick": 9296,
+      "player_hp": 1,
+      "final_tick": 9775
+    },
+    "r103_full_hp": {
+      "start_boss_hp": [597, 597],
+      "original_controller_moves": ["Back + Circle", "Roulette Shockwave", "Roulette Shockwave"],
+      "final_boss_hp": [487, 412],
+      "final_player_hp": 2,
+      "final_tick": 9000,
+      "first_two_moves_direct3d_frames": 462,
+      "renderer_errors": 0,
+      "victory_verified": false
+    }
+  },
   "original_game_scene_observed_in_native_port": true,
   "presented_scene_observation": {
     "scope": "original R100 room and HUD during the opening fade",

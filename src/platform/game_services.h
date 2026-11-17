@@ -73,6 +73,7 @@ typedef struct {
  gh_id_state *id,**id_global;gh_id_runtime **runtime;
  gh_font_state *font;gh_menu_state *menu;
  const void *core_bin;size_t core_bin_size;const gh_bundle *language;
+ struct gh_effects_frame_globals *effects_globals;
  gh_sound_control *sound_control;gh_movie_pool *movie_pool; /*borrowRootuniqueowners*/
  gh_screen_fade *fade; /*actual747470, borrowedRootONEowner*/
  gh_audio_registry *audio_registry; /*sameactualstartup/voiceowner*/
@@ -196,6 +197,7 @@ gh_game_services_status gh_game_services_trans_actor(gh_game_services *,const gh
 gh_player_target_bindings gh_game_services_scene_targets(gh_game_services *);
 gh_scene_at_status gh_game_services_r105_jump_offer(void *,
  const gh_scene_at_task_request *,uint32_t *frontier);
+gh_scene_step_status gh_game_services_roulette_command_00125f38(gh_game_services *,unsigned,uint32_t *);
 gh_action_step_status gh_game_services_player_interact_action_002dc1d0(gh_game_services *,void *,uint32_t *);
 gh_action_step_status gh_game_services_r105_scenery_action(void *,uint32_t,void *,uint32_t *);
 /* Native R102 AT actions: ticket script 2C2138 and the default JMP2 door. */

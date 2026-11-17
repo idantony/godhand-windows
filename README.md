@@ -218,7 +218,15 @@ and presses Cross. Direct3D 11 presents 587 scene frames across the test. Once
 the return fade clears, Gene is visible in the R102 corridor at 90 HP with the
 original HUD and zero renderer, GPU or window errors. A separate full-HP replay
 verifies the original flank charge and the boss's rear Triangle recoil and footstep.
-A complete fight starting at full boss HP is still in progress.
+
+The combined build verifies eight registered defeats on the original R100
+west route, with Gene at 1 HP. In R103, a separate controller replay starts
+with both bosses at 597 HP. Back + Circle and its collateral hit lower their
+HP to 572 and 587. The first Roulette Shockwave hits both bosses for 80.
+A second Shockwave and its recoil collision leave them at 412 and 487 HP,
+with Gene alive at tick 9,000. Direct3D presents 462 frames across the first
+two attacks with zero renderer errors. The complete full-HP fight remains in
+development.
 
 Project evidence tools verify actual instruction bytes, calls, imports and
 static memory sites. Their generated reports remain private; see
@@ -454,7 +462,13 @@ R103 已运行原版增援并进入双头目战。手柄回放验证了强化启
 标志与掉落。录像随后用手柄走到原版出口并按叉键，Direct3D 11 共呈现 587 帧。
 淡入结束后，R102 显示角色、走廊和 HUD，Gene 剩余 90 HP，渲染器、GPU 和窗口
 均无报错。另一段完整初始血量的录像验证了原版蓄力夹击，以及从背后用三角键命中头目时
-的受击动作和脚步声。完整血量的双头目实战仍在验证。
+的受击动作和脚步声。
+
+合并构建验证了 R100 西区原版战斗登记的八次击倒，Gene 当时剩余 1 HP。R103 的另一条
+手柄回放从两名头目各有 597 HP 开始。后＋圆圈及击飞碰撞分别将其打到 572 和 587 HP。
+第一发轮盘冲击波各造成 80 点伤害。第二发冲击波及其击飞碰撞后，两名头目分别剩余
+412 和 487 HP，Gene 在第 9,000 帧仍然存活。Direct3D 呈现了前两招的 462 帧，
+渲染器无报错。完整血量的双头目实战仍在验证。
 
 ### 构建与运行
 

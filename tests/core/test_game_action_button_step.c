@@ -26,6 +26,20 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
  gh_game_action_buttons_reset_001f72c0(&actions);actions.entries[0].flags=0;/* independent freshflag fixture after retired201 case */request(&actions,8,0,0,0x2dca58);put((uint8_t*)&work+0x5d8,0x400000);*view.flags=1;gh_action_button_frame skipped={0};C(!gh_action_button_frame_begin(&skipped)&&!gh_action_button_step_001f7360(&skipped,&b)&&skipped.complete&&*view.flags==1&&(actions.entries[0].flags&1));
  /*Force suppressselection but still genuine1F75D0 kind3 lifetime. */
  put((uint8_t*)&work+0x5e0,0x100000);actions.entries[0].kind=3;actions.entries[0].unknown36=1;actions.entries[0].unknown32=2;gh_action_button_frame lifetime={0};C(!gh_action_button_frame_begin(&lifetime)&&!gh_action_button_step_001f7360(&lifetime,&b)&&lifetime.complete&&actions.entries[0].unknown32==1&&(actions.entries[0].flags&1)&&!(*view.flags&1));actions.entries[0].unknown32=0;gh_action_button_frame expires={0};C(!gh_action_button_frame_begin(&expires)&&!gh_action_button_step_001f7360(&expires,&b)&&expires.complete&&!(actions.entries[0].flags&1));headers_only(&actions);
- put((uint8_t*)&work+0x5d8,0);put((uint8_t*)&work+0x5e0,0);gh_game_action_buttons_reset_001f72c0(&actions);request(&actions,8,3,0,0);gh_action_button_frame complex={0};C(!gh_action_button_frame_begin(&complex)&&gh_action_button_step_001f7360(&complex,&b)==GH_ACTION_STEP_UNSUPPORTED&&complex.frontier==0x1f70c8);
+ put((uint8_t*)&work+0x5d8,0);
+ put((uint8_t*)&work+0x5e0,0);
+ gh_game_action_buttons_reset_001f72c0(&actions);
+ const float matrix[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+ const gh_roulette_option options[]={{.icon=8,.command=7,.disabled=1},{.icon=15,.command=14}};
+ uint32_t wheel_handle, wheel_pc;
+ b.roulette_language=&bundle;
+ C(!gh_action_roulette_open_001f7900(&actions,options,2,matrix,&wheel_handle,&wheel_pc)&&
+   wheel_handle>0&&wheel_handle<=8&&!wheel_pc);
+ gh_action_prompt *wheel=actions.entries+wheel_handle-1;
+ gh_action_button_frame complex={0};
+ C(!gh_action_button_frame_begin(&complex)&&!gh_action_button_step_001f7360(&complex,&b)&&
+   complex.complete&&wheel->kind==3&&wheel->life==0x32&&(wheel->flags&1)&&
+   wheel->command_count==2&&wheel->id_table[1]==14&&wheel->argument_table[0]==1&&
+   wheel->unknown35==1&&wheel->unknown36==0&&wheel->unknown32==45);
  gh_game_action_buttons_reset_001f72c0(&actions);actions.heads[15]=(gh_action_link){GH_ACTION_LINK_PROMPT,99};gh_action_button_frame foreign={0};C(!gh_action_button_frame_begin(&foreign)&&gh_action_button_step_001f7360(&foreign,&b)==GH_ACTION_STEP_BOUNDS&&foreign.frontier==0x1f7360);
  C(!gh_game_cockpit_destroy(cockpit)&&!ids->pool_used&&!gh_id_runtime_destroy(runtime));free(ids);free(bytes);free(init);gh_disc_close(d);puts("PASS realISO Cockpit39runs SAME1414..1467 HUD writes/LIFO eligibility/no-input prompt construction/highword1A4 callbackfrontiers/orderedunlinkreset/kind3 lifetime/FEnv/retry/foreignlinks; no fakecallback");return 0;}

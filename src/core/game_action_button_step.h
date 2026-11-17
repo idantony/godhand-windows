@@ -12,7 +12,7 @@ typedef gh_action_step_status (*gh_action_callback)(void *,uint32_t original_ent
 typedef struct {gh_game_action_buttons *buttons;gh_boot_work *work;gh_game_cockpit *cockpit;
  const gh_title_player_view *current_player;gh_game_init_state *init;
  const gh_title_player_view *aux_6a0;uint8_t auxiliary_binding_known;
- gh_action_callback callback;void *context;} gh_action_step_bindings;
+ gh_action_callback callback;void *context;const gh_bundle *roulette_language;} gh_action_step_bindings;
 typedef struct {const void *identity;const gh_action_step_bindings *bindings;uint32_t stage,visited,selected,cleanup_index,frontier,callback_entry;int32_t callback_kind;void *callback_argument;
  gh_action_link link;uint8_t active,complete,pressed;} gh_action_button_frame;
 gh_action_step_status gh_action_button_frame_begin(gh_action_button_frame *);

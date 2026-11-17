@@ -2,16 +2,29 @@
  * capVu0Cos(0)=1/Sin(0)=0; no general rotation approximated. */
 #include "id_jobs.h"
 #include <math.h>
+gh_id_error gh_id_roulette_option_texture(const gh_id_base *o,const gh_id_entry *e,
+ gh_id_texture *texture)
+{
+ if(o->id!=5||o->resource_number!=1||e->source_index!=1||!e->texture.bytes)
+  return GH_ID_UNSUPPORTED;
+ gh_id_error error=gh_id_texture_open_view(&e->texture,texture);
+ if(error)return error;
+ return texture->tex0==GH_ID_TIM2_128X64_PSMT8_TEX0?GH_ID_OK:GH_ID_UNSUPPORTED;
+}
+
 gh_id_error gh_id_texture_quad_prepare(const gh_id_state *manager,const gh_id_base *o,
  const gh_id_entry *e,gh_id_texture_quad *out){
  gh_id_texture_quad q;gh_id_error error;float width,height,cx,cy;
  if(!manager||!o||!e||!out)return GH_ID_ARGUMENT;
+ const int timer=o->resource_number==1&&o->id==26&&e->b8a==1&&e->b8b==1&&e->b89==0;
  const int tutorial=o->resource_number==0x1d&&
     (e->b8a==0x1d||(e->b8a==1&&e->b8b==1));
  if(e->kind!=0||e->b89>4||e->draw_rotation!=0||
     (e->f80!=1&&(!tutorial||!isfinite(e->f80)||e->f80<=0||e->f80>2)))
     return GH_ID_UNSUPPORTED;
- if(e->texture.bytes){
+ if(e->texture.bytes&&o->id==5&&o->resource_number==1){
+  error=gh_id_roulette_option_texture(o,e,&q.texture);
+ }else if(e->texture.bytes){
   /* Original 2AAEF0 uses the cockpit's selected EM14/EM15 name texture. */
   if(o->resource_number!=0x0d||e->source_index!=2||e->b8a!=0x0d||e->b8b!=1||e->b89!=1)
    return GH_ID_UNSUPPORTED;
@@ -26,7 +39,8 @@ gh_id_error gh_id_texture_quad_prepare(const gh_id_state *manager,const gh_id_ba
  }else error=gh_id_texture_open(manager,e->b8a,(uint32_t)e->b8b+1,&q.texture);
  if(error)return error;
  width=e->f68*e->draw_scale_x;height=e->f6c*e->draw_scale_y;cx=e->draw_x+1;cy=e->draw_y+1;
- if(!isfinite(width)||!isfinite(height)||!isfinite(cx)||!isfinite(cy)||width<=0||height<=0)return GH_ID_UNSUPPORTED;
+ if(!isfinite(width)||!isfinite(height)||!isfinite(cx)||!isfinite(cy)||width==0||height==0||
+    (!timer&&(width<0||height<0)))return GH_ID_UNSUPPORTED;
  switch(e->b89){
  case 0:q.x0=cx-width*0.5f;q.x1=cx+width*0.5f;q.y0=cy-height*0.5f;q.y1=cy+height*0.5f;break;
  case 1:q.x0=cx;q.x1=cx+width;q.y0=cy;q.y1=cy+height;break;
@@ -42,6 +56,16 @@ gh_id_error gh_id_texture_quad_prepare(const gh_id_state *manager,const gh_id_ba
  }
  q.u0=e->f70[0];q.v0=e->f70[1];q.u1=e->f70[2];q.v1=e->f70[3];
  if(!isfinite(q.u0)||!isfinite(q.v0)||!isfinite(q.u1)||!isfinite(q.v1))return GH_ID_UNSUPPORTED;
+ /* The authored timer sprite reverses both axes. Keep its UV orientation
+  * when normalizing the rectangle for the host sprite renderer. */
+ if(width<0){
+  float v=q.x0;q.x0=q.x1;q.x1=v;
+  v=q.u0;q.u0=q.u1;q.u1=v;
+ }
+ if(height<0){
+  float v=q.y0;q.y0=q.y1;q.y1=v;
+  v=q.v0;q.v0=q.v1;q.v1=v;
+ }
  q.color=e->color;q.color_mode=o->mode==6?e->b8d:o->mode;q.font_mode=e->h8e;q.clip=0;
  *out=q;return GH_ID_OK;
 }

@@ -1,5 +1,6 @@
 /*Actual1B7118->1867E8 common1B6FB8, independent readable nativeC.*/
 #include "game_om_initialize.h"
+#include "game_om_factory.h"
 #include "game_om_fragments.h"
 #include "game_actor_model_nodes.h"
 #include "game_actor_model_material.h"
@@ -34,7 +35,7 @@ static gh_scene_placement_status select_placement_texture(gh_om_init_state *s,
 
 gh_scene_placement_status gh_om_common_initialize_001b6fb8(gh_om_init_state*s,gh_om_object*o,const gh_om_initializer_bindings*b,int*out){
  if(!s||!o||!b||!out||!b->work||!b->packet_heap||!b->fog_rgb||!o->registered||!o->view.bytes||o->view.size<0x5f8||!o->resource.bytes||!o->resource.file_extent_known||!o->resource.file_extent||o->resource.file_extent>o->resource.size)return GH_PLACE_ARGUMENT;
- int runtime=o->runtime_created&&(o->runtime_kind==0x3eb||o->runtime_kind==0x376||o->runtime_kind==0x363||o->runtime_kind==0x353||o->runtime_kind==0x3be||o->runtime_kind==0x3d6||o->runtime_kind==0x3da||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df)&&!o->source.bytes;
+ int runtime=o->runtime_created&&(o->runtime_kind==0x3eb||o->runtime_kind==0x376||o->runtime_kind==0x363||o->runtime_kind==0x353||o->runtime_kind==0x3be||o->runtime_kind==0x3d6||o->runtime_kind==0x3da||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1)&&!o->source.bytes;
  if(!runtime&&!gh_om_fragment_profile_for(o->source.type)&&(o->source.type!=0x300&&o->source.type!=0x303&&o->source.type!=0x304&&o->source.type!=0x305&&o->source.type!=0x307&&o->source.type!=0x30a&&o->source.type!=0x30e&&o->source.type!=0x310&&o->source.type!=0x311&&o->source.type!=0x313&&o->source.type!=0x317&&o->source.type!=0x318&&o->source.type!=0x31a&&o->source.type!=0x320&&o->source.type!=0x322&&o->source.type!=0x323&&o->source.type!=0x324&&o->source.type!=0x326&&o->source.type!=0x330&&o->source.type!=0x331&&o->source.type!=0x333&&o->source.type!=0x338&&o->source.type!=0x339&&o->source.type!=0x351&&o->source.type!=0x33f&&o->source.type!=0x346&&o->source.type!=0x354&&o->source.type!=0x355&&o->source.type!=0x356&&o->source.type!=0x357&&o->source.type!=0x35d&&o->source.type!=0x382&&o->source.type!=0x308&&o->source.type!=0x309&&o->source.type!=0x30b&&o->source.type!=0x30c&&o->source.type!=0x3d3&&o->source.type!=0x3d4&&o->source.type!=0x3d5&&o->source.type!=0x41c))return GH_PLACE_ARGUMENT;
  if(!runtime&&(!o->source.bytes||o->source.size<0x2e))return GH_PLACE_BOUNDS;
  if(runtime&&w(o->view.bytes+0x5e0))return fail(s,0x1b7de8,GH_PLACE_UNSUPPORTED);
@@ -121,10 +122,9 @@ gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *
  const int ticket=o->runtime_created&&b->work->room==0x102&&kind==0x3da&&w(o->view.bytes+0x560)==0x905;
  const int placed=!o->runtime_created&&b->work->room==0x101&&kind>=0x3d3&&kind<=0x3d5;
  const int16_t room=b->work->room;
- const int pickup=o->runtime_created&&(((room==0x101||room==0x102||room==0x103)&&kind==0x3d6)||
-      ((room==0x102||room==0x103)&&kind==0x3c4)||(room==0x103&&(kind==0x3c8||kind==0x3d0||kind==0x3d1||kind==0x3d7))||
-      (room==0x102&&kind==0x3df));
- if(!ticket&&!placed&&!pickup)return GH_PLACE_ARGUMENT;
+ const int pickup=o->runtime_created&&gh_om_runtime_pickup_supported(room,kind);
+ const int west_unscaled=o->runtime_created&&room==0x100&&(kind==0x3e0||kind==0x3e1);
+ if(!ticket&&!placed&&!pickup&&!west_unscaled)return GH_PLACE_ARGUMENT;
  *out=0;
  int original=0;
  gh_scene_placement_status status=gh_om_common_initialize_001b6fb8(s,o,b,&original);
@@ -176,9 +176,7 @@ gh_scene_placement_status gh_om_r101_item_collect_001c24e8(gh_om_init_state *s)
  const int16_t room=s->bindings->work->room;
  uint8_t *actor=item->view.bytes;
  uint8_t *save=s->bindings->save.bytes;
- if(!item->runtime_created||!(((room==0x101||room==0x102||room==0x103)&&kind==0x3d6)||
-    ((room==0x102||room==0x103)&&kind==0x3c4)||(room==0x103&&(kind==0x3c8||kind==0x3d0||kind==0x3d1||kind==0x3d7))||
-    (room==0x102&&kind==0x3df))||
+ if(!item->runtime_created||!gh_om_runtime_pickup_supported(room,kind)||
     !actor||item->view.size<0x690||
     actor[0x2f4]||actor[0x2f5]||actor[0x2f6]!=3||
     (w(actor+0x5b0)&0x20u)||!save||s->bindings->save.size<GH_CORE_SAVE_BYTES)
@@ -370,6 +368,40 @@ gh_scene_placement_status gh_om3be_launch_001bb548(gh_om3be_state *s,
    return fail(&s->common,0x1fcf20,GH_PLACE_UNSUPPORTED);
   s->stage=9;
  }
+ return GH_PLACE_OK;
+}
+
+gh_scene_placement_status gh_om3be_launch_roulette_001bb548(gh_om3be_state *s,
+ const gh_title_player_view *shooter,const float origin[3],const float velocity[3],unsigned rank)
+{
+ if(!s||!s->common.object||s->stage!=6||!shooter||!shooter->bytes||!origin||!velocity||rank>5)
+  return GH_PLACE_ARGUMENT;
+ gh_title_player_view *object=&s->common.object->view;
+ uint8_t *raw=object->bytes;
+ uint32_t frontier=0;
+ float yaw;
+ if(gh_game_angle_001f8180(velocity[0],velocity[2],&yaw,
+      GH_CAMERA_NATIVE_BINARY32_REFERENCE,&frontier))
+  return fail(&s->common,frontier?frontier:0x1f8180,GH_PLACE_UNSUPPORTED);
+ memcpy(object->alias_f0,origin,12);
+ memcpy(raw+0x490,origin,12);
+ memset(raw+0x100,0,12);
+ memcpy(raw+0x104,&yaw,4);
+ memcpy(raw+0x580,velocity,12);
+ if(s->attack_created)memcpy(s->attack.bytes+0x10,velocity,12);
+ if(s->contact_created)memcpy(s->contact.bytes+0x10,velocity,12);
+ if(gh_actor_model_update_hierarchy_00149eb8(&s->common.model,GH_STATIC_BINARY32_REFERENCE))
+  return fail(&s->common,s->common.model.frontier?s->common.model.frontier:0x149eb8,GH_PLACE_UNSUPPORTED);
+ if(s->contact_created&&gh_hitarea_object_set_excluded_actor(&s->contact,shooter))
+  return fail(&s->common,0x1fcf20,GH_PLACE_UNSUPPORTED);
+ static const float lifespan[]={150,150,210,270,270,360};
+ memcpy(raw+0x614,lifespan+rank,4);
+ put(raw,0x610,0x2c);
+ put(raw,0x618,0x40400000);
+ put(raw,0x61c,20);
+ put(raw,0x624,0x43160000);
+ s->shooter=shooter;
+ s->stage=9;
  return GH_PLACE_OK;
 }
 

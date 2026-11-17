@@ -75,6 +75,8 @@ typedef struct gh_player_frame_bindings {gh_game_title_player *player;gh_boot_wo
  void *paper_context;
  gh_player_interact_prop interact_prop;
  gh_player_throw_prop throw_prop;
+ gh_player_frame_status (*roulette_time_scale)(void *,uint32_t factor,uint32_t *frontier);
+ gh_player_frame_status (*roulette_projectile)(void *,const gh_title_player_view *,uint32_t *);
 } gh_player_frame_bindings;
 /* Native continuation only; all actual mutable fields live in borrowed owners.
  * Each source-prefix stage commits once. Error retry requires same bindings;

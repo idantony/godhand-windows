@@ -74,6 +74,7 @@ int gh_effect_ev04_radial_record_bound(const gh_game_effects *,gh_effect_view);
 
 /* Shared 300EF8 positive record flag 0x00200000. Inputs use the same staged
  * slot as the caller. It consumes the original three LCG steps. */
+int gh_effect_roulette_release_radial_row(gh_effect_view);
 gh_effect_status gh_effect_position_init_scaled_00301c20(uint8_t[0x400],gh_effect_view,int,float,float[3],uint32_t*);
 gh_effect_status gh_esp14_position_init_00301c20(uint8_t staged_payload[0x400],
     gh_effect_view, int mirrored, float position[3], uint32_t *frontier);

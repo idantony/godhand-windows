@@ -99,7 +99,24 @@ static gh_scene_step_status enemies(gh_game_scene_step*s,const gh_game_scene_ste
   /* Actual125F38 immediately returns onplayer+165C==0. Constructor leaves
    * thisfieldunwritten, so only anexplicitprovided/zero-reference player may
    * establish the value; never read arbitrary hostallocation asguestpointer. */
-  gh_game_title_player*p=b->title_player;if(!p||!p->ready)return fail(s,0x2db6b0,GH_SCENE_STEP_UNSUPPORTED,0);if(p->view.initial_memory==GH_TITLE_MEMORY_UNSPECIFIED||p->view.size<0x1660||w(p->view.bytes+0x165c))return fail(s,0x125f38,GH_SCENE_STEP_UNSUPPORTED,0);
+  gh_game_title_player*p=b->title_player;if(!p||!p->ready)return fail(s,0x2db6b0,GH_SCENE_STEP_UNSUPPORTED,0);if(p->view.initial_memory==GH_TITLE_MEMORY_UNSPECIFIED||p->view.size<0x1660)return fail(s,0x125f38,GH_SCENE_STEP_UNSUPPORTED,0);
+  const uint32_t roulette_handle=w(p->view.bytes+0x165c);
+  if(roulette_handle){
+   const gh_action_step_bindings *action=b->action_native;
+   const gh_action_prompt *prompt;
+   if(!action||!action->buttons||roulette_handle>8||
+      gh_action_button_prompt(action->buttons,(gh_action_link){GH_ACTION_LINK_PROMPT,roulette_handle-1},&prompt)||
+      (prompt->flags&0x201u)!=1u||prompt->kind!=3||prompt->life!=0x32)
+    return fail(s,0x125f38,GH_SCENE_STEP_ARGUMENT,0);
+   /* The original switch returns immediately for unselected 1F. */
+   if(prompt->unknown2c!=0x1f){
+    if(prompt->unknown2c!=14||!b->external)
+     return fail(s,0x125f38,GH_SCENE_STEP_UNSUPPORTED,prompt->unknown2c);
+    uint32_t pc=0;
+    const gh_scene_step_status status=b->external(b->external_context,0x125f38,14,&pc);
+    if(status)return fail(s,pc?pc:0x125f38,status,14);
+   }
+  }
   if((b->init->enemy_top||b->init->enemy_last)&&!b->binary32_reference)
    return fail(s,0x290250,GH_SCENE_STEP_UNSUPPORTED,0);
   int special;

@@ -19,6 +19,30 @@ static gh_action_step_status hud(gh_action_button_frame*s,const gh_action_step_b
  *v.icon=icon;ww(v.screen_x,x);ww(v.screen_y,y);ww(v.message,(uint32_t)p->life+0x3011u);return GH_ACTION_STEP_OK;
 }
 static int pressed(const gh_boot_work*work,const gh_action_prompt*p){uint32_t buttons=w((const uint8_t*)work+0x1a4);switch(p->unknown20){case 0:return (buttons&8)!=0;case 1:return (buttons&1)!=0;case 2:return (buttons&2)!=0;case 3:return (buttons&4)!=0;default:return 0;}}
+/* The kind-3 action action uses the cockpit's original result and timer.
+ * 1F6FA0 genuinely returns one. Only the initial ID setup can fail here. */
+static gh_action_step_status roulette_step(gh_action_button_frame*s,const gh_action_step_bindings*b,gh_action_prompt*p)
+{
+ if(p->unknown36==1)return GH_ACTION_STEP_OK;
+ const int selected=gh_game_cockpit_roulette_result_001451e0(b->cockpit);
+ if(selected==-2&&!p->unknown35){
+  const gh_id_error result=gh_game_cockpit_roulette_start_00144fd8(b->cockpit,
+     b->roulette_language,p->command_table,p->id_table,p->argument_table,p->command_count,p->unknown30);
+  if(result)return fail(s,0x144fd8,result==GH_ID_UNSUPPORTED?GH_ACTION_STEP_UNSUPPORTED:GH_ACTION_STEP_CALLEE);
+  p->unknown32=45;
+  p->unknown35=1;
+ }else if(p->unknown32>0)--p->unknown32;
+ p->unknown2c=0x1f;
+ if(selected>=0){
+  if(p->unknown35==1)gh_game_cockpit_roulette_flag(b->cockpit,0x20000000u);
+  p->unknown2c=selected;
+  p->unknown36=1;
+  p->unknown32=2;
+ }else if(p->unknown35==1){
+  p->unknown30=(uint16_t)(gh_game_cockpit_roulette_counter(b->cockpit)+1);
+ }
+ return GH_ACTION_STEP_OK;
+}
 gh_action_step_status gh_action_button_frame_begin(gh_action_button_frame*s){if(!s||(s->active&&!s->complete))return GH_ACTION_STEP_ARGUMENT;*s=(gh_action_button_frame){.identity=s,.active=1};return GH_ACTION_STEP_OK;}
 gh_action_step_status gh_action_button_step_001f7360(gh_action_button_frame*s,const gh_action_step_bindings*b){
  if(!s||!b||!s->active||s->identity!=s||!b->buttons||!b->work||b->buttons->native_identity!=b->buttons||!b->buttons->links_ready)return GH_ACTION_STEP_ARGUMENT;s->frontier=0;if(s->complete)return GH_ACTION_STEP_OK;if(s->bindings&&s->bindings!=b)return GH_ACTION_STEP_ARGUMENT;s->bindings=b;
@@ -30,7 +54,7 @@ gh_action_step_status gh_action_button_step_001f7360(gh_action_button_frame*s,co
    else {const gh_action_prompt*p;if(gh_action_button_prompt(a,s->link,&p))return fail(s,0x1f7360,GH_ACTION_STEP_BOUNDS);if(p->state0c==1&&p->life!=0x31){int accept;gh_action_step_status e=eligible(s,b,p,&accept);if(e)return e;if(accept){s->selected=s->link.index;s->stage=2;break;}}}
    if(gh_action_button_next(a,s->link,&s->link))return fail(s,0x1f7360,GH_ACTION_STEP_BOUNDS);s->visited++;
   }if(s->stage==1)s->stage=4;}
- if(s->stage==2){gh_action_prompt*p=a->entries+s->selected;if(p->kind==3)return fail(s,0x1f70c8,GH_ACTION_STEP_UNSUPPORTED);if(p->kind>=0&&p->kind<=2){gh_action_step_status e=hud(s,b,p);if(e)return e;s->pressed=(uint8_t)pressed(b->work,p);s->callback_kind=p->kind;s->callback_entry=p->callback_id10;s->callback_argument=p->callback_argument;s->stage=3;}else s->stage=4;}
+ if(s->stage==2){gh_action_prompt*p=a->entries+s->selected;if(p->kind==3){gh_action_step_status e=roulette_step(s,b,p);if(e)return e;s->stage=4;}else if(p->kind>=0&&p->kind<=2){gh_action_step_status e=hud(s,b,p);if(e)return e;s->pressed=(uint8_t)pressed(b->work,p);s->callback_kind=p->kind;s->callback_entry=p->callback_id10;s->callback_argument=p->callback_argument;s->stage=3;}else s->stage=4;}
  if(s->stage==3){if(s->pressed&&s->callback_entry){if(s->callback_kind!=0&&(s->callback_kind!=2||(s->callback_entry!=0x2c2138&&s->callback_entry!=0x2c2078&&s->callback_entry!=0x2c2330)||!s->callback_argument||!b->callback))return fail(s,0x31b410,GH_ACTION_STEP_UNSUPPORTED);if(!b->callback)return fail(s,s->callback_entry,GH_ACTION_STEP_UNSUPPORTED);uint32_t pc=0;gh_action_step_status e=b->callback(b->context,s->callback_entry,s->callback_argument,&pc);if(e)return fail(s,pc?pc:s->callback_entry,e);}s->stage=4;}
  if(s->stage==4){while(s->cleanup_index<8){unsigned i=s->cleanup_index;gh_action_prompt*p=a->entries+i;if((p->flags&0x201)==1){if(p->kind==3&&p->unknown36!=1){s->cleanup_index++;continue;}if(p->kind==3&&p->unknown32>0){p->unknown32--;s->cleanup_index++;continue;}uint32_t pc=0;gh_action_set_status e=gh_action_button_reset_entry_001f7228(a,i,&pc);if(e)return fail(s,pc?pc:0x1f7228,e==GH_ACTION_SET_BOUNDS?GH_ACTION_STEP_BOUNDS:GH_ACTION_STEP_CALLEE);}s->cleanup_index++;}s->complete=1;}
  return GH_ACTION_STEP_OK;

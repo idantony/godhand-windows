@@ -20,6 +20,40 @@ gh_action_set_status gh_action_button_set_001f7858(gh_game_action_buttons*s,cons
  *emitted=1;*index=selected;return GH_ACTION_SET_OK;
 }
 
+gh_action_set_status gh_action_roulette_open_001f7900(gh_game_action_buttons *s,
+ const gh_roulette_option *row,unsigned count,const float *matrix,uint32_t *handle,uint32_t *frontier)
+{
+ if(!owner(s)||!row||!matrix||!handle||!frontier||count>GH_ACTION_ROULETTE_LIMIT)
+  return GH_ACTION_SET_ARGUMENT;
+ *handle=0;
+ /* The original has one shared icon, id, and disabled table for kind3. */
+ for(unsigned i=0;i<8;i++){
+  if((s->entries[i].flags&0x201u)==1&&s->entries[i].kind==3){
+   *frontier=0x1f7900;return GH_ACTION_SET_UNSUPPORTED;
+  }
+ }
+ const gh_action_set_request request={.priority=13,.life=0x32,.kind=3};
+ int emitted;
+ unsigned index;
+ const gh_action_set_status status=gh_action_button_set_001f7858(s,&request,&emitted,&index,frontier);
+ if(status||!emitted)return status;
+ for(unsigned i=0;i<count;i++){
+  s->roulette_icons[i]=row[i].icon;
+  s->roulette_ids[i]=row[i].command;
+  s->roulette_disabled[i]=row[i].disabled;
+ }
+ gh_action_prompt *prompt=s->entries+index;
+ prompt->matrix=matrix;
+ prompt->unknown30=0;
+ prompt->unknown35=0;
+ prompt->command_count=(uint8_t)count;
+ prompt->command_table=s->roulette_icons;
+ prompt->id_table=s->roulette_ids;
+ prompt->argument_table=s->roulette_disabled;
+ *handle=index+1;
+ return GH_ACTION_SET_OK;
+}
+
 static void assign(gh_game_action_buttons*s,gh_action_link node,gh_action_link next){if(node.kind==GH_ACTION_LINK_HEADER)s->heads[node.index]=next;else s->prompt_next[node.index]=next;}
 gh_action_set_status gh_action_button_reset_entry_001f7228(gh_game_action_buttons*s,unsigned index,uint32_t*f){
  if(f)*f=0;if(!owner(s)||index>=8||!f)return GH_ACTION_SET_ARGUMENT;gh_action_link previous={GH_ACTION_LINK_HEADER,15},current;gh_action_set_status e=gh_action_button_next(s,previous,&current);if(e){*f=0x1f7820;return e;}unsigned visited=0;
