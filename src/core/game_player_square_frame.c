@@ -4,7 +4,6 @@
 #include "game_player_square_input.h"
 #include "game_player_idle_input.h"
 #include "game_player_root_delta.h"
-#include "game_player_idle_input.h"
 #include "id_layout_rotation.h"
 #include <string.h>
 #include <fenv.h>
@@ -119,7 +118,6 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
  if(sequence&0x40){
   put(p+0x15f4,word(p+0x15f4)|0x400u);
   if(p[0x627]||p[0x61e]){
-   uint8_t variant=0;
    if(!p[0x627]){
     if(!f->camera||!f->camera->constructed||!f->camera->identity)
      return stop(s,0x138f88,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -127,14 +125,13 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
      s->input_result=0;
      return GH_PLAYER_FRAME_OK;
     }
-    if(!isfinite(value(p+0x614)))return stop(s,0x124154,GH_PLAYER_FRAME_NUMERIC);
-    if(value(p+0x614)<=2.3561945f)return stop(s,0x124154,GH_PLAYER_FRAME_UNSUPPORTED);
-    put(p+0x54c,0x40a00000);
-    variant=1;
+    uint32_t pc=0;
+    const gh_player_frame_status status=gh_game_player_directional_dodge_00124154(&f->player->view,&pc);
+    if(status)return stop(s,pc?pc:0x124154,status);
+   }else{
+    p[0x2f4]=p[0x2f6]=p[0x2f7]=0;
+    p[0x2f5]=6;
    }
-   p[0x2f4]=p[0x2f6]=0;
-   p[0x2f5]=6;
-   p[0x2f7]=variant;
    s->input_result=1;
    return GH_PLAYER_FRAME_OK;
   }

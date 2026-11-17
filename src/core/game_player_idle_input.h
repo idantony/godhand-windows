@@ -20,6 +20,9 @@ gh_player_frame_status gh_game_player_interact_prompt_002dc108(
 gh_player_frame_status gh_game_player_pickup_prompt_002dbd40(
  const gh_player_idle_input_bindings *,const gh_player_target *,uint32_t *frontier);
 gh_player_frame_status gh_game_player_input_cleanup_0012bfb8(const gh_player_frame_bindings *,uint32_t *frontier);
+/* Shared right-stick selection in original 123938, after the camera gate. */
+gh_player_frame_status gh_game_player_directional_dodge_00124154(
+ const gh_title_player_view *,uint32_t *frontier);
 gh_player_frame_status gh_game_player_idle_input_00123938(gh_player_idle_input *,const gh_player_idle_input_bindings *,int *original_return);
 /* Original 123938(player,1), ordinary evade cancel windows. */
 gh_player_frame_status gh_game_player_dodge_input_00123938(gh_player_idle_input *,

@@ -147,6 +147,11 @@ Two native R103 title-load replays escape the first boss's sustained grab
 with real button presses and restore player control. Leaving the pad neutral
 during the grab plays the original lethal motion. Pressing Cross in the
 original Game Over menu reloads R103 at 100 HP and resumes scene updates.
+The same input tape presents 106 Direct3D scene frames covering the menu and
+the first visible scene after Retry. In a separate fight, an amplified Triangle
+hit lowers the second boss from 549 to 525 HP, followed by another hit to 513.
+A right-stick dodge during the original attack cancel window avoids the first
+boss's next grab attempt.
 Full boss clearance remains in development. Earlier Direct3D replays present the escape counter and the movement that
 follows it after entering R103 through the original door from R102.
 
@@ -396,6 +401,9 @@ Gene 起身恢复操作后，方块路线将第二名头目的生命值从 597 �
 两条从标题读档进入 R103 的原生回放通过连续按键挣脱首名头目的持续抓投，恢复操作。
 抓投期间保持手柄无输入会播放原版致死动作。在原版 Game Over 菜单按叉键重试，
 Gene 以 100 HP 回到 R103，场景继续运行。
+同一份手柄回放用 Direct3D 呈现了 106 帧，覆盖失败菜单和重试后的首个可见场景。
+另一条路线中，强化三角命中将第二名头目的 HP 从 549 降到 525，随后再次命中降到 513。
+在原版攻击允许取消的时机使用右摇杆，成功躲过首名头目的下一次抓取。
 完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
 已呈现挣脱反击和随后的摇杆移动。
 

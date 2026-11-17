@@ -790,9 +790,11 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     enum { amplified_power_ready = 16, stamp2_counter_cue = 18, stamp2_counter_reset = 19 };
     if (call->phase == 2 && (half(p + 0x3ac) & 0x100u)) {
         const int amplified_triangle = triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) ||
-            r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p));
+            r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p) ||
+            (p[0x2f6]==1&&r103_boss_player_strike_target(enemy,p)));
+        const int boss_square = boss_strike && effect==7 && p[0x2f6]==1;
         const int r102_em00 = r102_close_em00_punch(enemy, p, effect);
-        const int verified_motion = ((amplified_triangle || r102_em00 ||
+        const int verified_motion = ((amplified_triangle || boss_square || r102_em00 ||
             (r102_stamp2_punch(enemy, p, effect) && p[0x2f6] == 1)) && p[0x2f5] == 0x15) ||
             (r102_em00 && p[0x2f5] == 0x4b && p[0x2f6] == 1);
         if (!verified_motion || p[0x2f4] || p[0x2f7] || !rank)
@@ -1017,7 +1019,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             }
         }
         /* 20D218 returns before the counter RNG on the amplified effect-7 Take. */
-        const int skip_counter = (flags & 0x100u) && (r102_close_em00_punch(enemy, p, effect) ||
+        const int skip_counter = (flags & 0x100u) && ((boss_strike&&effect==7) || r102_close_em00_punch(enemy, p, effect) ||
             r102_stamp2_punch(enemy, p, effect));
         if (!skip_counter && !word(player->bytes + 0x5fc) && block <= 0 &&
             !body->state->heat[0x10] && !(number(p + 0x17cc) > 0)) {
@@ -1133,9 +1135,10 @@ counter_cue:
         }
         p[0x2f4] = 1;
         const int stunned = number(p + 0x17cc) > 0;
-        /* 20BD94 sends amplified 020A effect 7 to 20BDE0. */
-        const int stamp2_amplified = r102_stamp2_punch(enemy, p, effect) && (half(p + 0x3ac) & 0x100u);
-        p[0x2f5] = triangle ? (stunned ? 7 : 1) : (stunned || stamp2_amplified ? 1 : 0);
+        /* 20BD94 sends amplified effect 7 for 020A and the twins to 20BDE0. */
+        const int amplified_square = (half(p + 0x3ac) & 0x100u) &&
+            ((boss_strike&&effect==7)||r102_stamp2_punch(enemy,p,effect));
+        p[0x2f5] = triangle ? (stunned ? 7 : 1) : (stunned || amplified_square ? 1 : 0);
         p[0x2f6] = p[0x2f7] = 0;
         call->reacted = 1;
         call->phase = 5;
@@ -1213,12 +1216,13 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const uint16_t effect = body->bytes && body->size >= 0x48 ? half(body->bytes + 0x46) : 0;
     const int triangle = triangle_take_supported(enemy, p, effect);
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
+    const int boss_square=effect==7&&r103_boss_player_strike_target(enemy,p);
     if (!isfinite(timer) || (word(p + 0x564) != 0x20a && !r100_stamp19(enemy, p) &&
          !r100_stamp20(enemy, p) && !triangle && !room_unarmed_punch(enemy, p, effect) &&
          !r102_em03_punch(enemy, p, effect) && !r102_east_em27_punch(enemy, p, effect) &&
          !r102_at0b_em02_punch(enemy,p,effect)) ||
-        (amplified && !(triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) ||
-        r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p))) &&
+        (amplified && !boss_square && !(triangle && (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) ||
+        r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p) || r103_boss_player_strike_target(enemy,p))) &&
          !r102_close_em00_punch(enemy, p, effect) && !r102_stamp2_punch(enemy, p, effect)))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
@@ -1295,9 +1299,10 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     const int amplified_triangle = call->effect == 0x12 &&
         (r100_stamp20(enemy, p) || r100_stamp8(enemy, p) || r103_first_wave_em00(enemy) ||
-         r103_arena_em0a(enemy,p));
+         r103_arena_em0a(enemy,p) || r103_boss_player_strike_target(enemy,p));
+    const int boss_square=take_effect==7&&r103_boss_player_strike_target(enemy,p);
     if (amplified && (manager_active ||
-        (!amplified_triangle && !r102_close_em00_punch(enemy, p, half(body->bytes + 0x46)) &&
+        (!amplified_triangle && !boss_square && !r102_close_em00_punch(enemy, p, half(body->bytes + 0x46)) &&
          !r102_stamp2_punch(enemy, p, half(body->bytes + 0x46)))))
         return stop(frontier, 0x271cf8);
     if (amplified && ((word((const uint8_t *)enemy->entry.b.work + 0x590) & 0x800u) ||

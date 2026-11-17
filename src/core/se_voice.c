@@ -1967,8 +1967,9 @@ static int core_critical_sequence(const struct voice *v)
  const int r102_em0a=model->work->room==0x102&&stamp==2&&state==0x0101&&
     model->root.size>0x1650&&actor[0x1650]==5&&w(actor+0x564)==0x20a;
  const int arena_em00=r103_em00_voice_actor(v)!=NULL;
+ const int arena_boss=r103_boss_voice_actor(v)&&!actor[0x2f7];
  const int arena=actor[0x2f6]==0&&
-    ((state==0x0101&&(arena_em00||r103_em0a_voice_actor(v)))||(state==0x0701&&arena_em00));
+    ((state==0x0101&&(arena_em00||r103_em0a_voice_actor(v)||arena_boss))||(state==0x0701&&arena_em00));
  const int room_actor=(((r100||r102)&&w(actor+0x564)==0x200)||r102_em0a)&&
     h(actor+0x2fe)==0x202;
  return (room_actor||arena)&&
