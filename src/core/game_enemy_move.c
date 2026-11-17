@@ -9137,8 +9137,9 @@ static gh_actor_motion_status triangle_zero_wait(gh_enemy202_move *s,uint8_t *p)
     return GH_ACTOR_MOTION_OK;
 }
 
-/* 24D0F0's rear-hit clip and 24D550's continuation for the R102 EM00. */
-static gh_actor_motion_status advance_rear_reaction_0024d0f0(gh_enemy202_move *s,uint8_t *p)
+/* The 24D0F0 Square and 24DA80 Triangle rear reactions use distinct clips
+ * and wait draws, followed by the same stun, attack-choice and root steps. */
+static gh_actor_motion_status advance_short_rear_reaction(gh_enemy202_move *s,uint8_t *p)
 {
     enum { PREPARE=30, BIND, VOICE, RECOVERY_CUE, DELAY, STEP_EFFECT, SAMPLE,
         CHOOSE, RESISTANCE, WAIT, ATTACK, ROTATE, TRANSLATE, RECOVERY_DECIDE };
@@ -9147,25 +9148,32 @@ static gh_actor_motion_status advance_rear_reaction_0024d0f0(gh_enemy202_move *s
     gh_game_init_state *init=enemy->entry.b.init;
     gh_title_player_view *actor=&enemy->entry.object.view;
     uint32_t pc=0;
+    const int triangle=s->pending_ai_pc==0x24da80;
+    const size_t row_offset=triangle?0x1268u:0x540u;
     if(s->state1_phase==PREPARE){
         const gh_object_view *resource=&enemy->entry.resource;
-        const uint8_t *leaf=elf_span(s->elf,s->elf_bytes,0x43dd80,4);
-        if(!leaf||word(leaf)!=0x24d12c||word(p+0x6ec)||
-            !resource->bytes||!resource->file_extent_known||resource->file_extent<0x548||
+        const uint32_t dependency=word(p+0x564);
+        const uint32_t selection=triangle?0x43e2f0+(dependency-0x200)*4u:0x43dd80;
+        const uint32_t entry=triangle?0x24e938:0x24d12c;
+        const uint8_t *leaf=elf_span(s->elf,s->elf_bytes,selection,4);
+        if(!leaf||word(leaf)!=entry||word(p+0x6ec)||
+            !resource->bytes||!resource->file_extent_known||resource->file_extent<row_offset+8||
             resource->file_extent>resource->size||motion->b.resource!=resource->bytes)
-            return stop(s,0x24d12c,GH_ACTOR_MOTION_UNSUPPORTED);
-        uint32_t draw;
-        if(gh_game_mt_next_0030f348(&init->random,&draw))
-            return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
-        put(p+0x608,(draw&3u)?0x41200000u:0);
+            return stop(s,entry,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(!triangle){
+            uint32_t draw;
+            if(gh_game_mt_next_0030f348(&init->random,&draw))
+                return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
+            put(p+0x608,(draw&3u)?0x41200000u:0);
+        }
         s->state1_phase=BIND;
     }
     if(s->state1_phase==BIND){
-        const uint8_t *row=enemy->entry.resource.bytes+0x540;
+        const uint8_t *row=enemy->entry.resource.bytes+row_offset;
         gh_actor_motion_call *call=&s->substate67_motion;
         if(!call->active){
             const gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(
-                call,motion,&motion->b,word(row),word(row+4),word(p+0x608),2,
+                call,motion,&motion->b,word(row),word(row+4),triangle?0:word(p+0x608),2,
                 p[0x17c3]?0x42:0x40,0);
             if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
         }
@@ -9201,7 +9209,16 @@ static gh_actor_motion_status advance_rear_reaction_0024d0f0(gh_enemy202_move *s
         if(heat<1||heat>5)return stop(s,0x1fa010,GH_ACTOR_MOTION_UNSUPPORTED);
         gh_game_mt next=init->random;
         uint32_t delay,jitter;
-        if(gh_game_mt_next_0030f348(&next,&delay)||gh_game_mt_next_0030f348(&next,&jitter))
+        if(gh_game_mt_next_0030f348(&next,&delay))
+            return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
+        unsigned wait=delay%45u+60u-15u*(heat>4?3:heat-1);
+        if(triangle&&heat<=2){
+            uint32_t short_wait;
+            if(gh_game_mt_next_0030f348(&next,&short_wait))
+                return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
+            if(short_wait%(heat==1?8u:6u)==0)wait=15;
+        }
+        if(gh_game_mt_next_0030f348(&next,&jitter))
             return stop(s,0x31cfe0,GH_ACTOR_MOTION_UNSUPPORTED);
         const float yaw=number(word(p+0x104));
         fenv_t env;
@@ -9212,11 +9229,11 @@ static gh_actor_motion_status advance_rear_reaction_0024d0f0(gh_enemy202_move *s
             return stop(s,0x1f7d48,GH_ACTOR_MOTION_UNSUPPORTED);
         init->random=next;
         put(p+0x104,bits(turned));
-        put(p+0x5f4,delay%45u+60u-15u*(heat>4?3:heat-1));
+        put(p+0x5f4,wait);
         put(p+0x600,0x41200000u);
         put(p+0x604,0x40000000u);
         p[0x2f6]=3;
-        s->state1_phase=STEP_EFFECT;
+        s->state1_phase=triangle?SAMPLE:STEP_EFFECT;
     }
     const float rate=number(word(p+0x5a8));
     if(!isfinite(rate))return stop(s,0x24d550,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -9243,6 +9260,7 @@ static gh_actor_motion_status advance_rear_reaction_0024d0f0(gh_enemy202_move *s
             enemy_decision(p,1,0x0f,0);
             s->state1_phase=RESISTANCE;
         }else s->state1_phase=ended?CHOOSE:RESISTANCE;
+        if(triangle&&s->state1_phase==RESISTANCE&&p[0x2f7])s->state1_phase=17;
     }
     if(s->state1_phase==CHOOSE){
         const gh_actor_motion_status status=choose_after_substate_002705d8(s,p);
@@ -9332,7 +9350,9 @@ static gh_actor_motion_status advance_first_reaction_0024c3c8(gh_enemy202_move *
     if(triangle&&s->state1_phase==19)
         return stop(s,entry,GH_ACTOR_MOTION_UNSUPPORTED);
     if(s->state1_phase==6){
-        if(east_em00&&!p[0x2f7]&&(p[0x2f6]==2||p[0x2f6]==3))
+        if(boss_triangle&&!p[0x2f7]&&(p[0x2f6]==2||p[0x2f6]==3))
+            s->state1_phase=p[0x2f6]==2?30:36;
+        else if(east_em00&&!p[0x2f7]&&(p[0x2f6]==2||p[0x2f6]==3))
             s->state1_phase=p[0x2f6]==2?30:35;
         else if(p[0x2f6]==1)s->state1_phase=11;
         else if(p[0x2f6]!=0||p[0x2f7]||word(p+0x6ec))
@@ -9349,7 +9369,7 @@ static gh_actor_motion_status advance_first_reaction_0024c3c8(gh_enemy202_move *
                     return stop(s,pc?pc:0x2da038,GH_ACTOR_MOTION_UNSUPPORTED);
                 if(ordered_abs(angle)>2.3561945f){
                     p[0x2f6]=2;
-                    if(!east_em00){
+                    if(!east_em00&&!boss_triangle){
                         s->state1_phase=19;
                         return stop(s,triangle?entry:0x24d0f0,GH_ACTOR_MOTION_UNSUPPORTED);
                     }
@@ -9384,7 +9404,7 @@ static gh_actor_motion_status advance_first_reaction_0024c3c8(gh_enemy202_move *
     }
 rear_reaction:
     if(s->state1_phase>=30){
-        const gh_actor_motion_status status=advance_rear_reaction_0024d0f0(s,p);
+        const gh_actor_motion_status status=advance_short_rear_reaction(s,p);
         if(status)return status;
     }
     if(s->state1_phase==7){

@@ -223,6 +223,7 @@ static int enemy_reaction_profile(const struct voice *v,int16_t bank,int16_t pro
        ((state==0x0101||state==0x0701)&&!phase));
   const int arena_boss=r103_boss_voice_actor(v)&&v->part_index==-1&&
       (v->combat_profile||((state==0x0001||state==0x0101)&&!phase&&!root->bytes[0x2f7])||
+       (state==0x0101&&phase==2&&!root->bytes[0x2f7])||
        (state==0x0701&&!phase&&!h(root->bytes+0x54a))||
        r103_em14_hold_voice(v,root->bytes,7));
   if(h(root->bytes+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!arena_em03&&!arena_em0a&&!arena_boss)return 0;
@@ -640,6 +641,7 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
       (state==0x0a00&&boss[0x2f7]==1)||r103_boss_paired_attack(boss)||
       state==0x3b00||state==0x3c00))||
      (!state&&boss[0x2f6]==2)||
+     (state==0x0101&&boss[0x2f6]==3&&!boss[0x2f7])||
      (state==0x3b00&&(boss[0x2f6]==3||boss[0x2f6]==5))||r103_pincer_flank_withdrawal(boss)||
      r103_em14_hold_voice(v,boss,5));
  const int arena_hold=(arena_foot&&(state==0x7500||state==0x4d00))||

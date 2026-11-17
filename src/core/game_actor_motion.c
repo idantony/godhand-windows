@@ -96,7 +96,11 @@ unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *b)
  const int east_rear=p&&root->size>0x1650&&b->work&&b->work->room==0x102&&
     root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x202&&rd(p+0x564)==0x200&&
     half(p+0x640)==3&&p[0x1650]==1&&p[0x2f4]==1&&!p[0x2f5]&&p[0x2f6]==2&&!p[0x2f7];
- return (blowaway||east_rear||gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
+ const int boss_rear=p&&root->size>0x17c3&&b->work&&b->work->room==0x103&&
+    root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x204&&p[0x1650]==15&&
+    half(p+0x640)<2&&rd(p+0x564)==0x214u+half(p+0x640)&&
+    half(p+0x2f4)==0x0101&&p[0x2f6]==2&&!p[0x2f7]&&p[0x17c3];
+ return (blowaway||east_rear||boss_rear||gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
 }
 
 int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_bits,
