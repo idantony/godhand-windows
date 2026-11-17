@@ -234,6 +234,12 @@ static int r104_turn_is_exposed(const uint8_t *actor)
         !(half(actor+0x3ac)&0x100u)&&(word(actor+0x16d4)&1u);
 }
 
+static int r104_brace_is_exposed(const uint8_t *actor)
+{
+    return half(actor+0x2f4)==0x2100&&actor[0x2f6]==1&&
+        !(half(actor+0x3ac)&0x100u)&&(word(actor+0x16d0)&0x80e020u)==0x800000u;
+}
+
 static int r104_player_punch(const gh_enemy_actor *enemy,const uint8_t *actor,uint16_t effect)
 {
     if(effect!=7||!gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)||
@@ -247,7 +253,7 @@ static int r104_player_punch(const gh_enemy_actor *enemy,const uint8_t *actor,ui
     return !variant&&((state==0x1a00&&(phase==3||phase==5))||
         (state==0x1500&&phase==1&&(amplified||flags==0x800))||
         (state==0x1600&&phase==1&&amplified)||
-        (state==0x2100&&phase==1&&!amplified&&(word(actor+0x16d0)&0x80e020u)==0x800000u));
+        r104_brace_is_exposed(actor));
 }
 
 gh_actor_motion_status gh_enemy202_damage_0028fb88(
@@ -1142,9 +1148,10 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int idle_move=!half(p+0x2f4)&&p[0x2f6]==1&&!half(p+0x3ac);
     const int grab_windup=half(p+0x2f4)==0x4b00&&p[0x2f6]==1&&half(p+0x3ac)==0x800&&
         (word(p+0x16d4)&0x400u);
+    const int brace_windup=r104_brace_is_exposed(p);
     const int r104_triangle=triangle&&r104_em03_damage_receiver(enemy,p)&&
         (r104_turn_is_exposed(p)||(!p[0x2f7]&&
-         ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||em03_combo||fast_melee||idle_move||grab_windup)))&&
+         ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||em03_combo||fast_melee||idle_move||grab_windup||brace_windup)))&&
         word(player->bytes+0x5e8)==29&&
         word(body->bytes+0x4c)==12&&rank==1&&!body->state->heat[0x10];
     const int boss_recovery=r104_recovery||r104_triangle||em27_punch;
@@ -1257,9 +1264,9 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     if (call->phase == 3) {
         const uint16_t flags = half(p + 0x3ac);
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
-        const int r104_grab_recoil=r104_triangle&&grab_windup&&(behavior&0x800000u)&&
-            !body->state->heat[0x10];
-        if(r104_braced||r104_grab_recoil){
+        const int r104_braced_triangle=r104_triangle&&(grab_windup||brace_windup)&&
+            (behavior&0x800000u)&&!body->state->heat[0x10];
+        if(r104_braced||r104_braced_triangle){
             /* Original 20B394/20B8A8 calls 26A338 and preserves the live Move. */
             if((flags&0x12cu)||(status&0x04080040u)||!half(p+0x54a))
                 return stop(frontier,0x20af20);

@@ -18,7 +18,8 @@ typedef struct gh_om_initializer_bindings {gh_boot_work *work;gh_heap *packet_he
 typedef struct gh_om_init_state {gh_actor_model model;gh_bundle_entry geometry,texture;
  gh_hitarea_object hitarea;gh_om_door_geometry geometry_state;uint8_t *door_segments;gh_om_object *object;const gh_om_initializer_bindings *bindings;
  uint32_t stage,texture_mode,frontier;int model_return;uint8_t hitarea_created;
- const gh_actor_model *item_attachment_owner;} gh_om_init_state;
+ const gh_actor_model *item_attachment_owner;
+ gh_hitarea_object catapult_attack;uint8_t catapult_attack_created;} gh_om_init_state;
 /* Actual1B7118->door virtual1867E8->1B6FB8. Genuine model/source binding,
  * zeroanimation-source path, flags and direct semantic boundary at1FE218.
  * Future box/dynamicshape work continues SAME owner, nevermetadata-ready. */
@@ -34,6 +35,9 @@ gh_scene_placement_status gh_om_r101_item_collect_001c24e8(gh_om_init_state *);
 gh_scene_placement_status gh_om_r101_item_save_001fb1c0(gh_om_init_state *,const uint8_t *);
 gh_scene_placement_status gh_om_r101_item_position_001c2630(gh_om_init_state *,const uint8_t *);
 gh_scene_placement_status gh_om_r101_item_follow_001c2378(gh_om_init_state *);
+gh_scene_placement_status gh_om3bd_construct_001b87a8(void *,size_t,gh_title_player_view *);
+gh_scene_placement_status gh_om3bd_initialize_001b8868(gh_om_init_state *,gh_om_object *,
+ const gh_om_initializer_bindings *,int *);
 gh_scene_placement_status gh_om_initialize_abort(gh_om_init_state *);
 
 typedef struct {

@@ -217,7 +217,12 @@ static int hidden_00319848(const gh_game_object_step *s,const uint8_t *p,const u
  return 1;
 }
 
-typedef struct {uint8_t *object;uint32_t flags;float position[3];} scroll_forward_plan;
+typedef struct {
+ uint8_t *object;
+ uint32_t flags;
+ float position[3],yaw,matrix[16];
+ uint8_t copy_yaw,rebuild;
+} scroll_forward_plan;
 
 static gh_object_step_status plan_scroll_forward(const gh_game_object_step *s,
  const gh_room_pools *pools,const gh_boot_work *work,uint32_t handle,const float camera_rotation[16],
@@ -233,13 +238,35 @@ static gh_object_step_status plan_scroll_forward(const gh_game_object_step *s,
  const gh_scene_mesh_descriptor *d=&object->descriptor;
  const uint8_t *raw=d->script.bytes+d->mesh.descriptor_offset;
  uint32_t info=w(raw+0x34);
- if(!(w(p+0x350)&0x20000000u)||!(info&0x20u)||(info&0x06000000u))
+ const int yaw_only=work->room==0x200&&(info==0x42104100u||info==0x42004200u);
+ if(!(w(p+0x350)&0x20000000u)||
+    (!yaw_only&&(!(info&0x20u)||(info&0x06000000u))))
   return stop(frontier,0x319520,GH_OBJSTEP_UNSUPPORTED);
 
  int hidden;
  if(!hidden_00319848(s,p,raw,work,&hidden))return stop(frontier,0x1f8ad8,GH_OBJSTEP_UNSUPPORTED);
  plan->object=p;
  plan->flags=(w(p+0x250)&~0x200000u)|(hidden?0x200000u:0);
+ const uint8_t *camera=s->static_objects.camera->fields;
+ if(yaw_only){
+  /* 3195F8 copies camera Y rotation, and bit5 clear skips the parallax. */
+  plan->copy_yaw=1;
+  plan->yaw=rf(camera+0x224);
+  memcpy(plan->position,p+0xb0,sizeof(plan->position));
+  if(!isfinite(plan->yaw)||p[0x2b4])return stop(frontier,0x319608,GH_OBJSTEP_UNSUPPORTED);
+  if(!hidden){
+   if(!(plan->flags&0x800u)){
+    float angles[3],scales[3];
+    memcpy(angles,p+0x100,sizeof(angles));angles[1]=plan->yaw;
+    memcpy(scales,p+0x110,sizeof(scales));
+    if(gh_actor_matrix_compose_00147a48(plan->position,angles,scales,4,plan->matrix,
+       GH_STATIC_BINARY32_REFERENCE,frontier))return GH_OBJSTEP_UNSUPPORTED;
+    plan->rebuild=1;
+   }
+   plan->flags=(plan->flags&~4u)|(rf(p+0x27c)>0.0f?4u:0);
+  }
+  return GH_OBJSTEP_OK;
+ }
  float angles[3],rotation[16];
  memcpy(angles,p+0x100,sizeof(angles));
  if(gh_actor_matrix_rotation_00147728(angles,0,rotation,GH_STATIC_BINARY32_REFERENCE,frontier))
@@ -251,7 +278,6 @@ static gh_object_step_status plan_scroll_forward(const gh_game_object_step *s,
  float dot=add(add(mul(rotation[8],camera_rotation[8]),mul(rotation[9],camera_rotation[9])),
                mul(rotation[10],camera_rotation[10]));
  if(dot<0)dot=0;
- const uint8_t *camera=s->static_objects.camera->fields;
  float dx=add(rf(p+0xb0),-rf(camera+0x210)),dz=add(rf(p+0xb8),-rf(camera+0x218));
  float distance=sqrtf(add(mul(dx,dx),mul(dz,dz)));
  for(unsigned i=0;i<3;i++){
@@ -294,7 +320,14 @@ gh_object_step_status gh_game_object_step_forward_scroll_002c5470(gh_game_object
  if(fesetenv(&saved))status=stop(frontier,0x319520,GH_OBJSTEP_UNSUPPORTED);
  if(!status)for(uint32_t i=0;i<list->count;i++){
   ww(plans[i].object+0x250,plans[i].flags);
-  memcpy(plans[i].object+0xb0,plans[i].position,sizeof(plans[i].position));
+  if(plans[i].copy_yaw){
+   wf(plans[i].object+0x104,plans[i].yaw);
+   plans[i].object[0x140]=4;
+   if(plans[i].rebuild){
+    memcpy(plans[i].object+0x80,plans[i].matrix,sizeof(plans[i].matrix));
+    memcpy(plans[i].object+0x120,plans[i].object+0x110,12);
+   }
+  }else memcpy(plans[i].object+0xb0,plans[i].position,sizeof(plans[i].position));
  }
  free(plans);
  return status;

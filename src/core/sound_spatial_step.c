@@ -46,6 +46,12 @@ static gh_sound_scene_status ts_proximity(const uint8_t *record,const float play
     gh_sound_ts_row *row,uint32_t *frontier)
 {
     const unsigned kind=record[0x0d];
+    if(kind==0&&record[0x0e]==2&&!memcmp(record+0x30,record+0x40,16)){
+        /* 2DAA40 needs 0 < longitudinal position < segment length.
+         * The authored duplicate endpoints give an empty open interval. */
+        row->flags0c&=(uint8_t)~2u;
+        return GH_SOUND_SCENE_OK;
+    }
     if((kind!=2&&kind!=3)||!record[0x0e])
         return fail(frontier,0x2c8cf8,GH_SOUND_SCENE_UNSUPPORTED);
 

@@ -132,6 +132,7 @@ struct gh_game_services {
  gh_r102_room r102;
  gh_r207_allocation r200_work;
  gh_object_resource_load r200_load;
+ gh_om_runtime_create r200_catapult;
  uint8_t r200_init_stage,r200_entry_started;
  uint32_t r200_task_frontier;
  gh_r207_allocation r104_work;
@@ -266,6 +267,7 @@ static gh_game_services_status release_r200_room_init(gh_game_services *s)
   return fail(s,GH_SERVICES_ASSET,0x30ee08,0);
  s->r200_work=(gh_r207_allocation){0};
  s->r200_load=(gh_object_resource_load){0};
+ s->r200_catapult=(gh_om_runtime_create){0};
  s->r200_init_stage=s->r200_entry_started=0;
  s->r200_task_frontier=0;
  return GH_SERVICES_OK;
@@ -4508,15 +4510,35 @@ static gh_scene_status room_r200_init(void *context,uint32_t *frontier)
 
 static gh_scene_status room_r200_move(void *context,uint32_t *frontier)
 {
- const gh_game_services *s=context;
+ gh_game_services *s=context;
  if(!s||!frontier||s->module.room!=0x200||s->module.move_offset!=0x338||
     !s->r200_work.pointer)return GH_SCENE_ARGUMENT;
- /* Move loops over two rows and skips each empty catapult owner. Active
-  * rows can only be published by the original area scripts. */
- const uint8_t *rows=s->r200_work.pointer;
- if(u32(rows)||u32(rows+0x10)){
-  *frontier=0x338;
-  return GH_SCENE_UNSUPPORTED;
+ uint8_t *rows=s->r200_work.pointer;
+ for(size_t i=0;i<2;++i){
+  uint8_t *row=rows+i*0x10;
+  const uint32_t handle=u32(row);
+  if(!handle)continue;
+  gh_title_player_view view;
+  if(gh_om_factory_object_view(&s->om_factory,handle,&view)||
+     view.size!=0x640||view.original_vtable214!=0x428c20){
+   *frontier=0x1878;
+   return GH_SCENE_UNSUPPORTED;
+  }
+  uint8_t *actor=view.bytes;
+  const uint32_t flags=u32(actor+0x5b8);
+  const int active=(flags&1u)!=0;
+  const uint32_t bit=u32(row+(active?12:8));
+  if(bit>=64)continue;
+  uint8_t *sys=(uint8_t *)s->b.work+0x5ec+(bit/32)*4;
+  const uint32_t mask=0x80000000u>>(bit%32);
+  if(!(u32(sys)&mask)||(active&&actor[0x2f5]>=2))continue;
+  w32(sys,u32(sys)&~mask);
+  w32(actor+0x5b8,active?flags&~1u:flags|1u);
+  if(active){
+   actor[0x2f4]=3;
+   actor[0x2f5]=actor[0x2f6]=actor[0x2f7]=0;
+   w32(row,0);
+  }
  }
  *frontier=0;
  return GH_SCENE_OK;
@@ -4781,6 +4803,28 @@ static gh_door_status room_r101_side_release_002908c0(gh_game_services *s,uint32
  return GH_DOOR_OK;
 }
 
+static int room_r200_spawn_catapult(gh_game_services *s,uint32_t *frontier)
+{
+ gh_om_object *catapult=NULL;
+ if(gh_om_factory_create_0030fa98(&s->om_factory,&s->r200_catapult,0x3bd,0xffff,&catapult)||
+    (catapult&&gh_om_factory_initialize_runtime_3bd(&s->om_factory,catapult))){
+  *frontier=s->om_factory.frontier?s->om_factory.frontier:0x3165b0;
+  return 1;
+ }
+ uint8_t *row=s->r200_work.pointer;
+ /* REL1660 builds the relay row at +1A00. REL1100 copies its scalar fields. */
+ w32(row,catapult?catapult->handle:0);
+ w32(row+4,10);
+ w32(row+8,1);
+ w32(row+12,3);
+ if(catapult){
+  const uint32_t position[]={0x40966666,0xc174cccd,0x42dacccd};
+  memcpy(catapult->view.alias_f0,position,sizeof(position));
+  memset(catapult->view.bytes+0x100,0,12);
+ }
+ return 0;
+}
+
 static void room_r200_catapult_00001020(void *context,int32_t argument)
 {
  gh_game_services *s=context;
@@ -4802,7 +4846,32 @@ static void room_r200_catapult_00001020(void *context,int32_t argument)
   if(!*frontier)*frontier=0x2c39b0;
   return;
  }
- *frontier=0x3165b0; /* 109C constructs the original OM03BD catapult. */
+ if(room_r200_spawn_catapult(s,frontier))return;
+ gh_room_camera_start camera={0};
+ if(room_r100_set_camera(s,&camera,"A00",frontier))return;
+ if(room_r100_program_se(s,0x32,frontier))return;
+
+ static const uint8_t stamps[]={0xc,0xd};
+ for(size_t i=0;i<sizeof(stamps);++i)
+  if(gh_enemy_ems_set_stamp_alpha_00296230(s->enemies,s->b.init,stamps[i],0,frontier))return;
+ for(size_t i=0;i<sizeof(stamps);++i)
+  if(gh_enemy_ems_set_stamp_suspend_00295bc0(s->enemies,s->b.init,stamps[i],0,frontier))return;
+ for(size_t i=0;i<sizeof(stamps);++i)
+  if(gh_enemy_ems_start_stamp_action_00295ce8(s->enemies,s->b.init,stamps[i],frontier))return;
+ for(;;){
+  int ended;
+  if(room_r100_camera_ended(s,&ended,frontier))return;
+  if(ended)break;
+  if(gh_task_threads_sleep(s->scenario_threads,1)!=GH_THREAD_OK){
+   *frontier=0x2d5aa0;
+   return;
+  }
+ }
+ for(size_t i=0;i<sizeof(stamps);++i)
+  if(gh_enemy_ems_set_stamp_alpha_00296230(s->enemies,s->b.init,stamps[i],1,frontier))return;
+ gh_soft_event_end end={0};
+ if(room_r100_end_live_soft(s,&end,frontier))return;
+ w32(s->room_state.active+4,u32(s->room_state.active+4)|0x08000000u);
 }
 
 static void room_r200_entry_00000510(void *context,int32_t argument)
@@ -4839,11 +4908,13 @@ static void room_r200_entry_00000510(void *context,int32_t argument)
  }
  uint8_t *system_flags=(uint8_t *)s->b.work+0x5ec;
  w32(system_flags,(u32(system_flags)&~0x10000000u)|0x48000000u);
- if(room_flags&0x08000000u){*frontier=0x3165b0;return;}
+
 
  const gh_scene_scenario_view scene={s->scenario_scalar,sizeof(s->scenario_scalar),&s->scenario};
  int32_t slot;
- if(gh_scenario_exec_002c3890(scene,s->scenario_threads,-1,
+ if(room_flags&0x08000000u){
+  if(room_r200_spawn_catapult(s,frontier))return;
+ }else if(gh_scenario_exec_002c3890(scene,s->scenario_threads,-1,
      room_r200_catapult_00001020,s,0,&slot,frontier)){
   if(!*frontier)*frontier=0x2c3890;
   return;

@@ -36,7 +36,7 @@ static gh_scene_placement_status select_placement_texture(gh_om_init_state *s,
 
 gh_scene_placement_status gh_om_common_initialize_001b6fb8(gh_om_init_state*s,gh_om_object*o,const gh_om_initializer_bindings*b,int*out){
  if(!s||!o||!b||!out||!b->work||!b->packet_heap||!b->fog_rgb||!o->registered||!o->view.bytes||o->view.size<0x5f8||!o->resource.bytes||!o->resource.file_extent_known||!o->resource.file_extent||o->resource.file_extent>o->resource.size)return GH_PLACE_ARGUMENT;
- int runtime=o->runtime_created&&(o->runtime_kind==0x3eb||o->runtime_kind==0x376||o->runtime_kind==0x363||o->runtime_kind==0x353||o->runtime_kind==0x3be||o->runtime_kind==0x3d6||o->runtime_kind==0x3da||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1)&&!o->source.bytes;
+ int runtime=o->runtime_created&&(o->runtime_kind==0x3eb||o->runtime_kind==0x376||o->runtime_kind==0x363||o->runtime_kind==0x353||o->runtime_kind==0x3be||(o->runtime_kind==0x3bd&&b->work->room==0x200)||o->runtime_kind==0x3d6||o->runtime_kind==0x3da||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1)&&!o->source.bytes;
  if(!runtime&&!gh_om_fragment_profile_for(o->source.type)&&(o->source.type!=0x300&&o->source.type!=0x303&&o->source.type!=0x304&&o->source.type!=0x305&&o->source.type!=0x307&&o->source.type!=0x30a&&o->source.type!=0x30e&&o->source.type!=0x310&&o->source.type!=0x311&&o->source.type!=0x313&&o->source.type!=0x317&&o->source.type!=0x318&&o->source.type!=0x31a&&o->source.type!=0x320&&o->source.type!=0x322&&o->source.type!=0x323&&o->source.type!=0x324&&o->source.type!=0x325&&o->source.type!=0x326&&o->source.type!=0x330&&o->source.type!=0x331&&o->source.type!=0x332&&o->source.type!=0x333&&o->source.type!=0x338&&o->source.type!=0x339&&o->source.type!=0x351&&o->source.type!=0x33f&&o->source.type!=0x346&&o->source.type!=0x354&&o->source.type!=0x355&&o->source.type!=0x356&&o->source.type!=0x357&&o->source.type!=0x35d&&o->source.type!=0x382&&o->source.type!=0x308&&o->source.type!=0x309&&o->source.type!=0x30b&&o->source.type!=0x30c&&o->source.type!=0x3d3&&o->source.type!=0x3d4&&o->source.type!=0x3d5&&o->source.type!=0x41c))return GH_PLACE_ARGUMENT;
  if(!runtime&&(!o->source.bytes||o->source.size<0x2e))return GH_PLACE_BOUNDS;
  if(runtime&&w(o->view.bytes+0x5e0))return fail(s,0x1b7de8,GH_PLACE_UNSUPPORTED);
@@ -457,4 +457,86 @@ gh_scene_placement_status gh_om3be_abort(gh_om3be_state *s)
  return gh_om_initialize_abort(&s->common);
 }
 
-gh_scene_placement_status gh_om_initialize_abort(gh_om_init_state*s){if(!s)return GH_PLACE_ARGUMENT;gh_scene_placement_status ge=gh_om_door_geometry_abort(&s->geometry_state);if(ge)return ge;if(s->hitarea_created){uint32_t frontier=0;gh_hitarea_status he=gh_hitarea_shapes_abort_object(&s->hitarea,&frontier);if(he)return fail(s,frontier?frontier:0x1fd580,GH_PLACE_UNSUPPORTED);he=gh_hitarea_object_release_empty_001fe278(&s->hitarea,&frontier);if(he)return fail(s,frontier?frontier:0x1fe278,GH_PLACE_UNSUPPORTED);s->hitarea_created=0;}gh_actor_model_status e=gh_actor_model_release(&s->model);if(e)return GH_PLACE_BUSY;memset(s,0,sizeof(*s));return GH_PLACE_OK;}
+gh_scene_placement_status gh_om3bd_construct_001b87a8(void *data,size_t bytes,
+ gh_title_player_view *view)
+{
+ if(!data||!view||bytes!=0x640)return GH_PLACE_ARGUMENT;
+ gh_scene_placement_status status=gh_om_base_construct_001b6e90(data,bytes,view);
+ if(status)return status;
+ put(data,0x214,0x428c20);
+ view->original_vtable214=0x428c20;
+ ((uint8_t *)data)[0x630]=0;
+ put(data,0x620,0);
+ return GH_PLACE_OK;
+}
+
+gh_scene_placement_status gh_om3bd_initialize_001b8868(gh_om_init_state *s,
+ gh_om_object *o,const gh_om_initializer_bindings *b,int *result)
+{
+ if(!s||!o||!b||!result||!b->work||b->work->room!=0x200||!b->shapes||
+    !b->shapes->math||!b->init||o->runtime_kind!=0x3bd||o->view.size!=0x640||
+    o->view.original_vtable214!=0x428c20)return GH_PLACE_ARGUMENT;
+ int common=0;
+ *result=0;
+ gh_scene_placement_status status=gh_om_common_initialize_001b6fb8(s,o,b,&common);
+ if(status)return status;
+ if(!common)return fail(s,0x1b6fb8,GH_PLACE_UNSUPPORTED);
+
+ uint32_t frontier=0;
+ int present,index;
+ uint8_t *actor=o->view.bytes;
+ if(s->stage==3){
+  if(gh_hitarea_object_create_001fe0e8(b->init,&o->view,3,&s->catapult_attack,&present,&frontier))
+   return fail(s,frontier?frontier:0x1fe0e8,GH_PLACE_UNSUPPORTED);
+  s->catapult_attack_created=(uint8_t)present;
+  s->stage=4;
+ }
+ if(s->stage==4){
+  if(s->catapult_attack_created){
+   const uint32_t offset[3]={0};
+   if(gh_hitarea_add_sphere_001fdaf0(&s->catapult_attack,b->shapes,
+       (const uint8_t *)b->shapes->math->identity,offset,0x40200000,&index,&frontier))
+    return fail(s,frontier?frontier:0x1fdaf0,GH_PLACE_UNSUPPORTED);
+  }
+  s->stage=5;
+ }
+ if(s->stage==5){
+  if(s->catapult_attack_created){
+   uint8_t *attack=s->catapult_attack.bytes;
+   item_put_half(attack+0x46,0x52);
+   put(attack,0x4c,0x14);
+   if(gh_hitarea_object_set_active_001fd668(&s->catapult_attack,0,&frontier))
+    return fail(s,frontier?frontier:0x1fd668,GH_PLACE_UNSUPPORTED);
+   put(attack,0,w(attack)|1u);
+  }
+  if(gh_hitarea_object_create_001fe218(b->init,&o->view,1,&s->hitarea,&present,&frontier))
+   return fail(s,frontier?frontier:0x1fe218,GH_PLACE_UNSUPPORTED);
+  s->hitarea_created=(uint8_t)present;
+  s->stage=6;
+ }
+ if(s->stage==6){
+  const uint32_t offset[3]={0,0,0x40400000u};
+  if(s->hitarea_created&&gh_hitarea_add_sphere_001fdaf0(&s->hitarea,b->shapes,
+      actor+0x80,offset,0x3fc00000,&index,&frontier))
+   return fail(s,frontier?frontier:0x1fdaf0,GH_PLACE_UNSUPPORTED);
+  s->stage=7;
+ }
+ if(s->stage==7){
+  if(s->hitarea_created&&gh_hitarea_object_set_active_001fd668(&s->hitarea,0,&frontier))
+   return fail(s,frontier?frontier:0x1fd668,GH_PLACE_UNSUPPORTED);
+  put(actor,0x5b8,w(actor+0x5b8)&~1u);
+  s->stage=8;
+ }
+ *result=1;
+ return GH_PLACE_OK;
+}
+
+gh_scene_placement_status gh_om_initialize_abort(gh_om_init_state*s){if(!s)return GH_PLACE_ARGUMENT;
+ if(s->catapult_attack_created){
+  uint32_t frontier=0;
+  if(gh_hitarea_shapes_abort_object(&s->catapult_attack,&frontier)||
+     gh_hitarea_object_release_empty_001fe278(&s->catapult_attack,&frontier))
+   return fail(s,frontier?frontier:0x1fe278,GH_PLACE_UNSUPPORTED);
+  s->catapult_attack_created=0;
+ }
+ gh_scene_placement_status ge=gh_om_door_geometry_abort(&s->geometry_state);if(ge)return ge;if(s->hitarea_created){uint32_t frontier=0;gh_hitarea_status he=gh_hitarea_shapes_abort_object(&s->hitarea,&frontier);if(he)return fail(s,frontier?frontier:0x1fd580,GH_PLACE_UNSUPPORTED);he=gh_hitarea_object_release_empty_001fe278(&s->hitarea,&frontier);if(he)return fail(s,frontier?frontier:0x1fe278,GH_PLACE_UNSUPPORTED);s->hitarea_created=0;}gh_actor_model_status e=gh_actor_model_release(&s->model);if(e)return GH_PLACE_BUSY;memset(s,0,sizeof(*s));return GH_PLACE_OK;}

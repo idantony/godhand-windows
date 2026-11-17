@@ -2844,6 +2844,7 @@ static const sequence_clip *find_sequence_clip(const char *archive,int16_t bank,
  };
  static const sequence_clip roulette={4,16,2,2,48,115,0,253952,225044,0x0901bb80,0x02007171};
  static const sequence_clip counter={7,20,2,2,49,112,1,253952,225044,0x05015dc0,0x02007171};
+ static const sequence_clip r200_catapult={0x32,0,0,2,49,100,1,218578,194212,0x0901bb80,0x02007f7f};
  static const sequence_clip r105_gate={0x32,2,1,1,48,100,1,38992,69209,0x0501bb80,0x02005a71};
  static const sequence_clip critical={1,26,3,2,49,114,1,146902,130514,0x09015dc0,0x0200717f};
  static const sequence_clip r101_gate[]={
@@ -2883,6 +2884,7 @@ static const sequence_clip *find_sequence_clip(const char *archive,int16_t bank,
  }
  if(!strcmp(archive,"se/r101.afs"))
   return program>=0x28&&program<=0x29?r101_gate+(program-0x28):NULL;
+ if(!strcmp(archive,"se/r200.afs"))return program==0x32?&r200_catapult:NULL;
  if(!strcmp(archive,"se/r105.afs"))return program==0x32?&r105_gate:NULL;
  if(!strcmp(archive,"se/r102.afs")){
   if(program==0x0e)return r102_gate;
