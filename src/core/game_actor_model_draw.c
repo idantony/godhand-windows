@@ -152,7 +152,10 @@ static gh_actor_model_status within_distance(const gh_actor_model *model,const g
  for(unsigned corner=0;corner<8;corner++) {
   float offset[4],p[4],projected[4];for(unsigned k=0;k<3;k++)offset[k]=number(root+0x26c+k*4)*((corner&(1u<<k))?1:-1);offset[3]=1;
   float rotation[16];memcpy(rotation,world,64);rotation[12]=rotation[13]=rotation[14]=0;transform(rotation,offset,p);
-  for(unsigned k=0;k<4;k++)p[k]=sum(p[k],center[k]);transform(screen,p,projected);
+  /* Original 1F8F80 VADD.xyz preserves the corner's homogeneous W.
+   * Adding the center's W would apply the camera translation twice. */
+  for(unsigned k=0;k<3;k++)p[k]=sum(p[k],center[k]);
+  transform(screen,p,projected);
   if(!isfinite(projected[3])||!isfinite(limit))return fail(frontier,0x1f8df8,GH_ACTOR_MODEL_UNSUPPORTED);if(projected[3]<minimum)minimum=projected[3];
  }
  *yes=minimum<=limit;return GH_ACTOR_MODEL_OK;

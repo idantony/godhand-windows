@@ -63,5 +63,15 @@ int main(int argc,char**argv){
  const gh_actor_object_packets *object;C(!gh_actor_model_object_packet(&model,&object)&&object->object_program[0]==0x80000000u);
  /* The real program30 material now preserves its own shader/TFX3 state. */
  bytes[0x2b6]=255;queued=(queue_fixture){0};call=(gh_actor_draw_call){0};C(!gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)&&call.complete&&queued.count==27&&queued.commands[24].selected_program==30&&((queued.commands[24].materials.streams[0].tex0>>35)&3)==3);
+ /* Original VADD.xyz keeps W=1 when placing an actor box in world space.
+  * The translated camera makes an accidental W=2 cull the whole actor. */
+ putf(camera.fields+0x3c,600.0f);
+ putf(light->scalar+0x14,800.0f);
+ queued=(queue_fixture){0};call=(gh_actor_draw_call){0};
+ C(!gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)&&call.complete&&queued.count==27);
+ putf(light->scalar+0x14,500.0f);
+ queued=(queue_fixture){0};call=(gh_actor_draw_call){0};
+ C(!gh_actor_model_draw_0014ac90(&call,&model,10,0,&b,&pc)&&call.complete&&queued.count==1);
+ C(queued.commands[0].kind==GH_ACTOR_DRAW_SETUP);
  gh_stage_textures_destroy(textures);C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(light);free(data);free(elf);free(room);printf("PASS actual PL00 %zu material streams/26nodes, direct TM3 source/TEX0 oracle, cache identity/remap/CBP-bias strict, actual27groups OTsetup-first/reverse26nodes, programselectors and full9009vertex CPU consume; no GPU/frame ack\n",total);return 0;
 }

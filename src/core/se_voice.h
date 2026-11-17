@@ -57,6 +57,8 @@ gh_voice_status gh_se_voice_request_origin(gh_se_voice_engine *,int16_t bank,int
  * these scene voices have stopped. */
 gh_voice_status gh_se_voice_request_ts_002cb968(gh_se_voice_engine *,int16_t bank,int16_t program,
  const float position[4],const gh_se_attached_environment *,uint32_t *original_handle);
+gh_voice_status gh_se_voice_request_r200_impact_002cb968(gh_se_voice_engine *,int16_t bank,
+ int16_t program,const float position[4],const gh_se_attached_environment *,uint32_t *handle);
 gh_voice_status gh_se_voice_update_ts_002cbf48(gh_se_voice_engine *,uint32_t original_handle,
  const float position[4],uint16_t distance,int *found);
 /* Actual2CBA48/2CDD18 actor binding into SAME64EEpool. request_key identifies

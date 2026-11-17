@@ -89,12 +89,9 @@ static gh_actor_model_status prepare(gh_actor_model *model,unsigned index,gh_sta
   if(offset>packet->bytes||0x28>packet->bytes-offset)return fail(frontier,0x148690,GH_ACTOR_MODEL_BOUNDS);
   uint64_t stored=0;
   if(existing)memcpy(&stored,(const uint8_t*)packet->allocation.pointer+offset+0x20,8);
-  /* 14B9A0 reuses the packet left by 154DA0 for opacity geometry even
-   * when 14AD54 culled this mesh before its first normal material update. */
-  const uint32_t vtable=model->root.original_vtable214;
-  const uint16_t kind=(uint16_t)halfword(root+0x2fe);
-  if(existing&&!stored&&model->work->room==0x200&&
-     ((vtable==0x4479c8&&kind==0x201)||(vtable==0x42aa98&&kind==0x366))){
+  /* 14B9A0 reuses the constructor packet if 14AD54 never updated it.
+   * An unloaded constructor channel leaves the original zero TEX0. */
+  if(existing&&!stored){
    gh_stage_channel initial={0};
    const gh_stage_status channel_status=gh_stage_texture_channel(textures,
        (unsigned)stream->material_slot+node[0x384],&initial);
@@ -104,6 +101,11 @@ static gh_actor_model_status prepare(gh_actor_model *model,unsigned index,gh_sta
     next.streams[i].samples_display_base0=1;
     continue;
    }
+   const uint32_t vtable=model->root.original_vtable214;
+   const uint16_t kind=(uint16_t)halfword(root+0x2fe);
+   if(model->work->room!=0x200||
+      !((vtable==0x4479c8&&kind==0x201)||(vtable==0x42aa98&&kind==0x366)))
+    return fail(frontier,0x154da0,GH_ACTOR_MODEL_UNSUPPORTED);
    const gh_stage_material *constructor=NULL;
    if(gh_stage_tex0_material(textures,initial.tex0,&constructor))
     return fail(frontier,0x154da0,GH_ACTOR_MODEL_UNSUPPORTED);

@@ -2644,7 +2644,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
   * predictor history validated by the decoder. */
  const int emad_loop=emad_room_loop(candidate,bank,program,p);
  const int gate_loop=!candidate->source_owner&&bank==2&&program==0x10&&r105_gate_loop_descriptor(p);
- const int ts_loop=candidate->ts_environment!=NULL;
+ const int ts_loop=candidate->ts_environment&&(candidate->flags18&0x20000u);
  if(emad_loop||gate_loop||ts_loop){
   const int lava=ts_loop&&bank==2&&(program==0x18||program==0x19);
   const unsigned rate=lava&&program==0x18?18000u:16000u;
@@ -3275,19 +3275,44 @@ static int r200_ts_voice_program(const gh_audio_registry *registry,int16_t progr
   w(p+32)==0x00060004u&&w(p+36)==0x300u&&w(p+40)==0xffffu&&!w(p+44);
 }
 
-gh_voice_status gh_se_voice_request_ts_002cb968(gh_se_voice_engine *s,int16_t bank,int16_t program,
- const float position[4],const gh_se_attached_environment *environment,uint32_t *handle)
+static int r200_impact_voice_program(const gh_audio_registry *registry,int16_t bank,int16_t program,
+ const uint8_t *p)
+{
+ const char *archive=NULL;
+ if(gh_audio_external_path(registry,2,&archive)||strcmp(archive,"se/r200.afs"))
+  return 0;
+ if(bank==0&&program==0x5b)
+  return w(p)==0x005b0000u&&w(p+4)==0x04020040u&&w(p+8)==0x278u&&
+    w(p+12)==0x00200000u&&w(p+16)==0x007f007fu&&w(p+20)==0x005a0040u&&
+    w(p+24)==0x0100ff00u&&w(p+28)==0x00050000u&&w(p+32)==4&&!w(p+36)&&
+    w(p+40)==0xffffu&&!w(p+44);
+ if(bank!=2||program!=0x17)return 0;
+ return w(p)==0x00170002u&&w(p+4)==0x01300000u&&w(p+8)==0x5fu&&
+   w(p+12)==0x00220000u&&w(p+16)==0x007f007fu&&w(p+20)==0x005a0040u&&
+   !w(p+24)&&!w(p+28)&&w(p+32)==0x00030004u&&!w(p+36)&&w(p+40)==2&&!w(p+44);
+}
+
+static gh_voice_status request_positioned_002cb968(gh_se_voice_engine *s,int16_t bank,int16_t program,
+ const float position[4],const gh_se_attached_environment *environment,int catapult,uint32_t *handle)
 {
  if(!s||!position||!environment||!handle)return GH_VOICE_ARGUMENT;
  *handle=0;s->frontier=0;
  unsigned slot=0;
  while(slot<64&&s->voices[slot].used)++slot;
  if(slot==64)return GH_VOICE_OK;
- struct voice candidate={.part_index=-1,.ts_environment=environment,.flags18=0x20004u,.flags1c=3};
+ struct voice candidate={.part_index=-1,.ts_environment=environment,
+   .flags18=catapult?4u:0x20004u,.flags1c=catapult?0u:3u};
  gh_audio_status result=gh_audio_get_program(s->registry,bank,program,0,candidate.descriptor);
  if(result==GH_AUDIO_NOT_FOUND||result==GH_AUDIO_DISABLED||result==GH_AUDIO_BOUNDS)return GH_VOICE_OK;
  if(result)return unsupported(s,0x374cb8);
- if(bank!=2||(!(program==0x22&&ts_voice_program(candidate.descriptor))&&
+ if(catapult){
+  if(!r200_impact_voice_program(s->registry,bank,program,candidate.descriptor))return unsupported(s,0x2cdff0);
+  gh_sound_span descriptor,tail;
+  if(gh_audio_sample_at(s->registry,bank,h(candidate.descriptor+4),&descriptor,&tail)||
+    descriptor.size!=16||w(descriptor.data)!=(bank?0x11be0u:0x436f0u)||
+    w(descriptor.data+4)!=(bank?16000u:18000u)||w(descriptor.data+8)!=0x5fc080ffu||
+    w(descriptor.data+12))return unsupported(s,0x35fc);
+ }else if(bank!=2||(!(program==0x22&&ts_voice_program(candidate.descriptor))&&
     !r200_ts_voice_program(s->registry,program,candidate.descriptor)))return unsupported(s,0x2cdff0);
  for(unsigned axis=0;axis<4;++axis)if(!isfinite(position[axis]))return unsupported(s,0x2cde28);
  memcpy(candidate.info.source_position,position,16);
@@ -3307,6 +3332,18 @@ gh_voice_status gh_se_voice_request_ts_002cb968(gh_se_voice_engine *s,int16_t ba
  s->head=(int)slot;
  *handle=s->serial;
  return GH_VOICE_OK;
+}
+
+gh_voice_status gh_se_voice_request_ts_002cb968(gh_se_voice_engine *s,int16_t bank,int16_t program,
+ const float position[4],const gh_se_attached_environment *environment,uint32_t *handle)
+{
+ return request_positioned_002cb968(s,bank,program,position,environment,0,handle);
+}
+
+gh_voice_status gh_se_voice_request_r200_impact_002cb968(gh_se_voice_engine *s,int16_t bank,
+ int16_t program,const float position[4],const gh_se_attached_environment *environment,uint32_t *handle)
+{
+ return request_positioned_002cb968(s,bank,program,position,environment,1,handle);
 }
 
 gh_voice_status gh_se_voice_update_ts_002cbf48(gh_se_voice_engine *s,uint32_t handle,
@@ -3850,7 +3887,7 @@ static gh_voice_status spatial_update(gh_se_voice_engine *s,struct voice *v,
  if(v->info.position_mode){
   e=spatial_position(s,v,env,&distance,&angle);
   if(e)return e;
-  if(v->ts_environment&&!v->info.pending)distance=v->ts_distance;
+  if(v->ts_environment&&(v->flags18&0x20000u)&&!v->info.pending)distance=v->ts_distance;
   /* Original 3751B8 leaves the authored volume and pitch intact when
    * descriptor flags bit 0 is set. Position still controls stereo pan. */
   if(!(h(v->descriptor+0xe)&1u)){

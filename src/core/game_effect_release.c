@@ -19,6 +19,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
   const int forward_evade=kind==0&&!(profile&0xffffu)&&
       (profile>>16)>=0x29&&(profile>>16)<=0x2b;
   const int em03_effect=kind==0&&(profile&0xffffu)==0xa8u;
+  const int catapult=kind==0&&profile==0x00130000u;
   const int attached=kind==4||(kind==5&&profile==0x004e0000u)||(kind==3&&(profile==0x00040000u||profile==0x00210000u||profile==0x00250000u))||
       forward_evade||(kind==0&&(profile==0x00590058u||
       profile==0x005d0058u||profile==0x00390000u||(emitter&&profile==0x00420000u)));
@@ -37,6 +38,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
         (gh_effect_stamp19_attack_part_is_bound(&view)||gh_effect_stamp19_death_part_is_bound(&view)||
          gh_effect_knockdown_emitter_is_bound(&view)||gh_effect_em00_attack_emitter_is_bound(&view)||
          gh_effect_devil_emitter_is_bound(b->effects,&view)||
+         (catapult&&gh_effect_r200_catapult_part_is_bound(view.record,view.actor,view.selector))||
          (em03_effect&&gh_effect_em03_emitter_is_bound(b->effects,&view))||
          (attached&&(gh_effect_player_attachment_emitter_is_bound(&view)||
           gh_effect_player_heat_root_emitter_is_bound(&view))))))){
@@ -54,6 +56,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
         gh_effect_ambient_row_is_bound(b->effects,ambient_index,view.record))||
        (actor&&view.actor&&view.actor->bytes==actor->bytes&&
         (gh_effect_devil_esp_is_bound(b->effects,&view)||
+         (catapult&&gh_effect_r200_catapult_part_is_bound(view.record,view.actor,view.selector))||
          (em03_effect&&(gh_effect_em03_esp_is_bound(b->effects,&view)||
           gh_effect_attack_esp_is_bound(b->effects,&view)))||
          (((kind==0&&(profile==0x002b0058u||profile==0x002c0058u||profile==0x001d0058u||

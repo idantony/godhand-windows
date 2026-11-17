@@ -3090,7 +3090,8 @@ static gh_actor_motion_status advance_substate0_00211c08(gh_enemy202_move *s,uin
                !r101_scenery_enemy(room_work,p)&&!r101_gate_exchanged_enemy(room_work,p)&&!r102_east_em27(room_work,p))
                 return stop(s,0x211c08,GH_ACTOR_MOTION_UNSUPPORTED);
             /* EM27 uses the default original clip pair. */
-            /* fall through */
+            offset=0x98;
+            break;
         case 0x201:
             if(!r200)return stop(s,0x211c08,GH_ACTOR_MOTION_UNSUPPORTED);
             /* 211CBC is the underflow path for the ordinary stage-two cEm01. */

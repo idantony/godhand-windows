@@ -17,6 +17,9 @@ typedef gh_object_step_status (*gh_om_break_effect)(void *, const gh_actor_model
  const uint32_t world_xyz[3], uint32_t yaw_bits, uint32_t *frontier);
 typedef gh_object_step_status (*gh_om_break_collision)(void *, uint64_t key, uint32_t *frontier);
 typedef gh_object_step_status (*gh_om_remove_sound)(void *, gh_actor_model *, uint32_t *frontier);
+typedef gh_object_step_status (*gh_om_stop_sound)(void *,uint32_t handle,uint32_t *frontier);
+typedef gh_object_step_status (*gh_om_catapult_impact_sound)(void *,const gh_title_player_view *,
+ int16_t bank,int16_t program,uint32_t *frontier);
 typedef gh_object_step_status (*gh_om_mount_release)(void *,gh_om_object *,uint8_t *stage,uint32_t *frontier);
 typedef struct {
  gh_om_runtime_create create;
@@ -41,6 +44,8 @@ typedef struct {
  gh_motion_sound_consumer break_sound;
  gh_om_break_collision break_collision;
  gh_om_remove_sound remove_sound;
+ gh_om_stop_sound stop_sound;
+ gh_om_catapult_impact_sound catapult_impact_sound;
  const struct gh_motion_ik_globals *ik_globals;
  gh_motion_effect_consumer release_effect;
  const float *fragment_atan_coeff;

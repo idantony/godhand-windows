@@ -2156,6 +2156,67 @@ static gh_object_step_status catapult_launch_001b8b68(gh_om_frame_state *s,
  return GH_OBJSTEP_OK;
 }
 
+static gh_object_step_status catapult_impact_001b8e08(gh_om_frame_state *s,uint32_t *frontier)
+{
+ gh_om_init_state *init=common(s);
+ uint32_t pc=0;
+ if(s->special_phase==4){
+  if(!s->runtime.stop_sound)return fail(s,0x2cbba0,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const gh_object_step_status e=s->runtime.stop_sound(s->runtime.context,
+     word(s->object->view.bytes+0x62c),&pc);
+  if(e)return fail(s,pc?pc:0x2cbba0,frontier,e);
+  s->special_phase=5;
+ }
+ if(s->special_phase==5){
+  if(!s->runtime.release_effect)return fail(s,0x306200,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const gh_actor_motion_status e=s->runtime.release_effect(s->runtime.context,&s->object->view,0,2,&pc);
+  if(e)return fail(s,pc?pc:0x306200,frontier,GH_OBJSTEP_CALLEE);
+  s->special_phase=6;
+ }
+ if(s->special_phase==6&&init->catapult_attack_created){
+  gh_hitarea_object *attack=&init->catapult_attack;
+  if(!attack->fallback){
+   const uint8_t *node;
+   gh_collision_pair_shape shape;
+   float point[3];
+   memcpy(point,s->projectile_impact,sizeof(point));
+   if(gh_hitarea_node_at(attack,0,&node,&shape)||
+      gh_collision_pair_shape_offset_002bb258(&shape,point,&pc))
+    return fail(s,pc?pc:0x1fd888,frontier,GH_OBJSTEP_CALLEE);
+  }
+  s->special_phase=7;
+ }
+ if(s->special_phase<8){
+  if(init->catapult_attack_created&&gh_hitarea_object_set_active_001fd668(&init->catapult_attack,1,&pc))
+   return fail(s,pc?pc:0x1fd668,frontier,GH_OBJSTEP_CALLEE);
+  s->special_phase=8;
+ }
+ while(s->special_phase<10){
+  const int core=s->special_phase==8;
+  const uint32_t call=core?0x1b8e74:0x1b8ea4;
+  if(!s->runtime.catapult_impact_sound)return fail(s,call,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const gh_object_step_status e=s->runtime.catapult_impact_sound(
+      s->runtime.context,&s->object->view,core?0:2,core?0x5b:0x17,&pc);
+  if(e)return fail(s,pc?pc:call,frontier,e);
+  ++s->special_phase;
+ }
+ if(s->special_phase==10){
+  if(!s->runtime.break_effect)return fail(s,0x1b8ec4,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const gh_object_step_status e=s->runtime.break_effect(s->runtime.context,&init->model,
+      s->projectile_impact,0,&pc);
+  if(e)return fail(s,pc?pc:0x1b8ec4,frontier,e);
+  s->special_phase=11;
+ }
+ if(init->hitarea_created&&gh_hitarea_object_set_active_001fd668(&init->hitarea,0,&pc))
+  return fail(s,pc?pc:0x1fd668,frontier,GH_OBJSTEP_CALLEE);
+ uint8_t *actor=s->object->view.bytes;
+ memcpy(s->object->view.alias_f0,actor+0x600,12);
+ sh(actor+0x628,2);
+ actor[0x2f5]=3;
+ actor[0x2f6]=actor[0x2f7]=0;
+ return GH_OBJSTEP_OK;
+}
+
 static gh_object_step_status catapult_flight_001b8c6c(gh_om_frame_state *s,
  gh_static_transform_policy policy,uint32_t *frontier)
 {
@@ -2167,6 +2228,7 @@ static gh_object_step_status catapult_flight_001b8c6c(gh_om_frame_state *s,
     !s->runtime.scene_tables||!position||!player||!player->alias_f0||
     policy!=GH_STATIC_BINARY32_REFERENCE)
   return fail(s,0x1b8c6c,frontier,GH_OBJSTEP_ARGUMENT);
+ if(s->special_phase>=4)return catapult_impact_001b8e08(s,frontier);
  uint32_t pc=0;
  if(!s->special_phase){
   int hit;
@@ -2213,10 +2275,14 @@ static gh_object_step_status catapult_flight_001b8c6c(gh_om_frame_state *s,
  int hit;
  if(gh_scene_ray_query_00131e10(s->runtime.scene_tables,&ray,&hit,&pc))
   return fail(s,pc?pc:0x131e10,frontier,GH_OBJSTEP_UNSUPPORTED);
- if(number(position+4)<add(number(player->alias_f0+4),-10.0f))
-  return fail(s,0x1b8e08,frontier,GH_OBJSTEP_UNSUPPORTED);
- if(hit)return fail(s,0x1b8e08,frontier,GH_OBJSTEP_UNSUPPORTED);
- return GH_OBJSTEP_OK;
+ if(number(position+4)<add(number(player->alias_f0+4),-10.0f)){
+  memcpy(impact,position,12);
+  hit=1;
+ }
+ if(!hit)return GH_OBJSTEP_OK;
+ memcpy(s->projectile_impact,impact,sizeof(s->projectile_impact));
+ s->special_phase=4;
+ return catapult_impact_001b8e08(s,frontier);
 }
 
 static gh_object_step_status catapult_windup_001b8a50(gh_om_frame_state *s,
@@ -2240,6 +2306,18 @@ static gh_object_step_status catapult_windup_001b8a50(gh_om_frame_state *s,
   actor[0x2f6]=actor[0x2f7]=0;
  }
  if(actor[0x2f5]==2)return catapult_flight_001b8c6c(s,policy,frontier);
+ if(actor[0x2f5]==3){
+  const uint16_t timer=(uint16_t)half(actor+0x628);
+  if((int16_t)timer<=0){
+   gh_om_init_state *init=common(s);
+   uint32_t pc=0;
+   if(init->catapult_attack_created&&gh_hitarea_object_set_active_001fd668(&init->catapult_attack,0,&pc))
+    return fail(s,pc?pc:0x1fd668,frontier,GH_OBJSTEP_CALLEE);
+   actor[0x2f5]=actor[0x2f6]=actor[0x2f7]=0;
+  }
+  sh(actor+0x628,(uint16_t)(timer-1));
+  return GH_OBJSTEP_OK;
+ }
  if(actor[0x2f5]!=1)return fail(s,0x1b8a50,frontier,GH_OBJSTEP_UNSUPPORTED);
  const uint16_t counter=(uint16_t)half(actor+0x628);
  if((int16_t)counter>0){

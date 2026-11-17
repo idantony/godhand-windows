@@ -177,10 +177,17 @@ record contains 50,100 G and the Stage 1 unlock flags. Overwrite confirmation
 replaces the selected record and preserves the other slot and menu icons.
 Declining leaves both slots unchanged.
 
-These progression replays set the boss to 60 HP immediately before the
-original 80-point Shockwave. A separate full-health combat replay renders
-the boss's amplified hit reaction and get-up. The full-health victory
-and the rest of Stage 2 remain in development.
+The native Continue replay completes EV08 and enters the original R200
+corridor. Once the opening camera releases control, the left stick moves
+Gene in the rendered scene. The replay continues through the first catapult
+launch, flight and impact. Separate checks verify the original impact
+effects and collision-area cleanup.
+
+The progression replay uses the earlier EV07 Start shortcut and sets the
+boss to 60 HP immediately before the original 80-point Shockwave. A separate
+full-health combat replay raises Heat with an L2 taunt and lands two hits
+after evading the counterattack. The full-health victory and the rest of
+Stage 2 remain in development.
 
 The Windows port now renders combat in both the R104 boss arena and the R101
 side arena. In R104, a recorded Triangle input hits the boss after the original
@@ -509,8 +516,13 @@ R003，并预读原版 EV08 音频。另一条回放用原版 Start 跳过 EV07�
 标记均已核对。确认覆盖会替换当前槽位并保留另一槽位及菜单图标。取消覆盖后，两份
 存档均保持原样。
 
-这些流程测试在原版 80 点冲击波命中前将头目血量设为 60 HP。独立的满血战斗回放已
-呈现头目受强化命中后倒地及起身的动作。满血获胜和第二关后续流程仍在开发。
+原生流程回放从继续选项进入 EV08，过场播完后切换到第二关的原版 R200 走廊。
+开场镜头交还控制后，左摇杆能让画面中的主角走动。回放跑过了第一发投石机的发射、
+飞行和落地。单独的检查也验证了原版落地特效和命中区域清理。
+
+这条流程回放此前用了原版 Start 快捷键跳过 EV07，并在原版 80 点冲击波命中前将
+头目血量设为 60 HP。另一条满血战斗回放通过 L2 挑衅积攒斗气，闪避反击后命中两次。
+满血获胜和第二关后续流程仍在开发。
 
 Windows 端已能呈现 R104 头目战和 R101 支线竞技场的原版战斗。R104 播完原版过场后，
 回放中的三角键攻击命中头目。另一条回放经原版钥匙卡门进入 R104，验证了头目的普通弹

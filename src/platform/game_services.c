@@ -6488,9 +6488,13 @@ static gh_object_step_status om_break_effect(void *context,const gh_actor_model 
    const gh_effect_create_request door={.bank=0,.index=0x1a,.actor=&model->root,.mode=-1,.selector=-1};
    opened=gh_effect_create_begin(call,&door);
   }else if(kind==0x3bd&&s->b.work->room==0x200&&model->root.original_vtable214==0x428c20){
-   const gh_effect_create_request catapult={.bank=0,.index=0x13,
-       .actor=&model->root,.mode=0,.selector=-1};
-   opened=gh_effect_create_begin(call,&catapult);
+   if(model->root.bytes[0x2f5]==2)
+    opened=gh_effect_create_catapult_impact_00306838(call,position);
+   else{
+    const gh_effect_create_request catapult={.bank=0,.index=0x13,
+        .actor=&model->root,.mode=0,.selector=-1};
+    opened=gh_effect_create_begin(call,&catapult);
+   }
   }else if(kind==0x30a||kind==0x304||kind==0x33f||
       (kind==0x309&&s->b.work->room==0x102&&model->root.original_vtable214==0x4237e8))opened=gh_effect_create_om30a_break_begin_0018c580(call,position);
   else if(kind==0x363||kind==0x3c4||kind==0x3c8||kind==0x3d0||kind==0x3d1||kind==0x3df||
@@ -6536,6 +6540,37 @@ static gh_actor_motion_status om_break_sound(void *context,const gh_motion_sound
  if(actor_sound_prepare(s,&s->om_sound,frontier))return GH_ACTOR_MOTION_CALLEE;
  if(!s->om_sound.bound){*frontier=0x2cba48;return GH_ACTOR_MOTION_UNSUPPORTED;}
  return gh_actor_attached_sound_motion(&s->om_sound,request,handle,frontier);
+}
+
+static gh_object_step_status om_stop_sound(void *context,uint32_t handle,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ if(!s->b.voices){*frontier=0x2cbba0;return GH_OBJSTEP_UNSUPPORTED;}
+ const gh_voice_status status=gh_se_voice_stop_actor_002cbba0(s->b.voices,handle);
+ *frontier=status?gh_se_voice_frontier(s->b.voices):0;
+ return status?GH_OBJSTEP_CALLEE:GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status om_catapult_impact_sound(void *context,const gh_title_player_view *actor,
+ int16_t bank,int16_t program,uint32_t *frontier)
+{
+ gh_game_services *s=context;
+ *frontier=0x2cb968;
+ if(!s->b.voices||!s->b.sound_scene||s->b.work->room!=0x200||!actor||!actor->alias_f0||
+    actor->size!=0x640||actor->original_vtable214!=0x428c20)
+  return GH_OBJSTEP_UNSUPPORTED;
+ float position[4]={0,0,0,1};
+ memcpy(position,actor->alias_f0,12);
+ const gh_se_attached_environment *environment=&s->b.sound_scene->ts_environment;
+ uint32_t handle;
+ const gh_voice_status status=gh_se_voice_request_r200_impact_002cb968(s->b.voices,
+      bank,program,position,environment,&handle);
+ if(status){
+  *frontier=gh_se_voice_frontier(s->b.voices);
+  return status==GH_VOICE_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
+ }
+ *frontier=0;
+ return GH_OBJSTEP_OK;
 }
 
 static gh_object_step_status om_break_collision(void *context,uint64_t key,uint32_t *frontier) {
@@ -7635,7 +7670,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   if(environment_status){*f=state->frontier?state->frontier:entry;return GH_SERVICES_ASSET;}
   gh_om_frame_runtime runtime={.init=s->b.init,.canonical_rate=s->b.rate,
    .solids=&s->collision_solids,.context=s,.break_effect=om_break_effect,
-   .break_sound=om_break_sound,.break_collision=om_break_collision,.remove_sound=om_remove_sound,.ik_globals=s->b.motion_ik_globals,.release_effect=om_motion_effect,
+   .break_sound=om_break_sound,.break_collision=om_break_collision,.remove_sound=om_remove_sound,.stop_sound=om_stop_sound,.catapult_impact_sound=om_catapult_impact_sound,.ik_globals=s->b.motion_ik_globals,.release_effect=om_motion_effect,
    .fragment_atan_coeff=s->b.camera_envelope?s->b.camera_envelope->atan_coeff:NULL,
    .action_buttons=&s->action_buttons,.resolve_actor=om_canopy_actor,.scene_tables=&s->scene_tables,
    .drop_item=om_box_drop_item_002923e8,.award_item=om_item_award_001c2408,
