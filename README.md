@@ -212,6 +212,12 @@ controller input verifies Heat activation, damage to both bosses, and return to
 normal movement. A Direct3D 11 replay shows the aura appear and expire. A
 controlled test lowers the bosses' HP before landing real attacks and verifies
 both defeat records, the arena-clear flag, and the original item drops.
+In that controlled fight, each boss is set to 12 HP before the finishing
+attack. Recorded controller input then walks Gene to the original return door
+and presses Cross. Direct3D 11 presents 587 scene frames across the test. Once
+the return fade clears, Gene is visible in the R102 corridor at 90 HP with the
+original HUD and zero renderer, GPU or window errors. A separate full-HP replay
+verifies the original flank charge and the boss's rear Triangle recoil and footstep.
 A complete fight starting at full boss HP is still in progress.
 
 Project evidence tools verify actual instruction bytes, calls, imports and
@@ -444,8 +450,11 @@ Gene 以 100 HP 回到 R103，场景继续运行。
 
 R103 已运行原版增援并进入双头目战。手柄回放验证了强化启动、同时命中两名头目
 以及强化耗尽后恢复普通行动，Direct3D 11 回放显示了光效出现和消退。受控测试
-先降低头目 HP，再用实际攻击验证两次击败登记、原版胜利标志与掉落。完整血量的
-双头目实战仍在验证。
+在最后一击前分别将两名头目的 HP 设为 12，再用实际攻击验证两次击败登记、原版胜利
+标志与掉落。录像随后用手柄走到原版出口并按叉键，Direct3D 11 共呈现 587 帧。
+淡入结束后，R102 显示角色、走廊和 HUD，Gene 剩余 90 HP，渲染器、GPU 和窗口
+均无报错。另一段完整初始血量的录像验证了原版蓄力夹击，以及从背后用三角键命中头目时
+的受击动作和脚步声。完整血量的双头目实战仍在验证。
 
 ### 构建与运行
 

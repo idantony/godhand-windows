@@ -143,6 +143,10 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
  const uint8_t expected_seeds[11]={3,0,3,0,0,0,0,2,3,1,1};for(unsigned i=0;i<11;i++){uint32_t seed=expected_seeds[i];if(!seed)C(!gh_game_mt_next_0030f348(&oracle,&seed));C(w(emit+i*0x260+0x220)==seed&&w(emit+i*0x260+0x110)==0xffffffff&&emit[i*0x260+0x18e]==0x2e&&w(emit+i*0x260+0xf0)==0x44fd58);}
  C(!memcmp(&oracle,&init->random,sizeof(oracle)));gh_game_mt after=init->random;C(!gh_game_effect_create_00306528(&ec,&eb)&&!memcmp(&after,&init->random,sizeof(after))&&w(emit+0x26000)==0xffe00000);
  int matched;uint32_t frontier;gh_title_player_view wrapper=player.view;C(!gh_effect_create_actor_match(effects,1,0,&wrapper,&matched,&frontier)&&matched);gh_effect_release_bindings rb=eb.storage;rb.actor_match=gh_effect_create_actor_match;rb.context=effects;unsigned slot;C(gh_game_effect_release_00306200(&rb,&player.view,-1,0,&frontier,&slot)==GH_EFFECT_UNSUPPORTED&&frontier==0x302918);
+ /* Match the original 123460 producer before allocating the live aura. */
+ const int16_t prior_room=work.room;
+ work.room=0x103;
+ player.view.bytes[0x5f2]=3;
  request.index=0x21;request.mode=3;gh_effect_create_call heat={0};C(!gh_effect_create_begin(&heat,&request));C(!gh_game_effect_create_00306528(&heat,&eb)&&heat.complete&&heat.original_return==1&&heat.row==10);
  for(unsigned i=0;i<10;i++){uint32_t seed;C(!gh_game_mt_next_0030f348(&oracle,&seed));C(w(emit+(11+i)*0x260+0x220)==seed);}C(!memcmp(&oracle,&init->random,sizeof(oracle))&&w(emit+0x26000)==0xfffff800);
  for(unsigned i=0;i<3;i++)C(!gh_game_effect_create_00306528(&heat,&eb)&&!memcmp(&oracle,&init->random,sizeof(oracle))&&w(emit+0x26000)==0xfffff800);
@@ -156,6 +160,7 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
  for(unsigned i=0;i<3;i++)C(gh_game_effect_create_00306528(&late,&eb)==GH_EFFECT_UNSUPPORTED&&late.frontier==0x303a30&&!memcmp(&oracle,&init->random,sizeof(oracle))&&w(emit+0x26000)==0xfffffc00);
  eb.model=&c.model;C(!gh_game_effect_create_00306528(&late,&eb)&&late.complete&&late.original_return==1);for(unsigned i=1;i<10;i++){uint32_t seed;C(!gh_game_mt_next_0030f348(&oracle,&seed));}C(!memcmp(&oracle,&init->random,sizeof(oracle))&&w(emit+0x26000)==0xfffffffe);
  uint32_t saved5d8=w((uint8_t*)&work+0x5d8);put((uint8_t*)&work+0x5d8,0x10000000);gh_effect_create_call suppressed={0};C(!gh_effect_create_begin(&suppressed,&request)&&!gh_game_effect_create_00306528(&suppressed,&eb)&&suppressed.complete&&suppressed.original_return==1&&!memcmp(&oracle,&init->random,sizeof(oracle))&&w(emit+0x26000)==0xfffffffe);put((uint8_t*)&work+0x5d8,saved5d8);
+ work.room=prior_room;
  gh_effect_view original_table=effects->resources[0].tbl1;uint8_t unsupported_type[8+16+0x2f0]={0};put(unsupported_type,1);put(unsupported_type+4,8);put(unsupported_type+8,0x545345);put(unsupported_type+12,1);unsupported_type[8+16+0x128]=1;unsupported_type[8+16+0xbe]=0xff;effects->resources[0].tbl1=(gh_effect_view){unsupported_type,sizeof(unsupported_type)};
  gh_effect_create_request unknown={.bank=0,.index=1,.actor=&player.view,.mode=-1,.selector=-1};gh_effect_create_call pending={0};C(!gh_effect_create_begin(&pending,&unknown)&&gh_game_effect_create_00306528(&pending,&eb)==GH_EFFECT_UNSUPPORTED&&pending.frontier==0x304d70&&w(emit+0x26000)==0xfffffffe);effects->resources[0].tbl1=original_table;
  /* Native host destruction detaches only metadata, never fake kills slots. */

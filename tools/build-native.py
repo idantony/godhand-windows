@@ -24,6 +24,8 @@ SCRATCH = work_root(PROJECT)
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-tests", action="store_true")
+    parser.add_argument("--keep-going", action="store_true",
+                        help="Run remaining independent tests after a failure and fail the final report")
     parser.add_argument("--focus", action="append", default=[], metavar="TEST",
                         help="Run only this manifest test after the native module build; repeat for more tests")
     parser.add_argument("--jobs", type=int, default=4, help="Independent compiler processes (1..16); device tests remain serial")
@@ -107,7 +109,8 @@ def main():
             print(label + ": " + ("PASS" if result.returncode == 0 else "FAIL"), flush=True)
         if result.returncode:
             print(result.stdout, flush=True)
-            raise SystemExit(result.returncode)
+            if not args.keep_going or not label.startswith("test-"):
+                raise SystemExit(result.returncode)
 
     common = c_driver(compiler)
     modules = [("rng", "src/core/rng.c"), ("boot", "src/core/boot.c"),
@@ -893,7 +896,8 @@ def main():
                 cache_writes.append((key, target))
 
     def finish_build(status):
-        manifest["status"] = status
+        failed = [step["name"] for step in manifest["steps"] if step["returncode"]]
+        manifest["status"] = "failed" if failed else status
         final_sources = source_hashes(PROJECT, initial_sources)
         if initial_sources != final_sources:
             manifest["status"] = "failed-source-changed-during-build"
@@ -914,6 +918,9 @@ def main():
                                  for path in sorted(output.glob("*")) if path.is_file()]
         report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print("Report: " + str(report), flush=True)
+        if failed:
+            print("Failed checks: " + ", ".join(failed), flush=True)
+            raise SystemExit(1)
 
     def extra_test_path(name):
         return output / ("test_" + name.replace("-", "_") + ".exe")

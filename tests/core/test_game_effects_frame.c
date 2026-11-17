@@ -76,6 +76,26 @@ gh_esp_create_call no_reference={0};gh_esp_create_bindings no_reference_bind=par
  /* Paused -> hidden in one frame, typed virtual dtor -> clear active next.
   * It is not an unconditional bitmap reset, and pause/hidden remain set. */
  put(emit+0x26020,w(emit+0x26000));C(!gh_game_effects_frame_update_0030f228(&call,&b)&&w(emit+0x26000)==0xffe00000&&w(emit+0x26040)==0xffe00000&&w(emit+0xf0)==0x44fd58);C(!gh_game_effects_frame_update_0030f228(&call,&b)&&!w(emit+0x26000)&&w(emit+0x26020)==0xffe00000&&w(emit+0x26040)==0xffe00000&&w(emit+0xf0)==0x44b310);
- request.index=0x21;request.mode=3;C(!gh_effect_create_begin(&creator,&request)&&!gh_game_effect_create_00306528(&creator,&create)&&creator.complete&&creator.row==10);C(!gh_effect_create_emitter_at(effects,0,&view)&&view.payload==emit&&view.serial>11);gh_game_mt mt=init->random;C(gh_game_effects_frame_update_0030f228(&call,&b)==GH_EFFECT_UNSUPPORTED&&call.frontier==0x2b61b0&&call.emitter_index==0&&call.emitter_count==1&&call.emitter_stage==2);uint32_t flags=w(emit+0x114);for(unsigned i=0;i<3;i++)C(gh_game_effects_frame_update_0030f228(&call,&b)==GH_EFFECT_UNSUPPORTED&&call.emitter_count==1&&w(emit+0x114)==flags&&!memcmp(&mt,&init->random,sizeof(mt)));
+ /* Use the registered PL00 kind and Heat phase from the 123460 request. */
+ work.room=0x103;
+ put(player_bytes+0x2fc,(w(player_bytes+0x2fc)&0xffffu)|0x01000000u);
+ player_bytes[0x5f2]=3;
+ request.index=0x21;
+ request.mode=3;
+ C(!gh_effect_create_begin(&creator,&request));
+ C(!gh_game_effect_create_00306528(&creator,&create)&&creator.complete&&creator.row==10);
+ C(!gh_effect_create_emitter_at(effects,0,&view)&&view.payload==emit&&view.serial>11);
+ /* Pause at the original type-3 allocation until the room's pool is bound. */
+ C(gh_game_effects_frame_update_0030f228(&call,&b)==GH_EFFECT_ARGUMENT&&
+   call.frontier==0x2e35c0&&call.emitter_index==5&&call.emitter_count==6&&call.emitter_stage==5);
+ gh_game_mt mt=init->random;
+ const uint32_t flags=w(emit+5*0x260+0x114),active=w(esp+0x100000);
+ for(unsigned i=0;i<3;i++)
+  C(gh_game_effects_frame_update_0030f228(&call,&b)==GH_EFFECT_ARGUMENT&&
+    call.frontier==0x2e35c0&&call.emitter_count==6&&w(esp+0x100000)==active&&
+    w(emit+5*0x260+0x114)==flags&&!memcmp(&mt,&init->random,sizeof(mt)));
+ C(!gh_effect_create_bind_trail_pools(effects,&pools));
+ C(!gh_game_effects_frame_update_0030f228(&call,&b)&&!call.stage);
+ C(!gh_effect_create_esp_at(effects,5,&particle)&&particle.type==3&&particle.initialized&&particle.actor==&player);
  /* Host cancellation/destruction only, no claim of original positive dtor. */
  gh_effect_create_forget_on_owner_destroy(effects);C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_heap_destroy(heap));free(init);free(effects);free(esp);free(emit);free(pl);free(roombytes);free(core);free(private_ssd);free(elf);gh_disc_close(d);puts("PASS actualR100 SSD ambientbank3 ownedregistration+config40/MT/retry; parentless matrix+timers+count+type6 ctor/MT/texture source whole type6 Init/Gaussian->explicitnonzerooscillation1F7EF0, zero-direction/colour, fourFEnv retry, explicit sourcecount0 completion, generic unverifiedconfig strict; explicit empty/gated frame, EAR/query +3global speed fields, pool/ESP strict, real2E/21 samepayload/serial, paused->hidden->typed dtor, no retry replay; pureEuler4FEnv; NOT actualfirstframeFXcreation proof");return 0;}
