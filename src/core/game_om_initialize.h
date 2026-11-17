@@ -49,7 +49,7 @@ gh_scene_placement_status gh_om3be_initialize_001b90d0(gh_om3be_state *,gh_om_ob
  const gh_om_initializer_bindings *);
 gh_scene_placement_status gh_om3be_launch_001bb548(gh_om3be_state *,
  const gh_title_player_view *shooter,const float origin[3],const float velocity[3],
- unsigned heat,const gh_effect_create_bindings *);
+ unsigned heat,unsigned launch_type,const gh_effect_create_bindings *);
 gh_scene_placement_status gh_om3be_launch_roulette_001bb548(gh_om3be_state *,
  const gh_title_player_view *shooter,const float origin[3],const float velocity[3],unsigned rank);
 gh_scene_placement_status gh_om3be_abort(gh_om3be_state *);

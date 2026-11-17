@@ -194,9 +194,28 @@ gh_door_status gh_game_door_step_001ffe10(gh_game_door*s,const gh_game_door_bind
   put(p+0x5e4,w(p+0x5e4)&~0x20u);stop_input(b->work);s->step_stage=2;
  }
  if(s->target_room==-1){
-  /* Same-room reposition requires actual player/scenario transform callbacks;
-   * an empty actor list cannot prove those operations unnecessary. */
-  if(s->phase38==0)return fail(s,0x2c4440,GH_DOOR_UNSUPPORTED);
+  if(s->phase38==0){
+   if(!b->same_room)return fail(s,0x2c4440,GH_DOOR_UNSUPPORTED);
+   uint32_t pc=0;
+   if(s->step_stage==2){
+    e=b->same_room(b->context,s,0x2c4440,&pc);
+    if(e)return fail(s,pc?pc:0x2c4440,e);
+    s->wait=5;
+    p[0x5bb]=p[0x5b9];
+    p[0x5b9]=p[0x5ba]=s->point;
+    s->step_stage=3;
+   }
+   if(s->step_stage==3){
+    e=b->same_room(b->context,s,0x2c4de0,&pc);
+    if(e)return fail(s,pc?pc:0x2c4de0,e);
+    s->step_stage=4;
+   }
+   if(b->fade->state&&!(s->flags&0x80000000u)&&(e=fade(s,b,1)))return e;
+   s->phase38++;
+   s->step_stage=0;
+   s->frontier=0;
+   return GH_DOOR_OK;
+  }
   if(s->phase38==1){
    if(s->step_stage!=5){put(p+0x5e4,w(p+0x5e4)&~0x2000000u);if(!b->scenario.manager)return fail(s,0x200158,GH_DOOR_ARGUMENT);b->scenario.manager->flags&=~1u;memset(p+0x5d8,0,8);put(p+0x5e0,w(p+0x5e0)&~0x100000u);s->step_stage=5;}
    if(!b->player||!b->player->ready||!b->player->view.bytes||b->player->view.size<0x550)return fail(s,0x2db6b0,GH_DOOR_UNSUPPORTED);

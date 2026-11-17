@@ -140,9 +140,10 @@ gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *
   put(actor,0x600,0x3ca3d70a);put(actor,0x614,0x3e4ccccc);put(actor,0x670,0x31);
   put(actor,0x610,0);put(actor,0x618,0);put(actor,0x630,0);put(actor,0x634,0);
   actor[0x660]=actor[0x674]=actor[0x675]=0;
-  if(pickup&&kind!=0x3c8&&kind!=0x3d1&&kind!=0x3df){
+  if(pickup&&kind!=0x3c8&&kind!=0x3d1&&kind!=0x3df&&kind!=0x3e3){
    put(actor,0x110,0x40000000);put(actor,0x114,0x40000000);put(actor,0x118,0x40000000);
   }
+  if(kind==0x3e3)actor[0x531]=1;
   if(ticket){ /* 1C0128's item-ID class 3DA selects fixed scale and action kind 0. */
    for(size_t offset=0x110;offset<=0x118;offset+=4)put(actor,offset,0x3fc00000);
    put(actor,0x670,0);
@@ -351,15 +352,17 @@ gh_scene_placement_status gh_om3be_initialize_001b90d0(gh_om3be_state *s,gh_om_o
  return GH_PLACE_OK;
 }
 
-/* Original 26DA68 hands the positioned object to 1BB548 with launch type 3. */
+/* Original 26BEF0 hands the positioned object to subtype dispatch 1BB548. */
 gh_scene_placement_status gh_om3be_launch_001bb548(gh_om3be_state *s,
  const gh_title_player_view *shooter,const float origin[3],const float velocity[3],
- unsigned heat,const gh_effect_create_bindings *effects)
+ unsigned heat,unsigned launch_type,const gh_effect_create_bindings *effects)
 {
  if(!s||!s->common.object||s->stage<6||!origin||!velocity||!effects||
-    !shooter||!shooter->bytes||!heat||heat>5)return GH_PLACE_ARGUMENT;
+    !shooter||!shooter->bytes||!heat||heat>5||(launch_type!=0&&launch_type!=3))
+  return GH_PLACE_ARGUMENT;
  gh_om_object *object=s->common.object;
  uint8_t *raw=object->view.bytes;
+ if(s->stage>6&&(w(raw+0x610)!=launch_type||s->shooter!=shooter))return GH_PLACE_ARGUMENT;
  if(s->stage==6){
   uint32_t frontier=0;
   float yaw;
@@ -373,15 +376,17 @@ gh_scene_placement_status gh_om3be_launch_001bb548(gh_om3be_state *s,
   if(s->attack_created)memcpy(s->attack.bytes+0x10,velocity,12);
   if(s->contact_created)memcpy(s->contact.bytes+0x10,velocity,12);
   memcpy(raw+0x104,&yaw,4);
+  s->shooter=shooter;
   if(gh_actor_model_update_hierarchy_00149eb8(&s->common.model,GH_STATIC_BINARY32_REFERENCE))
    return fail(&s->common,s->common.model.frontier? s->common.model.frontier:0x149eb8,GH_PLACE_UNSUPPORTED);
-  put(raw,0x610,3);
+  put(raw,0x610,launch_type);
   s->stage=7;
  }
  if(s->stage==7){
   gh_effect_create_call *call=&s->launch_effect;
   if(!call->active){
-   const gh_effect_create_request request={.bank=0x58,.index=0x40,.actor=&object->view,.selector=-1};
+   const gh_effect_create_request request={.bank=launch_type==3?0x58:0xa8,
+       .index=launch_type==3?0x40:0x0f,.actor=&object->view,.selector=-1};
    if(gh_effect_create_begin(call,&request))return fail(&s->common,0x306528,GH_PLACE_UNSUPPORTED);
   }
   gh_effect_create_bindings bindings=*effects;

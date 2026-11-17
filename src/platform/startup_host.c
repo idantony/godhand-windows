@@ -374,12 +374,19 @@ static gh_door_status scene_door_player_aux(void *context,uint32_t address,uint3
     if(frontier)*frontier=0;
     return GH_DOOR_OK;
 }
+static gh_door_status scene_door_same_room(void *context,const gh_game_door *door,
+    uint32_t address,uint32_t *frontier)
+{
+    gh_startup_host *host=context;
+    return gh_game_services_r101_side_door_step(host->services,door,address,frontier);
+}
 static gh_game_door_bindings scene_door_bindings(gh_startup_host *h,const gh_game_services_scene_view *s)
 {
     gh_game_door_bindings b={.work=&h->work,.loop=&h->game_loop,
         .scenario={s->scenario_bytes,s->scenario_bytes_size,s->scenario},.messages=s->scene_ui,
         .prepare=s->prepare,.player=s->title_player,.scene_step=s->step,.fade=&h->fade,.display=&h->display,
-        .external=scene_door_player_aux,.context=h};
+        .external=scene_door_player_aux,.context=h,
+        .same_room=h->work.room==0x101?scene_door_same_room:NULL};
     return b;
 }
 static gh_checkpoint_bindings scene_checkpoint_bindings(gh_startup_host *h,

@@ -118,6 +118,20 @@ static int is_r101_appearance0_profile(const gh_enemy_request *request)
          (request->entry_number==15&&request->dependency_kind==0x200&&!request->flags));
 }
 
+static int is_r101_arena_appearance6_profile(const gh_enemy_request *request)
+{
+    static const uint16_t dependency[]={
+        0x200,0x200,0x200,0x200,0x20f,0x20f,0x20f,0x20f,
+        0x200,0x200,0x203,0x20a,0x20f,0x20f,0x20f,0x20f,0x200,0x202,0x203,
+    };
+    if(!request||request->object_kind!=0x202||request->appearance!=6||
+       request->entry_number<0x16||request->entry_number>0x28||request->flags)
+        return 0;
+    const unsigned stamp=request->entry_number;
+    const unsigned equipment=stamp==0x1e||stamp==0x1f||stamp==0x26;
+    return request->dependency_kind==dependency[stamp-0x16]&&request->dependency_flags==equipment;
+}
+
 static int is_r102_mount_stamp(const gh_enemy_request *request)
 {
     static const uint16_t dependency[]={0x202,0x200,0x203};
@@ -194,7 +208,7 @@ int gh_enemy202_is_room_supported_profile(const gh_enemy_request *request,uint16
         (room==0x105&&(is_r105_first_appearance0_profile(request)||is_r105_appearance1_profile(request)||
                        is_r105_battle_profile(request)))||
         (room==0x101&&(is_r101_appearance1_profile(request)||is_r101_appearance4_profile(request)||
-                       is_r101_appearance0_profile(request)))||
+                       is_r101_appearance0_profile(request)||is_r101_arena_appearance6_profile(request)))||
         (room==0x102&&(is_r102_appearance0_profile(request)||is_r102_appearance1_profile(request)||
                        is_r102_appearance2_profile(request)||is_r102_appearance5_profile(request)||
                        is_r102_appearance6_profile(request)||is_r102_appearance9_profile(request)));
@@ -336,10 +350,22 @@ gh_actor_model_status gh_enemy202_appearance6_select_00203c78(
 {
     if(!request||!resource||!out||!resource->bytes||resource->kind!=0x202)
         return GH_ACTOR_MODEL_ARGUMENT;
-    if(!is_r102_appearance6_profile(request))return GH_ACTOR_MODEL_UNSUPPORTED;
-    /* 42DD50 maps dependencies 202 and 203 to 203CB0. Dependency 200 takes
-     * 203CA4. Both enter the original {0,2,0,0} dispatch state. */
-    const size_t directory=request->dependency_kind==0x200?0x98:0x648;
+    if(!is_r102_appearance6_profile(request)&&!is_r101_arena_appearance6_profile(request))
+        return GH_ACTOR_MODEL_UNSUPPORTED;
+    /* 42DD50 maps 202/203 to 203CB0, 20A to 203CF8 and 20F to 203D7C.
+     * The latter forwards the MTB3 as both candidates and keeps no SEQ. */
+    if(request->dependency_kind==0x20f){
+        size_t directory=0xfbc;
+        if(!resource->file_extent_known||resource->file_extent>resource->size||
+           resource->file_extent<directory+4)return GH_ACTOR_MODEL_BOUNDS;
+        uint32_t motion;
+        memcpy(&motion,resource->bytes+directory,sizeof(motion));
+        if(motion>resource->file_extent-4)return GH_ACTOR_MODEL_BOUNDS;
+        if(memcmp(resource->bytes+motion,"mtb3",4))return GH_ACTOR_MODEL_UNSUPPORTED;
+        *out=(gh_enemy_initial_motion_selection){.motion_offset=motion,.sequence_offset=motion,.substate=2};
+        return GH_ACTOR_MODEL_OK;
+    }
+    const size_t directory=request->dependency_kind==0x200?0x98:request->dependency_kind==0x20a?0x828:0x648;
     return select_initial_motion(resource,directory,2,0,out);
 }
 

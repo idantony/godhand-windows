@@ -14,8 +14,13 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
   const uint32_t profile=rd(p+(emitter?0x18c:0x23a));
   const uint32_t ambient_index=profile>>16;
   const int ambient=!actor&&(profile&0xffffu)==3&&kind==0x2200+(int32_t)ambient_index;
+  /* The three authenticated forward-evade attachments share mode zero.
+   * A lateral evade or another bind can release them before their expiry. */
+  const int forward_evade=kind==0&&!(profile&0xffffu)&&
+      (profile>>16)>=0x29&&(profile>>16)<=0x2b;
+  const int em03_projectile=kind==0&&profile==0x000f00a8u;
   const int attached=kind==4||(kind==5&&profile==0x004e0000u)||(kind==3&&(profile==0x00040000u||profile==0x00210000u||profile==0x00250000u))||
-      (kind==0&&(profile==0x00590058u||
+      forward_evade||(kind==0&&(profile==0x00590058u||
       profile==0x005d0058u||profile==0x00390000u||(emitter&&profile==0x00420000u)));
   /* These authored mode-0 strikes can remain on the boss after the motion ends. */
   const int boss_strike=kind==0&&(profile==0x002c0058u||profile==0x00320058u||
@@ -32,6 +37,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
         (gh_effect_stamp19_attack_part_is_bound(&view)||gh_effect_stamp19_death_part_is_bound(&view)||
          gh_effect_knockdown_emitter_is_bound(&view)||gh_effect_em00_attack_emitter_is_bound(&view)||
          gh_effect_devil_emitter_is_bound(b->effects,&view)||
+         (em03_projectile&&gh_effect_em03_emitter_is_bound(b->effects,&view))||
          (attached&&(gh_effect_player_attachment_emitter_is_bound(&view)||
           gh_effect_player_heat_root_emitter_is_bound(&view))))))){
     /* 302918 only sets the stop request. The Effects step owns child
@@ -48,6 +54,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
         gh_effect_ambient_row_is_bound(b->effects,ambient_index,view.record))||
        (actor&&view.actor&&view.actor->bytes==actor->bytes&&
         (gh_effect_devil_esp_is_bound(b->effects,&view)||
+         (em03_projectile&&gh_effect_em03_esp_is_bound(b->effects,&view))||
          (((kind==0&&(profile==0x002b0058u||profile==0x002c0058u||profile==0x001d0058u||
                       profile==0x00500058u||profile==0x00460058u||profile==0x00290058u||profile==0x005a0058u))||boss_strike)&&
           gh_effect_em00_attack_esp_is_bound(b->effects,&view))||

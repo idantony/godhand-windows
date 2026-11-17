@@ -77,6 +77,7 @@ gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_c
 gh_effect_status gh_effect_create_om_sparkle_begin_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_om30a_break_begin_0018c580(gh_effect_create_call *,const uint32_t[3]);
 gh_effect_status gh_effect_create_devil_projectile_impact_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
+gh_effect_status gh_effect_create_em03_projectile_impact_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_om331_break_begin_0019ca58(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_om305_break_begin_001c2ce0(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_player_impact_begin_00306838(gh_effect_create_call *,

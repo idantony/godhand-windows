@@ -4,6 +4,36 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R104 boss combat and R101 side arena
+
+Direct3D presents the boss taking a Triangle hit after R104's original intro.
+In a separate CPU replay, the original-format three-card R101 test save reaches
+R104 through JMP1 and the save map. The boss launches its first projectile at
+tick 3,097. The native collision and damage handlers take Gene from 100 to 80 HP
+at tick 3,108, play his original fall and retire the projectile and its effects.
+All 3,156 applied input samples match the tape. An otherwise matching run with
+a right-stick input at tick 3,100 evades the projectile and keeps Gene at 100 HP.
+
+The zero-card R101 save reaches the side arena through the original JMP2
+transition. Direct3D shows the first attack and the enemy's reduced HP bar.
+The longer CPU replay keeps Gene at 100 HP and reduces the two active enemies
+from 74 HP each to 26 and 71.
+
+The same revision also reproduces four original forward-evade rewards in R103.
+All 9,900 input samples match and Gene retains 25 HP at each reward.
+
+Direct3D 已呈现 R104 原版过场后的三角键命中。另一条 CPU 回放从有三张钥匙卡的 R101
+原版格式测试档出发，经 JMP1 和保存地图进入 R104。头目在第 3,097 帧发射普通弹，原版
+碰撞和受伤流程在第 3,108 帧让 Gene 从 100 HP 降至 80 HP，并播放击倒动作、清理发射物
+和附着特效。3,156 条实际读取的手柄采样与回放逐条一致。对照回放在第 3,100 帧加入右摇杆
+侧闪，Gene 保持 100 HP。
+
+未编辑的 R101 零钥匙卡存档也走通了原版 JMP2 转场。Direct3D 画面可见第一次攻击和敌方
+血条下降。较长的 CPU 回放中，Gene 保持 100 HP，两名出场敌人从各 74 HP 降到 26 和 71。
+
+同一版本复现了 R103 的四次原版前闪奖励。9,900 条手柄采样逐条匹配，每次获得奖励时
+Gene 都保有 25 HP。
+
 ## R104 post-intro movement and R103 forward evade
 
 The original-format R101 test save contains three keycards and a door-side

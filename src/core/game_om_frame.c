@@ -50,7 +50,7 @@ static int weapon(const gh_om_object*o){return o&&(o->source.type==0x382||paper(
 static int r101_item(const gh_om_object *o)
 {
  if(!o)return 0;
- if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1||
+ if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1||o->runtime_kind==0x3e3||
      (o->runtime_kind==0x3da&&o->view.bytes&&o->view.size>=0x690&&(word(o->view.bytes+0x560)==0x905||word(o->view.bytes+0x560)==0xa5d));
  return o->source.type>=0x3d3&&o->source.type<=0x3d5;
 }
@@ -1586,9 +1586,9 @@ static gh_object_step_status om311_move(gh_om_frame_state *s,gh_static_transform
  return GH_OBJSTEP_OK;
 }
 
-/* Type 3 in 1B93E8 follows the stored velocity and performs a finite
- * world segment query before enabling the authored attack/contact shapes. */
-static gh_object_step_status devil_projectile_move(gh_om_frame_state *frame,
+/* 1B93E8 integrates stored velocity and checks the swept world segment
+ * before publishing the subtype's attack and contact shapes. */
+static gh_object_step_status projectile_move_001b93e8(gh_om_frame_state *frame,
  const gh_boot_work *work,gh_static_transform_policy policy,uint32_t *frontier)
 {
  gh_om3be_state *state=(gh_om3be_state *)frame->object->initialization;
@@ -1596,7 +1596,9 @@ static gh_object_step_status devil_projectile_move(gh_om_frame_state *frame,
  const uint32_t kind=word(p+0x610);
  const int roulette=kind==0x2c&&work->room==0x103&&state->shooter;
  const int devil=kind==3&&work->room==0x100;
- if(!frame->runtime_bound||(!roulette&&!devil)||!position||state->stage!=9||
+ const int em03=kind==0&&work->room==0x104&&state->shooter;
+ const int uses_contact=devil||em03;
+ if(!frame->runtime_bound||(!roulette&&!uses_contact)||!position||state->stage!=9||
     policy!=GH_STATIC_BINARY32_REFERENCE)
   return fail(frame,0x1b92f0,frontier,GH_OBJSTEP_UNSUPPORTED);
  if(p[0x2f4]>1)return fail(frame,0x1b92f0,frontier,GH_OBJSTEP_UNSUPPORTED);
@@ -1628,7 +1630,7 @@ static gh_object_step_status devil_projectile_move(gh_om_frame_state *frame,
   if(status)return status;
   frame->special_phase=7;
  }
- if(frame->special_phase==1&&devil&&state->attack_created){
+ if(frame->special_phase==1&&uses_contact&&state->attack_created){
   const gh_title_player_view *hit_actor=NULL;
   if(!state->attack.fallback&&gh_hitarea_object_last_hit_actor(&state->attack,&hit_actor))
    return fail(frame,0x1fcf20,frontier,GH_OBJSTEP_UNSUPPORTED);
@@ -1703,20 +1705,21 @@ static gh_object_step_status devil_projectile_move(gh_om_frame_state *frame,
   if(state->attack_created){
    if(gh_hitarea_object_set_active_001fd668(&state->attack,1,&pc))
     return fail(frame,pc?pc:0x1fd668,frontier,GH_OBJSTEP_UNSUPPORTED);
-   if(gh_hitarea_object_set_mode_001fd988(&state->attack,devil,&pc))
+   if(gh_hitarea_object_set_mode_001fd988(&state->attack,uses_contact,&pc))
     return fail(frame,pc?pc:0x1fd988,frontier,GH_OBJSTEP_UNSUPPORTED);
    if(number(p+0x100)||number(p+0x108))return fail(frame,0x1fd338,frontier,GH_OBJSTEP_UNSUPPORTED);
-   put(state->attack.bytes+0x4c,roulette?80:30);
+   put(state->attack.bytes+0x4c,roulette?80:em03?60:30);
    sh(state->attack.bytes+0x46,roulette?0x27:0x41);
-   if(devil&&state->contact_created&&gh_hitarea_object_set_active_001fd668(&state->contact,1,&pc))
+   if(uses_contact&&state->contact_created&&gh_hitarea_object_set_active_001fd668(&state->contact,1,&pc))
     return fail(frame,pc?pc:0x1fd668,frontier,GH_OBJSTEP_UNSUPPORTED);
    if(!state->attack.fallback&&state->attack_index>=0){
     const uint8_t *node;
     gh_collision_pair_shape shape;
     if(gh_hitarea_node_at(&state->attack,0,&node,&shape))
      return fail(frame,0x1fd888,frontier,GH_OBJSTEP_UNSUPPORTED);
-    const float offset[3]={0,roulette?-1.5f:-.3f,0};
-    const float size[3]={roulette?.7f:.3f,roulette?3.0f:.6f,roulette?2.0f:.3f};
+    const float offset[3]={0,roulette?-1.5f:em03?-1.0f:-.3f,0};
+    const float size[3]={roulette?.7f:em03?1.0f:.3f,roulette?3.0f:em03?2.0f:.6f,
+        roulette?2.0f:em03?1.0f:.3f};
     if(gh_collision_pair_shape_offset_002bb258(&shape,offset,&pc))
      return fail(frame,pc?pc:0x1fd888,frontier,GH_OBJSTEP_UNSUPPORTED);
     if(gh_collision_pair_box_size_002baaa8(&shape,size,&pc))
@@ -1881,7 +1884,7 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
   s->phase=4;
  }
  if(s->phase==1&&devil_projectile(s->object)){
-  gh_object_step_status status=devil_projectile_move(s,w,policy,f);
+  gh_object_step_status status=projectile_move_001b93e8(s,w,policy,f);
   if(status)return status;
   s->phase=4;
  }

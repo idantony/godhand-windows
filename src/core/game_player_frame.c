@@ -598,8 +598,8 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
  uint32_t pc=0;
  if(!s->hurt_phase){
   put(p+0x54c,0x41700000);
-  const int devil_fall=b->work->room==0x100&&p[0x2f7]==1;
-  if(p[0x2f6]>1||(p[0x2f7]&&!devil_fall))return fail(s,0x11add8,GH_PLAYER_FRAME_UNSUPPORTED);
+  const int projectile_fall=(b->work->room==0x100||b->work->room==0x104)&&p[0x2f7]==1;
+  if(p[0x2f6]>1||(p[0x2f7]&&!projectile_fall))return fail(s,0x11add8,GH_PLAYER_FRAME_UNSUPPORTED);
   if(p[0x2f6])s->hurt_phase=8;
   else{
    uint32_t draw;
@@ -608,7 +608,7 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
     return fail(s,0x2a8578,GH_PLAYER_FRAME_UNSUPPORTED);
    /* Original variant 1 uses the first motion/sequence row directly. */
    unsigned row=0x158;
-   if(!devil_fall){
+   if(!projectile_fall){
     if(gh_game_mt_next_0030f348(&b->init->random,&draw))
      return fail(s,0x31cfe0,GH_PLAYER_FRAME_UNSUPPORTED);
     row=rows[draw%5u];
@@ -908,13 +908,18 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
   if(gh_hitarea_object_last_hit_actor(b->take_object,&source)||!source||!source->bytes)
    return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   const uint8_t *take=b->take_object->bytes;
-  const int devil_projectile=b->work->room==0x100&&source->size==0x630&&
+  const int projectile=source->size==0x630&&
     source->original_vtable214==0x4290c8&&w(source->bytes+0x214)==0x4290c8&&
-    half(source->bytes+0x2fe)==0x3be&&w(source->bytes+0x610)==3;
-  if(devil_projectile){
-   /* 109928 splits the active type-3 projectile's power 30 into 23 and 7. */
-   if(s->pending_damage_kind!=0x41||s->pending_damage!=23||w(p+0x160c)!=7||
-      w(take+0x4c)!=30||w(take+0x40)!=UINT32_MAX||half(take+0x44))
+    half(source->bytes+0x2fe)==0x3be;
+  if(projectile){
+   const uint32_t launch_type=w(source->bytes+0x610);
+   const int32_t power=b->work->room==0x100&&launch_type==3?30:
+       b->work->room==0x104&&launch_type==0?60:0;
+   const int32_t residual=power/4;
+   /* 109928 derives the immediate damage and later falls from this Give. */
+   if(!power||s->pending_damage_kind!=0x41||s->pending_damage!=power-residual||
+      w(p+0x160c)!=(uint32_t)residual||w(take+0x4c)!=(uint32_t)power||
+      w(take+0x40)!=UINT32_MAX||half(take+0x44))
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   }else{
    if(source->size<0x642||source->original_vtable214!=0x4479c8||
@@ -1182,8 +1187,14 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
    const int em0a_reverse=em0a_story&&dependency==0x20a&&half(source->bytes+0x2f4)==0x4400&&
      source->bytes[0x2f6]==1&&override_bank==UINT32_MAX&&!cue&&
      s->pending_damage_kind==0x3e&&!em0a_power&&!s->pending_damage&&!residual;
-   const int r101_short=b->work->room==0x101&&dependency==0x200&&stamp==12&&
-     source->size>0x1650&&source->bytes[0x1650]==4&&half(source->bytes+0x2f4)==0x1500&&
+   const int r101_west_em00=source->size>0x1650&&dependency==0x200&&stamp==12&&
+     source->bytes[0x1650]==4;
+   /* REL0D68's first EM03 uses 21A538 close shape 2 with Give37/power20. */
+   const int r101_side_em03=source->size>=0x187c&&dependency==0x203&&stamp==0x20&&
+     source->bytes[0x1650]==6&&w(source->bytes+0x1870)==2&&w(source->bytes+0x1874)==20&&
+     w(source->bytes+0x1878)==0x37;
+   const int r101_short=b->work->room==0x101&&(r101_west_em00||r101_side_em03)&&
+     half(source->bytes+0x2f4)==0x1500&&
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&override_bank==UINT32_MAX&&!cue&&
      s->pending_damage_kind==0x37&&s->pending_damage==20&&w(take+0x4c)==20&&!residual;
    if(!r101_short&&!r101_weapon&&!armed47&&!r102_armed16&&!r102_short_hit&&!east_em27_short_hit&&

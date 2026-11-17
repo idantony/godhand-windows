@@ -163,6 +163,15 @@ messages pass drawing and dismissal checks.
 
 ### Verified progress
 
+The Windows port now renders combat in both the R104 boss arena and the R101
+side arena. In R104, a recorded Triangle input hits the boss after the original
+intro. A second replay enters through the original keycard gate and verifies a
+boss projectile's launch, flight, hit and removal. Gene's HP drops from 100
+to 80 on contact. A right-stick evade on the same approach avoids the hit.
+In R101, the controller reaches the side arena from an unchanged zero-card
+save and lands a hit using the original attack and enemy reaction. The keycard
+collection route and the boss victories are still in development.
+
 - Read-only access to 1445 resources and 81 overlays from the user's patched
   NTSC-U `SLUS-21503` disc. All 81 overlay hashes match the pinned upstream
   manifest; the boot ELF and loaded image differ from its retail baseline.
@@ -456,6 +465,12 @@ Gene 以 100 HP 回到 R103，场景继续运行。
 两条原版英文战后对白均通过绘制和关闭测试。
 
 ### 已验证的进展
+
+Windows 端已能呈现 R104 头目战和 R101 支线竞技场的原版战斗。R104 播完原版过场后，
+回放中的三角键攻击命中头目。另一条回放经原版钥匙卡门进入 R104，验证了头目的普通弹
+从发射、飞行到命中和清理的流程。Gene 中弹后从 100 HP 降到 80 HP，同一路线加一次
+右摇杆侧闪即可避开。R101 从未编辑的零钥匙卡存档进入支线竞技场，手柄攻击触发了原版
+命中和敌人受击。钥匙卡完整收集流程和头目胜利流程仍在开发中。
 
 - 从用户补丁镜像只读索引 1445 项资源和 81 个动态模块。模块哈希与固定上游一致；
   补丁主程序和加载映像与上游零售版不同，不能照搬其匹配结论。

@@ -1,8 +1,56 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-17T10:01:08+00:00",
-  "stage": "native-windows-r104-post-ev05-control",
+  "verified_utc": "2026-11-17T11:26:02+00:00",
+  "stage": "native-windows-r104-and-r101-combat",
   "playable": false,
+  "r104_boss_direct3d": {
+    "entry_fixture": "original-format R104 test save",
+    "triangle_contact_capture_tick": 2639,
+    "boss_hp_before": 1000,
+    "boss_hp_after": 997,
+    "direct3d_final_tick": 2654,
+    "direct3d_scene_frames": 2342,
+    "direct3d_errors": 0,
+    "boss_victory_verified": false
+  },
+  "r104_projectile_combat": {
+    "entry_fixture": "original-format R101 test save with three cards and a door-side landing position",
+    "matching_controller_samples": 3156,
+    "launch_tick": 3097,
+    "projectile_subtype": 0,
+    "contact_tick": 3108,
+    "original_give_reaction": "0041",
+    "original_give_power": 60,
+    "player_hp_before": 100,
+    "player_hp_after": 80,
+    "projectile_cleanup_verified": true,
+    "lateral_evade_input_tick": 3100,
+    "lateral_evade_matching_samples": 3164,
+    "lateral_evade_final_player_hp": 100,
+    "boss_victory_verified": false
+  },
+  "r101_jmp2_side_arena": {
+    "entry_fixture": "unchanged original-format R101 title save with zero cards",
+    "original_jmp2_transition_verified": true,
+    "direct3d_attack_capture_tick": 1559,
+    "direct3d_final_tick": 1620,
+    "direct3d_scene_frames": 1316,
+    "direct3d_errors": 0,
+    "cpu_final_tick": 1930,
+    "cpu_final_player_hp": 100,
+    "cpu_enemy_start_hp": [74, 74],
+    "cpu_enemy_final_hp": [26, 71],
+    "arena_victory_verified": false
+  },
+  "r103_four_forward_evades": {
+    "controller_ticks": [9496, 9546, 9602, 9648],
+    "award_ticks": [9505, 9555, 9611, 9657],
+    "player_hp_at_each_award": 25,
+    "heat_after_each_award": [11.4, 12.9, 14.4, 15.9],
+    "level_points_after_each_award": [657, 732, 807, 882],
+    "matching_controller_samples": 9900,
+    "victory_verified": false
+  },
   "r101_r104_jmp1": {
     "entry_fixture": "original-format R101 save prepared with three cards and a door-side landing position",
     "original_door_verified": true,

@@ -23,6 +23,7 @@ typedef enum {GH_DOOR_OK,GH_DOOR_ARGUMENT,GH_DOOR_BOUNDS,GH_DOOR_FORMAT,
 /* Required original operations beyond the verified R020->newroom branch.
  * No callback is needed or invoked on a genuine original branch which skips it. */
 typedef gh_door_status (*gh_door_external)(void*,uint32_t address,uint32_t *frontier);
+typedef gh_door_status (*gh_door_same_room)(void *,const gh_game_door *,uint32_t,uint32_t *);
 typedef struct {
  gh_game_children *children;
  const gh_save_map_bindings *map;
@@ -38,6 +39,7 @@ typedef struct {
  gh_screen_fade *fade;gh_display_state *display;
  gh_door_external external;void *context;
  const gh_door_save_prompt *save_prompt;
+ gh_door_same_room same_room;
 } gh_game_door_bindings;
 /* Zero-initialize native owner first. These load the exact cold ELF file/BSS
  * scalar values; they do not claim the whole original static constructor chain. */

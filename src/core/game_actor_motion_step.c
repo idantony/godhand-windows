@@ -43,6 +43,11 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
  if(kind==0x100&&model->work&&model->work->room==0x100&&
     model->root.original_vtable214==0x41d220&&half(p+0x2f4)==0x0b01&&
     p[0x2f6]==5&&!half(p+0x54a))return 0x48u;
+ /* The dep0250 frontal Give07 reaction reaches the same original bit 8 write. */
+ if(kind==0x203&&dependency==0x250&&model->work&&model->work->room==0x104&&
+    model->root.original_vtable214==0x4479c8&&model->root.size>0x1651&&
+    rd(p+0x1644)==0x80000&&!half(p+0x640)&&!p[0x1650]&&!p[0x1651]&&
+    p[0x2f4]==1&&!p[0x2f5]&&p[0x2f6]==1&&!p[0x2f7])return 0x48u;
  if(kind!=0x202)return 0x40u;
  /* 25FA18 sets the same sample bit for the R100 transform death clip. */
  if(model->root.size>=0x642&&dependency==0x200&&half(p+0x640)==8&&
@@ -62,9 +67,16 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
  const int at0b_em02=dependency==0x202&&model->root.size>=0x16c8&&model->work&&
     model->work->room==0x102&&half(p+0x640)==0x17&&!p[0x1650]&&rd(p+0x16c4)==2&&
     p[0x2f6]==1&&!p[0x2f7];
- const int east_em27=dependency==0x227&&model->root.size>0x1650&&model->work&&
-    model->work->room==0x102&&half(p+0x640)==4&&!p[0x1650]&&p[0x2f6]==1&&!p[0x2f7];
- const int allowed=(p[0x2f4]==1&&(dependency==0x20a||stamp19||stamp20||r102_em00||r102_em03||east_em27||at0b_em02))||
+ const int em27_reaction=dependency==0x227&&model->root.size>0x1650&&model->work&&
+    p[0x2f6]==1&&!p[0x2f7]&&
+    ((model->work->room==0x102&&half(p+0x640)==4&&!p[0x1650])||
+     (model->work->room==0x101&&half(p+0x640)==9&&p[0x1650]==4));
+ const unsigned stamp=model->root.size>0x1650?half(p+0x640):UINT16_MAX;
+ const int r101_wave=model->root.size>0x1650&&model->work&&model->work->room==0x101&&
+    p[0x1650]==6&&p[0x2f6]==1&&!p[0x2f7]&&
+    ((stamp==0x16&&dependency==0x200)||(stamp==0x20&&dependency==0x203));
+ const int allowed=(p[0x2f4]==1&&(dependency==0x20a||stamp19||stamp20||r102_em00||r102_em03||
+                       em27_reaction||at0b_em02||r101_wave))||
                    (p[0x2f4]==2&&(stamp19||stamp20||r102_death||(r102_em03&&!half(p+0x54a))));
  return allowed?0x48u:0x40u;
 }
