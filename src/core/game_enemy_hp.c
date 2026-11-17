@@ -13,7 +13,9 @@ gh_actor_model_status gh_enemy_hp_initialize_00202b88(gh_enemy_hp*s,gh_enemy_ent
  const int r103=gh_enemy204_is_r103_entry(&e->request,e->b.work->room);
  const int r103_boss=r103&&e->request.entry_number<2;
  const int r104_boss=gh_enemy203_is_r104_entry(&e->request,e->b.work->room);
- if(!save.bytes||save.size<GH_CORE_SAVE_BYTES||(!devil&&!r103&&!r104_boss&&(e->request.object_kind!=0x202||
+ const int r200=gh_enemy201_is_r200_entry(&e->request,e->b.work->room);
+ const int r200_heavy=r200&&e->request.dependency_kind==0x20c;
+ if(!save.bytes||save.size<GH_CORE_SAVE_BYTES||(!devil&&!r103&&!r104_boss&&!r200&&(e->request.object_kind!=0x202||
     (e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)))))
   return GH_ACTOR_MODEL_ARGUMENT;
  if(!s->stage){p[0x622]=0;unsigned level=p[0x186b];static const uint16_t hp20a[]={148,192,236,296,340,399,444,488};
@@ -25,7 +27,7 @@ gh_actor_model_status gh_enemy_hp_initialize_00202b88(gh_enemy_hp*s,gh_enemy_ent
   static const uint16_t hp20f[]={37,51,66,81,96,111,125,140};
   const uint16_t *hp=hp200;
   if(exchange)hp=hp227;
-  else if(e->request.dependency_kind==0x20a)hp=hp20a;
+  else if(e->request.dependency_kind==0x20a||r200_heavy)hp=hp20a;
   else if(e->request.dependency_kind==0x20f)hp=hp20f;
   uint32_t value=r104_boss?1000u:r103_boss?580u:devil?330u:level>=2&&level<=8?hp[level-1]:hp[0];
   /* Actual1FABB0 visits atmostsix equippedA8 bytes whenroomhigh!=0.
@@ -55,7 +57,7 @@ gh_actor_model_status gh_enemy_hp_initialize_00202b88(gh_enemy_hp*s,gh_enemy_ent
     value=(uint32_t)(((uint64_t)value*UINT64_C(13421773))>>24);
    }else if(difficulty==2)value+=20;
   }
-  if(devil||exchange||r103_boss||r104_boss)p[0x17c1]=1;
+  if(devil||exchange||r103_boss||r104_boss||r200_heavy)p[0x17c1]=1;
   if(r104_boss){uint32_t timer=0x40a00000;memcpy(p+0x54c,&timer,4);}
   p[0x622]=(uint8_t)(devil||r103_boss||r104_boss);uint16_t small=(uint16_t)value;memcpy(p+0x548,&small,2);memcpy(p+0x54a,&small,2);
   s->tail=t;s->hp=value;s->equipped_count=equipped;s->stage=1;

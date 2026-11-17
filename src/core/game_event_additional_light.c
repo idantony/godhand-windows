@@ -58,12 +58,12 @@ static gh_game_event_status track_at(gh_event_link *link, const gh_event_data_pr
     if (status) return status;
     if (word(component->bytes + 0x14) != track->count) return GH_EVENT_FORMAT;
     const unsigned event = link->components.event_no;
-    if (event != 1 && event != 2 && event != 4 && event != 5 && event != 6 && event != 7 && event != 0x1a && event != 0x1b)
+    if (event != 1 && event != 2 && event != 4 && event != 5 && event != 6 && event != 7 && event != 8 && event != 0x1a && event != 0x1b)
         return GH_EVENT_UNSUPPORTED;
     const unsigned cuts = event == 1 ? EV01_CUTS : event == 2 ? EV02_CUTS :
-        event == 4 ? EV04_CUTS : event == 5 ? EV05_CUTS : event == 6 ? EV06_CUTS : event == 7 ? 22 : event == 0x1a ? EV1A_CUTS : EV1B_CUTS;
+        event == 4 ? EV04_CUTS : event == 5 ? EV05_CUTS : event == 6 ? EV06_CUTS : event == 7 ? 22 : event == 8 ? 16 : event == 0x1a ? EV1A_CUTS : EV1B_CUTS;
     const unsigned rows = event == 1 ? EV01_ROWS : event == 2 ? EV02_ROWS :
-        event == 4 ? EV04_ROWS : event == 5 ? EV05_ROWS : event == 6 ? EV06_ROWS : event == 7 ? 65 : event == 0x1a ? EV1A_ROWS : EV1B_ROWS;
+        event == 4 ? EV04_ROWS : event == 5 ? EV05_ROWS : event == 6 ? EV06_ROWS : event == 7 ? 65 : event == 8 ? 51 : event == 0x1a ? EV1A_ROWS : EV1B_ROWS;
     if (data->camera_count != cuts || track->count != rows || track->stride != ROW_SIZE ||
         track->bytes != rows * ROW_SIZE || !track->records)
         return GH_EVENT_UNSUPPORTED;
@@ -74,7 +74,7 @@ static gh_game_event_status map_keys(const gh_event_data_prefix *data,
     gh_event_sequence_view track, uint16_t *cut_start)
 {
     const unsigned event = data->components->event_no;
-    const unsigned key_flags = event == 1 ? 4u : event == 2 ? 5u : event == 4 ? 0x15u : event == 5 ? 2u : (event == 0x1a || event==7) ? 0x11u : 1u;
+    const unsigned key_flags = event == 1 ? 4u : (event == 2 || event == 8) ? 5u : event == 4 ? 0x15u : event == 5 ? 2u : (event == 0x1a || event==7) ? 0x11u : 1u;
     for (unsigned cut = 0; cut < data->camera_count; ++cut) {
         gh_event_camera_cut camera;
         uint16_t length;

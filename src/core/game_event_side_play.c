@@ -38,7 +38,7 @@ static gh_game_event_status get_component(const gh_event_data_prefix *data, unsi
         (data->components->event_no == 2 &&
          (index == 0 || index == 5 || index == 9 || index == 10)) ||
         ((data->components->event_no == 4 || data->components->event_no == 5 || data->components->event_no == 6 || data->components->event_no == 7 ||
-          data->components->event_no == 0x1a ||
+          data->components->event_no == 8 || data->components->event_no == 0x1a ||
           data->components->event_no == 0x1b) &&
          (index == 0 || index == 1 || index == 5 || index == 9 || index == 10)))
         return GH_EVENT_OK;
@@ -70,7 +70,7 @@ static gh_game_event_status scroll_light_track(const gh_event_data_prefix *data,
     if (data->components->event_no == 1 || data->components->event_no == 0x1b)
         return !track->records && !track->count ? GH_EVENT_OK : GH_EVENT_UNSUPPORTED;
     const unsigned event = data->components->event_no;
-    const unsigned keys = event == 0x1a ? 1 : event == 4 ? 9 : event == 6 ? 11 : event == 7 ? 18 : 2;
+    const unsigned keys = (event == 0x1a || event == 8) ? 1 : event == 4 ? 9 : event == 6 ? 11 : event == 7 ? 18 : 2;
     if (!track->records || track->count != keys || track->stride != 0x60 || track->bytes != keys * 0x60)
         return GH_EVENT_UNSUPPORTED;
 
@@ -83,7 +83,7 @@ static gh_game_event_status scroll_light_track(const gh_event_data_prefix *data,
      * substitution. B770 normalizes their anonymous actor index to -1. */
     for (unsigned i = 0; i < track->count; ++i) {
         const uint8_t *row = track->records + i * track->stride;
-        const unsigned cut = event == 0x1a ? 0 : event == 4 ? row[3] : event == 5 ? ev05_cuts[i] :
+        const unsigned cut = (event == 0x1a || event == 8) ? 0 : event == 4 ? row[3] : event == 5 ? ev05_cuts[i] :
             event == 6 ? ev06_cuts[i] : event == 7 ? ev07_cuts[i] : 26u + i;
         const unsigned frame = half(row + 6);
         uint16_t length;
@@ -379,7 +379,7 @@ static gh_game_event_status scroll_layer_track(const gh_event_data_prefix *data,
         return GH_EVENT_ARGUMENT;
     if (!track->records) return track->count ? GH_EVENT_ARGUMENT : GH_EVENT_OK;
     const unsigned event=data->components->event_no;
-    if ((event != 4 && (event != 5 || track->count != 1) && (event != 6 || track->count != 5) && (event != 7 || track->count != 2)) || !track->count || track->stride != 0x28 ||
+    if ((event != 4 && (event != 5 || track->count != 1) && (event != 6 || track->count != 5) && (event != 7 || track->count != 2) && (event != 8 || track->count != 1)) || !track->count || track->stride != 0x28 ||
         track->bytes != track->count * track->stride) return GH_EVENT_UNSUPPORTED;
     return GH_EVENT_OK;
 }

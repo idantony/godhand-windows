@@ -987,7 +987,13 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      w(source->bytes+0x1878)==0x45&&w(source->bytes+0x187c)==UINT32_MAX&&
      !half(source->bytes+0x1880)&&override_bank==UINT32_MAX&&!half(take+0x44)&&
      s->pending_damage_kind==0x45&&s->pending_damage>0;
-   const int r104_strike=r104_combo||r104_melee||r104_charge||r104_punch||r104_sweep;
+   /* 226450 authors the zero-power brace contact with Take4B. */
+   const int r104_brace=r104_em03&&source_move==0x2100&&source->bytes[0x2f6]==1&&
+     source->size>=0x1882&&w(source->bytes+0x1870)==0x10&&!w(source->bytes+0x1874)&&
+     w(source->bytes+0x1878)==0x4b&&w(source->bytes+0x187c)==UINT32_MAX&&
+     !half(source->bytes+0x1880)&&override_bank==UINT32_MAX&&!half(take+0x44)&&
+     s->pending_damage_kind==0x4b&&!w(take+0x4c)&&!s->pending_damage&&!residual;
+   const int r104_strike=r104_combo||r104_melee||r104_charge||r104_punch||r104_sweep||r104_brace;
    /* The long EM20 Give's original kind3E splits power 40 into 30 and 10. */
    const int devil_melee=b->work->room==0x100&&source_kind==0x220&&dependency==0x220&&stamp==0xff&&
      source->size>0x1651&&w(source->bytes+0x1644)==0x400000u&&source->bytes[0x1651]==0xff&&
@@ -1418,9 +1424,9 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
     p[0x2f4]=1;p[0x2f5]=1;p[0x2f6]=p[0x2f7]=0;
    }
   }else if(!(w(p+0x15f4)&0x800u)){
-   if(s->pending_damage_kind==0x4a){
+   if(kind==0x4a||kind==0x4b){
     uint32_t target;
-    if(!elf_word(b,0x41bb3c,&target)||target!=0x10a210u)
+    if(!elf_word(b,0x41baf0+4*(kind-0x37),&target)||target!=0x10a210u)
      return fail(s,0x109f80,GH_PLAYER_FRAME_UNSUPPORTED);
     p[0x2f4]=1;p[0x2f5]=1;p[0x2f6]=p[0x2f7]=0;
     s->damage_stage=7;

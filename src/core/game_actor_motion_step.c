@@ -39,6 +39,10 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
      ((p[0x2f5]==0xf&&p[0x2f6]==1)||(p[0x2f5]==0xb&&p[0x2f6]==5))&&
      !half(p+0x54a))return 0x48u;
  }
+ /* 11BF20 sets the same bit in the original lethal R104 hold clip. */
+ if(kind==0x100&&model->work&&model->work->room==0x104&&
+    model->root.original_vtable214==0x41d220&&half(p+0x2f4)==0x0901&&
+    p[0x2f6]==3&&!p[0x2f7]&&!half(p+0x54a))return 0x48u;
  /* 11C608's paired lethal clip sets the original sample bit before Step. */
  if(kind==0x100&&model->work&&model->work->room==0x100&&
     model->root.original_vtable214==0x41d220&&half(p+0x2f4)==0x0b01&&

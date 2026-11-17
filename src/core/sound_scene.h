@@ -9,7 +9,8 @@ extern "C" {
 /* Canonical additional cSnd scene fields. Borrow one instance in BGM requests;
  * no guest pointers, no second registry/controller. Firstboot R020/default
  * tables only. This is not an SPU2 reverb implementation or bank2 voice player. */
-enum {GH_SOUND_TS_ROWS=8};
+/* Original R200 TS v1.1 uses seventeen linked rows. */
+enum {GH_SOUND_TS_ROWS=17};
 /* Original 2CB080 mutable fields. The source remains borrowed and immutable. */
 typedef struct {
  uint32_t offset,voice14;

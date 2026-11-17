@@ -141,7 +141,9 @@ gh_actor_motion_status gh_enemy_death_mark_00312708(gh_enemy_death_mark *state,
     const unsigned kind=(unsigned)view->bytes[0x2fe]|(unsigned)view->bytes[0x2ff]<<8;
     const int em202=(kind==0x202&&vtable==0x4479c8&&entry.enemy202&&view->size>=0x1978)||
         devil_220(&entry,kind)||r103_204(&entry,kind)||r104_203(&entry,kind);
-    int em2a2=kind==0x2a2&&vtable==0x448ca0&&entry.enemy2a2&&view->size>=0x15f0;
+    const int r200=kind==0x2a3&&entry.enemy2a2&&entry.enemy2a2->prefix.bindings.work->room==0x200&&
+        gh_enemy2a2_is_r200_entry(&entry.enemy2a2->prefix.request);
+    const int em2a2=(kind==0x2a2||r200)&&vtable==0x448ca0&&entry.enemy2a2&&view->size>=0x15f0;
     const int em2ad=scenery_2ad(&entry,kind);
     if(view->original_vtable214!=vtable||(!em202&&!em2a2&&!em2ad))return stop(frontier,0x312748);
     if(!state->stage){

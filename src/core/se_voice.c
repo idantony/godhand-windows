@@ -1577,7 +1577,10 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
   const uint8_t *boss=r103_boss_voice_actor(v);
   const int em15=boss&&w(boss+0x564)==0x215&&h(boss+0x2f4)==0x6900&&
     !boss[0x2f6]&&boss[0x2f7]==1&&v->part_index==-1;
-  return (source||em15||(!v->model&&v->combat_profile))&&
+  const uint8_t *em03_boss=r104_em03_voice_actor(v);
+  const int r104_counter=em03_boss&&h(em03_boss+0x2f4)==0x6900&&
+    em03_boss[0x2f6]<=1&&em03_boss[0x2f7]==1&&v->part_index==-1;
+  return (source||em15||r104_counter||(!v->model&&v->combat_profile))&&
      w(p+4)==0x04060054u&&w(p+8)==0x50u&&w(p+12)==0x00210000u&&
      w(p+16)==0x007f007fu&&w(p+20)==0x005a0040u&&w(p+24)==0x0100ff00u&&
      w(p+28)==0x00ff0000u&&w(p+32)==4u&&!w(p+36)&&w(p+40)==0xffff&&!w(p+44)&&
@@ -2424,6 +2427,9 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
     (h(candidate->model->root.bytes+0x2f4)==0x0102||
      h(candidate->model->root.bytes+0x2f4)==0x0002||
      r103_boss_throw_player_voice_model(candidate)||r103_hold_death_player_voice(candidate)||
+     /* 11BF20 calls CORE D6 while the lethal R104 hold still owns PL00. */
+     (candidate->model->work->room==0x104&&h(candidate->model->root.bytes+0x2f4)==0x0901&&
+      candidate->model->root.bytes[0x2f6]==3&&!candidate->model->root.bytes[0x2f7])||
      (candidate->model->work->room==0x100&&h(candidate->model->root.bytes+0x2f4)==0x0b01&&
       candidate->model->root.bytes[0x2f6]==5))&&
     !h(candidate->model->root.bytes+0x54a)&&

@@ -49,7 +49,8 @@ static gh_actor_model_status continue_entry(gh_enemy_entry_tail*s,gh_enemy_entry
  if(s->stage&&s->entry!=e)return GH_ACTOR_MODEL_BUSY;
  const int r103=gh_enemy204_is_r103_entry(&e->request,e->b.work->room);
  const int r104=gh_enemy203_is_r104_entry(&e->request,e->b.work->room);
- if(!devil&&!r103&&!r104&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)))){s->frontier=0x2022d0;return GH_ACTOR_MODEL_UNSUPPORTED;}
+ const int r200=gh_enemy201_is_r200_entry(&e->request,e->b.work->room);
+ if(!devil&&!r103&&!r104&&!r200&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room)))){s->frontier=0x2022d0;return GH_ACTOR_MODEL_UNSUPPORTED;}
  if(!s->stage){s->entry=e;s->stage=1;}
  uint8_t*p=e->object.view.bytes;
  if(s->stage==1){int original=0;gh_actor_model_status status=gh_enemy_base_initialize_0028ebf0(&s->base,&e->object.view,&e->request,e->argument,c,&e->b.init->random,&original);if(status){s->frontier=s->base.frontier;return status;}if(original!=1)return GH_ACTOR_MODEL_ARGUMENT;s->stage=2;}
@@ -65,6 +66,7 @@ static gh_actor_model_status continue_entry(gh_enemy_entry_tail*s,gh_enemy_entry
        0x3f800000:scales[s->original_counter&7];
   if(r103)scale=e->request.entry_number<2?0x3f8ccccd:0x3f800000;
   if(r104)scale=0x3f99999a;
+  if(r200&&e->request.dependency_kind==0x20c)scale=0x3f800000; /* 2029CC */
   put(p,0x110,scale);put(p,0x118,scale);put(p,0x114,scale);s->stage=3;
  }
  /* Actual271410 dependency20A is another switchdefault with noallocations.

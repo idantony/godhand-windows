@@ -198,7 +198,10 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
   const unsigned seq=h(p+0x3ac);
   const unsigned pressed=w(work+8);
   /* With SEQ bit 10, the original dodge caller enters 123ACC for a buffered kick. */
-  const int buffered_triangle=b->work->room==0x100&&(seq&0x10u)&&p[0x622]&&!p[0x621]&&!p[0x623]&&!p[0x624]&&!(pressed&3u);
+  const int r104_backflip=b->work->room==0x104&&h(p+0x2f4)==0x0600&&
+      p[0x2f6]==1&&p[0x2f7]==1;
+  const int buffered_triangle=(b->work->room==0x100||r104_backflip)&&(seq&0x10u)&&
+      p[0x622]&&!p[0x621]&&!p[0x623]&&!p[0x624]&&!(pressed&3u);
   if(seq&0x40u){
    if(b->work->room==0x700)return fail(s,0x1169d8,GH_PLAYER_FRAME_UNSUPPORTED);
    if(w(work+0x5d8)&0x2000000u){
@@ -208,7 +211,11 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
     return transition(s,out,0,0);
    }
   }
-  if(buffered_triangle)s->phase=4;
+  /* 123AB8 reaches 123ACC for an attack buffered during the R104 backflip. */
+  const int buffered_square=r104_backflip&&(seq&0x10u)&&p[0x621]&&
+       !p[0x622]&&!p[0x623]&&!p[0x624]&&!(pressed&7u);
+  const int buffered_attack=buffered_triangle||buffered_square;
+  if(buffered_attack)s->phase=4;
   else if(seq&0x40u){
    if(pressed&3u||p[0x621]||p[0x622]||p[0x623]||p[0x624])
     return fail(s,0x123acc,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -224,7 +231,7 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
     return status?fail(s,pc,status):done(s,out,1);
    }
   }
-  if(!buffered_triangle){
+  if(!buffered_attack){
    if(seq&0x10u){
     put(p+0x15f4,w(p+0x15f4)|0x400u);
     if(pressed&4u)return transition(s,out,4,0);
@@ -321,7 +328,7 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
   int selected;
   gh_player_frame_status e=gh_player_square_input_00123fc8(&b->player->view,b->save,b->init,mode!=IDLE_INPUT,&selected,&pc);
   if(e)return fail(s,pc,e);
-  if(selected||mode==REACTION_INPUT)return done(s,out,selected);
+  if(selected||mode!=IDLE_INPUT)return done(s,out,selected);
  }
  if(s->phase==7){if(p[0x623]||p[0x621]){if(p[0x61f]&&num(p+0x608)>2.3561945f)return fail(s,0x12c000,GH_PLAYER_FRAME_UNSUPPORTED);if(w(p+0x15f4)&0x8000)return transition(s,out,12,p[0x623]?2:0);return fail(s,0x12c000,GH_PLAYER_FRAME_UNSUPPORTED);}if(w(work+8)&1){if(!p[0x2f4]&&p[0x2f5]==10)return done(s,out,0);return transition(s,out,10,0);}put(p+0x15f4,w(p+0x15f4)|0x400);if(p[0x627])return transition(s,out,6,0);if(p[0x61e]){if(!b->camera||!b->camera->constructed||!b->camera->identity)return fail(s,0x138f88,GH_PLAYER_FRAME_UNSUPPORTED);if(((uint32_t)b->camera->identity->mode&1u)&&w(b->camera->fields+0x520))return done(s,out,0);
   const gh_player_frame_status status=gh_game_player_directional_dodge_00124154(&b->player->view,&pc);

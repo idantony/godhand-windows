@@ -73,7 +73,7 @@ gh_actor_model_status gh_enemy_weapon_create_kind_0030fa98(gh_enemy_weapon *weap
     *nonnull=0;
     if(weapon->stage&&(weapon->kind!=kind||!same_bindings(&weapon->bindings,binding)))
         return GH_ACTOR_MODEL_BUSY;
-    if(kind<0x361||kind>0x363)return stop(weapon,0x30fb70,GH_ACTOR_MODEL_UNSUPPORTED);
+    if((kind<0x361||kind>0x363)&&!(kind==0x366&&binding->work->room==0x200))return stop(weapon,0x30fb70,GH_ACTOR_MODEL_UNSUPPORTED);
     weapon->frontier=0;
     if(weapon->stage==ORIGINAL_NULL)return GH_ACTOR_MODEL_OK;
 

@@ -14,11 +14,22 @@ gh_actor_motion_status gh_enemy_motion_initialize_002036b0(gh_enemy_motion*s,gh_
  gh_enemy_entry*e=hp->tail->entry;uint8_t*p=e->object.view.bytes;
  const int r103=gh_enemy204_is_r103_entry(&e->request,e->b.work->room);
  const int r104=gh_enemy203_is_r104_entry(&e->request,e->b.work->room);
- if(!r103&&!r104&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room))))return GH_ACTOR_MOTION_ARGUMENT;
+ const int r200=gh_enemy201_is_r200_entry(&e->request,e->b.work->room);
+ if(!r103&&!r104&&!r200&&(e->request.object_kind!=0x202||(e->request.dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(&e->request,e->b.work->room))))return GH_ACTOR_MOTION_ARGUMENT;
  if(!s->stage){const gh_object_view*r=&e->resource;if(!r->bytes||!r->file_extent_known||r->file_extent>r->size||r->file_extent<0xc10)return GH_ACTOR_MOTION_BOUNDS;
   size_t a,b;
   uint8_t substate,detail=0;
-  if(r104){
+  if(r200){
+   /* 42D4C0 chooses the dependency pair, then appearance 0 enters 20393C. */
+   size_t first=0x98;
+   switch(e->request.dependency_kind){
+   case 0x202:first=0x648;break;
+   case 0x21a:first=0x10a8;break;
+   case 0x20c:first=0x1eac;break;
+   }
+   if(r->kind!=0x201||r->file_extent<first+8){s->frontier=0x2036b0;return GH_ACTOR_MOTION_BOUNDS;}
+   a=word(r->bytes,first);b=word(r->bytes,first+4);substate=1;
+  }else if(r104){
    /* 2036B0 uses the 250 rest pair. Appearance zero sets selector 00/01. */
    if(r->file_extent<0x18f8){s->frontier=0x2036b0;return GH_ACTOR_MOTION_BOUNDS;}
    a=word(r->bytes,0x18f0);b=word(r->bytes,0x18f4);substate=1;

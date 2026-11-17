@@ -745,6 +745,76 @@ static gh_actor_motion_status heavy_idle_00285f78(gh_enemy_other_move *s,
     return GH_ACTOR_MOTION_OK;
 }
 
+enum { R200_EMA3_BIND=90,R200_EMA3_POSITION,R200_EMA3_STEP,R200_EMA3_ROOT,R200_EMA3_TEST };
+
+static gh_actor_motion_status r200_ema3_wait_00286aa8(gh_enemy_other_move *s,
+    gh_enemy2a2_virtual_init *actor)
+{
+    gh_enemy2a2_init *prefix=&actor->prefix;
+    gh_title_player_view *root=prefix->root;
+    uint8_t *p=root->bytes;
+    if(s->stage==5){
+        if(p[0x2f6]>1||p[0x2f7]!=3)
+            return stop(s,0x286aa8,GH_ACTOR_MOTION_UNSUPPORTED);
+        int found;
+        gh_actor_motion_status status=mode1_lookup_00291010(s,actor,&found);
+        if(status)return status;
+        s->nearby=found!=0;
+        s->stage=p[0x2f6]?R200_EMA3_POSITION:R200_EMA3_BIND;
+    }
+    if(s->stage==R200_EMA3_BIND){
+        put(p+0x15b0,word(p+0x15b0)|1u);
+        if(!s->motion.active){
+            gh_actor_motion_bindings bindings=prefix->motion.b;
+            bindings.effect=s->effect;
+            bindings.context=s->effect_context;
+            bindings.sound=s->sound;
+            bindings.sound_context=s->sound_context;
+            gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(
+                &s->motion,&prefix->motion,&bindings,word(prefix->resource.bytes+0xd8),
+                word(prefix->resource.bytes+0xdc),0,10,0,0);
+            if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
+        }
+        gh_actor_motion_status status=gh_actor_motion_call_step_002a8578(&s->motion);
+        if(status)return stop(s,s->motion.frontier?s->motion.frontier:0x2a8578,status);
+        memmove(p+0x5c0,root->alias_f0,12);
+        p[0x2f6]=1;
+        s->stage=R200_EMA3_POSITION;
+    }
+    if(s->stage==R200_EMA3_POSITION){
+        fenv_t env;
+        if(!begin(&env))return stop(s,0x286bf8,GH_ACTOR_MOTION_CALLEE);
+        const float x=add(mul(scalar(root->alias_f0),.99f),mul(scalar(p+0x5c0),.01f));
+        const float z=add(mul(scalar(root->alias_f0+8),.99f),mul(scalar(p+0x5c8),.01f));
+        if(fesetenv(&env)||!isfinite(x)||!isfinite(z))
+            return stop(s,0x286bf8,GH_ACTOR_MOTION_UNSUPPORTED);
+        put_float(root->alias_f0,x);
+        put_float(root->alias_f0+8,z);
+        s->stage=scalar(p+0x24c)>0?R200_EMA3_STEP:R200_EMA3_TEST;
+    }
+    if(s->stage==R200_EMA3_STEP){
+        uint32_t frontier;
+        int ended;
+        if(!actor->pose.bindings.rate)return stop(s,0x157c18,GH_ACTOR_MOTION_UNSUPPORTED);
+        gh_actor_motion_status status=gh_actor_motion_step_00157c18(&prefix->motion,
+            *actor->pose.bindings.rate,prefix->bindings.policy,&ended,&frontier);
+        if(status)return stop(s,frontier?frontier:0x157c18,status);
+        s->stage=R200_EMA3_ROOT;
+    }
+    if(s->stage==R200_EMA3_ROOT){
+        gh_actor_motion_status status=heavy_root_motion_002da9b8(s,prefix);
+        if(status)return status;
+        s->stage=R200_EMA3_TEST;
+    }
+    if(s->stage==R200_EMA3_TEST){
+        if(scalar(p+0x618)<16)return stop(s,0x289328,GH_ACTOR_MOTION_UNSUPPORTED);
+        if(s->nearby&&(word(p+0x15b0)&8u))
+            return stop(s,0x2a74e0,GH_ACTOR_MOTION_UNSUPPORTED);
+        s->stage=12;
+    }
+    return GH_ACTOR_MOTION_OK;
+}
+
 static gh_actor_motion_status heavy_move_substate_002866f8(gh_enemy_other_move *s,
     gh_enemy2a2_virtual_init *actor)
 {
@@ -1144,6 +1214,11 @@ gh_actor_motion_status gh_enemy2a2_move_002856c0(gh_enemy_other_move *s,
               word(p+0x564)==0x2a2&&half(p+0x640)==6)||
              (s->stage>=HEAVY_IDLE_BIND&&s->stage<=HEAVY_IDLE_RECOVER_CUE)){
         gh_actor_motion_status status=heavy_idle_00285f78(s,actor);
+        if(status)return status;
+    }else if((s->stage==5&&!p[0x2f4]&&p[0x2f5]==3&&work->room==0x200&&
+              gh_enemy2a2_is_r200_entry(&actor->prefix.request))||
+             (s->stage>=R200_EMA3_BIND&&s->stage<=R200_EMA3_TEST)){
+        gh_actor_motion_status status=r200_ema3_wait_00286aa8(s,actor);
         if(status)return status;
     }else if(s->stage<12||(s->stage>=HEAVY_TIMER_CONVERT&&s->stage<=HEAVY_TIMER_DRAW)||
              (s->stage>=HEAVY_LEAVE_BIND&&s->stage<=HEAVY_LEAVE_ROOT)){

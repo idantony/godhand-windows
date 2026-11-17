@@ -43,7 +43,8 @@ gh_actor_model_status gh_enemy2a2_initialize_prefix_00284af8(gh_enemy2a2_init *s
     uint8_t *bytes=root->bytes;
     uint16_t kind;
     memcpy(&kind,bytes+0x2fe,sizeof(kind));
-    const int ema3=bindings->work->room==0x101 && gh_enemy2a2_is_r101_entry(request);
+    const int entry_r200=bindings->work->room==0x200 && gh_enemy2a2_is_r200_entry(request);
+    const int ema3=entry_r200 || (bindings->work->room==0x101 && gh_enemy2a2_is_r101_entry(request));
     if (root->original_vtable214!=0x448ca0 || request->object_kind!=kind ||
         (!ema3 && (kind!=0x2a2 || request->dependency_kind<0x2a2 ||
          request->dependency_kind>0x2a4))) {
@@ -102,22 +103,24 @@ gh_actor_model_status gh_enemy2a2_initialize_prefix_00284af8(gh_enemy2a2_init *s
     }
     if (s->stage==HP_WRITTEN) {
         const unsigned appearance=bytes[0x1560];
-        if (appearance!=0 && appearance!=5) {
+        if (appearance!=0 && appearance!=5 && !entry_r200) {
             s->frontier=0x284c28;
             return GH_ACTOR_MODEL_UNSUPPORTED;
         }
-        /* 448A90[5] -> 284D70 binds the default pair with detail 1. */
-        const uint32_t row_pc=appearance==5 ? 0x284da0 : 0x284c7c;
-        if (resource->file_extent<0x30) {s->frontier=row_pc;return GH_ACTOR_MODEL_BOUNDS;}
-        size_t motion=word(resource->bytes+0x28), sequence=word(resource->bytes+0x2c);
+        /* 448A90[4] -> 284D38 binds resource offsets +D8/+DC.
+         * 448A90[5] -> 284D70 binds the default pair with detail 1. */
+        const uint32_t row_pc=entry_r200 ? 0x284d64 : appearance==5 ? 0x284da0 : 0x284c7c;
+        const size_t pair=entry_r200 ? 0xd8 : 0x28;
+        if (resource->file_extent<pair+8) {s->frontier=row_pc;return GH_ACTOR_MODEL_BOUNDS;}
+        size_t motion=word(resource->bytes+pair), sequence=word(resource->bytes+pair+4);
         if (motion>resource->file_extent-4 || sequence>resource->file_extent-4) {
             s->frontier=row_pc;
             return GH_ACTOR_MODEL_BOUNDS;
         }
         bytes[0x2f4]=0;
-        bytes[0x2f5]=2;
+        bytes[0x2f5]=entry_r200?3:2;
         bytes[0x2f6]=0;
-        bytes[0x2f7]=(uint8_t)(appearance==5);
+        bytes[0x2f7]=entry_r200?3:(uint8_t)(appearance==5);
         s->motion_offset=motion;
         s->sequence_offset=sequence;
         s->stage=MOTION_SELECTED;

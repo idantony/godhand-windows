@@ -16,6 +16,8 @@ gh_scene_placement_status gh_om30c_initialize_0018dd40(gh_om309_state *,gh_om_ob
 gh_scene_placement_status gh_om331_construct_0019c588(void *,size_t,gh_title_player_view *);
 gh_scene_placement_status gh_om331_initialize_0019c670(gh_om309_state *,gh_om_object *,const gh_om_initializer_bindings *,int *);
 gh_scene_placement_status gh_om332_initialize_0019c670(gh_om309_state *,gh_om_object *,const gh_om_initializer_bindings *,int *);
+gh_scene_placement_status gh_om325_construct_00198fb8(void *,size_t,gh_title_player_view *);
+gh_scene_placement_status gh_om325_initialize_001990a0(gh_om309_state *,gh_om_object *,const gh_om_initializer_bindings *,int *);
 gh_scene_placement_status gh_om309_abort(gh_om309_state *);
 #ifdef __cplusplus
 }

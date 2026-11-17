@@ -644,7 +644,10 @@ gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor
         request->data->components && request->data->components->event_no == 0x1b) {
         return extra_standalone(s, request, handle, original_success, frontier);
     }
-    if (request->packed_resource) return extra_standalone(s, request, handle, original_success, frontier);
+    const int ev08_actor=request->data&&request->data->components&&request->info&&
+        gh_event_actor_ev08_el5b(request->data->components->event_no,request->actor_index,request->source_kind,request->info[4]);
+    if (request->packed_resource || ev08_actor)
+        return extra_standalone(s, request, handle, original_success, frontier);
     if (request->source_kind == 0x630 || request->source_kind == 0x631 ||
         request->source_kind == 0x634 || request->source_kind == 0x639 ||
         request->source_kind == 0x641 || request->source_kind == 0x646 ||

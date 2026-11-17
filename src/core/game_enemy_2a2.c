@@ -21,6 +21,14 @@ int gh_enemy2a2_is_r101_entry(const gh_enemy_request *r)
         ((r->entry_number==16 && r->dependency_flags==1) ||
          (r->entry_number==17 && !r->dependency_flags));
 }
+int gh_enemy2a2_is_r200_entry(const gh_enemy_request *request)
+{
+    return request && request->object_kind==0x2a3 && request->dependency_kind==0x2a7 &&
+        request->appearance==4 && !request->flags &&
+        ((request->entry_number==0x19 && !request->dependency_flags) ||
+         (request->entry_number==0x1a && request->dependency_flags==1));
+}
+
 int gh_enemy2a2_is_r102_entry(const gh_enemy_request *request)
 {
     return request && request->object_kind == 0x2a2 &&
@@ -94,7 +102,7 @@ gh_actor_model_status gh_enemy2a2_model_00288da8(gh_enemy_model *state,
     state->frontier=0;
     uint16_t kind;
     memcpy(&kind,root->bytes+0x2fe,sizeof(kind));
-    const int ema3=work->room==0x101 && kind==0x2a3 && word(root->bytes+0x564)==0x2a7;
+    const int ema3=(work->room==0x101 || work->room==0x200) && kind==0x2a3 && word(root->bytes+0x564)==0x2a7;
     if ((!ema3 && kind!=0x2a2) || root->original_vtable214!=0x448ca0) {
         state->frontier=0x288da8;
         return GH_ACTOR_MODEL_UNSUPPORTED;

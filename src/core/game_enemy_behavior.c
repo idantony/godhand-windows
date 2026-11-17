@@ -7,6 +7,8 @@ gh_actor_motion_status gh_enemy_behavior_initialize_002064fc(gh_enemy_behavior*s
  gh_enemy_entry*e=timers->nodes->solids->shadow->pose->motion->hp->tail->entry;uint8_t*p=e->object.view.bytes;
  const int r104_boss=gh_enemy203_is_r104_entry(&e->request,e->b.work->room);
  const int r103_boss=gh_enemy204_is_r103_entry(&e->request,e->b.work->room)&&e->request.entry_number<2;
+ const int r200=gh_enemy201_is_r200_entry(&e->request,e->b.work->room);
+ const uint32_t dependency=e->request.dependency_kind;
  if(!s->stage){s->timers=timers;
   /* Actual42E8C0[20A-202]→20654C: SBzero17B9. Ghidra'scase3iswrong. */
   const int devil=e->request.object_kind==0x220&&e->request.dependency_kind==0x220&&
@@ -23,6 +25,12 @@ gh_actor_motion_status gh_enemy_behavior_initialize_002064fc(gh_enemy_behavior*s
   }
   if(r104_boss){p[0x17b8]=p[0x17b9]=p[0x17ba]=p[0x17bc]=p[0x17bd]=2;}
   if(r103_boss){p[0x17b9]=1;p[0x17ba]=2;p[0x17bc]=0;}
+  if(r200){
+   /* 2064FC uses six independent tables for these behavior selectors. */
+   p[0x17b9]=dependency==0x202?0:dependency==0x20c?2:1;
+   if(dependency==0x21a||dependency==0x20c)p[0x17ba]=p[0x17bc]=0;
+   if(dependency==0x20c)p[0x17b8]=p[0x17bd]=2;
+  }
   s->stage=1;
  }
  if(s->stage==1){unsigned room=(uint16_t)e->b.work->room;if(room>=0x803&&room<=0x805){s->frontier=0x274140;return GH_ACTOR_MOTION_UNSUPPORTED;}
@@ -41,6 +49,13 @@ gh_actor_motion_status gh_enemy_behavior_initialize_002064fc(gh_enemy_behavior*s
     if(level!=1){s->frontier=0x2068a8;return GH_ACTOR_MOTION_UNSUPPORTED;}
     speed=0x3fc00000;
    }
+  }
+  if(r200&&dependency==0x20c){
+   /* 2068A8 applies a 1.5 base to the rank multiplier at 206D8C. */
+   uint64_t product=(uint64_t)((speed&0x7fffff)|0x800000)*UINT64_C(0xc00000);
+   unsigned normalized=(unsigned)(product>>47);
+   speed=((((speed>>23)&0xffu)+normalized)<<23)|
+       ((uint32_t)(product>>(23+normalized))&0x7fffff);
   }
   if(room==0x801||r104_boss)speed=0x3f800000;memcpy(p+0x76c,&speed,4);s->stage=2;
  }

@@ -2384,6 +2384,10 @@ static int authored_event_attached_row(const uint8_t *record,unsigned part,unsig
   {0x1e3e0010u, 0x00802000u, 0xff150001u, 0x00290028u, 0x07000001u, 21, 0x605},
   {0x1efe8010u, 0x00c00000u, 0x0014000cu, 0x00310030u, 0x1a000001u, 20, 0x605},
   {0x1e3e0010u, 0x00802000u, 0xff000001u, 0x000d000cu, 0x07000001u, 0, 0x610},
+  /* EV08 EST06 rows bind EL00 part 1 and EL59 part 0. */
+  {0x1efe8010u, 0x00800000u, 0x00010801u, 0x001e0001u, 0x1a000001u, 1, 0x600},
+  {0x1e3e0010u, 0x00800000u, 0xff000001u, 0x00010000u, 0x07000001u, 0, 0x659},
+  {0x1e3e8010u, 0x00800000u, 0x00000001u, 0x00070006u, 0x00000001u, 0, 0x659},
   /* EV07 original cuts 5, 6 and 8. */
   {0x1ebea010u, 0x00800000u, 0xff1d0001u, 0x00180017u, 0x1f000001u, 29, 0x610},
   {0x1efe8010u, 0x00800000u, 0x00040201u, 0x003c0014u, 0x00000001u, 4, 0x610},
@@ -2433,7 +2437,7 @@ int gh_effect_event_part_is_bound(gh_effect_view row,const gh_title_player_view 
  const unsigned part=row.bytes[0xbe];
  /* The original event lookup retries EL05 as EL00 when EL05 is absent. */
  if(!selector&&!(row_actor&0xffffu)&&((source==0x605&&(kind==0x605||kind==0x600))||
-     ((source==0x610||source==0x612||source==0x615||source==0x620)&&source==kind))&&authored_event_attached_row(row.bytes,part,source))return 1;
+     ((source==0x600||source==0x610||source==0x612||source==0x615||source==0x620||source==0x659)&&source==kind))&&authored_event_attached_row(row.bytes,part,source))return 1;
  if(row_actor!=(uint32_t)kind<<16)return 0;
  const uint32_t flags=w(row.bytes+4);
  /* R002 EFF bank 1 entry 2 rows 0, 2 and 3 bind EV07 EL10 part 29.
@@ -3175,6 +3179,13 @@ int gh_effect_esp_type7_record_bound(const gh_game_effects *e,const gh_effect_es
        r==est.bytes+16+ev07[i].row*0x2f0)return 1;
    }
   }
+ }
+ if(tag==0x00080006u&&e&&e->event_registered_41c&&w(v->payload+0x10c)==0x2507u){
+  gh_effect_view est;
+  /* EV08 cut 7 attaches its first EST row to EL59 part 0. */
+  if(gh_effect_event_part_is_bound(v->record,v->actor,v->selector)&&
+     !gh_effect_est_at_00306030(e,6,8,&est)&&est.bytes&&est.size>=16+2*0x2f0&&
+     w(est.bytes+4)==2&&v->record.bytes==est.bytes+16)return 1;
  }
  if(tag==0x00080006u||tag==0x00090006u){
   gh_effect_view est;

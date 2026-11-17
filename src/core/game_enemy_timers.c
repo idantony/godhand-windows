@@ -1,4 +1,5 @@
 #include "game_enemy_timers.h"
+#include "game_enemy_row2.h"
 #include "game_actor_external_parent.h"
 #include "game_om_initialize.h"
 #include <string.h>
@@ -238,6 +239,8 @@ gh_actor_motion_status gh_enemy_timers_with_weapon_00205ae4(gh_enemy_timers*s,
     else if(items==4&&e->request.dependency_kind==0x202&&e->request.entry_number==18&&e->request.appearance==9)
      kind=0x363;
    }
+   if(items==8&&gh_enemy201_is_r200_entry(&e->request,e->b.work->room))
+    kind=0x366; /* 205C18 attaches the authored left-hand shield. */
    if(!kind||!shapes||!actors||!scroll){
     s->frontier=0x26aa30;return GH_ACTOR_MOTION_UNSUPPORTED;
    }

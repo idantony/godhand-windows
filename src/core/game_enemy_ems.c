@@ -282,7 +282,8 @@ static gh_scene_placement_status spawn(gh_enemy_ems *owner,uint32_t *frontier,in
             }else if (bindings->names_2a2 &&
                 ((index==5 && request.entry_number==6 && request.object_kind==0x2a2 &&
                   request.dependency_kind==0x2a2 && request.appearance==0) ||
-                 (bindings->actor.entry.work->room==0x102 && gh_enemy2a2_is_r102_entry(&request)))) {
+                 (bindings->actor.entry.work->room==0x102 && gh_enemy2a2_is_r102_entry(&request)) ||
+                 (bindings->actor.entry.work->room==0x200 && gh_enemy2a2_is_r200_entry(&request)))) {
                 if(!entry->enemy2a2)entry->enemy2a2=calloc(1,sizeof(*entry->enemy2a2));
                 if(!entry->enemy2a2)return GH_PLACE_MEMORY;
                 status=enter_2a2(entry,bindings,&request,frontier);
@@ -419,7 +420,8 @@ gh_scene_placement_status gh_enemy_ems_set_002952d0(gh_enemy_ems *owner,
         request->appearance==3&&!request->flags&&!request->dependency_flags;
     *frontier=0x2905d0;
     gh_actor_motion_status status;
-    if(gh_enemy202_is_room_supported_profile(request,room)||gate_appearance3){
+    if(gh_enemy202_is_room_supported_profile(request,room)||gate_appearance3||
+       gh_enemy201_is_r200_entry(request,room)){
         status=enter_202(entry,owner->bindings,request,frontier);
         if(!entry->enemy202)return GH_PLACE_MEMORY;
     }else if((heavy||(room==0x101&&gh_enemy2a2_is_r101_entry(request)))&&owner->bindings->names_2a2){
@@ -1591,7 +1593,8 @@ gh_actor_motion_status gh_enemy_ems_remove_00290770(gh_enemy_ems *owner,gh_enemy
         const unsigned kind=bytes[0x2fe]|(unsigned)bytes[0x2ff]<<8;
         const int r103=kind==0x204&&gh_enemy204_is_r103_entry(&actor->request,actor->b.work->room);
         const int r104=kind==0x203&&gh_enemy203_is_r104_entry(&actor->request,actor->b.work->room);
-        if(kind!=0x202&&kind!=0x2a2&&!r103&&!r104)return retire_stop(frontier,0x2956f0);
+        const int r200=actor->b.work->room==0x200&&gh_enemy2a2_is_r200_entry(&actor->request);
+        if(kind!=0x202&&kind!=0x2a2&&!r103&&!r104&&!r200)return retire_stop(frontier,0x2956f0);
         /* 2956F0 only stores surviving 220/223 actors. 2956A0 separately
          * preserves current vitality in the current placement page. */
         unsigned stamp=bytes[0x640]|(unsigned)bytes[0x641]<<8;

@@ -1321,9 +1321,10 @@ static gh_scene_step_status scene_consumer(void *context,uint32_t address,uint32
         const gh_scene_at_step_callbacks r101={.context=h->services,.dispatch=gh_game_services_r101_area_dispatch,.spawn=gh_game_services_r101_action_offer};
         const gh_scene_at_step_callbacks r102={.context=h->services,.spawn=gh_game_services_r102_action_offer};
         const gh_scene_at_step_callbacks r103={.context=h->services,.spawn=gh_game_services_r103_action_offer};
+        const gh_scene_at_step_callbacks r200={.context=h->services,.dispatch=gh_game_services_r200_area_dispatch};
         const gh_scene_at_step_callbacks *callbacks=h->work.room==0x100?&r100:
             h->work.room==0x105?&r105:h->work.room==0x101?&r101:h->work.room==0x102?&r102:
-            h->work.room==0x103?&r103:NULL;
+            h->work.room==0x103?&r103:h->work.room==0x200?&r200:NULL;
         int original_return;
         gh_scene_at_status e=gh_scene_at_step_native_002c1618(s.scene_at,s.scene_tables,&s.title_player->view,
             &h->work,callbacks,&original_return,frontier);

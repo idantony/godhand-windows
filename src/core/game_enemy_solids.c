@@ -23,7 +23,8 @@ gh_actor_motion_status gh_enemy_solids_initialize_00204b4c(gh_enemy_solids*s,gh_
  if(s->stage==2){
   const uint32_t xyz[]={0,0x3f000000,0};
   const uint32_t dependency=e->request.dependency_kind;
-  const uint32_t radius=(dependency==0x20a||dependency==0x250)?0x3f333333u:dependency==0x20f?0x3e99999au:0x3f000000u;
+  const int r200_heavy=dependency==0x20c&&gh_enemy201_is_r200_entry(&e->request,e->b.work->room);
+  const uint32_t radius=(dependency==0x20a||dependency==0x250||r200_heavy)?0x3f333333u:dependency==0x20f?0x3e99999au:0x3f000000u;
   gh_solid_unit_status status=gh_collision_solid_create_sphere_00134880(
       manager,&e->object.view,p+0x80,xyz,radius,&s->sphere,&s->frontier);
   if(status)return GH_ACTOR_MOTION_UNSUPPORTED;

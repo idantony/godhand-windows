@@ -15,7 +15,9 @@ gh_actor_model_status gh_enemy202_initialize_prefix_002022d0(gh_enemy_initialize
  const int r103=constructed_kind==0x204&&root->original_vtable214==0x4479c8&&gh_enemy204_is_r103_entry(r,work->room);
  const int r104=constructed_kind==0x203&&root->original_vtable214==0x4479c8&&
     gh_enemy203_is_r104_entry(r,work->room);
- if(!devil&&!r103&&!r104&&(r->object_kind!=0x202||(r->dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(r,work->room)))){s->frontier=0x2022d0;return GH_ACTOR_MODEL_UNSUPPORTED;}
+ const int r200=constructed_kind==0x201&&root->original_vtable214==0x4479c8&&
+    gh_enemy201_is_r200_entry(r,work->room);
+ if(!devil&&!r103&&!r104&&!r200&&(r->object_kind!=0x202||(r->dependency_kind!=0x20a&&!gh_enemy202_is_room_supported_profile(r,work->room)))){s->frontier=0x2022d0;return GH_ACTOR_MODEL_UNSUPPORTED;}
  if(s->stage&&(s->root!=root||(s->request.object_kind!=r->object_kind||memcmp(s->request.position_xyz,r->position_xyz,12)||s->request.yaw_bits!=r->yaw_bits||s->request.flags!=r->flags||s->request.dependency_kind!=r->dependency_kind||s->request.dependency_flags!=r->dependency_flags||s->request.appearance!=r->appearance||s->request.entry_number!=r->entry_number)))return GH_ACTOR_MODEL_BUSY;
  uint8_t*p=root->bytes;
  if(!s->stage){s->root=root;s->request=*r;put(p,0x1620,r->object_kind);memcpy(p+0x1630,r->position_xyz,12);

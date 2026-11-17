@@ -129,7 +129,8 @@ gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *
     gh_title_player_view *object=&weapon->object.view;
     uint8_t *p=object->bytes;
     const uint16_t kind=weapon->kind;
-    if(kind<0x361||kind>0x363||object->size<GH_ENEMY_WEAPON_363_BYTES||object->original_vtable214!=0x42aa98||
+    const int shield=kind==0x366&&weapon->bindings.work->room==0x200;
+    if(((kind<0x361||kind>0x363)&&!shield)||object->size<GH_ENEMY_WEAPON_363_BYTES||object->original_vtable214!=0x42aa98||
         (word(p+0x2fc)>>16)!=kind)return stop(s,0x1c9268,GH_ACTOR_MODEL_UNSUPPORTED);
     void *identity=NULL;
     if(gh_room_object_lookup(weapon->bindings.pools,weapon->handle,GH_ROOM_OBJECT_ENEMY_WEAPON,
@@ -183,7 +184,7 @@ gh_actor_model_status gh_enemy_weapon_initialize_001c9268(gh_enemy_weapon_init *
         put(p+0x600,0);
         put(p+0x604,0);
         put(p+0x630,0);
-        put(p+0x668,(uint32_t)(120-30*(kind-0x361)));
+        put(p+0x668,shield?100u:(uint32_t)(120-30*(kind-0x361)));
         s->stage=MODEL_READY;
     }
 
@@ -227,7 +228,8 @@ gh_actor_model_status gh_om_weapon_bind_0026ab20(const gh_event_weapon_attachmen
     if(!a||!a->weapon||!a->weapon->bytes||a->weapon->size<0x665||!a->weapon_model||
        a->weapon_model->root.bytes!=a->weapon->bytes||!a->parent||!a->parent_model||
        a->parent_model->root.bytes!=a->parent->bytes||!owner||!actors||!scroll||
-       (a->parent_part!=10&&a->parent_part!=16)||kind<0x361||kind>0x363||*stage>5)
+       (a->parent_part!=10&&a->parent_part!=16)||
+       ((kind<0x361||kind>0x363)&&kind!=0x366)||*stage>5)
         return GH_ACTOR_MODEL_ARGUMENT;
     uint8_t *p=a->weapon->bytes;
     gh_actor_model *model=a->weapon_model;
@@ -250,6 +252,11 @@ gh_actor_model_status gh_om_weapon_bind_0026ab20(const gh_event_weapon_attachmen
         if(a->parent_part==10){
             xyz[0]^=0x80000000u;
             angles[1]^=0x80000000u;
+        }
+        if(kind==0x366){
+            /* 445454 selects 26AC00, preserving the chosen hand and zeroing its transform. */
+            memset(xyz,0,sizeof(xyz));
+            memset(angles,0,sizeof(angles));
         }
         memcpy(child->alias_d0,xyz,12);
         memcpy(child->bytes+0x100,angles,12);
@@ -303,7 +310,9 @@ gh_actor_model_status gh_enemy_weapon_attach_0026ab20(gh_enemy_weapon_init *s,
     const uint32_t parent_kind=word(parent->bytes+0x564);
     const int standard_weapon=s->weapon->kind==0x361&&
         (parent_kind==0x200||parent_kind==0x203);
-    if((parent_kind!=0x202&&!standard_weapon)||
+    const int shield=s->weapon->kind==0x366&&s->weapon->bindings.work->room==0x200&&
+        parent_kind==0x21a&&(word(parent->bytes+0x2fc)>>16)==0x201;
+    if((parent_kind!=0x202&&!standard_weapon&&!shield)||
         (s->weapon->kind==0x363&&parent->bytes[0x17c3]))
         return stop(s,0x26acdc,GH_ACTOR_MODEL_UNSUPPORTED);
 
@@ -320,8 +329,13 @@ gh_actor_model_status gh_enemy_weapon_attach_0026ab20(gh_enemy_weapon_init *s,
     }
     const gh_event_weapon_attachment attachment={weapon,&s->model,parent,parent_model,
         parent->bytes[0x17c3]?10:16};
-    return gh_om_weapon_bind_0026ab20(&attachment,s->weapon->kind,s,actors,scroll,
-        s->weapon->bindings.policy,&s->attach_stage,&s->frontier);
+    const gh_actor_model_status status=gh_om_weapon_bind_0026ab20(&attachment,
+        s->weapon->kind,s,actors,scroll,s->weapon->bindings.policy,&s->attach_stage,&s->frontier);
+    if(!status&&shield) {
+        /* 26ADB0 arms selector 06 through 1D04D0 before retaining the shield. */
+        weapon->bytes[0x2f5]=6;
+    }
+    return status;
 }
 
 gh_actor_model_status gh_enemy_weapon_release_init(gh_enemy_weapon_init *s)

@@ -228,6 +228,12 @@ static int r100_amplified_triangle_receiver(const gh_enemy_actor *enemy,const ui
 static gh_actor_motion_status take_player_power_0028fb88(uint8_t *,const gh_title_player_view *,
     const gh_game_init_state *,int32_t,uint32_t *);
 
+static int r104_turn_is_exposed(const uint8_t *actor)
+{
+    return half(actor+0x2f4)==0x0800&&actor[0x2f6]==1&&actor[0x2f7]==1&&
+        !(half(actor+0x3ac)&0x100u)&&(word(actor+0x16d4)&1u);
+}
+
 static int r104_player_punch(const gh_enemy_actor *enemy,const uint8_t *actor,uint16_t effect)
 {
     if(effect!=7||!gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)||
@@ -237,7 +243,7 @@ static int r104_player_punch(const gh_enemy_actor *enemy,const uint8_t *actor,ui
     const uint16_t flags=half(actor+0x3ac);
     const int amplified=(flags&0x100u)!=0;
     if(state==0x0800)
-        return phase==1&&variant==1&&!amplified&&(word(actor+0x16d4)&1u);
+        return r104_turn_is_exposed(actor);
     return !variant&&((state==0x1a00&&(phase==3||phase==5))||
         (state==0x1500&&phase==1&&(amplified||flags==0x800))||
         (state==0x1600&&phase==1&&amplified)||
@@ -1134,9 +1140,12 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int r104_triangle_recoil=half(p+0x2f4)==0x0101&&
         (p[0x2f6]==3||(p[0x2f6]==1&&!half(p+0x3ac)));
     const int idle_move=!half(p+0x2f4)&&p[0x2f6]==1&&!half(p+0x3ac);
+    const int grab_windup=half(p+0x2f4)==0x4b00&&p[0x2f6]==1&&half(p+0x3ac)==0x800&&
+        (word(p+0x16d4)&0x400u);
     const int r104_triangle=triangle&&r104_em03_damage_receiver(enemy,p)&&
-        ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||em03_combo||fast_melee||idle_move)&&
-        !p[0x2f7]&&word(player->bytes+0x5e8)==29&&
+        (r104_turn_is_exposed(p)||(!p[0x2f7]&&
+         ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||em03_combo||fast_melee||idle_move||grab_windup)))&&
+        word(player->bytes+0x5e8)==29&&
         word(body->bytes+0x4c)==12&&rank==1&&!body->state->heat[0x10];
     const int boss_recovery=r104_recovery||r104_triangle||em27_punch;
     const int counter_selector = opening_200 || (ordinary_punch && dependency==0x200) || boss_strike;
@@ -1248,8 +1257,10 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     if (call->phase == 3) {
         const uint16_t flags = half(p + 0x3ac);
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
-        if(r104_braced){
-            /* Give07 reaches 20AF20, then the live 20B390 recoil without changing Move. */
+        const int r104_grab_recoil=r104_triangle&&grab_windup&&(behavior&0x800000u)&&
+            !body->state->heat[0x10];
+        if(r104_braced||r104_grab_recoil){
+            /* Original 20B394/20B8A8 calls 26A338 and preserves the live Move. */
             if((flags&0x12cu)||(status&0x04080040u)||!half(p+0x54a))
                 return stop(frontier,0x20af20);
             put(p+0x16fc,p[0x1700]&1u?0x3e860a92u:0xbe860a92u);
@@ -1577,8 +1588,9 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                 /* 20D348 uses variant 1 for the authored arena EM00/EM03,
                  * with 274238's default timer class for both dependencies. */
                 const int key_carrier=r101_key_carrier_punch(enemy,p,effect);
+                const int r104_grab_counter=r104_triangle&&grab_windup;
                 const int synchronous_counter=stamp2||east_em00||r102_em03_punch(enemy,p,effect)||at0b_em02||
-                    r101_side_arena_punch(enemy,p,effect)||key_carrier;
+                    r101_side_arena_punch(enemy,p,effect)||key_carrier||r104_grab_counter;
                 const int faces=number(p+0x760)<=1.5707964f;
                 /* 20D2A0 always draws before the face test. A rear turn cannot enter 274238 here. */
                 const int r104_rear_pressure=r104_recovery&&p[0x2f5]==8&&!faces;
@@ -1608,7 +1620,8 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                             static const float delay[]={0,40,30,20,20,15};
                             static const float em27_delay[]={0,15,13,12,12,10};
                             if(rank>5)return stop(frontier,0x274238);
-                            duration=key_carrier?em27_delay[rank]:delay[rank];
+                            /* 447260 dispatches dep0250 to the 10-unit rank-one timer. */
+                            duration=r104_grab_counter?10.0f:key_carrier?em27_delay[rank]:delay[rank];
                             if(rank<5){
                                 uint32_t jitter;
                                 fenv_t env;

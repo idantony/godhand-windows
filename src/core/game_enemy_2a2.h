@@ -9,6 +9,7 @@ extern "C" {
 
 #define GH_EM2A2_BYTES 0x1610u
 int gh_enemy2a2_is_r101_entry(const gh_enemy_request *request);
+int gh_enemy2a2_is_r200_entry(const gh_enemy_request *request);
 int gh_enemy2a2_is_r102_entry(const gh_enemy_request *request);
 /* 284A28 is the shared constructor for factory kinds 2A2, 2A3 and 2A4. */
 gh_title_player_status gh_enemy2a2_construct_00284a28(void *, size_t, gh_title_player_view *);

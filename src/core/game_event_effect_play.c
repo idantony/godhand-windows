@@ -29,7 +29,7 @@ static gh_game_event_status absent(const gh_event_data_prefix *data, unsigned in
     gh_event_sequence_view track;
     gh_game_event_status status = gh_event_sequence_at(data, index, &track);
     if (status) return status;
-    if ((data->components->event_no != 1 && data->components->event_no != 4 && data->components->event_no != 5 && data->components->event_no != 6 &&
+    if ((data->components->event_no != 1 && data->components->event_no != 4 && data->components->event_no != 5 && data->components->event_no != 6 && data->components->event_no != 8 &&
          data->components->event_no != 0x1a && data->components->event_no != 0x1b &&
          !(index == 3 && (data->components->event_no == 2 || data->components->event_no == 7))) ||
         track.records || track.count ||
@@ -77,7 +77,7 @@ static gh_game_event_status effect_sequence(const gh_event_data_prefix *data,
 {
     *row = NULL;
     if (!data->components || !data->components->constructed) return GH_EVENT_ARGUMENT;
-    if (data->components->event_no == 1 || data->components->event_no == 4 || data->components->event_no == 5 || data->components->event_no == 6 ||
+    if (data->components->event_no == 1 || data->components->event_no == 4 || data->components->event_no == 5 || data->components->event_no == 6 || data->components->event_no == 8 ||
         data->components->event_no == 0x1a || data->components->event_no == 0x1b)
         return absent(data, 4, 0xd1e8, component);
     const int event=data->components->event_no;

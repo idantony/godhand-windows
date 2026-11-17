@@ -215,6 +215,29 @@ int gh_enemy202_is_room_supported_profile(const gh_enemy_request *request,uint16
 }
 
 /* Original R104 EMS stamp zero, activated by EV05 release. */
+int gh_enemy201_is_r200_entry(const gh_enemy_request *request,uint16_t room)
+{
+    if(!request||room!=0x200||request->object_kind!=0x201||request->appearance)
+        return 0;
+    /* R200 REL0510 activates only these eleven EMS placements. */
+    static const struct {
+        uint8_t stamp;
+        uint16_t dependency;
+        uint32_t flags;
+        uint8_t dependency_flags;
+    } rows[]={
+        {0x00,0x21a,0,0},{0x01,0x202,0,0},{0x02,0x200,0,0},
+        {0x04,0x202,0,0},{0x06,0x201,0x40000000,0},{0x07,0x201,0x40000000,0},
+        {0x08,0x21a,0x40000008,0},{0x09,0x21a,0x40000000,0},
+        {0x0b,0x201,0x40000000,1},{0x0c,0x20c,0,0},{0x0d,0x201,0,0}
+    };
+    for(unsigned i=0;i<sizeof(rows)/sizeof(rows[0]);++i)
+        if(request->entry_number==rows[i].stamp)
+            return request->dependency_kind==rows[i].dependency&&
+                request->flags==rows[i].flags&&request->dependency_flags==rows[i].dependency_flags;
+    return 0;
+}
+
 int gh_enemy203_is_r104_entry(const gh_enemy_request *request,uint16_t room)
 {
     return room==0x104&&request&&request->object_kind==0x203&&
@@ -254,6 +277,15 @@ gh_actor_model_status gh_enemy_model_occurrence_002ddea0(uint32_t kind,
         case 0x203: *occurrence=1; return GH_ACTOR_MODEL_OK;
         case 0x20a: *occurrence=2; return GH_ACTOR_MODEL_OK;
         case 0x20f: *occurrence=3; return GH_ACTOR_MODEL_OK;
+        }
+    } else if (kind==0x201) {
+        /* Original 2DDECC dependency table at 44D8D0. */
+        switch (dependency) {
+        case 0x200: *occurrence=0; return GH_ACTOR_MODEL_OK;
+        case 0x201: *occurrence=1; return GH_ACTOR_MODEL_OK;
+        case 0x20c: *occurrence=2; return GH_ACTOR_MODEL_OK;
+        case 0x21a: *occurrence=3; return GH_ACTOR_MODEL_OK;
+        case 0x202: *occurrence=4; return GH_ACTOR_MODEL_OK;
         }
     } else if (kind==0x203 && dependency==0x250) {
         *occurrence=0;

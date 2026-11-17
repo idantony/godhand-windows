@@ -5,6 +5,24 @@
 #include <string.h>
 static uint32_t w(const uint8_t*p){uint32_t n;memcpy(&n,p,4);return n;}static void put(uint8_t*p,size_t o,uint32_t n){memcpy(p+o,&n,4);}static void half(uint8_t*p,size_t o,uint16_t n){memcpy(p+o,&n,2);}static void vf0(uint8_t*p,size_t o){memset(p+o,0,12);put(p,o+12,0x3f800000);}
 gh_scene_placement_status gh_om309_construct_0018b290(void*data,size_t n,gh_title_player_view*out){if(!data||!out)return GH_PLACE_ARGUMENT;if(n<0x9c0)return GH_PLACE_BOUNDS;gh_scene_placement_status e=gh_om_pushable_construct_001c7d98(data,n,out);if(e)return e;uint8_t*p=data;put(p,0x214,0x4237e8);for(unsigned i=0;i<9;i++){size_t o=0x660+(size_t)i*0x60;for(unsigned j=0;j<5;j++)vf0(p,o+j*16);p[o+0x54]=0;}out->original_vtable214=0x4237e8;return GH_PLACE_OK;}
+gh_scene_placement_status gh_om325_construct_00198fb8(void *data,size_t size,
+ gh_title_player_view *out)
+{
+ if(!data||!out)return GH_PLACE_ARGUMENT;
+ if(size<0x9c0)return GH_PLACE_BOUNDS;
+ gh_scene_placement_status status=gh_om_pushable_construct_001c7d98(data,size,out);
+ if(status)return status;
+ uint8_t *p=data;
+ put(p,0x214,0x4250f0);
+ for(unsigned i=0;i<9;++i){
+  const size_t offset=0x660+(size_t)i*0x60;
+  for(unsigned j=0;j<5;++j)vf0(p,offset+j*16);
+  p[offset+0x54]=0;
+ }
+ out->original_vtable214=0x4250f0;
+ return GH_PLACE_OK;
+}
+
 /* Original 313DE0 -> 18A598, base 1B6E90 with eight VF0 records. */
 gh_scene_placement_status gh_om308_construct_0018a598(void *data,size_t size,gh_title_player_view *out)
 {
@@ -128,6 +146,60 @@ gh_scene_placement_status gh_om332_initialize_0019c670(gh_om309_state *s,gh_om_o
  const gh_om_initializer_bindings *b,int *out)
 {
  return initialize_fragment_cylinder(s,o,b,out,0x332,0x650,0x660);
+}
+
+gh_scene_placement_status gh_om325_initialize_001990a0(gh_om309_state *s,gh_om_object *o,
+ const gh_om_initializer_bindings *b,int *out)
+{
+ if(!s||!o||!b||!b->work||!out||o->source.type!=0x325)return GH_PLACE_ARGUMENT;
+ *out=0;
+ if(b->work->room!=0x200)return fail(s,0x1990a0,GH_PLACE_UNSUPPORTED);
+ int initialized=0;
+ gh_scene_placement_status status=gh_om_common_initialize_001b6fb8(&s->common,o,b,&initialized);
+ if(status)return fail(s,s->common.frontier,status);
+ if(!initialized)return fail(s,0x1b6fb8,GH_PLACE_UNSUPPORTED);
+ uint8_t *p=o->view.bytes;
+ if(!s->stage){
+  if(!b->init)return fail(s,0x1fe218,GH_PLACE_UNSUPPORTED);
+  uint32_t frontier=0;
+  int present=0;
+  if(gh_hitarea_object_create_001fe218(b->init,&o->view,2,&s->common.hitarea,&present,&frontier))
+   return fail(s,frontier?frontier:0x1fe218,GH_PLACE_UNSUPPORTED);
+  s->common.hitarea_created=(uint8_t)present;
+  put(p,0x650,0);
+  s->stage=1;
+ }
+ if(s->stage==1){
+  if(s->common.hitarea_created){
+   const uint32_t zero[3]={0},size[3]={0x3f874539,0x3fa11d15,0x3f874539};
+   int index;
+   uint32_t frontier=0;
+   if(!b->shapes||gh_hitarea_add_box_001fd9d8(&s->common.hitarea,b->shapes,
+      p+0x80,zero,zero,size,&index,&frontier))
+    return fail(s,frontier?frontier:0x1fd9d8,GH_PLACE_UNSUPPORTED);
+  }
+  s->stage=2;
+ }
+ if(s->stage==2){
+  half(p,0x548,1);
+  half(p,0x54a,1);
+  const gh_actor_node_packets *first,*second;
+  gh_actor_model *model=&s->common.model;
+  if(gh_actor_model_packet_at(model,0,&first)||gh_actor_model_packet_at(model,1,&second))
+   return fail(s,0x14b6f8,GH_PLACE_BOUNDS);
+  put(first->node,0x380,w(first->node+0x380)|1u);
+  put(second->node,0x380,w(second->node+0x380)&~1u);
+  for(unsigned i=1;i<9&&i<model->part_count;++i){
+   const gh_actor_part *part;
+   if(gh_actor_model_part_at(model,i,&part))
+    return fail(s,0x14bfe0,GH_PLACE_BOUNDS);
+   put(part->bytes,0x154,w(part->bytes+0x154)|0x18u);
+  }
+  s->segments=p+0x660;
+  s->stage=5;
+ }
+ *out=1;
+ return GH_PLACE_OK;
 }
 
 gh_scene_placement_status gh_om309_abort(gh_om309_state*s){return gh_om303_abort(s);}

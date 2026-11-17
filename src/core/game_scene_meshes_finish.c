@@ -65,7 +65,7 @@ gh_scene_mesh_status gh_scene_meshes_finish_object_reference(gh_scene_meshes*s,g
  if(!o)return GH_MESH_ARGUMENT;if(o->constructor_complete)return GH_MESH_OK;
  if(!s->prepared||!o->factory_ready||!o->handle||!o->node||!o->packet_allocation.pointer)return GH_MESH_BUSY;
  const gh_scene_mesh_descriptor*d=&o->descriptor;const uint8_t*desc=d->script.bytes+d->mesh.descriptor_offset;
- if((d->mesh.flags&~0xc0174320u)||d->node_flags!=0x1001000u||!s->tables->scroll_texture.bytes)return fail(s,0x31d3d0,0,GH_MESH_UNSUPPORTED);
+ if((d->mesh.flags&~0xc2174320u)||d->node_flags!=0x1001000u||!s->tables->scroll_texture.bytes)return fail(s,0x31d3d0,0,GH_MESH_UNSUPPORTED);
  /* Initial pose uses the SCR scale and angles. 3187D8 converts the separate
   * angular velocity at +4C from degrees and enables flag index 3. */
  float angle[3],scale[3],angular_speed[3];
@@ -139,8 +139,8 @@ gh_scene_mesh_status gh_scene_meshes_finish_object_reference(gh_scene_meshes*s,g
  w32(p+0x254,0xc0000000);w16(p+0x2ae,(uint16_t)distance_tenths);p[0x2b0]=(uint8_t)((distance_tenths*15)/100);w32(p+0x2b8,half_bits(u16(desc+0x48)));
  uint32_t model_flags=u32(p+0x350)&~0x10000000u;
  if(rotates)model_flags|=0x10000000u;
- /* 318B20–318B3C routes flag5 meshes to the late Scenario update. */
- if(d->mesh.flags&0x20u)model_flags|=0x20000000u;
+ /* 318AFC-318B3C routes scroll flags 25, 26 and 5 to late Scenario update. */
+ if(d->mesh.flags&0x06000020u)model_flags|=0x20000000u;
  w32(p+0x350,model_flags);
  /* 149EB8: no skeletal nodes in this static constructor. */
  memcpy(p+0x80,world,sizeof(world));
