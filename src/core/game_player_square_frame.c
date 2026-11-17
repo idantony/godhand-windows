@@ -85,7 +85,7 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
     * combo bypasses the scan and goes straight to 123CE4. */
    if(p[0x624]||!b->target_640)return stop(s,0x123ba8,GH_PLAYER_FRAME_UNSUPPORTED);
    if(!half(p+0x5e0)){
-    if(f->work->room!=0x100&&f->work->room!=0x104)
+    if(f->work->room!=0x100&&f->work->room!=0x104&&f->work->room!=0x200)
      return stop(s,0x123ba8,GH_PLAYER_FRAME_UNSUPPORTED);
     gh_player_idle_target_result close;
     const gh_player_target_status status=gh_player_scan_close_action_00123ba8(

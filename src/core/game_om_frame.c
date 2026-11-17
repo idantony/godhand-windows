@@ -2289,6 +2289,18 @@ static gh_object_step_status catapult_windup_001b8a50(gh_om_frame_state *s,
  gh_static_transform_policy policy,uint32_t *frontier)
 {
  uint8_t *actor=s->object->view.bytes;
+ /* 3BD Move table state 3 -> 1BB508 when the room retires the catapult. */
+ if(actor[0x2f4]==3){
+  if(!s->special_phase){
+   actor[0x531]=0xff;
+   if(!s->runtime.release_effect)return fail(s,0x306200,frontier,GH_OBJSTEP_UNSUPPORTED);
+   uint32_t pc=0;
+   if(s->runtime.release_effect(s->runtime.context,&s->object->view,0,2,&pc))
+    return fail(s,pc?pc:0x306200,frontier,GH_OBJSTEP_CALLEE);
+   s->special_phase=1;
+  }
+  return remove_object(s,frontier);
+ }
  if(actor[0x2f4])return fail(s,0x1b8990,frontier,GH_OBJSTEP_UNSUPPORTED);
  if(!actor[0x2f5]){
   if(!s->runtime_bound||!s->runtime.break_effect||!s->object->view.alias_f0)

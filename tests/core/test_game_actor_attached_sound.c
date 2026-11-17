@@ -207,6 +207,77 @@ static void shared_voice_owners(gh_disc *disc,gh_heap *heap,gh_room_pools *pools
  C(!gh_enemy_model_release_prefix(&enemy_model)&&!gh_game_title_player_release(&enemy));
  free(data);
 }
+
+static gh_voice_status pending_footstep_probe(void *context,const float position[4],int check_seh,
+ gh_se_attached_environment *environment,uint32_t *frontier)
+{
+ const gh_actor_attached_sound_bindings *bindings=context;
+ const gh_sound_control *control=bindings->control;
+ (void)position;
+ (void)check_seh;
+ *frontier=0;
+ *environment=(gh_se_attached_environment){.gain64_bits=bindings->scene->ratios60[1],
+   .se_level_q8=0x5a00,.output_mode=control->output_mode,.listener_mode110=control->listener_mode110};
+ memcpy(environment->listener_position_c0,control->listener_position_c0,sizeof(environment->listener_position_c0));
+ memcpy(environment->listener_matrix_d0,control->listener_matrix_d0,sizeof(environment->listener_matrix_d0));
+ return GH_VOICE_OK;
+}
+
+static void em03_pending_footstep(gh_disc *disc,gh_audio_registry *registry,gh_heap *heap,
+ gh_room_pools *pools,gh_audio_output *output,const gh_se_mix *mix,
+ gh_actor_attached_sound_bindings *bindings)
+{
+ size_t ses_size,model_size;
+ uint8_t *ses=read_file(disc,"se/em50.ses",&ses_size);
+ gh_audio_token bank;
+ C(!gh_audio_commit_se(registry,1,ses,ses_size,&bank)&&gh_audio_token_complete(registry,bank));
+ free(ses);
+ gh_se_voice_engine *voices;
+ C(!gh_se_voice_create(registry,output,mix,&voices)&&!gh_se_voice_bind_pitch_reference(voices,disc));
+
+ gh_boot_work work={.room=0x104};
+ gh_game_title_player enemy={0};
+ int original;
+ C(!gh_enemy202_allocate_003130e0(&enemy,heap,&work,&original)&&original);
+ uint8_t *root=enemy.view.bytes;
+ memcpy(root+0x2fe,&(uint16_t){0x203},2);
+ memcpy(root+0x564,&(uint32_t){0x250},4);
+ memcpy(root+0x1644,&(uint32_t){0x80000},4);
+ root[0x1651]=0;
+ uint8_t *data=read_file(disc,"em/em03.dat",&model_size);
+ gh_object_view resource={.bytes=data,.kind=0x203,.size=model_size,.file_extent=model_size,.file_extent_known=1};
+ gh_enemy_model model={0};
+ uint32_t fog=0;
+ C(!gh_enemy_model_initialize_00208268(&model,&enemy.view,&resource,&work,pools,heap,&fog,
+   GH_STATIC_BINARY32_REFERENCE,&original)&&original);
+ store(root+0x5a8,1);
+ store(enemy.view.alias_f0,3);
+ store(enemy.view.alias_f0+12,1);
+
+ uint32_t handle=0;
+ gh_se_voice_info info;
+ memcpy(root+0x2f4,&(uint32_t){0x00010500},4);
+ const gh_voice_status requested=gh_se_voice_request_attached(voices,&model,&handle,&model.model,-1,1,17,0,0,
+   pending_footstep_probe,bindings,NULL,NULL,&handle);
+ if(requested||!handle)fprintf(stderr,"EM03 footstep admission status=%d PC=%08x handle=%u\n",
+    requested,gh_se_voice_frontier(voices),handle);
+ C(!requested&&handle);
+ C(!gh_se_voice_query(voices,handle,&info)&&info.pending&&!info.native_voice&&info.sample_slot==16);
+ memcpy(root+0x2f4,&(uint32_t){0x00001500},4);
+ const gh_voice_status submitted=gh_se_voice_update(voices);
+ if(submitted)fprintf(stderr,"EM03 footstep submission status=%d PC=%08x\n",
+    submitted,gh_se_voice_frontier(voices));
+ C(!submitted);
+ C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&info.program==17&&info.rate==14000);
+
+ C(!gh_se_voice_abort_attached_owner(voices,&model)&&!model.model.sound_borrowers);
+ gh_se_voice_destroy(voices);
+ C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
+ free(data);
+ C(!gh_audio_release_bank(registry,1));
+ puts("PASS R104 EM03 pending footstep after approach changes to attack");
+}
+
 int main(int argc,char**argv){
  C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));gh_audio_registry*r;C(!gh_audio_registry_create(&r)&&!gh_audio_startup_load(r,d));gh_sound_control control={0};C(!gh_sound_control_from_startup(&control,d,r));gh_sound_scene scene={0};C(!gh_sound_scene_from_startup(&scene,&control,r));
  size_t room_size,n;uint8_t*room=read_file(d,"st1/r100.dat",&room_size);gh_bundle bundle;C(!gh_bundle_open(room,room_size,&bundle));gh_heap*heap;C(!gh_heap_create(16*1024*1024,&heap));gh_dvd_jobs dvd;gh_dvd_jobs_init(&dvd,d);gh_task_record32 records[4]={0};gh_task_manager manager={.records=records,.capacity=4,.count=4,.current_index=-1};gh_task_threads*threads;C(!gh_task_threads_create(&manager,&threads));gh_boot_work work={0};work.room=0x100;loader l={&scene,&bundle,&work,&dvd,heap,threads,0};int32_t slot;C(!gh_task_threads_start(threads,2,load,&l,0,&slot));for(unsigned i=0;!l.done&&i<16;i++){C(!gh_tasks_run_matching_002d52a0(&manager).status&&!gh_dvd_pump(&dvd));}C(l.done&&scene.ready&&!scene.seh.bytes&&!scene.seh.size);
@@ -225,6 +296,8 @@ int main(int argc,char**argv){
  shared_voice_owners(d,heap,&pools,&work,voices,&source,&bindings,&model,&player);
  devil_spawn_sound(d,heap,&pools,&work,output,&bindings);
  request.part=NULL;request.program=0x1e; /* Same 64 EE slots as origin requests; exhaustion precedes MT and borrowing. */
- for(unsigned i=0;i<64;i++)C(!gh_se_voice_request_origin(voices,0,0x160,-1,-1,0,0,&handle)&&handle);C(!gh_actor_attached_sound_bind(&source,&bindings));expected=mt;C(!gh_actor_attached_sound_motion(&source,&request,&handle,&f)&&!handle&&!model.sound_borrowers&&!memcmp(&expected,&mt,sizeof(mt)));C(!gh_actor_attached_sound_abort(&source));gh_se_voice_destroy(voices);gh_audio_output_destroy(output);
+ for(unsigned i=0;i<64;i++)C(!gh_se_voice_request_origin(voices,0,0x160,-1,-1,0,0,&handle)&&handle);C(!gh_actor_attached_sound_bind(&source,&bindings));expected=mt;C(!gh_actor_attached_sound_motion(&source,&request,&handle,&f)&&!handle&&!model.sound_borrowers&&!memcmp(&expected,&mt,sizeof(mt)));C(!gh_actor_attached_sound_abort(&source));gh_se_voice_destroy(voices);
+ em03_pending_footstep(d,r,heap,&pools,output,&mix,&bindings);
+ gh_audio_output_destroy(output);
  C(!gh_actor_model_release(&model)&&!gh_game_room_pools_release(&pools)&&!gh_task_threads_destroy(threads)&&!gh_heap_destroy(heap));free(resource);free(room);gh_audio_registry_destroy(r);gh_disc_close(d);puts("PASS actualR100/PL00 attachedFoot sameMT variant, shared64EEpool, pitchrange exact37D760, fixedpitch real mutedXAudio2 progress/EOS, same-key reuse, modelborrow/detach/abort, lateerror retry/FEnv");return 0;
 }

@@ -524,7 +524,8 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
     w(p+32)==(program==4?0x00010285u:0x00010085u)&&w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
     (!sample||(w(sample)==offsets[program-4]&&w(sample+4)==11025u&&w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
  }
- if(charge&&(!charge[0x2f7]||approach_voice||em03_turn||em03_rear||em03_chase)&&v->part_index==-1&&v->requested_bank==1&&
+ if(charge&&(!charge[0x2f7]||approach_voice||em03_turn||em03_rear||em03_chase||
+    (program==17&&v->r104_footstep_queued))&&v->part_index==-1&&v->requested_bank==1&&
     bank==1&&request==program){
   const uint16_t state=h(charge+0x2f4);
   const unsigned phase=charge[0x2f6];
@@ -1089,13 +1090,16 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
  const int r200_step=root->size>0x1650&&v->model->work&&v->model->work->room==0x200&&
     v->part_index==-1&&other_surface&&h(actor+0x2fe)==0x201&&!actor[0x1650]&&
     ((dependency==0x21a&&!h(actor+0x640)&&
-      (w(actor+0x2f4)==0x00016b00u||w(actor+0x2f4)==0x00010800u||
+      (w(actor+0x2f4)==0x00016b00u||(state==0x0800&&phase==1&&actor[0x2f7]<=1)||
        w(actor+0x2f4)==0x00010500u||w(actor+0x2f4)==0x00010600u||
-       w(actor+0x2f4)==0x00010700u||w(actor+0x2f4)==0x00010900u||w(actor+0x2f4)==0x00011500u))||
+       w(actor+0x2f4)==0x00010700u||w(actor+0x2f4)==0x00010900u||
+       w(actor+0x2f4)==0x00011300u||w(actor+0x2f4)==0x00011500u))||
      (dependency==0x202&&h(actor+0x640)==1&&
       (w(actor+0x2f4)==0x00011500u||w(actor+0x2f4)==0x00010101u||
        w(actor+0x2f4)==0x00010500u||w(actor+0x2f4)==0x00010600u||
-       w(actor+0x2f4)==0x00010900u)));
+       w(actor+0x2f4)==0x00011300u||((state==0x0800||state==0x0900)&&phase==1&&actor[0x2f7]<=1)))||
+     (dependency==0x201&&(h(actor+0x640)==6||h(actor+0x640)==7)&&
+      w(actor+0x2f4)==0x00010600u));
  const int r200_landing=gate_death_step&&root->size>0x1650&&v->model->work&&
     v->model->work->room==0x200&&h(actor+0x2fe)==0x201&&dependency==0x21a&&
     !h(actor+0x640)&&!actor[0x1650]&&w(actor+0x2f4)==0x02030801u;
@@ -1574,8 +1578,11 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
       ((((w(actor+0x564)==0x20c&&h(actor+0x640)==0x0c)||
          (w(actor+0x564)==0x201&&h(actor+0x640)==0x0d))&&w(actor+0x2f4)==0x00016b00u)||
        (w(actor+0x564)==0x21a&&!h(actor+0x640)&&
-        (w(actor+0x2f4)==0x00010d01u||w(actor+0x2f4)==0x00010800u))||
-       (w(actor+0x564)==0x202&&h(actor+0x640)==1&&w(actor+0x2f4)==0x00016b00u));
+        (w(actor+0x2f4)==0x00010d01u||
+         (h(actor+0x2f4)==0x0800&&actor[0x2f6]==1&&actor[0x2f7]<=1)))||
+       (w(actor+0x564)==0x202&&h(actor+0x640)==1&&
+        (w(actor+0x2f4)==0x00016b00u||
+         (h(actor+0x2f4)==0x0800&&actor[0x2f6]==1&&actor[0x2f7]<=1))));
   if(!r200_step&&!ema2_home&&(root->original_vtable214!=0x4479c8||
      (h(root->bytes+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!r103_em03_voice_actor(v)&&
       !arena_landing&&!arena_turn&&!boss_turn&&!flank_turn&&!r104_turn)))return 0;
@@ -2860,6 +2867,11 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  candidate->info.pitch_q12=selected_pitch?selected_pitch:(uint16_t)((uint64_t)rate*4096/48000);
  result=gh_audio_decode_ps_adpcm(tail.data,tail.size,&candidate->pcm);if(result){s->frontier=0x35fc;return result;}
  result=render(&candidate->pcm,candidate->info.pitch_q12);if(result){gh_audio_pcm_release(&candidate->pcm);return result;}
+ /* The pending pitch update can prepare the same sound after EM03 switches
+  * moves. Keep the admitted source and continue validating its sample. */
+ if(attack_voice&&bank==1&&program==17&&candidate->requested_bank==bank&&
+    candidate->requested_program==program&&r104_em03_voice_actor(candidate))
+  candidate->r104_footstep_queued=1;
  level=(unsigned)((uint64_t)s->mix.se_level_q8*(h(p+0x10)<<8)/0x7f00);
  candidate->base_gain=(uint16_t)level;level/=2;
  candidate->info.stop_current=0x7f00;

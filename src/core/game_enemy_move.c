@@ -3417,7 +3417,7 @@ static gh_actor_motion_status advance_substate8_00214298(gh_enemy202_move *s,uin
             case 0x200:offset=positive?0xe4:0xdc;break;
             case 0x202:case 0x203:offset=positive?0x684:0x67c;break;
             case 0x21a:
-                if(work->room!=0x200||half(p+0x640)||p[0x2f7])
+                if(work->room!=0x200||half(p+0x640)||p[0x2f7]>1)
                     return stop(s,0x214298,GH_ACTOR_MOTION_UNSUPPORTED);
                 /* Original 4359A0/435BA0 share EM0A's turn motion rows. */
                 /* fall through */
@@ -4819,7 +4819,10 @@ static gh_actor_motion_status advance_substate6_00213710(gh_enemy202_move *s,uin
     const int r104=gh_enemy203_is_r104_entry(&enemy->entry.request,work->room);
     const int r100=r100_armed_em02(enemy,p);
     const int r200_em1a=dependency==0x21a&&!stamp&&!p[0x2f7];
-    const int r200=((dependency==0x202&&stamp==1)||r200_em1a)&&
+    /* R200 AT06 starts stamps 6 and 7. The dep0201 subtract underflows
+     * and binds the original C0/C4 default at 213794. */
+    const int r200_wave_em01=dependency==0x201&&(stamp==6||stamp==7)&&!p[0x2f7];
+    const int r200=((dependency==0x202&&stamp==1)||r200_em1a||r200_wave_em01)&&
         gh_enemy201_is_r200_entry(&enemy->entry.request,work->room);
     if((!r200&&!r100&&!r101&&!r101_unarmed&&!r101_scenery&&!r102&&!r105&&!arena&&!arena_em0a&&!r104&&!r100_at2_enemy(work,p)&&
         ((dependency!=0x200&&!r100_em03&&!r100_at2_formation(work,p)&&!em0a)||work->room!=0x100))||
@@ -5316,8 +5319,10 @@ static gh_actor_motion_status advance_substate13_00218c48(gh_enemy202_move *s,ui
     const int r102_home=mode==6&&(r102_em00||east_em27_home||r102_gate_actor(work,p)||r102_at0b_em02(work,p));
     const int r102_pickup=r102_em00&&mode==8;
     /* The R200 opening actors use mode 6 and their original home-walk clip pairs. */
+    const int r200_em1a_home=dependency==0x21a&&!stamp&&!p[0x1650];
     const int r200_home=work->room==0x200&&mode==6&&
-        ((dependency==0x201&&stamp==0x0d)||(dependency==0x20c&&stamp==0x0c));
+        ((dependency==0x201&&stamp==0x0d)||(dependency==0x20c&&stamp==0x0c)||
+         (dependency==0x202&&stamp==1&&!p[0x1650])||r200_em1a_home);
     if(!r102&&!approach&&!camera_walk&&!r101_home&&!r102_home&&!r102_pickup&&!r200_home&&(work->room!=0x100||
        (!em0a_formation&&(mode!=6||(dependency!=0x203&&!em00&&!em02_home&&!em0a)))))
         return stop(s,0x218c48,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -5336,7 +5341,8 @@ static gh_actor_motion_status advance_substate13_00218c48(gh_enemy202_move *s,ui
             /* Modes 0, 2, 6 and 8 use the same dependency table. Mode 3
              * uses 10B0/10B4 for the EM14 and EM15 walking animation. */
             size_t row=dependency==0x200?0xc0:(em0a||(arena_reinforcement&&dependency==0x20a))?0x840:0x660;
-            if(r200_home)row=dependency==0x20c?0x1ec4:0xc0;
+            if(r200_home)row=dependency==0x20c?0x1ec4:r200_em1a_home?0x10c0:
+                dependency==0x202?0x660:0xc0;
             if(arena_boss)row=0x10b0;
             if(r101_armed)row=0x4b8;
             if(r102)row=held?(held->weapon->kind==0x3b7?0x4f4:0x4b8):word(p+0x6ec)?0x4b8:0xd10;

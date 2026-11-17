@@ -187,6 +187,9 @@ Two Windows replays load an original-format R200 diagnostic save and verify
 combat in both directions. A Triangle input hits two enemies twice each,
 bringing both from 96 to 72 HP. On a separate route, EM1A's attack takes
 Gene from 100 to 92 HP and triggers the original hurt animation.
+A longer Windows replay walks past the opening attackers and activates
+the original road trigger. It records the room flag change and starts the
+next two enemies while Gene stays at 100 HP.
 
 The progression replay uses the earlier EV07 Start shortcut and sets the
 boss to 60 HP immediately before the original 80-point Shockwave. A separate
@@ -528,6 +531,8 @@ R003，并预读原版 EV08 音频。另一条回放用原版 Start 跳过 EV07�
 两条 Windows 回放加载原版格式的 R200 诊断存档，验证双方都能命中。按一次三角键，
 两名敌人各被命中两次，血量都从 96 HP 降到 72 HP。另一条路线中，EM1A 的攻击使
 Gene 从 100 HP 降到 92 HP，并触发了原版受击动作。
+一条更长的 Windows 回放走过开场交战区，触发了原版道路事件。房间进度标记随之写入，
+下一批两名敌人入场，Gene 保持 100 HP。
 
 这条流程回放此前用了原版 Start 快捷键跳过 EV07，并在原版 80 点冲击波命中前将
 头目血量设为 60 HP。另一条满血战斗回放通过 L2 挑衅积攒斗气，闪避反击后命中两次。

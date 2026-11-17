@@ -97,6 +97,7 @@ static uint32_t class_vtable(const gh_om_object *actor)
  if(om_kind(actor)==0x357)return 0x427a58;
  if(r101_placed_item(actor))return 0x429b88;
  if(weapon_destructor(om_kind(actor)))return 0x42aa98;
+ if(actor->runtime_created&&om_kind(actor)==0x3bd)return 0x428c20;
  if(actor->runtime_created&&om_kind(actor)==0x3be)return 0x4290c8;
  if(actor->runtime_created&&(cash_item_destructor(om_kind(actor))))return 0x429b88;
  if(actor->runtime_created&&om_kind(actor)==0x3eb)return 0x4296f0;
@@ -115,6 +116,8 @@ static gh_om_object *registered_om(gh_om_factory *factory,uint32_t handle)
  if(!vtable||actor->view.original_vtable214!=vtable)return NULL;
  if(actor->runtime_created&&om_kind(actor)==0x353)
   return actor->view.size>=0x630&&actor->initialization->stage==4?actor:NULL;
+ if(actor->runtime_created&&om_kind(actor)==0x3bd)
+  return actor->view.size==0x640&&actor->initialization->stage==8?actor:NULL;
  if(actor->runtime_created&&om_kind(actor)==0x3be)
   return actor->view.size==0x630&&((gh_om3be_state *)actor->initialization)->stage==9?actor:NULL;
  if(actor->runtime_created&&!weapon_destructor(om_kind(actor))){
@@ -261,6 +264,7 @@ uint32_t gh_om_retire_entry(uint32_t kind)
  case 0x357:return 0x1a8930;
  case 0x3d3:case 0x3d4:case 0x3d5:return 0x1c00c8;
  case 0x363:case 0x376:case 0x382:return 0x1c91b0;
+ case 0x3bd:return 0x1b87f0;
  case 0x3be:return 0x1b9030;
  case 0x3c4:case 0x3c8:case 0x3d0:case 0x3d1:case 0x3d7:case 0x3df:case 0x3d6:case 0x3e0:case 0x3e1:case 0x3e3:return 0x1c00c8;
  case 0x3da:return 0x1c00c8;
@@ -393,6 +397,20 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
    const size_t cloth=om_kind(object)==0x357?0xe40:0xd80;
    put(actor+cloth+0x10,0);
    put(actor+cloth+0x14,0);
+  }else if(om_kind(object)==0x3bd){
+   /* Original 1B87F0 releases the B Take at 624 before the A Give at 620. */
+   if(init->hitarea_created){
+    if(release_hitarea(&init->hitarea,&state->frontier))
+     return fail(&state->frontier,state->frontier?state->frontier:0x1fe278);
+    init->hitarea_created=0;
+    put(actor+0x624,0);
+   }
+   if(init->catapult_attack_created){
+    if(release_hitarea(&init->catapult_attack,&state->frontier))
+     return fail(&state->frontier,state->frontier?state->frontier:0x1fe148);
+    init->catapult_attack_created=0;
+    put(actor+0x620,0);
+   }
   }else if(om_kind(object)==0x3be){
    /* Original 1B9030 releases the two A-pool HitAreas before cOm's base. */
    gh_om3be_state *projectile=(gh_om3be_state *)init;
@@ -499,7 +517,7 @@ static gh_room_pool_status retire_prefix(gh_om300_retirement *state,
     *a_created=0;
    }
   }else if(om_kind(object)==0x353||om_kind(object)==0x356||om_kind(object)==0x3eb||
-           om_kind(object)==0x311||cash_item_destructor(om_kind(object))||
+           om_kind(object)==0x311||om_kind(object)==0x3bd||cash_item_destructor(om_kind(object))||
            om_kind(object)==0x3da||om_kind(object)==0x308||om_kind(object)==0x351||r101_placed_item(object)){
    /* These classes reach 1B6F38 without a remaining derived HitArea. */
   }else if(om_kind(object)==0x35d){
@@ -672,7 +690,7 @@ gh_room_pool_status gh_om_destroy_detached_mode3(gh_om300_full_retirement *state
   if(!object||(om_kind(object)!=0x300&&om_kind(object)!=0x304&&om_kind(object)!=0x305&&om_kind(object)!=0x307&&om_kind(object)!=0x309&&om_kind(object)!=0x30a&&
       om_kind(object)!=0x331&&om_kind(object)!=0x332&&om_kind(object)!=0x33f&&om_kind(object)!=0x346&&
      om_kind(object)!=0x313&&om_kind(object)!=0x324&&om_kind(object)!=0x326&&om_kind(object)!=0x356&&om_kind(object)!=0x363&&
-     om_kind(object)!=0x376&&om_kind(object)!=0x382&&om_kind(object)!=0x3be&&!cash_item_destructor(om_kind(object)))||
+     om_kind(object)!=0x376&&om_kind(object)!=0x382&&om_kind(object)!=0x3bd&&om_kind(object)!=0x3be&&!cash_item_destructor(om_kind(object)))||
      object->view.bytes!=actor->bytes||object->view.size!=actor->size||
      word(actor->bytes+0x214)!=class_vtable(object)||original!=gh_om_retire_entry(om_kind(object))||
      (word(actor->bytes+0x250)&0xa0000000u)!=0xa0000000u)
