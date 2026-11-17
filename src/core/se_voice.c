@@ -530,7 +530,9 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
   const uint16_t state=h(charge+0x2f4);
   const unsigned phase=charge[0x2f6];
   /* Program17 is explicit in the charge and is also dep0250's normalized AA footstep. */
-  if(program==17&&((state==0x1a00&&phase>=3&&phase<=5)||
+  /* Original 212310 binds row 18F8. SEQ 2B8800 uses AA while facing the player. */
+  if(program==17&&((!state&&phase==3&&!h(charge+0x3ac))||
+                   (state==0x1a00&&phase>=3&&phase<=5)||
                    ((state==0x0600||state==0x2300)&&phase==1)||
                    (approach_voice&&phase==5)||
                    (em03_hit&&(phase==1||phase==3))||(em03_hold&&phase==5)||

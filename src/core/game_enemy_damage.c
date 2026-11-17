@@ -1687,9 +1687,13 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                 /* 20D348 uses variant 1 for the authored arena EM00/EM03,
                  * with 274238's default timer class for both dependencies. */
                 const int key_carrier=r101_key_carrier_punch(enemy,p,effect);
-                const int r104_grab_counter=r104_triangle&&grab_windup;
+                /* The original frontal 20D348 branch uses the same dep0250 timer
+                 * for the ordinary Give07 in the turning clip and the grab windup. */
+                const int r104_turn_counter=r104_recovery&&word(p+0x2f4)==0x01010800u&&
+                    !half(p+0x3ac);
+                const int r104_counter=(r104_triangle&&grab_windup)||r104_turn_counter;
                 const int synchronous_counter=stamp2||east_em00||r102_em03_punch(enemy,p,effect)||at0b_em02||
-                    r101_side_arena_punch(enemy,p,effect)||key_carrier||r104_grab_counter;
+                    r101_side_arena_punch(enemy,p,effect)||key_carrier||r104_counter;
                 const int faces=number(p+0x760)<=1.5707964f;
                 /* 20D2A0 always draws before the face test. A rear turn cannot enter 274238 here. */
                 const int r104_rear_pressure=r104_recovery&&p[0x2f5]==8&&!faces;
@@ -1720,7 +1724,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                             static const float em27_delay[]={0,15,13,12,12,10};
                             if(rank>5)return stop(frontier,0x274238);
                             /* 447260 dispatches dep0250 to the 10-unit rank-one timer. */
-                            duration=r104_grab_counter?10.0f:key_carrier?em27_delay[rank]:delay[rank];
+                            duration=r104_counter?10.0f:key_carrier?em27_delay[rank]:delay[rank];
                             if(rank<5){
                                 uint32_t jitter;
                                 fenv_t env;
