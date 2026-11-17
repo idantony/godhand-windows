@@ -2229,6 +2229,12 @@ int gh_effect_stamp19_death_part_is_bound(const gh_effect_emitter_view *v)
     w(v->payload+0x18c)!=0x00020058u||v->payload[0x1ec]||
     v->record.bytes[0xbe]||v->record.bytes[0x128]||v->record.bytes[0x136])return 0;
  if(enemy_landing_emitter(v)||r100_west_death_owner(v->actor,v->model->work))return 1;
+ const uint8_t *r200=v->actor->bytes;
+ if(v->model->work&&v->model->work->room==0x200&&v->actor->original_vtable214==0x4479c8&&
+    (w(r200+0x2fc)>>16)==0x201&&w(r200+0x564)==0x21a&&!(w(r200+0x640)&0xffffu)&&
+    (w(r200+0x2f4)&0xff00ffffu)==0x02000801u&&
+    w(v->payload+0x110)==UINT32_MAX&&v->record.bytes[0x133]==0x1a&&
+    w(v->record.bytes)==0x1e3e8010u&&w(v->record.bytes+4)==0x00c00000u)return 1;
 
  const uint8_t *actor=v->actor->bytes;
  if((w(actor+0x2fc)>>16)!=0x202)return 0;

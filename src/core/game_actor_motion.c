@@ -109,7 +109,10 @@ unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *b)
  const int boss_mirror=(r103_boss||r104_em03)&&p[0x17c3];
  const int r200_blowaway=p&&root->size>=0x17c4&&b->work&&b->work->room==0x200&&
     root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x201&&rd(p+0x564)==0x21a&&
-    !half(p+0x640)&&half(p+0x2f4)==0x0801&&p[0x2f7]==2&&rd(p+0x17b4)==20&&p[0x17c3];
+    !half(p+0x640)&&rd(p+0x17b4)==20&&p[0x17c3]&&
+    ((half(p+0x2f4)==0x0801&&p[0x2f7]==2)||(half(p+0x2f4)==0x0d01&&!p[0x2f7])||
+     ((half(p+0x2f4)==0x0800||half(p+0x2f4)==0x0600||!half(p+0x2f4))&&!p[0x2f7])||
+     (half(p+0x2f4)==0x0900&&p[0x2f7]<=2));
  return (blowaway||east_rear||boss_mirror||r200_blowaway||
       gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
 }
@@ -146,6 +149,11 @@ int gh_actor_motion_seek_start(const gh_actor_motion_bindings *b,uint32_t start_
     b->model->root.size>=0x642&&half(p+0x640)==0xff&&!p[0x2f4]&&
     p[0x2f5]==0x12&&!p[0x2f6]&&blend_frames==2&&!(flags&~2u))
   return start_bits==0x40000000u; /* 21821C starts the original retreat at frame 2. */
+ if(kind==0x203&&dependency==0x250&&b->work&&b->work->room==0x104&&
+    b->model->root.size>=0x17c4&&b->model->root.original_vtable214==0x4479c8&&
+    !half(p+0x640)&&half(p+0x2f4)==0x0a00&&!p[0x2f6]&&!p[0x2f7]&&
+    blend_frames==3&&flags==(p[0x17c3]?0x42u:0x40u))
+  return start_bits==0x40e00000u; /* R104 EM03 variant zero at 21521C. */
  if(kind!=0x202)return 0;
  if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&dependency!=0x20a)return 0;
  if(b->work&&b->work->room==0x100&&b->model->root.size>0x1650&&!p[0x1650]&&

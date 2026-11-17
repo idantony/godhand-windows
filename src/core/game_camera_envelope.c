@@ -85,7 +85,12 @@ static gh_camera_status finish(gh_camera_envelope*s,gh_camera_follow*follow,
        s->player_model->work->room==0x104&&target.size>0x1651&&
        word(target.bytes+0x564)==0x250&&(word(target.bytes+0x640)&0xffffu)==0&&
        word(target.bytes+0x1644)==0x80000&&!target.bytes[0x1650]&&!target.bytes[0x1651];
-    if(target.original_vtable214!=0x4479c8||(kind!=0x202&&!arena&&!west_devil&&!r104))
+    /* R200 cEm01 uses the same 275978 virtual target position. */
+    const int r200=kind==0x201&&s->player_model&&s->player_model->work&&
+       s->player_model->work->room==0x200&&target.size>=0x168c&&
+       ((word(target.bytes+0x564)==0x202&&(word(target.bytes+0x640)&0xffffu)==1)||
+        (word(target.bytes+0x564)==0x21a&&!(word(target.bytes+0x640)&0xffffu)));
+    if(target.original_vtable214!=0x4479c8||(kind!=0x202&&!arena&&!west_devil&&!r104&&!r200))
      return fail(f,0x13a73c,GH_CAMERA_UNSUPPORTED);
     float point[3];
     if(gh_enemy_target_position_00275978(&target,point))return fail(f,0x275978,GH_CAMERA_UNSUPPORTED);
