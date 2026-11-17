@@ -138,14 +138,11 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
   /* State5 phase1 stops these effects before the 30F8B0 retirement
    * passes. Either phase2 or the final phase5 owner release can reach
    * the last destruction bit, depending on the disk request's timing. */
-  const unsigned player_state=kind==0x100?(word(actor->bytes+0x2f4)&0xffffu):0;
-  const int r103_player=kind==0x100&&b->player.model&&b->player.model->work&&
-     b->player.model->work->room==0x103&&!(word(actor->bytes+0x548)>>16)&&
-     (player_state==0x0002||player_state==0x0f01||
-      (player_state==0x0b01&&actor->bytes[0x2f6]==5&&(flags&0xe0000000u)==0xe0000000u));
-  const int r102_player=kind==0x100&&b->player.model&&b->player.model->work&&
-    b->player.model->work->room==0x102&&(flags&0xe0000000u)==0xe0000000u;
-  if(borrowed&&((kind!=0x2ad&&kind!=0x202&&kind!=0x220&&!r102_player&&!r103_player)||b->enemy.effects!=b->effects||
+  const gh_boot_work *work=b->player.model?b->player.model->work:NULL;
+  /* 30F8B0 retires the player after the global stop regardless of HP. */
+  const int exiting_player=kind==0x100&&work&&(work->room==0x102||work->room==0x103)&&
+      (flags&0xe0000000u)==0xe0000000u;
+  if(borrowed&&((kind!=0x2ad&&kind!=0x202&&kind!=0x220&&!exiting_player)||b->enemy.effects!=b->effects||
      gh_effect_create_quiesce_actor_room_exit(b->enemy.effects,actor)))
    return fail(state,handle,0x305b90);
   if(kind==0x100&&b->player.model&&b->player.attachment&&
