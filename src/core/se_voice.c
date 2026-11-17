@@ -619,7 +619,7 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
  const uint8_t *p,const uint8_t *sample)
 {
  /* The two R200 opening cEm01 instances use different dependency-loaded banks. */
- if(bank==9&&program==11&&v->source_owner&&v->requested_bank==bank&&
+ if(bank==9&&(program==0x0a||program==0x0b)&&v->source_owner&&v->requested_bank==bank&&
     v->requested_program==program&&v->part_index==-1&&v->model&&v->model->work&&
     v->model->work->room==0x200){
   const gh_title_player_view *root=&v->model->root;
@@ -627,11 +627,11 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
   if(a&&root->size>=0x642&&root->original_vtable214==0x4479c8&&
      h(a+0x2fe)==0x201&&w(a+0x564)==0x201&&h(a+0x640)==0x0d&&
      w(a+0x2f4)==0x00016b00u)
-   return w(p)==0x000b0009u&&w(p+4)==0x022b000au&&w(p+8)==0x255u&&
+   return w(p)==(((uint32_t)program<<16)|9u)&&w(p+4)==(0x022b0009u+(program==0x0b))&&w(p+8)==0x255u&&
       w(p+12)==0x00200000u&&w(p+16)==0x007f007fu&&w(p+20)==0x005a0040u&&
       w(p+24)==0x0064ff38u&&w(p+28)==0x00030000u&&w(p+32)==0x00010085u&&
       w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
-      (!sample||(w(sample)==0x15470u&&w(sample+4)==11025u&&w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
+      (!sample||(w(sample)==(program==0x0a?0x17660u:0x15470u)&&w(sample+4)==11025u&&w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
  }
  /* R200 EM0C uses the dependency-loaded bank's native 06 cue in selector 6B. */
  if(bank==10&&program==6&&v->source_owner&&v->requested_bank==bank&&
