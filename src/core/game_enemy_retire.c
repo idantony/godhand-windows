@@ -208,7 +208,9 @@ gh_actor_motion_status gh_enemy_destroy_prefix_mode3(gh_enemy_destructor *state,
     const int r104=r104_203(&entry,kind);
     const int standard=(kind==0x202&&entry.enemy202&&view->size>=0x1978&&view->original_vtable214==0x4479c8)||
         devil||r103||r104;
-    const int heavy=kind==0x2a2&&entry.enemy2a2&&view->size>=0x15f0&&view->original_vtable214==0x448ca0;
+    const int r200_ema3=kind==0x2a3&&entry.enemy2a2&&entry.enemy2a2->prefix.bindings.work->room==0x200&&
+        gh_enemy2a2_is_r200_entry(&entry.enemy2a2->prefix.request);
+    const int heavy=(kind==0x2a2||r200_ema3)&&entry.enemy2a2&&view->size>=0x15f0&&view->original_vtable214==0x448ca0;
     const int scenery=scenery_2ad(&entry,kind);
     if(!standard&&!heavy&&!scenery)return stop(frontier,0x30fa00);
     if(!state->stage){

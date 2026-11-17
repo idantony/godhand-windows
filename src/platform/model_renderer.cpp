@@ -183,7 +183,7 @@ static gh_model_gpu_error draw_material(gh_model_renderer*r,const gh_model_draw_
    const auto &color=input[i-i%3].rgba;
    if(!std::equal(color,color+4,input[i].rgba))return GH_MODEL_GPU_UNSUPPORTED;
   }
- }else if (flat_strip || (gouraud_strip&&s->frame_mask == 0xff000000u)) {
+ }else if (flat_strip || (gouraud_strip&&!scene_warp&&s->frame_mask == 0xff000000u)) {
   // The masked ESP sprite paths submit one original four-vertex strip.
   // A flat packet must also satisfy its original uniformly shaded vertices.
   if (count != 4 || n != 6 || indices[0] != 0 || indices[1] != 1 || indices[2] != 2 || indices[5] != 3 ||

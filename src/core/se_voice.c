@@ -618,6 +618,35 @@ static int r103_paired_attack_voice_profile(const struct voice *v,int16_t bank,i
 static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
+ /* The two R200 opening cEm01 instances use different dependency-loaded banks. */
+ if(bank==9&&program==11&&v->source_owner&&v->requested_bank==bank&&
+    v->requested_program==program&&v->part_index==-1&&v->model&&v->model->work&&
+    v->model->work->room==0x200){
+  const gh_title_player_view *root=&v->model->root;
+  const uint8_t *a=root->bytes;
+  if(a&&root->size>=0x642&&root->original_vtable214==0x4479c8&&
+     h(a+0x2fe)==0x201&&w(a+0x564)==0x201&&h(a+0x640)==0x0d&&
+     w(a+0x2f4)==0x00016b00u)
+   return w(p)==0x000b0009u&&w(p+4)==0x022b000au&&w(p+8)==0x255u&&
+      w(p+12)==0x00200000u&&w(p+16)==0x007f007fu&&w(p+20)==0x005a0040u&&
+      w(p+24)==0x0064ff38u&&w(p+28)==0x00030000u&&w(p+32)==0x00010085u&&
+      w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
+      (!sample||(w(sample)==0x15470u&&w(sample+4)==11025u&&w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
+ }
+ /* R200 EM0C uses the dependency-loaded bank's native 06 cue in selector 6B. */
+ if(bank==10&&program==6&&v->source_owner&&v->requested_bank==bank&&
+    v->requested_program==program&&v->part_index==-1&&v->model&&v->model->work&&
+    v->model->work->room==0x200){
+  const gh_title_player_view *root=&v->model->root;
+  const uint8_t *a=root->bytes;
+  return a&&root->size>=0x642&&root->original_vtable214==0x4479c8&&
+    h(a+0x2fe)==0x201&&w(a+0x564)==0x20c&&h(a+0x640)==0x0c&&
+    w(a+0x2f4)==0x00016b00u&&w(p)==0x0006000au&&w(p+4)==0x022a0005u&&
+    w(p+8)==0x250u&&w(p+12)==0x00200000u&&w(p+16)==0x007f007fu&&
+    w(p+20)==0x005a0040u&&!w(p+24)&&w(p+28)==0x00060000u&&
+    w(p+32)==0x00010085u&&w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
+    (!sample||(w(sample)==0xd040u&&w(sample+4)==11025u&&w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
+ }
  /* Both original West capture clips request their dependency-specific 1E row. */
  if(program==0x1e){
   const gh_actor_model *model=v->model;
@@ -1441,7 +1470,12 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
       r104[0x2f6]==1&&
       (((h(r104+0x2f4)==0x0800||h(r104+0x2f4)==0x0b00)&&r104[0x2f7]<=1)||
        ((h(r104+0x2f4)==0x2100||h(r104+0x2f4)==0x4500)&&!r104[0x2f7])||r104_getup);
-  if(!ema2_home&&(root->original_vtable214!=0x4479c8||
+  /* Both R200 opening clips can submit CORE8D during selector 6B. */
+  const int r200_step=v->part_index==-1&&v->model->work&&v->model->work->room==0x200&&
+      root->original_vtable214==0x4479c8&&h(actor+0x2fe)==0x201&&root->size>=0x642&&
+      ((w(actor+0x564)==0x20c&&h(actor+0x640)==0x0c)||
+       (w(actor+0x564)==0x201&&h(actor+0x640)==0x0d))&&w(actor+0x2f4)==0x00016b00u;
+  if(!r200_step&&!ema2_home&&(root->original_vtable214!=0x4479c8||
      (h(root->bytes+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!r103_em03_voice_actor(v)&&
       !arena_landing&&!arena_turn&&!boss_turn&&!flank_turn&&!r104_turn)))return 0;
   const uint32_t dependency=w(root->bytes+0x564);
@@ -1454,7 +1488,7 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
       root->size>0x1650&&v->part_index==-1&&(h(root->bytes+0x640)==10||h(root->bytes+0x640)==11)&&
       root->bytes[0x1650]==4&&h(root->bytes+0x2f4)==0x6b00&&root->bytes[0x2f6]==1;
   const int r101_key_carrier=r101_key_carrier_attack_voice(v,0x4b00);
-  if(!ema2_home&&dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&!gate_em0a&&!east_em27&&!r101_gate&&
+  if(!r200_step&&!ema2_home&&dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&!gate_em0a&&!east_em27&&!r101_gate&&
      !r101_key_carrier&&
      !r102_em0f_voice_source(v)&&!r105_em27_voice_source(v)&&!r100_em0a_formation_source(v)&&
      !arena_landing&&!arena_turn&&!boss_turn&&!flank_turn&&!r104_turn)return 0;
