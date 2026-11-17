@@ -440,7 +440,7 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
  const int em03_recoil=em03_state==0x0301&&em03_phase<=1&&v->model->root.size>=0x17b8&&
     w(charge+0x17b4)==80&&(w(charge+0x16d0)&0x1000u);
  const int em03_getup=em03_state==0x0d01&&em03_phase<=1&&v->model->root.size>=0x17b8&&
-    (w(charge+0x17b4)==80||w(charge+0x17b4)==24);
+    (w(charge+0x17b4)==80||w(charge+0x17b4)==24||w(charge+0x17b4)==12);
  const int em03_melee=(em03_state==0x1500||em03_state==0x4500)&&em03_phase==1;
  const int em03_wide=em03_state==0x4500&&em03_phase==1;
  const int em03_hold=em03_state==0x4c00&&
@@ -661,6 +661,22 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
      w(p+24)==0x0064ff38u&&w(p+28)==0x00030000u&&w(p+32)==0x00010085u&&
      w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
      (!sample||(w(sample)==offset&&w(sample+4)==11025u&&w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
+  }
+ }
+ /* EM1A row 114C resolves its original attack cues from the live dependency bank. */
+ if(bank==1&&(program==4||program==5)&&v->source_owner&&v->requested_bank==1&&
+    v->requested_program==4&&v->part_index==-1&&v->model&&v->model->work&&v->model->work->room==0x200){
+  const gh_title_player_view *root=&v->model->root;
+  const uint8_t *a=root->bytes;
+  if(a&&root->size>0x1650&&root->original_vtable214==0x4479c8&&
+     h(a+0x2fe)==0x201&&w(a+0x564)==0x21a&&!h(a+0x640)&&!a[0x1650]&&w(a+0x2f4)==0x00011500u){
+   const unsigned alternate=program-4;
+   return h(p)==1&&h(p+2)==(unsigned)program&&w(p+4)==0x022a0003u+alternate&&
+     w(p+8)==0x250u&&w(p+12)==0x00200000u&&w(p+16)==0x007f007fu&&
+     w(p+20)==0x005a0040u&&w(p+24)==0x00c8ff38u&&w(p+28)==0x00060000u&&
+     w(p+32)==(alternate?0x00010085u:0x00010185u)&&w(p+36)==0x400u&&w(p+40)==0xffffu&&
+     !w(p+44)&&(!sample||(w(sample)==(alternate?0x2a10u:0x2240u)&&w(sample+4)==11025u&&
+     w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
   }
  }
  /* EM02 selector 15 binds its attack SEQ to the stage's original bank7. */
@@ -1044,7 +1060,7 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
  const int em03_recoil=r104_em03_voice_actor(v)&&v->model->root.size>=0x17b8&&
     ((w(actor+0x17b4)==80&&((state==0x0301&&phase==3)||
       (state==0x0102&&phase==1&&!h(actor+0x54a))))||
-     (w(actor+0x17b4)==24&&state==0x0701&&phase==1));
+     ((w(actor+0x17b4)==24||w(actor+0x17b4)==12)&&state==0x0701&&phase==1));
  const int recoil_step=gate_death_step&&!actor[0x2f7]&&v->part_index==-1&&
     (em03_recoil||(boss&&((state==0x0301&&phase==3)||(state==0x0401&&phase==5))));
  const int arena_boss_step=ground_step&&boss&&v->part_index==-1&&
@@ -1074,9 +1090,11 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
     ((dependency==0x21a&&!h(actor+0x640)&&
       (w(actor+0x2f4)==0x00016b00u||w(actor+0x2f4)==0x00010800u||
        w(actor+0x2f4)==0x00010500u||w(actor+0x2f4)==0x00010600u||
-       w(actor+0x2f4)==0x00010700u||w(actor+0x2f4)==0x00010900u))||
+       w(actor+0x2f4)==0x00010700u||w(actor+0x2f4)==0x00010900u||w(actor+0x2f4)==0x00011500u))||
      (dependency==0x202&&h(actor+0x640)==1&&
-      (w(actor+0x2f4)==0x00011500u||w(actor+0x2f4)==0x00010101u)));
+      (w(actor+0x2f4)==0x00011500u||w(actor+0x2f4)==0x00010101u||
+       w(actor+0x2f4)==0x00010500u||w(actor+0x2f4)==0x00010600u||
+       w(actor+0x2f4)==0x00010900u)));
  const int r200_landing=gate_death_step&&root->size>0x1650&&v->model->work&&
     v->model->work->room==0x200&&h(actor+0x2fe)==0x201&&dependency==0x21a&&
     !h(actor+0x640)&&!actor[0x1650]&&w(actor+0x2f4)==0x02030801u;
@@ -1510,7 +1528,7 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
  const int r104_rear=r104&&h(r104+0x2f4)==0x0a00&&r104[0x2f6]==1&&r104[0x2f7]<=1&&v->part_index==-1;
  const int r104_getup=r104&&v->model->root.size>=0x17b8&&h(r104+0x2f4)==0x0d01&&
     r104[0x2f6]==1&&!r104[0x2f7]&&
-    (w(r104+0x17b4)==80||w(r104+0x17b4)==24)&&v->part_index==-1;
+    (w(r104+0x17b4)==80||w(r104+0x17b4)==24||w(r104+0x17b4)==12)&&v->part_index==-1;
  if(program==0x29){
   if(!r104_rear&&!r104_getup)return 0;
   /* Original rear SEQ 2C9900 frame7 plays CORE29 alongside CORE8E. */
@@ -1555,7 +1573,8 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
       ((((w(actor+0x564)==0x20c&&h(actor+0x640)==0x0c)||
          (w(actor+0x564)==0x201&&h(actor+0x640)==0x0d))&&w(actor+0x2f4)==0x00016b00u)||
        (w(actor+0x564)==0x21a&&!h(actor+0x640)&&
-        (w(actor+0x2f4)==0x00010d01u||w(actor+0x2f4)==0x00010800u)));
+        (w(actor+0x2f4)==0x00010d01u||w(actor+0x2f4)==0x00010800u))||
+       (w(actor+0x564)==0x202&&h(actor+0x640)==1&&w(actor+0x2f4)==0x00016b00u));
   if(!r200_step&&!ema2_home&&(root->original_vtable214!=0x4479c8||
      (h(root->bytes+0x2fe)!=0x202&&!r103_em00_voice_actor(v)&&!r103_em03_voice_actor(v)&&
       !arena_landing&&!arena_turn&&!boss_turn&&!flank_turn&&!r104_turn)))return 0;
@@ -1701,9 +1720,10 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
      w(p+28)==0x00ff0000u&&w(p+32)==4u&&!w(p+36)&&w(p+40)==0xffff&&!w(p+44)&&
      (!sample||(w(sample)==0x38280u&&w(sample+4)==20000&&w(sample+8)==0x5fc080ffu&&!w(sample+12)));
  }
+ const int program82=program==0x82;
  const int program84=program==0x84;
  const int aged=program==0xa0;
- if(program!=0x83&&!program84&&program!=0x85&&program!=0x87&&!aged)return 0;
+ if(!program82&&program!=0x83&&!program84&&program!=0x85&&program!=0x87&&!aged)return 0;
  if(v->model){
   const gh_title_player_view *root=&v->model->root;
   if(!root->bytes||root->size<0x568||root->original_vtable214!=0x4479c8)return 0;
@@ -1724,8 +1744,11 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
       h(r104+0x2f4)==0x1500&&r104[0x2f6]==1&&!r104[0x2f7];
   const uint8_t *r200_actor=root->bytes;
   const int r200_melee=v->part_index==-1&&v->model->work&&v->model->work->room==0x200&&
-     root->size>0x1650&&h(r200_actor+0x2fe)==0x201&&dependency==0x202&&
-     h(r200_actor+0x640)==1&&!r200_actor[0x1650]&&w(r200_actor+0x2f4)==0x00011500u;
+     root->size>0x1650&&h(r200_actor+0x2fe)==0x201&&
+     ((dependency==0x202&&h(r200_actor+0x640)==1&&!program82)||
+      (dependency==0x21a&&!h(r200_actor+0x640)&&(program82||program==0x83||program==0x87)))&&
+     !r200_actor[0x1650]&&w(r200_actor+0x2f4)==0x00011500u;
+  if(program82&&!r200_melee)return 0;
   if(h(root->bytes+0x2fe)!=0x202&&!boss_attack&&!r104_grab&&!r104_melee&&!r200_melee){
    const uint8_t *em00=r103_em00_voice_actor(v);
    const int arena_em00=em00&&(program==0x83||program==0x87||
@@ -1766,14 +1789,14 @@ static int core_enemy_attack_profile(const struct voice *v,int16_t bank,int16_t 
      (dependency!=0x200||aged)&&(dependency!=0x203||program84))return 0;
  }else if(!v->combat_profile)return 0;
  const unsigned slot=aged?98u:(unsigned)(program-0x2d);
- const unsigned gain=aged?120u:program==0x83?60u:program==0x85?70u:90u;
- const uint32_t pitch=program==0x85||aged?0x0080ff80u:0x00800080u;
+ const unsigned gain=aged?120u:program82?65u:program==0x83?60u:program==0x85?70u:90u;
+ const uint32_t pitch=program82||program==0x85||aged?0x0080ff80u:0x00800080u;
  if(h(p+4)!=slot||w(p+6)!=(aged?0x025a020bu:0x0246020bu)||
     h(p+0xe)!=0x20||w(p+0x10)!=gain*0x10001u||w(p+0x14)!=0x005a0040u||
     w(p+0x18)!=pitch||w(p+0x1c)!=(aged?0x60000u:0)||
     w(p+0x20)!=(aged?0x30005u:4u)||w(p+0x24)!=(aged?0x300u:0x301u)||
     w(p+0x28)!=0xffffu||w(p+0x2c))return 0;
- const uint32_t offset=aged?0x6f7d0u:program==0x83?657040u:program==0x84?674208u:
+ const uint32_t offset=aged?0x6f7d0u:program82?0xa3bc0u:program==0x83?657040u:program==0x84?674208u:
      program==0x85?0xa2f60u:0xa1ed0u;
  return !sample||(w(sample)==offset&&w(sample+4)==16000&&
     w(sample+8)==0x5fc080ffu&&!w(sample+12));

@@ -183,6 +183,11 @@ Gene in the rendered scene. The replay continues through the first catapult
 launch, flight and impact. Separate checks verify the original impact
 effects and collision-area cleanup.
 
+Two Windows replays load an original-format R200 diagnostic save and verify
+combat in both directions. A Triangle input hits two enemies twice each,
+bringing both from 96 to 72 HP. On a separate route, EM1A's attack takes
+Gene from 100 to 92 HP and triggers the original hurt animation.
+
 The progression replay uses the earlier EV07 Start shortcut and sets the
 boss to 60 HP immediately before the original 80-point Shockwave. A separate
 full-health combat replay raises Heat with an L2 taunt and lands two hits
@@ -519,6 +524,10 @@ R003，并预读原版 EV08 音频。另一条回放用原版 Start 跳过 EV07�
 原生流程回放从继续选项进入 EV08，过场播完后切换到第二关的原版 R200 走廊。
 开场镜头交还控制后，左摇杆能让画面中的主角走动。回放跑过了第一发投石机的发射、
 飞行和落地。单独的检查也验证了原版落地特效和命中区域清理。
+
+两条 Windows 回放加载原版格式的 R200 诊断存档，验证双方都能命中。按一次三角键，
+两名敌人各被命中两次，血量都从 96 HP 降到 72 HP。另一条路线中，EM1A 的攻击使
+Gene 从 100 HP 降到 92 HP，并触发了原版受击动作。
 
 这条流程回放此前用了原版 Start 快捷键跳过 EV07，并在原版 80 点冲击波命中前将
 头目血量设为 60 HP。另一条满血战斗回放通过 L2 挑衅积攒斗气，闪避反击后命中两次。

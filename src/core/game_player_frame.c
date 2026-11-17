@@ -1105,7 +1105,15 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&s->pending_damage_kind==0x4e&&
      w(source->bytes+0x1870)==0x11&&w(take+0x4c)==30&&s->pending_damage==30&&
      !w(p+0x160c)&&override_bank==UINT32_MAX&&!half(take+0x44);
-   if(source_kind!=0x202&&!arena_hit&&!em14_sphere&&!devil_melee&&!devil_combo&&!r104_strike)
+   /* Original 21FB34 writes the timed EM1A Give3D with base power15.
+    * Its live 260C20 attack scale produces the observed power18 Take. */
+   const int r200_em1a_timed=b->work->room==0x200&&source_kind==0x201&&dependency==0x21a&&!stamp&&
+     source->size>=0x1884&&!source->bytes[0x1650]&&w(source->bytes+0x2f4)==0x00011500u&&
+     w(source->bytes+0x5f4)==1&&!w(source->bytes+0x1870)&&w(source->bytes+0x1874)==15&&
+     w(source->bytes+0x1878)==0x3d&&w(source->bytes+0x187c)==UINT32_MAX&&!half(source->bytes+0x1880)&&
+     override_bank==UINT32_MAX&&!half(take+0x44)&&s->pending_damage_kind==0x3d&&
+     w(take+0x4c)==18&&s->pending_damage==18&&!residual;
+   if(source_kind!=0x202&&!arena_hit&&!em14_sphere&&!devil_melee&&!devil_combo&&!r104_strike&&!r200_em1a_timed)
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
    const int em0a_story=source->size>=0x16c8&&b->work->room==0x102&&stamp==2&&
      source->bytes[0x1650]==5&&!w(source->bytes+0x16c4)&&!source->bytes[0x2f7];
@@ -1295,7 +1303,7 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      half(source->bytes+0x2f4)==0x1500&&
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&override_bank==UINT32_MAX&&!cue&&
      s->pending_damage_kind==0x37&&s->pending_damage==20&&w(take+0x4c)==20&&!residual;
-   if(!r101_short&&!r101_weapon&&!armed47&&!r102_armed16&&!r102_short_hit&&!east_em27_short_hit&&
+   if(!r200_em1a_timed&&!r101_short&&!r101_weapon&&!armed47&&!r102_armed16&&!r102_short_hit&&!east_em27_short_hit&&
       !area11_fall&&!r105_short_hit&&!r105_combo_hit&&!east_em27_combo_hit&&!r104_strike&&
       !em03_fall&&!arena_hit&&!em14_sphere&&!em0a_override&&!em0a_kick&&!em0a_reverse&&!em0a_wide&&
       !west_em0a_timed&&!west_em0a_reverse&&!west_em0a_face_kick&&

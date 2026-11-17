@@ -1191,6 +1191,9 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         (word(p+0x16d4)&0x400u);
     const int r104_triangle_recoil=half(p+0x2f4)==0x0101&&
         (p[0x2f6]==3||(p[0x2f6]==1&&!half(p+0x3ac)));
+    const int falling=half(p+0x2f4)==0x0701&&p[0x2f6]==1&&
+        (half(p+0x3ac)&0x12cu)==4&&
+        !(word(p+0x16d0)&0x4000u)&&!(word(p+0x16d4)&0x100040u);
     const int idle_move=!half(p+0x2f4)&&p[0x2f6]==1&&!half(p+0x3ac);
     /* The angry grab can take original contact before its SEQ bit 800.
      * Its authored brace is already active on that earlier frame. */
@@ -1209,7 +1212,8 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         rank==1&&!body->state->heat[0x10];
     const int r104_triangle=triangle&&r104_em03_damage_receiver(enemy,p)&&
         (r104_turn_is_exposed(p)||(!p[0x2f7]&&
-         ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||em03_combo||fast_melee||idle_move||grab_windup||angry_grab_windup||brace_windup||reverse_recovery)))&&
+         ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||falling||
+          em03_combo||fast_melee||idle_move||grab_windup||angry_grab_windup||brace_windup||reverse_recovery)))&&
         word(player->bytes+0x5e8)==29&&
         word(body->bytes+0x4c)==12&&rank==1&&!body->state->heat[0x10];
     const int boss_recovery=r104_recovery||r104_triangle||em27_punch;
@@ -1398,8 +1402,34 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             call->phase=5;
             return GH_ACTOR_MOTION_OK;
         }
-        /* 20DA18 returns zero for previous HP <= 0 and active stagger.
-         * The airborne effect-12 branch keeps the original 01/07 motion. */
+        if (r104_triangle && falling && !(flags & 0x100u)) {
+            /* Give12 follows 20DA18 to selector 2's roll unless already
+             * staggered or 12C748 reports the player's special mode. */
+            const float stagger = number(p + 0x17cc);
+            if (!isfinite(stagger)) return stop(frontier, 0x26f1d8);
+            if (stagger <= 0.0f && (int32_t)word(p + 0x17ac) > 0 && !word(player->bytes + 0x5fc)) {
+                uint32_t draw;
+                if (p[0x17b8] != 2) return stop(frontier, 0x20db14);
+                if (gh_game_mt_next_0030f348(&body->state->random, &draw)) return stop(frontier, 0x31cfe0);
+                if (!(draw & 3u)) {
+                    restore_counter_hp(p);
+                    put(p + 0x54c, 0x40000000u);
+                    put(p + 0x17c4, UINT32_MAX);
+                    put_half(p + 0x17c8, 0);
+                    p[0x1867] = 0;
+                    p[0x2f4] = 1;
+                    p[0x2f5] = 9;
+                    p[0x2f6] = p[0x2f7] = 0;
+                    call->phase = 5;
+                    return GH_ACTOR_MOTION_OK;
+                }
+            }
+            /* 20BA0C returns one and preserves the existing 01/07 fall. */
+            call->reacted = 1;
+            call->phase = 5;
+            return GH_ACTOR_MOTION_OK;
+        }
+        /* 20DA18 declines a counter during stun or with previous HP <= 0. */
         if (continuing_knockdown) {
             call->reacted = 1;
             call->phase = 5;

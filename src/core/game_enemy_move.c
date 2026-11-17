@@ -1313,9 +1313,18 @@ static int r103_heavy_recoil_getup(const gh_enemy_actor *enemy,const uint8_t *p)
 
 static int r104_heavy_recoil_getup(const gh_enemy_actor *enemy,const uint8_t *p)
 {
+    const uint32_t power=word(p+0x17b4);
     return enemy&&gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->b.entry.work->room)&&
-        /* 257948 uses the same selector after amplified and Roulette falls. */
-        positive_hp(p)&&(word(p+0x17b4)==80||word(p+0x17b4)==24)&&!p[0x2f7]&&p[0x2f6]<=1;
+        /* 257948 uses the same selector even after a hit during the fall. */
+        positive_hp(p)&&(power==80||power==24||power==12)&&!p[0x2f7]&&p[0x2f6]<=1;
+}
+
+static int r104_knockdown_motion(const uint8_t *p)
+{
+    /* A repeat Take can overwrite the last power while 253DE8's original
+     * clip is already bound. Only power24 can start this recovered fall. */
+    const uint32_t power = word(p+0x17b4);
+    return (power==24 || (power==12 && p[0x2f6]==1)) && !p[0x2f7];
 }
 
 static gh_actor_motion_status ground_sequence_0014fb48(gh_enemy202_move *s,const uint8_t *p)
@@ -12087,7 +12096,7 @@ static gh_actor_motion_status advance_knockdown_reaction_00253de8(gh_enemy202_mo
     gh_title_player_view *actor=&enemy->entry.object.view;
     uint32_t pc=0;
     const int em03=gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room)&&
-        word(p+0x17b4)==24;
+        r104_knockdown_motion(p);
     const unsigned side=p[0x2f7]^(em03&&p[0x17c3]!=0);
     if(s->state1_phase==6){
         const int arena_em0a=r103_arena_em0a(&enemy->entry);
@@ -13322,7 +13331,7 @@ static gh_actor_motion_status advance_state1_0024c0f0(gh_enemy202_move *s,uint8_
         const int boss_getup=p[0x2f5]==0x0d&&(r103_heavy_recoil_getup(s->enemy,p)||r104_heavy_recoil_getup(s->enemy,p));
         const int r104=gh_enemy203_is_r104_entry(&entry->request,work->room)&&
             ((p[0x2f5]<=1&&positive_hp(p))||(p[0x2f5]==3&&word(p+0x17b4)==80)||
-             (p[0x2f5]==7&&word(p+0x17b4)==24))&&
+             (p[0x2f5]==7&&r104_knockdown_motion(p)))&&
             p[0x2f6]<=3&&!p[0x2f7];
         const int r200_triangle=work->room==0x200&&
             ((dependency==0x202&&half(p+0x640)==1)||(dependency==0x21a&&!half(p+0x640)))&&
