@@ -26,7 +26,8 @@ typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_req
  uint32_t configuration_nested_scale,configuration_nested_flags;
  const float *configuration_positioned_atan_coeff;
  uint32_t configuration_positioned_position[3],configuration_positioned_yaw;
- uint8_t configuration_positioned,configuration_part4_stun,configuration_death_part_zero,configuration_05288;} gh_effect_create_call;
+ uint8_t configuration_positioned,configuration_part4_stun,configuration_death_part_zero,configuration_05288;
+ uint8_t configuration_held_impact_part_zero;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
 gh_effect_status gh_effect_create_r101_weapon_002a8608(gh_effect_create_call *,
@@ -79,6 +80,8 @@ gh_effect_status gh_effect_create_enemy_impact_begin_00306838(gh_effect_create_c
 /* Original grounded item sparkle, bank 0 and index 1B. */
 gh_effect_status gh_effect_create_om_sparkle_begin_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_om30a_break_begin_0018c580(gh_effect_create_call *,const uint32_t[3]);
+gh_effect_status gh_effect_create_r104_em03_ground_00306838(gh_effect_create_call *,
+ const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_devil_projectile_impact_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_em03_projectile_impact_00306838(gh_effect_create_call *,const uint32_t world_xyz[3]);
 gh_effect_status gh_effect_create_om331_break_begin_0019ca58(gh_effect_create_call *,const uint32_t world_xyz[3]);

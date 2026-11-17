@@ -1,8 +1,46 @@
 {
   "schema_version": 1,
-  "verified_utc": "2026-11-17T12:39:50+00:00",
-  "stage": "native-r104-retry-and-r100-west-tenth-defeat",
+  "verified_utc": "2026-11-17T13:25:32+00:00",
+  "stage": "native-r104-hold-escape-and-equipped-combat",
   "playable": false,
+  "native_cpu_r104_hold_combat": {
+    "entry_fixture": "original-format three-card R101 test save through the original gate and Retry",
+    "escape_phase_tick": 4018,
+    "normal_stance_after_escape_tick": 4104,
+    "player_hp_after_escape": 100,
+    "walking_verified_after_escape": true,
+    "attack_started_after_escape": true,
+    "escape_matching_samples": 4250,
+    "held_impact_tick": 4108,
+    "held_impact_player_hp": 77,
+    "normal_stance_after_impact_tick": 4292,
+    "hold_matching_samples": 4350
+  },
+  "native_cpu_r104_new_game_equipment": {
+    "entry_fixture": "original-format R104 test save with equipment from original New Game initialization",
+    "triangle_tick": 2627,
+    "contact_ticks": [
+      2656,
+      2659
+    ],
+    "damage_per_contact": 12,
+    "boss_hp_before": 1070,
+    "boss_hp_after": 1046,
+    "matching_samples": 3100
+  },
+  "r104_hold_direct3d": {
+    "capture_ticks": [
+      3252,
+      3256,
+      3271
+    ],
+    "player_hp_before_impact": 100,
+    "player_hp_after_impact": 77,
+    "presented_scene_frames": 2967,
+    "final_tick": 3280,
+    "renderer_errors": 0,
+    "window_errors": 0
+  },
   "native_cpu_r104_retry": {
     "entry_fixture": "original-format R101 test save with three cards and a door-side landing position",
     "player_defeat_tick": 3654,

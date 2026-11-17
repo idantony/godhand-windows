@@ -605,16 +605,18 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
  if(!s->hurt_phase){
   put(p+0x54c,0x41700000);
   const int projectile_fall=(b->work->room==0x100||b->work->room==0x104)&&p[0x2f7]==1;
-  if(p[0x2f6]>1||(p[0x2f7]&&!projectile_fall))return fail(s,0x11add8,GH_PLAYER_FRAME_UNSUPPORTED);
+  const int charge_fall=b->work->room==0x104&&p[0x2f7]==2;
+  if(p[0x2f6]>1||(p[0x2f7]&&!projectile_fall&&!charge_fall))
+   return fail(s,0x11add8,GH_PLAYER_FRAME_UNSUPPORTED);
   if(p[0x2f6])s->hurt_phase=8;
   else{
    uint32_t draw;
    static const uint16_t rows[]={0x158,0x4fc,0x164,0x504,0x50c};
    if(!b->model||!b->resource||b->resource_bytes<0x514||!b->initialize_motion)
     return fail(s,0x2a8578,GH_PLAYER_FRAME_UNSUPPORTED);
-   /* Original variant 1 uses the first motion/sequence row directly. */
-   unsigned row=0x158;
-   if(!projectile_fall){
+   /* Original 41C5B0 variants 1 and 2 directly bind 158/15C and 4FC/500. */
+   unsigned row=charge_fall?0x4fc:0x158;
+   if(!projectile_fall&&!charge_fall){
     if(gh_game_mt_next_0030f348(&b->init->random,&draw))
      return fail(s,0x31cfe0,GH_PLAYER_FRAME_UNSUPPORTED);
     row=rows[draw%5u];
@@ -949,17 +951,23 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
    const uint32_t residual=w(p+0x160c);
    const int r104_em03=b->work->room==0x104&&source_kind==0x203&&dependency==0x250&&!stamp&&
      source->size>0x1651&&w(source->bytes+0x1644)==0x80000u&&!source->bytes[0x1650]&&
-     !source->bytes[0x1651]&&source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&
-     override_bank==1&&half(take+0x44)==0x28;
+     !source->bytes[0x1651]&&!source->bytes[0x2f7];
+   const int r104_close=r104_em03&&source->bytes[0x2f6]==1&&override_bank==1&&half(take+0x44)==0x28;
    const unsigned source_move=half(source->bytes+0x2f4);
    /* 21FD50 pairs the light hit with the later fall. 21A538 can emit the
     * stronger fall directly from the low-rank 19D0 sequence. */
-   const int r104_combo=r104_em03&&source_move==0x1600&&
+   const int r104_combo=r104_close&&source_move==0x1600&&
      ((s->pending_damage_kind==0x3d&&w(take+0x4c)==30&&s->pending_damage==30&&!residual)||
       (s->pending_damage_kind==0x3e&&w(take+0x4c)==40&&s->pending_damage==30&&residual==10));
-   const int r104_melee=r104_em03&&source_move==0x1500&&s->pending_damage_kind==0x3e&&
+   const int r104_melee=r104_close&&source_move==0x1500&&s->pending_damage_kind==0x3e&&
      w(take+0x4c)==60&&s->pending_damage==45&&residual==15;
-   const int r104_strike=r104_combo||r104_melee;
+   /* 224090 sets the charge shape and both Give rows at 2609A8. */
+   const int r104_charge=r104_em03&&source_move==0x1a00&&source->bytes[0x2f6]>=3&&
+     source->bytes[0x2f6]<=5&&source->size>=0x1882&&w(source->bytes+0x1870)==10&&
+     w(source->bytes+0x1874)==40&&w(source->bytes+0x1878)==0x42&&!w(source->bytes+0x187c)&&
+     half(source->bytes+0x1880)==0xf5&&!override_bank&&half(take+0x44)==0xf5&&
+     s->pending_damage_kind==0x42&&w(take+0x4c)==40&&s->pending_damage==30&&residual==10;
+   const int r104_strike=r104_combo||r104_melee||r104_charge;
    /* The long EM20 Give's original kind3E splits power 40 into 30 and 10. */
    const int devil_melee=b->work->room==0x100&&source_kind==0x220&&dependency==0x220&&stamp==0xff&&
      source->size>0x1651&&w(source->bytes+0x1644)==0x400000u&&source->bytes[0x1651]==0xff&&
@@ -1749,24 +1757,29 @@ static gh_player_frame_status hurt_r103_em14_sphere_0011b3e8(gh_game_player_fram
  return GH_PLAYER_FRAME_OK;
 }
 
-static gh_player_frame_status hurt_em0a_grab_0011baf8(gh_game_player_frame *s)
+/* Original paired receivers at 11BAF8 and 11BF20. */
+static gh_player_frame_status hurt_paired_grab(gh_game_player_frame *s)
 {
  enum { CUE=1, PLACE, BIND, AUX, FOLLOW, ESCAPE_SCORE, CAMERA, SAMPLE,
    EXIT_CAMERA, ROTATE, TRANSLATE, TIMER, DAMAGE_SCORE, DAMAGE, DAMAGE_VOICE,
-   DEATH_SE, VIBRATE, ESCAPE_INPUT, ESCAPE_CAMERA };
+   DEATH_SE, DEATH_SCORE, VIBRATE, ESCAPE_INPUT, ESCAPE_CAMERA };
  const gh_player_frame_bindings *b=&s->b;
  const gh_title_player_view *actor=&b->player->view,*attacker=b->grab_attacker;
  uint8_t *p=actor->bytes;
  uint32_t pc=0;
+ const int r104=s->state_entry==0x11bf20;
  if(!actor->alias_f0||!attacker||!attacker->bytes||attacker->size<=0x1650||
-    attacker->original_vtable214!=0x4479c8||w(attacker->bytes+0x564)!=0x20a)
-  return fail(s,0x11baf8,GH_PLAYER_FRAME_UNSUPPORTED);
+    attacker->original_vtable214!=0x4479c8||w(attacker->bytes+0x564)!=(r104?0x250u:0x20au))
+  return fail(s,s->state_entry,GH_PLAYER_FRAME_UNSUPPORTED);
  const uint8_t *source=attacker->bytes;
  const int r100=b->work->room==0x100&&!half(source+0x640)&&source[0x1650]==3;
  const int r102=b->work->room==0x102&&half(source+0x640)==2&&source[0x1650]==5&&
     attacker->size>=0x16c8&&!w(source+0x16c4);
- if(!r100&&!r102&&!r103_grab_attacker(b->work,attacker,0x20a))
-  return fail(s,0x11baf8,GH_PLAYER_FRAME_UNSUPPORTED);
+ const int em03=b->work->room==0x104&&attacker->size>0x1651&&
+    half(source+0x2fe)==0x203&&!half(source+0x640)&&w(source+0x1644)==0x80000u&&
+    !source[0x1650]&&!source[0x1651];
+ if(r104?!em03:(!r100&&!r102&&!r103_grab_attacker(b->work,attacker,0x20a)))
+  return fail(s,s->state_entry,GH_PLAYER_FRAME_UNSUPPORTED);
  if(!s->hurt_phase){
   put(p+0x54c,0x40a00000u);
   put(p+0x250,w(p+0x250)|0x10000u);
@@ -1789,7 +1802,9 @@ static gh_player_frame_status hurt_em0a_grab_0011baf8(gh_game_player_frame *s)
   s->hurt_phase=PLACE;
  }
  if(s->hurt_phase==PLACE){
-  gh_player_frame_status status=place_grab_001299f0(s,attacker,0xbe2b020cu,0x3f8240b8u);
+  const uint32_t x_offset=r104?0xbd32fec5u:0xbe2b020cu;
+  const uint32_t z_offset=r104?0x3f9d0e56u:0x3f8240b8u;
+  gh_player_frame_status status=place_grab_001299f0(s,attacker,x_offset,z_offset);
   if(status)return status;
   s->hurt_phase=BIND;
  }
@@ -1799,7 +1814,7 @@ static gh_player_frame_status hurt_em0a_grab_0011baf8(gh_game_player_frame *s)
   s->hurt_phase=BIND;
  }
  if(s->hurt_phase==BIND){
-  const size_t row=0xc80u+4u*s->hurt_sample_phase;
+  const size_t row=(r104?0x1a7cu:0xc80u)+4u*s->hurt_sample_phase;
   const gh_object_view *resource=&b->grab_resource;
   if(!b->initialize_motion||!resource->bytes||!resource->file_extent_known||
      resource->file_extent<row+8||resource->file_extent>resource->size)
@@ -1812,7 +1827,7 @@ static gh_player_frame_status hurt_em0a_grab_0011baf8(gh_game_player_frame *s)
   if(status)return fail(s,pc?pc:0x2a8578,status==GH_PLAYER_INIT_UNSUPPORTED?
     GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE);
   if(s->hurt_sample_phase){
-   if(s->hurt_sample_phase==2)put(p+0x15b0,25);
+   if(s->hurt_sample_phase==2)put(p+0x15b0,r104?5:25);
    ++p[0x2f6];
    s->hurt_phase=CAMERA;
   }else s->hurt_phase=AUX;
@@ -1881,7 +1896,7 @@ static gh_player_frame_status hurt_em0a_grab_0011baf8(gh_game_player_frame *s)
  if(s->hurt_phase==ESCAPE_INPUT){
   gh_player_frame_status status=hurt_input_00123938(s);
   if(status)return status;
-  if(!(s->input_result||(half(p+0x3ac)&0x20))||!(w(p+0x15f4)&2u))
+  if(!(s->input_result||(half(p+0x3ac)&0x20))||(!r104&&!(w(p+0x15f4)&2u)))
    return GH_PLAYER_FRAME_OK;
   s->hurt_phase=ESCAPE_CAMERA;
  }
@@ -1898,7 +1913,7 @@ static gh_player_frame_status hurt_em0a_grab_0011baf8(gh_game_player_frame *s)
   s->hurt_phase=DAMAGE;
  }
  if(s->hurt_phase==DAMAGE){
-  volatile float power=number(w(attacker->bytes+0x76c))*30.0f;
+  volatile float power=number(w(attacker->bytes+0x76c))*(r104?50.0f:30.0f);
   if(!isfinite(power)||power<-2147483648.0f||power>=2147483648.0f)
    return fail(s,0x12c0f8,GH_PLAYER_FRAME_NUMERIC);
   gh_player_frame_status status=damage_hp_0012c0f8(s,(int32_t)power);
@@ -1911,9 +1926,20 @@ static gh_player_frame_status hurt_em0a_grab_0011baf8(gh_game_player_frame *s)
   if(status)return status;
   s->hurt_phase=dead?DEATH_SE:VIBRATE;
  }
- if(s->hurt_phase==DEATH_SE)return fail(s,0x2ca718,GH_PLAYER_FRAME_UNSUPPORTED);
+ if(s->hurt_phase==DEATH_SE){
+  if(!r104||!b->death_fade)return fail(s,0x2ca718,GH_PLAYER_FRAME_UNSUPPORTED);
+  gh_player_frame_status status=b->death_fade(b->damage_context,&pc);
+  if(status)return fail(s,pc?pc:0x2ca718,status);
+  s->hurt_phase=DEATH_SCORE;
+ }
+ if(s->hurt_phase==DEATH_SCORE){
+  gh_player_frame_status status=damage_score_001fa280(s,1000);
+  if(status)return status;
+  sh(p+0x434,half(p+0x434)|8u);
+  s->hurt_phase=VIBRATE;
+ }
  if(s->hurt_phase==VIBRATE)return hurt_vibration_0012c348(s,2);
- return fail(s,0x11baf8,GH_PLAYER_FRAME_UNSUPPORTED);
+ return fail(s,s->state_entry,GH_PLAYER_FRAME_UNSUPPORTED);
 }
 
 /* Original R103 placement for Gene, the EM15 owner and its live EM14 partner. */
@@ -3579,7 +3605,9 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
  if(s->stage==14&&s->state_entry==0x11a820){
   uint32_t method,descriptor;
   const unsigned selector=p[0x2f5];
-  if(selector!=0&&selector!=1&&(selector!=2||b->work->room!=0x103)&&selector!=3&&selector!=4&&selector!=5&&selector!=6&&selector!=8&&selector!=0xa&&selector!=0xb&&selector!=0xf)
+  const int r104_grab=selector==9&&b->work->room==0x104;
+  if(selector!=0&&selector!=1&&(selector!=2||b->work->room!=0x103)&&selector!=3&&selector!=4&&
+     selector!=5&&selector!=6&&selector!=8&&!r104_grab&&selector!=0xa&&selector!=0xb&&selector!=0xf)
    return fail(s,0x11a820,GH_PLAYER_FRAME_UNSUPPORTED);
   if(!b->auxiliary_bindings_known||b->aux_6a0||w(p+0x6a0))
    return fail(s,0x12b928,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -3587,7 +3615,8 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
   sh(p+0x5e0,0);sh(p+0x5e2,0);p[0x1603]=0;sh(p+0x1618,0);
   const uint32_t slot=0x3bd328+8*selector;
   const uint32_t expected=selector==0?0x11a8f8:selector==1?0x11aaa0:selector==2?0x11ac80:selector==3?0x11add8:selector==4?0x11b280:
-     selector==5?0x11b3e8:selector==6?0x11b5f8:selector==8?0x11baf8:selector==0xa?0x11c348:selector==0xb?0x11c608:0x11d4b0;
+     selector==5?0x11b3e8:selector==6?0x11b5f8:selector==8?0x11baf8:r104_grab?0x11bf20:
+     selector==0xa?0x11c348:selector==0xb?0x11c608:0x11d4b0;
   if(!elf_word(b,slot,&descriptor)||!elf_word(b,slot+4,&method)||
      descriptor!=0xffff0000u||method!=expected)
    return fail(s,0x11a820,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -3608,8 +3637,8 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
   if(status)return status;
   s->stage=16;
  }
- if(s->stage==15&&s->state_entry==0x11baf8){
-  gh_player_frame_status status=hurt_em0a_grab_0011baf8(s);
+ if(s->stage==15&&(s->state_entry==0x11baf8||s->state_entry==0x11bf20)){
+  gh_player_frame_status status=hurt_paired_grab(s);
   if(status)return status;
   s->stage=16;
  }
@@ -4032,11 +4061,14 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
        (b->work->room==0x100||b->work->room==0x102||b->work->room==0x103);
      const int forward_evade=b->work->room==0x103&&s->state_entry==0x10d0e0&&
        p[0x2f6]==1&&!p[0x2f7]&&entry[1]>=0x29&&entry[1]<=0x2b&&mode==0;
-     if(entry[8]!=0xff||(!boss_throw&&(entry[0]!=0||(!(flags==7&&(rise||grab||heat_finish||roulette_launch||forward_evade))&&!em0a_grab&&!heat)))||
-        (half(p+0x434)&2u)||!b->effect_create)
+     const int held_impact=b->work->room==0x104&&s->state_entry==0x11bf20&&p[0x2f6]==3&&!p[0x2f7]&&
+       entry[0]==0xa8&&entry[1]==0x19&&!entry[8]&&mode==UINT32_MAX&&flags==1;
+     if(!b->effect_create||(!held_impact&&(entry[8]!=0xff||
+        (!boss_throw&&(entry[0]!=0||(!(flags==7&&(rise||grab||heat_finish||roulette_launch||forward_evade))&&!em0a_grab&&!heat)))||
+        (half(p+0x434)&2u))))
       return fail(s,entry[8]!=0xff?0x306900:(flags&8)?0x306838:0x306528,GH_PLAYER_FRAME_UNSUPPORTED);
      const gh_player_frame_effect_request request={.actor=&b->player->view,.kind=entry[1],
-       .parameter_bits=entry[0],.mode=mode,.selector=-1,.sequence_scale=w(p+0x114)};
+       .parameter_bits=entry[0],.mode=mode,.selector=-1,.sequence_scale=held_impact?0x3f800000u:w(p+0x114)};
      if(!request.sequence_scale)return fail(s,0x306528,GH_PLAYER_FRAME_UNSUPPORTED);
      gh_player_frame_status status=b->effect_create(b->effect_context,&request,&pc);
      if(status)return fail(s,pc?pc:0x306528,status);

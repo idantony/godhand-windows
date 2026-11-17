@@ -791,17 +791,21 @@ static int player_motion_request_matches(gh_game_services*s,const gh_player_moti
       r102_east_grab_attacker(s,live.enemy202)||r102_area11_short_grab_attacker(s,live.enemy202)||arena);
  const int em0a_grab=selector==8&&(r102_gate_em0a_grab_attacker(s,live.enemy202)||
      r103_grab_attacker(s,live.enemy202,0x20a));
+ const int r104_grab=selector==9&&
+     gh_enemy203_is_r104_entry(&live.enemy202->entry.request,s->b.work->room);
  const int counter=p[0x2f4]==0&&selector==0x39&&phase==0;
  const int r102_counter=counter&&(r102_em00_grab_attacker(s,live.enemy202)||
      r102_east_grab_attacker(s,live.enemy202)||r102_area11_short_grab_attacker(s,live.enemy202));
- if(s->b.work->room!=0x100&&!long_grab&&!short_grab&&!em0a_grab&&!r102_counter&&!(arena&&counter))return 0;
- if(p[0x2f4]==1&&selector==8&&(phase==0||phase==2||phase==4)&&(s->b.work->room==0x100||em0a_grab)){
-  const size_t row=0xc80u+4u*phase;
+ if(s->b.work->room!=0x100&&!long_grab&&!short_grab&&!em0a_grab&&!r104_grab&&
+    !r102_counter&&!(arena&&counter))return 0;
+ const int em0a_receiver=selector==8&&(s->b.work->room==0x100||em0a_grab);
+ if(p[0x2f4]==1&&(phase==0||phase==2||phase==4)&&(em0a_receiver||r104_grab)){
+  const size_t row=(r104_grab?0x1a7cu:0xc80u)+4u*phase;
   const gh_title_player_view *attacker=&live.enemy202->entry.object.view;
   const gh_object_view *resource=&live.enemy202->entry.resource;
   return attacker->bytes&&attacker->size>0x1650&&attacker->original_vtable214==0x4479c8&&
-     u32(attacker->bytes+0x564)==0x20a&&
-     (em0a_grab||(!attacker->bytes[0x640]&&!attacker->bytes[0x641]&&attacker->bytes[0x1650]==3))&&
+     u32(attacker->bytes+0x564)==(r104_grab?0x250u:0x20au)&&
+     (r104_grab||em0a_grab||(!attacker->bytes[0x640]&&!attacker->bytes[0x641]&&attacker->bytes[0x1650]==3))&&
      resource->bytes&&resource->file_extent_known&&
      resource->file_extent>=row+8&&resource->file_extent<=resource->size&&
      r->resource==resource->bytes&&r->resource_bytes==resource->size&&
@@ -5421,8 +5425,10 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  const int boss_em15=r103_grab_attacker(s,enemy,0x215);
  const int area11=r102_area11_grab_attacker(s,enemy);
  const int em0a_grab=r102_gate_em0a_grab_attacker(s,enemy)||r103_grab_attacker(s,enemy,0x20a);
+ const int r104=enemy&&gh_enemy203_is_r104_entry(&enemy->entry.request,s->b.work->room);
  if(!p||s->title_player.view.size<0x1660||
-    (s->b.work->room!=0x100&&!em27&&!r102_em00&&!east_em00&&!west_em00&&!area11&&!arena&&!arena_em03&&!em0a_grab&&!boss_em14&&!boss_em15)||
+    (s->b.work->room!=0x100&&!em27&&!r102_em00&&!east_em00&&!west_em00&&!area11&&!arena&&!arena_em03&&
+     !em0a_grab&&!boss_em14&&!boss_em15&&!r104)||
     !enemy||enemy->entry.b.init!=s->b.init||!enemy->entry.published){
   *frontier=0x129718;
   return GH_ACTOR_MOTION_UNSUPPORTED;
@@ -5437,6 +5443,9 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  if(argument==0&&dependency==0x20a&&enemy->entry.object.view.size>0x1650&&
     (em0a_grab||(!attacker[0x640]&&attacker[0x1650]==3))&&
     !attacker[0x2f4]&&attacker[0x2f5]==0x4c)selector=8;
+ /* EM03's original 235968 passes argument 1 and selects player state 01/09. */
+ else if(argument==1&&r104&&dependency==0x250&&!attacker[0x2f4]&&attacker[0x2f5]==0x4c&&
+         !attacker[0x2f6]&&!attacker[0x2f7])selector=9;
  else if(argument==7&&boss_em15&&!attacker[0x2f4]&&attacker[0x2f5]==0x52&&
          !attacker[0x2f6]&&!attacker[0x2f7])selector=0xf;
  else if(argument==2&&((dependency==0x200&&attacker[0x640]==20)||r102_em00||em27||arena||
@@ -6821,7 +6830,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   grab_attacker_retired=s->player_frame.b.grab_attacker_retired;
   grab_resource=s->player_frame.b.grab_resource;
  }else if(s->player_grab_attacker&&((v->bytes[0x2f4]==1&&
-     (v->bytes[0x2f5]==8||v->bytes[0x2f5]==0xa||v->bytes[0x2f5]==0xb||
+     (v->bytes[0x2f5]==8||v->bytes[0x2f5]==9||v->bytes[0x2f5]==0xa||v->bytes[0x2f5]==0xb||
        v->bytes[0x2f5]==0xf))||
      (v->bytes[0x2f4]==0&&v->bytes[0x2f5]==0x39))){
   gh_enemy_ems_live grab={0};

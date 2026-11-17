@@ -4,6 +4,37 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## R104 hold, escape and New Game equipment
+
+Two native CPU replays continue the original R104 boss fight after Retry.
+Alternating Cross and Triangle triggers the paired escape at tick 4,018.
+Gene returns to his normal stance at tick 4,104 with 100 HP. A subsequent
+left-stick interval moves him and Triangle starts another attack. The replay
+runs through tick 4,250 with every controller sample verified.
+
+With no escape input, the original A8:19 distortion and debris run during
+the hold. Gene takes 23 HP of damage at tick 4,108 and stands again at tick
+4,292 with 77 HP. This replay verifies all 4,350 samples. A separate Direct3D
+replay shows Gene being held at tick 3,252 and the distortion effect at 3,256,
+when his HP has dropped to 77. It presents 2,967 scene frames through tick
+3,280 with zero renderer or window errors.
+
+A separate original-format test save uses the authored New Game equipment
+and health scaling. One Triangle press at tick 2,627 produces two 12-point
+hits at ticks 2,656 and 2,659. The boss drops from 1,070 to 1,046 HP. The
+replay reaches tick 3,100 with every applied sample verified.
+
+R104 重试后的两条原生 CPU 回放验证了头目的抱摔。交替按叉键和三角键后，第 4,018 帧
+触发挣脱。Gene 在第 4,104 帧以 100 HP 回到站立，随后能用左摇杆移动，并再次发动
+三角攻击。回放逐条核对了 4,250 个手柄采样。保持无输入时，会生成原版抱摔特效包，
+并在第 4,108 帧扣除 23 HP，Gene 于第 4,292 帧以 77 HP 站起。第二条回放核对了
+全部 4,350 个采样。独立的 Direct3D 回放在第 3,252 帧呈现抱摔，第 3,256 帧
+呈现画面扭曲，Gene 已降到 77 HP。回放到第 3,280 帧共呈现 2,967 个场景帧，
+渲染和窗口均无报错。
+
+使用原版新游戏默认装备的独立测试档中，第 2,627 帧按一次三角键，在第 2,656 帧和
+第 2,659 帧各造成 12 点伤害，头目血量由 1,070 降到 1,046 HP。3,100 个手柄采样逐条一致。
+
 ## R104 Retry and ten R100 west defeats
 
 An original-format three-card R101 test save reaches R104 through the keycard

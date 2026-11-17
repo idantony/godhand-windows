@@ -529,8 +529,9 @@ gh_effect_status gh_esp04_initialize_002e64b0(gh_esp14_instance *s,
     const int heat_activation = word(p + 0x23a) == 0x00220000u &&
         !word(r + 0x16c) && r[0x12e] >= 7 && r[0x12e] <= 9;
     const int debris = om307 && word(r + 0x16c) == 2 && r[0x12e] == 2;
+    const int held_impact = paired_throw && word(p + 0x23a) == 0x001900a8u && word(r + 0x170) == 3;
     if (!v->target120_known_null || word(p + 0x120) || (!paired_throw && !heat_activation && !charge && !debris) ||
-        word(r + 0x170) || r[0x174] || word(r + 0x18c) || r[0x190] || r[0x191] || r[0x192])
+        (word(r + 0x170) && !held_impact) || r[0x174] || word(r + 0x18c) || r[0x190] || r[0x191] || r[0x192])
         return GH_EFFECT_UNSUPPORTED;
     if (s->stage && (s->effects != b->effects || s->slot != slot || s->serial != v->serial))
         return GH_EFFECT_ARGUMENT;
@@ -711,6 +712,9 @@ static gh_effect_status move_esp04_ballistic_002e7098(const gh_esp14_bindings *b
     for (unsigned i = 0; i < 3; ++i) hit_pos[i] = add(hit_pos[i], multiply(normal[i], 0.1f));
     status = set_esp04_world_position(b, slot, v, hit_pos, frontier);
     if (status) return status;
+    /* Original 2E7410 pauses mode 3 on the first solid contact. */
+    if (word(p + 0x2d8) == 3)
+        return gh_effect_create_esp_pause_002fbe50(b->effects, slot, v->serial, frontier);
     float dot = 0, length_squared = 0, reflection_squared = 0, reflected[3];
     for (unsigned i = 0; i < 3; ++i) {
         dot = add(dot, multiply(-velocity[i], normal[i]));
@@ -747,7 +751,9 @@ gh_effect_status gh_esp04_move_after_base_002e6868(gh_esp14_instance *s,
         return GH_EFFECT_ARGUMENT;
     uint8_t *p = current.payload;
     if (!(word(p + 0x2dc) & 1)) {
-        if (word(p + 0x2d8)) return GH_EFFECT_UNSUPPORTED;
+        const uint32_t impact_mode = word(p + 0x2d8);
+        const int held_impact = impact_mode == 3 && word(p + 0x23a) == 0x001900a8u;
+        if (impact_mode && !held_impact) return GH_EFFECT_UNSUPPORTED;
         gh_effect_status status;
         switch (word(p + 0x2d4)) {
         case 0:

@@ -179,6 +179,14 @@ Direct3D replay presents the second hit on the boss as its HP reaches 991.
 In R100's west area, a replay earns and activates Heat and records ten of the
 twelve defeats required by the original gate.
 
+After R104 Retry, recorded controls exercise both outcomes of the boss's hold.
+Alternating Cross and Triangle frees Gene at 100 HP. He can then walk and
+start another Triangle attack. Waiting in the hold triggers the original
+impact and recovery, leaving Gene at 77 HP. Direct3D also presents the hold
+and its distortion effect. A separate test save initialized
+with the original New Game equipment verifies two 12-point contacts from one
+Triangle press, taking the boss from 1,070 to 1,046 HP.
+
 - Read-only access to 1445 resources and 81 overlays from the user's patched
   NTSC-U `SLUS-21503` disc. All 81 overlay hashes match the pinned upstream
   manifest; the boot ELF and loaded image differ from its retail baseline.
@@ -483,6 +491,12 @@ R104 的原版重试菜单已经能在 Gene 战败后接收回放中的叉键。
 恢复检查点并继续战斗，Gene 回到 100 HP，头目回到 1,000 HP。另一条 Direct3D
 回放呈现了第二次命中，头目血量降到 991。R100 西区的回放通过原版输入积攒并激活
 热血，已记入开门所需的十二次击倒中的十次。
+
+R104 重试后，原生手柄回放验证了头目抱摔的两种结果。交替按叉键和三角键，
+Gene 能以 100 HP 挣脱，随后可以移动并再次发动三角攻击。保持无输入会触发原版抱摔
+受击与起身流程，Gene 剩余 77 HP。Direct3D 回放也呈现了抱摔与屏幕扭曲效果。
+另一份测试档使用原版新游戏的默认装备，一次三角键
+连中两段，每段扣 12 点，头目血量从 1,070 降到 1,046 HP。
 
 - 从用户补丁镜像只读索引 1445 项资源和 81 个动态模块。模块哈希与固定上游一致；
   补丁主程序和加载映像与上游零售版不同，不能照搬其匹配结论。
