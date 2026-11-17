@@ -366,10 +366,10 @@ static gh_game_event_status extra_standalone(gh_event_actor_extra *s,
         }
     }
     if (request->source_kind == 0x650) p[0x2b5] = (uint8_t)-10;
-    if (request->packed_resource || request->source_kind == 0x630 || request->source_kind == 0x631 ||
+    if (request->packed_resource || request->source_kind == 0x61a || request->source_kind == 0x630 || request->source_kind == 0x631 ||
         request->source_kind == 0x634 || request->source_kind == 0x639) p[0x4d8] = 1;
     static const uint8_t one_body_meshes[][9] = {"HD_01", "z_hana", "z_hana_m"};
-    if (request->packed_resource) {
+    if (request->packed_resource || request->source_kind == 0x61a) {
         /* 2B83B8 sets one-body and hides the same three child meshes. */
         if (frontier) *frontier = 0x14a338;
         for (unsigned i = 0; i < sizeof(one_body_meshes) / sizeof(*one_body_meshes); ++i) {
@@ -494,9 +494,10 @@ static gh_game_event_status extra_ev04_accessory(gh_event_actor_extra *s,
     gh_game_event_status status = extra_standalone(s, request, handle, original, frontier);
     if (status) return status;
     *original = 0;
-    const unsigned index = request->source_kind == 0x615 ? 0 : 1;
-    const uint16_t kind = index ? 0x628 : 0x253;
-    const unsigned parent_part = index ? 17 : 2;
+    const int em57 = request->source_kind == 0x625;
+    const unsigned index = em57 ? 1 : request->source_kind == 0x61a ? 2 : 0;
+    const uint16_t kind = em57 ? 0x628 : 0x253;
+    const unsigned parent_part = em57 ? 17 : 2;
     uint8_t *work = request->work;
     gh_event_actor_factory *body = &s->bindings.roster->rows[request->actor_index];
     gh_event_actor_factory *accessory = &s->ev04_accessory[index];
@@ -514,7 +515,7 @@ static gh_game_event_status extra_ev04_accessory(gh_event_actor_extra *s,
     if (made) {
         status = initialize_ev04_accessory(s, accessory, &s->ev04_accessory_springs[index], frontier);
         if (status) return status;
-        if (frontier) *frontier = index ? 0x27b260 : 0x27a768;
+        if (frontier) *frontier = em57 ? 0x27b260 : 0x27a768;
         if (gh_actor_model_bind_external_parent(&accessory->model, 0, &body->model, parent_part, accessory))
             return GH_EVENT_CALLEE;
         uint8_t *raw = accessory->object.view.bytes;
@@ -523,8 +524,8 @@ static gh_game_event_status extra_ev04_accessory(gh_event_actor_extra *s,
         put(raw + 0x2f0, word(raw + 0x2f0) | 1);
         put(raw + 0x250, word(raw + 0x250) | 0x10000);
     }
-    put(work + 0x30, index ? 0x257 : 0x253);
-    if (!index) {
+    put(work + 0x30, em57 ? 0x257 : 0x253);
+    if (!em57) {
         body->object.view.bytes[0x2fa0] = 1; /* SetBustFlag. */
         work[0x24] |= 8;
     } else {
@@ -604,14 +605,17 @@ gh_game_event_status gh_event_actor_extra_run(void *opaque, const gh_event_actor
     if (request->source_kind == 0x60a) {
         return attach_olivia_accessory(s, request, handle, original_success, frontier);
     }
-    if (request->data && request->data->components && request->data->components->event_no == 4) {
+    if (request->data && request->data->components &&
+        (request->data->components->event_no == 4 ||
+         (request->info && gh_event_actor_ev07_shared_source_kind(request->data->components->event_no,
+            request->actor_index,request->source_kind,request->info[4])))) {
         switch (request->source_kind) {
         case 0x610:
             return extra_el10(s, request, handle, original_success, frontier);
         case 0x611: case 0x612: case 0x616: case 0x617:
         case 0x621: case 0x622: case 0x626: case 0x627:
             return attach_el_pair(s, request, handle, original_success, frontier);
-        case 0x615: case 0x625:
+        case 0x615: case 0x61a: case 0x625:
             return extra_ev04_accessory(s, request, handle, original_success, frontier);
         case 0x618:
             if (s->ev04_accessory[0].handle)

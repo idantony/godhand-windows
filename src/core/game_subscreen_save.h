@@ -1,6 +1,7 @@
 #ifndef GH_GAME_SUBSCREEN_SAVE_H
 #define GH_GAME_SUBSCREEN_SAVE_H
 #include "game_children.h"
+#include "game_cockpit.h"
 #include "dvd_jobs.h"
 #include "game_init.h"
 #include "game_title_player.h"
@@ -43,7 +44,13 @@ typedef gh_child_status (*gh_save_map_trans_submit)(void *,gh_id_base *,
 gh_child_status gh_game_children_draw_with_save_map_00160b90(const gh_game_children *,
     const gh_boot_work *,gh_render_draw_env *,gh_child_cover_submit,
     gh_save_map_trans_submit,void *context,uint32_t *frontier);
-/* Actual Door-only SubScrOn(3,2,0x11), sharing the nine-child owner. */
+/* Original163C58's texture quads use the same 15BCF0 packet as the radar. */
+gh_child_status gh_game_children_save_map_route_quads(const gh_game_children *,
+    const gh_id_state *,gh_cockpit_radar_quad quads[2],size_t *count,uint32_t *frontier);
+/* Child3 selected by Results (variant 1) and the ordinary Door (variant 2). */
+gh_child_status gh_game_children_save_map_open_variant_00160020(gh_game_children *,
+    const gh_save_map_bindings *,unsigned variant,int *started,uint32_t *frontier);
+/* Actual Door SubScrOn(3,2,0x11), sharing the nine-child owner. */
 gh_child_status gh_game_children_save_map_open_00160020(gh_game_children *,const gh_save_map_bindings *,int *started,uint32_t *frontier);
 /* Actual 1601D8 states for the ordinary Door map and mode0 save handoff.
  * Call on ordinary scene visits. The outer scene pumps DVD and Fade. */

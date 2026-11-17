@@ -137,16 +137,17 @@ static gh_game_event_status mapped_keys(const gh_event_data_prefix *data,
     const int object_light = index == OBJECT_LIGHT;
     const int ev05 = event == 5;
     const int ev06 = event == 6;
+    const int ev07 = event == 7;
     const int ev1a = event == 0x1a;
     const int ev1b = event == 0x1b;
-    if ((!ev05 && !ev06 && !ev1a && !ev1b && event != 1 && event != 2 && event != 4) ||
-        data->camera_count != (ev05 ? 18 : ev06 ? 14 : ev1a ? 11 : ev1b ? 12 : event == 1 ? 10 : event == 2 ? 28 : 24))
+    if ((!ev05 && !ev06 && !ev07 && !ev1a && !ev1b && event != 1 && event != 2 && event != 4) ||
+        data->camera_count != (ev05 ? 18 : ev06 ? 14 : ev07 ? 22 : ev1a ? 11 : ev1b ? 12 : event == 1 ? 10 : event == 2 ? 28 : 24))
         return GH_EVENT_UNSUPPORTED;
     static const uint8_t ev1b_light_cuts[] = {0, 6, 7, 8, 11};
     static const uint8_t ev1b_filter_cuts[] = {1, 2, 4, 5, 7, 8, 9, 10, 11};
     static const uint8_t ev05_filter_cuts[] = {1,7,8,9,12,15,16};
     static const uint8_t ev06_filter_cuts[] = {0,1,2,3,5,7,8,9,10,11,12,13};
-    const unsigned count = ev05 ? (object_light ? 1 : sizeof(ev05_filter_cuts)) :
+    const unsigned count = ev07 ? (object_light ? 1 : 24) : ev05 ? (object_light ? 1 : sizeof(ev05_filter_cuts)) :
         ev06 ? (object_light ? 1 : sizeof(ev06_filter_cuts)) :
         ev1a ? (object_light ? 1 : 8) :
         ev1b ? (object_light ? sizeof(ev1b_light_cuts) : sizeof(ev1b_filter_cuts)) :
@@ -159,6 +160,7 @@ static gh_game_event_status mapped_keys(const gh_event_data_prefix *data,
         unsigned cut = i;
         if (ev05) cut = object_light ? 0 : ev05_filter_cuts[i];
         else if (ev06) cut = object_light ? 0 : ev06_filter_cuts[i];
+        else if (ev07 && !object_light) cut=i<=12 ? i : i<=14 ? 12 : i-2;
         else if (ev1b) cut = object_light ? ev1b_light_cuts[i] : ev1b_filter_cuts[i];
         else if (ev1a && !object_light) {
             static const uint8_t cuts[] = {0, 1, 2, 3, 4, 5, 8, 9};
@@ -167,11 +169,12 @@ static gh_game_event_status mapped_keys(const gh_event_data_prefix *data,
         else if (object_light && event == 1) cut = 1;
         if (!object_light && event == 2 && i >= 16) cut += 3;
         const unsigned frame = read_half(key + 6);
-        const uint32_t supported_modes = event == 4 ? (object_light ? 1u : 3u) : 0;
+        const unsigned ev07_frame=ev07&&!object_light ? i==13 ? 67 : i==14 ? 76 : 0 : 0;
+        const uint32_t supported_modes = ev07&&!object_light&&i==13 ? 1u : event == 4 ? (object_light ? 1u : 3u) : 0;
         uint16_t length;
         gh_event_camera_cut camera;
         if (read_word(key) != (0xffffu | cut << 24) || read_half(key + 4) ||
-            (event != 4 && frame) || (read_word(key + 8) & ~supported_modes) ||
+            (event != 4 && frame!=ev07_frame) || (read_word(key + 8) & ~supported_modes) ||
             gh_event_camera_cut_at(data, cut, &camera) || !camera.primary ||
             gh_event_camera_cut_length_00004e60(data, cut, &length) || frame >= length)
             return GH_EVENT_UNSUPPORTED;

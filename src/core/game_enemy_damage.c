@@ -165,6 +165,13 @@ static int r104_em03_damage_receiver(const gh_enemy_actor *enemy,const uint8_t *
         half(actor+0x2fe)==0x203&&word(actor+0x564)==0x250;
 }
 
+/* The original amplified Give12 chooses the EM03 fall and doubles its power. */
+static int r104_amplified_triangle_fall(const gh_enemy_actor *enemy,const uint8_t *p)
+{
+    return r104_em03_damage_receiver(enemy,p)&&half(p+0x2f4)==0x0701&&
+        !p[0x2f7]&&word(p+0x17b4)==24;
+}
+
 static int triangle_take_supported(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
     return effect==0x12&&(r100_stamp19(enemy,actor)||r100_stamp20(enemy,actor)||
         r100_stamp8(enemy,actor)||r100_at2_em03(enemy,actor)||r104_em03_damage_receiver(enemy,actor)||
@@ -249,7 +256,8 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
         (half(view->bytes+0x2fe)!=0x202&&!r103_arena_punch_target(enemy,word(view->bytes+0x564))&&
          !r103_arena_em0a(enemy,view->bytes)&&!r103_boss_player_strike_target(enemy,view->bytes)&&
          !r104_player_punch(enemy,view->bytes,7)&&
-         !(r104_em03_damage_receiver(enemy,view->bytes)&&word(player->bytes+0x5e8)==29&&power==12)) ||
+         !(r104_em03_damage_receiver(enemy,view->bytes)&&word(player->bytes+0x5e8)==29&&
+           power==((half(view->bytes+0x3ac)&0x100u)?24:12))) ||
         !enemy->hitareas.created[0])
         return stop(frontier, 0x20a5dc);
     const gh_hitarea_object *body = &enemy->hitareas.units[0];
@@ -1120,14 +1128,14 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int r104_braced=r104_punch&&p[0x2f5]==0x21;
     /* Give12 from default set1 ID29 uses the same original dep0250 probes
      * at the rear of the charge and during the melee ending contact. */
-    const int melee_end=half(p+0x2f4)==0x1600&&p[0x2f6]==1&&half(p+0x3ac)==0x10;
+    const int em03_combo=half(p+0x2f4)==0x1600&&p[0x2f6]<=1;
     const int fast_melee=half(p+0x2f4)==0x1500&&p[0x2f6]==1&&half(p+0x3ac)==0x800&&
         (word(p+0x16d4)&0x400u);
     const int r104_triangle_recoil=half(p+0x2f4)==0x0101&&
         (p[0x2f6]==3||(p[0x2f6]==1&&!half(p+0x3ac)));
     const int idle_move=!half(p+0x2f4)&&p[0x2f6]==1&&!half(p+0x3ac);
     const int r104_triangle=triangle&&r104_em03_damage_receiver(enemy,p)&&
-        ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||melee_end||fast_melee||idle_move)&&
+        ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||em03_combo||fast_melee||idle_move)&&
         !p[0x2f7]&&word(player->bytes+0x5e8)==29&&
         word(body->bytes+0x4c)==12&&rank==1&&!body->state->heat[0x10];
     const int boss_recovery=r104_recovery||r104_triangle||em27_punch;
@@ -1187,7 +1195,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             r100_west_em02_em03(enemy,p) && p[0x2f5] == 0x18 && p[0x2f6] == 1;
         const int boss_heat=heat_contact&&boss_strike&&p[0x2f6]==1&&
             (p[0x2f5]==0x4b||(dependency==0x214&&p[0x2f5]==0x16));
-        const int verified_motion = boss_heat || ((amplified_triangle || heat_contact || boss_square || opening_attack_contact || back_circle || r102_em00 || r101_square ||
+        const int verified_motion = (r104_triangle&&em03_combo) || boss_heat || ((amplified_triangle || heat_contact || boss_square || opening_attack_contact || back_circle || r102_em00 || r101_square ||
             (r102_stamp2_punch(enemy, p, effect) && p[0x2f6] == 1)) && p[0x2f5] == 0x15) ||
             formation_capture || ((r102_em00 || r101_square) && p[0x2f5] == 0x4b && p[0x2f6] == 1);
         if ((!verified_motion&&(!r104_punch||r104_recovery||r104_braced)) || p[0x2f4] || p[0x2f7] || !rank)
@@ -1549,7 +1557,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             }
         }
         /* 20D218 returns before the counter RNG on the amplified effect-7 Take. */
-        const int skip_counter = (flags & 0x100u) && ((boss_strike&&effect==7) || r102_close_em00_punch(enemy, p, effect) ||
+        const int skip_counter = (flags & 0x100u) && (r104_triangle||(boss_strike&&effect==7) || r102_close_em00_punch(enemy, p, effect) ||
             r102_stamp2_punch(enemy, p, effect));
         if (!skip_counter && !word(player->bytes + 0x5fc) && block <= 0 &&
             !body->state->heat[0x10] && !(number(p + 0x17cc) > 0)) {
@@ -1689,7 +1697,9 @@ counter_cue:
         /* 20BD94 sends amplified effect 7 for 020A and the twins to 20BDE0. */
         const int amplified_square = (half(p + 0x3ac) & 0x100u) &&
             ((boss_strike&&effect==7)||r102_stamp2_punch(enemy,p,effect));
-        p[0x2f5] = triangle ? (stunned ? 7 : 1) : (stunned || amplified_square ? 1 : 0);
+        /* 20BF34 uses the fall for Give12 if stunned or amplified. */
+        const int triangle_fall=stunned||(r104_triangle&&(half(p+0x3ac)&0x100u));
+        p[0x2f5] = triangle ? (triangle_fall ? 7 : 1) : (stunned || amplified_square ? 1 : 0);
         p[0x2f6] = p[0x2f7] = 0;
         call->reacted = 1;
         call->phase = 5;
@@ -1809,7 +1819,7 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
         (amplified && !shockwave && !heat_contact && !back_circle && !boss_square && !r104_punch &&
          !r101_key_carrier_punch(enemy,p,effect) && !r101_side_arena_punch(enemy,p,effect) &&
          !(triangle && (r100_amplified_triangle_receiver(enemy,p) ||
-        r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p) || r103_boss_player_strike_target(enemy,p))) &&
+        r104_amplified_triangle_fall(enemy,p) || r103_first_wave_em00(enemy) || r103_arena_em0a(enemy,p) || r103_boss_player_strike_target(enemy,p))) &&
          !r102_close_em00_punch(enemy, p, effect) && !r102_stamp2_punch(enemy, p, effect)))
         return stop(frontier, 0x208f34);
     unsigned increment = 10;
@@ -2067,7 +2077,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     }
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     const int amplified_triangle = call->effect == 0x12 &&
-        (r100_amplified_triangle_receiver(enemy,p) || r103_first_wave_em00(enemy) ||
+        (r100_amplified_triangle_receiver(enemy,p) || r104_amplified_triangle_fall(enemy,p) ||
+         r103_first_wave_em00(enemy) ||
          r103_arena_em0a(enemy,p) || r103_boss_player_strike_target(enemy,p));
     const int boss_square=take_effect==7&&r103_boss_player_strike_target(enemy,p);
     const int r104_punch=take_effect==7&&!call->effect&&take_power==3&&

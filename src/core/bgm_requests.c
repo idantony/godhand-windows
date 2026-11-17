@@ -377,6 +377,8 @@ gh_bgm_status gh_bgm_event_prefetch_002d1c78(gh_bgm_requests *s,
     case 0x201d06: path="se/ev/ev05.afs";break;
     case 0x142462: path="se/ev/ev05.afs";authored_offset=0x202800;authored_member=1;break;
     case 0x30f54a: path="se/ev/ev06.afs";break;
+    case 0x66a83a: path="se/ev/ev07.afs";break;
+    case 0x2ec59a: path="se/ev/ev08.afs";break;
     case 0x18008e: path="se/ev/ev1a.afs";break;
     case 0x1ad45a: path="se/ev/ev1b.afs";break;
     default:return fail(s,0x32bb48,GH_BGM_DISC);

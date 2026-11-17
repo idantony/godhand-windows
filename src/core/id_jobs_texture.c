@@ -72,7 +72,7 @@ gh_id_error gh_id_texture_open_view(const gh_id_view *source,gh_id_texture *out)
  t.tex0=u64(t.source.bytes+32);
  {unsigned psm=(unsigned)((t.tex0>>20)&63),power=(unsigned)((t.tex0>>30)&15);
   unsigned tw=(unsigned)((t.tex0>>26)&15);if(((t.tex0>>51)&31)!=0)return GH_ID_UNSUPPORTED;
-  if(psm==19){if(t.tex0==GH_ID_PAD_ICON_TEX0){t.width=128;t.height=128;*out=t;return GH_ID_OK;}if(t.tex0==UINT64_C(0x20000001e1310000)){t.width=256;t.height=128;*out=t;return GH_ID_OK;}if(t.tex0==GH_ID_RADAR_TEX0){t.width=128;t.height=256;*out=t;return GH_ID_OK;}if(tw!=9||(power!=8&&power!=9))return GH_ID_UNSUPPORTED;}
+  if(psm==19){if(t.tex0==GH_ID_PAD_ICON_TEX0){t.width=128;t.height=128;*out=t;return GH_ID_OK;}if(t.tex0==UINT64_C(0x20000001e1310000)){t.width=256;t.height=128;*out=t;return GH_ID_OK;}if(t.tex0==GH_ID_RADAR_TEX0){t.width=128;t.height=256;*out=t;return GH_ID_OK;}if(t.tex0==GH_ID_SAVE_MAP_MARKER_TEX0){t.width=256;t.height=256;*out=t;return GH_ID_OK;}if(tw!=9||(power!=8&&power!=9))return GH_ID_UNSUPPORTED;}
   else if(psm==20){if(tw!=9||power!=9||((t.tex0>>56)&31))return GH_ID_UNSUPPORTED;}
   else return GH_ID_UNSUPPORTED;
   t.width=512;t.height=(uint16_t)(1U<<power);
@@ -123,7 +123,9 @@ gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity
  int level=t->width==256&&t->height==128&&t->tex0==UINT64_C(0x20000001e1310000);
  int pad_icon=t->width==128&&t->height==128&&t->tex0==GH_ID_PAD_ICON_TEX0;
  int radar=t->width==128&&t->height==256&&t->tex0==GH_ID_RADAR_TEX0;
- if(t->source.size<48||(!level&&!radar&&!pad_icon&&(t->width!=512||(t->height!=256&&t->height!=512))))return GH_ID_UNSUPPORTED;
+ int map_marker=t->width==256&&t->height==256&&t->tex0==GH_ID_SAVE_MAP_MARKER_TEX0;
+ if(t->source.size<48||(!level&&!radar&&!pad_icon&&!map_marker&&
+    (t->width!=512||(t->height!=256&&t->height!=512))))return GH_ID_UNSUPPORTED;
  psm=(unsigned)((t->tex0>>20)&63);if(psm!=19&&(psm!=20||t->height!=512||((t->tex0>>51)&63)||((t->tex0>>56)&31)))return GH_ID_UNSUPPORTED;
  memset(&slot,0,sizeof(slot));slot.bound=1;slot.mst=t->source.bytes;slot.mst_size=t->source.size;
  for(i=0;i<2;i++){slot.table_offset[i]=u32(slot.mst+8+i*4);slot.table_count[i]=u16(slot.mst+16+i*2);}

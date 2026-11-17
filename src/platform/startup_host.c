@@ -491,6 +491,15 @@ static gh_child_status scene_menu_cover(void *context,const gh_child_cover_quad 
 static gh_child_status scene_save_map_trans(void *context,gh_id_base *base,uint16_t chapter_message,uint32_t *frontier)
 {
     gh_startup_host *h=context;
+    gh_cockpit_radar_quad route[2];
+    size_t route_count=0;
+    gh_child_status route_status=gh_game_children_save_map_route_quads(h->game_children,
+        h->id_global,route,&route_count,frontier);
+    if(route_status)return route_status;
+    for(size_t i=0;i<route_count;++i){
+        const gh_id_error error=scene_cockpit_radar(h,&route[i],frontier);
+        if(error)return error==GH_ID_MEMORY?GH_CHILD_MEMORY:GH_CHILD_UNSUPPORTED;
+    }
     gh_id_draw_job jobs[64];
     gh_id_frontier id_frontier={0};
     size_t count=0;

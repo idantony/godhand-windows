@@ -115,6 +115,11 @@ static gh_game_event_status check_effect_borrows(const gh_event_actor_release *s
     const gh_event_actor_factory *actor, uint32_t *frontier) {
     if (!s->bindings.effects) return GH_EVENT_OK;
     if (frontier) *frontier = 0x312778;
+    if (s->bindings.creation->bindings.data->components->event_no==7 &&
+        actor->kind==0x610 && !actor->actor_index) {
+        const gh_effect_status status=gh_effect_create_detach_ev07_stopped_effects(s->bindings.effects,&actor->object.view);
+        if(status)return status==GH_EFFECT_UNSUPPORTED?GH_EVENT_UNSUPPORTED:GH_EVENT_CALLEE;
+    }
     int borrowed;
     if (gh_effect_create_actor_has_live_refs(s->bindings.effects, &actor->object.view, &borrowed))
         return GH_EVENT_CALLEE;
@@ -152,14 +157,15 @@ static gh_game_event_status release_associated(gh_event_actor_release *s, size_t
     // Original row deletion can leave soon-to-be-deleted children with a
     // stale guest parent. Remove only the matching native borrows before free.
     gh_actor_model *target = &s->bindings.roster->rows[index].model;
-    if (source_kind == 0x615 || source_kind == 0x625) {
+    if (source_kind == 0x615 || source_kind == 0x61a || source_kind == 0x625) {
         // REL 2968 deletes the row+2C accessory before deleting its body.
         // Both virtual destructors converge on 2A73C8 -> 14EA28 -> 14E5D0.
         const int em57 = source_kind == 0x625;
-        gh_event_actor_factory *accessory = &extra->ev04_accessory[em57];
+        gh_event_actor_factory *accessory = &extra->ev04_accessory[em57 ? 1 : source_kind == 0x61a ? 2 : 0];
         if (accessory->bound) {
             if (frontier) *frontier = 0x312778;
-            if (s->bindings.creation->bindings.data->components->event_no != 4 ||
+            const int event=s->bindings.creation->bindings.data->components->event_no;
+            if ((event!=4&&event!=7) ||
                 accessory->actor_index != index || accessory->kind != (em57 ? 0x628 : 0x253))
                 return GH_EVENT_ARGUMENT;
             gh_game_event_status status = check_effect_borrows(s, accessory, frontier);

@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <wchar.h>
 #include "memory_card.h"
-enum {MC_INFO=1,MC_ICON,MC_SAVE_OPEN,MC_SAVE_READ,MC_SAVE_CLOSE,MC_SAVE_RECORD,MC_SAVE_WRITE_OPEN,MC_SAVE_WRITE,MC_SLOT_DIRECTORY,MC_SLOT_CREATE,MC_SAVE_ICON_OPEN,MC_SAVE_ICON_WRITE};
+enum {MC_INFO=1,MC_ICON,MC_SAVE_OPEN,MC_SAVE_READ,MC_SAVE_CLOSE,MC_SAVE_RECORD,MC_SAVE_WRITE_OPEN,MC_SAVE_WRITE,MC_SLOT_DIRECTORY,MC_SLOT_CREATE,MC_SAVE_ICON_OPEN,MC_SAVE_ICON_WRITE,MC_SAVE_ICON_DELETE};
 struct gh_memory_card {wchar_t root[1024];unsigned command,slot,ended;HANDLE save;uint8_t *header;const uint8_t *write_record;unsigned writing,icon_kind;uint32_t write_bytes;};
 gh_mc_error gh_memory_card_open(const char *root,gh_memory_card **out)
 {
@@ -76,6 +76,14 @@ gh_mc_error gh_memory_card_request_slot_create(gh_memory_card *c,uint32_t slot)
     if(!e)c->slot=slot;
     return e;
 }
+gh_mc_error gh_memory_card_request_save_icon_delete(gh_memory_card *c,uint32_t slot)
+{
+    if(!c||slot>=20)return GH_MC_ARGUMENT;
+    if(c->save)return GH_MC_BUSY;
+    gh_mc_error e=request(c,MC_SAVE_ICON_DELETE);
+    if(!e)c->slot=slot;
+    return e;
+}
 static uint32_t icon_write_bytes(gh_mc_save_icon_kind kind)
 {
     if(kind==GH_MC_SAVE_ICON_MODEL)return 0x8618;
@@ -110,7 +118,8 @@ static gh_mc_error slot_file(gh_memory_card *c,unsigned command,gh_mc_result *r)
     int length=swprintf(path,1100,L"%ls\\%ls",c->root,folder);
     if(length<0 || length>=1100)return GH_MC_ARGUMENT;
     const int writing=command==MC_SAVE_WRITE_OPEN||command==MC_SAVE_ICON_OPEN;
-    if(writing||command==MC_SLOT_CREATE){
+    const int deleting=command==MC_SAVE_ICON_DELETE;
+    if(writing||deleting||command==MC_SLOT_CREATE){
         DWORD root=GetFileAttributesW(c->root);
         if(root==INVALID_FILE_ATTRIBUTES)return GH_MC_IO;
         if(!(root&FILE_ATTRIBUTE_DIRECTORY)||(root&FILE_ATTRIBUTE_REPARSE_POINT))
@@ -130,7 +139,7 @@ static gh_mc_error slot_file(gh_memory_card *c,unsigned command,gh_mc_result *r)
     if(command==MC_SLOT_CREATE)return GH_MC_OK;
     if(command==MC_SLOT_DIRECTORY){r->result=1;return GH_MC_OK;}
     const wchar_t *basename=folder;
-    if(command==MC_ICON||(command==MC_SAVE_ICON_OPEN&&c->icon_kind==GH_MC_SAVE_ICON_SYSTEM))
+    if(command==MC_ICON||deleting||(command==MC_SAVE_ICON_OPEN&&c->icon_kind==GH_MC_SAVE_ICON_SYSTEM))
         basename=L"icon.sys";
     else if(command==MC_SAVE_ICON_OPEN)basename=L"godh0.ico";
     if((size_t)length+1+wcslen(basename)>=1100)return GH_MC_ARGUMENT;
@@ -144,7 +153,8 @@ static gh_mc_error slot_file(gh_memory_card *c,unsigned command,gh_mc_result *r)
         if(r->result)r->file_bytes=((uint64_t)icon.nFileSizeHigh<<32)|icon.nFileSizeLow;
         return GH_MC_OK;
     }
-    HANDLE file=CreateFileW(path,writing?GENERIC_WRITE:GENERIC_READ,FILE_SHARE_READ,0,
+    DWORD access=deleting?(DELETE|FILE_READ_ATTRIBUTES):writing?GENERIC_WRITE:GENERIC_READ;
+    HANDLE file=CreateFileW(path,access,FILE_SHARE_READ,0,
                             writing?OPEN_ALWAYS:OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,0);
     if(file==INVALID_HANDLE_VALUE){
         if(!missing(GetLastError()))return GH_MC_IO;
@@ -154,8 +164,14 @@ static gh_mc_error slot_file(gh_memory_card *c,unsigned command,gh_mc_result *r)
     BY_HANDLE_FILE_INFORMATION info;
     if(!GetFileInformationByHandle(file,&info)){CloseHandle(file);return GH_MC_IO;}
     if((info.dwFileAttributes&(FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY))||
-       (writing&&info.nNumberOfLinks!=1)){
+       ((writing||deleting)&&info.nNumberOfLinks!=1)){
         CloseHandle(file);return GH_MC_UNSUPPORTED;
+    }
+    if(deleting){
+        FILE_DISPOSITION_INFO disposition={TRUE};
+        const BOOL deleted=SetFileInformationByHandle(file,FileDispositionInfo,&disposition,sizeof(disposition));
+        const BOOL closed=CloseHandle(file);
+        return deleted&&closed?GH_MC_OK:GH_MC_IO;
     }
     c->save=file;c->writing=(unsigned)writing;
     return GH_MC_OK;
@@ -183,7 +199,7 @@ gh_mc_error gh_memory_card_poll(gh_memory_card *c,int *done,gh_mc_result *r)
             r->free_clusters=available.QuadPart/1024>INT32_MAX?INT32_MAX:(int32_t)(available.QuadPart/1024);
         }
     } else if(command==MC_ICON||command==MC_SAVE_OPEN||command==MC_SAVE_WRITE_OPEN||command==MC_SLOT_DIRECTORY||
-              command==MC_SLOT_CREATE||command==MC_SAVE_ICON_OPEN) {
+              command==MC_SLOT_CREATE||command==MC_SAVE_ICON_OPEN||command==MC_SAVE_ICON_DELETE) {
         gh_mc_error e=slot_file(c,command,r);
         if(e)return e;
     } else if(command==MC_SAVE_READ) {

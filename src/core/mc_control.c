@@ -775,11 +775,10 @@ static gh_mc_save_status save_select(gh_mc_save_control *save,gh_mc_control_stat
             else if(save->free_clusters<150)return save_fail(frontier,0x5120,GH_MC_SAVE_UNSUPPORTED);
             else select_phase(checks,7);
         }else if(!save->choice)select_phase(checks,6);
-        else if(checks->phase==8)return save_fail(frontier,0x5a20,GH_MC_SAVE_UNSUPPORTED);
         else{
             clear_progress(control);
             checks->mode=3;
-            select_phase(checks,10);
+            select_phase(checks,checks->phase==8?9:10);
         }
         return GH_MC_SAVE_PENDING;
     }
@@ -815,6 +814,27 @@ static gh_mc_save_status save_select(gh_mc_save_control *save,gh_mc_control_stat
         save->choice=(uint8_t)yes;
         checks->subphase=4;
     }
+    return GH_MC_SAVE_PENDING;
+}
+
+/* REL5A20 removes the occupied slot's icon.sys before writing phase 10. */
+static gh_mc_save_status save_remove_icon(gh_mc_save_control *save,gh_mc_control_state *control,
+    gh_mc_boot_checks *checks,gh_memory_card *card,uint32_t *frontier)
+{
+    if(!checks->subphase){
+        clear_progress(control);
+        checks->mode=3;
+        const gh_mc_save_status status=save_queue(
+            gh_memory_card_request_save_icon_delete(card,save->selected_slot),0x3390,frontier);
+        if(status!=GH_MC_SAVE_PENDING)return status;
+        checks->subphase=1;
+    }
+    int done;
+    int32_t result;
+    const gh_mc_save_status status=save_poll(card,&result,&done,frontier);
+    if(status!=GH_MC_SAVE_PENDING||!done)return status;
+    checks->error=result<0?6:-1; /* REL70F8 */
+    select_phase(checks,result<0?15:10);
     return GH_MC_SAVE_PENDING;
 }
 
@@ -1014,6 +1034,9 @@ gh_mc_save_status gh_mc_control_save_00003f78(gh_mc_save_control *save,gh_mc_con
     }
     case 6:case 7:case 8:
         status=save_select(save,control,common,bindings,providers,frontier);
+        break;
+    case 9:
+        status=save_remove_icon(save,control,checks,bindings->card,frontier);
         break;
     case 10:
         status=save_write_step(save,task,bindings->card,providers,frontier);

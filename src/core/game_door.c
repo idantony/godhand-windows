@@ -135,6 +135,62 @@ gh_door_status gh_game_door_request_jump_002004c8(gh_game_door *door,
  return begin(door,bindings);
 }
 
+static gh_door_status room_jump_pose(const uint8_t *table,size_t size,uint16_t room,
+ uint8_t point,float position[3],float *yaw)
+{
+ if(!table&&size)return GH_DOOR_ARGUMENT;
+ uint32_t xyz[3]={0};
+ float angle=0;
+ if(table){
+  if(size<0x10)return GH_DOOR_BOUNDS;
+  const uint32_t count=w(table),start=w(table+8);
+  if(count>(size-0x10)/4||start>size)return GH_DOOR_BOUNDS;
+  for(uint32_t i=0;i<count;++i){
+   const uint8_t *row=table+0x10+(size_t)i*4;
+   if(h(row)!=room)continue;
+   if(point<row[2]){
+    const size_t offset=((size_t)row[3]+point)*0x30;
+    if(offset>size-start||size-start-offset<0x30)return GH_DOOR_BOUNDS;
+    const uint8_t *record=table+start+offset;
+    for(unsigned axis=0;axis<3;++axis)xyz[axis]=w(record+axis*4);
+    const uint32_t yaw_bits=w(record+12);
+    memcpy(&angle,&yaw_bits,sizeof(angle));
+    if(angle< -3.14159274f||angle>3.14159274f)angle*=0.0174532924f;
+   }
+   break;
+  }
+ }
+ memcpy(position,xyz,sizeof(xyz));
+ *yaw=angle;
+ return GH_DOOR_OK;
+}
+
+gh_door_status gh_game_room_jump_set_next_pose_002be998(gh_boot_work *work,
+ const uint8_t *table,size_t size,uint16_t room,uint8_t point,float position[3],float *yaw)
+{
+ if(!work||!position||!yaw)return GH_DOOR_ARGUMENT;
+ const gh_door_status status=room_jump_pose(table,size,room,point,position,yaw);
+ if(status)return status;
+ memcpy((uint8_t *)work+0x5c0,position,12);
+ memcpy((uint8_t *)work+0x5d0,yaw,4);
+ return GH_DOOR_OK;
+}
+
+gh_door_status gh_game_door_set_casino_jump_point_002008b8(gh_game_door *door,
+ const uint8_t *table,size_t size,uint16_t room,uint8_t point)
+{
+ if(!door||!door->initialized)return GH_DOOR_ARGUMENT;
+ float position[3],yaw;
+ const gh_door_status status=room_jump_pose(table,size,room,point,position,&yaw);
+ if(status)return status;
+ memcpy(door->backup,position,12);
+ memcpy(door->backup+12,&yaw,4);
+ door->backup[16]=(uint8_t)room;
+ door->backup[17]=(uint8_t)(room>>8);
+ door->backup[18]=0xff;
+ return GH_DOOR_OK;
+}
+
 static int reset_clock_room(uint16_t room){return room==0x100||room==0x200||room==0x300||room==0x400||room==0x500||room==0x600||room==0x700||room==0x802||room==0x806;}
 /* Door progression prompt uses the same child3 and Save cursor owners as
  * SubScr Move. The Scenario end provider runs the real 2C3858 callbacks. */

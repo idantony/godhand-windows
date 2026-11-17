@@ -26,9 +26,12 @@ typedef struct {const void *identity;gh_game_effects *owner;gh_effect_create_req
  uint32_t configuration_nested_scale,configuration_nested_flags;
  const float *configuration_positioned_atan_coeff;
  uint32_t configuration_positioned_position[3],configuration_positioned_yaw;
+ float configuration_esp10_rotation[3],configuration_esp10_color[4];
  uint8_t configuration_positioned,configuration_part4_stun,configuration_death_part_zero,configuration_05288;
- uint8_t configuration_held_impact_part_zero;} gh_effect_create_call;
+ uint8_t configuration_held_impact_part_zero,configuration_esp10;} gh_effect_create_call;
 /* New original invocation only; same call must retain its cursor on error. */
+gh_effect_status gh_effect_create_ev07_nested_002effec(gh_effect_create_call *,uint32_t tag,const float position[3],
+ const float rotation[3],const float color[4],float scale);
 gh_effect_status gh_effect_create_begin(gh_effect_create_call *,const gh_effect_create_request *);
 gh_effect_status gh_effect_create_r101_weapon_002a8608(gh_effect_create_call *,
  const gh_title_player_view *weapon,const gh_title_player_view *selector,uint32_t index,uint32_t scale);
@@ -188,6 +191,7 @@ gh_effect_status gh_effect_create_esp_commit_type7(gh_game_effects *,unsigned sl
 unsigned gh_effect_esp_type15_copies(const gh_game_effects *,const gh_effect_esp_view *);
 gh_effect_status gh_effect_create_esp_commit_15(gh_game_effects *,unsigned slot,uint32_t serial);
 gh_effect_status gh_effect_create_esp_commit_14(gh_game_effects *,unsigned,uint32_t);
+gh_effect_status gh_effect_create_esp_commit_10(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_12(gh_game_effects *,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_commit_13(gh_game_effects *,unsigned,uint32_t);
 /* Non-SSD resource banks use the original one-based EST table index. */
@@ -225,6 +229,7 @@ gh_effect_status gh_effect_create_esp_finish_hidden_14(struct gh_esp14_instance 
  * Other effect borrows still have to clear before the actor is freed. */
 /* Release host attachments after their original effects stop reading the actor. */
 gh_effect_status gh_effect_create_prepare_actor_retirement(gh_game_effects *,const gh_title_player_view *);
+gh_effect_status gh_effect_create_detach_ev07_stopped_effects(gh_game_effects *,const gh_title_player_view *);
 gh_effect_status gh_effect_create_actor_has_live_refs(const gh_game_effects *,
  const gh_title_player_view *,int *borrowed);
 gh_effect_status gh_effect_create_esp_destroy_hidden_native(gh_game_effects *,unsigned,uint32_t,uint32_t *frontier);

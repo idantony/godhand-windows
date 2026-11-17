@@ -73,6 +73,7 @@ typedef struct {
 
 /* Source IDs from EV04's complete original 17-row actor table. */
 int gh_event_actor_ev05_ev06_source_kind(int32_t event,size_t row,uint16_t source);
+int gh_event_actor_ev07_shared_source_kind(int32_t event,size_t row,uint16_t source,uint8_t code);
 int gh_event_actor_ev04_source_kind(uint16_t);
 int gh_event_actor_packed_enemy(int32_t event,size_t row,uint16_t source,uint8_t code);
 

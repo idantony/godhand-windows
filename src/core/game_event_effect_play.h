@@ -15,6 +15,7 @@ typedef struct {
     gh_game_effects *effects;
     gh_boot_work *work;
     gh_effect_create_call create;
+    const gh_actor_model *sequence_model;
     const uint8_t *esp, *emitters;
     uint32_t cut;
     unsigned next_esp;

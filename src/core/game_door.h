@@ -58,6 +58,12 @@ gh_door_status gh_game_door_request_001fff30(gh_game_door *,const gh_game_door_b
  * and preserves the destination jump index before invoking 1FFF80. */
 gh_door_status gh_game_door_request_jump_002004c8(gh_game_door *,const gh_game_door_bindings *,
  const gh_bundle_entry *,uint8_t index,uint8_t kind,uint32_t flags,uint8_t force);
+/* Original 2BE998 selects the point and publishes Work's pending pose. */
+gh_door_status gh_game_room_jump_set_next_pose_002be998(gh_boot_work *,
+ const uint8_t *table,size_t table_size,uint16_t room,uint8_t point,float position[3],float *yaw);
+/* Original 2008B8 resolves the casino return point from RoomJmpTbl. */
+gh_door_status gh_game_door_set_casino_jump_point_002008b8(gh_game_door *,
+ const uint8_t *table,size_t table_size,uint16_t room,uint8_t point);
 /* Original per-frame1FFE10: wait decrement, Fade readiness,2000F8. No hidden
  * Fade stepping, no forced frame waits, and no room asset loading shortcut.
  * R020 kind1/force1 changes canonical Main state to5 and Work's next-room data;

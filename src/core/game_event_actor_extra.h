@@ -41,14 +41,14 @@ typedef struct {
     gh_actor_external_parent_set row_parts[16];
     uint8_t row_stage[16], row_mesh_cursor[6];
     gh_event_actor_factory olivia_accessory;
-    gh_event_actor_factory ev04_accessory[2];
+    gh_event_actor_factory ev04_accessory[3];
     gh_event_actor_factory *ev04_el18_accessory;
     gh_actor_external_parent_set accessory_parts;
     uint32_t accessory_handle;
     uint8_t olivia_stage;
     gh_event_spring_profile pendulum_profile;
     gh_event_spring_profile ev04_pendulums[3];
-    gh_event_spring_profile ev04_accessory_springs[2];
+    gh_event_spring_profile ev04_accessory_springs[3];
     gh_actor_model *pendulum_parent;
     uint8_t one_body_mesh[2];
     uint8_t finish_stage;

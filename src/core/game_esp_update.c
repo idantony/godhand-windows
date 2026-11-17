@@ -3,6 +3,7 @@
 #include "game_esp03.h"
 #include "game_effects_frame.h"
 #include "game_actor_matrix.h"
+#include "game_actor_two_bone.h"
 #include "id_layout_rotation.h"
 #include <string.h>
 #include <math.h>
@@ -27,7 +28,7 @@ static int integer(float x,int*out)
  *out=(int)x;
  return 1;
 }
-static int same(const gh_esp_update_bindings*a,const gh_esp_update_bindings*b){return a->storage.effects==b->storage.effects&&a->storage.esp==b->storage.esp&&a->storage.emitters==b->storage.emitters&&a->storage.esp_bytes==b->storage.esp_bytes&&a->storage.emitter_bytes==b->storage.emitter_bytes&&a->work==b->work&&a->globals==b->globals&&a->atan_coeff==b->atan_coeff&&a->policy==b->policy&&a->camera==b->camera&&a->active_camera==b->active_camera&&a->display==b->display;}
+static int same(const gh_esp_update_bindings*a,const gh_esp_update_bindings*b){return a->storage.effects==b->storage.effects&&a->storage.esp==b->storage.esp&&a->storage.emitters==b->storage.emitters&&a->storage.esp_bytes==b->storage.esp_bytes&&a->storage.emitter_bytes==b->storage.emitter_bytes&&a->work==b->work&&a->globals==b->globals&&a->atan_coeff==b->atan_coeff&&a->policy==b->policy&&a->random==b->random&&a->camera==b->camera&&a->active_camera==b->active_camera&&a->display==b->display;}
 static int scaled(const gh_esp_update_call*c,const uint8_t*p,const uint8_t*r){return (!(w(r+4)&0x2000u)&&(w(p+0x11c)&0x100u))||(w((const uint8_t*)c->b.work+0x5e4)&0x20000u);}
 /* 2FA350 increments the chopped centiframe base if the conversion
  * changed it, then adds the chopped product of the two live rates. */
@@ -190,9 +191,45 @@ static gh_effect_status update_07(gh_esp_update_call *c,uint8_t *p)
  return GH_EFFECT_OK;
 }
 
+/* EV07 uses the original world-oriented, one-shot ESP10 child (2EFD20).
+ * The other ESP10 orientation/raycast branches retain their frontier. */
+static gh_effect_status update_10(gh_esp_update_call *c,const gh_effect_esp_view *v)
+{
+ const gh_esp_update_bindings *b=&c->b;
+ const uint8_t *p=v->payload;
+ const uint32_t tag=w(p+0x23a);
+ const int cut12=tag==0x000d0006u;
+ if(w(p+0x2b0)!=UINT32_MAX||w(p+0x2b4)!=1||w(p+0x2b8)||uh(p+0x2bc)||
+    p[0x2be]||p[0x2bf]||p[0x2c0]||w(p+0x104)!=(cut12?6u:2u)||(!cut12&&tag!=0x00020001u)||
+    !gh_effect_event_part_is_bound(v->record,v->actor,v->selector))
+  return stop(c,0x2efd20,GH_EFFECT_UNSUPPORTED);
+ if(!c->nested.active){
+  float world[16],rotation[3],color[4];
+  uint32_t frontier=0;
+  gh_effect_status status=gh_effect_node_world_matrix_native(b->storage.effects,0,c->slot,c->serial,
+     world,b->policy,&frontier);
+  if(status)return stop(c,frontier?frontier:0x2b61b0,status);
+  if(!b->atan_coeff||gh_actor_matrix_extract_euler_00147c88(world,b->atan_coeff,rotation,b->policy,&frontier))
+   return stop(c,frontier?frontier:0x147c88,GH_EFFECT_UNSUPPORTED);
+  memcpy(color,p+0x188,sizeof(color));
+  status=gh_effect_create_ev07_nested_002effec(&c->nested,tag,world+12,rotation,color,mul(rf(p+0x2c4),rf(p+0x20)));
+  if(status)return stop(c,0x2effec,status);
+ }
+ const gh_effect_create_bindings nested={.storage=b->storage,.work=b->work,.random=b->random,.atan_coeff=b->atan_coeff};
+ gh_effect_status status=gh_game_effect_create_00306528(&c->nested,&nested);
+ if(status)return stop(c,c->nested.frontier?c->nested.frontier:0x306528,status);
+ if(!c->nested.complete)return stop(c,0x306528,GH_EFFECT_ARGUMENT);
+ uint32_t frontier=0;
+ status=gh_effect_create_esp_pause_002fbe50(b->storage.effects,c->slot,c->serial,&frontier);
+ if(status)return stop(c,frontier?frontier:0x2fbe50,status);
+ c->stage=1;
+ return GH_EFFECT_OK;
+}
+
 static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b,unsigned slot,uint32_t serial){
  if(!c||!b||!b->work||!b->globals||!b->globals->initialized||!b->storage.effects||!b->storage.esp||!b->storage.emitters||b->storage.esp_bytes<0x100180||b->storage.emitter_bytes<0x26060)return GH_EFFECT_ARGUMENT;if(c->identity&&(c->identity!=c||c->slot!=slot||c->serial!=serial||!same(&c->b,b)))return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);if(b->policy!=GH_STATIC_BINARY32_REFERENCE)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);c->frontier=0;if(c->complete)return GH_EFFECT_OK;
  gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,slot,&v)||v.serial!=serial||!v.initialized||v.globals!=b->globals||v.payload!=b->storage.esp+(size_t)slot*0x400||v.payload_size!=0x400||v.record.size!=0x2f0)return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;const uint8_t*r=v.record.bytes;uint32_t vtable=v.type==0?0x44fad0u:v.type==3?GH_ESP03_VTABLE:v.type==4?GH_ESP04_VTABLE:v.type==5?0x44e640u:v.type==6?0x44e6d8u:v.type==7?0x44e770u:v.type==8?0x44e820u:v.type==9?0x44e8c8u:v.type==0x12?0x44eb70u:v.type==0x13?0x44ec68u:v.type==0x14?GH_ESP14_VTABLE:v.type==0x15?0x44ef08u:v.type==0x18?0x44f078u:v.type==0x1a?0x44f270u:v.type==0x1f?0x44f448u:v.type==0x20?0x44f4f8u:0;
+ if(v.type==0x10)vtable=0x44eab8u;
  if(!vtable||w(p+0xf0)!=vtable)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);
  /* 2F01B8 calls the base Move before three optional oscillations. */
  if(v.type==0x12&&(rf(p+0x2c8)!=0.0f||rf(p+0x2cc)!=0.0f||rf(p+0x2dc)!=0.0f))
@@ -212,8 +249,9 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
    }
    memcpy(p+0x2b8,phase,sizeof(phase));
   }
-  c->identity=c;c->b=*b;c->slot=slot;c->serial=serial;c->stage=1;
+  c->identity=c;c->b=*b;c->slot=slot;c->serial=serial;c->stage=v.type==0x10?18:1;
  }
+ if(c->stage==18){gh_effect_status status=update_10(c,&v);if(status)return status;}
  if(c->stage==1){
   if(((v.actor||v.selector)&&!gh_esp14_nested_sprite_is_bound(v.record,v.actor,v.selector)&&!(gh_effect_event_part_is_bound(v.record,v.actor,v.selector)||gh_effect_ev05_partless_is_bound(v.record,v.actor,v.selector)||gh_effect_r101_door_break_part_is_bound(v.record,v.actor,v.selector))&&!gh_effect_attack_esp_is_bound(b->storage.effects,&v)&&!gh_effect_knockdown_esp_is_bound(b->storage.effects,&v)&&!gh_effect_player_attachment_esp_is_bound(b->storage.effects,&v)&&!gh_effect_devil_esp_is_bound(b->storage.effects,&v)&&!gh_effect_enemy_light_esp_is_bound(b->storage.effects,&v)&&(!gh_effect_emad_esp_is_bound(b->storage.effects,&v)&&!gh_effect_em03_esp_is_bound(b->storage.effects,&v)))||w(p+0x114))
     return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);

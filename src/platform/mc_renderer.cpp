@@ -466,7 +466,9 @@ extern "C" gh_id_error gh_mc_renderer_queue_radar(gh_mc_renderer *r,
     gh_id_texture_quad sprite={};
     gh_id_error error=gh_id_texture_open_view(&quad->texture,&sprite.texture);
     if(error)return error;
-    if(sprite.texture.tex0!=GH_ID_RADAR_TEX0)return GH_ID_UNSUPPORTED;
+    const bool map_route=sprite.texture.tex0==GH_ID_TIM2_64X64_PSMT8_TEX0&&
+        sprite.texture.width==64&&sprite.texture.height==64&&quad->rgba==0x80808080;
+    if(sprite.texture.tex0!=GH_ID_RADAR_TEX0&&!map_route)return GH_ID_UNSUPPORTED;
     for(unsigned i=0;i<4;++i){
         const float xy=quad->xy[i],uv=quad->uv[i];
         if(!std::isfinite(xy)||xy<-512||xy>1024||!std::isfinite(uv)||uv<0||uv>1)

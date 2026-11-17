@@ -81,6 +81,16 @@ int gh_event_actor_ev05_ev06_source_kind(int32_t event,size_t row,uint16_t sourc
         (row==6&&((event==5&&source==0x654)||(event==6&&source==0x653)));
 }
 
+/* Original EV07 DAT rows shared with the event REL's recovered EV04 leaves. */
+int gh_event_actor_ev07_shared_source_kind(int32_t event,size_t row,uint16_t source,uint8_t code)
+{
+    static const uint16_t kinds[]={
+        0x610,0x611,0x612,0x615,0x616,0x617,0x618,0x61a,
+        0x620,0x621,0x622,0x625,0x626,0x627,0x660,0x660,0x661
+    };
+    return event==7&&row<sizeof(kinds)/sizeof(*kinds)&&source==kinds[row]&&code==(row==15);
+}
+
 int gh_event_actor_ev04_source_kind(uint16_t kind)
 {
     return (kind >= 0x610 && kind <= 0x612) || (kind >= 0x615 && kind <= 0x618) ||
@@ -145,7 +155,8 @@ static gh_game_event_status create_row(gh_event_actor_create *s, size_t index) {
     const int ev1b_prop = b->components->event_no == 0x1b &&
         ((index == 5 && source == 0x338) || (index == 6 && source == 0x3bc));
     const int ev05_ev06_actor=!info[4]&&gh_event_actor_ev05_ev06_source_kind(b->components->event_no,index,source);
-    if (!ev04_actor && !ev05_ev06_actor && !ev1b_el40 && !packed_enemy && !ev1b_prop &&
+    const int ev07_actor=gh_event_actor_ev07_shared_source_kind(b->components->event_no,index,source,info[4]);
+    if (!ev04_actor && !ev05_ev06_actor && !ev07_actor && !ev1b_el40 && !packed_enemy && !ev1b_prop &&
         (source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60c) &&
         (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x634 && source != 0x639 &&
         source != 0x641 && source != 0x642 && source != 0x646 && source != 0x647 &&

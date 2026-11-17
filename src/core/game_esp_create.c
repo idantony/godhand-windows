@@ -44,11 +44,10 @@ static int authored_actor_scale(const gh_esp_create_call *c,float scale)
  if(!isfinite(scale)||scale<=0||
     gh_effect_create_emitter_at(c->b.storage.effects,c->emitter_slot,&emitter)||
     emitter.serial!=c->emitter_serial)return 0;
- const uint32_t program=w(emitter.payload+0x18c);
- /* The mirrored 2A8608 recoil carries the original actor scale into 301554. */
- const int mirrored_recoil=(program==0x00040058u||program==0x00080058u)&&
-    (w(emitter.payload+0x1e8)&0x80u)&&gh_effect_knockdown_emitter_is_bound(&emitter);
- return mirrored_recoil||gh_effect_em00_attack_emitter_is_bound(&emitter)||
+ /* 2A86A0 carries the original actor scale for each mirrored knockdown row. */
+ const int mirrored_knockdown=(w(emitter.payload+0x1e8)&0x80u)&&
+    gh_effect_knockdown_emitter_is_bound(&emitter);
+ return mirrored_knockdown||gh_effect_em00_attack_emitter_is_bound(&emitter)||
     gh_effect_stamp19_attack_part_is_bound(&emitter)||
     gh_effect_r101_weapon_emitter_is_bound(&emitter)||
     gh_effect_player_attachment_emitter_is_bound(&emitter)||
@@ -169,9 +168,27 @@ static gh_effect_status initial_direction(gh_esp_create_call*c,uint8_t*p,const u
 }
 static float random_unit(uint8_t*p){uint32_t bits=(random_next(p)&0x7fffffu)|0x3f800000u;float n;memcpy(&n,&bits,4);return add(n,-1.0f);}
 static gh_effect_status initial_colour(gh_esp_create_call*c,uint8_t*p,const uint8_t*r,const uint8_t*source){
- unsigned mode=r[0x293];if(mode>1)return fail(c,0x302150,GH_EFFECT_UNSUPPORTED);for(unsigned j=0;j<4;j++)if(floating(source+0x1d0+j*4)!=1.0f)return fail(c,0x30221c,GH_EFFECT_UNSUPPORTED);if(w(r+4)&0x4000u)return fail(c,0x3022a4,GH_EFFECT_UNSUPPORTED);
+ unsigned mode=r[0x293];
+ if(mode>1)return fail(c,0x302150,GH_EFFECT_UNSUPPORTED);
+ const uint32_t tag=w(source+0x18c);
+ const int ev07_child=mode==1&&(tag==0x00020001u||tag==0x000d0006u)&&
+    w(source+0x110)==UINT32_MAX&&source[0x214]==1&&w(r)==0x1ece0010u&&
+    w(r+4)==0x00800000u&&w(r+0x134)==0x00010000u&&r[0xbe]==0xff;
+ uint8_t tint[4];
+ int tinted=0;
+ for(unsigned j=0;j<4;j++){
+  const float channel=floating(source+0x1d0+j*4);
+  if(channel!=1.0f){
+   if(!ev07_child||!isfinite(channel)||channel<0.0f||channel>1.0f)
+    return fail(c,0x30221c,GH_EFFECT_UNSUPPORTED);
+   tinted=1;
+  }
+  tint[j]=(uint8_t)nearbyintf(mul(channel,255.0f));
+ }
+ if(w(r+4)&0x4000u)return fail(c,0x3022a4,GH_EFFECT_UNSUPPORTED);
  float base[4];for(unsigned j=0;j<3;j++)base[j]=floating(r+(mode?0xc4:0xe8)+j*4);base[3]=floating(r+(mode?0xd0:0xc8));float variation=floating(r+0x124);for(unsigned j=0;j<4;j++)if(!isfinite(base[j]))return fail(c,0x302150,GH_EFFECT_UNSUPPORTED);if(!isfinite(variation))return fail(c,0x3022d8,GH_EFFECT_UNSUPPORTED);
- uint8_t next[0x400];memcpy(next,p,sizeof(next));next[0x187]=(uint8_t)mode;float result[4];memcpy(result,base,sizeof(result));if(!mode){float random[4];for(unsigned j=0;j<3;j++)random[j]=random_unit(next);random[3]=1.0f;float inverse=add(1.0f,-variation);for(unsigned j=0;j<4;j++){result[j]=add(mul(random[j],variation),mul(base[j],inverse));if(!isfinite(result[j]))return fail(c,0x3022d8,GH_EFFECT_UNSUPPORTED);}store_float(next+0x208,variation);memcpy(next+0x1f8,result,16);}else put(next+0x208,0);memcpy(next+0x188,result,16);
+ uint8_t next[0x400];memcpy(next,p,sizeof(next));if(tinted){next[0x186]|=1;memcpy(next+0x20c,tint,4);}
+ next[0x187]=(uint8_t)mode;float result[4];memcpy(result,base,sizeof(result));if(!mode){float random[4];for(unsigned j=0;j<3;j++)random[j]=random_unit(next);random[3]=1.0f;float inverse=add(1.0f,-variation);for(unsigned j=0;j<4;j++){result[j]=add(mul(random[j],variation),mul(base[j],inverse));if(!isfinite(result[j]))return fail(c,0x3022d8,GH_EFFECT_UNSUPPORTED);}store_float(next+0x208,variation);memcpy(next+0x1f8,result,16);}else put(next+0x208,0);memcpy(next+0x188,result,16);
  if(!mode){memcpy(next+0x198,r+0xc4,0x60);memcpy(next+0x1bc,result,12);}else memcpy(next+0x198,r+0xc4,0x30);memcpy(p,next,sizeof(next));return GH_EFFECT_OK;
 }
 static gh_effect_status finish_source(gh_esp_create_call*c,uint8_t*p,const uint8_t*r){
@@ -504,6 +521,21 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
  }
  if(view.type==0x18&&c->stage==10)return initialize_18(c,p,r);
  if(view.type==0x13&&c->stage==10)return initialize_13(c,p,r);
+ if(view.type==0x10&&c->stage==10){
+  /* Original virtual Init at 2EFCA8 consumes the emitter's EFF_PARAM+40. */
+  if((int8_t)r[0x18c]<0||r[0x18c]>1||r[0x18f]>1||r[0x190]>1)
+   return fail(c,0x2efca8,GH_EFFECT_UNSUPPORTED);
+  status=gh_effect_create_esp_commit_10(b->storage.effects,c->slot,c->serial);
+  if(status)return fail(c,0x2efca8,status);
+  put(p+0x2c4,w(source+0x1e0));
+  put(p+0x2b0,w(r+0x16c));
+  put(p+0x2b4,r[0x170]);
+  put(p+0x2b8,r[0x18c]);
+  half(p+0x2bc,r[0x18d]);
+  p[0x2be]=r[0x18e];p[0x2bf]=r[0x18f];p[0x2c0]=r[0x190];
+  c->stage=12;c->complete=1;
+  return GH_EFFECT_OK;
+ }
  if(view.type==0x12&&c->stage==10)return initialize_12(c,p,r);
  if(view.type==0x1a&&c->stage>=10)return initialize_1a(c,p,r);
  if(c->stage==10){

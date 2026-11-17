@@ -423,21 +423,25 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
  const unsigned em03_phase=charge?charge[0x2f6]:0;
  const int em03_hit=(em03_state==0x0101||em03_state==0x0001)&&em03_phase<=3;
  const int em03_grab=em03_state==0x4b00&&em03_phase==1;
+ const int em03_guard=em03_state==0x6900&&em03_phase<=1&&charge[0x2f7]<=1;
  const int em03_turn=em03_state==0x0800&&em03_phase==1&&charge[0x2f7]<=1;
  const int em03_selector21=em03_state==0x2100&&em03_phase==1;
  const int em03_recoil=em03_state==0x0301&&em03_phase<=1&&v->model->root.size>=0x17b8&&
     w(charge+0x17b4)==80&&(w(charge+0x16d0)&0x1000u);
  const int em03_getup=em03_state==0x0d01&&em03_phase<=1&&v->model->root.size>=0x17b8&&
-    w(charge+0x17b4)==80;
+    (w(charge+0x17b4)==80||w(charge+0x17b4)==24);
  const int em03_melee=(em03_state==0x1500||em03_state==0x4500)&&em03_phase==1;
  const int em03_wide=em03_state==0x4500&&em03_phase==1;
  const int em03_hold=em03_state==0x4c00&&
      (em03_phase==1||em03_phase==3||em03_phase==5);
+ /* 253DE8 emits the local take cue after creating the mirrored impact. */
+ const int em03_knockdown=em03_state==0x0701&&em03_phase<=1&&v->model->root.size>=0x17b8&&
+     w(charge+0x17b4)==24;
  const int em03_rear=em03_state==0x0a00&&em03_phase==1&&charge[0x2f7]==1;
  const int em03_approach=em03_state==0x0500&&em03_phase==1;
  /* Chase row 1900 emits AA, remapped to local program 17. */
  const int em03_chase=em03_state==0x0700&&em03_phase==1&&charge[0x2f7]==1;
- if(charge&&(em03_turn||((em03_hit||em03_grab||em03_hold||em03_selector21||em03_melee||em03_recoil||em03_getup)&&!charge[0x2f7]))&&
+ if(charge&&(em03_turn||em03_guard||((em03_hit||em03_grab||em03_hold||em03_selector21||em03_melee||em03_recoil||em03_getup||em03_knockdown)&&!charge[0x2f7]))&&
     !h(charge+0x424)&&v->part_index==-1&&v->requested_bank==1&&bank==1){
   if(request==35&&(program==35||program==36)){
    const unsigned variation=(unsigned)(program-35);
@@ -483,7 +487,7 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
       (!sample||(w(sample)==0x4bfc0u&&w(sample+4)==16000u&&
                 w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
   }
-  if((em03_hit||(em03_hold&&em03_phase==5))&&request==0&&program>=0&&program<=2){
+  if((em03_hit||em03_knockdown||(em03_hold&&em03_phase==5))&&request==0&&program>=0&&program<=2){
    const unsigned variation=(unsigned)program;
    static const uint32_t samples[]={0x17350u,0x17cb0u,0x18430u};
    return w(p)==((variation<<16)|1u)&&w(p+4)==0x02280000u+variation&&
@@ -941,9 +945,11 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
  const int arena_em03=r103_em03_voice_actor(v)!=NULL;
  const uint8_t *boss=r103_boss_voice_actor(v);
  /* Original EM15 rows 560 and 568 contain CORE B4 during heavy recoil. */
+ /* EM03 AC4/ABC landing also calls the original heavy CORE B4. */
  const int em03_recoil=r104_em03_voice_actor(v)&&v->model->root.size>=0x17b8&&
-    w(actor+0x17b4)==80&&((state==0x0301&&phase==3)||
-      (state==0x0102&&phase==1&&!h(actor+0x54a)));
+    ((w(actor+0x17b4)==80&&((state==0x0301&&phase==3)||
+      (state==0x0102&&phase==1&&!h(actor+0x54a))))||
+     (w(actor+0x17b4)==24&&state==0x0701&&phase==1));
  const int recoil_step=gate_death_step&&!actor[0x2f7]&&v->part_index==-1&&
     (em03_recoil||(boss&&((state==0x0301&&phase==3)||(state==0x0401&&phase==5))));
  const int arena_boss_step=ground_step&&boss&&v->part_index==-1&&
@@ -1395,7 +1401,8 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
  const uint8_t *r104=r104_em03_voice_actor(v);
  const int r104_rear=r104&&h(r104+0x2f4)==0x0a00&&r104[0x2f6]==1&&r104[0x2f7]==1&&v->part_index==-1;
  const int r104_getup=r104&&v->model->root.size>=0x17b8&&h(r104+0x2f4)==0x0d01&&
-    r104[0x2f6]==1&&!r104[0x2f7]&&w(r104+0x17b4)==80&&v->part_index==-1;
+    r104[0x2f6]==1&&!r104[0x2f7]&&
+    (w(r104+0x17b4)==80||w(r104+0x17b4)==24)&&v->part_index==-1;
  if(program==0x29){
   if(!r104_rear&&!r104_getup)return 0;
   /* Original rear SEQ 2C9900 frame7 plays CORE29 alongside CORE8E. */
@@ -1868,7 +1875,7 @@ static int recovery_footing_profile(const struct voice *voice,const uint8_t *row
  const int room=model->work->room;
  const uint16_t state=h(actor+0x2f4);
  const int player=player_fall_voice_model(voice)&&
-    (room==0x100||room==0x101||room==0x102||room==0x103||room==0x105)&&state==0x0601;
+    (room>=0x100&&room<=0x105)&&state==0x0601;
  const int gate_guard=room==0x102&&model->root.size>=0x17d0&&
     model->root.original_vtable214==0x4479c8&&h(actor+0x2fe)==0x202&&w(actor+0x564)==0x200&&
     h(actor+0x640)==0x10&&!actor[0x1650]&&state==1&&!actor[0x2f6]&&
@@ -2773,7 +2780,8 @@ static int core_critical_sequence(const struct voice *v)
  const int west_em03=model->work->room==0x100&&model->root.size>=0x16c8&&
     dependency==0x203&&stamp==19&&!actor[0x1650]&&w(actor+0x16c4)==6&&
     state==0x0101&&!actor[0x2f6]&&!actor[0x2f7];
- const int r104=r104_em03_voice_actor(v)&&state==0x0101&&!actor[0x2f6]&&!actor[0x2f7];
+ const int r104=r104_em03_voice_actor(v)&&!actor[0x2f6]&&!actor[0x2f7]&&
+    (state==0x0101||(state==0x0701&&model->root.size>=0x17b8&&w(actor+0x17b4)==24));
  return (room_actor||arena||r104||((west_em02||west_em03)&&h(actor+0x2fe)==0x202))&&
     (h(actor+0x3ac)&0x100u)&&v->part_index==-1&&
     !v->requested_bank&&v->requested_program==1&&!v->info.bank&&v->info.program==1&&

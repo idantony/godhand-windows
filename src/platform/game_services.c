@@ -112,8 +112,8 @@ struct gh_game_services {
  gh_game_scene_step step;gh_r020_title*title;gh_scene_hook scenario_exit,scenario_callback104;
  gh_id_base results_base;
  gh_id_entry *results_entries[34];
- uint16_t results_state,results_phase,results_clear_variant;
- uint32_t results_time_bonus,results_continue_bonus,results_npc_fine,results_kill_bonus;
+ uint16_t results_state,results_phase,results_clear_variant,results_save_target;
+ uint32_t results_time_bonus,results_continue_bonus,results_npc_fine,results_kill_bonus,results_total_bonus;
  gh_r207_allocation results_idd;
  uint32_t results_dvd_job;
  uint8_t results_pair_bound;
@@ -183,9 +183,9 @@ struct gh_game_services {
   gh_shadow_call shadow;
   gh_event_pendulum_call pendulum;
  } event_actor_move[GH_EVENT_ACTOR_ROSTER_CAPACITY + 1];
- gh_event_pendulum_call event_accessory_cloth[2];
+ gh_event_pendulum_call event_accessory_cloth[3];
  gh_actor_render_call event_actor_render[GH_EVENT_ACTOR_ROSTER_CAPACITY + 1];
- gh_actor_render_call event_accessory_render[2];
+ gh_actor_render_call event_accessory_render[3];
  gh_esp14_provider model_effect;
  gh_services_esp14_slot *esp14_slots[1024], *esp14_retired;
  size_t esp14_limit;
@@ -480,8 +480,18 @@ static gh_scene_status room_results_init(void *context,uint32_t *frontier)
  uint8_t *work=(uint8_t *)s->b.work;
  if(u32(work+0x594)&0x02000000u)w32(s->b.save.bytes+0x20,999999u);
  s->results_entries[29]->seed=u32(s->b.save.bytes+0x20);
- s->results_state=0;
+ /* REL0274 tests the persisted Results bit before setting it again.
+  * Re-entry after the event starts the Save/Map branch at state 9. */
+ s->results_state=(u32(work+0x5e4)&0x40000u)?9:0;
  s->results_phase=0;
+ if(s->results_state==9){
+  if(!s->b.fade||!s->b.display)return GH_SCENE_ARGUMENT;
+  const gh_screen_fade_context fade={s->b.display->screen_width,
+   s->b.display->gs_y_origin,u32(work+0x564),u32(work+0x5e0)};
+  if(gh_screen_fade_start_00307208(s->b.fade,&fade,0,10,0,0xff000000u,0xff000000u,0)){
+   *frontier=0x307208;return GH_SCENE_UNSUPPORTED;
+  }
+ }
  s->scenario_exit=(gh_scene_hook){GH_SCENE_HOOK_NATIVE,room_results_release,s};
  w32(work+0x5d8,u32(work+0x5d8)|0xf8040000u);
  w32(work+0x5e0,u32(work+0x5e0)|0xfe200000u);
@@ -542,7 +552,7 @@ static gh_scene_status room_results_effect(gh_game_services *s,unsigned program,
 /* REL2228 advances by the largest increment that remains strictly
  * below the target, then plays the count sound before testing completion. */
 static gh_scene_status room_results_tally_award(gh_game_services *s,unsigned entry,uint32_t award,
-    int fine,uint32_t *frontier)
+    int fine,unsigned next_phase,uint32_t *frontier)
 {
  gh_id_entry *number=s->results_entries[entry];
  static const unsigned steps[]={100000,10000,1000,100,10};
@@ -555,7 +565,7 @@ static gh_scene_status room_results_tally_award(gh_game_services *s,unsigned ent
  number->seed+=increment;
  if(number->seed>award){
   number->seed=fine?0u-award:award;
-  s->results_phase=4;
+  s->results_phase=(uint16_t)next_phase;
  }
  return GH_SCENE_OK;
 }
@@ -596,7 +606,7 @@ static gh_scene_status room_results_count_continue_or_npc(gh_game_services *s,ui
   s->results_phase=3;
   break;
  }
- case 3:return room_results_tally_award(s,award_entry,*award,npc,frontier);
+ case 3:return room_results_tally_award(s,award_entry,*award,npc,4,frontier);
  case 4:++s->results_state;s->results_phase=0;break;
  default:return GH_SCENE_ARGUMENT;
  }
@@ -638,10 +648,113 @@ static gh_scene_status room_results_tally_kills(gh_game_services *s,uint32_t *fr
   if(complete){s->results_kill_bonus=bonus;s->results_phase=3;}
   break;
  }
- case 3:return room_results_tally_award(s,20,s->results_kill_bonus,0,frontier);
+ case 3:return room_results_tally_award(s,20,s->results_kill_bonus,0,4,frontier);
  case 4:++s->results_state;s->results_phase=0;break;
  default:return GH_SCENE_ARGUMENT;
  }
+ return GH_SCENE_OK;
+}
+
+/* REL09E4 slides the original TOTAL row and 0AD0 calls
+ * cCoreSave::addGold(amount,1) only on the phase-three Cross edge. */
+static gh_scene_status room_results_total(gh_game_services *s,uint32_t *frontier)
+{
+ const uint8_t *work=(const uint8_t *)s->b.work;
+ const int confirm=(u32(work+0x1a0)&0x10000000u)!=0;
+ switch(s->results_phase){
+ case 0:{
+  const gh_scene_status status=room_results_effect(s,0x161,frontier);
+  if(status)return status;
+  s->results_entries[15]->seed=0;
+  s->results_phase=1;
+ }
+ /* fall through as the original jump-table leaf does */
+ case 1:{
+  const int32_t total=(int32_t)(s->results_continue_bonus+s->results_kill_bonus-s->results_npc_fine);
+  s->results_total_bonus=total<0?0u:total>999999?999999u:(uint32_t)total;
+  room_results_slide_heading(s,5);
+  if(confirm){
+   const gh_scene_status status=room_results_effect(s,0x15e,frontier);
+   if(status)return status;
+   gh_id_entry *heading=s->results_entries[5];
+   memcpy(&heading->pos_x,heading->source+8,sizeof(heading->pos_x));
+   s->results_phase=2;
+  }
+  break;
+ }
+ case 2:return room_results_tally_award(s,15,s->results_total_bonus,0,3,frontier);
+ case 3:{
+  if(!confirm)break;
+  const gh_scene_status status=room_results_effect(s,0x15e,frontier);
+  if(status)return status;
+  uint8_t *save=s->b.save.bytes;
+  s->results_entries[15]->seed=s->results_total_bonus;
+  const uint32_t count=u32(save+0x24);
+  if(count<16)w32(save+0x28+count*4,s->results_total_bonus);
+  w32(save+0x24,0);
+  const int32_t sum=(int32_t)(u32(save+0x20)+s->results_total_bonus);
+  const uint32_t gold=(u32(work+0x594)&0x02000000u)||sum>999999?999999u:sum<0?0u:(uint32_t)sum;
+  w32(save+0x20,gold);
+  s->results_entries[29]->seed=gold;
+  s->results_phase=4;
+  break;
+ }
+ case 4:++s->results_state;s->results_phase=0;break;
+ default:return GH_SCENE_ARGUMENT;
+ }
+ return GH_SCENE_OK;
+}
+
+static gh_scene_status room_results_open_save(gh_game_services *s,uint32_t *frontier)
+{
+ const uint8_t *work=(const uint8_t *)s->b.work;
+ const uint32_t unlocked=u32(s->b.save.bytes+0xa4);
+ unsigned stage=1;
+ while(stage<9&&((u32(work+0x59c)&0x80000u)||(unlocked&(1u<<stage))))++stage;
+ /* REL1C40 takes the last contiguous cleared stage. REL1FB0 for 0200
+  * saves the authored stage jump, then points the card at the EV08 room. */
+ *frontier=0x1fb0;s->frontier_module_code=1;
+ if(stage!=2||!s->b.event_reserve||!s->b.children||!*s->b.children)return GH_SCENE_UNSUPPORTED;
+ const uint16_t destination=0x200;
+ gh_game_assets *assets=s->b.assets;
+ *frontier=0x2008b8;s->frontier_module_code=0;
+ if(gh_game_door_set_casino_jump_point_002008b8(&s->door,assets->room_jump.pointer,
+     assets->room_jump_size,destination,0))return GH_SCENE_CALLEE;
+ gh_event_reserve_work reserve={.flags=3,.mode=8,.destination_room=destination};
+ memcpy(reserve.position,s->door.backup,12);
+ memcpy(&reserve.yaw,s->door.backup+12,4);
+ *s->b.event_reserve=reserve;
+ s->door.backup[16]=3;
+ s->door.backup[17]=0;
+ const gh_save_map_bindings map={.work=s->b.work,.player=&s->title_player,
+  .map_room=destination,.target_room=3};
+ int started=0;
+ *frontier=0x160020;
+ if(gh_game_children_save_map_open_variant_00160020(*s->b.children,&map,1,&started,frontier))
+  return GH_SCENE_CALLEE;
+ s->results_state=10;
+ return GH_SCENE_OK;
+}
+
+static gh_scene_status room_results_finish_save(gh_game_services *s,uint32_t *frontier)
+{
+ if(!s->results_save_target){
+  /* REL0794 resolves the separate casino entry table for this menu choice. */
+  *frontier=0x0794;s->frontier_module_code=1;return GH_SCENE_UNSUPPORTED;
+ }
+ if(!s->b.begin_event_room_jump)return GH_SCENE_ARGUMENT;
+ const uint16_t room=(uint16_t)(s->door.backup[16]|(uint16_t)s->door.backup[17]<<8);
+ const gh_game_assets *assets=s->b.assets;
+ float position[3],yaw;
+ *frontier=0x2be998;s->frontier_module_code=0;
+ if(gh_game_room_jump_set_next_pose_002be998(s->b.work,assets->room_jump.pointer,
+    assets->room_jump_size,room,0,position,&yaw))return GH_SCENE_CALLEE;
+ *frontier=0x2c4548;
+ if(s->b.begin_event_room_jump(s->b.event_room_context,room,position,yaw,0,0,1,frontier))
+  return GH_SCENE_CALLEE;
+ uint8_t *work=(uint8_t *)s->b.work;
+ w32(work+0x5e4,u32(work+0x5e4)&~0x40000u);
+ *frontier=0;
  return GH_SCENE_OK;
 }
 
@@ -649,7 +762,8 @@ static gh_scene_status room_results_move(void *context,uint32_t *frontier)
 {
  gh_game_services *s=context;
  const gh_r020_move_callbacks *callbacks=&s->b.title_callbacks;
- if(!s->results_base.initialized||!s->b.screen_state_5cae40){
+ if(!s->b.screen_state_5cae40||
+    (s->results_state<8&&!s->results_base.initialized)){
   *frontier=0x02e8;s->frontier_module_code=1;return GH_SCENE_UNSUPPORTED;
  }
  if(s->results_state==0){
@@ -688,8 +802,69 @@ static gh_scene_status room_results_move(void *context,uint32_t *frontier)
  }else if(s->results_state==4){
   const gh_scene_status status=room_results_tally_kills(s,frontier);
   if(status)return status;
- }else{
-  *frontier=0x0908;s->frontier_module_code=1;return GH_SCENE_UNSUPPORTED;
+ }else if(s->results_state==5){
+  const gh_scene_status status=room_results_total(s,frontier);
+  if(status)return status;
+ }else if(s->results_state==6){
+  ++s->results_state;
+ }else if(s->results_state==7){
+  const uint8_t *work=(const uint8_t *)s->b.work;
+  if(!s->b.fade||!s->b.display)return GH_SCENE_ARGUMENT;
+  const gh_screen_fade_context fade={s->b.display->screen_width,
+   s->b.display->gs_y_origin,u32(work+0x564),u32(work+0x5e0)};
+  if(gh_screen_fade_start_00307208(s->b.fade,&fade,0,10,0,0,0xff000000u,15)){
+   *frontier=0x307208;return GH_SCENE_UNSUPPORTED;
+  }
+  ++s->results_state;
+ }else if(s->results_state==8&&(gh_screen_fade_status_00307718(s->b.fade)&4u)){
+  const uint8_t *work=(const uint8_t *)s->b.work;
+  uint8_t *save=s->b.save.bytes;
+  /* REL06A4 resets per-stage data before releasing the results ID Base.
+   * REL1D10 then records cumulative stage 1 via original 1FBF90. */
+  if(!s->results_phase){
+   if(gh_game_stage_clear_002bf8c8(&s->prepare,s->b.save,s->b.work->room)){
+    *frontier=0x2bf8c8;return GH_SCENE_UNSUPPORTED;
+   }
+   w32(save+0xb8c,u32(save+0xb8c)|1u);
+   s->results_phase=1;
+  }
+  const gh_scene_status status=room_results_release(s,frontier);
+  if(status)return status;
+  if(work[0x5b7]!=1){
+   *frontier=0x1d10;s->frontier_module_code=1;return GH_SCENE_UNSUPPORTED;
+  }
+  /* 1FBF90 includes bits 0 and 1 when recording stage 1. */
+  w32(save+0xa4,3);
+  /* REL1D78 clears Event+38, reserves EV07 and asks cScenario for R002.
+   * REL2A68 reads bit 3, clear in the newly authored flags, so force is 1. */
+  *frontier=0x1d78;
+  if(!s->b.event_reserve||!s->b.begin_event_room_jump)return GH_SCENE_UNSUPPORTED;
+  *s->b.event_reserve=(gh_event_reserve_work){.flags=3,.mode=7,.destination_room=0x21};
+  if(s->b.work->room!=2){
+   const float zero[3]={0};
+   *frontier=0x2c4548;
+   if(s->b.begin_event_room_jump(s->b.event_room_context,2,zero,0,0,0,1,frontier))
+    return GH_SCENE_CALLEE;
+  }
+  *s->b.screen_state_5cae40=15;
+  *frontier=0;
+  return GH_SCENE_OK;
+ }else if(s->results_state==9){
+  const gh_scene_status status=room_results_open_save(s,frontier);
+  if(status)return status;
+ }else if(s->results_state==10){
+  const uint8_t *manager;
+  size_t bytes;
+  *frontier=0x0760;s->frontier_module_code=1;
+  if(gh_game_children_manager_view(*s->b.children,&manager,&bytes)||bytes<0x866)
+   return GH_SCENE_ARGUMENT;
+  if(u32(manager+0x48)==UINT32_MAX){
+   s->results_save_target=(uint16_t)(manager[0x864]|(uint16_t)manager[0x865]<<8);
+   s->results_state=11;
+  }
+ }else if(s->results_state==11){
+  const gh_scene_status status=room_results_finish_save(s,frontier);
+  if(status)return status;
  }
  *s->b.screen_state_5cae40=15;
  gh_id_frontier detail={0};
@@ -7025,10 +7200,11 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
   if(gh_event_actor_factory_view(event_actor,handle,&registered)||v->bytes!=registered.bytes||
      v->size!=registered.size||v->alias_f0!=registered.alias_f0){*f=entry;return GH_SERVICES_ASSET;}
   if(entry==0x27a320||entry==0x27ae10){
-   const unsigned accessory=entry==0x27a320?0:1;
    gh_event_actor_extra *extra=s->event_actor_extra;
    *f=entry;
-   if(!extra||event_actor!=&extra->ev04_accessory[accessory])return GH_SERVICES_ASSET;
+   if(!extra)return GH_SERVICES_ASSET;
+   const unsigned accessory=entry==0x27ae10?1:event_actor==&extra->ev04_accessory[2]?2:0;
+   if(event_actor!=&extra->ev04_accessory[accessory])return GH_SERVICES_ASSET;
    gh_cloth_step_bindings cloth={.templates=s->b.cloth_templates,.globals=s->b.cloth_globals,
     .random=&s->b.init->random,.actors=&s->scene_tables,
     .matrix_policy=GH_STATIC_BINARY32_REFERENCE,.random_policy=GH_FRAME_CHOP_REFERENCE};

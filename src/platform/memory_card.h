@@ -44,6 +44,8 @@ gh_mc_error gh_memory_card_request_save_write(gh_memory_card *,const uint8_t rec
 gh_mc_error gh_memory_card_request_save_close(gh_memory_card *);
 typedef enum {GH_MC_SAVE_ICON_MODEL=1,GH_MC_SAVE_ICON_SYSTEM=2} gh_mc_save_icon_kind;
 gh_mc_error gh_memory_card_request_slot_create(gh_memory_card *,uint32_t slot);
+/* Original occupied-save overwrite invalidates only the selected icon.sys. */
+gh_mc_error gh_memory_card_request_save_icon_delete(gh_memory_card *,uint32_t slot);
 gh_mc_error gh_memory_card_request_save_icon_write_open(gh_memory_card *,uint32_t slot,gh_mc_save_icon_kind);
 gh_mc_error gh_memory_card_request_save_icon_write(gh_memory_card *,gh_mc_save_icon_kind,const uint8_t *,uint32_t bytes);
 /* pending command executes real filesystem query here; completed=1 reports

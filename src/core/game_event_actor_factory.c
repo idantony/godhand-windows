@@ -96,7 +96,13 @@ gh_game_event_status gh_event_actor_factory_run(void *opaque, const gh_event_act
         request->data->components && request->data->components->event_no == 0x1b;
     const int ev05_ev06_actor=request->data&&request->data->components&&request->info&&!request->info[4]&&
         gh_event_actor_ev05_ev06_source_kind(request->data->components->event_no,request->actor_index,source);
-    if ((!ev04_actor && !ev05_ev06_actor && !ev1b_el40 && !packed_enemy && !ev1b_prop &&
+    const int ev07_actor=request->data&&request->data->components&&
+        ((request->info&&gh_event_actor_ev07_shared_source_kind(request->data->components->event_no,
+            request->actor_index,source,request->info[4]))||
+         (request->data->components->event_no==7&&
+          ((source==0x253&&(request->actor_index==3||request->actor_index==7))||
+           (source==0x628&&request->actor_index==11))));
+    if ((!ev04_actor && !ev05_ev06_actor && !ev07_actor && !ev1b_el40 && !packed_enemy && !ev1b_prop &&
         (source < 0x600 || source > 0x602) && (source < 0x60a || source > 0x60d) &&
         (source < 0x605 || source > 0x607) && source != 0x630 && source != 0x631 && source != 0x634 && source != 0x639 &&
         source != 0x641 && source != 0x642 && source != 0x646 && source != 0x647 &&

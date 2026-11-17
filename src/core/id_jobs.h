@@ -35,6 +35,8 @@ typedef struct {gh_id_view source;uint16_t width,height;uint64_t tex0;} gh_id_te
 /* Original Radar+94, resource1/TBL1 item0x36, T32 PSMT8 128x256. */
 #define GH_ID_CAPTION_TEX0 UINT64_C(0x19d408000)
 #define GH_ID_RADAR_TEX0 UINT64_C(0x200000021d308000)
+/* Original IDSubScrMap US TBL1 item3. */
+#define GH_ID_SAVE_MAP_MARKER_TEX0 UINT64_C(0x2000000221310000)
 /* Original language TBL1 items 12/13. */
 #define GH_ID_TIM2_128X64_PSMT8_TEX0 UINT64_C(0x19d308000)
 /* Actual tutorial TBL1 items 29:1, 29:2 and language 1:2. */

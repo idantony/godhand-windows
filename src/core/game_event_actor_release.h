@@ -15,7 +15,7 @@ typedef struct {
     gh_event_actor_extra *extra;
     gh_event_actor_play *play;
     gh_sound_control *sound;
-    const gh_game_effects *effects;
+    gh_game_effects *effects;
 } gh_event_actor_release_bindings;
 
 typedef struct {

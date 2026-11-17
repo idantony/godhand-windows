@@ -330,12 +330,23 @@ static gh_effect_status emitter_update(gh_game_effects_frame*s,unsigned i){
   store_number(p+0x228,elapsed);
   s->emitter_stage=4;
  }
- if(s->emitter_stage==4){
+ if(s->emitter_stage==4||s->emitter_stage==7){
   int32_t time,elapsed;if(!clock_integer(number(p+0x180),&time)||!clock_integer(number(p+0x228),&elapsed))return fail(s,0x3035d0,GH_EFFECT_UNSUPPORTED);
   unsigned duration=h(p+0x224);if(duration&&(int16_t)(uint16_t)elapsed>=(int32_t)duration){put(p+0x114,w(p+0x114)|0x40000000u);return GH_EFFECT_OK;}
   s->emitter_spawn_count=0;
   if((int16_t)h(p+0x186)<time){if((int16_t)h(p+0x188)>0&&(int16_t)h(p+0x188)<time){put(p+0x114,w(p+0x114)|0x40000000u);return GH_EFFECT_OK;}
-   if(w(r)&0x10000u)return fail(s,0x31d098,GH_EFFECT_UNSUPPORTED);
+   if((w(r)&0x10000u)&&s->emitter_stage==4){
+    /* Original 303654 mutates the emitter seed even when the sample
+     * rejects this frame's spawn. Keep the accepted draw across retries. */
+    if(w(p+0x18c)!=0x000d0006u||w(p+0x110)!=0x250cu||
+       w(r)!=0x1ebfa010u||r[0x133]!=0x1f||
+       !gh_effect_event_part_is_bound(current.record,current.actor,current.selector))
+     return fail(s,0x31d098,GH_EFFECT_UNSUPPORTED);
+    const uint32_t seed=w(p+0x220)*UINT32_C(0x19660d)+UINT32_C(0x3c6ef35f);
+    put(p+0x220,seed);
+    if((seed&7u)<4u)return GH_EFFECT_OK;
+    s->emitter_stage=7;
+   }
    if(!(w(p+0x114)&0x800000u)){e=emitter_transform(s,p,r);if(e)return e;}
    e=emitter_spawn_interval_003035d0(s,p,r);
    if(e)return e;
@@ -396,6 +407,7 @@ static int esp_update_class(const gh_effect_esp_view *view)
  case 0x1f: return vtable==0x44f448;
  case 8: return vtable==0x44e820&&gh_effect_esp08_screen_row(view->record);
  case 9: return vtable==0x44e8c8;
+ case 0x10: return vtable==0x44eab8;
  case 0x12: return vtable==0x44eb70;
  case 0x13: return vtable==0x44ec68;
  case 4: return vtable==GH_ESP04_VTABLE;
@@ -422,7 +434,7 @@ static gh_effect_status esps(gh_game_effects_frame*s){uint8_t*base=s->b.storage.
  s->esp_count++;s->esp_stage=1;}
  /* Original wrapper2FBE88 counts the call but skips virtualUpdate whenfrozen. */
  if(!s->esp_update.identity&&(w(v.payload+0x11c)&0x10000u)){s->esp_stage=0;continue;}gh_esp_update_bindings b={.storage=s->b.storage,.work=s->b.work,.globals=s->b.globals,.atan_coeff=s->b.atan_coeff,.policy=s->b.policy,.camera=s->b.camera,.display=s->b.display,
- .active_camera=s->b.init?s->b.init->active_camera:NULL};gh_effect_status status=gh_game_esp_update_002fbed0(&s->esp_update,&b,i,v.serial);if(status)return fail(s,s->esp_update.frontier,status);if(!s->esp_update.complete)return fail(s,0x2fbed0,GH_EFFECT_ARGUMENT);
+ .active_camera=s->b.init?s->b.init->active_camera:NULL,.random=s->b.init?&s->b.init->random:NULL};gh_effect_status status=gh_game_esp_update_002fbed0(&s->esp_update,&b,i,v.serial);if(status)return fail(s,s->esp_update.frontier,status);if(!s->esp_update.complete)return fail(s,0x2fbed0,GH_EFFECT_ARGUMENT);
  if(v.type==5&&!s->esp_update.retired){
   if(!v.light_part||!v.light_part->alias_f0||!v.actor||
      !gh_effect_enemy_light_esp_is_bound(s->b.storage.effects,&v))

@@ -163,14 +163,24 @@ messages pass drawing and dismissal checks.
 
 ### Verified progress
 
-The R104 victory replay now presents the original Stage Clear screen in R021.
-The test lowers the boss to 60 HP immediately before an original 80-point
-Shockwave. Native code applies the hit, plays all 14 EV06 shots and releases
-the arena before entering R021. Direct3D presents the clear time, Continue,
-villager and enemy tallies through the planned stop at tick 4,710. A separate
-CPU replay verifies all 4,712 controller samples and reaches the original total
-payout routine. A full-health boss victory and the complete confirmation and
-save flow remain in development.
+The native Windows replay confirms the R021 results with the original Cross
+input, awards 50,100 G in the verified case and renders EV07 through its
+final shot. A scheduler replay completes all 22 authored shots, releases
+the scene and returns to R021.
+
+The Stage 2 map shows the route and the original Save, Continue, Enter Shop
+and Enter Casino options. The Continue path enters R003 and prefetches the
+original EV08 audio. A separate replay uses the original Start shortcut
+during EV07 and writes a new card slot through the original Save menu.
+A fresh process reads that slot from the title menu and enters R003. The
+record contains 50,100 G and the Stage 1 unlock flags. Overwrite confirmation
+replaces the selected record and preserves the other slot and menu icons.
+Declining leaves both slots unchanged.
+
+These progression replays set the boss to 60 HP immediately before the
+original 80-point Shockwave. A separate full-health combat replay renders
+the boss's amplified hit reaction and get-up. The full-health victory
+and the rest of Stage 2 remain in development.
 
 The Windows port now renders combat in both the R104 boss arena and the R101
 side arena. In R104, a recorded Triangle input hits the boss after the original
@@ -490,11 +500,17 @@ Gene 以 100 HP 回到 R103，场景继续运行。
 
 ### 已验证的进展
 
-R104 的胜利回放已在 R021 呈现原版结算画面。测试在原版 80 点冲击波命中前将头目血量
-调到 60 HP。原生程序处理命中，播放 EV06 全部 14 个镜头，清理竞技场并进入 R021。
-Direct3D 呈现结算时间、继续次数、村民和敌人击杀统计，到第 4,710 帧按计划结束。
-独立的 CPU 回放核对全部 4,712 个手柄采样，并到达原版总奖金流程。满血头目战的完整
-胜利路线、确认和保存流程仍在开发。
+原生 Windows 回放用原版叉键确认 R021 结算，测试路线领取了 50,100 G，并渲染 EV07
+至最后一镜。调度回放跑完原版的全部 22 个镜头，释放过场对象后返回 R021。
+
+第二关地图显示路线和原版的保存、继续、进入商店、进入赌场四个选项。选择继续会进入
+R003，并预读原版 EV08 音频。另一条回放用原版 Start 跳过 EV07，再通过原版保存菜单
+写入新槽位。新进程从标题菜单读入该存档并进入 R003，存档中的 50,100 G 和首关解锁
+标记均已核对。确认覆盖会替换当前槽位并保留另一槽位及菜单图标。取消覆盖后，两份
+存档均保持原样。
+
+这些流程测试在原版 80 点冲击波命中前将头目血量设为 60 HP。独立的满血战斗回放已
+呈现头目受强化命中后倒地及起身的动作。满血获胜和第二关后续流程仍在开发。
 
 Windows 端已能呈现 R104 头目战和 R101 支线竞技场的原版战斗。R104 播完原版过场后，
 回放中的三角键攻击命中头目。另一条回放经原版钥匙卡门进入 R104，验证了头目的普通弹

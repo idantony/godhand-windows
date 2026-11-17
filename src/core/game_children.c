@@ -140,11 +140,9 @@ static gh_child_status save_map_trans_001640e8(const gh_game_children *s,
     uint32_t *frontier)
 {
     const uint8_t variant=child->bytes[0x64];
-    if(variant==1&&child->bytes[0x5b]==1)
-        return child_stop(frontier,0x163c58,GH_CHILD_UNSUPPORTED);
     /* 164978 receives 00567D70 and immediately returns. Door map variants
      * 2 and 3 proceed directly to the IDBase Trans at 2AAC28. */
-    if(!s->save_map_active||!s->save_map_inited||(variant!=2&&variant!=3)||
+    if(!s->save_map_active||!s->save_map_inited||(variant!=1&&variant!=2&&variant!=3)||
        !child->native_base||!child->native_base->initialized)
         return child_stop(frontier,0x1640e8,GH_CHILD_UNSUPPORTED);
     uint32_t original_frontier=0;
@@ -192,11 +190,12 @@ static gh_id_base *save_map_base(gh_game_children *s)
     return s->pairs[3].native_base;
 }
 
-gh_child_status gh_game_children_save_map_open_00160020(gh_game_children *s,
-    const gh_save_map_bindings *b,int *started,uint32_t *frontier)
+gh_child_status gh_game_children_save_map_open_variant_00160020(gh_game_children *s,
+    const gh_save_map_bindings *b,unsigned variant,int *started,uint32_t *frontier)
 {
     if(frontier)*frontier=0;
-    if(!s||!b||!b->work||!started||s->count!=9)return GH_CHILD_ARGUMENT;
+    if(!s||!b||!b->work||!started||s->count!=9||(variant!=1&&variant!=2))
+        return GH_CHILD_ARGUMENT;
     *started=0;
     uint8_t *w=(uint8_t*)b->work,*p=s->bytes;
     const uint32_t flags=r32(w+0x5e4);
@@ -211,7 +210,7 @@ gh_child_status gh_game_children_save_map_open_00160020(gh_game_children *s,
     p[0xf15]=1;
     w32(p,0xee8,3);
     w32(p,0x48,3);
-    p[0x794]=2;
+    p[0x794]=(uint8_t)variant;
     w16(p,0x50,1);
     w32(b->player->view.bytes,0x54c,0x40a00000);
     w32(w,0x5e4,flags|0x08000000);
@@ -220,6 +219,12 @@ gh_child_status gh_game_children_save_map_open_00160020(gh_game_children *s,
     s->save_map_active=1;
     *started=1;
     return GH_CHILD_OK;
+}
+
+gh_child_status gh_game_children_save_map_open_00160020(gh_game_children *s,
+    const gh_save_map_bindings *b,int *started,uint32_t *frontier)
+{
+    return gh_game_children_save_map_open_variant_00160020(s,b,2,started,frontier);
 }
 
 static gh_child_status save_map_resource(gh_game_children *s,const gh_save_map_bindings *b,
@@ -272,6 +277,122 @@ static void save_map_show(gh_id_entry *entry,int show)
     else entry->flags|=UINT32_C(0x08000000);
 }
 
+static float map_word_float(const uint8_t *p,size_t offset)
+{
+    float value;
+    memcpy(&value,p+offset,sizeof(value));
+    return value;
+}
+
+static void map_store_float(uint8_t *p,size_t offset,float value)
+{
+    memcpy(p+offset,&value,sizeof(value));
+}
+
+static void map_variant1_reveal(gh_id_entry **entries,unsigned stage)
+{
+    static const uint8_t markers[]={0,1,2,3,4,5,7,8,0};
+    save_map_show(entries[stage+8],1);
+    if(markers[stage])save_map_show(entries[markers[stage]],1);
+    if(stage==5)save_map_show(entries[6],1);
+}
+
+/* Original static initializer 164980 and interpolator 1646C0. The table
+ * stores each route knot and the matching endpoint tangent. */
+static void map_variant1_position(gh_id_entry *marker,float cursor)
+{
+    static const float point[16][2]={
+        {102,276},{165,210},{116,178},{133,105},{168,121},{187,172},{235,138},{279,160},
+        {310,204},{335,185},{312,151},{325,97},{358,93},{376,128},{404,106},{454,57}
+    };
+    static const float tangent[16][2]={
+        {11,-35},{3,-13},{-63,-43},{63,-55},{-8,32},{91,16},{35,-71},{0,44},
+        {55,-15},{3,-21},{-64,-46},{11,-8},{10,35},{13,1},{44,-97},{11,-26}
+    };
+    unsigned index=(unsigned)cursor;
+    const float t=cursor-(float)index;
+    if(index==15)index=14;
+    const float cube=t*t*t,square=t*t;
+    const float basis[]={2*cube-3*square+1,-2*cube+3*square,cube-2*square+t,cube-square};
+    float position[2];
+    for(unsigned i=0;i<2;++i)
+        position[i]=point[index][i]*basis[0]+point[index+1][i]*basis[1]+
+            tangent[index][i]*basis[2]+tangent[index+1][i]*basis[3];
+    marker->pos_x=position[0];
+    marker->pos_y=position[1]-16.0f;
+}
+
+/* 1645E0's target selection uses the contiguous cleared-stage bits. */
+static unsigned save_map_stage(uint32_t mask)
+{
+    unsigned stage=0;
+    while(stage<8&&(mask&(1u<<stage)))++stage;
+    return stage;
+}
+
+static uint16_t save_map_next_room(unsigned stage)
+{
+    static const uint16_t target[]={0,0x200,0x300,0x400,0x500,0x600,0x700,0x802,0x806};
+    return target[stage];
+}
+
+/* 163C58 draws both halves of the highlighted route before IDBase Trans. */
+gh_child_status gh_game_children_save_map_route_quads(const gh_game_children *s,
+    const gh_id_state *manager,gh_cockpit_radar_quad quads[2],size_t *count,
+    uint32_t *frontier)
+{
+    if(!s||!manager||!quads||!count)return GH_CHILD_ARGUMENT;
+    *count=0;
+    const uint8_t *p=s->bytes+0x730;
+    if(!s->save_map_active||!s->save_map_inited||p[0x64]!=1||p[0x5b]!=1)
+        return GH_CHILD_OK;
+    const unsigned stage=p[0xf0];
+    if(!stage)return GH_CHILD_OK;
+    if(stage>7)return child_stop(frontier,0x163c58,GH_CHILD_UNSUPPORTED);
+    const gh_id_entry *route=s->save_map_entries[stage+8];
+    for(unsigned i=0;i<2;++i){
+        const size_t offset=i?0x110:0x100;
+        const float x=map_word_float(p,offset),y=map_word_float(p,offset+4);
+        const float reveal=map_word_float(p,offset+8);
+        const float width=route->f68*reveal,height=route->f6c*reveal;
+        if(reveal==0.0f)continue; /* Zero-area sprite before its reveal starts. */
+        gh_id_texture texture;
+        if(gh_id_texture_open(manager,7,i+4,&texture)!=GH_ID_OK||
+           texture.tex0!=GH_ID_TIM2_64X64_PSMT8_TEX0)
+            return child_stop(frontier,0x2acdc8,GH_CHILD_UNSUPPORTED);
+        gh_cockpit_radar_quad quad={.texture=texture.source,
+            .xy={i?x:x-width,y,i?x+width:x,y+height},
+            .uv={i?0:1-reveal,0,i?reveal:1,reveal},.rgba=0x80808080};
+        quads[(*count)++]=quad;
+    }
+    return GH_CHILD_OK;
+}
+
+static void save_map_init_variant1(gh_game_children *s,const gh_save_map_bindings *b)
+{
+    static const float start[]={0,0,1,3,6,8,11.1f,14,15};
+    static const float end[]={0,1,3,6,8,11.1f,14,15,15};
+    uint8_t *p=s->bytes+0x730;
+    unsigned stage=save_map_stage(r32(b->save.bytes+0xa4));
+    w16(p,0x134,save_map_next_room(stage));
+    if(stage>7)stage=7;
+    p[0xf0]=(uint8_t)stage;
+    for(unsigned i=1;i<=8;++i){
+        save_map_show(s->save_map_entries[i+8],0);
+        if(i<stage)map_variant1_reveal(s->save_map_entries,i);
+    }
+    map_store_float(p,0x120,start[stage]);
+    map_store_float(p,0x124,end[stage]);
+    map_variant1_position(s->save_map_entries[0],start[stage]);
+    const unsigned chapter=s->save_map_room>>8;
+    unsigned message=chapter?chapter*16+0x2013+(s->save_map_room&255):0x20a3;
+    s->save_map_message=(uint16_t)(message>0x20a3?0x20a3:message);
+    s->save_map_entries[25]->message=s->save_map_entries[26]->message=0x2022;
+    w16(p,0x130,0);
+    w32(p,0x60,3);
+    s->save_map_inited=1;
+}
+
 static gh_child_status save_map_init(gh_game_children *s,const gh_save_map_bindings *b,
     int *ready,uint32_t *frontier)
 {
@@ -286,7 +407,13 @@ static gh_child_status save_map_init(gh_game_children *s,const gh_save_map_bindi
     gh_child_status status=save_map_resource(s,b,ready,frontier);
     if(status||!*ready)return status;
     const int from_load=(b->work->flags&0x40)!=0;
-    if((p[0x64]!=2&&p[0x64]!=3)||!b->save.bytes||b->save.size<0xa8)
+    if(!b->save.bytes||b->save.size<0xa8)
+        return child_stop(frontier,0x1627d8,GH_CHILD_UNSUPPORTED);
+    if(p[0x64]==1){
+        save_map_init_variant1(s,b);
+        return GH_CHILD_OK;
+    }
+    if(p[0x64]!=2&&p[0x64]!=3)
         return child_stop(frontier,0x1627d8,GH_CHILD_UNSUPPORTED);
     gh_id_entry **entries=s->save_map_entries;
     const uint32_t unlock=r32(b->save.bytes+0xa4);
@@ -316,6 +443,84 @@ static gh_child_status save_map_init(gh_game_children *s,const gh_save_map_bindi
     return GH_CHILD_OK;
 }
 
+/* The highlighted route (163598) precedes the marker travel and prompt
+ * (163840). Use child +5B/+5C, which the original Trans reads directly. */
+static void save_map_move_variant1(gh_game_children *s,const gh_save_map_bindings *b)
+{
+    uint8_t *p=s->bytes+0x730;
+    gh_id_entry **entries=s->save_map_entries;
+    switch(p[0x5b]){
+    case 0:
+        save_map_show(entries[24],0);
+        p[0x5c]=0;
+        ++p[0x5b];
+        break;
+    case 1:
+        if(!p[0xf0]){++p[0x5b];break;}
+        if(!p[0x5c]){
+            const gh_id_entry *route=entries[p[0xf0]+8];
+            map_store_float(p,0x100,route->pos_x+route->f68*route->scale_x);
+            map_store_float(p,0x104,route->pos_y);
+            map_store_float(p,0x108,0);
+            map_store_float(p,0x110,route->pos_x);
+            map_store_float(p,0x114,route->pos_y);
+            map_store_float(p,0x118,0);
+            ++p[0x5c];
+            break;
+        }
+        if(p[0x5c]<=2){
+            const size_t offset=p[0x5c]==1?0x108:0x118;
+            const float value=map_word_float(p,offset)+0.1f;
+            map_store_float(p,offset,value>1?1:value);
+            if(value>1)++p[0x5c];
+        }else{
+            map_variant1_reveal(entries,p[0xf0]);
+            p[0x5c]=0;
+            ++p[0x5b];
+        }
+        break;
+    case 2: {
+        uint8_t phase=p[0x5c];
+        if(!phase){
+            map_store_float(p,0x138,0);
+            phase=++p[0x5c];
+        }
+        float motion=map_word_float(p,0x138);
+        if(phase==1){
+            const float start=map_word_float(p,0x120),end=map_word_float(p,0x124);
+            map_variant1_position(entries[0], start+(end-start)*motion);
+            motion+=0.01f;
+            if(motion>1){
+                map_store_float(p,0x128,entries[0]->pos_x);
+                map_store_float(p,0x12c,entries[0]->pos_y);
+                ++p[0x5c];
+            }
+        }else if(phase==2){
+            static const float y[2][4]={{21,65,109,155},{22,66,110,156}};
+            const unsigned selected=r16(p+0x130);
+            const unsigned row=r32((const uint8_t *)b->work+0x56c)!=0;
+            save_map_show(entries[24],1);
+            save_map_show(entries[17],1);
+            for(unsigned i=0;i<4;++i)save_map_show(entries[19+i],i==selected);
+            entries[18]->pos_y=y[row][selected];
+            p[0x132]=(uint8_t)(selected>=2);
+            entries[0]->pos_x=selected<2?map_word_float(p,0x128):255.0f;
+            entries[0]->pos_y=selected<2?map_word_float(p,0x12c):283.0f;
+            if(r32((const uint8_t *)b->work+0x1a0)&0x10000000u)++p[0x5c];
+        }else if(phase==3)++p[0x5c];
+        else if(phase==4){p[0x5c]=0;++p[0x5b];}
+        if(p[0x5c]!=1)motion+=0.01f;
+        float origin;
+        memcpy(&origin,entries[23]->source+8,sizeof(origin));
+        entries[23]->pos_x=origin+motion*623.0f;
+        map_store_float(p,0x138,motion>2.0f?0.0f:motion);
+        break;
+    }
+    case 3: ++p[0x5b];break;
+    case 4: p[0x5b]=0;++p[0x5a];break;
+    }
+}
+
 static gh_child_status save_map_update(gh_game_children *s,const gh_save_map_bindings *b,
     uint32_t *frontier)
 {
@@ -324,6 +529,12 @@ static gh_child_status save_map_update(gh_game_children *s,const gh_save_map_bin
     const uint16_t selected=r16(p+0x130);
     if(!s->save_map_inited||selected>=4)return GH_CHILD_ARGUMENT;
     e[24]->seed=r32(b->save.bytes+0x20);
+    if(p[0x64]==1){
+        save_map_move_variant1(s,b);
+        gh_id_frontier detail={0};
+        gh_id_error error=gh_id_jobs_move_reference_rotation(save_map_base(s),NULL,NULL,&detail);
+        return error?child_stop(frontier,detail.address?detail.address:0x2aaa40,GH_CHILD_UNSUPPORTED):GH_CHILD_OK;
+    }
     if(r32((const uint8_t*)b->work+0x594)&0x02000000){
         e[24]->seed=999999;
         w32(b->save.bytes,0x20,e[24]->seed);
@@ -374,12 +585,16 @@ static gh_child_status save_map_input(gh_game_children *s,const gh_save_map_bind
     else if(selection>3)selection=first_selection;
     w16(p,0x130,(uint16_t)selection);
     if(!(r32(w+0x1a0)&0x10000000u))return GH_CHILD_OK;
-    if(selection==1&&b->work->room==0x21)
+    if(selection==1&&p[0x64]!=1&&b->work->room==0x21)
         return child_stop(frontier,0x1645e0,GH_CHILD_UNSUPPORTED);
     if((status=save_map_sound(b,0x15e,frontier)))return status;
     w32(p,0x60,selection==0?0xc:UINT32_MAX);
     if(selection==0)w16(p,0x134,0xffff);
-    else if(selection==1)w16(p,0x134,s->save_map_target);
+    else if(selection==1){
+        const unsigned stage=save_map_stage(r32(b->save.bytes+0xa4));
+        if(p[0x64]!=1)w16(p,0x134,s->save_map_target);
+        else if(stage)w16(p,0x134,save_map_next_room(stage));
+    }
     else{
         w16(p,0x134,0);
         w16(p,0x136,(uint16_t)(selection==2));
@@ -458,6 +673,7 @@ gh_child_status gh_game_children_save_map_move_001601d8(gh_game_children *s,
         w16(p,0x50,4);
         break;
     case 4:
+        if(p[0x794]==1&&(status=save_map_update(s,b,frontier)))return status;
         if(!p[0xed4]){
             if((status=save_map_fade(b,15,1,frontier)))return status;
             p[0xed4]=1;
@@ -471,7 +687,9 @@ gh_child_status gh_game_children_save_map_move_001601d8(gh_game_children *s,
         break;
     case 5:
         if(r32(w+0x5dc)&0x100000)return GH_CHILD_OK;
-        if((status=save_map_input(s,b,frontier)))return status;
+        if(p[0x794]!=1||(p[0x78b]==2&&p[0x78c]==2)){
+            if((status=save_map_input(s,b,frontier)))return status;
+        }
         if((status=save_map_update(s,b,frontier)))return status;
         if(r32(p+0x790)==0xc){
             w32(p,0x4c,0xc);
