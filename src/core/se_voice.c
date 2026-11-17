@@ -288,8 +288,9 @@ static int enemy_reaction_profile(const struct voice *v,int16_t bank,int16_t pro
   const uint8_t *actor=root->bytes;
   const int catapult=bank==1&&v->part_index==-1&&v->model->work&&v->model->work->room==0x200&&
      root->original_vtable214==0x4479c8&&root->size>=0x17b8&&h(actor+0x2fe)==0x201&&
-     w(actor+0x564)==0x21a&&!h(actor+0x640)&&state==0x0801&&phase<=1&&
-     actor[0x2f7]==2&&w(actor+0x17b4)==20;
+     w(actor+0x564)==0x21a&&!h(actor+0x640)&&phase<=1&&
+     ((state==0x0801&&actor[0x2f7]==2&&w(actor+0x17b4)==20)||
+      (state==0x0101&&!actor[0x2f7]&&w(actor+0x17b4)==12));
   const int r200_triangle=bank==7&&v->part_index==-1&&v->model->work&&v->model->work->room==0x200&&
      root->original_vtable214==0x4479c8&&root->size>=0x17b8&&h(actor+0x2fe)==0x201&&
      w(actor+0x564)==0x202&&h(actor+0x640)==1&&!actor[0x1650]&&state==0x0101&&phase<=1&&
@@ -1072,7 +1073,8 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
     v->part_index==-1&&other_surface&&h(actor+0x2fe)==0x201&&!actor[0x1650]&&
     ((dependency==0x21a&&!h(actor+0x640)&&
       (w(actor+0x2f4)==0x00016b00u||w(actor+0x2f4)==0x00010800u||
-       w(actor+0x2f4)==0x00010600u||w(actor+0x2f4)==0x00010900u))||
+       w(actor+0x2f4)==0x00010500u||w(actor+0x2f4)==0x00010600u||
+       w(actor+0x2f4)==0x00010700u||w(actor+0x2f4)==0x00010900u))||
      (dependency==0x202&&h(actor+0x640)==1&&
       (w(actor+0x2f4)==0x00011500u||w(actor+0x2f4)==0x00010101u)));
  const int r200_landing=gate_death_step&&root->size>0x1650&&v->model->work&&

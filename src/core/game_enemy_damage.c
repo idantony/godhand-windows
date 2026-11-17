@@ -185,12 +185,19 @@ static int r200_em02_triangle_recoil(const gh_enemy_actor *enemy,const uint8_t *
         word(actor+0x17b4)==24;
 }
 
+static int r200_em1a_triangle(const gh_enemy_actor *enemy,const uint8_t *actor)
+{
+    return enemy&&enemy->entry.b.work&&enemy->entry.b.work->room==0x200&&
+        enemy->entry.object.view.original_vtable214==0x4479c8&&half(actor+0x2fe)==0x201&&
+        word(actor+0x564)==0x21a&&!half(actor+0x640)&&!actor[0x1650];
+}
+
 static int triangle_take_supported(const gh_enemy_actor *enemy, const uint8_t *actor, uint16_t effect) {
     return effect==0x12&&(r100_stamp19(enemy,actor)||r100_stamp20(enemy,actor)||
         r100_stamp8(enemy,actor)||r100_at2_em03(enemy,actor)||r104_em03_damage_receiver(enemy,actor)||
         r100_west_em00(enemy,actor)||r100_west_em02_em03(enemy,actor)||
         r103_arena_punch_target(enemy,word(actor+0x564))||r103_arena_em0a(enemy,actor)||
-        r103_boss_player_strike_target(enemy,actor)||r200_em02_triangle(enemy,actor));
+        r103_boss_player_strike_target(enemy,actor)||r200_em02_triangle(enemy,actor)||r200_em1a_triangle(enemy,actor));
 }
 
 /* PL00 114120 submits Give2A with the original shape17 attachment. */
@@ -283,8 +290,11 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
          !r103_arena_em0a(enemy,view->bytes)&&!r103_boss_player_strike_target(enemy,view->bytes)&&
          !r104_player_punch(enemy,view->bytes,7)&&
          !(power==25&&back_circle_contact(enemy,player,0x0f))&&
+         !(r200_em1a_triangle(enemy,view->bytes)&&power==12&&
+           word(player->bytes+0x2f4)==0x00010b00u)&&
          !(r200_em02_triangle(enemy,view->bytes)&&word(player->bytes+0x2f4)==0x00010b00u&&
-           (power==24||(power==12&&word(view->bytes+0x2f4)==0x00010101u)))&&
+           (power==24||(power==12&&(word(view->bytes+0x2f4)==0x00010101u||
+             word(view->bytes+0x2f4)==0x00011500u))))&&
          !(r104_em03_damage_receiver(enemy,view->bytes)&&word(player->bytes+0x5e8)==29&&
            power==((half(view->bytes+0x3ac)&0x100u)?24:12))) ||
         !enemy->hitareas.created[0])
@@ -1203,7 +1213,10 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         word(player->bytes+0x5e8)==29&&
         word(body->bytes+0x4c)==12&&rank==1&&!body->state->heat[0x10];
     const int boss_recovery=r104_recovery||r104_triangle||em27_punch;
-    const int counter_selector = opening_200 || (ordinary_punch && dependency==0x200) || boss_strike;
+    const int r200_em1a=triangle&&r200_em1a_triangle(enemy,p)&&word(body->bytes+0x4c)==12&&
+        half(body->bytes+0x44)==0xa&&rank==1&&word(player->bytes+0x2f4)==0x00010b00u&&
+        (word(p+0x2f4)==0x00010900u||word(p+0x2f4)==0x00010101u);
+    const int counter_selector = opening_200 || (ordinary_punch && dependency==0x200) || boss_strike||r200_em1a;
     const int arena_em0a=triangle&&r103_arena_em0a(enemy,p);
     const int arena_stun_airborne=arena_em0a&&effect==0x12&&number(p+0x17cc)>0;
     const int dead_airborne=triangle&&!half(p+0x54a)&&
@@ -1221,7 +1234,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         const float block = number(p + 0x1740), armor = number(p + 0x1734);
         const uint16_t hp = half(p + 0x54a);
         uint16_t flags = half(p + 0x3ac);
-        if ((!hit_probe_selector && !em27_punch && !boss_strike && !r104_punch && !r104_triangle && !r104_back_circle && dependency != 0x20a) ||
+        if ((!hit_probe_selector && !em27_punch && !boss_strike && !r104_punch && !r104_triangle && !r104_back_circle && !r200_em1a && dependency != 0x20a) ||
             (!hp && !continuing_knockdown && !continued_fall) || hp >= 0x8000 ||
             !isfinite(drain) || drain > 0 || !isfinite(cooldown) || cooldown > 0 ||
             !isfinite(block) || !isfinite(armor))

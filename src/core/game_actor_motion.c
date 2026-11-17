@@ -112,7 +112,8 @@ unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *b)
     !half(p+0x640)&&rd(p+0x17b4)==20&&p[0x17c3]&&
     ((half(p+0x2f4)==0x0801&&p[0x2f7]==2)||(half(p+0x2f4)==0x0d01&&!p[0x2f7])||
      ((half(p+0x2f4)==0x0800||half(p+0x2f4)==0x0600||!half(p+0x2f4))&&!p[0x2f7])||
-     (half(p+0x2f4)==0x0900&&p[0x2f7]<=2));
+     (half(p+0x2f4)==0x0900&&p[0x2f7]<=2)||
+     ((half(p+0x2f4)==0x0500||half(p+0x2f4)==0x0700||half(p+0x2f4)==0x1500)&&!p[0x2f7]));
  return (blowaway||east_rear||boss_mirror||r200_blowaway||
       gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
 }
