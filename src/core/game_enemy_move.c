@@ -7604,7 +7604,7 @@ static gh_actor_motion_status advance_em00_substate4d_00236190(gh_enemy202_move 
     return advance_state0_tail(s,p);
 }
 
-/* Original paired catch for the EM02/EM03 4E state. */
+/* Original paired catch shared by EM02, EM03 and the first arena boss. */
 static gh_actor_motion_status advance_substate4e_002363e8(gh_enemy202_move *s,uint8_t *p)
 {
     enum { ENTER=210, BIND, PROMPT, INPUT, SAMPLE, CHOOSE, ROTATE, TRANSLATE };
@@ -7614,7 +7614,8 @@ static gh_actor_motion_status advance_substate4e_002363e8(gh_enemy202_move *s,ui
     gh_actor_motion *motion=&enemy->motion.motion;
     uint32_t pc=0;
     const int opening=work->room==0x100&&word(p+0x564)==0x203&&half(p+0x640)==19;
-    if((!r102_area11_em02(work,p)&&!opening&&!r103_arena_em03(&enemy->entry))||
+    const int arena_boss=word(p+0x564)==0x214&&r103_arena_boss(&enemy->entry);
+    if((!r102_area11_em02(work,p)&&!opening&&!r103_arena_em03(&enemy->entry)&&!arena_boss)||
        !s->player||s->player->size<0x55c||s->player->bytes[0x2f4]!=1||
        s->player->bytes[0x2f5]!=0xb)
         return stop(s,0x2363e8,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -7622,19 +7623,23 @@ static gh_actor_motion_status advance_substate4e_002363e8(gh_enemy202_move *s,ui
     if(s->substate67_stage==ENTER){
         if(!enemy->b.solids||gh_collision_solid_set_enabled_001351d8(enemy->b.solids,actor,0,&pc))
             return stop(s,pc?pc:0x1351d8,GH_ACTOR_MOTION_UNSUPPORTED);
-        if(p[0x2f6]==4||p[0x2f6]==5||p[0x2f6]>7)return stop(s,0x2363e8,GH_ACTOR_MOTION_UNSUPPORTED);
-        s->substate67_stage=p[0x2f6]==7?INPUT:(p[0x2f6]&1u)?PROMPT:BIND;
+        const unsigned phase=p[0x2f6];
+        if((!arena_boss&&(phase==4||phase==5))||phase>7)
+            return stop(s,0x2363e8,GH_ACTOR_MOTION_UNSUPPORTED);
+        s->substate67_stage=phase==5||phase==7?INPUT:(phase&1u)?PROMPT:BIND;
     }
     if(s->substate67_stage==BIND){
         gh_actor_motion_call *call=&s->substate67_motion;
         if(!call->active){
             const gh_object_view *resource=&enemy->entry.resource;
-            if(!resource->bytes||!resource->file_extent_known||resource->file_extent<0x7f0||
+            const unsigned phase=p[0x2f6];
+            const unsigned row=phase==4&&!positive_hp(s->player->bytes)?0x7f0:
+                phase>=4?0x7e0:phase==2?0x7d8:0x7e8;
+            if(!resource->bytes||!resource->file_extent_known||resource->file_extent<row+8||
                resource->file_extent>resource->size||motion->b.resource!=resource->bytes)
                 return stop(s,0x236420,GH_ACTOR_MOTION_BOUNDS);
-            const unsigned row=p[0x2f6]==6?0x7e0:p[0x2f6]==2?0x7d8:0x7e8;
             gh_actor_motion_status status=gh_actor_motion_call_open_parameters_002a8578(
-                call,motion,&motion->b,word(resource->bytes+row),word(resource->bytes+row+4),0,p[0x2f6]==6?3:0,0,1);
+                call,motion,&motion->b,word(resource->bytes+row),word(resource->bytes+row+4),0,phase>=4?3:0,0,1);
             if(status)return stop(s,call->frontier?call->frontier:0x2a8578,status);
             p[0x1864]=0;
         }
@@ -7648,7 +7653,7 @@ static gh_actor_motion_status advance_substate4e_002363e8(gh_enemy202_move *s,ui
             put_half(p+0x56e,15);
         }
         p[0x2f6]++;
-        s->substate67_stage=p[0x2f6]==7?INPUT:PROMPT;
+        s->substate67_stage=p[0x2f6]>=5?INPUT:PROMPT;
     }
     if(s->substate67_stage==PROMPT){
         const gh_action_set_request request={.priority=11,.life=19,.unknown20=16};
@@ -7672,7 +7677,7 @@ static gh_actor_motion_status advance_substate4e_002363e8(gh_enemy202_move *s,ui
             put_half(p+0x56e,(uint16_t)(remaining-1));
             memcpy(actor->alias_f0,next,12);
         }
-        if(p[0x2f6]!=7){
+        if(p[0x2f6]<5){
             const uint32_t pressed=word((const uint8_t *)work+8);
             const unsigned timer=half(p+0x568);
             put_half(p+0x568,(uint16_t)(timer-((pressed&0xf0u)?1u:0u)-((pressed&0xf00000u)?4u:0u)));
@@ -7692,6 +7697,7 @@ static gh_actor_motion_status advance_substate4e_002363e8(gh_enemy202_move *s,ui
     if(s->substate67_stage==CHOOSE){
         if(s->state71_exit){
             if(p[0x2f6]==1)p[0x2f6]=2;
+            else if(p[0x2f6]==5)enemy_decision(p,0,0x6c,0);
             else if(p[0x2f6]==7){
                 gh_actor_motion_status status=choose_after_substate_002705d8(s,p);
                 if(status)return status;

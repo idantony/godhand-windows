@@ -2598,8 +2598,11 @@ gh_effect_status gh_effect_create_quiesce_actor_room_exit(gh_game_effects *effec
     gh_effect_devil_emitter_is_bound(effects,&view);
   const int heat_ready=player&&w(view.payload+0x18c)==0x00250000u&&
     gh_effect_player_attachment_emitter_is_bound(&view);
+  const uint32_t profile=w(view.payload+0x18c);
+  const int pincer=(profile&0xffffu)==0x58&&r103_pincer_effect_rows(profile>>16)&&
+    gh_effect_em00_attack_emitter_is_bound(&view);
   if(!devil&&!heat_ready&&!gh_effect_emad_emitter_is_bound(effects,&view)&&
-     !gh_effect_enemy_light_emitter_is_bound(effects,&view))
+     !gh_effect_enemy_light_emitter_is_bound(effects,&view)&&!pincer)
    return GH_EFFECT_UNSUPPORTED;
   emitters[emitter_count++]=i;
  }
@@ -2619,8 +2622,11 @@ gh_effect_status gh_effect_create_quiesce_actor_room_exit(gh_game_effects *effec
     (view.type==0||view.type==0x1f)&&gh_effect_devil_esp_is_bound(effects,&view);
   const int heat_ready=player&&w(view.payload+0x23a)==0x00250000u&&
     (view.type==0||view.type==9)&&gh_effect_player_attachment_esp_is_bound(effects,&view);
+  const uint32_t profile=w(view.payload+0x23a);
+  const int pincer=(profile&0xffffu)==0x58&&r103_pincer_effect_rows(profile>>16)&&
+    gh_effect_attack_esp_is_bound(effects,&view);
   if(!devil&&!heat_ready&&!gh_effect_emad_esp_is_bound(effects,&view)&&
-     !gh_effect_enemy_light_esp_is_bound(effects,&view))return GH_EFFECT_UNSUPPORTED;
+     !gh_effect_enemy_light_esp_is_bound(effects,&view)&&!pincer)return GH_EFFECT_UNSUPPORTED;
   const int known_trail=(devil&&view.type==0x1f)||(heat_ready&&view.type==9);
   if(m->trail_pools&&(!known_trail||m->trail_pools!=native->trail_pools))
    return GH_EFFECT_UNSUPPORTED;

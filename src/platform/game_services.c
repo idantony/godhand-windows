@@ -734,7 +734,8 @@ static int player_motion_request_matches(gh_game_services*s,const gh_player_moti
     !r->blend_frames&&!r->flags&&!r->release_previous_sequence;
  }
  const int long_grab=selector==0xb&&
-     (r102_area11_grab_attacker(s,live.enemy202)||r103_grab_attacker(s,live.enemy202,0x203));
+     (r102_area11_grab_attacker(s,live.enemy202)||r103_grab_attacker(s,live.enemy202,0x203)||
+      r103_grab_attacker(s,live.enemy202,0x214));
  const int arena=r103_grab_attacker(s,live.enemy202,0x200);
  const int short_grab=selector==0xa&&
      (r105_grab_attacker(s,live.enemy202)||r102_em00_grab_attacker(s,live.enemy202)||
@@ -759,17 +760,19 @@ static int player_motion_request_matches(gh_game_services*s,const gh_player_moti
      r->sequence_candidate_offset==u32(resource->bytes+row+4)&&!r->start_frame_bits&&
      r->blend_frames==(phase?3u:0u)&&!r->flags&&r->release_previous_sequence==1;
  }
+ const int arena_death=selector==0xb&&phase==4&&r103_grab_attacker(s,live.enemy202,0x214);
  if(!counter&&(p[0x2f4]!=1||
      (selector!=0xa&&selector!=0xb)||
-     (selector==0xa?phase!=0:(phase!=0&&phase!=2&&phase!=6))))return 0;
+     (selector==0xa?phase!=0:(phase!=0&&phase!=2&&phase!=6&&!arena_death))))return 0;
  const gh_object_view *resource=&live.enemy202->entry.resource;
- const size_t row=counter?0x538:selector==0xa?0x520:phase==6?0x800:phase==2?0x7f8:0x808;
+ const size_t row=counter?0x538:selector==0xa?0x520:
+     arena_death&&(int16_t)(u32(p+0x548)>>16)<1?0x810:phase>=4?0x800:phase==2?0x7f8:0x808;
  return resource->bytes&&resource->file_extent_known&&resource->file_extent>=row+8&&
   resource->file_extent<=resource->size&&
   r->resource==resource->bytes&&r->resource_bytes==resource->size&&
   r->motion_offset==u32(resource->bytes+row)&&
   r->sequence_candidate_offset==u32(resource->bytes+row+4)&&
-  !r->start_frame_bits&&r->blend_frames==(phase==6?3u:0u)&&!r->flags&&
+  !r->start_frame_bits&&r->blend_frames==(phase>=4?3u:0u)&&!r->flags&&
   r->release_previous_sequence==(s->b.work->room==0x100||long_grab||r102_counter||(arena&&counter));
 }
 static gh_player_init_status actor_sound_prepare(gh_game_services*s,gh_actor_attached_sound*sound,uint32_t*frontier){
@@ -4464,11 +4467,12 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  const int west_em00=r102_area11_short_grab_attacker(s,enemy);
  const int arena=r103_grab_attacker(s,enemy,0x200);
  const int arena_em03=r103_grab_attacker(s,enemy,0x203);
+ const int boss_em14=r103_grab_attacker(s,enemy,0x214);
  const int boss_em15=r103_grab_attacker(s,enemy,0x215);
  const int area11=r102_area11_grab_attacker(s,enemy);
  const int em0a_grab=r102_gate_em0a_grab_attacker(s,enemy)||r103_grab_attacker(s,enemy,0x20a);
  if(!p||s->title_player.view.size<0x1660||
-    (s->b.work->room!=0x100&&!em27&&!r102_em00&&!east_em00&&!west_em00&&!area11&&!arena&&!arena_em03&&!em0a_grab&&!boss_em15)||
+    (s->b.work->room!=0x100&&!em27&&!r102_em00&&!east_em00&&!west_em00&&!area11&&!arena&&!arena_em03&&!em0a_grab&&!boss_em14&&!boss_em15)||
     !enemy||enemy->entry.b.init!=s->b.init||!enemy->entry.published){
   *frontier=0x129718;
   return GH_ACTOR_MOTION_UNSUPPORTED;
@@ -4488,7 +4492,8 @@ static gh_actor_motion_status player_grab_00129718(void *context,const gh_enemy_
  else if(argument==2&&((dependency==0x200&&attacker[0x640]==20)||r102_em00||em27||arena||
          ((east_em00||west_em00)&&!attacker[0x2f4]))&&attacker[0x2f5]==0x4d)selector=0xa;
  else if(argument==3&&((dependency==0x203&&attacker[0x640]==19)||
-         ((area11||arena_em03)&&!attacker[0x2f4]))&&
+         ((area11||arena_em03)&&!attacker[0x2f4])||
+         (boss_em14&&!attacker[0x2f4]&&!attacker[0x2f6]&&!attacker[0x2f7]))&&
          attacker[0x2f5]==0x4e)selector=0xb;
  else if(argument==0x1d&&dependency==0x200&&(arena||attacker[0x640]==20||((r102_em00||east_em00||west_em00)&&attacker[0x2f7]==1))&&
          attacker[0x2f4]==1&&attacker[0x2f5]==0x1d&&

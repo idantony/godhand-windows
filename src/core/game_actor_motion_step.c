@@ -33,9 +33,10 @@ static unsigned motion_flags_allowed(const gh_actor_motion *s){
       (appearance==15&&((dependency==0x214&&stamp==0)||(dependency==0x215&&stamp==1))))
     return 0x48u;
   }
-  /* The lethal 11D4B0 impact sets bit 8 until the paired clip ends. */
+  /* The lethal 11D4B0 and 11C608 phases set bit 8 before moveMotion. */
   if(kind==0x100&&model->root.original_vtable214==0x41d220&&p[0x2f4]==1&&
-     p[0x2f5]==0xf&&p[0x2f6]==1&&!half(p+0x54a))return 0x48u;
+     ((p[0x2f5]==0xf&&p[0x2f6]==1)||(p[0x2f5]==0xb&&p[0x2f6]==5))&&
+     !half(p+0x54a))return 0x48u;
  }
  if(kind!=0x202)return 0x40u;
  /* 25FA18 sets the same sample bit for the R100 transform death clip. */

@@ -143,6 +143,10 @@ The coordinated flank attack also runs through contact and withdrawal.
 It lowers Gene's HP from 31 to 17 and then to 12 on the fall. A separate
 right-stick dodge avoids that attack and leaves Gene at 31 HP for the next
 exchange.
+Two native R103 title-load replays escape the first boss's sustained grab
+with real button presses and restore player control. Leaving the pad neutral
+during the grab plays the original lethal motion. Pressing Cross in the
+original Game Over menu reloads R103 at 100 HP and resumes scene updates.
 Full boss clearance remains in development. Earlier Direct3D replays present the escape counter and the movement that
 follows it after entering R103 through the original door from R102.
 
@@ -389,6 +393,9 @@ Gene 起身恢复操作后，方块路线将第二名头目的生命值从 597 �
 静音 Direct3D 回放呈现了合投过程。另一条手柄回放在 Gene 被合投击倒后进入原版 Game Over 菜单，确认重试后
 以 100 HP 回到 R103 继续战斗。原版夹击已运行至侧翼命中和收招，Gene 的 HP 从 31 降到 17，
 倒地时再降到 12。另一条路线用右摇杆闪避这次攻击，以 31 HP 进入下一次交锋。
+两条从标题读档进入 R103 的原生回放通过连续按键挣脱首名头目的持续抓投，恢复操作。
+抓投期间保持手柄无输入会播放原版致死动作。在原版 Game Over 菜单按叉键重试，
+Gene 以 100 HP 回到 R103，场景继续运行。
 完整头目战仍在开发中。较早的 Direct3D 回放从 R102 经原版门进入 R103，
 已呈现挣脱反击和随后的摇杆移动。
 

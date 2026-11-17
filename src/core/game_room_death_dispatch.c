@@ -141,7 +141,8 @@ static gh_room_pool_status dispatch(gh_room_death_dispatch *state,
   const unsigned player_state=kind==0x100?(word(actor->bytes+0x2f4)&0xffffu):0;
   const int r103_player=kind==0x100&&b->player.model&&b->player.model->work&&
      b->player.model->work->room==0x103&&!(word(actor->bytes+0x548)>>16)&&
-     (player_state==0x0002||player_state==0x0f01);
+     (player_state==0x0002||player_state==0x0f01||
+      (player_state==0x0b01&&actor->bytes[0x2f6]==5&&(flags&0xe0000000u)==0xe0000000u));
   const int r102_player=kind==0x100&&b->player.model&&b->player.model->work&&
     b->player.model->work->room==0x102&&(flags&0xe0000000u)==0xe0000000u;
   if(borrowed&&((kind!=0x2ad&&kind!=0x202&&kind!=0x220&&!r102_player&&!r103_player)||b->enemy.effects!=b->effects||

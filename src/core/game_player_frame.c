@@ -963,14 +963,16 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      s->pending_damage_kind==0x3e&&override_bank==UINT32_MAX&&!half(take+0x44)&&
      ((w(take+0x4c)==20&&s->pending_damage==15&&w(p+0x160c)==5)||
       (w(take+0x4c)==30&&s->pending_damage==23&&w(p+0x160c)==7));
-   /* The original flank lunge writes Give3E with power40. Contact can be
-    * consumed after the flank has already advanced into withdrawal. */
+   /* 260C20 can boost the flank's Give3E power40 to 60. The Take retains
+    * that power after the attacker advances into withdrawal. */
    const int boss_flank=b->work->room==0x103&&source_kind==0x204&&stamp<2&&
-     dependency==0x214u+stamp&&source->size>0x1650&&source->bytes[0x1650]==15&&
+     dependency==0x214u+stamp&&source->size>=0x187c&&source->bytes[0x1650]==15&&
      half(source->bytes+0x2f4)==0x3c00&&source->bytes[0x2f6]>=13&&
      source->bytes[0x2f6]<=16&&!source->bytes[0x2f7]&&
-     s->pending_damage_kind==0x3e&&w(take+0x4c)==40&&s->pending_damage==30&&
-     w(p+0x160c)==10&&override_bank==UINT32_MAX&&!half(take+0x44);
+     s->pending_damage_kind==0x3e&&override_bank==UINT32_MAX&&!half(take+0x44)&&
+     ((w(take+0x4c)==40&&s->pending_damage==30&&w(p+0x160c)==10)||
+      (w(take+0x4c)==60&&s->pending_damage==45&&w(p+0x160c)==15&&
+       w(source->bytes+0x1874)==40&&w(source->bytes+0x1878)==0x3e));
    const int arena_hit=(arena_attack&&(arena_em00||arena_em03||arena_em0a_short||arena_em0a_fall))||
      arena_slide||arena_em0a_f6||arena_reverse||boss_melee||em15_short||em14_short||boss_deflect||boss_kick||boss_flank;
    const int em14_sphere=b->work->room==0x103&&source_kind==0x204&&dependency==0x214&&!stamp&&
@@ -1314,7 +1316,8 @@ static int r103_grab_attacker(const gh_boot_work *work,const gh_title_player_vie
  const int em00=dependency==0x200&&(stamp==2||stamp==3);
  const int em03=dependency==0x203&&(stamp==6||stamp==7);
  const int em0a=dependency==0x20a&&(stamp==4||stamp==5);
- return (em00||em03||em0a)&&w(p+0x564)==dependency&&p[0x1650]==24&&
+ const int em14=dependency==0x214&&stamp==0;
+ return (em00||em03||em0a||em14)&&w(p+0x564)==dependency&&p[0x1650]==(em14?15:24)&&
     attacker->original_vtable214==0x4479c8&&half(p+0x2fe)==0x204;
 }
 
@@ -2797,8 +2800,7 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
  }
  if(s->stage==15&&s->state_entry==0x11c608){
   const gh_title_player_view *attacker=b->grab_attacker;
-  if(!attacker||!attacker->bytes||attacker->size<0x642||
-     p[0x2f6]==4||p[0x2f6]==5||p[0x2f6]>7)
+  if(!attacker||!attacker->bytes||attacker->size<0x642||p[0x2f6]>7)
    return fail(s,0x11c608,GH_PLAYER_FRAME_UNSUPPORTED);
   const uint8_t *source=attacker->bytes;
   const unsigned stamp=half(source+0x640);
@@ -2806,7 +2808,9 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
   const int area11=b->work->room==0x102&&dependency==0x202&&stamp==0x17&&
      attacker->size>=0x16c8&&!source[0x1650]&&w(source+0x16c4)==2;
   const int arena=r103_grab_attacker(b->work,attacker,0x203);
-  if(!area11&&!arena&&(b->work->room!=0x100||dependency!=0x203||stamp!=19))
+  const int arena_boss=r103_grab_attacker(b->work,attacker,0x214);
+  if((!arena_boss&&(p[0x2f6]==4||p[0x2f6]==5))||
+     (!area11&&!arena&&!arena_boss&&(b->work->room!=0x100||dependency!=0x203||stamp!=19)))
    return fail(s,0x11c608,GH_PLAYER_FRAME_UNSUPPORTED);
   if(!s->hurt_phase){
    put(p+0x54c,0x40a00000);
@@ -2827,18 +2831,23 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
    if(!p[0x2f6]&&(!b->auxiliary_bindings_known||b->aux_698||w(p+0x698)))
     return fail(s,0x12ac28,GH_PLAYER_FRAME_UNSUPPORTED);
    const gh_object_view *resource=&b->grab_resource;
-   const unsigned row=p[0x2f6]==6?0x800:p[0x2f6]==2?0x7f8:0x808;
+   const unsigned phase=p[0x2f6];
+   const unsigned row=phase==4&&(int16_t)half(p+0x54a)<1?0x810:
+      phase>=4?0x800:phase==2?0x7f8:0x808;
    if(!b->initialize_motion||!resource->bytes||resource->size<row+8)
     return fail(s,0x23a300,GH_PLAYER_FRAME_UNSUPPORTED);
    const gh_player_motion_request request={.player=b->player,.model=b->model,
      .work=b->work,.resource=resource->bytes,.resource_bytes=resource->size,
      .motion_offset=w(resource->bytes+row),
      .sequence_candidate_offset=w(resource->bytes+row+4),
-     .blend_frames=p[0x2f6]==6?3:0,.release_previous_sequence=1,.rate=b->rate};
+     .blend_frames=phase>=4?3:0,.release_previous_sequence=1,.rate=b->rate};
    gh_player_init_status status=b->initialize_motion(b->motion_context,&request,&pc);
    if(status)return fail(s,pc?pc:0x2a8578,status==GH_PLAYER_INIT_UNSUPPORTED?
       GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE);
-   if(p[0x2f6]==6){
+   if(phase==4){
+    put(p+0x15b0,30);
+    s->hurt_phase=14;
+   }else if(phase==6){
     p[0x2f6]=7;
     s->hurt_phase=4;
    }else if(p[0x2f6]==2){
@@ -2854,6 +2863,18 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
    gh_player_frame_status status=damage_score_001fa280(s,320);
    if(status)return status;
    p[0x2f6]=1;
+   s->hurt_phase=4;
+  }
+  if(s->hurt_phase==14){
+   if(!b->death_fade)return fail(s,0x2ca718,GH_PLAYER_FRAME_UNSUPPORTED);
+   gh_player_frame_status status=b->death_fade(b->damage_context,&pc);
+   if(status)return fail(s,pc?pc:0x2ca718,status);
+   s->hurt_phase=15;
+  }
+  if(s->hurt_phase==15){
+   gh_player_frame_status status=damage_score_001fa280(s,1000);
+   if(status)return status;
+   p[0x2f6]=5;
    s->hurt_phase=4;
   }
   if(p[0x2f6]==1&&half(p+0x56e)&&s->hurt_phase<=4){
@@ -2874,6 +2895,7 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
    gh_player_frame_status status=b->grab_camera(b->motion_context,b->model,&pc);
    if(status)return fail(s,pc?pc:0x124ec0,status);
    put(p+0x15f4,w(p+0x15f4)|2u);
+   if(p[0x2f6]==5)sh(p+0x434,half(p+0x434)|8u);
    s->hurt_phase=6;
   }
   if(s->hurt_phase==6){
@@ -2884,6 +2906,7 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
    gh_player_frame_status status=b->advance_motion(b->motion_context,&request,&ended,&pc);
    if(status)return fail(s,pc?pc:0x157c18,status);
    if(p[0x2f6]==1){if(ended)p[0x2f6]=2;}
+   else if(p[0x2f6]==5){if(ended)b->work->flags|=8u;}
    else if(p[0x2f6]==7){if(ended)s->hurt_phase=11;}
    else{
     if(ended)put(p+0x15b0,5);
