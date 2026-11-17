@@ -29,7 +29,9 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
     const unsigned shape_class = word(p + 0x1660 + side * 4);
     const int kick = shape_class == 0x19 && word(p + 0x5e8) == 0x25 &&
         word(p + 0x1670 + side * 4) == 7;
-    if (shape_class > 1 && !kick)
+    const int heat = shape_class == 0x17 && player->size > 0x1684 && p[0x1684] == 1 &&
+        word(p + 0x1670 + side * 4) == 0x2a && word(p + 0x1668 + side * 4) == 5;
+    if (shape_class > 1 && !kick && !heat)
         return stop(frontier, 0x10a608, GH_HITAREA_UNSUPPORTED);
     if (!give) return stop(frontier, 0x10a438, GH_HITAREA_ARGUMENT);
 
@@ -72,9 +74,11 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
     const float offset1[3] = {0.0f, 1.3f, 0.2f};
     const float offset2[3] = {0.0f, 0.8f, 0.2f};
     const float base_box[3] = {0.0f, 1.3f, 0.0f};
-    const float active_box[3] = {0.0f, shape_class ? 0.5f : 0.9f, 0.7f};
+    const float active_box[3] = {0.0f, heat ? 0.0f : shape_class ? 0.5f : 0.9f, heat ? 0.0f : 0.7f};
     const float box_size[3] = {
-        shape_class ? 1.8f : 0.7f, shape_class ? 1.5f : 1.0f, shape_class ? 1.8f : 1.2f
+        heat ? 2.0f : shape_class ? 1.8f : 0.7f,
+        heat ? 2.0f : shape_class ? 1.5f : 1.0f,
+        heat ? 2.0f : shape_class ? 1.8f : 1.2f
     };
     for (unsigned i = 0; i < 5; ++i) {
         uint8_t *object = give[order[i]].bytes;
@@ -110,7 +114,8 @@ gh_hitarea_status gh_player_attack_hitarea_0010a438(
     gh_hitarea_status status = gh_hitarea_object_set_active_001fd668(&give[4], 1, frontier);
     if (status) return status;
     memcpy(box + 0x4c, &power, sizeof(power));
-    memcpy(box + 0x10, rotation + 8, 12);
+    if(heat)memset(box + 0x10, 0, 12); /* 10AE60 copies original 747B00's zero vector. */
+    else memcpy(box + 0x10, rotation + 8, 12);
     /* 1FD820 dispatches to box VT+3C = 2BAAA8 (SetSize). */
     return gh_collision_pair_box_size_002baaa8(&shapes[4],box_size,frontier)?
         GH_HITAREA_UNSUPPORTED:GH_HITAREA_OK;

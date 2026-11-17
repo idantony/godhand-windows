@@ -1,4 +1,5 @@
 #include "game_player_post_state.h"
+#include "game_actor_model_material.h"
 #include <string.h>
 static uint32_t word(const uint8_t *p){uint32_t v;memcpy(&v,p,4);return v;}
 static void put(uint8_t *p,uint32_t v){memcpy(p,&v,4);}
@@ -47,7 +48,8 @@ static gh_player_post_status node_flag(gh_game_player_post_state *s,const gh_gam
  gh_actor_model_status x=gh_actor_model_node_mask_flags(r->owner,(unsigned)mesh,0x380,and_mask,or_mask);
  return x?fail(s,0x1236e8,GH_PLAYER_POST_CALLEE):GH_PLAYER_POST_OK;
 }
-gh_player_post_status gh_player_mesh_visibility_001236e8(gh_game_player_post_state *s,const gh_game_player_node_cache *cache,gh_core_save_view save){
+gh_player_post_status gh_player_mesh_visibility_resource_001236e8(gh_game_player_post_state *s,
+ const gh_game_player_node_cache *cache,gh_core_save_view save,const uint8_t *resource,size_t bytes){
  if(!cache||!cache->ready||!cache->player||!cache->model||cache->model->root.bytes!=cache->player->view.bytes)return s?fail(s,0x1236e8,GH_PLAYER_POST_UNSUPPORTED):GH_PLAYER_POST_ARGUMENT;
  gh_player_post_status e=bind(s,&cache->player->view);if(e)return e;if(s->visibility_phase==2)return GH_PLAYER_POST_OK;
  uint8_t *p=cache->player->view.bytes;
@@ -56,13 +58,36 @@ gh_player_post_status gh_player_mesh_visibility_001236e8(gh_game_player_post_sta
   if(!(flags&0x20)||costume==3||costume==5||costume==7){put(p+0x254,word(p+0x254)|0x10000000u);s->visibility_phase=1;}
   else{put(p+0x254,word(p+0x254)&~0x10000000u);e=node_flag(s,cache,0,~1u,0);if(e)return e;s->visibility_phase=3;}
  }
- if(s->visibility_phase==1)return fail(s,0x149ad8,GH_PLAYER_POST_UNSUPPORTED);
+ if(s->visibility_phase==1){
+  gh_bundle bundle;
+  gh_bundle_entry exchange;
+  /* PL00's original +0C resource pointer selects the third bundle member. */
+  if(!resource||bytes<16||gh_bundle_open(resource,bytes,&bundle)||
+     gh_bundle_at(&bundle,2,&exchange)||exchange.offset!=word(resource+0x0c)||
+     memcmp(exchange.tag,"TXE",3))return fail(s,0x149ad8,GH_PLAYER_POST_UNSUPPORTED);
+  uint8_t replacement[16];
+  int applied=0;
+  const unsigned row=(word(p+0x15f4)&0x20u)!=0;
+  const gh_actor_model_status status=gh_actor_texture_exchange_00149ad8(
+     &cache->model->texture,&exchange,row,replacement,&applied);
+  if(status)return fail(s,0x149ad8,status==GH_ACTOR_MODEL_UNSUPPORTED?
+     GH_PLAYER_POST_UNSUPPORTED:GH_PLAYER_POST_CALLEE);
+  if(applied)memcpy(p+0x2d4,replacement,sizeof(replacement));
+  e=node_flag(s,cache,0,UINT32_MAX,1);
+  if(e)return e;
+  s->visibility_phase=3;
+ }
  /* All writes are idempotent. Late native validation errors may retry this
   * loop without releasing effects or executing the player's motion again. */
  for(unsigned i=2;i<10;i++){e=node_flag(s,cache,i,UINT32_MAX,1);if(e)return e;}
  uint16_t flags;memcpy(&flags,p+0x3ac,2);unsigned a=((flags&0x4000)?1u:0u)|((flags&0x1000)?2u:0u),b=((flags&0x8000)?1u:0u)|((flags&0x2000)?2u:0u);
  e=node_flag(s,cache,2+a,~1u,0);if(e)return e;e=node_flag(s,cache,6+b,~1u,0);if(e)return e;
  s->visibility_phase=2;s->frontier=0;return GH_PLAYER_POST_OK;
+}
+gh_player_post_status gh_player_mesh_visibility_001236e8(gh_game_player_post_state *s,
+ const gh_game_player_node_cache *cache,gh_core_save_view save)
+{
+ return gh_player_mesh_visibility_resource_001236e8(s,cache,save,NULL,0);
 }
 gh_player_post_status gh_player_camera_mode_00123908(const gh_game_init_state *init,uint32_t *out){
  if(!init||!out)return GH_PLAYER_POST_ARGUMENT;*out=(uint32_t)init->camera.mode&1u;return GH_PLAYER_POST_OK;

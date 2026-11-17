@@ -17,6 +17,7 @@ typedef struct {
     float position[4], scale;
     uint32_t bank, index;
     int32_t mode;
+    uint8_t heat_after_critical;
 } gh_enemy202_impact_request;
 typedef struct {
     gh_enemy202_impact_request impact;

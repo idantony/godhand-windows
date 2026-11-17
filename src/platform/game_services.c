@@ -1134,11 +1134,12 @@ static gh_scene_status room_r105_status(gh_game_services *s,gh_scene_status stat
  return status;
 }
 
-static gh_player_frame_status room_r105_release_paper(void *context,const gh_title_player_view *player,
+static gh_player_frame_status release_player_paper(void *context,const gh_title_player_view *player,
  gh_core_save_view save,uint32_t *frontier)
 {
  gh_game_services *s=context;
- if(player!=&s->title_player.view||s->b.work->room!=0x105)return GH_PLAYER_FRAME_ARGUMENT;
+ if(!s||player!=&s->title_player.view||!gh_om376_paper_room_supported(s->b.work->room))
+  return GH_PLAYER_FRAME_ARGUMENT;
  const gh_scene_placement_status status=gh_om376_release_paper_001cf6e0(&s->r105_paper,player,save,frontier);
  return !status?GH_PLAYER_FRAME_OK:status==GH_PLACE_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE;
 }
@@ -4630,7 +4631,7 @@ static gh_object_step_status om_break_effect(void *context,const gh_actor_model 
    opened=gh_effect_create_begin(call,&door);
   }else if(kind==0x30a||kind==0x304||kind==0x33f||
       (kind==0x309&&s->b.work->room==0x102&&model->root.original_vtable214==0x4237e8))opened=gh_effect_create_om30a_break_begin_0018c580(call,position);
-  else if(kind==0x363||kind==0x3c4||kind==0x3c8||kind==0x3d0||kind==0x3df||(kind>=0x3d3&&kind<=0x3d6))
+  else if(kind==0x363||kind==0x3c4||kind==0x3c8||kind==0x3d0||kind==0x3d1||kind==0x3df||(kind>=0x3d3&&kind<=0x3d7))
    opened=gh_effect_create_om_sparkle_begin_00306838(call,position);
   else if(kind==0x305)opened=gh_effect_create_om305_break_begin_001c2ce0(call,position);
   else if(kind==0x331&&s->b.work->room==0x102&&model->root.original_vtable214==0x425c78)
@@ -5054,7 +5055,7 @@ static gh_game_services_status player_prop_flight_body(gh_game_services *s,
 }
 
 static gh_object_step_status om_spawn_dropped_item_002923e8(gh_game_services *s,gh_om_box_item_drop *drop,
- const gh_title_player_view *source,uint16_t kind,uint32_t *frontier)
+ const gh_title_player_view *source,uint16_t kind,int reset_pity,uint32_t *frontier)
 {
  *frontier=0;
  if(drop->stage==4){*frontier=0x31d000;return GH_OBJSTEP_UNSUPPORTED;}
@@ -5066,7 +5067,7 @@ static gh_object_step_status om_spawn_dropped_item_002923e8(gh_game_services *s,
    *frontier=s->om_factory.frontier?s->om_factory.frontier:0x30fa98;
    return status==GH_PLACE_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE;
   }
-  memset(s->b.init->enemies+0x534,0,4);
+  if(reset_pity)memset(s->b.init->enemies+0x534,0,4);
   if(!item){drop->stage=4;*frontier=0x31d000;return GH_OBJSTEP_UNSUPPORTED;}
   drop->stage=1;
  }
@@ -5126,7 +5127,7 @@ static gh_object_step_status om_box_drop_item_002923e8(void *context,gh_om_box_i
  const int west_prop=room==0x102&&
      (source->original_vtable214==0x425c78||source->original_vtable214==0x4237e8);
  if(!box&&!arena_fixture&&!west_prop)return GH_OBJSTEP_ARGUMENT;
- return om_spawn_dropped_item_002923e8(s,drop,source,0x3d6,frontier);
+ return om_spawn_dropped_item_002923e8(s,drop,source,0x3d6,1,frontier);
 }
 
 static gh_actor_motion_status enemy_drop_item_002923e8(void *context,gh_om_box_item_drop *drop,
@@ -5137,7 +5138,9 @@ static gh_actor_motion_status enemy_drop_item_002923e8(void *context,gh_om_box_i
  const int arena=enemy&&(r103_grab_attacker(s,enemy,0x200)||r103_grab_attacker(s,enemy,0x203)||
      r103_grab_attacker(s,enemy,0x20a));
  const int east=(kind==0x3c4||kind==0x3df)&&r102_east_grab_attacker(s,enemy);
- if(!east&&!((kind==0x3c4&&(arena||r102_em00_grab_attacker(s,enemy)))||
+ const int boss_drop=(kind==0x3d1&&r103_grab_attacker(s,enemy,0x214))||
+     (kind==0x3d7&&r103_grab_attacker(s,enemy,0x215));
+ if(!boss_drop&&!east&&!((kind==0x3c4&&(arena||r102_em00_grab_attacker(s,enemy)))||
       (kind==0x3d0&&arena)||(kind==0x3c8&&r103_grab_attacker(s,enemy,0x20a)))){
   *frontier=0x30fa98;return GH_ACTOR_MOTION_UNSUPPORTED;
  }
@@ -5145,7 +5148,7 @@ static gh_actor_motion_status enemy_drop_item_002923e8(void *context,gh_om_box_i
  if(!source->alias_f0||source->bytes[0x2f4]!=2||source->bytes[0x2f5]!=2){
   *frontier=0x2929a8;return GH_ACTOR_MOTION_UNSUPPORTED;
  }
- const gh_object_step_status status=om_spawn_dropped_item_002923e8(s,drop,source,kind,frontier);
+ const gh_object_step_status status=om_spawn_dropped_item_002923e8(s,drop,source,kind,!boss_drop,frontier);
  return !status?GH_ACTOR_MOTION_OK:status==GH_OBJSTEP_UNSUPPORTED?GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_CALLEE;
 }
 
@@ -5198,9 +5201,12 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
  const uint32_t kind=u32(item->bytes+0x2fc)>>16;
  const int full_heal=room==0x103&&kind==0x3d0;
  const int partial_heal=room==0x103&&kind==0x3c8;
+ const int half_heal=room==0x103&&kind==0x3d1;
+ const int boss_currency=room==0x103&&kind==0x3d7;
+ const int heal=full_heal||partial_heal||half_heal;
  if(room==0x102&&kind==0x3df)return om_attack_boost_0012c708(s,pickup,item,frontier);
  if(!(((room==0x101||room==0x102||room==0x103)&&kind==0x3d6)||
-      ((room==0x102||room==0x103)&&kind==0x3c4)||full_heal||partial_heal))return GH_OBJSTEP_ARGUMENT;
+      ((room==0x102||room==0x103)&&kind==0x3c4)||heal||boss_currency))return GH_OBJSTEP_ARGUMENT;
  *frontier=0;
  const gh_title_player_view *player=&s->title_player.view;
  uint8_t *work=(uint8_t *)s->b.work;
@@ -5216,8 +5222,8 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
   const int premium=bonus||(u32(work+0x59c)&0x40000u);
   const uint32_t hp_pair=u32(player->bytes+0x548);
   const uint16_t maximum=(uint16_t)hp_pair, hp=(uint16_t)(hp_pair>>16);
-  if((!full_heal&&!partial_heal)||hp==maximum){
-   const int32_t amount=(premium?2:1)*(full_heal?1000:200);
+  if(!heal||hp==maximum){
+   const int32_t amount=(premium?2:1)*(full_heal||boss_currency?1000:half_heal?500:200);
    int32_t count,money;
    memcpy(&count,save+0x24,4);memcpy(&money,save+0x20,4);
    if(count<0){*frontier=0x1fa750;return GH_OBJSTEP_UNSUPPORTED;}
@@ -5231,9 +5237,9 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
    memcpy(save+0x20,&changed,4);
   }
   /* 1C0E50 replenishes current HP and clears stagger. */
-  if(full_heal||partial_heal){
-   /* 1C0678 truncates 30 percent of maximum HP before adding it. */
-   const volatile float partial=(float)maximum*0.3f;
+  if(heal){
+   /* 1C0678 truncates the selected fraction before adding it. */
+   const volatile float partial=(float)maximum*(half_heal?0.5f:0.3f);
    const unsigned healed=full_heal?maximum:(unsigned)hp+(unsigned)partial;
    const uint16_t health=(uint16_t)(healed>maximum?maximum:healed);
    memcpy(player->bytes+0x54a,&health,2);
@@ -5241,8 +5247,9 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
   }
   /* Original 13E2F8 returns without drawing. The live HUD consumes +24/+28. */
   const int devil=(u32(player->bytes+0x15f4)&0x1000u)!=0;
+  const int16_t program=full_heal?0xdc:partial_heal?0xd2:half_heal?0xdf:boss_currency?0xde:0xd4;
   pickup->sound=(gh_motion_sound_request){.model=&s->player_model,.actor=player,
-      .bank=devil?2:0,.program=devil?200:full_heal?0xdc:partial_heal?0xd2:0xd4};
+      .bank=devil?2:0,.program=devil?200:program};
   pickup->stage=1;
  }
  if(pickup->stage==1){
@@ -5760,7 +5767,7 @@ gh_game_services_status gh_game_services_move_actor_with_render(gh_game_services
    .damage_sound=s->player_sound.bound?gh_actor_attached_sound_motion:NULL,.damage_sound_context=&s->player_sound,
    .damage_effect=player_damage_positioned_effect,.damage_abort=player_damage_abort,
    .damage_camera_exit=player_square_camera_exit,.death_fade=player_death_bgm,.damage_context=s,.damage_vibration_rows=s->player_damage_vibration,
-   .paper_release=s->b.work->room==0x105?room_r105_release_paper:NULL,.paper_context=s};
+   .paper_release=gh_om376_paper_room_supported(s->b.work->room)?release_player_paper:NULL,.paper_context=s};
  if(!s->player_frame.bound)s->player_idle_bindings=(gh_player_idle_input_bindings){.frame=b,
   .targets=gh_game_services_scene_targets(s),.action_buttons=&s->action_buttons};
  gh_player_frame_status e=gh_game_player_frame_00108ab0(&s->player_frame,&b);*f=s->player_frame.frontier;

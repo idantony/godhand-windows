@@ -207,7 +207,12 @@ checked across the full 16-bit XY range. Original walk/run states and their
 PL00 animation/root displacement pass focused tests. Windows QA exercises
 native input mapping with synthetic gamepad samples. The opening's final
 composites include the original fade, dialogue poses and camera changes.
-The next scenario and combat paths remain under recovery.
+R103 runs the original reinforcements and opens the twin-boss fight. Recorded
+controller input verifies Heat activation, damage to both bosses, and return to
+normal movement. A Direct3D 11 replay shows the aura appear and expire. A
+controlled test lowers the bosses' HP before landing real attacks and verifies
+both defeat records, the arena-clear flag, and the original item drops.
+A complete fight starting at full boss HP is still in progress.
 
 Project evidence tools verify actual instruction bytes, calls, imports and
 static memory sites. Their generated reports remain private; see
@@ -436,6 +441,11 @@ Gene 以 100 HP 回到 R103，场景继续运行。
   深度、同桶后进先出和上一帧提交顺序。
 - 同一DLL中的两个RNG对10272个种子完成20544次状态／浮点位精确比较，依据实际指令的受限模型验证；
   这不是 PS2 实机验证。上游匹配比例也不是本项目的移植完成比例。
+
+R103 已运行原版增援并进入双头目战。手柄回放验证了强化启动、同时命中两名头目
+以及强化耗尽后恢复普通行动，Direct3D 11 回放显示了光效出现和消退。受控测试
+先降低头目 HP，再用实际攻击验证两次击败登记、原版胜利标志与掉落。完整血量的
+双头目实战仍在验证。
 
 ### 构建与运行
 

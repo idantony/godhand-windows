@@ -10517,7 +10517,8 @@ static gh_actor_motion_status advance_state1_0024c0f0(gh_enemy202_move *s,uint8_
         const int gate_guard_stun=r102_em00&&half(p+0x640)==0x10&&!p[0x1650]&&p[0x2f5]==0x0f;
         const int arena_em03=r103_arena_em03(&s->enemy->entry);
         const int arena_em0a=r103_arena_em0a(&s->enemy->entry);
-        const int arena_boss=r103_arena_boss(&s->enemy->entry)&&p[0x2f5]<=1;
+        const int arena_boss=r103_arena_boss(&s->enemy->entry)&&
+            (p[0x2f5]<=1||(p[0x2f5]==7&&!positive_hp(p)));
         const int gate_em0a_reaction=r102_gate_em0a(s->enemy->b.entry.work,p)&&p[0x2f5]==1&&
             p[0x2f6]<=1&&!p[0x2f7];
         const int gate_em0a_blowaway=r102_gate_em0a(s->enemy->b.entry.work,p)&&p[0x2f5]==8&&p[0x2f7]==2;
@@ -10667,6 +10668,7 @@ enum {
     DEATH_DROP_FALLBACK_SPAWN = 13,
     DEATH_DROP_FALLBACK_NEARBY = 14,
     DEATH_DROP_FALLBACK_CONTINUES = 15,
+    DEATH_DROP_AUTHORED = 16,
 };
 
 /* 292650 chooses the original item after the pity threshold succeeds. */
@@ -10729,7 +10731,13 @@ static gh_actor_motion_status death_drop_002923e8(gh_enemy202_move *s,uint8_t *p
     if(s->death_fade_phase==DEATH_DROP_BEGIN){
         if(word(p+0x16d4)&2u){s->death_fade_phase=DEATH_DROP_COMPLETE;return GH_ACTOR_MOTION_OK;}
         put(p+0x16d4,word(p+0x16d4)|2u);
-        s->death_fade_phase=DEATH_DROP_PITY;
+        const unsigned stamp=half(p+0x640);
+        const uint32_t item=word(p+0x560);
+        /* REL0E54 gives both bosses explicit drops in the 292048 identity range. */
+        if(r103_arena_boss(&s->enemy->entry)&&item==(stamp==0?0x3d1u:0x3d7u)){
+            s->death_item=(uint16_t)item;
+            s->death_fade_phase=DEATH_DROP_AUTHORED;
+        }else s->death_fade_phase=DEATH_DROP_PITY;
     }
     if(s->death_fade_phase==DEATH_DROP_PITY){
         /* Actual dependency203 uses the default branch and original
@@ -10800,9 +10808,10 @@ static gh_actor_motion_status death_drop_002923e8(gh_enemy202_move *s,uint8_t *p
         if(status)return status;
     }
     if(s->death_fade_phase==DEATH_DROP_FALLBACK_CONTINUES)return stop(s,0x292828,GH_ACTOR_MOTION_UNSUPPORTED);
-    if(s->death_fade_phase==DEATH_DROP_CURRENCY||s->death_fade_phase==DEATH_DROP_FALLBACK_SPAWN){
+    const int authored=s->death_fade_phase==DEATH_DROP_AUTHORED;
+    if(authored||s->death_fade_phase==DEATH_DROP_CURRENCY||s->death_fade_phase==DEATH_DROP_FALLBACK_SPAWN){
         if(!s->death_item)return stop(s,0x31d000,GH_ACTOR_MOTION_UNSUPPORTED);
-        if(!r102_em00_stamp3(s->enemy->b.entry.work,p)&&
+        if(!authored&&!r102_em00_stamp3(s->enemy->b.entry.work,p)&&
            s->death_item!=0x3c4&&s->death_item!=0x3d0&&
            (s->death_item!=0x3c8||!r103_arena_em0a(&s->enemy->entry)))
             return stop(s,0x30fa98,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -10822,6 +10831,8 @@ static gh_actor_motion_status death_fade_0025f1f0(gh_enemy202_move *s,uint8_t *p
     gh_enemy_actor *enemy=s->enemy;
     gh_game_init_state *init=enemy->b.entry.init;
     uint32_t pc=0;
+    const uint32_t flags=word(p+0x16d4);
+    const int retained_boss=(flags&0x1000u)&&r103_arena_boss(&enemy->entry);
     if(!s->death_fade_phase){
         put(p+0x54c,0x40400000);
         put(p+0x16d0,word(p+0x16d0)|0x10000u);
@@ -10830,9 +10841,21 @@ static gh_actor_motion_status death_fade_0025f1f0(gh_enemy202_move *s,uint8_t *p
         put(p+0x16d0,word(p+0x16d0)|0x20000u);
         put(p+0x250,word(p+0x250)|0x10000u);
         p[0x617]=1;
-        if(p[0x2f7]||(word(p+0x16d4)&0x101000u)||number(word(p+0x770))!=0)
+        if(p[0x2f7]||(flags&0x100000u)||number(word(p+0x770))!=0)
             return stop(s,0x25f1f0,GH_ACTOR_MOTION_UNSUPPORTED);
-        s->death_fade_phase=p[0x2f6]?DEATH_FADE_ADVANCE:DEATH_FADE_PRIMARY_EFFECT;
+        if(retained_boss){
+            /* 25F900 records the defeat and leaves the body for the room outro. */
+            if(p[0x2f6]==6)s->death_fade_phase=DEATH_FADE_TAIL;
+            else if(p[0x2f6]==0||p[0x2f6]==5){
+                p[0x2f6]=5;
+                put_half(p+0x54a,0);
+                put(p+0x608,0);
+                s->death_fade_phase=DEATH_DROP_BEGIN;
+            }else return stop(s,0x25f1f0,GH_ACTOR_MOTION_UNSUPPORTED);
+        }else{
+            if(flags&0x1000u)return stop(s,0x25f1f0,GH_ACTOR_MOTION_UNSUPPORTED);
+            s->death_fade_phase=p[0x2f6]?DEATH_FADE_ADVANCE:DEATH_FADE_PRIMARY_EFFECT;
+        }
     }
     if(s->death_fade_phase==DEATH_FADE_PRIMARY_EFFECT){
         gh_actor_motion_status status=death_effect(s,1,2);
@@ -10864,9 +10887,16 @@ static gh_actor_motion_status death_fade_0025f1f0(gh_enemy202_move *s,uint8_t *p
         if(half(p+0x640)==0xff)return stop(s,0x1fbe40,GH_ACTOR_MOTION_UNSUPPORTED);
         status=count_death_and_mark_room(s,p);
         if(status)return status;
-        if(word(p+0x6f4)||word(p+0x704))return stop(s,0x1cf4a8,GH_ACTOR_MOTION_UNSUPPORTED);
-        put(p+0x608,0);++p[0x2f6];
-        s->death_fade_phase=DEATH_FADE_ADVANCE;
+        if(retained_boss){
+            p[0x531]=0xff;
+            ++p[0x2f6];
+            s->death_fade_phase=DEATH_FADE_TAIL;
+        }else{
+            if(word(p+0x6f4)||word(p+0x704))return stop(s,0x1cf4a8,GH_ACTOR_MOTION_UNSUPPORTED);
+            put(p+0x608,0);
+            ++p[0x2f6];
+            s->death_fade_phase=DEATH_FADE_ADVANCE;
+        }
     }
     if(s->death_fade_phase==DEATH_FADE_ADVANCE){
         const unsigned phase=p[0x2f6];
@@ -11116,7 +11146,7 @@ static gh_actor_motion_status advance_death_0025e600(gh_enemy202_move *s,uint8_t
             !positive_hp(p)&&!p[0x2f7];
         const int arena=!positive_hp(p)&&(p[0x2f5]==1||p[0x2f5]==2)&&
             (r103_arena_em00(&enemy->entry)||r103_arena_em03(&enemy->entry)||
-             r103_arena_em0a(&enemy->entry));
+             r103_arena_em0a(&enemy->entry)||r103_arena_boss(&enemy->entry));
         if(!opening&&!r102&&!arena)return stop(s,0x25e600,GH_ACTOR_MOTION_UNSUPPORTED);
         if(word(p+0x6e4)||word(p+0x6e8))return stop(s,0x26a938,GH_ACTOR_MOTION_UNSUPPORTED);
         if(word(p+0x6ec)||gh_enemy_timers_weapon_kind(&enemy->timers))
@@ -11268,6 +11298,34 @@ gh_actor_motion_status gh_enemy202_move_bind_room_state(gh_enemy202_move *s,
 /* Original 208F84 chooses the audible hit from the canonical Take ledger.
  * An extra descriptor sound replaces ledger programs 10/100 when both are
  * on the core-bank branch. Dual-sound profiles remain at this boundary. */
+static gh_actor_motion_status create_hit_impact(gh_enemy202_move *s,const gh_enemy_move_actor *rt)
+{
+    if(!s->damage.impact.index)return GH_ACTOR_MOTION_OK;
+    if(!s->impact_bindings.storage.effects)return stop(s,0x306838,GH_ACTOR_MOTION_UNSUPPORTED);
+    if(s->impact_bindings.work!=rt->entry->b.work||
+       s->impact_bindings.random!=&rt->entry->b.init->random)
+        return stop(s,0x306838,GH_ACTOR_MOTION_ARGUMENT);
+    if(!s->impact_create.active){
+        uint32_t position[3];
+        memcpy(position,s->damage.impact.position,sizeof(position));
+        gh_effect_status begin;
+        if(s->damage.impact.bank==0&&s->damage.impact.index==0x40)
+            begin=gh_effect_create_enemy_boosted_impact_begin_00306838(&s->impact_create,position);
+        else if(s->damage.impact.bank==0)
+            begin=gh_effect_create_enemy_counter_impact_begin_00306838(&s->impact_create,position);
+        else if(s->damage.impact.index==0x12)
+            begin=gh_effect_create_enemy_amplified_impact_begin_00306838(&s->impact_create,position);
+        else
+            begin=gh_effect_create_enemy_impact_begin_00306838(&s->impact_create,position);
+        if(begin)return stop(s,0x306838,GH_ACTOR_MOTION_UNSUPPORTED);
+    }
+    gh_effect_status status=gh_game_effect_create_00306528(&s->impact_create,&s->impact_bindings);
+    if(status||!s->impact_create.complete)
+        return stop(s,s->impact_create.frontier?s->impact_create.frontier:0x306528,
+            status==GH_EFFECT_UNSUPPORTED?GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_CALLEE);
+    return GH_ACTOR_MOTION_OK;
+}
+
 static gh_actor_motion_status submit_hit_sound(gh_enemy202_move *s,const gh_motion_sound_request *request)
 {
     const gh_actor_motion *motion=&s->enemy->motion.motion;
@@ -11368,7 +11426,7 @@ static gh_actor_motion_status enemy_move(gh_enemy202_move *s,gh_enemy_actor *ene
                 if(s->damage.phase==7){
                     const uint8_t *thresholds=elf_span(elf,elf_bytes,0x3bf160,20);
                     if(!thresholds)return stop(s,0x1fa280,GH_ACTOR_MOTION_UNSUPPORTED);
-                    status=gh_enemy202_hit_rank_points_001fa280(enemy,thresholds,(s->damage.effect==0x2e||s->damage.effect==0x12||s->damage.effect==0x36||s->damage.effect==0x52)?16u:4u,&pc);
+                    status=gh_enemy202_hit_rank_points_001fa280(enemy,thresholds,(s->damage.effect==0x2e||s->damage.effect==0x12||s->damage.effect==0x2a||s->damage.effect==0x36||s->damage.effect==0x52)?16u:4u,&pc);
                     if(status)return stop(s,pc?pc:0x1fa280,status);
                     s->damage.phase=8;
                 }
@@ -11382,30 +11440,8 @@ static gh_actor_motion_status enemy_move(gh_enemy202_move *s,gh_enemy_actor *ene
                 if(s->damage.phase<=10){
                     status=gh_enemy202_impact_00271810(&s->damage,enemy,player,&pc);
                     if(status)return stop(s,pc?pc:0x271810,status);
-                    if(s->damage.impact.index){
-                        if(!s->impact_bindings.storage.effects)return stop(s,0x306838,GH_ACTOR_MOTION_UNSUPPORTED);
-                        if(s->impact_bindings.work!=rt->entry->b.work||
-                            s->impact_bindings.random!=&rt->entry->b.init->random)
-                            return stop(s,0x306838,GH_ACTOR_MOTION_ARGUMENT);
-                        if(!s->impact_create.active){
-                            uint32_t position[3];
-                            memcpy(position,s->damage.impact.position,sizeof(position));
-                            gh_effect_status begin;
-                            if(s->damage.impact.bank==0&&s->damage.impact.index==0x40)
-                                begin=gh_effect_create_enemy_boosted_impact_begin_00306838(&s->impact_create,position);
-                            else if(s->damage.impact.bank==0)
-                                begin=gh_effect_create_enemy_counter_impact_begin_00306838(&s->impact_create,position);
-                            else if(s->damage.impact.index==0x12)
-                                begin=gh_effect_create_enemy_amplified_impact_begin_00306838(&s->impact_create,position);
-                            else
-                                begin=gh_effect_create_enemy_impact_begin_00306838(&s->impact_create,position);
-                            if(begin)return stop(s,0x306838,GH_ACTOR_MOTION_UNSUPPORTED);
-                        }
-                        gh_effect_status effect=gh_game_effect_create_00306528(&s->impact_create,&s->impact_bindings);
-                        if(effect||!s->impact_create.complete)
-                            return stop(s,s->impact_create.frontier?s->impact_create.frontier:0x306528,
-                                effect==GH_EFFECT_UNSUPPORTED?GH_ACTOR_MOTION_UNSUPPORTED:GH_ACTOR_MOTION_CALLEE);
-                    }
+                    status=create_hit_impact(s,rt);
+                    if(status)return status;
                     if(s->damage.impact.bank==0&&s->damage.impact.index==0x40)s->damage.phase=61;
                     else s->damage.phase=(half(p+0x3ac)&0x100u)?17:11;
                 }
@@ -11419,6 +11455,19 @@ static gh_actor_motion_status enemy_move(gh_enemy202_move *s,gh_enemy_actor *ene
                 if(s->damage.phase==17){
                     /* 271D5C is a separate original cue before the ledger hit sound. */
                     const gh_motion_sound_request cue={.model=model,.actor=view,.bank=0,.program=1};
+                    status=submit_hit_sound(s,&cue);
+                    if(status)return status;
+                    if(s->damage.impact.heat_after_critical){
+                        s->impact_create=(gh_effect_create_call){0};
+                        s->damage.impact.bank=0;
+                        s->damage.impact.index=0x40;
+                        s->damage.phase=62;
+                    }else s->damage.phase=11;
+                }
+                if(s->damage.phase==62){
+                    status=create_hit_impact(s,rt);
+                    if(status)return status;
+                    const gh_motion_sound_request cue={.model=model,.actor=view,.bank=0,.program=0x121};
                     status=submit_hit_sound(s,&cue);
                     if(status)return status;
                     s->damage.phase=11;

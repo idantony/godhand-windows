@@ -96,6 +96,7 @@ int gh_effect_devil_emitter_is_bound(const gh_game_effects *,const gh_effect_emi
 int gh_effect_emad_emitter_is_bound(const gh_game_effects *,const gh_effect_emitter_view *);
 int gh_effect_player_stun_row(gh_effect_view);
 int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *);
+int gh_effect_player_heat_root_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_r101_weapon_emitter_is_bound(const gh_effect_emitter_view *);
 int gh_effect_stamp19_attack_part_is_bound(const gh_effect_emitter_view *);
 int gh_effect_r103_slide_camera_emitter_is_bound(const gh_effect_emitter_view *);
@@ -188,6 +189,13 @@ gh_effect_status gh_effect_create_esp_abort_native(gh_game_effects *,unsigned,ui
  * genuinely returns withoutreparenting; unlink is original2B5EC0 only. */
 gh_effect_status gh_effect_create_esp_attach_emitter_002b5d58(gh_game_effects *,unsigned,uint32_t,unsigned,uint32_t);
 gh_effect_status gh_effect_create_esp_unlink_002b5ec0(gh_game_effects *,unsigned,uint32_t);
+gh_effect_status gh_effect_create_esp_heat_aura_init_002e35c0(gh_game_effects *,unsigned,uint32_t,
+ uint32_t work594,uint32_t *frontier);
+gh_effect_status gh_effect_create_esp_heat_aura_move_002e4280(gh_game_effects *,unsigned,uint32_t,
+ gh_static_transform_policy,uint32_t *frontier);
+struct gh_esp03_active_state;
+const struct gh_esp03_active_state *gh_effect_create_esp_heat_aura_state(
+ const gh_game_effects *,unsigned,uint32_t serial);
 gh_effect_status gh_effect_create_esp_bind_textures(gh_game_effects *,unsigned,uint32_t,gh_effect_view,gh_effect_view);
 /* Native host owner destruction ONLY: detach metadata before actor/model and
  * raw buffers are destroyed; does NOT pretend302918 or clear original masks. */

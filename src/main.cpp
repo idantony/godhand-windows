@@ -25,8 +25,13 @@
 #include <cstring>
 #include <vector>
 #include <string>
+#include <utility>
 
 struct ShadowEntry {gh_shadow_world_packet packet;const gh_stage_material *material;};
+struct QueuedEffect {
+    gh_effect_trans_packet packet;
+    std::vector<gh_effect_trans_vertex> triangles;
+};
 struct NativeApp {
     gh_startup_host *host=nullptr;
     gh_window_host *window=nullptr;
@@ -40,7 +45,7 @@ struct NativeApp {
     std::vector<unsigned char> world_pixels;
     std::vector<gh_ui_order_group> groups;
     std::vector<ShadowEntry> shadow_queue;
-    std::vector<gh_effect_trans_packet> effect_queue;
+    std::vector<QueuedEffect> effect_queue;
     bool frame_building=false,display_pending=false,building_scene=false,pending_scene=false;
     uint64_t prepared_mc_serial=0,pending_mc_serial=0,pending_fade_serial=0;
     uint64_t prepared_scene_serial=0,presented_scene=0;
@@ -177,7 +182,14 @@ static gh_effect_status queue_effect(void *opaque,const gh_effect_trans_packet *
         app.groups.reserve(app.groups.size()+1);
         app.effect_queue.reserve(app.effect_queue.size()+1);
         size_t index=app.effect_queue.size();
-        app.effect_queue.push_back(*packet);
+        QueuedEffect item{*packet,{}};
+        if(packet->triangle_vertices){
+            if(!packet->triangles||packet->triangle_vertices>744||packet->triangle_vertices%3)
+                return GH_EFFECT_ARGUMENT;
+            item.triangles.assign(packet->triangles,packet->triangles+packet->triangle_vertices);
+            item.packet.triangles=item.triangles.data();
+        }
+        app.effect_queue.push_back(std::move(item));
         app.groups.push_back({packet->order.bank,packet->order.depth,world_identity|effect_identity|index});
         return GH_EFFECT_OK;
     }catch(const std::bad_alloc&){return GH_EFFECT_BOUNDS;}
@@ -442,11 +454,12 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
         const bool marker=p.original_callee==0x15bcf0;
         const bool trail=p.original_callee==0x2ec398||p.original_callee==0x2edf70;
         const bool wave=p.original_callee==0x2eaf70;
-        if(!p.writes_clamp||p.clamp||!p.writes_tex0||p.prim!=0x54||
+        const bool aura=p.original_callee==0x2e4e70;
+        if(!p.writes_clamp||p.clamp||!p.writes_tex0||p.prim!=(aura?0x5b:0x54)||
             p.source!=GH_EFFECT_SURFACE_MATERIAL||p.destination!=GH_EFFECT_SURFACE_SCENE_COLOR||
             !p.material||p.tex0!=p.material->source_tex0||
             (trail?p.quad_count>GH_EFFECT_TRANS_QUAD_CAPACITY:
-                   !(p.quad_count==1||(wave&&p.quad_count==9))))
+                   !(p.quad_count==1||(wave&&p.quad_count==9)||(aura&&!p.quad_count))))
             return GH_ID_UNSUPPORTED;
         if(marker){
             if(!p.inherits_scene_target||!p.writes_tex1||p.tex1!=0x60||p.inherited_sampler||
@@ -468,6 +481,10 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
                 if((p.order.bank!=2&&p.order.bank!=3)||(p.frame_mask&&p.frame_mask!=0xff000000u)||
                     (p.test!=0x5000d&&p.test!=0x3000d)||p.restore_zbuf!=0x0a0000f8||
                     (p.zbuf!=0x0a0000f8&&p.zbuf!=UINT64_C(0x10a0000f8)))return GH_ID_UNSUPPORTED;
+            }else if(aura){
+                if(p.order.bank!=2||p.frame_mask||p.alpha!=UINT64_C(0x8000000048)||
+                   (p.test!=0x5000c&&p.test!=0x3000c)||p.restore_zbuf!=0x0a0000f8||
+                   (p.zbuf!=0x0a0000f8&&p.zbuf!=UINT64_C(0x10a0000f8)))return GH_ID_UNSUPPORTED;
             }else if(p.restore_zbuf!=0x3a0000f8||(p.zbuf!=0x3a0000f8&&p.zbuf!=UINT64_C(0x13a0000f8))){
                 return GH_ID_UNSUPPORTED;
             }
@@ -479,6 +496,28 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
         state.xy_offset_x16=x;state.xy_offset_y16=y;state.frame_mask=marker||wave?scene_frame_mask:p.frame_mask;
         state.texture_function=(uint8_t)((p.tex0>>35)&3);
         state.zbuf_psm=58;state.z_write=(uint8_t)((p.zbuf>>32)==0);state.colclamp=state.native_float_reference=1;
+        if(aura){
+            if(!p.triangles||!p.triangle_vertices||p.triangle_vertices>744||p.triangle_vertices%3)
+                return GH_ID_UNSUPPORTED;
+            gh_static_gs_vertex vertices[744];
+            uint32_t indices[744];
+            for(unsigned i=0;i<p.triangle_vertices;++i){
+                const auto &v=p.triangles[i];
+                if(v.q!=1||v.z>65535||v.u12_4||v.v12_4)return GH_ID_UNSUPPORTED;
+                auto &out=vertices[i];out={};
+                out.stq[0]=v.s;out.stq[1]=v.t;out.stq[2]=v.q;
+                out.xyz_fixed4[0]=v.x12_4;out.xyz_fixed4[1]=v.y12_4;out.xyz_fixed4[2]=(int32_t)(v.z<<4);
+                for(unsigned c=0;c<4;++c)out.rgba[c]=(v.rgba>>(8*c))&255;
+                indices[i]=i;
+            }
+            uint32_t texture=0;
+            app.world_gpu_error=gh_model_renderer_upload(app.world_renderer,p.material,&texture);
+            if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+            app.world_gpu_error=gh_model_renderer_draw(app.world_renderer,&state,texture,vertices,
+                p.triangle_vertices,indices,p.triangle_vertices);
+            if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+            ++app.effect_sprite_packets;app.world_frontier=0;return GH_ID_OK;
+        }
         if(trail){
             if(p.quad_count){
                 gh_static_gs_vertex vertices[GH_EFFECT_TRANS_TRAIL_VERTEX_CAPACITY];
@@ -587,7 +626,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
             if(ui_started){
                 size_t effect_index=encoded&~effect_identity;
                 if((encoded&effect_identity)&&effect_index<app.effect_queue.size())
-                    app.world_frontier=app.effect_queue[effect_index].original_callee;
+                    app.world_frontier=app.effect_queue[effect_index].packet.original_callee;
                 return GH_ID_UNSUPPORTED;
             }
             world_order.push_back(encoded);
@@ -629,7 +668,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
         const uint32_t x=(2048-display->screen_width/2)*16,y=display->gs_y_origin*16;
         for(size_t encoded:world_order){
             if(encoded&effect_identity){
-                const auto &packet=app.effect_queue[encoded&~effect_identity];
+                const auto &packet=app.effect_queue[encoded&~effect_identity].packet;
                 auto e=consume_effect(app,packet,sampler,post,x,y,frame_mask);
                 if(e)return failure("world-effect",e,encoded);
                 if(packet.restores_scene_target)frame_mask=packet.restore_frame_mask;

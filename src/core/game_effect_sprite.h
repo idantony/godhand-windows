@@ -15,6 +15,9 @@ typedef struct {int32_t xyz_fixed4[4][3],original_depth;float q[4];uint8_t visib
 /* Original2FE0D8 bounded projectedquad domain. SAME CNode cache/identity,
  * no renderer/material acknowledgment. Clipped quads genuinely returnvisible0. */
 gh_effect_status gh_effect_sprite_project_002fe0d8(gh_game_effects *,unsigned,uint32_t,const gh_effect_sprite_camera *,gh_effect_sprite_projection *,uint32_t *frontier);
+/* Effects::Trans shares the original four 61B7A8 scratch floats with ESP03. */
+gh_effect_status gh_effect_sprite_project_track_uv_002fe0d8(gh_game_effects *,unsigned,uint32_t,
+ const gh_effect_sprite_camera *,gh_effect_sprite_projection *,float q_scratch[4],uint32_t *frontier);
 /* Existing SINGLE cTexture owner handles the actual customcount1 format2
  * source; returns its own material handle/pixels. Never creates a new cache. */
 gh_effect_status gh_effect_sprite_material_00151398(gh_stage_textures *,gh_effect_view,unsigned original_mode,const gh_stage_material **,uint32_t *frontier);

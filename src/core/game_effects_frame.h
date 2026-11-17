@@ -16,6 +16,8 @@ typedef struct gh_effects_frame_globals {uint32_t factor_741dc0,region_mask_741d
  uint16_t flare_depth_61b672;
  uint8_t flare_hold_3c3bb0,flare_active_61b670;
  uint8_t distortion_ready_61b644;
+ /* 2FE0D8/2FE8A0 store sprite Q, which the original ESP03 GIF builder reads. */
+ float sprite_uv_q_61b7a8[4];
 } gh_effects_frame_globals;
 gh_effect_status gh_effects_frame_globals_from_elf(gh_effects_frame_globals *,const void *,size_t);
 /* Actual292F38 writes three distinct canonical fields. */

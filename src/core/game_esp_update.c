@@ -1,5 +1,6 @@
 #include "game_esp_update.h"
 #include "game_esp14.h"
+#include "game_esp03.h"
 #include "game_effects_frame.h"
 #include "game_actor_matrix.h"
 #include "id_layout_rotation.h"
@@ -170,7 +171,7 @@ static gh_effect_status update_07(gh_esp_update_call *c,uint8_t *p)
 
 static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b,unsigned slot,uint32_t serial){
  if(!c||!b||!b->work||!b->globals||!b->globals->initialized||!b->storage.effects||!b->storage.esp||!b->storage.emitters||b->storage.esp_bytes<0x100180||b->storage.emitter_bytes<0x26060)return GH_EFFECT_ARGUMENT;if(c->identity&&(c->identity!=c||c->slot!=slot||c->serial!=serial||!same(&c->b,b)))return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);if(b->policy!=GH_STATIC_BINARY32_REFERENCE)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);c->frontier=0;if(c->complete)return GH_EFFECT_OK;
- gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,slot,&v)||v.serial!=serial||!v.initialized||v.globals!=b->globals||v.payload!=b->storage.esp+(size_t)slot*0x400||v.payload_size!=0x400||v.record.size!=0x2f0)return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;const uint8_t*r=v.record.bytes;uint32_t vtable=v.type==0?0x44fad0u:v.type==4?GH_ESP04_VTABLE:v.type==6?0x44e6d8u:v.type==7?0x44e770u:v.type==8?0x44e820u:v.type==9?0x44e8c8u:v.type==0x12?0x44eb70u:v.type==0x13?0x44ec68u:v.type==0x14?GH_ESP14_VTABLE:v.type==0x15?0x44ef08u:v.type==0x18?0x44f078u:v.type==0x1a?0x44f270u:v.type==0x1f?0x44f448u:v.type==0x20?0x44f4f8u:0;
+ gh_effect_esp_view v;if(gh_effect_create_esp_at(b->storage.effects,slot,&v)||v.serial!=serial||!v.initialized||v.globals!=b->globals||v.payload!=b->storage.esp+(size_t)slot*0x400||v.payload_size!=0x400||v.record.size!=0x2f0)return stop(c,0x2fbed0,GH_EFFECT_ARGUMENT);uint8_t*p=v.payload;const uint8_t*r=v.record.bytes;uint32_t vtable=v.type==0?0x44fad0u:v.type==3?GH_ESP03_VTABLE:v.type==4?GH_ESP04_VTABLE:v.type==6?0x44e6d8u:v.type==7?0x44e770u:v.type==8?0x44e820u:v.type==9?0x44e8c8u:v.type==0x12?0x44eb70u:v.type==0x13?0x44ec68u:v.type==0x14?GH_ESP14_VTABLE:v.type==0x15?0x44ef08u:v.type==0x18?0x44f078u:v.type==0x1a?0x44f270u:v.type==0x1f?0x44f448u:v.type==0x20?0x44f4f8u:0;
  if(!vtable||w(p+0xf0)!=vtable)return stop(c,0x2fbed0,GH_EFFECT_UNSUPPORTED);
  /* 2F01B8 calls the base Move before three optional oscillations. */
  if(v.type==0x12&&(rf(p+0x2c8)!=0.0f||rf(p+0x2cc)!=0.0f||rf(p+0x2dc)!=0.0f))
@@ -242,6 +243,12 @@ static gh_effect_status body(gh_esp_update_call*c,const gh_esp_update_bindings*b
  if(c->stage==13){if(!(!(w(r+4)&0x2000u)&&(w(p+0x11c)&0x100u)&&sh(p+0x230)==sh(p+0x22e))){float velocity[3];for(unsigned j=0;j<3;j++){velocity[j]=mul(rf(p+0x124+j*4),rf(p+0x130));if(!isfinite(velocity[j]))return stop(c,0x2fdd10,GH_EFFECT_UNSUPPORTED);}memcpy(p+0x124,velocity,12);}c->stage=14;}
  if(c->stage==14){uint32_t f;gh_effect_status status=gh_effect_node_detach_update_002fcb88(&c->detach,b->storage.effects,slot,serial,b->atan_coeff,b->policy,&f);if(status)return stop(c,f,status);if(!c->detach.complete)return stop(c,0x2fcb88,GH_EFFECT_ARGUMENT);half(p+0x230,sh(p+0x22e));c->stage=15;}
  if(c->stage==15){uint32_t flags=w(p+0x11c);if(w(r+4)&0x800u)flags=b->globals->region_active_741db8?flags&~0x800000u:flags|0x800000u;if(w(r+4)&0x400u)flags=b->globals->region_active_741db8?flags|0x800000u:flags&~0x800000u;put(p+0x11c,flags);c->stage=16;}
+ if(c->stage==16&&v.type==3){
+  uint32_t pc=0;
+  gh_effect_status status=gh_effect_create_esp_heat_aura_move_002e4280(b->storage.effects,
+     slot,serial,b->policy,&pc);
+  if(status)return stop(c,pc?pc:0x2e4280,status);
+ }
  if(c->stage==16&&v.type==7){
     gh_effect_status status=update_07(c,p);
     if(status)return status;

@@ -6,9 +6,13 @@
 static void ww(uint8_t*p,uint32_t v){memcpy(p,&v,4);}
 static float value(const uint8_t*p){float v;memcpy(&v,p,4);return v;}
 static gh_player_init_status fail(gh_game_player_post_init*s,uint32_t pc,gh_player_init_status e){s->frontier=pc;return e;}
-gh_player_init_status gh_game_heat_clear_mode_002a9cc8(gh_game_init_state*s,gh_static_transform_policy policy,uint32_t*f){
- if(f)*f=0;if(!s)return GH_PLAYER_INIT_ARGUMENT;if(policy!=GH_STATIC_BINARY32_REFERENCE){if(f)*f=0x2a9cc8;return GH_PLAYER_INIT_UNSUPPORTED;}s->heat[0x10]=0;float current=value(s->heat+4),drain=value(s->heat+12);if(!isfinite(current)||!isfinite(drain)){if(f)*f=0x2a9cc8;return GH_PLAYER_INIT_UNSUPPORTED;}
+gh_player_init_status gh_game_heat_set_mode_002a9cc8(gh_game_init_state*s,gh_static_transform_policy policy,uint8_t mode,uint32_t*f){
+ if(f)*f=0;if(!s||mode>1)return GH_PLAYER_INIT_ARGUMENT;if(policy!=GH_STATIC_BINARY32_REFERENCE){if(f)*f=0x2a9cc8;return GH_PLAYER_INIT_UNSUPPORTED;}s->heat[0x10]=mode;float current=value(s->heat+4),drain=value(s->heat+12);if(!isfinite(current)||!isfinite(drain)){if(f)*f=0x2a9cc8;return GH_PLAYER_INIT_UNSUPPORTED;}
  fenv_t saved;if(feholdexcept(&saved)){if(f)*f=0x2a9cc8;return GH_PLAYER_INIT_UNSUPPORTED;}if(fesetround(FE_TONEAREST)){(void)fesetenv(&saved);if(f)*f=0x2a9cc8;return GH_PLAYER_INIT_UNSUPPORTED;}volatile float difference=current-drain;float delta=difference;if(delta<0)delta=0;uint32_t result;memcpy(&result,&delta,4);int numeric=isfinite(delta);if(fesetenv(&saved)||!numeric){if(f)*f=0x2a9cc8;return GH_PLAYER_INIT_UNSUPPORTED;}ww(s->heat+8,result);return GH_PLAYER_INIT_OK;
+}
+gh_player_init_status gh_game_heat_clear_mode_002a9cc8(gh_game_init_state *s,gh_static_transform_policy policy,uint32_t *frontier)
+{
+ return gh_game_heat_set_mode_002a9cc8(s,policy,0,frontier);
 }
 static gh_player_init_status model_finish(gh_game_player_post_init*s,gh_static_transform_policy policy){
  gh_actor_model_status e=gh_actor_finish_model_0014a038(s->model,policy);

@@ -5,13 +5,14 @@
 #include "game_effect_node.h"
 #include "game_actor_two_bone.h"
 #include "game_esp14.h"
+#include "game_esp03.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
-typedef struct {const gh_title_player_view *actor,*selector;const gh_actor_model *model;uint32_t part_index,part_handle;
+typedef struct {const gh_title_player_view *actor,*selector;const gh_actor_model *model,*heat_model;uint32_t part_index,part_handle;
  const uint8_t *record;uint32_t serial;uint8_t associated,initialized,quiesced;int32_t first_esp_child;} emitter_metadata;
-typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t associated,initialized,type,quiesced;int32_t parent_emitter,previous,next;uint32_t parent_serial;uint8_t target120_known_null,knockdown,player_attachment;gh_effect_retired_actor retired_actor;gh_room_pools *trail_pools;gh_room_arena_allocation trail[4];} esp_metadata;
+typedef struct {gh_effect_view record,texture,secondary_texture;const gh_title_player_view *actor,*selector;uint32_t serial,emitter_serial;unsigned emitter_slot;uint8_t associated,initialized,type,quiesced;int32_t parent_emitter,previous,next;uint32_t parent_serial;uint8_t target120_known_null,knockdown,player_attachment;gh_effect_retired_actor retired_actor;gh_room_pools *trail_pools;gh_room_arena_allocation trail[4];gh_esp03_active_state heat;const gh_actor_model *heat_model;} esp_metadata;
 struct gh_effect_native {gh_game_effects *owner;uint8_t *esp,*emitters;uint32_t serial;gh_room_pools *trail_pools;
  emitter_metadata slots[256];esp_metadata esps[1024];struct gh_effects_frame_globals *frame_globals;gh_game_scene_tables *frame_actors;};
 static int r103_em0a_effect_actor(const gh_title_player_view *actor);
@@ -483,6 +484,42 @@ static int em0a_grab_impact_row(const uint8_t *row,unsigned index)
     row[0x12e]==(index==3?7:0)&&!row[0x128]&&!row[0x136];
 }
 
+static int player_heat_activation_row(const uint8_t *r,unsigned i)
+{
+ static const uint8_t parts[]={10,8,7,7,9,10,9,8,10,10,10,8,8,8,8,8,9,8,10,10,0};
+ static const uint8_t types[]={0,0,0,9,9,9,0,0,0,0,0,0,0,0,4,4,4,4,7,7,0x15};
+ static const uint8_t textures[]={14,14,14,24,24,24,76,76,76,0,11,24,24,24,9,8,8,7,0,0,0};
+ static const uint32_t flags[]={0x800000,0x800000,0x800000,0xe00000,0xe00000,0xe00000,
+     0xc00000,0xc00000,0xc00000,0xc00000,0x800000,0x802000,0xc02000,0x802000,
+     0xc02000,0xc02000,0xc02000,0xc02000,0x800000,0x800000,0xc00000};
+ return i<sizeof(parts)&&!r[0x128]&&!r[0x136]&&r[0xbe]==parts[i]&&r[0x133]==types[i]&&
+     r[0x12e]==textures[i]&&w(r+4)==flags[i];
+}
+
+/* Authored PL00 Heat finish sequence uses all twelve CORE 0:28 rows. */
+static int player_heat_finish_row(const uint8_t *r,unsigned i)
+{
+ static const uint8_t parts[]={10,8,7,7,9,10,9,9,10,9,10,10};
+ static const uint8_t types[]={0,0,0,9,9,9,0,0,0,0,7,7};
+ static const uint8_t textures[]={14,14,14,24,24,24,76,0,6,51,0,0};
+ static const uint32_t headers[]={0x1e3e8010u,0x1e3e8010u,0x1e3e8010u,0x1ebea010u,0x1ebea010u,0x1ebea010u,0x1eeee010u,0x1eeee010u,0x1efee010u,0x1e3e8010u,0x1e3e0010u,0x1e3e8010u};
+ static const uint32_t flags[]={0x00800000u,0x00800000u,0x00800000u,0x00e00000u,0x00e00000u,0x00e00000u,0x00c00000u,0x00c00000u,0x00800000u,0x00800000u,0x00800000u,0x00800000u};
+ return i<sizeof(parts)&&!r[0x128]&&!r[0x136]&&r[0xbe]==parts[i]&&r[0x133]==types[i]&&
+    r[0x12e]==textures[i]&&w(r)==headers[i]&&w(r+4)==flags[i];
+}
+
+/* Bank 0/21 is the live God Hand aura once the original Heat sequence ends. */
+static int player_heat_active_row(const uint8_t *r,unsigned i)
+{
+ static const uint8_t parts[]={10,9,8,7,7,0xff,8,9,9,8};
+ static const uint8_t types[]={0,0,0,0,0,3,0,0,0x1f,0x1f};
+ static const uint8_t textures[]={14,14,14,14,14,29,10,10,12,12};
+ static const uint32_t headers[]={0x1e3e8010,0x1e3e8010,0x1e3e8010,0x1e3e8010,0x1e3e8010,
+     0x1e3e0010,0x1efee010,0x1efee010,0x1ebea010,0x1ebe8010};
+ return i<sizeof(parts)&&!r[0x128]&&!r[0x136]&&r[0xbe]==parts[i]&&r[0x133]==types[i]&&
+    r[0x12e]==textures[i]&&w(r)==headers[i]&&w(r+4)==(i<6?0x00802000u:0x00c02000u);
+}
+
 static int player_attack_boost_row(const uint8_t *row,unsigned i)
 {
  static const uint8_t parts[]={10,10,2,3,2,2,2,2,2,0,0,2,4,2,0};
@@ -574,6 +611,12 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
  const gh_title_player_view *actor=request->actor;
  if(request->bank==0&&((request->index==0x3e&&request->mode==-1)||
                       (request->index==0x42&&!request->mode)||
+                      (request->index==0x28&&!request->mode&&actor->bytes&&actor->size>0x1684&&
+                       actor->bytes[0x2f4]==0&&actor->bytes[0x2f5]==9&&actor->bytes[0x2f6]==1&&
+                       !actor->bytes[0x2f7]&&actor->bytes[0x1684]==1)||
+                      (request->index==0x22&&request->mode==-1&&actor->bytes&&actor->size>0x1684&&
+                       actor->bytes[0x2f4]==0&&actor->bytes[0x2f5]==8&&actor->bytes[0x2f6]==1&&
+                       !actor->bytes[0x2f7]&&actor->bytes[0x1684]==1)||
                       (request->index==0x35&&request->mode==-1))){
   if(!actor->bytes||actor->size<0x300||actor->original_vtable214!=0x41d220||
      (w(actor->bytes+0x2fc)>>16)!=0x100)return GH_EFFECT_UNSUPPORTED;
@@ -766,6 +809,30 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
    if(!player_dodge_effect_row(c->request.index,row)||row[0xbe]!=parts[index][i]||row[0x133]!=children[index][i])
     return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   }
+ }
+ if(c->request.bank==0&&c->request.index==0x22&&c->configuration_nested_scale){
+  if((b->work->room!=0x102&&b->work->room!=0x103)||c->count!=21)return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<c->count;++i)
+   if(!player_heat_activation_row(entry.bytes+16+i*0x2f0,i))
+    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+ }
+ if(c->request.bank==0&&c->request.index==0x28&&c->configuration_nested_scale){
+  if((b->work->room!=0x102&&b->work->room!=0x103)||c->count!=12)
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<c->count;++i)
+   if(!player_heat_finish_row(entry.bytes+16+i*0x2f0,i))
+    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+ }
+ if(c->request.bank==0&&c->request.index==0x21){
+  const gh_title_player_view *actor=c->request.actor;
+  if(!actor||!actor->bytes||actor->size<0x15f8||actor->original_vtable214!=0x41d220||
+     (w(actor->bytes+0x2fc)>>16)!=0x100||c->request.mode!=3||c->request.selector!=-1||
+     actor->bytes[0x5f2]!=3||(w(actor->bytes+0x15f4)&0x20u)||c->count!=10||
+     (b->work->room!=0x102&&b->work->room!=0x103))
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  for(unsigned i=0;i<c->count;++i)
+   if(!player_heat_active_row(entry.bytes+16+i*0x2f0,i))
+    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
  }
  if(c->request.bank==0&&c->request.index==0x4e){
   const gh_title_player_view *actor=c->request.actor;
@@ -978,7 +1045,8 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
  if(c->configuration_positioned&&c->request.bank==0&&c->request.index==0x40){
   static const uint8_t texture[]={11,57,51,1,76,15};
   static const uint32_t flags[]={0x1efe8010,0x1efe8010,0x1efee010,0x1efee010,0x1efee010,0x1e3ea010};
-  if(b->work->room!=0x102||c->count!=sizeof(texture))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  if((b->work->room!=0x102&&b->work->room!=0x103)||c->count!=sizeof(texture))
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<sizeof(texture);++i){
    const uint8_t *row=entry.bytes+16+i*0x2f0;
    if(w(row)!=flags[i]||w(row+4)!=(i==3?0x00a00000u:0x00800000u)||row[0xbe]!=0xff||
@@ -1186,6 +1254,11 @@ static gh_effect_status initialize_record(gh_effect_create_call*c,const gh_effec
  }
  half(p+0x186,(uint16_t)((uint16_t)(r[0xc0]|(unsigned)r[0xc1]<<8)+p[0x1ed]));uint16_t duration=(uint16_t)(r[0xc2]|(unsigned)r[0xc3]<<8);if(duration&&duration<0x8000)duration=(uint16_t)(duration+p[0x1ed]);half(p+0x188,duration);
  if((w(r+4)&0x48000)&&m->actor){if(m->actor->size<0x2f6)return fail(c,0x303a30,GH_EFFECT_BOUNDS);p[0x226]=m->actor->bytes[0x2f4];p[0x227]=m->actor->bytes[0x2f5];}
+ if(part==-1&&c->request.bank==0&&c->request.index==0x21&&player_heat_active_row(r,5)){
+  if(!b->model||!b->model->parts_ready||b->model->root.bytes!=m->actor->bytes)
+   return fail(c,0x303a30,GH_EFFECT_UNSUPPORTED);
+  m->heat_model=b->model;
+ }
  c->stage=4;return GH_EFFECT_OK;
 }
 gh_effect_status gh_game_effect_create_00306528(gh_effect_create_call*c,const gh_effect_create_bindings*b){
@@ -1221,9 +1294,19 @@ static gh_effect_status release_trail(esp_metadata *view)
   view->trail[i]=(gh_room_arena_allocation){0};
  }
  view->trail_pools=NULL;
- return GH_EFFECT_OK;
+ return gh_esp03_destroy_002e3500(&view->heat);
 }
 void gh_effect_create_forget_on_owner_destroy(gh_game_effects*s){if(!s||!s->native)return;if(s->native->owner!=s)return;for(unsigned i=0;i<1024;i++)(void)release_trail(s->native->esps+i);free(s->native);s->native=NULL;}
+
+int gh_effect_player_heat_root_emitter_is_bound(const gh_effect_emitter_view *view)
+{
+ if(!view||view->model||view->part||!view->actor||view->actor!=view->selector||
+    !view->actor->bytes||view->actor->size<0x300||view->actor->original_vtable214!=0x41d220||
+    (w(view->actor->bytes+0x2fc)>>16)!=0x100||!view->record.bytes||view->record.size!=0x2f0||
+    !view->payload||view->payload_size!=0x260||w(view->payload+0x18c)!=0x00210000u||
+    w(view->payload+0x110)!=3)return 0;
+ return player_heat_active_row(view->record.bytes,5);
+}
 
 int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *view)
 {
@@ -1266,6 +1349,27 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
     !view->model||view->model->root.bytes!=actor->bytes||view->record.size!=0x2f0||
     !record||view->payload_size!=0x260||!payload)return 0;
  const uint32_t profile=w(payload+0x18c);
+ if(profile==0x00210000u&&w(payload+0x110)==3&&view->model->work&&
+    (view->model->work->room==0x102||view->model->work->room==0x103)){
+  const unsigned part=record[0xbe];
+  if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
+  for(unsigned i=0;i<10;++i)if(player_heat_active_row(record,i))return 1;
+  return 0;
+ }
+ if(profile==0x00220000u&&w(payload+0x110)==UINT32_MAX&&view->model->work&&
+    (view->model->work->room==0x102||view->model->work->room==0x103)){
+  const unsigned part=record[0xbe];
+  if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
+  for(unsigned i=0;i<21;++i)if(player_heat_activation_row(record,i))return 1;
+  return 0;
+ }
+ if(profile==0x00280000u&&!w(payload+0x110)&&view->model->work&&
+    (view->model->work->room==0x102||view->model->work->room==0x103)){
+  const unsigned part=record[0xbe];
+  if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
+  for(unsigned i=0;i<12;++i)if(player_heat_finish_row(record,i))return 1;
+  return 0;
+ }
  if(profile==0x004e0000u&&w(payload+0x110)==5&&view->model->work&&view->model->work->room==0x102){
   const unsigned part=record[0xbe];
   if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
@@ -1494,7 +1598,10 @@ int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *v)
     v->actor->original_vtable214==0x4479c8&&v->model->work&&v->model->work->room==0x103&&
     ((dependency==0x200&&(stamp==2||stamp==3))||(dependency==0x203&&(stamp==6||stamp==7))||
      r103_em0a_effect_actor(v->actor));
- if(!arena&&(kind!=0x202||
+ /* Original 253DE8 attaches CORE 58:2F/30 to the same boss skeleton. */
+ const int arena_boss=r103_pincer_boss(v->actor)&&v->model->work&&
+    v->model->work->room==0x103;
+ if(!arena&&!arena_boss&&(kind!=0x202||
     !((stamp==19&&dependency==0x203)||(stamp==20&&dependency==0x200)||
       (program==0x002f0058u&&v->model->work&&v->model->work->room==0x100&&
        stamp8_attack_actor(v->actor)))))return 0;
@@ -1557,6 +1664,7 @@ gh_effect_status gh_effect_create_emitter_at(const gh_game_effects*s,unsigned sl
 static uint32_t esp_vtable(unsigned type){
  switch(type){
  case 0: return 0x44fad0u;
+ case 3: return GH_ESP03_VTABLE;
  case 4: return GH_ESP04_VTABLE;
  case 6: return 0x44e6d8u;
  case 7: return 0x44e770u;
@@ -1743,7 +1851,7 @@ static int sprite_binding(gh_effect_view row,const gh_title_player_view *actor,
 static int authenticated_esp(const gh_game_effects *e,const gh_effect_esp_view *v,int player_attachment)
 {
  if(!e||!e->native||e->native->owner!=e||!v||!v->payload||
-    (v->type!=0&&v->type!=9&&v->type!=0x1a&&!(player_attachment&&(v->type==4||v->type==7||v->type==0x12||v->type==0x14||v->type==0x15))))return 0;
+    (v->type!=0&&v->type!=9&&v->type!=0x1a&&!(player_attachment&&(v->type==3||v->type==4||v->type==7||v->type==0x12||v->type==0x14||v->type==0x15||v->type==0x1f))))return 0;
  /* At allocation the source emitter and immutable EST row were authenticated.
   * Retain this fact independently of emitter lifetime/slot reuse. */
  const uintptr_t base=(uintptr_t)e->native->esp, current=(uintptr_t)v->payload;
@@ -1937,6 +2045,7 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
     gh_effect_knockdown_emitter_is_bound(&source);
  const int death_ground=r[0x133]==0x1a&&gh_effect_stamp19_death_part_is_bound(&source);
  const int player_attachment=gh_effect_player_attachment_emitter_is_bound(&source);
+ const int player_heat_root=gh_effect_player_heat_root_emitter_is_bound(&source);
  const int stamp19=gh_effect_stamp19_attack_part_is_bound(&source);
  const int weapon=gh_effect_r101_weapon_emitter_is_bound(&source);
  const int emad=gh_effect_emad_emitter_is_bound(e,&source);
@@ -1944,24 +2053,33 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
  const int event_part=enemy_light||emad||stamp19||weapon||player_attachment||attack||knock||death_ground||gh_effect_event_part_is_bound(source.record,source.actor,source.selector)||
     gh_effect_r101_door_break_part_is_bound(source.record,source.actor,source.selector);
  const int devil=gh_effect_devil_emitter_is_bound(e,&source);
- const int bound=devil||enemy_light||emad||stamp19||weapon||player_attachment||attack||knock||death_ground||gh_effect_r103_slide_camera_emitter_is_bound(&source)||
+ const int bound=devil||enemy_light||emad||stamp19||weapon||player_attachment||attack||knock||death_ground||player_heat_root||gh_effect_r103_slide_camera_emitter_is_bound(&source)||
     sprite_binding(source.record,source.actor,source.selector);
  if((!bound&&(source.actor||source.selector))||((event_part||devil)?(!source.model||!source.part):(source.model||source.part))){*f=0x2faa88;return GH_EFFECT_UNSUPPORTED;}
  unsigned i;for(i=0;i<1024;i++)if(!(w(b->esp+0x100000+(i>>5)*4)&(UINT32_C(0x80000000)>>(i&31))))break;if(i==1024)return GH_EFFECT_OK;
  unsigned type=source.record.bytes[0x133];uint32_t vtable=esp_vtable(type);
- if(!vtable||(type==0x1f&&!devil)){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}
+ if(!vtable||(type==3&&!player_heat_root)||(type==0x1f&&!devil&&!(player_attachment&&attack_profile==0x00210000u&&
+    (player_heat_active_row(r,8)||player_heat_active_row(r,9))))){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}
  const int paired_kick=attack&&attack_profile==0x00500058u&&r103_paired_kick_row(r);
- if(type==4&&!paired_kick&&(!player_attachment||w(source.payload+0x18c)!=0x003b006cu||
-    w(source.payload+0x110)!=UINT32_MAX||
-    (!r103_boss_throw_effect_row(r,10)&&!r103_boss_throw_effect_row(r,11)))){
-  *f=0x2faca8;return GH_EFFECT_UNSUPPORTED;
+ if(type==4&&!paired_kick){
+  const uint32_t tag=w(source.payload+0x18c);
+  const int paired_throw=tag==0x003b006cu&&
+      (r103_boss_throw_effect_row(r,10)||r103_boss_throw_effect_row(r,11));
+  int heat_activation=0;
+  if(tag==0x00220000u)
+   for(unsigned row=14;row<18;++row)heat_activation|=player_heat_activation_row(r,row);
+  if(!player_attachment||w(source.payload+0x110)!=UINT32_MAX||(!paired_throw&&!heat_activation)){
+   *f=0x2faca8;return GH_EFFECT_UNSUPPORTED;
+  }
  }
  if(type==0x15){
   const uint32_t tag=w(source.payload+0x18c),mode=w(source.payload+0x110);
   const int boost=tag==0x004e0000u&&mode==5&&player_attack_boost_row(r,9);
   const int paired_throw=tag==0x003b006cu&&mode==UINT32_MAX&&
     (r103_boss_throw_effect_row(r,12)||r103_boss_throw_effect_row(r,13));
-  if(!player_attachment||(!boost&&!paired_throw)){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}
+  const int heat_activation=tag==0x00220000u&&mode==UINT32_MAX&&
+    player_heat_activation_row(r,20)&&w(r+0x18c)==15;
+  if(!player_attachment||(!boost&&!paired_throw&&!heat_activation)){*f=0x2faca8;return GH_EFFECT_UNSUPPORTED;}
  }
  if(type==8){
   const uint32_t tag=w(source.payload+0x18c);
@@ -1974,12 +2092,52 @@ gh_effect_status gh_effect_create_esp_allocate_002faa88(const gh_effect_release_
   }
  }
  if(e->native->serial==UINT32_MAX){*f=0x2faa88;return GH_EFFECT_UNSUPPORTED;}
- uint8_t*p=b->esp+(size_t)i*0x400;memset(p,0,0x400);construct_esp_base(p,type,vtable);if(type==9||type==0x20||type==0x1f)ww(p+0x2d4,0x3f800000);if(type==0x1f)ww(p+0x30c,0x3f800000);if(type==4)vf0(p+0x2c0);if(type==0x14)gh_esp14_construct_tail_002ffd88(p);if(type==0x15){vf0(p+0x2c0);vf0(p+0x2e0);}uint32_t id=++e->native->serial;esp_metadata*m=&e->native->esps[i];*m=(esp_metadata){.record=source.record,.actor=source.actor,.selector=source.selector,.serial=id,.emitter_serial=source_serial,.emitter_slot=source_slot,.associated=1,.type=(uint8_t)type,.parent_emitter=-1,.previous=-1,.next=-1,.knockdown=(uint8_t)(knock||death_ground),.player_attachment=(uint8_t)player_attachment,.target120_known_null=(uint8_t)((bound||(!source.actor&&!source.selector))&&!w(source.payload+0x218))};unsigned off=(i>>5)*4;uint32_t mask=UINT32_C(0x80000000)>>(i&31);ww(b->esp+0x100000+off,w(b->esp+0x100000+off)|mask);ww(b->esp+0x100080+off,w(b->esp+0x100080+off)&~mask);ww(b->esp+0x100100+off,w(b->esp+0x100100+off)&~mask);*slot=i;*serial=id;*allocated=1;return GH_EFFECT_OK;
+ uint8_t*p=b->esp+(size_t)i*0x400;memset(p,0,0x400);construct_esp_base(p,type,vtable);if(type==3||type==9||type==0x20||type==0x1f)ww(p+0x2d4,0x3f800000);if(type==0x1f)ww(p+0x30c,0x3f800000);if(type==4)vf0(p+0x2c0);if(type==0x14)gh_esp14_construct_tail_002ffd88(p);if(type==0x15){vf0(p+0x2c0);vf0(p+0x2e0);}uint32_t id=++e->native->serial;esp_metadata*m=&e->native->esps[i];*m=(esp_metadata){.record=source.record,.actor=source.actor,.selector=source.selector,.serial=id,.emitter_serial=source_serial,.emitter_slot=source_slot,.associated=1,.type=(uint8_t)type,.parent_emitter=-1,.previous=-1,.next=-1,.knockdown=(uint8_t)(knock||death_ground),.player_attachment=(uint8_t)(player_attachment||player_heat_root),.heat_model=e->native->slots[source_slot].heat_model,.target120_known_null=(uint8_t)((bound||(!source.actor&&!source.selector))&&!w(source.payload+0x218))};unsigned off=(i>>5)*4;uint32_t mask=UINT32_C(0x80000000)>>(i&31);ww(b->esp+0x100000+off,w(b->esp+0x100000+off)|mask);ww(b->esp+0x100080+off,w(b->esp+0x100080+off)&~mask);ww(b->esp+0x100100+off,w(b->esp+0x100100+off)&~mask);*slot=i;*serial=id;*allocated=1;return GH_EFFECT_OK;
 }
 gh_effect_status gh_effect_create_esp_at(const gh_game_effects*e,unsigned slot,gh_effect_esp_view*out){
  if(!e||!out||slot>=1024||!e->native||e->native->owner!=e)return GH_EFFECT_ARGUMENT;const esp_metadata*m=&e->native->esps[slot];if(!m->associated||m->quiesced||!(w(e->native->esp+0x100000+(slot>>5)*4)&(UINT32_C(0x80000000)>>(slot&31))))return GH_EFFECT_UNSUPPORTED;
  *out=(gh_effect_esp_view){.record=m->record,.texture=m->texture,.secondary_texture=m->secondary_texture,.actor=m->actor,.selector=m->selector,.payload=e->native->esp+(size_t)slot*0x400,.payload_size=0x400,.serial=m->serial,.emitter_serial=m->emitter_serial,.emitter_slot=m->emitter_slot,.initialized=m->initialized,.type=m->type,.globals=e->native->frame_globals,.scene_actors=e->native->frame_actors,.parent_emitter=m->parent_emitter,.previous=m->previous,.next=m->next,.parent_serial=m->parent_serial,.target120_known_null=m->target120_known_null,.retired_actor=m->retired_actor};return GH_EFFECT_OK;
 }
+gh_effect_status gh_effect_create_esp_heat_aura_init_002e35c0(gh_game_effects *e,unsigned slot,
+ uint32_t serial,uint32_t work594,uint32_t *frontier)
+{
+ if(!frontier)return GH_EFFECT_ARGUMENT;
+ *frontier=0x2e35c0;
+ gh_effect_esp_view view;
+ if(gh_effect_create_esp_at(e,slot,&view)||view.serial!=serial||view.type!=3||view.initialized||
+    w(view.payload+0x23a)!=0x00210000u||w(view.payload+0x10c)!=3||
+    !gh_effect_player_attachment_esp_is_bound(e,&view)||!player_heat_active_row(view.record.bytes,5))
+  return GH_EFFECT_UNSUPPORTED;
+ esp_metadata *meta=e->native->esps+slot;
+ gh_effect_status status=gh_esp03_initialize_002e35c0(&meta->heat,e->native->trail_pools,work594,
+    view.payload,view.record.bytes,frontier);
+ if(!status)meta->initialized=1;
+ return status;
+}
+
+gh_effect_status gh_effect_create_esp_heat_aura_move_002e4280(gh_game_effects *e,unsigned slot,
+ uint32_t serial,gh_static_transform_policy policy,uint32_t *frontier)
+{
+ if(!frontier)return GH_EFFECT_ARGUMENT;
+ *frontier=0x2e4280;
+ gh_effect_esp_view view;
+ if(gh_effect_create_esp_at(e,slot,&view)||view.serial!=serial||view.type!=3||!view.initialized||
+    !gh_effect_player_attachment_esp_is_bound(e,&view))return GH_EFFECT_ARGUMENT;
+ esp_metadata *meta=e->native->esps+slot;
+ if(!meta->heat_model||!view.actor||meta->heat_model->root.bytes!=view.actor->bytes)
+  return GH_EFFECT_UNSUPPORTED;
+ return gh_esp03_move_002e4280(&meta->heat,meta->heat_model,policy,frontier);
+}
+
+const gh_esp03_active_state *gh_effect_create_esp_heat_aura_state(
+ const gh_game_effects *e,unsigned slot,uint32_t serial)
+{
+ gh_effect_esp_view view;
+ if(gh_effect_create_esp_at(e,slot,&view)||view.serial!=serial||view.type!=3||!view.initialized||
+    !gh_effect_player_attachment_esp_is_bound(e,&view))return NULL;
+ return &e->native->esps[slot].heat;
+}
+
 gh_effect_status gh_effect_create_esp_bind_textures(gh_game_effects*e,unsigned slot,uint32_t serial,gh_effect_view texture,gh_effect_view secondary){gh_effect_esp_view v;gh_effect_status status=gh_effect_create_esp_at(e,slot,&v);if(status||v.serial!=serial)return GH_EFFECT_ARGUMENT;e->native->esps[slot].texture=texture;e->native->esps[slot].secondary_texture=secondary;return GH_EFFECT_OK;}
 
 static gh_effect_status abort_esp_native(gh_game_effects*e,unsigned slot,uint32_t serial,int ready_allowed){gh_effect_esp_view v;gh_effect_status status=gh_effect_create_esp_at(e,slot,&v);if(status||v.serial!=serial||(!ready_allowed&&v.initialized))return GH_EFFECT_ARGUMENT;if((v.actor||v.selector)&&!sprite_binding(v.record,v.actor,v.selector)&&!gh_effect_attack_esp_is_bound(e,&v)&&!gh_effect_knockdown_esp_is_bound(e,&v)&&!gh_effect_player_attachment_esp_is_bound(e,&v)&&!gh_effect_devil_esp_is_bound(e,&v)&&!gh_effect_enemy_light_esp_is_bound(e,&v)&&!gh_effect_emad_esp_is_bound(e,&v))return GH_EFFECT_ARGUMENT;uint32_t vtable=esp_vtable(v.type);if(!vtable||w(v.payload+0xf0)!=vtable)return GH_EFFECT_UNSUPPORTED;if(v.parent_emitter>=0){status=gh_effect_create_esp_unlink_002b5ec0(e,slot,serial);if(status)return status;}if(release_trail(e->native->esps+slot))return GH_EFFECT_ARGUMENT;unsigned off=(slot>>5)*4;uint32_t keep=~(UINT32_C(0x80000000)>>(slot&31));for(unsigned bank=0;bank<3;bank++)ww(e->native->esp+0x100000+bank*0x80+off,w(e->native->esp+0x100000+bank*0x80+off)&keep);e->native->esps[slot]=(esp_metadata){0};return GH_EFFECT_OK;}
@@ -2067,7 +2225,7 @@ int gh_effect_esp_type7_record_bound(const gh_game_effects *e,const gh_effect_es
  if(tag==0x003f0058u||((tag&0xffffu)==0x58&&devil_ranged_effect_rows(tag>>16)))
   return gh_effect_devil_esp_is_bound(e,v);
  if(tag==0x003b006cu||tag==0x00350000u||tag==0x00420000u||tag==0x00270058u||tag==0x00590058u||
-    tag==0x005d0058u||tag==0x00170000u)
+    tag==0x005d0058u||tag==0x00170000u||tag==0x00220000u||tag==0x00280000u)
   return gh_effect_player_attachment_esp_is_bound(e,v);
  if(tag==0x00130006u){
   if(!gh_effect_event_part_is_bound(v->record,v->actor,v->selector))return 0;
@@ -2108,6 +2266,7 @@ unsigned gh_effect_esp_type15_copies(const gh_game_effects *e,const gh_effect_es
  const uint32_t tag=w(v->payload+0x23a),mode=w(v->payload+0x10c);
  const uint8_t *row=v->record.bytes;
  if(tag==0x004e0000u&&mode==5&&player_attack_boost_row(row,9))return 16;
+ if(tag==0x00220000u&&mode==UINT32_MAX&&player_heat_activation_row(row,20)&&w(row+0x18c)==15)return 16;
  if(tag==0x003b006cu&&mode==UINT32_MAX){
   if(r103_boss_throw_effect_row(row,12))return 13;
   if(r103_boss_throw_effect_row(row,13))return 16;
@@ -2192,7 +2351,9 @@ gh_effect_status gh_effect_create_esp_unlink_002b5ec0(gh_game_effects*e,unsigned
 int gh_effect_esp_trail_is_bound(const gh_game_effects *e,const gh_effect_esp_view *v)
 {
  if(!v)return 0;
- if(v->type==0x1f)return gh_effect_devil_esp_is_bound(e,v);
+ if(v->type==0x1f)return gh_effect_devil_esp_is_bound(e,v)||
+    (gh_effect_player_attachment_esp_is_bound(e,v)&&w(v->payload+0x23a)==0x00210000u&&
+     (player_heat_active_row(v->record.bytes,8)||player_heat_active_row(v->record.bytes,9)));
  if(v->type==0x20&&gh_effect_em00_attack_esp_is_bound(e,v))return 1;
  gh_effect_view est;
  if(v->type==9){
@@ -2294,12 +2455,12 @@ gh_effect_status gh_effect_create_esp_devil_trail_init_002f5788(gh_game_effects 
  *frontier=0x2f5788;
  gh_effect_esp_view v;
  if(gh_effect_create_esp_at(e,slot,&v)||v.serial!=serial||v.initialized||v.type!=0x1f||
-    !gh_effect_devil_esp_is_bound(e,&v)||v.parent_emitter<0)return GH_EFFECT_ARGUMENT;
+    !gh_effect_esp_trail_is_bound(e,&v)||v.parent_emitter<0)return GH_EFFECT_ARGUMENT;
  const uint8_t *r=v.record.bytes;
  uint8_t *p=v.payload;
- /* All five EM20 rows have no length clamp, lateral oscillation or
-  * angular variation. Their constant Y acceleration is 0.01 per Move. */
- if(r[0x18d]!=20||r[0x18e]!=5||r[0x197]||
+ /* The EM20 and PL00 rows share the original spring and Y acceleration. */
+ const unsigned count=r[0x18d];
+ if((count!=15&&count!=20)||r[0x18e]!=5||r[0x197]||
     w(r+0x13c)||w(r+0x140)!=0x3f800000||w(r+0x144)!=0x3e4ccccd||
     w(r+0x148)||w(r+0x14c)!=0x3c23d70a||w(r+0x150)||
     r[0x191]||r[0x192]||r[0x193]||r[0x194]||w(p+0x2e0)||w(p+0x2dc))
@@ -2307,7 +2468,7 @@ gh_effect_status gh_effect_create_esp_devil_trail_init_002f5788(gh_game_effects 
  float position[4],zero[4]={0,0,0,1};
  gh_effect_status status=gh_effect_node_world_position_native(e,0,slot,serial,position,policy,frontier);
  if(status)return status;
- status=initialize_trail(e,slot,&v,work594,position,zero,20,frontier);
+ status=initialize_trail(e,slot,&v,work594,position,zero,count,frontier);
  if(status)return status;
  uint32_t seed=w(p+0x220);
  const float phase=devil_trail_mul(devil_trail_roll(&seed),3.1415927f);
@@ -2335,11 +2496,14 @@ gh_effect_status gh_effect_create_esp_devil_trail_move_002f5bf8(gh_game_effects 
  *frontier=0x2f5bf8;
  gh_effect_esp_view v;
  if(gh_effect_create_esp_at(e,slot,&v)||v.serial!=serial||!v.initialized||v.type!=0x1f||
-    !gh_effect_devil_esp_is_bound(e,&v))return GH_EFFECT_ARGUMENT;
+    !gh_effect_esp_trail_is_bound(e,&v))return GH_EFFECT_ARGUMENT;
  esp_metadata *m=e->native->esps+slot;
  uint8_t *p=v.payload;
+ const unsigned count=p[0x249];
+ const size_t bytes=count*sizeof(float[4]);
  if(!m->trail_pools||!m->trail[2].pointer||!m->trail[3].pointer||
-    m->trail[2].bytes!=320||m->trail[3].bytes!=320||p[0x249]!=20||
+    (count!=15&&count!=20)||count!=v.record.bytes[0x18d]||
+    m->trail[2].bytes!=bytes||m->trail[3].bytes!=bytes||
     w(p+0x2dc)||w(p+0x310)||w(p+0x324)||w(p+0x328))
   return GH_EFFECT_UNSUPPORTED;
  float position[4],phase,increment;
@@ -2351,12 +2515,12 @@ gh_effect_status gh_effect_create_esp_devil_trail_move_002f5bf8(gh_game_effects 
   return GH_EFFECT_UNSUPPORTED;
  }
  float point[20][4],velocity[20][4];
- memcpy(point,m->trail[2].pointer,sizeof(point));
- memcpy(velocity,m->trail[3].pointer,sizeof(velocity));
- for(unsigned i=19;i>0;i--)for(unsigned axis=0;axis<3;axis++)
+ memcpy(point,m->trail[2].pointer,bytes);
+ memcpy(velocity,m->trail[3].pointer,bytes);
+ for(unsigned i=count-1;i>0;--i)for(unsigned axis=0;axis<3;axis++)
   velocity[i][axis]=devil_trail_add(velocity[i][axis],
       devil_trail_add(point[i-1][axis],-point[i][axis]));
- for(unsigned i=0;i<19;i++)for(unsigned axis=0;axis<3;axis++)
+ for(unsigned i=0;i<count-1;++i)for(unsigned axis=0;axis<3;axis++)
   velocity[i][axis]=devil_trail_add(velocity[i][axis],
       devil_trail_add(point[i+1][axis],-point[i][axis]));
  float rate=1;
@@ -2367,15 +2531,15 @@ gh_effect_status gh_effect_create_esp_devil_trail_move_002f5bf8(gh_game_effects 
   rate=devil_trail_mul(rate,work->canonical_rate574);
  }
  const float gravity=devil_trail_mul(0.01f,rate);
- for(unsigned i=1;i<20;i++)for(unsigned axis=0;axis<3;axis++){
+ for(unsigned i=1;i<count;++i)for(unsigned axis=0;axis<3;axis++){
   if(axis==1)velocity[i][axis]=devil_trail_add(velocity[i][axis],gravity);
   velocity[i][axis]=devil_trail_mul(velocity[i][axis],0.8f);
   point[i][axis]=devil_trail_add(point[i][axis],velocity[i][axis]);
   if(!isfinite(point[i][axis]))return GH_EFFECT_UNSUPPORTED;
  }
  memcpy(point[0],position,12);
- memcpy(m->trail[2].pointer,point,sizeof(point));
- memcpy(m->trail[3].pointer,velocity,sizeof(velocity));
+ memcpy(m->trail[2].pointer,point,bytes);
+ memcpy(m->trail[3].pointer,velocity,bytes);
  memcpy(p+0x330,&phase,4);
  *frontier=0;
  return GH_EFFECT_OK;
@@ -2534,7 +2698,9 @@ gh_effect_status gh_effect_create_esp_pause_002fbe50(gh_game_effects*e,unsigned 
   * API accepts emitterparents. Unknown rawchild/parent tokens remainstrict. */
  if(w(v.payload+4)||w(v.payload+8)||w(v.payload+0xc)||w(v.payload+0x10)){*f=0x2b5cf0;return GH_EFFECT_UNSUPPORTED;}status=gh_effect_create_esp_unlink_002b5ec0(e,slot,serial);if(status){*f=0x2b5ec0;return status;}unsigned off=(slot>>5)*4;uint32_t bit=UINT32_C(0x80000000)>>(slot&31);ww(e->native->esp+0x100080+off,w(e->native->esp+0x100080+off)|bit);return GH_EFFECT_OK;}
 gh_effect_status gh_effect_create_esp_destroy_hidden_native(gh_game_effects*e,unsigned slot,uint32_t serial,uint32_t*f){if(!f)return GH_EFFECT_ARGUMENT;*f=0;gh_effect_esp_view v;gh_effect_status status=gh_effect_create_esp_at(e,slot,&v);if(status||v.serial!=serial||!v.initialized)return GH_EFFECT_ARGUMENT;unsigned off=(slot>>5)*4;uint32_t bit=UINT32_C(0x80000000)>>(slot&31);if(!(w(e->native->esp+0x100100+off)&bit))return GH_EFFECT_ARGUMENT;if(v.type==4||v.type==0x14){*f=v.type==4?0x2e6368:0x2f27e8;return GH_EFFECT_UNSUPPORTED;}if(!esp_vtable(v.type)||((v.actor||v.selector)&&!sprite_binding(v.record,v.actor,v.selector)&&!gh_effect_attack_esp_is_bound(e,&v)&&!gh_effect_knockdown_esp_is_bound(e,&v)&&!gh_effect_player_attachment_esp_is_bound(e,&v)&&!gh_effect_devil_esp_is_bound(e,&v)&&!gh_effect_enemy_light_esp_is_bound(e,&v)&&!gh_effect_emad_esp_is_bound(e,&v))||v.parent_emitter!=-1||v.previous!=-1||v.next!=-1||w(v.payload+4)||w(v.payload+8)||w(v.payload+0xc)||w(v.payload+0x10)){*f=0x2fbe28;return GH_EFFECT_UNSUPPORTED;}if(w(v.payload+0xf0)!=esp_vtable(v.type)){*f=0x2fbe28;return GH_EFFECT_UNSUPPORTED;}
- if((v.type==9||v.type==0x1f||v.type==0x20)&&release_trail(e->native->esps+slot)){*f=0x2ebc50;return GH_EFFECT_ARGUMENT;}
+ if((v.type==3||v.type==9||v.type==0x1f||v.type==0x20)&&release_trail(e->native->esps+slot)){
+  *f=v.type==3?0x2e3500:0x2ebc50;return GH_EFFECT_ARGUMENT;
+ }
  /* Actualvirtual dtor(flags2): concreteVT ->44FAD0 ->44B310; bit1clear
   * means original30F5A0 is not called. Caller clearsactive onlyafterreturn. */
  ww(v.payload+0xf0,0x44fad0u);ww(v.payload+0xf0,0x44b310u);e->native->esps[slot].associated=0;return GH_EFFECT_OK;}

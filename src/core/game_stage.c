@@ -100,11 +100,11 @@ gh_stage_status gh_stage_tim2_sprite_resolve(gh_stage_textures*s,const void*raw,
  size_t bytes=(size_t)picture.width*picture.height*4;
  p->pixels=malloc(bytes);
  if(!p->pixels){free(p);return GH_STAGE_MEMORY;}
- e=indexed8?gh_tim2_rgba8(&picture,p->pixels,bytes):gh_tim2_rgba4(&picture,p->pixels,bytes);
+ e=indexed8?gh_tim2_rgba8(&picture,p->pixels,bytes):gh_tim2_gs_rgba4(&picture,p->pixels,bytes);
  if(e){free(p->pixels);free(p);return e==GH_TIM2_BOUNDS?GH_STAGE_BOUNDS:GH_STAGE_UNSUPPORTED;}
- /* The shared preview decoder maps alpha 0..128 losslessly to even bytes
-  * and 255. Recover the raw CT32 CLUT alpha used by GS modulation. */
- for(size_t i=3;i<bytes;i+=4)p->pixels[i]=(uint8_t)((p->pixels[i]+1u)/2u);
+ /* The indexed8 preview mapping is reversible. PSMT4 already retains raw
+  * CT32 GS alpha, including the authored values above 0x80 in CORE item 29. */
+ if(indexed8)for(size_t i=3;i<bytes;i+=4)p->pixels[i]=(uint8_t)((p->pixels[i]+1u)/2u);
  /* 151990 sets TCC and CLD and retains TEX0 dimensions. Native cache
   * identity supplies storage, so TEX0's TBP/CBP address fields stay zero. */
  const uint64_t format_bits=(uint64_t)psm<<20;

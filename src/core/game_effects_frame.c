@@ -1,5 +1,6 @@
 #include "game_effects_frame.h"
 #include "game_esp14.h"
+#include "game_esp03.h"
 #include "game_actor_matrix.h"
 #include "game_effect_node.h"
 #include "game_actor_two_bone.h"
@@ -105,7 +106,8 @@ static gh_effect_status emitter_transform(gh_game_effects_frame*s,uint8_t*p,cons
      gh_actor_matrix_product_00147548(world,offset,world,s->b.policy,&pc))
     return fail(s,pc?pc:0x302bc8,GH_EFFECT_UNSUPPORTED);
  }else{
-  if((v->actor&&!gh_effect_r103_slide_camera_emitter_is_bound(v))||v->part||
+  if((v->actor&&!gh_effect_r103_slide_camera_emitter_is_bound(v)&&
+      !gh_effect_player_heat_root_emitter_is_bound(v))||v->part||
      w(p+4)||w(p+8)||w(p+0x10))return fail(s,0x2b61b0,GH_EFFECT_UNSUPPORTED);
   status=gh_effect_node_world_matrix_native(s->b.storage.effects,1,s->emitter_index,
     s->emitter_serial,world,s->b.policy,&pc);
@@ -313,7 +315,7 @@ static gh_effect_status emitter_update(gh_game_effects_frame*s,unsigned i){
     !gh_effect_stamp19_attack_part_is_bound(&current)&&!gh_effect_r101_weapon_emitter_is_bound(&current)&&
     !gh_effect_player_attachment_emitter_is_bound(&current)&&!gh_effect_devil_emitter_is_bound(s->b.storage.effects,&current)&&
   !gh_effect_emad_emitter_is_bound(s->b.storage.effects,&current)&&
-  !gh_effect_r103_slide_camera_emitter_is_bound(&current)&&
+  !gh_effect_player_heat_root_emitter_is_bound(&current)&&!gh_effect_r103_slide_camera_emitter_is_bound(&current)&&
   (((current.actor||current.selector)&&!gh_esp14_nested_sprite_is_bound(current.record,current.actor,current.selector))||current.model||current.part))return fail(s,0x2b5cf0,GH_EFFECT_UNSUPPORTED);
   if(w(p+8))return fail(s,0x2b5e58,GH_EFFECT_UNSUPPORTED);if(w(p+4))return fail(s,0x2b5cf0,GH_EFFECT_UNSUPPORTED);unsigned off=(i>>5)*4;uint8_t*mask=s->b.storage.emitters+0x26020+off;put(mask,w(mask)|(UINT32_C(0x80000000)>>(i&31)));return GH_EFFECT_OK;}
   const int scaled=scaled_emitter_clock(s,p,r);
@@ -384,6 +386,7 @@ static int esp_update_class(const gh_effect_esp_view *view)
  const uint32_t vtable=w(view->payload+0xf0);
  switch(view->type){
  case 0: return vtable==0x44fad0;
+ case 3: return vtable==GH_ESP03_VTABLE;
  case 6: return vtable==0x44e6d8;
  case 7: return vtable==0x44e770;
  case 0x1f: return vtable==0x44f448;

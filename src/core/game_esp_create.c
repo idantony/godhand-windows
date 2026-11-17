@@ -354,6 +354,14 @@ static gh_effect_status create_body(gh_esp_create_call*c,const gh_esp_create_bin
   c->stage=12;
   return GH_EFFECT_OK;
  }
+ if(view.type==3&&c->stage==10){
+  uint32_t pc=0;
+  status=gh_effect_create_esp_heat_aura_init_002e35c0(b->storage.effects,c->slot,c->serial,
+     w((const uint8_t *)b->work+0x594),&pc);
+  if(status)return fail(c,pc?pc:0x2e35c0,status);
+  c->stage=12;c->complete=1;
+  return GH_EFFECT_OK;
+ }
  if(view.type==7&&c->stage==10){
   if(w(p+0xf0)!=0x44e770u||!b->globals||
      !gh_effect_esp_type7_record_bound(b->storage.effects,&view))

@@ -189,6 +189,7 @@ def main():
                ("game_object_opacity", "src/core/game_object_opacity.c"),
                ("game_effects_frame", "src/core/game_effects_frame.c"),
                ("game_esp_create", "src/core/game_esp_create.c"),
+               ("game_esp03", "src/core/game_esp03.c"),
                ("game_esp14", "src/core/game_esp14.c"),
                ("game_effect_exp", "src/core/game_effect_exp.c"),
                ("game_effect_node", "src/core/game_effect_node.c"),

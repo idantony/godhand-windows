@@ -3,7 +3,7 @@
 #include "tim2.h"
 #include "gs_indexed_layout.h"
 #include <string.h>
-gh_tim2_error gh_tim2_rgba4(const gh_tim2_picture *p,void *rgba,size_t capacity){
+static gh_tim2_error rgba4(const gh_tim2_picture *p,void *rgba,size_t capacity,int preview){
  unsigned char *out=rgba;size_t n,i;
  if(!p||!rgba||!p->image||!p->clut)return GH_TIM2_ARGUMENT;
  if(!p->width||!p->height||(p->width&1)||p->image_type!=4||p->clut_type!=3||p->colors!=16||
@@ -12,15 +12,25 @@ gh_tim2_error gh_tim2_rgba4(const gh_tim2_picture *p,void *rgba,size_t capacity)
  if(p->image_size!=n/2||p->clut_size!=64||n>SIZE_MAX/4||capacity<n*4)return GH_TIM2_BOUNDS;
  /* gsKit PNG4 loader swaps PNG's high-first nibbles before upload and
   * uses sequential RGBA32 CLUT16; only its T8 path rotates CLUT groups. */
- for(i=0;i<16;i++)if(p->clut[i*4+3]>128)return GH_TIM2_UNSUPPORTED;
+ if(preview)for(i=0;i<16;i++)if(p->clut[i*4+3]>128)return GH_TIM2_UNSUPPORTED;
  for(i=0;i<n;i++){
   unsigned index=(p->image[i/2]>>((i&1)*4))&15;
   const unsigned char *c=p->clut+index*4;
   out[i*4]=c[0];out[i*4+1]=c[1];out[i*4+2]=c[2];
-  out[i*4+3]=c[3]>=128?255:(unsigned char)(c[3]*2);
+  out[i*4+3]=preview?(c[3]==128?255:(unsigned char)(c[3]*2)):c[3];
  }
  return GH_TIM2_OK;
 }
+gh_tim2_error gh_tim2_rgba4(const gh_tim2_picture *p,void *rgba,size_t capacity)
+{
+ return rgba4(p,rgba,capacity,1);
+}
+
+gh_tim2_error gh_tim2_gs_rgba4(const gh_tim2_picture *p,void *rgba,size_t capacity)
+{
+ return rgba4(p,rgba,capacity,0);
+}
+
 gh_tim2_error gh_tim2_rgba8(const gh_tim2_picture *picture,void *rgba,size_t capacity)
 {
  unsigned char *out=rgba;

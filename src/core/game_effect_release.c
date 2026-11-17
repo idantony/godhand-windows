@@ -12,7 +12,7 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
   gh_effect_status e=b->actor_match(b->context,emitter,i,actor,&match,f);if(e)return e;
   if(!match)continue;
   const uint32_t profile=rd(p+(emitter?0x18c:0x23a));
-  const int attached=kind==4||(kind==5&&profile==0x004e0000u)||(kind==3&&(profile==0x00040000u||profile==0x00250000u))||
+  const int attached=kind==4||(kind==5&&profile==0x004e0000u)||(kind==3&&(profile==0x00040000u||profile==0x00210000u||profile==0x00250000u))||
       (kind==0&&(profile==0x00590058u||
       profile==0x005d0058u||(emitter&&profile==0x00420000u)));
   /* These authored mode-0 strikes can remain on the boss after the motion ends. */
@@ -26,7 +26,8 @@ static gh_effect_status scan(const gh_effect_release_bindings*b,const gh_title_p
    if(!gh_effect_create_emitter_at(b->effects,i,&view)&&view.payload==p&&
       (gh_effect_stamp19_attack_part_is_bound(&view)||gh_effect_stamp19_death_part_is_bound(&view)||gh_effect_knockdown_emitter_is_bound(&view)||gh_effect_em00_attack_emitter_is_bound(&view)||gh_effect_devil_emitter_is_bound(b->effects,&view)||
        (boss_strike&&gh_effect_em00_attack_emitter_is_bound(&view))||
-       (attached&&gh_effect_player_attachment_emitter_is_bound(&view)))&&
+       (attached&&(gh_effect_player_attachment_emitter_is_bound(&view)||
+        gh_effect_player_heat_root_emitter_is_bound(&view))))&&
       actor&&view.actor->bytes==actor->bytes){
     /* 302918 only sets the stop request. The Effects step owns child
      * links, pending masks, and final destruction. */

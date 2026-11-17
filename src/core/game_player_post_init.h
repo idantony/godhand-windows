@@ -8,6 +8,7 @@ extern "C" {
 /* Only the actualmode0 callfrom107F58. SamecanonicalHeat owner, writesbyte10
  * and delta8=max(current4-drainC,0), preservesallotherfields/FEnv.
  * Nonfinite values remain unsupported ratherthan being replacedwithzero. */
+gh_player_init_status gh_game_heat_set_mode_002a9cc8(gh_game_init_state *,gh_static_transform_policy,uint8_t mode,uint32_t *frontier);
 gh_player_init_status gh_game_heat_clear_mode_002a9cc8(gh_game_init_state *,gh_static_transform_policy,uint32_t *frontier);
 typedef gh_player_init_status (*gh_player_restore_paper)(void *,const gh_title_player_view *,uint32_t *);
 typedef struct {gh_game_title_player *player;gh_actor_model *model;gh_game_init_state *init;

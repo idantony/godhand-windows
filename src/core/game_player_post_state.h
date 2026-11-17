@@ -14,6 +14,8 @@ gh_player_post_status gh_player_state_effect_with_create_0012bb38(gh_game_player
 /* Actual cached mesh references replace raw1550/1554..1570 pointer tokens.
  * The149AD8 positive mapping branch remains precise until its real consumer.
  * NULL references are the cache's known current values, not raw0 guesses. */
+gh_player_post_status gh_player_mesh_visibility_resource_001236e8(gh_game_player_post_state *,
+ const gh_game_player_node_cache *,gh_core_save_view,const uint8_t *resource,size_t resource_bytes);
 gh_player_post_status gh_player_mesh_visibility_001236e8(gh_game_player_post_state *,const gh_game_player_node_cache *,gh_core_save_view);
 /* Exact138F88 AND result, used by123908 whose caller discards the value. */
 gh_player_post_status gh_player_camera_mode_00123908(const gh_game_init_state *,uint32_t *original_mask);

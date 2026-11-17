@@ -59,7 +59,12 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
  const uint8_t *work=(const uint8_t*)f->work;
  const unsigned sequence=half(p+0x3ac);
  const uint32_t pressed=word(work+8),flags=word(p+0x15f4);
- if(flags&0x10)return stop(s,0x2a9ad0,GH_PLAYER_FRAME_UNSUPPORTED);
+ int heat_expired;
+ uint32_t heat_frontier=0;
+ const gh_player_frame_status heat_status=gh_game_player_input_heat_00123938(
+     f,1,&heat_expired,&heat_frontier);
+ if(heat_status)return stop(s,heat_frontier,heat_status);
+ if(heat_expired){s->input_result=1;return GH_PLAYER_FRAME_OK;}
  if(sequence&0x40){
   if(half(work+0x5b0)==0x700)return stop(s,0x1169d8,GH_PLAYER_FRAME_UNSUPPORTED);
   if(word(work+0x5d8)&0x2000000)return stop(s,0x12bfb8,GH_PLAYER_FRAME_UNSUPPORTED);

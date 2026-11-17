@@ -144,12 +144,59 @@ static gh_player_frame_status cleanup(gh_player_idle_input *s)
  return status?fail(s,frontier,status):GH_PLAYER_FRAME_OK;
 }
 static gh_player_frame_status target_status(gh_player_idle_input*s,gh_player_target_status e,uint32_t pc){return fail(s,pc,e==GH_PLAYER_TARGET_UNSUPPORTED?GH_PLAYER_FRAME_UNSUPPORTED:e==GH_PLAYER_TARGET_NUMERIC?GH_PLAYER_FRAME_NUMERIC:GH_PLAYER_FRAME_CALLEE);}
+/* 12395C..123A08 is shared by mode 0 and mode 1. Mode 1
+ * checks the authored cancel bits before ending Heat. */
+gh_player_frame_status gh_game_player_input_heat_00123938(
+ const gh_player_frame_bindings *b,int mode_one,int *expired,uint32_t *frontier)
+{
+ uint8_t *p=b->player->view.bytes,*heat=b->init->heat;
+ const uint32_t flags=w(p+0x15f4);
+ *expired=0;
+ if(!(flags&0x10))return GH_PLAYER_FRAME_OK;
+
+ float current=num(heat+4),minimum=num(heat+8),maximum=num(heat);
+ if(!isfinite(current)||!isfinite(minimum)||!isfinite(maximum)){
+  *frontier=0x2a9ad0;
+  return GH_PLAYER_FRAME_NUMERIC;
+ }
+ if(current<minimum)current=minimum;
+ float ratio=maximum!=0?current/maximum:0;
+ if(!isfinite(ratio)){
+  *frontier=0x2a9b50;
+  return GH_PLAYER_FRAME_NUMERIC;
+ }
+ memcpy(heat+4,&current,4);
+ put(heat+0x14,ratio<.5f?0:ratio<=.75f?1:2);
+ const unsigned sequence=h(p+0x3ac);
+ if(current>minimum||(flags&0x80200)||(p[0x2f4]==0&&p[0x2f5]==9)||
+    (sequence&0xc)||(mode_one&&!(sequence&0x70)))return GH_PLAYER_FRAME_OK;
+
+ const float threshold=num(heat+12);
+ if(!isfinite(threshold)){
+  *frontier=0x2a9cc8;
+  return GH_PLAYER_FRAME_NUMERIC;
+ }
+ volatile float next_minimum=current-threshold;
+ const float minimum_value=next_minimum<0?0:next_minimum;
+ heat[0x10]=0;
+ memcpy(heat+8,&minimum_value,4);
+ put(p+0x54c,0x40400000);
+ p[0x2f4]=p[0x2f6]=p[0x2f7]=0;
+ p[0x2f5]=9;
+ *expired=1;
+ return GH_PLAYER_FRAME_OK;
+}
 enum player_input_mode { IDLE_INPUT, REACTION_INPUT, DODGE_INPUT };
 static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_input_mode mode){gh_player_frame_bindings*b=&s->b.frame;uint8_t*p=b->player->view.bytes,*heat=b->init->heat;const uint8_t*work=(const uint8_t*)b->work;uint32_t pc=0,flags;
+ if(!s->phase&&mode!=REACTION_INPUT){
+  int expired;
+  gh_player_frame_status status=gh_game_player_input_heat_00123938(b,mode==DODGE_INPUT,&expired,&pc);
+  if(status)return fail(s,pc,status);
+  if(expired)return done(s,out,1);
+ }
  if(mode==DODGE_INPUT&&!s->phase){
   const unsigned seq=h(p+0x3ac);
   const unsigned pressed=w(work+8);
-  if(w(p+0x15f4)&0x10u)return fail(s,0x2a9ad0,GH_PLAYER_FRAME_UNSUPPORTED);
   if(seq&0x40u){
    if(b->work->room==0x700)return fail(s,0x1169d8,GH_PLAYER_FRAME_UNSUPPORTED);
    if(w(work+0x5d8)&0x2000000u){
@@ -187,7 +234,7 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
    return fail(s,0x123acc,GH_PLAYER_FRAME_UNSUPPORTED);
   s->phase=4;
  }
- if(s->phase==0){flags=w(p+0x15f4);if(flags&0x10){float current=num(heat+4),minimum=num(heat+8),maximum=num(heat);if(!isfinite(current)||!isfinite(minimum)||!isfinite(maximum))return fail(s,0x2a9ad0,GH_PLAYER_FRAME_NUMERIC);if(current<minimum)current=minimum;float ratio=maximum!=0?current/maximum:0;if(!isfinite(ratio))return fail(s,0x2a9b50,GH_PLAYER_FRAME_NUMERIC);memcpy(heat+4,&current,4);put(heat+0x14,ratio<.5f?0:ratio<=.75f?1:2);if(current<=minimum&&!(flags&0x80200)&&!(p[0x2f4]==0&&p[0x2f5]==9)&&!(h(p+0x3ac)&0xc)){float threshold=num(heat+12);if(!isfinite(threshold))return fail(s,0x2a9cc8,GH_PLAYER_FRAME_NUMERIC);volatile float next_minimum=current-threshold;float minimum_value=next_minimum<0?0:next_minimum;heat[0x10]=0;memcpy(heat+8,&minimum_value,4);put(p+0x54c,0x40400000);return transition(s,out,9,0);}}s->phase=1;}
+ if(!s->phase)s->phase=1;
  if(s->phase==1){flags=w(p+0x15f4);if(!(flags&0x10)&&!heat[0x10]&&!(flags&0x20)){put(p+0x15f4,flags|0x20);s->effect=(gh_player_frame_effect_request){&b->player->view,0x2e,0,0,0xffffffffu,-1,0};s->phase=2;}else s->phase=3;}
  if(s->phase==2){if(!b->effect_create)return fail(s,0x306528,GH_PLAYER_FRAME_UNSUPPORTED);gh_player_frame_status e=b->effect_create(b->effect_context,&s->effect,&pc);if(e)return fail(s,pc?pc:0x306528,e);s->phase=3;}
  if(s->phase==3){if(h(work+0x5b0)==0x700)return fail(s,0x2c2638,GH_PLAYER_FRAME_UNSUPPORTED);s->phase=4;}

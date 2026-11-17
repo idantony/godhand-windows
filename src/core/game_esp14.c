@@ -519,9 +519,11 @@ gh_effect_status gh_esp04_initialize_002e64b0(gh_esp14_instance *s,
         return GH_EFFECT_ARGUMENT;
     uint8_t *p = v->payload;
     const uint8_t *r = v->record.bytes;
-    if (!v->target120_known_null || word(p + 0x120) || word(r + 0x16c) != 2 ||
-        word(r + 0x170) || r[0x174] || r[0x12e] != 5 ||
-        word(r + 0x18c) || r[0x190] || r[0x191] || r[0x192])
+    const int paired_throw = word(r + 0x16c) == 2 && r[0x12e] == 5;
+    const int heat_activation = word(p + 0x23a) == 0x00220000u &&
+        !word(r + 0x16c) && r[0x12e] >= 7 && r[0x12e] <= 9;
+    if (!v->target120_known_null || word(p + 0x120) || (!paired_throw && !heat_activation) ||
+        word(r + 0x170) || r[0x174] || word(r + 0x18c) || r[0x190] || r[0x191] || r[0x192])
         return GH_EFFECT_UNSUPPORTED;
     if (s->stage && (s->effects != b->effects || s->slot != slot || s->serial != v->serial))
         return GH_EFFECT_ARGUMENT;
@@ -595,6 +597,82 @@ gh_effect_status gh_esp04_initialize_002e64b0(gh_esp14_instance *s,
     return GH_EFFECT_OK;
 }
 
+static gh_effect_status set_esp04_world_position(const gh_esp14_bindings *b, unsigned slot,
+    const gh_effect_esp_view *v, const float position[4], uint32_t *frontier)
+{
+    if (v->parent_emitter < 0)
+        return gh_effect_node_set_position_native(b->effects, 0, slot, v->serial, position, frontier);
+    float parent[16], inverse[16], local[4];
+    gh_effect_status status = gh_effect_node_world_matrix_native(b->effects, 1,
+        (unsigned)v->parent_emitter, v->parent_serial, parent, b->model.policy, frontier);
+    if (status) return status;
+    if (gh_actor_matrix_inverse_00147568(parent, inverse, b->model.policy, frontier) ||
+        gh_scene_at_apply_world_001508d8(inverse, position, local))
+        return GH_EFFECT_UNSUPPORTED;
+    return gh_effect_node_set_position_native(b->effects, 0, slot, v->serial, local, frontier);
+}
+
+/* Mode 0 samples a fixed floor height once and bounces against it (2E6EE8/2E6B88). */
+static gh_effect_status move_esp04_floor_002e6ee8(const gh_esp14_bindings *b,
+    unsigned slot, const gh_effect_esp_view *v, uint32_t *frontier)
+{
+    uint8_t *p = v->payload;
+    const uint32_t flags = word(p + 0x2dc);
+    float position[4], hit_at[4] = {0, 0, 0, 1};
+    gh_effect_status status = gh_effect_node_world_position_native(b->effects, 0,
+        slot, v->serial, position, b->model.policy, frontier);
+    if (status) return status;
+
+    if (!(flags & 2)) {
+        if (!v->scene_actors) {
+            *frontier = 0x131e10;
+            return GH_EFFECT_ARGUMENT;
+        }
+        gh_scene_ray_request ray = {
+            .mask = 2, .segmented = 1, .hit_position = hit_at,
+            .from = {position[0], add(position[1], 1.0f), position[2], 1},
+            .to = {position[0], add(position[1], -11.0f), position[2], 1}
+        };
+        int hit = 0;
+        gh_scene_ray_status ray_status = gh_scene_ray_query_00131e10(
+            v->scene_actors, &ray, &hit, frontier);
+        if (ray_status)
+            return ray_status == GH_RAY_ARGUMENT ? GH_EFFECT_ARGUMENT :
+                ray_status == GH_RAY_BOUNDS ? GH_EFFECT_BOUNDS : GH_EFFECT_UNSUPPORTED;
+        if (!hit) return GH_EFFECT_OK;
+        store(p + 0x2e0, hit_at[1]);
+        put(p + 0x2dc, flags | 2);
+    }
+
+    float matrix[16], scale[3];
+    status = gh_effect_node_world_matrix_native(b->effects, 0, slot, v->serial,
+        matrix, b->model.policy, frontier);
+    if (status) return status;
+    if (gh_actor_matrix_extract_scale_00148160(matrix, scale, b->model.policy, frontier))
+        return GH_EFFECT_UNSUPPORTED;
+    const float half_height = multiply(scale[1], 0.5f);
+    const float floor = number(word(p + 0x2e0));
+    if (add(position[1], -half_height) >= floor) return GH_EFFECT_OK;
+
+    position[1] = add(floor, half_height);
+    status = set_esp04_world_position(b, slot, v, position, frontier);
+    if (status) return status;
+    float speed_squared = 0;
+    for (unsigned i = 0; i < 3; ++i) {
+        const float factor = i == 1 ? -number(word(p + 0x2c4)) : number(word(p + 0x2c0));
+        const float speed = multiply(number(word(p + 0x124 + 4*i)), factor);
+        store(p + 0x124 + 4*i, speed);
+        speed_squared = add(speed_squared, multiply(speed, speed));
+    }
+    if (sqrtf(speed_squared) < 0.1f) {
+        put(p + 0x2dc, word(p + 0x2dc) | 1);
+        memset(p + 0x124, 0, 12);
+        memset(p + 0x134, 0, 12);
+        memset(p + 0x178, 0, 12);
+    }
+    return GH_EFFECT_OK;
+}
+
 static gh_effect_status move_esp04_ballistic_002e7098(const gh_esp14_bindings *b,
     unsigned slot, const gh_effect_esp_view *v, uint32_t *frontier)
 {
@@ -624,18 +702,7 @@ static gh_effect_status move_esp04_ballistic_002e7098(const gh_esp14_bindings *b
             ray_status == GH_RAY_BOUNDS ? GH_EFFECT_BOUNDS : GH_EFFECT_UNSUPPORTED;
     if (!hit) return GH_EFFECT_OK;
     for (unsigned i = 0; i < 3; ++i) hit_pos[i] = add(hit_pos[i], multiply(normal[i], 0.1f));
-    if (v->parent_emitter >= 0) {
-        float parent[16], inverse[16], local[4];
-        status = gh_effect_node_world_matrix_native(b->effects, 1, (unsigned)v->parent_emitter,
-            v->parent_serial, parent, b->model.policy, frontier);
-        if (status) return status;
-        if (gh_actor_matrix_inverse_00147568(parent, inverse, b->model.policy, frontier))
-            return GH_EFFECT_UNSUPPORTED;
-        if (gh_scene_at_apply_world_001508d8(inverse, hit_pos, local))
-            return GH_EFFECT_UNSUPPORTED;
-        memcpy(hit_pos, local, 12);
-    }
-    status = gh_effect_node_set_position_native(b->effects, 0, slot, v->serial, hit_pos, frontier);
+    status = set_esp04_world_position(b, slot, v, hit_pos, frontier);
     if (status) return status;
     float dot = 0, length_squared = 0, reflection_squared = 0, reflected[3];
     for (unsigned i = 0; i < 3; ++i) {
@@ -673,8 +740,18 @@ gh_effect_status gh_esp04_move_after_base_002e6868(gh_esp14_instance *s,
         return GH_EFFECT_ARGUMENT;
     uint8_t *p = current.payload;
     if (!(word(p + 0x2dc) & 1)) {
-        if (word(p + 0x2d4) != 2 || word(p + 0x2d8)) return GH_EFFECT_UNSUPPORTED;
-        gh_effect_status status = move_esp04_ballistic_002e7098(b, s->slot, &current, frontier);
+        if (word(p + 0x2d8)) return GH_EFFECT_UNSUPPORTED;
+        gh_effect_status status;
+        switch (word(p + 0x2d4)) {
+        case 0:
+            status = move_esp04_floor_002e6ee8(b, s->slot, &current, frontier);
+            break;
+        case 2:
+            status = move_esp04_ballistic_002e7098(b, s->slot, &current, frontier);
+            break;
+        default:
+            return GH_EFFECT_UNSUPPORTED;
+        }
         if (status) return status;
     } else if (word(p + 0x2dc) & 4) {
         p[0x24c] = p[0x2e5] ? p[0x2e5] : 30;
