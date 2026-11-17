@@ -1316,16 +1316,19 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         (boosted_scenery||boosted_at0b);
     const gh_title_player_view *heat_source=NULL;
     const int32_t take_power=(int32_t)word(body->bytes+0x4c);
-    const int active_triangle=take_effect==0x12&&call->effect==0x12&&take_power==12&&
-        r103_boss_player_strike_target(enemy,p)&&
-        half(p+0x2f4)==0x0101&&!p[0x2f6]&&!p[0x2f7]&&init->heat[0x10]&&
-        player->size>=0x15f8&&(word(player->bytes+0x15f4)&0x10u);
-    const int heat_impact=(active_triangle||(call->effect==0x2a&&
+    const uint16_t reaction=half(p+0x2f4);
+    const int triangle=take_effect==0x12&&call->effect==0x12&&take_power==12&&reaction==0x0101;
+    const int em15_square=take_effect==7&&!call->effect&&take_power==3&&
+        dependency==0x215&&reaction==0x0001;
+    const int active_boss_strike=(triangle||em15_square)&&r103_boss_player_strike_target(enemy,p)&&
+        !p[0x2f6]&&!p[0x2f7]&&init->heat[0x10]&&player->size>=0x15f8&&
+        (word(player->bytes+0x15f4)&0x10u);
+    const int heat_impact=(active_boss_strike||(call->effect==0x2a&&
         r103_heat_activation_contact(enemy,player,take_effect,take_power)))&&
         !gh_hitarea_object_last_hit_actor(body,&heat_source)&&heat_source==player;
     if(heat_impact){
-        /* 271CA8 keeps the manager path distinct. The verified wave is
-         * unmanaged and passes 271D10/20 before 271D7C and CORE121. */
+        /* 271CA8 keeps the manager path distinct. The unmanaged original
+         * 271DA8 Heat arm uses CORE0:40 at the 271518 point and CORE121. */
         if(manager_active)return stop(frontier,0x271ca8);
         gh_actor_motion_status status=gh_enemy202_impact_position_00271518(
             enemy,call->impact.position,frontier);

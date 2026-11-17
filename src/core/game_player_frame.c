@@ -688,7 +688,7 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
   }else if(w(p+0x15b0)){
    const int32_t residual=(int32_t)w(p+0x160c);
    const int arena_residual=b->work->room==0x103&&
-     ((p[0x2f7]<=1&&residual==10)||(!p[0x2f7]&&(residual==3||residual==5)));
+     ((p[0x2f7]<=1&&(residual==10||residual==11))||(!p[0x2f7]&&(residual==3||residual==5)));
    if(residual!=0&&residual!=15&&residual!=7&&!arena_residual&&!(b->work->room==0x102&&residual==3))
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
    gh_player_frame_status status=damage_hp_0012c0f8(s,residual);
@@ -964,16 +964,22 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      s->pending_damage_kind==0x3e&&override_bank==UINT32_MAX&&!half(take+0x44)&&
      ((w(take+0x4c)==20&&s->pending_damage==15&&w(p+0x160c)==5)||
       (w(take+0x4c)==30&&s->pending_damage==23&&w(p+0x160c)==7));
-   /* 260C20 can boost the flank's Give3E power40 to 60. The Take retains
-    * that power after the attacker advances into withdrawal. */
+   /* 22D2F0 emits Give3E power30, including the frame that enters phase10.
+    * The later flank emits power40. 260C20 can amplify either by half. */
+   const unsigned flank_phase=source->bytes[0x2f6];
+   const uint32_t flank_take_power=w(take+0x4c), flank_residual=w(p+0x160c);
    const int boss_flank=b->work->room==0x103&&source_kind==0x204&&stamp<2&&
      dependency==0x214u+stamp&&source->size>=0x187c&&source->bytes[0x1650]==15&&
-     half(source->bytes+0x2f4)==0x3c00&&source->bytes[0x2f6]>=13&&
-     source->bytes[0x2f6]<=16&&!source->bytes[0x2f7]&&
+     half(source->bytes+0x2f4)==0x3c00&&!source->bytes[0x2f7]&&
      s->pending_damage_kind==0x3e&&override_bank==UINT32_MAX&&!half(take+0x44)&&
-     ((w(take+0x4c)==40&&s->pending_damage==30&&w(p+0x160c)==10)||
-      (w(take+0x4c)==60&&s->pending_damage==45&&w(p+0x160c)==15&&
-       w(source->bytes+0x1874)==40&&w(source->bytes+0x1878)==0x3e));
+     (((flank_phase==9||flank_phase==10)&&!w(source->bytes+0x1870)&&
+       w(source->bytes+0x1874)==30&&w(source->bytes+0x1878)==0x3e&&
+       ((flank_take_power==30&&s->pending_damage==23&&flank_residual==7)||
+        (flank_take_power==45&&s->pending_damage==34&&flank_residual==11)))||
+      (flank_phase>=13&&flank_phase<=16&&
+       ((flank_take_power==40&&s->pending_damage==30&&flank_residual==10)||
+        (flank_take_power==60&&s->pending_damage==45&&flank_residual==15&&
+         w(source->bytes+0x1874)==40&&w(source->bytes+0x1878)==0x3e))));
    const int arena_hit=(arena_attack&&(arena_em00||arena_em03||arena_em0a_short||arena_em0a_fall))||
      arena_slide||arena_em0a_f6||arena_reverse||boss_melee||em15_short||em14_short||boss_deflect||boss_kick||boss_flank;
    const int em14_sphere=b->work->room==0x103&&source_kind==0x204&&dependency==0x214&&!stamp&&

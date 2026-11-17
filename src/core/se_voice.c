@@ -1626,7 +1626,9 @@ static int boost_impact_voice(const struct voice *v,int16_t bank,int16_t program
   const int heat_receiver=r103_em00_voice_actor(v)||arena_boss;
   const uint32_t power=heat_receiver&&v->model->root.size>=0x17b8?w(actor+0x17b4):0;
   const int heat_contact=(power==12&&arena_boss)||(power==5&&dependency!=0x214);
-  const int active_impact=heat_contact&&h(actor+0x2f4)==0x0101&&
+  const int standing_hit=heat_contact&&h(actor+0x2f4)==0x0101;
+  const int em15_square=dependency==0x215&&power==3&&h(actor+0x2f4)==0x0001;
+  const int active_impact=(standing_hit||em15_square)&&
       (!actor[0x2f6]||(v->combat_profile&&actor[0x2f6]==1))&&!actor[0x2f7];
   if(!active_impact&&!local&&!r102_east_em27_voice(v,0x1101,0)&&
      !(v->combat_profile&&r102_east_em27_voice(v,0x1101,1)))return 0;
