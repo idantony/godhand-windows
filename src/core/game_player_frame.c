@@ -11,6 +11,7 @@
 #include "game_hitarea_frame.h"
 #include "game_player_root_delta.h"
 #include "game_player_post_init.h"
+#include "game_enemy_ems.h"
 #include <string.h>
 #include <math.h>
 #include <fenv.h>
@@ -728,7 +729,8 @@ static gh_player_frame_status hurt_fall_0011add8(gh_game_player_frame *s)
    const int arena_residual=b->work->room==0x103&&
      ((p[0x2f7]<=1&&(residual==10||residual==11))||(!p[0x2f7]&&(residual==3||residual==5)));
    const int combo_residual=(b->work->room==0x100||b->work->room==0x104)&&residual==10;
-   if(residual!=0&&residual!=15&&residual!=7&&!arena_residual&&
+   const int r104_anger_residual=b->work->room==0x104&&!p[0x2f7]&&residual==22;
+   if(residual!=0&&residual!=15&&residual!=7&&!arena_residual&&!r104_anger_residual&&
       !combo_residual&&!(b->work->room==0x104&&p[0x2f7]==5&&residual>0)&&
       !(b->work->room==0x100&&!p[0x2f7]&&residual==5)&&!(b->work->room==0x102&&residual==3))
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -968,8 +970,14 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
    const int r104_combo=r104_close&&source_move==0x1600&&
      ((s->pending_damage_kind==0x3d&&w(take+0x4c)==30&&s->pending_damage==30&&!residual)||
       (s->pending_damage_kind==0x3e&&w(take+0x4c)==40&&s->pending_damage==30&&residual==10));
+   /* The published Give keeps its effective power after the anger timer changes. */
+   const int r104_amplified_melee=source->size>=0x1882&&
+     !w(source->bytes+0x1870)&&w(source->bytes+0x1874)==60&&
+     w(source->bytes+0x1878)==0x3e&&w(source->bytes+0x187c)==1&&
+     half(source->bytes+0x1880)==0x28&&w(take+0x4c)==90&&
+     s->pending_damage==68&&residual==22;
    const int r104_melee=r104_close&&source_move==0x1500&&s->pending_damage_kind==0x3e&&
-     w(take+0x4c)==60&&s->pending_damage==45&&residual==15;
+     ((w(take+0x4c)==60&&s->pending_damage==45&&residual==15)||r104_amplified_melee);
    /* 224090 sets the charge shape and both Give rows at 2609A8. */
    const int r104_charge=r104_em03&&source_move==0x1a00&&source->bytes[0x2f6]>=3&&
      source->bytes[0x2f6]<=5&&source->size>=0x1882&&w(source->bytes+0x1870)==10&&
@@ -3445,6 +3453,165 @@ static gh_player_frame_status interact_00115310(gh_game_player_frame *s)
 /* PL00 uses separate authored Heat transition clips. Activation enables Heat
  * on SEQ bit0. Exhaustion publishes Give2A once during initialization and
  * restores ordinary flags from the finish clip's own SEQ bit0. */
+
+/* 291B90 only sees the single authored stamp-zero enemy in R104.
+ * 447A8C dispatches 26F200 before the caller awards Heat and rank input. */
+static gh_player_frame_status r104_taunt_nearby_00291b90(gh_game_player_frame *s, int *accepted)
+{
+    const gh_player_frame_bindings *b = &s->b;
+    gh_game_title_player *enemy = NULL;
+    *accepted = 0;
+    if (gh_enemy_manager_get_00290868(b->init, 0, &enemy))
+        return fail(s, 0x291bd8, GH_PLAYER_FRAME_ARGUMENT);
+    if (!enemy) return GH_PLAYER_FRAME_OK;
+
+    const gh_title_player_view *view = &enemy->view;
+    uint8_t *p = view->bytes;
+    const gh_title_player_view *player = &b->player->view;
+    if (!p || view->size < 0x16f0 || !view->alias_f0 || !player->alias_f0 ||
+        view->original_vtable214 != 0x4479c8 || half(p + 0x2fe) != 0x203 ||
+        w(p + 0x564) != 0x250)
+        return fail(s, 0x291cd8, GH_PLAYER_FRAME_UNSUPPORTED);
+    if ((int16_t)half(p + 0x54a) <= 0) return GH_PLAYER_FRAME_OK;
+
+    float origin[3], target[3];
+    memcpy(origin, player->alias_f0, sizeof(origin));
+    memcpy(target, view->alias_f0, sizeof(target));
+    fenv_t env;
+    if (feholdexcept(&env)) return fail(s, 0x1f7eb0, GH_PLAYER_FRAME_NUMERIC);
+    if (fesetround(FE_TOWARDZERO)) {
+        (void)fesetenv(&env);
+        return fail(s, 0x1f7eb0, GH_PLAYER_FRAME_NUMERIC);
+    }
+    const float dx = sub(target[0], origin[0]), dz = sub(target[2], origin[2]);
+    const float dy = sub(target[1], origin[1]);
+    volatile float xx = dx * dx, zz = dz * dz;
+    const float distance_squared = add(xx, zz);
+    gh_scene_ray_request ray = {.mask = 1, .flags = 0x10, .segmented = 1};
+    memcpy(ray.from, target, sizeof(target));
+    memcpy(ray.to, origin, sizeof(origin));
+    ray.from[1] = add(target[1], 1.0f);
+    ray.to[1] = add(origin[1], 1.0f);
+    ray.from[3] = ray.to[3] = 1.0f;
+    if (fesetenv(&env) || !isfinite(distance_squared) || !isfinite(dy) ||
+        !isfinite(ray.from[1]) || !isfinite(ray.to[1]))
+        return fail(s, 0x1f7eb0, GH_PLAYER_FRAME_NUMERIC);
+    if (fabsf(dy) > 2.0f || distance_squared > 225.0f) return GH_PLAYER_FRAME_OK;
+
+    uint32_t pc = 0;
+    float angle;
+    if (gh_player_target_angle_002da038(b->elf, b->elf_bytes, origin, target,
+        number(w(player->bytes + 0x104)), number(0x40490fdb), &angle, &pc))
+        return fail(s, pc ? pc : 0x2da038, GH_PLAYER_FRAME_NUMERIC);
+    if (fabsf(angle) > number(0x3f060a92) || number(w(p + 0x16c0)) > 0.0f)
+        return GH_PLAYER_FRAME_OK;
+
+    /* 26F328 checks enemy-to-player visibility and writes the visibility bit. */
+    int hit = 0;
+    if (!b->actors || gh_scene_ray_query_00131e10(b->actors, &ray, &hit, &pc))
+        return fail(s, pc ? pc : 0x131e10, GH_PLAYER_FRAME_UNSUPPORTED);
+    const uint32_t flags = w(p + 0x16d0);
+    put(p + 0x16d0, hit == 1 ? flags & ~0x200000u : flags | 0x200000u);
+    if (hit == 1 || (flags & 0x40000u)) return GH_PLAYER_FRAME_OK;
+
+    unsigned rank;
+    if (gh_core_save_game_level_001fa010(b->save, b->elf, b->elf_bytes, &rank))
+        return fail(s, 0x1fa010, GH_PLAYER_FRAME_ARGUMENT);
+    /* 445B50 selects threshold150. The forced callback clears the pressure
+     * and sets the rank-selected timer. Dep0250 skips both pressure sounds. */
+    put(p + 0x16ec, rank >= 3 ? 300 : 150);
+    put(p + 0x16e8, 0);
+    put(p + 0x16dc, 0);
+    *accepted = (int)rank;
+    return GH_PLAYER_FRAME_OK;
+}
+
+static gh_player_frame_status taunt_00114460(gh_game_player_frame *s)
+{
+ enum {BIND=1,SAMPLE,ROTATE,TRANSLATE,MARKER,HEAT,RANK,INPUT};
+ const gh_player_frame_bindings *b=&s->b;
+ gh_title_player_view *actor=&b->player->view;
+ uint8_t *p=actor->bytes;
+ uint32_t pc=0;
+ if(b->work->room!=0x104)return fail(s,0x114460,GH_PLAYER_FRAME_UNSUPPORTED);
+ if(!s->hurt_phase){
+  if(p[0x2f6]){
+   s->hurt_phase=p[0x2f6]==1?SAMPLE:INPUT;
+  }else{
+   if(!b->model||!b->resource||b->resource_bytes<0x8a8||!b->initialize_motion||!b->rate)
+    return fail(s,0x2a8578,GH_PLAYER_FRAME_UNSUPPORTED);
+   sh(p+0x5e0,0);
+   sh(p+0x5e2,0);
+   uint32_t random;
+   gh_player_frame_status status=idle_random(s,&random);
+   if(status)return status;
+   const size_t row=(random&1u)?0x230:0x8a0;
+   s->pending_motion=(gh_player_motion_request){.player=b->player,.model=b->model,.work=b->work,
+      .resource=b->resource,.resource_bytes=b->resource_bytes,.motion_offset=w(b->resource+row),
+      .sequence_candidate_offset=w(b->resource+row+4),.blend_frames=3,
+      .release_previous_sequence=1,.rate=b->rate};
+   s->hurt_phase=BIND;
+  }
+ }
+ if(s->hurt_phase==BIND){
+  const gh_player_init_status status=b->initialize_motion(b->motion_context,&s->pending_motion,&pc);
+  if(status)return fail(s,pc?pc:0x2a8578,status==GH_PLAYER_INIT_UNSUPPORTED?
+      GH_PLAYER_FRAME_UNSUPPORTED:GH_PLAYER_FRAME_CALLEE);
+  sh(p+0x568,1);
+  p[0x2f6]=1;
+  s->hurt_phase=SAMPLE;
+ }
+ if(s->hurt_phase==SAMPLE){
+  if(!b->advance_motion||!b->rate)return fail(s,0x157c18,GH_PLAYER_FRAME_UNSUPPORTED);
+  const gh_player_motion_request request={.player=b->player,.model=b->model,.work=b->work,
+   .resource=b->resource,.resource_bytes=b->resource_bytes,.rate=b->rate};
+  gh_player_frame_status status=b->advance_motion(b->motion_context,&request,&s->motion_ended,&pc);
+  if(status)return fail(s,pc?pc:0x157c18,status);
+  if(s->motion_ended)memset(p+0x2f4,0,4);
+  s->hurt_phase=ROTATE;
+ }
+ if(s->hurt_phase==ROTATE){
+  if(gh_player_root_rotation_0014f9f0(actor,b->work,GH_STATIC_BINARY32_REFERENCE,&pc))
+   return fail(s,pc?pc:0x14f9f0,GH_PLAYER_FRAME_UNSUPPORTED);
+  s->hurt_phase=TRANSLATE;
+ }
+ if(s->hurt_phase==TRANSLATE){
+  if(gh_player_root_translation_0014f928(actor,b->work,GH_STATIC_BINARY32_REFERENCE,&pc))
+   return fail(s,pc?pc:0x14f928,GH_PLAYER_FRAME_UNSUPPORTED);
+  s->hurt_phase=MARKER;
+ }
+ if(s->hurt_phase==MARKER){
+  s->hurt_phase=INPUT;
+  if((half(p+0x3ac)&1u)&&half(p+0x568)){
+   int rank;
+   const gh_player_frame_status status=r104_taunt_nearby_00291b90(s,&rank);
+   if(status){s->hurt_phase=MARKER;return status;}
+   sh(p+0x568,0);
+   s->pending_damage=rank;
+   if(rank)s->hurt_phase=HEAT;
+  }
+ }
+ if(s->hurt_phase==HEAT){
+  if(gh_game_heat_gain_002a9978(b->init,b->work,b->save,s->pending_damage==5?6.0f:12.0f,&pc))
+   return fail(s,pc,GH_PLAYER_FRAME_NUMERIC);
+  s->hurt_phase=s->pending_damage==5?INPUT:RANK;
+ }
+ if(s->hurt_phase==RANK){
+  const gh_player_frame_status status=damage_score_001fa280(s,-250);
+  if(status)return status;
+  s->hurt_phase=INPUT;
+ }
+ if(!b->idle_input||!b->idle_input_bindings)return fail(s,0x123938,GH_PLAYER_FRAME_UNSUPPORTED);
+ if(!s->input_started){
+  const gh_player_frame_status status=gh_player_idle_input_begin(b->idle_input);
+  if(status)return fail(s,0x123938,status);
+  s->input_started=1;
+ }
+ const gh_player_frame_status status=gh_game_player_dodge_input_00123938(
+     b->idle_input,b->idle_input_bindings,&s->input_result);
+ return status?fail(s,b->idle_input->frontier?b->idle_input->frontier:0x123938,status):GH_PLAYER_FRAME_OK;
+}
+
 static gh_player_frame_status heat_transition_00114120_001142e0(gh_game_player_frame *s,int finishing)
 {
  enum { BIND=1, FINISH_GIVE, SAMPLE, ROTATE, TRANSLATE, ACTIVATE, RELEASE, STRIKE, INPUT, DONE };
@@ -3980,6 +4147,11 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
  if(s->stage==15&&s->state_entry==0x11b5f8){gh_player_frame_status e=hurt_stagger_0011b5f8(s);if(e)return e;s->stage=16;}
  if(s->stage==15&&s->state_entry==0x11a530){
   gh_player_frame_status status=event_wait_0011a530(s);
+  if(status)return status;
+  s->stage=16;
+ }
+ if(s->stage==15&&s->state_entry==0x114460){
+  const gh_player_frame_status status=taunt_00114460(s);
   if(status)return status;
   s->stage=16;
  }

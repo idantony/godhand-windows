@@ -64,7 +64,7 @@ gh_player_frame_status gh_player_square_attack_begin_00126918(
   };
   const int triangle=set==1&&!slot&&skill==29;
   const int kick=b->work->room==0x103&&set==2&&!slot&&skill==0x25;
-  const int back_circle=b->work->room==0x103&&set==5&&!slot&&skill==52;
+  const int back_circle=(b->work->room==0x103||b->work->room==0x104)&&set==5&&!slot&&skill==52;
   if(!triangle&&!kick&&!back_circle&&(set||slot>=sizeof(square)/sizeof(square[0])||skill!=square[slot].skill))
    return stop(s,0x1269e0,GH_PLAYER_FRAME_UNSUPPORTED);
   const uint32_t expected=back_circle?0x127d24:kick?0x1277ac:triangle?0x12749c:square[slot].entry;

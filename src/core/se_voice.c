@@ -2476,6 +2476,18 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
     candidate->model->root.bytes:NULL;
  const uint32_t skill=player?w(player+0x5e8):UINT32_MAX;
  /* The original Square combo and R104 grab escape share PL00 row 4. */
+ /* PL00/SYS rows 1E–20 are the original CORE E6 taunt cue group. */
+ static const uint32_t taunt_sample_offsets[]={0x14f40u,0x16ef0u,0x1390u};
+ const int taunt_voice=adsr2==0x5fcb&&bank==3&&program>=0x1e&&program<=0x20&&
+    candidate->source_owner&&candidate->requested_bank==0&&candidate->requested_program==0xe6&&
+    candidate->part_index==-1&&player&&candidate->model->work&&candidate->model->work->room==0x104&&
+    candidate->model->root.original_vtable214==0x41d220&&h(player+0x2fe)==0x100&&
+    w(player+0x2f4)==0x00010a00u&&w(p)==(((uint32_t)program<<16)|3u)&&
+    w(p+4)==(0x000f001au+(uint32_t)(program-0x1e))&&w(p+8)==0x50&&w(p+12)==0x00210000u&&
+    w(p+16)==(program==0x20?0x007f007fu:0x00780078u)&&w(p+20)==0x005a0040u&&!w(p+24)&&
+    w(p+28)==0x00ff0000u&&w(p+32)==(program==0x1e?0x205u:5u)&&!w(p+36)&&
+    w(p+40)==0xffffu&&!w(p+44)&&w(descriptor.data)==taunt_sample_offsets[program-0x1e]&&
+    w(descriptor.data+4)==11025;
  const int player_cc=adsr2==0x5fcb&&candidate->source_owner&&bank==3&&program==4&&
     candidate->requested_bank==0&&candidate->requested_program==0xcc&&candidate->part_index==-1&&
     ((candidate->model&&candidate->model->work&&candidate->model->root.bytes&&
@@ -2516,7 +2528,8 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  /* Skill 52 SEQ140920 requests CORE E2, which maps to PL00 row 26. */
  const int back_circle_voice=adsr2==0x5fcb&&candidate->source_owner&&bank==3&&program==26&&
     candidate->requested_bank==0&&candidate->requested_program==0xe2&&candidate->part_index==-1&&
-    candidate->model&&candidate->model->work&&candidate->model->work->room==0x103&&player&&
+    candidate->model&&candidate->model->work&&player&&
+    (candidate->model->work->room==0x103||candidate->model->work->room==0x104)&&
     candidate->model->root.original_vtable214==0x41d220&&h(player+0x2fe)==0x100&&
     h(player+0x2f4)==0x0b00&&skill==52&&
     w(p+4)==0x000f0017&&w(p+8)==0x50&&w(p+12)==0x00210000&&
@@ -2586,7 +2599,8 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
     w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))return unsupported(s,0x35fc);
  const uint32_t prop_sample=prop_break_room==0x100?(candidate->requested_program==4?0x12bc0u:0xf630u):prop_break_room==0x102?0x113c0u:
     prop_break_room==0x103?0x5570u:prop_break_room==0x104?0x2d80u:0xe710u;
- if(prop_break_room&&(w(descriptor.data)!=prop_sample||w(descriptor.data+4)!=16000||
+ if(prop_break_room&&(w(descriptor.data)!=(prop_break_room==0x200?0u:prop_sample)||
+    w(descriptor.data+4)!=(prop_break_room==0x200?20000u:16000u)||
     w(descriptor.data+8)!=0x5fc080ffu||w(descriptor.data+12)))return unsupported(s,0x35fc);
  if(door){
   const unsigned kind=h(candidate->model->root.bytes+0x2fe);
@@ -2683,7 +2697,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
   return unsupported(s,0x35fc);
  const int roulette_motion_voice=r103_roulette_motion_voice_profile(candidate,bank,program,p,descriptor.data);
  const int evade_voice=player_evade_award_voice(candidate,bank,program,p,descriptor.data);
- if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!evade_voice&&!roulette_motion_voice&&!pressure_cue&&!ema2_timer_voice&&!square_voice&&!back_circle_voice&&!triangle_voice&&!escape_voice&&!player_cc&&!player_cd&&!hurt_voice&&!player_death&&!fall_grunt&&!pickup_voice&&!impact_voice&&!em0a_attack_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!local_cue_voice&&!attack_voice&&!death_voice&&!mount_fall_sample)||w(descriptor.data+12))return unsupported(s,0x35fc);
+ if(adsr1!=0x80ff||(adsr2!=0x5fc0&&!evade_voice&&!roulette_motion_voice&&!pressure_cue&&!ema2_timer_voice&&!square_voice&&!back_circle_voice&&!triangle_voice&&!escape_voice&&!taunt_voice&&!player_cc&&!player_cd&&!hurt_voice&&!player_death&&!fall_grunt&&!pickup_voice&&!impact_voice&&!em0a_attack_voice&&!reaction_voice&&!timed_voice&&!sequence_voice&&!local_cue_voice&&!attack_voice&&!death_voice&&!mount_fall_sample)||w(descriptor.data+12))return unsupported(s,0x35fc);
  static const uint32_t ema2_impact_offsets[]={0x553c0,0x56490,0x54300};
  int ema2_voice=adsr2==0x5fc0&&core_ema2_impact_profile(candidate,bank,program,p)&&
                 w(descriptor.data)==ema2_impact_offsets[program-0x96]&&w(descriptor.data+4)==22050;
@@ -3345,6 +3359,14 @@ static unsigned room_prop_break_profile(const struct voice *v)
  const gh_title_player_view *root=&v->model->root;
  const unsigned room=v->model->work->room,kind=h(root->bytes+0x2fe);
  const uint32_t vtable=root->original_vtable214;
+ if(room==0x200&&kind==0x3bd&&vtable==0x428c20&&root->size==0x640&&
+    (w(root->bytes+0x2f4)==0x00000100u||w(root->bytes+0x2f4)==0x00000200u)&&
+    v->requested_program==0x1a&&v->info.program==0x1a){
+  /* 1B8B68 selects the catapult's attached launch PCM in R200.SES. */
+  return w(p)==0x001a0002u&&w(p+4)==0x02170005u&&w(p+8)==0x250u&&w(p+12)==0x00210000u&&
+    w(p+16)==0x00780078u&&w(p+20)==0x005a0040u&&w(p+24)==0x0080ff00u&&
+    w(p+28)==0x00ff0000u&&w(p+32)==0x000a0004u&&w(p+36)==0x300u&&w(p+40)==0xffffu&&!w(p+44)?room:0;
+ }
  const int om307=kind==0x307&&vtable==0x423608;
  const int om346=kind==0x346&&vtable==0x426e78&&root->size>=0xda0&&root->bytes[0x2f4]==2;
  if(room==0x100&&(om307||om346)&&v->requested_program==4&&v->info.program==4){

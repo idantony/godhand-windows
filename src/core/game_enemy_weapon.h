@@ -5,6 +5,7 @@
 #include "game_hitarea_shapes.h"
 #include "game_collision_scroll.h"
 #include "game_event_player_reset.h"
+#include "game_actor_motion.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +39,7 @@ gh_actor_model_status gh_enemy_weapon_release_factory(gh_enemy_weapon *);
 typedef struct {
     gh_enemy_weapon *weapon;
     gh_actor_model model;
+    gh_actor_motion shield_motion;
     gh_bundle_entry geometry,texture;
     gh_hitarea_shape_bindings shapes;
     gh_hitarea_object hit[2];

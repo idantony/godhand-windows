@@ -900,13 +900,16 @@ static gh_actor_motion_status advance_post_pose(gh_enemy202_move *s,uint8_t *p)
         /* 3130E0 zeroes the actor. The verified dependency paths, including
          * 227's table entry at 44621C, return from 271410 without using 1860. */
         uint32_t dependency=word(p+0x564);
+        /* Original table 4461E8 selects 2714A0 without allocating +1860. */
+        const int r200_021a=dependency==0x21a&&gh_enemy201_is_r200_entry(
+            &actor->entry->request,actor->entry->b.work->room);
         if(s->enemy&&(((dependency==0x214||dependency==0x215)&&
             gh_enemy204_is_r103_entry(&actor->entry->request,actor->entry->b.work->room))||
             gh_enemy203_is_r104_entry(&actor->entry->request,actor->entry->b.work->room))){
             const gh_actor_motion_status status=boss_spring_frame_002714e8(s,p);
             if(status)return status;
         }else if(actor->entry->object.view.initial_memory!=GH_TITLE_MEMORY_ORIGINAL_FACTORY_ZERO||
-            (dependency>=0x214&&dependency!=0x220&&dependency!=0x227)||
+            (dependency>=0x214&&dependency!=0x220&&dependency!=0x227&&!r200_021a)||
             word(p+0x1860))return stop(s,0x2714e8,GH_ACTOR_MOTION_UNSUPPORTED);
         s->substate67_stage=18;
     }

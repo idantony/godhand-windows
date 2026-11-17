@@ -200,7 +200,9 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
   /* With SEQ bit 10, the original dodge caller enters 123ACC for a buffered kick. */
   const int r104_backflip=b->work->room==0x104&&h(p+0x2f4)==0x0600&&
       p[0x2f6]==1&&p[0x2f7]==1;
-  const int buffered_triangle=(b->work->room==0x100||r104_backflip)&&(seq&0x10u)&&
+  const int r104_taunt=b->work->room==0x104&&h(p+0x2f4)==0x0a00&&
+      p[0x2f6]==1&&!p[0x2f7];
+  const int buffered_triangle=(b->work->room==0x100||r104_backflip||r104_taunt)&&(seq&0x10u)&&
       p[0x622]&&!p[0x621]&&!p[0x623]&&!p[0x624]&&!(pressed&3u);
   if(seq&0x40u){
    if(b->work->room==0x700)return fail(s,0x1169d8,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -212,12 +214,14 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
    }
   }
   /* 123AB8 reaches 123ACC for an attack buffered during the R104 backflip. */
-  const int buffered_square=r104_backflip&&(seq&0x10u)&&p[0x621]&&
+  const int buffered_square=(r104_backflip||r104_taunt)&&(seq&0x10u)&&p[0x621]&&
        !p[0x622]&&!p[0x623]&&!p[0x624]&&!(pressed&7u);
   const int buffered_attack=buffered_triangle||buffered_square;
   if(buffered_attack)s->phase=4;
   else if(seq&0x40u){
-   if(pressed&3u||p[0x621]||p[0x622]||p[0x623]||p[0x624])
+   /* 123AB8 bypasses the attack dispatch while this taunt frame lacks bit10. */
+   const int taunt_attack_closed=r104_taunt&&!(seq&0x10u);
+   if(!taunt_attack_closed&&(pressed&3u||p[0x621]||p[0x622]||p[0x623]||p[0x624]))
     return fail(s,0x123acc,GH_PLAYER_FRAME_UNSUPPORTED);
    if(!b->auxiliary_bindings_known||b->aux_698||b->aux_6a0||w(p+0x698)||w(p+0x6a0))
     return fail(s,0x1240f8,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -309,13 +313,14 @@ static gh_player_frame_status body(gh_player_idle_input*s,int*out,enum player_in
  if(s->phase==5){if(s->b.targets.player!=&b->player->view)return fail(s,0x129cc8,GH_PLAYER_FRAME_ARGUMENT);gh_player_target_status e=gh_player_small_object_gate_00129cc8(&s->b.targets,&pc);if(e)return target_status(s,e,pc);s->phase=6;}
  if(s->phase==6){/*2948C8's TWO original fields, notenemy_kept16. */if(w(b->init->enemies+0x5ac)||w(b->init->enemies+0x5b0))return fail(s,0x2948c8,GH_PLAYER_FRAME_UNSUPPORTED);s->phase=7;}
  if(s->phase==7&&mode==REACTION_INPUT&&!p[0x621])return done(s,out,0);
- if(s->phase==7&&mode==IDLE_INPUT&&b->work->room==0x103&&p[0x623]&&
-    !(w(p+0x15f4)&0x8000u)){
+ if(s->phase==7&&mode==IDLE_INPUT&&p[0x623]&&!(w(p+0x15f4)&0x8000u)){
   /* 123938 selects Circle set 2 or back+Circle set 5. The 12C000
    * exhaustion result applies only to the interruptible caller. */
-  const unsigned set=p[0x61f]&&num(p+0x608)>2.3561945f?5:2;
-  put(p+0x5e0,set<<16);
-  return transition(s,out,0x0b,0);
+  const int back=p[0x61f]&&num(p+0x608)>2.3561945f;
+  if(b->work->room==0x103||(b->work->room==0x104&&back)){
+   put(p+0x5e0,(back?5u:2u)<<16);
+   return transition(s,out,0x0b,0);
+  }
  }
  if(s->phase==7&&!p[0x623]&&p[0x622]){
   int selected;

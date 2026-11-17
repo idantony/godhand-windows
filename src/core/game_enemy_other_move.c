@@ -1228,6 +1228,35 @@ gh_actor_motion_status gh_enemy2a2_move_002856c0(gh_enemy_other_move *s,
     return heavy_move_tail(s,actor);
 }
 
+static gh_actor_motion_status shield_idle_001cb030(gh_enemy_other_move *s,
+ gh_enemy_weapon_init *owner,uint8_t *p)
+{
+    const gh_enemy_weapon *weapon=owner->weapon;
+    const gh_object_view *resource=&weapon->resource;
+    const float rate=scalar(owner->parent->bytes+0x5a8);
+    if(!isfinite(rate)||!resource->bytes||!resource->file_extent_known||
+       resource->file_extent<0x10||resource->file_extent>resource->size)
+        return stop(s,0x1cb030,GH_ACTOR_MOTION_UNSUPPORTED);
+    put_float(p+0x5a8,rate);
+    put_float(p+0x444,half(p+0x434)&4?-rate:rate);
+    gh_actor_motion *motion=&owner->shield_motion;
+    if(p[0x2f6]==0){
+        put(p+0x250,word(p+0x250)|0x40000u);
+        const gh_actor_motion_bindings binding={.model=&owner->model,.work=weapon->bindings.work,
+            .resource=resource->bytes,.resource_bytes=resource->file_extent};
+        const gh_actor_motion_status e=gh_actor_motion_begin_002a8578(
+            motion,&binding,word(resource->bytes+0xc),SIZE_MAX,0);
+        if(e)return stop(s,motion->frontier?motion->frontier:0x2a8578,e);
+        ++p[0x2f6];
+    }
+    if(p[0x2f6]!=1||p[0x2f7])return stop(s,0x1cb068,GH_ACTOR_MOTION_UNSUPPORTED);
+    uint32_t pc=0;
+    int ended;
+    const gh_actor_motion_status e=gh_actor_motion_step_00157c18(
+        motion,weapon->bindings.work->canonical_rate574,weapon->bindings.policy,&ended,&pc);
+    return e?stop(s,pc?pc:0x157c18,e):GH_ACTOR_MOTION_OK;
+}
+
 gh_actor_motion_status gh_enemy363_move_001c9860(gh_enemy_other_move *s,
     gh_enemy_weapon_init *actor,gh_motion_effect_consumer effect,void *effect_context)
 {
@@ -1278,13 +1307,20 @@ gh_actor_motion_status gh_enemy363_move_001c9860(gh_enemy_other_move *s,
     if(s->stage==4){
         if(p[0x2f4]!=0)return stop(s,0x1c9860,GH_ACTOR_MOTION_UNSUPPORTED);
         const uint16_t kind=half(p+0x2fe);
-        /* PMF 3BDEA0 selects 1CA040 for all three held weapon kinds. */
+        /* The R200 left shield follows PMF 3BDEC8 while its parent carries it. */
+        if(kind==0x366&&kind==actor->weapon->kind&&work->room==0x200&&p[0x2f5]==6){
+            const gh_actor_motion_status status=shield_idle_001cb030(s,actor,p);
+            if(status)return status;
+            s->stage=7;
+        }else{
+        /* PMF 3BDEA0 selects 1CA040 for the ordinary held weapon kinds. */
         if(p[0x2f5]!=1||kind<0x361||kind>0x363||kind!=actor->weapon->kind)
             return stop(s,0x1c9a50,GH_ACTOR_MOTION_UNSUPPORTED);
         if(p[0x2f6]==0){
             p[0x531]=0xff;
             s->stage=5;
         }else s->stage=6;
+        }
     }
     if(s->stage==5){
         uint32_t pc=0;

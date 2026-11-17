@@ -54,8 +54,15 @@ gh_actor_world_status gh_actor_world_queue_append(gh_actor_world_queue *q,const 
    const gh_actor_stream_material *material=materials->streams+stream;const gh_stage_material *image=material->material;
    const gh_actor_packet_stream *source=packet->streams+stream;
    if(material->samples_display_base0){
-    if(material->written||image||material->tex0||source->input.material!=255||
-       source->material_slot!=255||material->source_member!=255||material->selected_member!=255||
+    const uint8_t *root=model->root.bytes;
+    const unsigned kind=(unsigned)root[0x2fe]|(unsigned)root[0x2ff]<<8;
+    const uint32_t vtable=model->root.original_vtable214;
+    const int r200_constructor=command->kind==GH_ACTOR_DRAW_OPACITY_GEOMETRY&&model->work->room==0x200&&
+       ((vtable==0x4479c8&&kind==0x201)||(vtable==0x42aa98&&kind==0x366))&&
+       source->input.material==source->material_slot&&source->material_slot==material->source_member&&
+       material->source_member==material->selected_member;
+    if(material->written||image||material->tex0||(!r200_constructor&&(source->input.material!=255||
+       source->material_slot!=255||material->source_member!=255||material->selected_member!=255))||
        packet->node[0x384]||command->selected_program!=2||command->clamp){
      status=fail(frontier,0x154da0,GH_ACTOR_WORLD_UNSUPPORTED);goto failed;
     }

@@ -57,6 +57,11 @@ gh_actor_model_status gh_actor_packets_build_00148420(gh_actor_node_packets*s,vo
   put(node,0x400,0);((uint8_t*)node)[0x384]=0;put(node,0x380,flags);put(node,0x410,0);put(node,0x388,0);((uint8_t*)node)[0x386]=(uint8_t)s->streams[0].input.parts;s->bound=1;
  }
  if(!s->allocation.pointer){if(gh_heap_allocate(heap,s->bytes,16,&s->allocation)!=GH_MEM_OK)return fail(s,0x30ee08,0,GH_ACTOR_MODEL_MEMORY);}
+ /* Native stream allocation is recycled. The constructor TEX0 starts at
+  * the channel-table value (zero for an unloaded original channel). */
+ for(unsigned parity=0;parity<2;++parity)
+  for(size_t i=0;i<s->stream_count;++i)
+   quad(s->allocation.pointer,s->streams[i].frame_offset[parity]+0x20,0);
  s->test=(flags&0x80)?0x5000d:0x5000c;s->alpha=(flags&0x80)?UINT64_C(0x8000000044):UINT64_C(0x800000002a);s->tex1=UINT64_C(0xffffff3800000360);s->clamp=0;
  put(node,0x38c,0);put(node,0x390,0);for(unsigned j=0;j<4;j++)put(node,0x3a0+j*4,0x3f800000);((uint8_t*)node)[0x385]=(uint8_t)s->stream_count;
  header(s,0);header(s,1);gh_actor_model_status status=bounds(s);if(status)return status;s->ready=1;*out=1;return GH_ACTOR_MODEL_OK;

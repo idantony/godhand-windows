@@ -2098,7 +2098,129 @@ static gh_object_step_status mount_visit_001a7a28(gh_om_frame_state *s,uint32_t 
  return mount_turn_lids(s,frontier);
 }
 
-static gh_object_step_status catapult_windup_001b8a50(gh_om_frame_state *s,uint32_t *frontier)
+static gh_object_step_status catapult_launch_001b8b68(gh_om_frame_state *s,
+ gh_static_transform_policy policy,uint32_t *frontier)
+{
+ const gh_title_player_view *player=s->environment.current_player;
+ gh_om_init_state *init=common(s);
+ uint8_t *actor=s->object->view.bytes;
+ if(policy!=GH_STATIC_BINARY32_REFERENCE||!s->runtime.init||!s->runtime.break_sound||
+    !s->environment_bound||!player||!player->alias_f0||!player->bytes||player->size<0x108||
+    !s->object->view.alias_f0||s->runtime.init->random.index>624)
+  return fail(s,0x1b8b68,frontier,GH_OBJSTEP_ARGUMENT);
+ uint32_t pc=0;
+ if(!s->special_phase){
+  s->break_sound=(gh_motion_sound_request){.model=&init->model,.actor=&s->object->view,.bank=2,.program=0x1a};
+  uint32_t handle;
+  const gh_actor_motion_status e=s->runtime.break_sound(s->runtime.context,&s->break_sound,&handle,&pc);
+  if(e)return fail(s,pc?pc:0x2cba48,frontier,
+      e==GH_ACTOR_MOTION_UNSUPPORTED?GH_OBJSTEP_UNSUPPORTED:GH_OBJSTEP_CALLEE);
+  put(actor+0x62c,handle);
+  s->special_phase=1;
+ }
+ if(s->special_phase==1){
+  float from[3],target[3],sine,cosine;
+  memcpy(from,s->object->view.alias_f0,sizeof(from));
+  memcpy(target,player->alias_f0,sizeof(target));
+  if(gh_sdk_rotation_sincos_reference_0030a5d0(number(player->bytes+0x104),
+      &sine,&cosine,policy,&pc))return fail(s,pc?pc:0x150888,frontier,GH_OBJSTEP_CALLEE);
+  gh_game_mt random=s->runtime.init->random;
+  target[0]=add(add(mul(sine,4.0f),target[0]),mul(fragment_random(&random,0),8.0f));
+  target[2]=add(add(mul(cosine,4.0f),target[2]),mul(fragment_random(&random,0),8.0f));
+  const float yaw=number(actor+0x104);
+  float delta;
+  if(gh_player_target_angle_002da038(init->bindings->elf,init->bindings->elf_bytes,
+     from,target,yaw,3.14159274f,&delta,&pc))
+   return fail(s,pc?pc:0x2da7a8,frontier,GH_OBJSTEP_CALLEE);
+  /* 1B7C48 adds a one-unit apex above the higher endpoint. */
+  const float apex=add(1.0f,from[1]>target[1]?from[1]:target[1]);
+  const float up=add(apex,-from[1]),down=add(apex,-target[1]);
+  const float gravity=-0.01f;
+  const float time=add(sqrtf(mul(up,-2.0f)/gravity),sqrtf(mul(down,-2.0f)/gravity));
+  const float inverse=1.0f/time;
+  const float velocity[3]={mul(add(target[0],-from[0]),inverse),sqrtf(mul(mul(gravity,-2.0f),up)),
+      mul(add(target[2],-from[2]),inverse)};
+  if(!isfinite(time)||time<=0||!isfinite(velocity[0])||!isfinite(velocity[1])||!isfinite(velocity[2]))
+   return fail(s,0x1b7c48,frontier,GH_OBJSTEP_UNSUPPORTED);
+  const float next_yaw=add(yaw,delta);
+  memcpy(actor+0x104,&next_yaw,sizeof(next_yaw));
+  memcpy(actor+0x610,velocity,sizeof(velocity));
+  s->runtime.init->random=random;
+  s->special_phase=2;
+ }
+ if(init->hitarea_created&&gh_hitarea_object_set_active_001fd668(&init->hitarea,1,&pc))
+  return fail(s,pc?pc:0x1fd668,frontier,GH_OBJSTEP_CALLEE);
+ sh(actor+0x628,15);
+ actor[0x2f5]=2;
+ actor[0x2f6]=actor[0x2f7]=0;
+ return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status catapult_flight_001b8c6c(gh_om_frame_state *s,
+ gh_static_transform_policy policy,uint32_t *frontier)
+{
+ gh_om_init_state *init=common(s);
+ uint8_t *actor=s->object->view.bytes;
+ uint8_t *position=s->object->view.alias_f0;
+ const gh_title_player_view *player=s->environment.current_player;
+ if(!s->runtime_bound||!s->runtime.init||!s->runtime.canonical_rate||
+    !s->runtime.scene_tables||!position||!player||!player->alias_f0||
+    policy!=GH_STATIC_BINARY32_REFERENCE)
+  return fail(s,0x1b8c6c,frontier,GH_OBJSTEP_ARGUMENT);
+ uint32_t pc=0;
+ if(!s->special_phase){
+  int hit;
+  const gh_hitarea_object *area=init->hitarea_created?&init->hitarea:NULL;
+  if(gh_om_check_damage_001b7380(&s->damage_calls[0],&s->object->view,area,
+      s->runtime.init->heat+0x10,policy,&hit,&pc))
+   return fail(s,pc?pc:0x1b7380,frontier,GH_OBJSTEP_CALLEE);
+  if(hit){
+   float velocity[3];
+   for(unsigned axis=0;axis<3;++axis)
+    velocity[axis]=mul(number(actor+0x5c0+axis*4),0.08f);
+   velocity[1]=add(velocity[1],0.1f);
+   memcpy(actor+0x610,velocity,sizeof(velocity));
+  }
+  s->special_phase=hit?1:2;
+ }
+ if(s->special_phase==1){
+  if(gh_hitarea_object_set_active_001fd668(&init->hitarea,0,&pc))
+   return fail(s,pc?pc:0x1fd668,frontier,GH_OBJSTEP_CALLEE);
+  s->special_phase=2;
+ }
+ if(s->special_phase==2){
+  const float rate=mul(number(s->runtime.init->enemies+0x548),*s->runtime.canonical_rate);
+  float next[3];
+  for(unsigned axis=0;axis<3;++axis)
+   next[axis]=add(number(position+axis*4),mul(number(actor+0x610+axis*4),rate));
+  const float vertical=add(number(actor+0x614),mul(rate,-0.01f));
+  if(!isfinite(vertical)||!isfinite(next[0])||!isfinite(next[1])||!isfinite(next[2]))
+   return fail(s,0x292f50,frontier,GH_OBJSTEP_UNSUPPORTED);
+  memcpy(position,next,sizeof(next));
+  memcpy(actor+0x614,&vertical,sizeof(vertical));
+  s->special_phase=3;
+ }
+ const uint16_t timer=(uint16_t)half(actor+0x628);
+ if((int16_t)timer>0){
+  sh(actor+0x628,(uint16_t)(timer-1));
+  return GH_OBJSTEP_OK;
+ }
+ float impact[4];
+ gh_scene_ray_request ray={.mask=7,.hit_position=impact,.segmented=1};
+ memcpy(ray.from,actor+0x490,12);
+ memcpy(ray.to,position,12);
+ ray.from[3]=ray.to[3]=1.0f;
+ int hit;
+ if(gh_scene_ray_query_00131e10(s->runtime.scene_tables,&ray,&hit,&pc))
+  return fail(s,pc?pc:0x131e10,frontier,GH_OBJSTEP_UNSUPPORTED);
+ if(number(position+4)<add(number(player->alias_f0+4),-10.0f))
+  return fail(s,0x1b8e08,frontier,GH_OBJSTEP_UNSUPPORTED);
+ if(hit)return fail(s,0x1b8e08,frontier,GH_OBJSTEP_UNSUPPORTED);
+ return GH_OBJSTEP_OK;
+}
+
+static gh_object_step_status catapult_windup_001b8a50(gh_om_frame_state *s,
+ gh_static_transform_policy policy,uint32_t *frontier)
 {
  uint8_t *actor=s->object->view.bytes;
  if(actor[0x2f4])return fail(s,0x1b8990,frontier,GH_OBJSTEP_UNSUPPORTED);
@@ -2117,13 +2239,14 @@ static gh_object_step_status catapult_windup_001b8a50(gh_om_frame_state *s,uint3
   actor[0x2f5]=1;
   actor[0x2f6]=actor[0x2f7]=0;
  }
+ if(actor[0x2f5]==2)return catapult_flight_001b8c6c(s,policy,frontier);
  if(actor[0x2f5]!=1)return fail(s,0x1b8a50,frontier,GH_OBJSTEP_UNSUPPORTED);
  const uint16_t counter=(uint16_t)half(actor+0x628);
  if((int16_t)counter>0){
   sh(actor+0x628,(uint16_t)(counter-1u));
   return GH_OBJSTEP_OK;
  }
- if(word(actor+0x5b8)&1u)return fail(s,0x1b8b68,frontier,GH_OBJSTEP_UNSUPPORTED);
+ if(word(actor+0x5b8)&1u)return catapult_launch_001b8b68(s,policy,frontier);
  return GH_OBJSTEP_OK;
 }
 
@@ -2136,7 +2259,7 @@ static gh_object_step_status body(gh_om_frame_state*s,const gh_boot_work*w,gh_st
   s->phase=4;
  }
  if(s->phase==1&&catapult(s->object)){
-  gh_object_step_status status=catapult_windup_001b8a50(s,f);
+  gh_object_step_status status=catapult_windup_001b8a50(s,policy,f);
   if(status)return status;
   s->phase=4;
  }

@@ -192,12 +192,13 @@ static int r103_heat_activation_contact(const gh_enemy_actor *enemy,
         (word(player->bytes+0x15f4)&0x10u);
 }
 
-static int r103_back_circle_contact(const gh_enemy_actor *enemy,
+static int back_circle_contact(const gh_enemy_actor *enemy,
     const gh_title_player_view *player, uint16_t effect)
 {
+    const uint8_t *target=enemy->entry.object.view.bytes;
     return effect==0x0f&&half(player->bytes+0x2f4)==0x0b00&&
         word(player->bytes+0x5e8)==52&&
-        r103_boss_player_strike_target(enemy,enemy->entry.object.view.bytes);
+        (r103_boss_player_strike_target(enemy,target)||r104_em03_damage_receiver(enemy,target));
 }
 
 /* 1142E0 sends the same Give2A at the start of the exhaustion clip.
@@ -268,6 +269,7 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
         (half(view->bytes+0x2fe)!=0x202&&!r103_arena_punch_target(enemy,word(view->bytes+0x564))&&
          !r103_arena_em0a(enemy,view->bytes)&&!r103_boss_player_strike_target(enemy,view->bytes)&&
          !r104_player_punch(enemy,view->bytes,7)&&
+         !(power==25&&back_circle_contact(enemy,player,0x0f))&&
          !(r104_em03_damage_receiver(enemy,view->bytes)&&word(player->bytes+0x5e8)==29&&
            power==((half(view->bytes+0x3ac)&0x100u)?24:12))) ||
         !enemy->hitareas.created[0])
@@ -282,7 +284,7 @@ gh_actor_motion_status gh_enemy202_damage_0028fb88(
         !(word(body->bytes + 0x60) & 1) ||
         (half(body->bytes + 0x46) != 7 &&
             !triangle_take_supported(enemy, view->bytes, half(body->bytes + 0x46)) &&
-            !r103_back_circle_contact(enemy,player,half(body->bytes+0x46)) &&
+            !back_circle_contact(enemy,player,half(body->bytes+0x46)) &&
             !r103_heat_transition_contact(enemy,player,half(body->bytes+0x46),power)))
         return stop(frontier, 0x20a5dc);
 
@@ -1113,7 +1115,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     if(effect==0x27)return roulette_shockwave_hit(call,enemy,source,rank,frontier);
     const int triangle = triangle_take_supported(enemy, p, effect);
     const int heat_contact=r103_heat_transition_contact(enemy,player,effect,(int32_t)word(body->bytes+0x4c));
-    const int back_circle=r103_back_circle_contact(enemy,player,effect);
+    const int back_circle=back_circle_contact(enemy,player,effect);
     if (source != player || half(player->bytes + 0x2fe) != 0x100 ||
         (effect != 7 && !triangle && !heat_contact && !back_circle))
         return stop(frontier, 0x20a178);
@@ -1146,12 +1148,20 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     const int r104_triangle_recoil=half(p+0x2f4)==0x0101&&
         (p[0x2f6]==3||(p[0x2f6]==1&&!half(p+0x3ac)));
     const int idle_move=!half(p+0x2f4)&&p[0x2f6]==1&&!half(p+0x3ac);
-    const int grab_windup=half(p+0x2f4)==0x4b00&&p[0x2f6]==1&&half(p+0x3ac)==0x800&&
+    /* The angry grab can take original contact before its SEQ bit 800.
+     * Its authored brace is already active on that earlier frame. */
+    const int braced_grab=half(p+0x2f4)==0x4b00&&p[0x2f6]==1&&
         (word(p+0x16d4)&0x400u);
+    const int grab_windup=braced_grab&&half(p+0x3ac)==0x800;
+    const int angry_grab_windup=braced_grab&&!half(p+0x3ac)&&
+        (int32_t)word(p+0x16ec)>0&&(word(p+0x16d0)&0x800000u);
     const int brace_windup=r104_brace_is_exposed(p);
+    const int r104_back_circle=back_circle&&grab_windup&&!p[0x2f7]&&
+        r104_em03_damage_receiver(enemy,p)&&word(body->bytes+0x4c)==25&&
+        rank==1&&!body->state->heat[0x10];
     const int r104_triangle=triangle&&r104_em03_damage_receiver(enemy,p)&&
         (r104_turn_is_exposed(p)||(!p[0x2f7]&&
-         ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||em03_combo||fast_melee||idle_move||grab_windup||brace_windup)))&&
+         ((half(p+0x2f4)==0x1a00&&p[0x2f6]==5)||r104_triangle_recoil||em03_combo||fast_melee||idle_move||grab_windup||angry_grab_windup||brace_windup)))&&
         word(player->bytes+0x5e8)==29&&
         word(body->bytes+0x4c)==12&&rank==1&&!body->state->heat[0x10];
     const int boss_recovery=r104_recovery||r104_triangle||em27_punch;
@@ -1173,7 +1183,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         const float block = number(p + 0x1740), armor = number(p + 0x1734);
         const uint16_t hp = half(p + 0x54a);
         uint16_t flags = half(p + 0x3ac);
-        if ((!hit_probe_selector && !em27_punch && !boss_strike && !r104_punch && !r104_triangle && dependency != 0x20a) ||
+        if ((!hit_probe_selector && !em27_punch && !boss_strike && !r104_punch && !r104_triangle && !r104_back_circle && dependency != 0x20a) ||
             (!hp && !continuing_knockdown && !continued_fall) || hp >= 0x8000 ||
             !isfinite(drain) || drain > 0 || !isfinite(cooldown) || cooldown > 0 ||
             !isfinite(block) || !isfinite(armor))
@@ -1264,9 +1274,10 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
     if (call->phase == 3) {
         const uint16_t flags = half(p + 0x3ac);
         const uint32_t behavior = word(p + 0x16d0), status = word(p + 0x16d4);
-        const int r104_braced_triangle=r104_triangle&&(grab_windup||brace_windup)&&
+        const int r104_braced_triangle=r104_triangle&&(grab_windup||angry_grab_windup||brace_windup)&&
             (behavior&0x800000u)&&!body->state->heat[0x10];
-        if(r104_braced||r104_braced_triangle){
+        const int r104_braced_kick=r104_back_circle&&(behavior&0x800000u);
+        if(r104_braced||r104_braced_triangle||r104_braced_kick){
             /* Original 20B394/20B8A8 calls 26A338 and preserves the live Move. */
             if((flags&0x12cu)||(status&0x04080040u)||!half(p+0x54a))
                 return stop(frontier,0x20af20);
@@ -1823,7 +1834,7 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
         !gh_hitarea_object_last_hit_actor(body,&source)&&source&&source->bytes&&source->size>=0x600;
     const int heat_contact=has_source&&
         r103_heat_transition_contact(enemy,source,effect,(int32_t)word(body->bytes+0x4c));
-    const int back_circle=has_source&&r103_back_circle_contact(enemy,source,effect);
+    const int back_circle=has_source&&back_circle_contact(enemy,source,effect);
     const int triangle = triangle_take_supported(enemy, p, effect);
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
     const int shockwave=effect==0x27&&(word(p+0x564)==0x214||word(p+0x564)==0x215||r104_em03_damage_receiver(enemy,p));
@@ -2024,8 +2035,11 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
     const int em15_square=take_effect==7&&!call->effect&&take_power==3&&
         dependency==0x215&&reaction==0x0001;
     const gh_title_player_view *take_source=NULL;
-    const int back_circle=call->effect==0x0f&&(reaction==0x0301||reaction==0x0401)&&take_power==25&&
-        r103_back_circle_contact(enemy,player,take_effect)&&
+    const int r104_braced_kick=r104_em03_damage_receiver(enemy,p)&&reaction==0x4b00&&
+        p[0x2f6]==1&&!p[0x2f7]&&(word(p+0x16d0)&0x800000u);
+    const int back_circle=call->effect==0x0f&&
+        (reaction==0x0301||reaction==0x0401||r104_braced_kick)&&take_power==25&&
+        back_circle_contact(enemy,player,take_effect)&&
         !gh_hitarea_object_last_hit_actor(body,&take_source)&&take_source==player;
     const int active_boss_strike=(triangle||em15_square||back_circle)&&r103_boss_player_strike_target(enemy,p)&&
         !p[0x2f6]&&!p[0x2f7]&&init->heat[0x10]&&player->size>=0x15f8&&

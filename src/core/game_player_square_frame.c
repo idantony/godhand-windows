@@ -75,7 +75,7 @@ static gh_player_frame_status attack_input(gh_player_square_frame *s,
  if(sequence&0x10){
   put(p+0x15f4,flags|0x400u);
   if(pressed&2)return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
-  const int back_circle=f->work->room==0x103&&p[0x623]&&p[0x61f]&&
+  const int back_circle=(f->work->room==0x103||f->work->room==0x104)&&p[0x623]&&p[0x61f]&&
       value(p+0x608)>2.3561945f;
   if(p[0x623]&&!back_circle)return stop(s,0x123ae0,GH_PLAYER_FRAME_UNSUPPORTED);
   if(!b->target_bindings)return stop(s,0x129cc8,GH_PLAYER_FRAME_UNSUPPORTED);
@@ -244,7 +244,8 @@ static gh_player_frame_status body(gh_player_square_frame *s,const gh_player_squ
   if(e)return stop(s,pc?pc:0x10b2e8,GH_PLAYER_FRAME_CALLEE);
   if(recent&&word(p+0x5e8)==0x5d)return stop(s,0x2cba48,GH_PLAYER_FRAME_UNSUPPORTED);
   const uint32_t skill=word(p+0x5e8);
-  const int kick=f->work->room==0x103&&(skill==0x25||skill==52);
+  const int kick=(f->work->room==0x103&&(skill==0x25||skill==52))||
+      (f->work->room==0x104&&skill==52);
   if(p[0x2f6]>1||(p[0x2f6]&&skill!=0&&skill!=4&&skill!=10&&skill!=13&&skill!=29&&!kick))
    return stop(s,0x10d3a8,GH_PLAYER_FRAME_UNSUPPORTED);
   s->stage=p[0x2f6]?5:2;
