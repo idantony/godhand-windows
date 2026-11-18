@@ -190,6 +190,12 @@ Use the same input and save fixture across adapters. Report gameplay parity
 and pixel differences separately. For native sound, distinguish decoded
 samples, device buffer completion and audible output in the evidence.
 
+For tests of the ordinary Windows keyboard path, launch the pinned standard
+executable with a fresh profile. [win32_keyboard.py](scripts/win32_keyboard.py)
+posts focus and key messages only to the hidden window of the owned child.
+Use live menu or gameplay readiness when startup timing varies. Preserve the
+event timeline and evidence of the resulting original state or rendered frame.
+
 For a native Windows crash, resolve the failing module and relative address
 against the executable's matching PDB before editing. Pass the executable and
 the Application Error event's fault offset to

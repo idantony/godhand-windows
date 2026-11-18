@@ -20,6 +20,24 @@
       "movie_frames_presented": 90,
       "scene_frames_presented": 539,
       "graphics_errors": 0
+    },
+    "production_window_keyboard_gameplay": {
+      "room": "R100",
+      "tick": 1930,
+      "scene_frames_presented": 1780,
+      "player_updates": 225,
+      "movement_distance_over_18_ticks": 2.06,
+      "neutral_distance_over_18_ticks": 0.05,
+      "square_attack_samples": 18,
+      "attack_hit_verified": false
+    },
+    "production_visible_card_load": {
+      "room": "R102",
+      "tick": 3000,
+      "scene_frames_presented": 2223,
+      "player_updates": 1224,
+      "card_bytes_unchanged": true,
+      "graphics_errors": 0
     }
   },
   "private_west_r105_integration": {

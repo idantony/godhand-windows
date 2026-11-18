@@ -18,6 +18,18 @@ ordinary window keyboard path. A hidden-window test posted key messages to
 that process and reached tick 700 with 90 opening movie frames, 539 scene
 presents and zero graphics errors. The run used the production executable.
 
+In a later standard-executable test, the original R100 opening event completes
+and the player accepts normal keyboard input. Holding W triggers a run and
+moves the player 2.06 world units over 18 ticks. The same interval in a neutral
+run accounts for 0.05 units. C triggers the mapped Square attack and 18 attack
+samples are observed. The test reaches tick 1,930 with 225 player updates.
+Enemy HP stays at 74 for both enemies.
+
+A separate visible standard-executable run reads the R102 card via the title
+menu and confirms Continue on the map. Pressing W in R102 moves the player in
+the captured client window. It reaches tick 3,000 with 2,223 scene presents and
+no graphics errors. The original card and isolated copy have matching bytes.
+
 A separate muted WinMM test submitted original ADX audio to a real Windows
 output device. The device consumed all 4,800 frames. The test also exercised
 pause, loop, seek, stop and end of stream.
@@ -28,6 +40,13 @@ Windows 原生渲染路径统一选卡。同一集成版 QA 程序在 RTX 4080 S
 
 标准 Windows 可执行文件也通过普通窗口键盘处理进入了 R100。测试只向同一进程的隐藏窗口发送
 按键消息，从新游戏运行到第 700 个 tick，呈现 90 帧开场影片和 539 个场景帧，图形错误为零。
+
+随后标准程序在 R100 播完开场事件并接收键盘操作。按住 W 触发跑动，18 个 tick 内移动 2.06
+个世界单位，无操作对照同期移动 0.05。按 C 触发原版方块攻击，采到 18 个攻击状态样本。测试跑到
+第 1,930 个 tick，完成 225 次角色更新，两名敌人的 HP 均保持 74。
+
+另一轮标准程序在实际窗口通过标题读档，确认地图中的 Continue 后进入 R102。按 W 后窗口画面
+显示角色前移。测试到第 3,000 个 tick，呈现 2,223 帧，图形错误为零。原档与隔离副本内容一致。
 
 独立的静音 WinMM 测试将原版 ADX 音频送到实际 Windows 输出设备。设备消费了全部 4,800 帧，
 暂停、循环、定位、停止和流结束检查均通过。
