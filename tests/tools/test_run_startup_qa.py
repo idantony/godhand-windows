@@ -159,6 +159,64 @@ class StartupRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(tool.proof.ProofError, "lacks original deaths"):
             tool.verify_archive(self.scratch, tool.proof.digest(path))
 
+    def test_r102_walk_preflight_uses_its_existing_native_route(self):
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                                max_ticks=7000, capture_count=16, r102_walk=True)
+        self.assertIn("--qa-r102-walk", prepared["command"])
+        self.assertNotIn("--qa-r003-controlled", prepared["command"])
+        self.assertNotIn("--qa-load", prepared["command"])
+        with self.assertRaisesRegex(tool.proof.ProofError, "own controlled R105 exit route"):
+            tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                         max_ticks=7000, r102_walk=True, title_load=True)
+
+    def test_r102_walk_requires_cut_order_continue_input_walk_and_capture_hashes(self):
+        qa = dict(exit_code=0, room="0102", game_state=4, frontier="00000000",
+                  effect_post_error=0, scene_frames_presented=156, scene_frame_serial=156, ticks=300)
+        r003 = dict(handoff_tick=2, first_scene=1, last_scene=40, frames=40, last_ev02_cut=0)
+        r105 = dict(first_scene=50, last_scene=60, frames=11)
+        r002 = dict(first_scene=65, last_scene=103, frames=39, first_cut_scene=68)
+        r102 = dict(first_scene=121, last_scene=156, frames=36)
+        walk = dict(inputs=24, first_scene=128, last_scene=156, first_room_frame=8, last_room_frame=36,
+                    moving_frames=21, start_xz=[0, 0], end_xz=[1, 0], distance_squared=1.0,
+                    hp_before=100, hp_after=100, complete=True)
+        lines = [
+            "QA_R003_PRESENTED cut=0 scene=10", f"QA_R003_STATUS {json.dumps(r003)}",
+            "QA_R105_PRESENTED scene=50 tick=80", f"QA_R105_STATUS {json.dumps(r105)}",
+            f"QA_R002_STATUS {json.dumps(r002)}",
+            *(f"QA_R002_PRESENTED event=4 cut={i} scene={68+i} tick={101+i}" for i in range(24)),
+            "QA_SAVE_MAP_PAD room=0002 buttons=0002 tick=135 scene=98",
+            "QA_SAVE_MAP room=0002 phase=5 choice=1 tick=136 scene=99",
+            "QA_SAVE_MAP_PAD room=0002 buttons=1000 tick=137 scene=100",
+            "QA_SAVE_MAP room=0002 phase=21 choice=1 tick=140 scene=103",
+            f"QA_R102_STATUS {json.dumps(r102)}", f"QA_R102_WALK {json.dumps(walk)}",
+            "QA_CAPTURE_PRESENTED 121", "QA_CAPTURE_PRESENTED 122",
+        ]
+        capture = self.scratch / "first-scene-candidate.rgba"
+        paths = (capture, capture.with_name("first-scene-candidate.scene-122.rgba"))
+        hashes = {}
+        for raster in paths:
+            for path in (raster, Path(str(raster) + ".world.rgba")):
+                path.write_bytes(bytes(512 * 448 * 4))
+                hashes[path.name] = tool.proof.digest(path)
+
+        log = "\n".join(lines)
+        result = tool.r102_walk_observations(log, capture, 2, qa, hashes)
+        self.assertEqual(result["ev04_presented_cuts"], 24)
+        self.assertEqual(result["r002_continue_tick"], 137)
+        self.assertEqual(result["r102_walk"], walk)
+        for bad, message in [
+            (log.replace("cut=11 scene=79", "cut=12 scene=79"), "EV04 cut"),
+            (log.replace("buttons=1000", "buttons=0000"), "Continue step"),
+            (log.replace('"inputs": 24', '"inputs": 23'), "complete input"),
+            (log.replace("QA_CAPTURE_PRESENTED 122", "QA_CAPTURE_PRESENTED 123"), "presentation order"),
+        ]:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(tool.proof.ProofError, message):
+                    tool.r102_walk_observations(bad, capture, 2, qa, hashes)
+        paths[1].write_bytes(b"tampered")
+        with self.assertRaisesRegex(tool.proof.ProofError, "mismatched R102 capture"):
+            tool.r102_walk_observations(log, capture, 2, qa, hashes)
+
     def test_frozen_launcher_uses_its_original_project(self):
         with patch.object(tool, "PROJECT", self.snapshot):
             prepared = self.prepare()

@@ -118,14 +118,12 @@ def controlled_r105_status(log, qa, r003):
     return {**status, "first_tick": int(marker[2])}
 
 
-def controlled_room_observations(log, qa):
+def controlled_room_ranges(log, qa):
     r003 = controlled_r003_status(log, qa)
     r105 = controlled_r105_status(log, qa, r003)
     observations = {"controlled_r003": r003}
-    ranges = [r003]
     if r105 is not None:
         observations["controlled_r105"] = r105
-        ranges.append(r105)
     r002_records = re.findall(r"^QA_R002_STATUS (.+)$", log, re.M)
     r002 = None
     if r002_records:
@@ -142,7 +140,13 @@ def controlled_room_observations(log, qa):
                     first <= first_cut <= last and int(cut_trace[0][1]) <= qa["ticks"],
                     "EV04 first cut does not match the R002 device presentation")
             observations["controlled_r002_ev04"] = r002
-            ranges.append(r002)
+    return observations
+
+
+def controlled_room_observations(log, qa):
+    observations = controlled_room_ranges(log, qa)
+    ranges = observations.values()
+    r002 = observations.get("controlled_r002_ev04")
     captures = [int(serial) for serial in re.findall(r"^QA_CAPTURE_PRESENTED (\d+)$", log, re.M)]
     require(all(any(room["first_scene"] <= serial <= room["last_scene"] for room in ranges)
                 for serial in captures), "capture presented outside controlled rooms")

@@ -7,6 +7,7 @@ import argparse
 import datetime
 import importlib.util
 import json
+import math
 from pathlib import Path, PureWindowsPath
 import re
 import stat
@@ -46,7 +47,7 @@ def launch_project(snapshot):
 def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370,
             capture_count=1, control_probe=None, title_load=False, build_scratch=None, r003_controlled=False,
             game_over_retry=False, pad_tape=None, level_confirm_tick=None, after_victory_frames=None,
-            *, trace_native_input=False):
+            *, trace_native_input=False, r102_walk=False):
     """Read-only preflight. No launch or output creation occurs on rejection."""
     snapshot, scratch = Path(snapshot_arg).resolve(), Path(scratch_arg).resolve()
     build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
@@ -67,6 +68,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
                   and 1 <= level_confirm_tick < max_ticks), "level confirmation needs a pad tape and a later tick cap")
     proof.require(after_victory_frames is None or (pad_tape is not None and type(after_victory_frames) is int
                   and 1 <= after_victory_frames < max_ticks), "post-victory capture needs a pad tape and a later tick cap")
+    proof.require(not r102_walk or not (title_load or r003_controlled or game_over_retry or control_probe or pad_tape),
+                  "R102 walk uses its own controlled R105 exit route")
     if pad_tape is not None:
         pad_tape = Path(pad_tape).resolve()
         proof.require(pad_tape.is_file(), "pad tape must be an existing file")
@@ -89,7 +92,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
     else:
         proof.require(not profile.exists(), "QA profile must be absent; refusing to touch existing profile")
     proof.require(not capture.exists() and not Path(str(capture) + ".world.rgba").exists() and not any(p.exists() for p in outputs), "QA outputs already exist; use a fresh scratch cohort")
-    mode = "--qa-load" if title_load else "--qa-r003-controlled" if r003_controlled else "--qa-new-game"
+    mode = ("--qa-r102-walk" if r102_walk else "--qa-load" if title_load else
+            "--qa-r003-controlled" if r003_controlled else "--qa-new-game")
     command = [str(executable), "--iso", str(iso), "--profile", str(profile), "--ffmpeg", str(ffmpeg),
                "--hidden", "--muted", mode, "--qa-capture", str(capture),
                "--qa-capture-frame", str(capture_frame), "--max-ticks", str(max_ticks)]
@@ -113,7 +117,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
             "executable_sha256": exe_sha, "source_snapshot": receipt_fact, "windows_build": report_fact,
             "control_probe": control_probe, "r003_controlled": r003_controlled, "game_over_retry": game_over_retry,
             "pad_tape": pad_tape, "pad_tape_sha256": proof.digest(pad_tape) if pad_tape else None,
-            "after_victory_frames": after_victory_frames}
+            "after_victory_frames": after_victory_frames, "r102_walk": r102_walk,
+            "capture_count": capture_count}
 
 
 def game_over_observations(log, capture, exit_code):
@@ -189,6 +194,75 @@ def pad_tape_observations(log, capture, qa, after_victory_frames=None):
                               "missing complete R100 post-victory capture")
         status["post_victory"] = tail
     return status
+
+
+def r102_walk_observations(log, capture, count, qa, output_hashes):
+    """Validate the existing saved-open R105 fixture through a presented R102 walk."""
+    proof.require(qa.get("exit_code") == 0 and qa.get("room") == "0102" and qa.get("game_state") == 4
+                  and qa.get("frontier") == "00000000" and qa.get("effect_post_error") == 0,
+                  "controlled walk did not finish in active R102")
+    rooms = proof.controlled_room_ranges(log, qa)
+    r002 = rooms.get("controlled_r002_ev04")
+    proof.require(r002 is not None, "missing the presented R002 EV04 range")
+    cuts = [tuple(map(int, row)) for row in
+            re.findall(r"^QA_R002_PRESENTED event=4 cut=(\d+) scene=(\d+) tick=(\d+)$", log, re.M)]
+    proof.require([row[0] for row in cuts] == list(range(24)) and cuts[0][1] == r002["first_cut_scene"] and
+                  all(r002["first_scene"] <= scene <= r002["last_scene"] and 0 < tick <= qa["ticks"]
+                      for _, scene, tick in cuts) and
+                  all(a[1] < b[1] and a[2] < b[2] for a, b in zip(cuts, cuts[1:])),
+                  "missing or unordered EV04 cut presentations")
+
+    continue_steps = []
+    for marker in (r"QA_SAVE_MAP_PAD room=0002 buttons=0002", r"QA_SAVE_MAP room=0002 phase=5 choice=1",
+                   r"QA_SAVE_MAP_PAD room=0002 buttons=1000", r"QA_SAVE_MAP room=0002 phase=21 choice=1"):
+        rows = re.findall(rf"^{marker} tick=(\d+) scene=(\d+)$", log, re.M)
+        proof.require(len(rows) == 1, "missing or repeated original R002 Continue step")
+        continue_steps.append(tuple(map(int, rows[0])))
+    proof.require(all(cuts[-1][2] < tick <= qa["ticks"] and cuts[-1][1] <= scene <= r002["last_scene"]
+                      for tick, scene in continue_steps) and
+                  all(a[0] < b[0] and a[1] <= b[1] for a, b in zip(continue_steps, continue_steps[1:])),
+                  "unordered original R002 Continue steps")
+
+    def status(marker, fields):
+        lines = re.findall(rf"^{marker} (.+)$", log, re.M)
+        proof.require(len(lines) == 1, "missing or repeated " + marker)
+        data = json.loads(lines[0])
+        proof.require(isinstance(data, dict) and all(type(data.get(key)) is int and data[key] >= 0 for key in fields),
+                      "invalid " + marker)
+        return data
+
+    r102 = status("QA_R102_STATUS", ("first_scene", "last_scene", "frames"))
+    first, last = r102["first_scene"], r102["last_scene"]
+    proof.require(r002["last_scene"] < first <= last <= qa["scene_frames_presented"] and
+                  last == qa.get("scene_frame_serial") and r102["frames"] == last - first + 1,
+                  "invalid R102 presentation range")
+    walk = status("QA_R102_WALK", ("first_scene", "last_scene", "first_room_frame", "last_room_frame",
+                                  "inputs", "moving_frames", "hp_before", "hp_after"))
+    distance = walk.get("distance_squared")
+    coords = [walk.get(key) for key in ("start_xz", "end_xz")]
+    proof.require(walk.get("complete") is True and walk["inputs"] == 24 and
+                  8 <= walk["first_room_frame"] and walk["last_room_frame"] == r102["frames"] and
+                  walk["last_room_frame"] >= walk["first_room_frame"] + 28 and
+                  walk["first_scene"] == first + walk["first_room_frame"] - 1 and walk["last_scene"] == last and
+                  3 <= walk["moving_frames"] <= walk["last_room_frame"] - walk["first_room_frame"] and
+                  0 < walk["hp_before"] == walk["hp_after"] < 0x8000 and
+                  type(distance) in (int, float) and math.isfinite(distance) and distance >= 0.0625 and
+                  all(isinstance(pair, list) and len(pair) == 2 and
+                      all(type(x) in (int, float) and math.isfinite(x) for x in pair) for pair in coords) and
+                  math.isclose(sum((b-a)**2 for a, b in zip(*coords)), distance, rel_tol=1e-5, abs_tol=1e-5),
+                  "R102 walk lacks the complete input, movement and HP observations")
+
+    serials = list(map(int, re.findall(r"^QA_CAPTURE_PRESENTED (\d+)$", log, re.M)))
+    proof.require(serials == list(range(first, first + count)) and serials[-1] <= last,
+                  "R102 captures are missing or out of presentation order")
+    for index, serial in enumerate(serials):
+        raster = capture if index == 0 else capture.with_name(f"{capture.stem}.scene-{serial}.rgba")
+        for path in (raster, Path(str(raster) + ".world.rgba")):
+            proof.require(path.name in output_hashes and path.is_file() and path.stat().st_size == 512*448*4
+                          and proof.digest(path) == output_hashes[path.name],
+                          "missing or mismatched R102 capture: " + path.name)
+    return {**rooms, "ev04_presented_cuts": len(cuts), "r002_continue_tick": continue_steps[2][0],
+            "controlled_r102": r102, "r102_walk": walk, "r102_capture_serials": serials}
 
 
 def last_logged_observations(path):
@@ -312,6 +386,10 @@ def validate_run(prepared, receipt, capture, *, expected_tick_limit=None):
         proof.require_clean_startup_tick_limit(
             qa, receipt["exit_code"], command[command.index("--max-ticks") + 1], expected_tick_limit)
         summary["classification"] = "tick-limit"
+    if prepared.get("r102_walk"):
+        log = (scratch / "startup-newgame.stderr.log").read_text(encoding="utf-8-sig")
+        summary.update(r102_walk_observations(log, capture, prepared["capture_count"], qa,
+                                             receipt["outputs_sha256"]))
     if r003_controlled:
         proof.require(qa.get("effect_post_error") == 0, "controlled R003 reported effect_post_error")
         log = (scratch / "startup-newgame.stderr.log").read_text(encoding="utf-8-sig")
@@ -455,16 +533,18 @@ def main():
     parser.add_argument("--build-scratch", type=Path, help="reuse the exact build in this workspace cohort")
     parser.add_argument("--iso", type=Path)
     parser.add_argument("--ffmpeg", type=Path)
-    parser.add_argument("--max-ticks", type=int, default=1100)
+    parser.add_argument("--max-ticks", type=int, help="maximum ticks (default 1100, or 7120 for R102 walk)")
     parser.add_argument("--expect-tick-limit", action="store_true",
                         help="require a clean bounded exit at max-ticks with presented scene frames")
     parser.add_argument("--capture-frame", type=int, default=370)
-    parser.add_argument("--capture-count", type=int, default=1,
-                        help=f"capture up to {MAX_CAPTURE_COUNT} ready scene frames beginning at capture-frame")
+    parser.add_argument("--capture-count", type=int,
+                        help=f"capture up to {MAX_CAPTURE_COUNT} ready scene frames (default 1, or 16 for R102 walk)")
     parser.add_argument("--control-probe", choices=CONTROL_PROBES,
                         help="send original pad input after EV01 and two neutral player updates")
     parser.add_argument("--title-load", action="store_true", help="select Load Game using the scratch profile-load directory")
     parser.add_argument("--r003-controlled", action="store_true", help="isolate R003 using the original A38 destination at title handoff")
+    parser.add_argument("--r102-walk", action="store_true",
+                        help="verify the saved-open R105 fixture through EV04, Continue and a presented R102 walk")
     parser.add_argument("--game-over-retry", action="store_true", help="confirm the presented Game Over panel and capture the reloaded room")
     parser.add_argument("--trace-native-input", action="store_true", help="record native input and simulation observations per tick")
     parser.add_argument("--wall-timeout", type=int, metavar="SECONDS",
@@ -481,12 +561,16 @@ def main():
             return
         if args.snapshot is None:
             parser.error("--snapshot is required when launching a replay")
-        prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame,
-                           args.capture_count, args.control_probe, args.title_load, args.build_scratch, args.r003_controlled,
+        if args.r102_walk and args.expect_tick_limit:
+            parser.error("--r102-walk finishes when walking completes")
+        max_ticks = args.max_ticks if args.max_ticks is not None else (7120 if args.r102_walk else 1100)
+        capture_count = args.capture_count if args.capture_count is not None else (16 if args.r102_walk else 1)
+        prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, max_ticks, args.capture_frame,
+                           capture_count, args.control_probe, args.title_load, args.build_scratch, args.r003_controlled,
                            args.game_over_retry, args.pad_tape, args.level_confirm_tick, args.after_victory_frames,
-                           trace_native_input=args.trace_native_input)
+                           trace_native_input=args.trace_native_input, r102_walk=args.r102_walk)
         require_frozen_runner(args.snapshot)
-        expected = args.max_ticks if args.expect_tick_limit else None
+        expected = max_ticks if args.expect_tick_limit else None
         print(json.dumps(run(prepared, expected_tick_limit=expected, wall_timeout=args.wall_timeout)), flush=True)
     except (proof.ProofError, OSError, ValueError) as error:
         parser.exit(1, str(error) + "\n")
