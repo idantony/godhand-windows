@@ -83,6 +83,27 @@ class ReplayPrefix(unittest.TestCase):
                 ["QA Title", "QA Title Load"], before_tick=511,
             )
 
+    def test_mixed_records_check_order_across_input_and_presentation(self):
+        present = "PRESENT tick=6 scene=4\n"
+        baseline = [START, PLAY, present, AFTER]
+        selected = {"tags": {"START", "PLAY"}, "text_prefixes": ["PRESENT"], "before_tick": 7}
+        result = PREFIX.compare(baseline, baseline, **selected)
+        self.assertEqual(result["tag_counts"], {"START": 1, "PLAY": 1, "PRESENT": 1})
+        self.assertTrue(result["full_baseline_match"])
+
+        reordered = PREFIX.compare(baseline, [START, present, PLAY, AFTER], **selected)
+        self.assertEqual(reordered["records_matched"], 1)
+        self.assertEqual(reordered["first_difference"], {
+            "expected": ("PLAY", {"tick": 6, "hp": 10}),
+            "actual": ("PRESENT", present.rstrip("\n")),
+        })
+
+    def test_mixed_records_fail_closed_on_missing_or_ambiguous_text(self):
+        with self.assertRaisesRegex(ValueError, "No baseline records in range for PRESENT"):
+            PREFIX.compare([START], [START], {"START"}, 7, text_prefixes=["PRESENT"])
+        with self.assertRaisesRegex(ValueError, "cannot be both JSON and text"):
+            PREFIX.compare([START], [START], {"START"}, 7, text_prefixes=["START"])
+
     def test_raw_mode_excludes_boundary_and_does_not_read_replay_tail(self):
         def replay():
             yield b"native diagnostic\r\n"
