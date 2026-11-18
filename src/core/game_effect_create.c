@@ -534,9 +534,10 @@ static int em00_attack_trail_actor(const gh_title_player_view *actor,unsigned in
  if(index!=0x46||!em00_family_attack_actor(actor)||actor->size<0x16c8)return 0;
  const uint8_t *p=actor->bytes;
  const unsigned stamp=w(p+0x640)&0xffffu;
- return (w(p+0x2fc)>>16)==0x202&&w(p+0x16c4)==6&&
-        ((stamp==20&&!p[0x1650])||
-         (stamp==10&&p[0x1650]==5));
+ const uint32_t home=w(p+0x16c4);
+ return (w(p+0x2fc)>>16)==0x202&&
+        ((stamp==20&&!p[0x1650]&&(home==6||(!home&&w(p+0x564)==0x200)))||
+         (stamp==10&&p[0x1650]==5&&home==6));
 }
 
 static int16_t wide_strike_effect_room(const gh_title_player_view *actor,unsigned index)

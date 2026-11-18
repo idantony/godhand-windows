@@ -1259,11 +1259,15 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      !home_mode&&!source->bytes[0x1650]&&source_move==0x1500&&
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&override_bank==UINT32_MAX&&!cue&&
      w(take+0x4c)==15&&!residual;
-   const int north_em00=b->work->room==0x100&&source_kind==0x202&&dependency==0x200&&
-     stamp==10&&home_mode==6&&source->size>=0x1884&&source->bytes[0x1650]==5&&source_move==0x1500&&
+   const int r100_em00_strike=b->work->room==0x100&&source_kind==0x202&&dependency==0x200&&
+     source->size>=0x1884&&source_move==0x1500&&
      source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&override_bank==UINT32_MAX&&!cue&&
      !w(source->bytes+0x1870)&&!residual;
-   const int north_em00_timed=north_em00&&w(source->bytes+0x5f4)==1&&
+   const int north_em00=r100_em00_strike&&stamp==10&&home_mode==6&&source->bytes[0x1650]==5;
+   const int opening_em00=r100_em00_strike&&stamp==20&&!home_mode&&!source->bytes[0x1650]&&
+     source->size>=0x1896&&w(source->bytes+0x187c)==UINT32_MAX&&!half(source->bytes+0x1880)&&
+     !memcmp(source->bytes+0x1870,source->bytes+0x1884,18);
+   const int r100_em00_timed=(north_em00||opening_em00)&&w(source->bytes+0x5f4)==1&&
      w(source->bytes+0x1874)==15&&w(source->bytes+0x1878)==0x3d&&
      s->pending_damage_kind==0x3d&&w(take+0x4c)==15&&s->pending_damage==15;
    /* The source timer can be one while both published Give rows
@@ -1357,7 +1361,7 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
       !em03_fall&&!arena_hit&&!em14_sphere&&!em0a_override&&!em0a_kick&&!em0a_reverse&&!em0a_wide&&
       !west_em0a_timed&&!west_em0a_reverse&&!west_em0a_face_kick&&
       (b->work->room!=0x100||(!short_hit&&!stamp19_fall&&!wave_fall&&!west_formation_fall&&
-       !west_em02_capture&&!west_combo&&!devil_melee&&!devil_combo&&!north_em00_timed&&!north_em00_short)))
+       !west_em02_capture&&!west_combo&&!devil_melee&&!devil_combo&&!r100_em00_timed&&!north_em00_short)))
     return fail(s,0x12c0f8,GH_PLAYER_FRAME_UNSUPPORTED);
   }
   gh_player_frame_status status=damage_hp_0012c0f8(s,s->pending_damage);
