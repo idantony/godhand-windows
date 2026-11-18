@@ -98,6 +98,13 @@ a distinct host error channel where needed.
 
 ## Verify host semantics and content
 
+For platform save tests, use an isolated profile and verify the old bytes
+between write and explicit close. Check abort, failed replacement, and retry,
+including original file tails and the separate visibility marker for a save
+slot. Verify a read in a fresh process after normal commit. Keep host-only
+tests runnable without a disc package by resolving media prerequisites only
+for the tests whose inputs actually require them.
+
 Make integer wrapping, sign extension, alignment, endianness and guest-address
 resolution explicit. Establish numerical semantics for the actual PS2
 instructions: rounding, intermediate operations, denormals and exceptional

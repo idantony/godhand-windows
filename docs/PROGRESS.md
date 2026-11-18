@@ -111,6 +111,38 @@ Movie0 解码了 90 帧影片，123,328 帧音频全部完成。影片测试只�
 WinMM 确认完成影片缓冲区和 313 个 ADX 缓冲区。完成的缓冲区在解码时含非零 PCM，应用静音
 后向设备提交的是零值 PCM。
 
+## Windows save-file replacement
+
+The card backend stages the record and each icon file in the slot directory.
+An explicit close after a full write flushes and publishes the staged file.
+The file regression verifies that the previous record and its trailing bytes
+survive cancellation, shutdown and a blocked replacement. It also verifies
+that a second card cannot stage writes to the same slot until the first
+releases it, and that retry and reopen succeed.
+
+A controlled R021 replay confirms overwrite in the original Save Map.
+The selected 46,080-byte record changes. The other slot and all four
+icons match their starting bytes, and the profile contains only the six
+expected files. A separate standard Windows executable run reads the
+tested R102 card from the title menu, presents 539 scene frames and moves
+Gene 2.95 world units through ordinary keyboard input.
+
+The game still issues the original sequence of separate record and icon
+operations. Verification covers individual files. Interruption between the
+original icon deletion and its later rewrite can hide the slot from the title
+menu.
+
+Windows 存档后端在槽目录暂存记录和各图标文件。写完整后，显式关闭会刷新并提交该文件。
+回归验证了取消、退出和替换受阻时旧记录及尾部字节保留。同槽的第二个写入会等待第一次
+释放槽位后才可重新发起，重试保存和重新打开均通过。
+
+一轮受控的 R021 回放在原版存档地图确认覆盖。选中的 46,080 字节记录发生变化，另一槽及
+四个图标的内容均保持原样，目录中只有预期的六个文件。另一轮标准 Windows 程序从标题读档
+进入 R102，实际呈现 539 个场景帧，普通键盘输入使 Gene 移动 2.95 个世界单位。
+
+原版记录和图标仍分步更新。目前验证范围是单文件。游戏删除旧图标后若在写回前中断，
+标题菜单仍可能暂时找不到该槽。
+
 ## West route from New Game to R105
 
 An internal native CPU integration run replays the controller recording from

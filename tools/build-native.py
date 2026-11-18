@@ -946,7 +946,27 @@ def main():
         run("compile-" + name + "-tests", common + ["-Isrc/core", "-Isrc/platform", "-Isrc/rooms", "-Isrc/assets"]
             + [source, *transport, native_archive, "-o", extra_test_path(name)])
 
-    def extra_test_command(test, baseline):
+    baseline_path = PROJECT / "analysis" / "disc-baseline.json"
+    original_iso = None
+
+    def require_original_iso(context):
+        nonlocal original_iso
+        if original_iso is None:
+            try:
+                baseline = json.loads(baseline_path.read_text(encoding="utf-8-sig"))
+                iso = Path(baseline["source_iso"]["path"])
+            except FileNotFoundError:
+                parser.error(f"{context} requires an original ISO. Missing private disc baseline at "
+                             f"{baseline_path}. Run tools/prepare-inputs.py --iso PATH first.")
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                parser.error(f"{context} requires a valid private disc baseline at {baseline_path}: {error}")
+            if not iso.is_file():
+                parser.error(f"{context} requires an original ISO. The file recorded in {baseline_path} "
+                             f"is unavailable at {iso}. Run tools/prepare-inputs.py --iso PATH to update it.")
+            original_iso = iso
+        return original_iso
+
+    def extra_test_command(test):
         name, _, inputs = test
         requires_audio = name in ("game-event-create", "se-voice", "se-stop", "se-bank2", "se-voice-stop-bank",
                                   "mc-control-flow", "bgm-requests", "bgm-automatic", "adx-stream", "r020-title",
@@ -956,7 +976,7 @@ def main():
             return None
         arguments = [extra_test_path(name)]
         if inputs in ("iso", "both", "movie") or inputs in wave_inputs:
-            arguments.append(baseline["source_iso"]["path"])
+            arguments.append(require_original_iso(name))
         if inputs in ("elf", "both"):
             arguments.append(PROJECT / "reference" / "SLUS_215.03")
         if inputs == "movie":
@@ -964,7 +984,7 @@ def main():
         if inputs in ("scratch", "scratch-iso"):
             arguments.append(card_scratch)
         if inputs == "scratch-iso":
-            arguments.append(baseline["source_iso"]["path"])
+            arguments.append(require_original_iso(name))
         if inputs in wave_inputs:
             arguments.append(wave_inputs[inputs].resolve())
         if name in ("enemy-se-banks", "game-object-sounds", "game-enemy-resources", "game-event-audio", "sound-spatial-step") and args.hardware_audio:
@@ -973,11 +993,12 @@ def main():
 
     if focused:
         manifest["focused_tests"] = [case[0] for case in focused]
-        baseline = json.loads((PROJECT / "analysis" / "disc-baseline.json").read_text(encoding="utf-8"))
-        focused_commands = [(case, extra_test_command(case, baseline)) for case in focused]
+        focused_commands = [(case, extra_test_command(case)) for case in focused]
         for case, command in focused_commands:
             if command is None:
                 parser.error(case[0] + " requires its hardware, codec or reference WAV option")
+    elif not args.skip_tests:
+        require_original_iso("The full native regression suite")
     # Host headers must also parse when the real Windows SDK was included
     # first. Its legacy far/near macros previously erased new actor fields.
     run("check-windows-public-headers", [compiler,"c++","-target","x86_64-windows-gnu",
@@ -1073,30 +1094,29 @@ def main():
         run("test-model", [output / "test_model.exe", PROJECT / "reference" / "model" / "om0e.scr"])
         run("test-startup-task", [output / "test_startup_task.exe"])
         run("test-cpp-abi", [output / "test_cpp_abi.exe"])
-        baseline = json.loads((PROJECT / "analysis" / "disc-baseline.json").read_text(encoding="utf-8"))
-        run("test-original-disc", [output / "test_disc.exe", baseline["source_iso"]["path"], PROJECT / "reference" / "overlays" / "r207.rel", PROJECT / "reference" / "SLUS_215.03"])
-        run("test-dvd-jobs", [output / "test_dvd_jobs.exe", baseline["source_iso"]["path"], PROJECT / "reference" / "overlays" / "r207.rel"])
-        run("test-core-bundle", [output / "test_core_bundle.exe", baseline["source_iso"]["path"]])
-        run("test-sound-bank", [output / "test_sound_bank.exe", baseline["source_iso"]["path"]])
-        run("test-font-state", [output / "test_font_state.exe", baseline["source_iso"]["path"]])
-        run("test-menu-state", [output / "test_menu_state.exe", baseline["source_iso"]["path"]])
-        run("test-audio-startup", [output / "test_audio_startup.exe", baseline["source_iso"]["path"]])
-        run("test-startup-host", [output / "test_startup_host.exe", baseline["source_iso"]["path"]] + (["--hardware-audio"] if args.hardware_audio else []))
-        run("test-font-texture", [output / "test_font_texture.exe", baseline["source_iso"]["path"]])
-        run("test-game-start", [output / "test_game_start.exe", baseline["source_iso"]["path"], PROJECT / "reference" / "SLUS_215.03"])
-        run("test-mc-id", [output / "test_mc_boot_id.exe", baseline["source_iso"]["path"]])
-        run("test-font-draw", [output / "test_font_draw.exe", baseline["source_iso"]["path"]])
-        run("test-game-gate", [output / "test_game_gate.exe", baseline["source_iso"]["path"]])
-        run("test-id-base", [output / "test_id_base.exe", baseline["source_iso"]["path"]])
-        run("test-packed-message", [output / "test_packed_message.exe", baseline["source_iso"]["path"]])
+        run("test-original-disc", [output / "test_disc.exe", original_iso, PROJECT / "reference" / "overlays" / "r207.rel", PROJECT / "reference" / "SLUS_215.03"])
+        run("test-dvd-jobs", [output / "test_dvd_jobs.exe", original_iso, PROJECT / "reference" / "overlays" / "r207.rel"])
+        run("test-core-bundle", [output / "test_core_bundle.exe", original_iso])
+        run("test-sound-bank", [output / "test_sound_bank.exe", original_iso])
+        run("test-font-state", [output / "test_font_state.exe", original_iso])
+        run("test-menu-state", [output / "test_menu_state.exe", original_iso])
+        run("test-audio-startup", [output / "test_audio_startup.exe", original_iso])
+        run("test-startup-host", [output / "test_startup_host.exe", original_iso] + (["--hardware-audio"] if args.hardware_audio else []))
+        run("test-font-texture", [output / "test_font_texture.exe", original_iso])
+        run("test-game-start", [output / "test_game_start.exe", original_iso, PROJECT / "reference" / "SLUS_215.03"])
+        run("test-mc-id", [output / "test_mc_boot_id.exe", original_iso])
+        run("test-font-draw", [output / "test_font_draw.exe", original_iso])
+        run("test-game-gate", [output / "test_game_gate.exe", original_iso])
+        run("test-id-base", [output / "test_id_base.exe", original_iso])
+        run("test-packed-message", [output / "test_packed_message.exe", original_iso])
         run("test-game-init", [output / "test_game_init.exe"])
-        run("test-id-jobs", [output / "test_id_jobs.exe", baseline["source_iso"]["path"]])
-        run("test-id-texture", [output / "test_id_texture.exe", baseline["source_iso"]["path"]])
-        run("test-mc-control", [output / "test_mc_control.exe", baseline["source_iso"]["path"]])
-        run("test-game-stage", [output / "test_game_stage.exe", baseline["source_iso"]["path"]])
+        run("test-id-jobs", [output / "test_id_jobs.exe", original_iso])
+        run("test-id-texture", [output / "test_id_texture.exe", original_iso])
+        run("test-mc-control", [output / "test_mc_control.exe", original_iso])
+        run("test-game-stage", [output / "test_game_stage.exe", original_iso])
         for test in extra_tests:
             label = "test-" + test[0]
-            command = extra_test_command(test, baseline)
+            command = extra_test_command(test)
             if command is None:
                 manifest.setdefault("skipped_checks", []).append({"name": label, "reason": "Explicit hardware/codec opt-in not supplied"})
                 continue

@@ -3,6 +3,10 @@
 These project tools support readable source recovery. They do not generate a
 finished port or execute guest instructions in the production runtime.
 
+- Run `python -B tools/build-native.py --focus mc-file-save` for the native
+  save-file regression. Its fixture lives under scratch and needs no private
+  ISO or extracted files. ISO-dependent checks resolve the disc baseline when
+  selected.
 - The standard Windows executable accepts `--trace-native-input`. Each
   `NATIVE_INPUT` JSON line on stderr records the applied sample and the state
   after that tick. Read the menu fields for readiness and the player fields

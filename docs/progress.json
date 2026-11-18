@@ -82,6 +82,19 @@
       "original_format_card_load_verified": true
     }
   },
+  "native_windows_save_file_replacement": {
+    "observed_on": "2026-11-18",
+    "original_record_bytes": 46080,
+    "abort_and_failed_replacement_preserve_record_and_tail": true,
+    "competing_writer_rejected_until_slot_release": true,
+    "physical_short_write_bytes_rejected_on_close": 23040,
+    "r021_occupied_confirmation_replay_samples": 5600,
+    "r021_other_slot_and_icons_unchanged": true,
+    "r102_standard_executable_scene_presents": 539,
+    "r102_keyboard_movement_world_units": 2.95,
+    "r102_card_bytes_unchanged": true,
+    "all_slot_files_committed_as_one_transaction": false
+  },
   "private_west_r105_integration": {
     "observed_on": "2026-11-18",
     "cpu_startup_records_matched": 1750,

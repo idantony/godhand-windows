@@ -38,7 +38,8 @@ gh_mc_error gh_memory_card_request_save_open(gh_memory_card *,uint32_t save_slot
 gh_mc_error gh_memory_card_request_save_header(gh_memory_card *,uint8_t out[GH_MC_SAVE_HEADER_BYTES]);
 gh_mc_error gh_memory_card_request_save_record(gh_memory_card *,uint8_t out[GH_MC_SAVE_RECORD_BYTES]);
 /* Original 0x202 write/create path. Writes from offset zero and preserves
- * bytes beyond the fixed record. The queued write borrows the input. */
+ * bytes beyond the fixed record. The queued write borrows the input.
+ * A successful explicit close publishes the staged file. Teardown discards it. */
 gh_mc_error gh_memory_card_request_save_write_open(gh_memory_card *,uint32_t save_slot);
 gh_mc_error gh_memory_card_request_save_write(gh_memory_card *,const uint8_t record[GH_MC_SAVE_RECORD_BYTES]);
 gh_mc_error gh_memory_card_request_save_close(gh_memory_card *);

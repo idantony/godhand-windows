@@ -422,6 +422,10 @@ Pass a copy of that profile to `startup-qa` with `--qa-load --qa-r102-walk`
 and `--qa-capture FILE --qa-capture-count 36`. The game reads the checkpoint
 through its original title menu.
 
+On Windows, the card backend stages each save file in its slot directory.
+A successful close publishes the complete file. The isolated regression
+`python -B tools/build-native.py --focus mc-file-save` runs without an ISO.
+
 | Directory | Purpose |
 |---|---|
 | `src/`, `tests/` | Recovered source, native backends and meaningful checks |
@@ -653,6 +657,8 @@ DXGI 索引显式选卡。启动日志会记录厂商、设备编号和 LUID。
 
 窗口默认隐藏，`--show` 才显示；`--muted` 仅静音本程序，不改系统音量。原生存档
 目录不存在时走原版无卡分支。标题读档已验证恢复 R100 测试档。游戏内存档和完整流程仍在开发。
+Windows 存档后端在槽目录中暂存各文件，成功关闭后提交。执行
+`python -B tools/build-native.py --focus mc-file-save` 可在无需 ISO 的情况下验证写档和恢复。
 WASD 移动，方向键对应十字键。Z 对应叉键，X 对应圆圈，C 对应方块，Esc 对应三角，
 Enter 对应 Start。确认和取消由原版 ELF 映射表决定。
 加上 `--trace-native-input` 可在标准错误流记录已接收的输入、更新后的菜单与场景状态，以及

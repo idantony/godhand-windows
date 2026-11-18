@@ -3,7 +3,53 @@
 #include <wchar.h>
 #include "memory_card.h"
 enum {MC_INFO=1,MC_ICON,MC_SAVE_OPEN,MC_SAVE_READ,MC_SAVE_CLOSE,MC_SAVE_RECORD,MC_SAVE_WRITE_OPEN,MC_SAVE_WRITE,MC_SLOT_DIRECTORY,MC_SLOT_CREATE,MC_SAVE_ICON_OPEN,MC_SAVE_ICON_WRITE,MC_SAVE_ICON_DELETE};
-struct gh_memory_card {wchar_t root[1024];unsigned command,slot,ended;HANDLE save;uint8_t *header;const uint8_t *write_record;unsigned writing,icon_kind;uint32_t write_bytes;};
+enum {MC_PATH_CAPACITY=1100};
+struct gh_memory_card {
+    wchar_t root[1024];
+    unsigned command,slot,ended;
+    HANDLE save;
+    uint8_t *header;
+    const uint8_t *write_record;
+    unsigned icon_kind;
+    uint32_t write_bytes;
+    struct {
+        HANDLE lock,directory,original;
+        wchar_t target[MC_PATH_CAPACITY],staged[MC_PATH_CAPACITY+40];
+        int complete,failed;
+    } write;
+};
+
+static gh_mc_error finish_file(gh_memory_card *c,int publish)
+{
+    if(!c->save)return GH_MC_OK;
+    const int writing=c->write.lock!=NULL;
+    gh_mc_error error=GH_MC_OK;
+    if(writing&&publish&&(!c->write.complete||c->write.failed||!FlushFileBuffers(c->save)))
+        error=GH_MC_IO;
+    if(!CloseHandle(c->save))error=GH_MC_IO;
+    c->save=NULL;
+    c->icon_kind=0;
+    if(writing){
+        DWORD flags=MOVEFILE_WRITE_THROUGH;
+        if(c->write.original){
+            BY_HANDLE_FILE_INFORMATION info;
+            if(publish&&(!GetFileInformationByHandle(c->write.original,&info)||info.nNumberOfLinks!=1))
+                error=GH_MC_IO;
+            if(!CloseHandle(c->write.original))error=GH_MC_IO;
+            flags|=MOVEFILE_REPLACE_EXISTING;
+        }
+        const int committed=publish&&!error&&MoveFileExW(c->write.staged,c->write.target,flags);
+        if(!committed){
+            if(publish)error=GH_MC_IO;
+            if(!DeleteFileW(c->write.staged)&&GetLastError()!=ERROR_FILE_NOT_FOUND)
+                error=GH_MC_IO;
+        }
+        CloseHandle(c->write.lock);
+        CloseHandle(c->write.directory);
+        ZeroMemory(&c->write,sizeof(c->write));
+    }
+    return error;
+}
 gh_mc_error gh_memory_card_open(const char *root,gh_memory_card **out)
 {
     gh_memory_card *c;
@@ -16,7 +62,7 @@ gh_mc_error gh_memory_card_open(const char *root,gh_memory_card **out)
     *out=c;return GH_MC_OK;
 }
 void gh_memory_card_close(gh_memory_card *c)
-{if(c){if(c->save)CloseHandle(c->save);HeapFree(GetProcessHeap(),0,c);}}
+{if(c){finish_file(c,0);HeapFree(GetProcessHeap(),0,c);}}
 gh_mc_error gh_memory_card_begin(gh_memory_card *c)
 {
     if(!c)return GH_MC_ARGUMENT;
@@ -25,8 +71,13 @@ gh_mc_error gh_memory_card_begin(gh_memory_card *c)
     return GH_MC_OK;
 }
 gh_mc_error gh_memory_card_end(gh_memory_card *c)
-{if(!c)return GH_MC_ARGUMENT;if(c->command)return GH_MC_BUSY;
- if(c->save&&!CloseHandle(c->save))return GH_MC_IO;c->save=0;c->ended=1;return GH_MC_OK;}
+{
+    if(!c)return GH_MC_ARGUMENT;
+    if(c->command)return GH_MC_BUSY;
+    gh_mc_error error=finish_file(c,0);
+    c->ended=1;
+    return error;
+}
 gh_mc_error gh_memory_card_abort(gh_memory_card *c)
 {
     if(!c)return GH_MC_ARGUMENT;
@@ -63,7 +114,7 @@ gh_mc_error gh_memory_card_request_save_write_open(gh_memory_card *c,uint32_t sl
 gh_mc_error gh_memory_card_request_save_write(gh_memory_card *c,const uint8_t *record)
 {
     if(!c||!record)return GH_MC_ARGUMENT;
-    if(!c->ended&&!c->command&&(!c->save||!c->writing||c->icon_kind))return GH_MC_ARGUMENT;
+    if(!c->ended&&!c->command&&(!c->save||!c->write.lock||c->icon_kind))return GH_MC_ARGUMENT;
     gh_mc_error e=request(c,MC_SAVE_WRITE);
     if(!e){c->write_record=record;c->write_bytes=GH_MC_SAVE_RECORD_BYTES;}
     return e;
@@ -101,7 +152,7 @@ gh_mc_error gh_memory_card_request_save_icon_write_open(gh_memory_card *c,uint32
 gh_mc_error gh_memory_card_request_save_icon_write(gh_memory_card *c,gh_mc_save_icon_kind kind,const uint8_t *bytes,uint32_t count)
 {
     if(!c||!bytes||!count||count!=icon_write_bytes(kind))return GH_MC_ARGUMENT;
-    if(!c->ended&&!c->command&&(!c->save||!c->writing||c->icon_kind!=(unsigned)kind))
+    if(!c->ended&&!c->command&&(!c->save||!c->write.lock||c->icon_kind!=(unsigned)kind))
         return GH_MC_ARGUMENT;
     gh_mc_error e=request(c,MC_SAVE_ICON_WRITE);
     if(!e){c->write_record=bytes;c->write_bytes=count;}
@@ -111,12 +162,82 @@ gh_mc_error gh_memory_card_request_save_close(gh_memory_card *c)
 {if(!c)return GH_MC_ARGUMENT;if(!c->ended&&!c->command&&!c->save)return GH_MC_ARGUMENT;
  return request(c,MC_SAVE_CLOSE);}
 static int missing(DWORD error){return error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND;}
+
+/* The slot-directory file ID serializes writers across card instances and
+ * path aliases without leaving a lock file behind on process exit. */
+static gh_mc_error lock_slot(const wchar_t *path,HANDLE *directory,HANDLE *lock)
+{
+    HANDLE folder=CreateFileW(path,FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE,0,
+                              OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_OPEN_REPARSE_POINT,0);
+    if(folder==INVALID_HANDLE_VALUE)return GH_MC_IO;
+    BY_HANDLE_FILE_INFORMATION info;
+    if(!GetFileInformationByHandle(folder,&info)){
+        CloseHandle(folder);
+        return GH_MC_IO;
+    }
+    if(!(info.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)||(info.dwFileAttributes&FILE_ATTRIBUTE_REPARSE_POINT)){
+        CloseHandle(folder);
+        return GH_MC_UNSUPPORTED;
+    }
+    wchar_t name[64];
+    swprintf(name,64,L"Local\\GodHand.CardWrite.%08lX.%08lX%08lX",
+             info.dwVolumeSerialNumber,info.nFileIndexHigh,info.nFileIndexLow);
+    HANDLE held=CreateMutexW(NULL,FALSE,name);
+    if(!held||GetLastError()==ERROR_ALREADY_EXISTS){
+        if(held)CloseHandle(held);
+        CloseHandle(folder);
+        return GH_MC_IO;
+    }
+    *directory=folder;
+    *lock=held;
+    return GH_MC_OK;
+}
+
+static HANDLE open_staged_file(gh_memory_card *c,const wchar_t *path)
+{
+    static volatile LONG sequence;
+    for(unsigned attempt=0;attempt<8;attempt++){
+        swprintf(c->write.staged,MC_PATH_CAPACITY+40,L"%ls.gh-%08lX-%08lX.tmp",
+                 path,GetCurrentProcessId(),(unsigned long)InterlockedIncrement(&sequence));
+        HANDLE file=CreateFileW(c->write.staged,GENERIC_WRITE,0,0,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,0);
+        if(file!=INVALID_HANDLE_VALUE)return file;
+        if(GetLastError()!=ERROR_FILE_EXISTS)break;
+    }
+    return NULL;
+}
+
+static int seed_staged_file(HANDLE file,HANDLE original)
+{
+    BYTE buffer[16384];
+    for(;;){
+        DWORD read,written;
+        if(!ReadFile(original,buffer,sizeof(buffer),&read,NULL))return 0;
+        if(!read)break;
+        if(!WriteFile(file,buffer,read,&written,NULL)||written!=read)return 0;
+    }
+    LARGE_INTEGER start={0};
+    return SetFilePointerEx(file,start,NULL,FILE_BEGIN)!=FALSE;
+}
+
+static gh_mc_error prepare_write(gh_memory_card *c,const wchar_t *path,HANDLE original,
+                                 HANDLE directory,HANDLE lock)
+{
+    HANDLE staged=open_staged_file(c,path);
+    if(!staged)return GH_MC_IO;
+    c->save=staged;
+    c->write.original=original;
+    c->write.directory=directory;
+    c->write.lock=lock;
+    wcscpy(c->write.target,path);
+    return GH_MC_OK;
+}
+
 static gh_mc_error slot_file(gh_memory_card *c,unsigned command,gh_mc_result *r)
 {
-    wchar_t folder[24],path[1100];
+    wchar_t folder[24],path[MC_PATH_CAPACITY];
     if(swprintf(folder,24,L"BASLUS-21503GODHD0%02u",c->slot)<0)return GH_MC_ARGUMENT;
-    int length=swprintf(path,1100,L"%ls\\%ls",c->root,folder);
-    if(length<0 || length>=1100)return GH_MC_ARGUMENT;
+    int length=swprintf(path,MC_PATH_CAPACITY,L"%ls\\%ls",c->root,folder);
+    if(length<0 || length>=MC_PATH_CAPACITY)return GH_MC_ARGUMENT;
     const int writing=command==MC_SAVE_WRITE_OPEN||command==MC_SAVE_ICON_OPEN;
     const int deleting=command==MC_SAVE_ICON_DELETE;
     if(writing||deleting||command==MC_SLOT_CREATE){
@@ -142,7 +263,12 @@ static gh_mc_error slot_file(gh_memory_card *c,unsigned command,gh_mc_result *r)
     if(command==MC_ICON||deleting||(command==MC_SAVE_ICON_OPEN&&c->icon_kind==GH_MC_SAVE_ICON_SYSTEM))
         basename=L"icon.sys";
     else if(command==MC_SAVE_ICON_OPEN)basename=L"godh0.ico";
-    if((size_t)length+1+wcslen(basename)>=1100)return GH_MC_ARGUMENT;
+    if((size_t)length+1+wcslen(basename)>=MC_PATH_CAPACITY)return GH_MC_ARGUMENT;
+    HANDLE directory=NULL,lock=NULL;
+    if(writing||deleting){
+        gh_mc_error error=lock_slot(path,&directory,&lock);
+        if(error)return error;
+    }
     wcscat(path,L"\\");wcscat(path,basename);
     if(command==MC_ICON){
         WIN32_FILE_ATTRIBUTE_DATA icon;
@@ -153,28 +279,41 @@ static gh_mc_error slot_file(gh_memory_card *c,unsigned command,gh_mc_result *r)
         if(r->result)r->file_bytes=((uint64_t)icon.nFileSizeHigh<<32)|icon.nFileSizeLow;
         return GH_MC_OK;
     }
-    DWORD access=deleting?(DELETE|FILE_READ_ATTRIBUTES):writing?GENERIC_WRITE:GENERIC_READ;
+    DWORD access=deleting?(DELETE|FILE_READ_ATTRIBUTES):GENERIC_READ;
     HANDLE file=CreateFileW(path,access,FILE_SHARE_READ,0,
-                            writing?OPEN_ALWAYS:OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,0);
+                            OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,0);
+    gh_mc_error error=GH_MC_OK;
     if(file==INVALID_HANDLE_VALUE){
-        if(!missing(GetLastError()))return GH_MC_IO;
-        r->result=GH_MC_SAVE_NOT_FOUND;
-        return GH_MC_OK;
+        file=NULL;
+        if(!missing(GetLastError()))error=GH_MC_IO;
+        else if(!writing)r->result=GH_MC_SAVE_NOT_FOUND;
     }
     BY_HANDLE_FILE_INFORMATION info;
-    if(!GetFileInformationByHandle(file,&info)){CloseHandle(file);return GH_MC_IO;}
-    if((info.dwFileAttributes&(FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY))||
-       ((writing||deleting)&&info.nNumberOfLinks!=1)){
-        CloseHandle(file);return GH_MC_UNSUPPORTED;
+    if(file){
+        if(!GetFileInformationByHandle(file,&info))error=GH_MC_IO;
+        else if((info.dwFileAttributes&(FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY))||
+                ((writing||deleting)&&info.nNumberOfLinks!=1))error=GH_MC_UNSUPPORTED;
+        else if(writing&&(info.dwFileAttributes&FILE_ATTRIBUTE_READONLY))error=GH_MC_IO;
     }
-    if(deleting){
+    if(!error&&writing){
+        error=prepare_write(c,path,file,directory,lock);
+        if(!error){
+            if(!file||seed_staged_file(c->save,file))return GH_MC_OK;
+            finish_file(c,0);
+            return GH_MC_IO;
+        }
+    } else if(!error&&deleting&&file){
         FILE_DISPOSITION_INFO disposition={TRUE};
-        const BOOL deleted=SetFileInformationByHandle(file,FileDispositionInfo,&disposition,sizeof(disposition));
-        const BOOL closed=CloseHandle(file);
-        return deleted&&closed?GH_MC_OK:GH_MC_IO;
+        if(!SetFileInformationByHandle(file,FileDispositionInfo,&disposition,sizeof(disposition)))
+            error=GH_MC_IO;
+    } else if(!error&&!writing&&!deleting){
+        c->save=file;
+        return GH_MC_OK;
     }
-    c->save=file;c->writing=(unsigned)writing;
-    return GH_MC_OK;
+    if(file&&!CloseHandle(file))error=GH_MC_IO;
+    if(lock)CloseHandle(lock);
+    if(directory)CloseHandle(directory);
+    return error;
 }
 gh_mc_error gh_memory_card_poll(gh_memory_card *c,int *done,gh_mc_result *r)
 {
@@ -219,11 +358,16 @@ gh_mc_error gh_memory_card_poll(gh_memory_card *c,int *done,gh_mc_result *r)
         const uint8_t *record=c->write_record;
         DWORD bytes;
         c->write_record=0;
-        if(!WriteFile(c->save,record,c->write_bytes,&bytes,0))return GH_MC_IO;
+        if(!WriteFile(c->save,record,c->write_bytes,&bytes,0)){
+            c->write.failed=1;
+            return GH_MC_IO;
+        }
+        if(bytes==c->write_bytes)c->write.complete=1;
+        else c->write.failed=1;
         r->result=(int32_t)bytes;
     } else if(command==MC_SAVE_CLOSE) {
-        if(!CloseHandle(c->save))return GH_MC_IO;
-        c->save=0;c->icon_kind=0;
+        gh_mc_error e=finish_file(c,1);
+        if(e)return e;
     }
     *done=1;return GH_MC_OK;
 }
