@@ -263,6 +263,9 @@ event timeline and evidence of the resulting original state or rendered frame.
 When the application exposes an opt-in typed input trace, use its complete
 records to gate menu and gameplay input. Bind the emitted sample to the same
 tick's resulting state and keep scheduler serials distinct from present counts.
+Use [check-native-movement.py](scripts/check-native-movement.py) to verify
+contiguous movement input, living-player state, horizontal displacement and
+actual presents over the same tick interval.
 Version recorded input formats and preserve changed analog fields during
 deduplication. Keep the comparable archive schema stable when accepting an
 older recording or adding supported input columns.
