@@ -116,6 +116,9 @@ If fast-forward drops a surface sampled by a later frame, require the
 exact expected preceding capture or render the missing history. Verify
 the archived capture's presented frame, input prefix and source range,
 then count new hardware presents from the resumed frame.
+[verify-presented-replay.py](scripts/verify-presented-replay.py) rechecks
+saved process receipts, raw capture dimensions and presentation markers
+without relaunching the game.
 
 Make integer wrapping, sign extension, alignment, endianness and guest-address
 resolution explicit. Establish numerical semantics for the actual PS2
