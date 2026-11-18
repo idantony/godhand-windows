@@ -22,19 +22,22 @@ struct QAR100PadTape {
     {
         std::ifstream input(path);
         std::string line;
-        if(!std::getline(input,line)||
-           line!="tick,move,buttons,left_x,left_y,right_x,right_y,connected")return false;
+        if(!std::getline(input,line))return false;
+        const bool has_triggers=line=="tick,move,buttons,left_x,left_y,right_x,right_y,connected,left_trigger,right_trigger";
+        if(!has_triggers&&line!="tick,move,buttons,left_x,left_y,right_x,right_y,connected")return false;
+        const size_t columns=has_triggers?10:8;
         uint64_t last_tick=0,tick_at_move=0;
         while(std::getline(input,line)){
-            std::array<int64_t,8> row={};
-            if(!parse(line,row)||row[0]<=0||uint64_t(row[0])<=last_tick||
-               row[1]<0||row[2]<0||row[2]>65535||row[7]<0||row[7]>1)return false;
+            std::array<int64_t,10> row={};
+            if(!parse(line,row,columns)||row[0]<=0||uint64_t(row[0])<=last_tick||
+               row[1]<0||row[2]<0||row[2]>65535||row[7]<0||row[7]>1||
+               row[8]<0||row[8]>255||row[9]<0||row[9]>255)return false;
             for(unsigned axis=3;axis<7;++axis)
                 if(row[axis]<-32768||row[axis]>32767)return false;
             last_tick=uint64_t(row[0]);
             const uint64_t move=uint64_t(row[1]);
             if(!samples.empty()&&move<samples.back().move)return false;
-            const std::array<int64_t,6> fields={row[2],row[3],row[4],row[5],row[6],row[7]};
+            const std::array<int64_t,8> fields={row[2],row[3],row[4],row[5],row[6],row[7],row[8],row[9]};
             if(!samples.empty()&&move==samples.back().move){
                 ++tick_at_move;
                 if(fields==samples.back().fields)continue;
@@ -68,6 +71,8 @@ struct QAR100PadTape {
         pad.right_x=int16_t(fields[3]);
         pad.right_y=int16_t(fields[4]);
         pad.connected=uint8_t(fields[5]);
+        pad.left_trigger=uint8_t(fields[6]);
+        pad.right_trigger=uint8_t(fields[7]);
         if(last_sample!=move){
             ++sampled_moves;
             last_sample=move;
@@ -109,7 +114,7 @@ struct QAR100PadTape {
 private:
     struct Sample {
         uint64_t move,tick_at_move;
-        std::array<int64_t,6> fields;
+        std::array<int64_t,8> fields;
     };
     std::vector<Sample> samples;
     size_t next=0;
@@ -160,11 +165,11 @@ private:
             snapshot.gameplay_random_index,snapshot.gameplay_random_block_word);
     }
 
-    static bool parse(std::string_view line,std::array<int64_t,8> &row)
+    static bool parse(std::string_view line,std::array<int64_t,10> &row,size_t columns)
     {
-        for(size_t field=0;field<row.size();++field){
+        for(size_t field=0;field<columns;++field){
             const size_t delimiter=line.find(',');
-            const bool final=field+1==row.size();
+            const bool final=field+1==columns;
             if(final!=(delimiter==std::string_view::npos))return false;
             const auto token=line.substr(0,delimiter);
             const auto end=token.data()+token.size();

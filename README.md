@@ -373,6 +373,8 @@ ELF tables determine logical confirm and cancel.
 Use `--trace-native-input` to write the accepted input and resulting menu,
 room and player state to standard error. It also records the cumulative
 number of scene presents.
+The R100 QA pad reader accepts both recorded CSV formats, including the
+version with analog triggers.
 The window stays hidden unless `--show` is supplied. `--muted` silences only
 this program's output while retaining actual device processing/completion.
 
@@ -655,6 +657,7 @@ WASD 移动，方向键对应十字键。Z 对应叉键，X 对应圆圈，C 对
 Enter 对应 Start。确认和取消由原版 ELF 映射表决定。
 加上 `--trace-native-input` 可在标准错误流记录已接收的输入、更新后的菜单与场景状态，以及
 实际呈现的场景帧累计数。
+R100 手柄回放工具兼容八列和十列记录，十列格式保留模拟扳机。
 
 当前以退出码 **4** 报告下一个尚未接通的原始调用，并非游戏完成。独立 `startup-qa` 目标才
 包含合成输入选项 `--qa-confirm` 和 `--qa-new-game`；生产目标没有该选项。真实图形、音频或视频消费失败

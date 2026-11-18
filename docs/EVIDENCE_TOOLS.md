@@ -8,6 +8,10 @@ finished port or execute guest instructions in the production runtime.
   after that tick. Read the menu fields for readiness and the player fields
   for input response. `scene_serial` tracks the scheduler and
   `scene_presents` counts successful window presents.
+- R100 pad replay accepts the older eight-column CSV and the ten-column
+  version ending in `left_trigger,right_trigger`. The older format uses
+  zero for both triggers. Trigger-only changes are kept when multiple input
+  samples fall between player updates.
 - `tools/run-ghidra.ps1` exports explicit function probes with the installed
   Ghidra/EmotionEngine language. `-MaxInstructions` accepts 1..65536 and defaults
   to 2048. Reports include the limit, captured count and `disassemblyTruncated`.

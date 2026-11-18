@@ -198,6 +198,9 @@ event timeline and evidence of the resulting original state or rendered frame.
 When the application exposes an opt-in typed input trace, use its complete
 records to gate menu and gameplay input. Bind the emitted sample to the same
 tick's resulting state and keep scheduler serials distinct from present counts.
+Version recorded input formats and preserve changed analog fields during
+deduplication. Keep the comparable archive schema stable when accepting an
+older recording or adding supported input columns.
 
 On Windows, keep command-line arguments Unicode until the native boundary
 converts them to the encoding used by the platform APIs. Verify the actual

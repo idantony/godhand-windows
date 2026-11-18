@@ -82,7 +82,8 @@
       "first_dodge_tick": 20098,
       "player_hp": 1,
       "stop_tick": 20160,
-      "frontier": "00306528"
+      "frontier": "00306528",
+      "diagnostic_stage": "enemy effect request construction before resource lookup"
     }
   },
   "r104_victory_to_r021_stage_clear": {

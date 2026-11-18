@@ -103,6 +103,9 @@ A follow-up CPU replay matches all 16,007 prior startup and gameplay records
 and applies new controller inputs only after natural entry into R105.
 Retreating triggers the original dodge and Gene stays at 1 HP. The altered
 enemy encounter ends at an unfinished effect path at tick 20,160.
+The diagnostic replay reproduces that endpoint and locates the rejection
+in the enemy's effect request constructor, before resource lookup. The
+exact rejected request condition remains unverified.
 
 内部原生 CPU 集成回放从新游戏出发，通过手柄录像完成西区战斗、R003 的 EV02 全部 28 个镜头，
 随后进入 R105。回放与归档中的 1,750 条启动记录和 14,257 条游戏记录一致。事件在第 20,046 个
@@ -115,6 +118,8 @@ tick 结束，第 20,053 个 tick 进入 R105，第 20,265 个 tick 停在敌人
 后续 CPU 回放与此前 16,007 条启动及游戏记录全数一致，自然进入 R105 后才接入新的手柄输入。
 后撤触发原版闪避，Gene 仍有 1 点生命值。敌人随后走到另一条分支，回放在第 20,160 个 tick
 停在尚未覆盖的特效路径。
+诊断回放复现了同一停点，将拒绝点定位到敌人特效请求的构造检查，早于资源查找。具体触发条件
+仍待核实。
 
 ## R104 victory event and R021 Stage Clear
 
