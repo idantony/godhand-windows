@@ -909,6 +909,10 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
    if(root->size<0x642||!v->model->work||v->part_index!=-1)return 0;
    const unsigned stamp=h(root->bytes+0x640),room=v->model->work->room;
    const int r100=room==0x100&&((stamp==19&&dependency==0x203)||(stamp==20&&dependency==0x200));
+   /* The west EM00 recovery requests its loaded dependency bank. */
+   const int r100_west_em00=room==0x100&&bank==8&&v->requested_bank==bank&&
+       dependency==0x200&&stamp==10&&root->size>0x1650&&actor[0x1650]==5&&
+       w(actor+0x2f4)==0x00016c00u;
    /* Armed EM02's original 3E4 motion directly requests local row 10. */
    const int r100_armed_em02=room==0x100&&dependency==0x202&&stamp==18&&
        root->size>0x1650&&root->bytes[0x1650]==9&&h(root->bytes+0x2f4)==0x6c00&&
@@ -936,7 +940,7 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
        ((dependency==0x203&&stamp==30&&w(root->bytes+0x16c4)==2)||
         (dependency==0x202&&stamp==32&&!w(root->bytes+0x16c4)))&&
        h(root->bytes+0x2f4)==0x6c00&&root->bytes[0x2f6]==1;
-   if(!r100&&!r100_armed_em02&&!west_wave&&!r101&&!r102&&!r102_at0b&&!r105_em00&&!r105_em03&&
+   if(!r100&&!r100_west_em00&&!r100_armed_em02&&!west_wave&&!r101&&!r102&&!r102_at0b&&!r105_em00&&!r105_em03&&
       !r103_em00_voice_actor(v)&&!arena_em03)return 0;
   }
  }else if(!v->combat_profile||program==0x10)return 0;

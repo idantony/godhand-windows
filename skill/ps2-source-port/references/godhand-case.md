@@ -5,6 +5,12 @@ progress/authorization belongs in [resume.md](resume.md).
 
 ## Parallel verification and precise stopping
 
+West R100 controller CSVs sample by completed Player Move. A soft event
+can yield several input samples at one Move. Use the project's
+`tools/make-r100-pad-variant.py` for bounded stick and R2 changes while
+preserving those rows and source ticks. Compare the unchanged startup and
+Move trace before attributing a new stop to the variant.
+
 The first R100 world surface was nonblack and visibly recognizable while its
 final composed frame was entirely black under the original opening Fade.
 Capture and hash both layers from the same executable/frame before diagnosing
