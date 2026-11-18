@@ -33,6 +33,14 @@ presents all 28 original EV02 cuts over 2,785 frames, then follows the original
 room exit to R105. After Gene's defeat, Cross confirms Continue in the original
 Game Over menu. Windows presents the reloaded R105 with Gene at 100 HP. A
 separate native CPU replay continues for 60 game frames after that reload.
+
+The current Windows QA build repeats the controlled R105 test. Direct3D
+presents Game Over at scene 4230 and the reloaded R105 at scene 4322 with
+100 HP and zero renderer errors. The standard Windows executable also loads
+an R102 save through the original menus, presents 539 scene frames, and
+registers movement from ordinary keyboard input. The test save files retain
+their original bytes.
+
 Another actual-disc CPU replay restores the R100 checkpoint from Game Over and
 registers movement and a Square attack after the reload. An original controller
 recording reaches the AT10 area with Gene alive in a native CPU replay.
@@ -470,9 +478,15 @@ Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面
 独立的 Windows 标题读档实跑恢复了原版格式的测试档，并呈现 R100。受控实跑在标题交接处
 选入 R003，呈现 EV02 全部 28 个镜头，共 2,785 帧，随后沿原版房间切换进入 R105。
 Gene 战败后，按叉键在原版 Game Over 菜单中选择继续。Windows 呈现重载后的 R105，Gene
-恢复到 100 HP。单独的无画面原盘回放在这次重载后又完成 60 帧。另一轮无画面原盘回放恢复了
-R100 检查点，重载后接收移动和方块攻击。一轮原盘无画面回放通过录制的原版手柄输入走到 R100 的
-AT10 区域，Gene 仍然存活。
+恢复到 100 HP。单独的无画面原盘回放在这次重载后又完成 60 帧。
+
+当前 Windows 验证构建复跑了受控的 R105 流程。Direct3D 在第 4230 帧呈现 Game Over，
+并于第 4322 帧呈现重载后的 R105。Gene 恢复到 100 HP，渲染错误为零。标准 Windows
+程序还通过原版菜单加载了 R102 存档，呈现 539 帧，并响应普通键盘移动。测试存档文件
+保持原有字节。
+
+另一轮无画面原盘回放恢复了 R100 检查点，重载后接收移动和方块攻击。一轮原盘无画面回放
+通过录制的原版手柄输入走到 R100 的 AT10 区域，Gene 仍然存活。
 
 一轮独立集成测试从新游戏沿西区连续推进，在 R003 播完 EV02 全部 28 个镜头，于第 20,053 个
 tick 进入 R105。原生 CPU 回放与归档中的 16,007 条启动及游戏状态记录一致，随后停在 R105
