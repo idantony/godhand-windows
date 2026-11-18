@@ -46,6 +46,9 @@ int gh_effect_ambient_row_is_bound(gh_game_effects *,uint32_t index,gh_effect_vi
 /* Original 14FB48 explicit configuration for the 58:2D part15 attack. */
 gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call *,
  const gh_effect_create_request *,uint32_t scale);
+/* The R105 EM00 58:46 profile also requires its live room. */
+gh_effect_status gh_effect_create_actor_sequence_in_room_0014fb48(gh_effect_create_call *,
+ const gh_effect_create_request *,uint32_t scale,const gh_boot_work *);
 /* Original 14FB48 -> 306900, attached 58:02 with explicit part0
  * and otherwise identity configuration. */
 gh_effect_status gh_effect_create_player_stun_part4_00306900(gh_effect_create_call *,const gh_title_player_view *);

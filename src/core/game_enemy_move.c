@@ -1325,8 +1325,10 @@ static gh_actor_motion_status advance_sequence_effects_0014fb48(gh_enemy202_move
             const gh_effect_create_request request={.bank=entry[0],.index=entry[1],
                 .actor=(flags&1u)?actor:NULL,.mode=mode,.selector=-1};
             /* Original 14FB48 explicit part 0 takes 306900, with unit scale. */
+            const gh_boot_work *sequence_work=r105&&s->reaction_resource_offset==0x19c&&
+                flags==3u&&request.bank==0x58&&request.index==0x46&&!mode?work:NULL;
             status=explicit_root?gh_effect_create_enemy_death_part0_00306900(call,actor,mode):
-                gh_effect_create_actor_sequence_0014fb48(call,&request,word(p+0x114));
+                gh_effect_create_actor_sequence_in_room_0014fb48(call,&request,word(p+0x114),sequence_work);
             if(status)return stop(s,0x306528,GH_ACTOR_MOTION_UNSUPPORTED);
         }
         status=gh_game_effect_create_00306528(call,&bindings);

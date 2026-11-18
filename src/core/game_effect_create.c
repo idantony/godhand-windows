@@ -542,6 +542,10 @@ static int em00_attack_trail_actor(const gh_title_player_view *actor,unsigned in
 static int16_t wide_strike_effect_room(const gh_title_player_view *actor,unsigned index)
 {
  if(em00_attack_trail_actor(actor,index))return 0x100;
+ /* R105 stamp 0 uses the same dependency-0200 CORE58:46 attachment rows. */
+ if(index==0x46&&em00_family_attack_actor(actor)&&actor->size>0x1650&&
+    (w(actor->bytes+0x2fc)>>16)==0x202&&w(actor->bytes+0x564)==0x200&&
+    !(w(actor->bytes+0x640)&0xffffu)&&!actor->bytes[0x1650])return 0x105;
  if(index!=0x2b)return 0;
  if(stamp8_attack_actor(actor))return 0x100;
  if(r103_paired_kick_actor(actor)&&w(actor->bytes+0x564)==0x214)return 0x103;
@@ -921,8 +925,8 @@ static int r200_em1a_melee_row(const uint8_t *row,unsigned index)
     !row[0x128]&&row[0x133]==children[index]&&!row[0x136];
 }
 
-gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call *call,
- const gh_effect_create_request *request,uint32_t scale)
+gh_effect_status gh_effect_create_actor_sequence_in_room_0014fb48(gh_effect_create_call *call,
+ const gh_effect_create_request *request,uint32_t scale,const gh_boot_work *work)
 {
  if(!request||!request->actor||request->selector!=-1||!scale||
     (scale&0x80000000u)||(scale&0x7f800000u)==0x7f800000u)return GH_EFFECT_UNSUPPORTED;
@@ -980,8 +984,11 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
   if(!r104_charge_actor(actor)||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x1a||
      actor->bytes[0x2f6]!=4||actor->bytes[0x2f7])return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&(request->index==0x2b||request->index==0x46)&&!request->mode){
-  if(!wide_strike_effect_room(actor,request->index)||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x15)
+  const int16_t room=wide_strike_effect_room(actor,request->index);
+  if(!room||actor->bytes[0x2f4]||actor->bytes[0x2f5]!=0x15)
    return GH_EFFECT_UNSUPPORTED;
+  if(room==0x105&&(!work||work->room!=0x105||w(actor->bytes+0x2f4)!=0x00011500u||
+     scale!=0x3f851eb8u))return GH_EFFECT_UNSUPPORTED;
   if(request->index==0x46&&(w(actor->bytes+0x640)&0xffffu)==10&&
      (actor->bytes[0x2f6]!=1||actor->bytes[0x2f7]))return GH_EFFECT_UNSUPPORTED;
  }else if(request->bank==0x58&&r103_em0a_slide_rows(request->index)&&!request->mode){
@@ -1043,6 +1050,12 @@ gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call 
    call->configuration_nested_flags=0x80;
  }
  return status;
+}
+
+gh_effect_status gh_effect_create_actor_sequence_0014fb48(gh_effect_create_call *call,
+ const gh_effect_create_request *request,uint32_t scale)
+{
+ return gh_effect_create_actor_sequence_in_room_0014fb48(call,request,scale,NULL);
 }
 
 static gh_effect_status lookup_est(const gh_game_effects *owner,uint32_t bank,uint32_t index,
@@ -1369,6 +1382,8 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
   static const uint8_t children[]={0x12,0x20,0x12,0x20,0x1a,0x1a};
   const int16_t room=wide_strike_effect_room(c->request.actor,c->request.index);
   if(c->count!=6||!room||!b->work||b->work->room!=room)
+   return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
+  if(room==0x105&&(!b->model||b->model->work!=b->work||b->model->root.bytes!=c->request.actor->bytes))
    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<6;i++){
    const uint8_t *row=entry.bytes+16+i*0x2f0;

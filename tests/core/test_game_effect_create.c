@@ -1,4 +1,6 @@
 #include "game_effect_create.h"
+#include "game_enemy_factory.h"
+#include "game_enemy_model.h"
 #include "game_esp14.h"
 #include "game_esp_update.h"
 #include "game_effects_frame.h"
@@ -19,6 +21,81 @@ static uint8_t*load(gh_disc*d,const char*path,size_t*n){size_t i;gh_disc_entry e
 typedef struct {gh_actor_model model;gh_game_player_factory*factory;gh_heap*heap;gh_game_world_light*light;gh_player_shared_vector vector;gh_player_child_tail child_tail;gh_game_player_child*publication;gh_core_save_view save;uint8_t*elf;size_t elf_size;} context;
 static gh_player_init_status model_init(void*raw,gh_game_title_player*player,gh_boot_work*work,const gh_bundle_entry*md,const gh_bundle_entry*tm,uint32_t mode,int*original,uint32_t*frontier){context*c=raw;gh_actor_model_status e=gh_actor_model_initialize_00149738(&c->model,&player->view,work,c->factory->b.pools,md,tm,0,mode,GH_STATIC_BINARY32_REFERENCE,original);*frontier=c->model.frontier;return e?GH_PLAYER_INIT_UNSUPPORTED:GH_PLAYER_INIT_OK;}
 static gh_title_player_status child_init(void*raw,gh_game_player_child*child,int*original,uint32_t*frontier){context*c=raw;if(!child->model.bound)C(!gh_actor_model_bind_packet_inputs(&child->model,c->heap,c->light->scalar+4));gh_title_player_status e=gh_game_player_child_initialize_00100378(child,original);if(e==GH_PLAYER_UNSUPPORTED&&child->frontier==0x100420)e=gh_game_player_child_finish_00100420(&c->child_tail,child,&c->vector,&c->publication,c->save,c->elf,c->elf_size,GH_STATIC_BINARY32_REFERENCE,original);*frontier=e?(c->child_tail.frontier?c->child_tail.frontier:child->frontier):0;return e;}
+static void test_r105_em00_trail(gh_disc *disc, gh_heap *heap, const void *core, size_t core_size)
+{
+    size_t room_size, enemy_size;
+    uint8_t *room_data=load(disc,"st1/r105.dat",&room_size);
+    uint8_t *enemy_data=load(disc,"em/em00.dat",&enemy_size);
+    gh_bundle room;
+    gh_room_pools pools={0};
+    gh_boot_work work={.room=0x105};
+    gh_game_title_player enemy={0};
+    int original=0;
+    C(!gh_bundle_open(room_data,room_size,&room));
+    C(!gh_game_room_pools_initialize_002a5d80(&pools,&room,heap));
+    C(!gh_enemy202_allocate_003130e0(&enemy,heap,&work,&original)&&original);
+    const uint16_t kind=0x202;
+    memcpy(enemy.view.bytes+0x2fe,&kind,2);
+    put(enemy.view.bytes+0x564,0x200);
+    gh_object_view resource={.bytes=enemy_data,.kind=0x202,.size=enemy_size,
+        .file_extent=enemy_size,.file_extent_known=1};
+    uint32_t fog=0;
+    gh_enemy_model loaded={0};
+    C(!gh_enemy_model_initialize_00208268(&loaded,&enemy.view,&resource,&work,&pools,
+        heap,&fog,GH_STATIC_BINARY32_REFERENCE,&original)&&original&&loaded.model.parts_ready);
+    C(loaded.resource==enemy_data&&loaded.geometry.bytes==enemy_data+loaded.geometry.offset&&
+        loaded.geometry.size&&loaded.texture.bytes==enemy_data+loaded.texture.offset&&loaded.texture.size);
+    gh_actor_model *model=&loaded.model;
+    C(model->work==&work&&model->root.bytes==enemy.view.bytes&&model->part_count>25);
+    /* The original disk model is positioned in the observed constructor state. */
+    put(enemy.view.bytes+0x2f4,0x00011500u);
+    put(enemy.view.bytes+0x114,0x3f851eb8u);
+
+    uint8_t *esp=calloc(1,0x100180),*emit=calloc(1,0x26060);
+    gh_game_effects *effects=calloc(1,sizeof(*effects));
+    C(esp&&emit&&effects&&!gh_game_effects_initialize_00305a68(effects,esp,0x100180,
+        emit,0x26060,core,core_size,&room));
+    gh_effect_view est;
+    C(!gh_effect_est_at_00306030(effects,0x58,0x46,&est)&&w(est.bytes)==0x545345&&
+        w(est.bytes+4)==6&&est.size>=16+6*0x2f0);
+    gh_game_mt random;
+    gh_game_mt_seed_0030f2b0(&random,0x105);
+    gh_game_mt initial=random;
+    gh_effect_create_bindings bindings={.storage={.effects=effects,.esp=esp,.emitters=emit,
+        .esp_bytes=0x100180,.emitter_bytes=0x26060},.work=&work,.random=&random,.model=model};
+    gh_effect_create_request request={.bank=0x58,.index=0x46,.actor=&enemy.view,.mode=0,.selector=-1};
+    gh_effect_create_call call={0};
+    gh_boot_work other_room={.room=0x100};
+    gh_boot_work other_owner={.room=0x105};
+    C(gh_effect_create_actor_sequence_0014fb48(&call,&request,0x3f851eb8u)==GH_EFFECT_UNSUPPORTED);
+    C(gh_effect_create_actor_sequence_in_room_0014fb48(&call,&request,0x3f851eb8u,&other_room)==GH_EFFECT_UNSUPPORTED);
+    C(!call.active&&!w(emit+0x26000)&&!memcmp(&random,&initial,sizeof(random)));
+    C(!gh_effect_create_actor_sequence_in_room_0014fb48(&call,&request,0x3f851eb8u,&work));
+    bindings.work=&other_owner;
+    C(gh_game_effect_create_00306528(&call,&bindings)==GH_EFFECT_UNSUPPORTED&&call.frontier==0x3066d0);
+    C(!w(emit+0x26000)&&!memcmp(&random,&initial,sizeof(random)));
+
+    bindings.work=&work;
+    gh_effect_create_call valid={0};
+    C(!gh_effect_create_actor_sequence_in_room_0014fb48(&valid,&request,0x3f851eb8u,&work));
+    C(!gh_game_effect_create_00306528(&valid,&bindings)&&valid.complete&&valid.row==6&&
+        valid.original_return==1&&w(emit+0x26000)==0xfc000000u);
+    const uint8_t parts[]={25,24,21,20,24,21};
+    const uint8_t children[]={0x12,0x20,0x12,0x20,0x1a,0x1a};
+    for(unsigned i=0;i<6;++i){
+        gh_effect_emitter_view view;
+        const uint8_t *row=est.bytes+16+i*0x2f0;
+        C(!gh_effect_create_emitter_at(effects,i,&view)&&view.initialized&&view.record.bytes==row&&
+            view.actor->bytes==enemy.view.bytes&&view.model==model&&view.part==&model->parts[parts[i]]&&
+            row[0xbe]==parts[i]&&row[0x133]==children[i]);
+    }
+    gh_effect_create_forget_on_owner_destroy(effects);
+    C(!gh_enemy_model_release_prefix(&loaded)&&!gh_game_title_player_release(&enemy));
+    C(!gh_game_room_pools_release(&pools));
+    free(effects);free(emit);free(esp);free(enemy_data);free(room_data);
+    puts("PASS R105 EM00 CORE 58:46: six original EST rows, live model attachment, room and owner rejection");
+}
+
 static void test_om324_break(const void *core,size_t core_size,const gh_bundle *room,
  const void *elf,size_t elf_size)
 {
@@ -165,5 +242,6 @@ int main(int argc,char**argv){C(argc==3);context c={0};FILE*f=fopen(argv[2],"rb"
  gh_effect_create_request unknown={.bank=0,.index=1,.actor=&player.view,.mode=-1,.selector=-1};gh_effect_create_call pending={0};C(!gh_effect_create_begin(&pending,&unknown)&&gh_game_effect_create_00306528(&pending,&eb)==GH_EFFECT_UNSUPPORTED&&pending.frontier==0x304d70&&w(emit+0x26000)==0xfffffffe);effects->resources[0].tbl1=original_table;
  /* Native host destruction detaches only metadata, never fake kills slots. */
  test_om324_break(core,core_size,&bundle,c.elf,c.elf_size);
+ test_r105_em00_trail(d,c.heap,core,core_size);
  gh_effect_create_forget_on_owner_destroy(effects);C(!effects->native&&w(emit+0x26000)==0xfffffffe);free(effects);free(esp);free(emit);free(core);
  C(!gh_hitarea_shapes_abort(init,&frontier)&&!gh_game_object_pool_release_001fdfa8(init,&frontier)&&!gh_collision_solid_units_shutdown(&solids,&frontier));gh_game_player_child_attachment_clear(&attachment);c.publication=NULL;C(!gh_game_player_child_release_prefix(&child)&&!gh_actor_model_release(&c.model)&&!gh_game_player_factory_release_prefix(&factory)&&!gh_collision_pairs_release(&pairs)&&!gh_game_world_light_release_presets(light));free(light);gh_game_objects_destroy(objects);gh_game_objects_destroy(global);C(!gh_game_room_pools_release(&pools)&&!gh_heap_used(c.heap)&&!gh_heap_destroy(c.heap));free(hair);free(pl);free(room);free(init);free(c.elf);gh_disc_close(d);puts("PASS actualISO effects2E eleven realtype0 constructors/partbinds/virtualInit/RNG/occupancy/typedrelease; effect21 ten real Init incl boundedunattachedidentity/retry/cleanup; OM324 actual3-row bank0/1C world transform");return 0;}
