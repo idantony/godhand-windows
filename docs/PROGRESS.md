@@ -39,8 +39,8 @@ In a separate controlled scenario, the integrated runtime writes a new
 original-format card into an empty profile. A new Direct3D process opens
 that card, loads R102, and presents 36 frames during the walk check.
 
-The Windows launchers accept Unicode inputs. A native boot uses an ISO path
-with Chinese characters and an emoji. A graphics replay decodes the opening
+The standard Windows and Direct3D QA executables accept Unicode paths. A native
+boot uses an ISO path with Chinese characters and an emoji. A replay decodes the opening
 movie, reads a controller tape and writes its capture using similarly named
 paths. The R102 card also reopens from a Unicode profile path without changing
 the card bytes.
@@ -69,8 +69,9 @@ Windows 原生渲染路径统一选卡。同一集成版 QA 程序在 RTX 4080 S
 独立受控测试从空白存档目录写出原版格式存档。新启动的 Direct3D 进程读取该存档进入 R102，
 在行走验证中呈现 36 帧。
 
-Windows 启动支持 Unicode 路径。标准程序从包含中文和表情符号的路径读取 ISO。图形回放使用
-同类路径调用 FFmpeg、读取手柄记录并写出截图。R102 存档也从这样的路径成功读回，内容未变化。
+标准 Windows 程序和 Direct3D 验证程序支持 Unicode 路径。标准程序从包含中文和表情符号的路径
+读取 ISO。图形回放使用同类路径调用 FFmpeg、读取手柄记录并写出截图。R102 存档也从这样的路径
+成功读回，内容未变化。
 
 独立的静音 WinMM 测试将原版 ADX 音频送到实际 Windows 输出设备。设备消费了全部 4,800 帧，
 暂停、循环、定位、停止和流结束检查均通过。

@@ -1119,9 +1119,20 @@ static int run_native_application(int argc,char **argv)
     NativeApp app;gh_disc *disc=nullptr;int result=1;gh_host_error host_error=GH_HOST_OK;
     gh_frame_clock clock={};
     do {
-        if(gh_disc_open(iso,&disc)!=GH_DISC_OK)break;
-        app.elf.resize((size_t)gh_disc_boot_elf_size(disc));
-        if(app.elf.empty()||gh_disc_read_boot_elf(disc,0,app.elf.data(),app.elf.size())!=GH_DISC_OK)break;
+        const char *disc_operation="open the ISO";
+        gh_disc_error disc_error=gh_disc_open(iso,&disc);
+        if(disc_error==GH_DISC_OK){
+            disc_operation="read the ISO boot executable";
+            app.elf.resize((size_t)gh_disc_boot_elf_size(disc));
+            disc_error=app.elf.empty()?GH_DISC_FORMAT:
+                gh_disc_read_boot_elf(disc,0,app.elf.data(),app.elf.size());
+        }
+        if(disc_error!=GH_DISC_OK){
+            host_error=GH_HOST_DISC;
+            app.snapshot.subsystem_error=(int)disc_error;
+            std::fprintf(stderr,"Could not %s (disc error %u).\n",disc_operation,(unsigned)disc_error);
+            break;
+        }
         gh_disc_close(disc);disc=nullptr;
         gh_window_config window={};window.width=640;window.height=480;window.show=show;
         window.title="God Hand native source port";window.xinput_index=0;
