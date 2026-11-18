@@ -200,6 +200,12 @@ For behavior guarded by a compile definition, check the affected source's
 recorded compile command for the required flag, including on a cache hit.
 Before launching, use [check-windows-build-steps.py](scripts/check-windows-build-steps.py)
 with one `--require STEP=ARG` per exact argument needed by the replay.
+An asynchronous decoder can shift the first input or RNG checkpoint by a
+host update. Capture the reference poll schedule when exact replay needs it.
+Use a QA-only switch to schedule reads from the actual decoder. Require real
+decoded frame counts, decoder EOF and device audio completion in the result.
+Record the schedule hash and compare early typed checkpoints before running
+the long input tape. Also exercise the normal device-paced build.
 Keep the build report in the executable's scratch directory so each build
 preserves its own evidence. When verification and Windows builds use separate
 scratch directories, pass each directory explicitly to the release check.

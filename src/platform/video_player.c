@@ -6,8 +6,51 @@
 #include <string.h>
 #include "video_player.h"
 #include "winmm_trace.h"
+#if defined(GH_NATIVE_STARTUP_QA)
+enum { QA_MOVIE0_FRAMES = 90, QA_MOVIE0_MAX_POLL = 600 };
+typedef struct {
+    unsigned long due[QA_MOVIE0_FRAMES + 1];
+    unsigned long poll;
+    int enabled;
+} qa_movie_schedule;
+
+/* Each entry is the poll index for the next real frame, followed by real EOF. */
+static int qa_movie_schedule_load(qa_movie_schedule *schedule)
+{
+    const wchar_t *path = _wgetenv(L"GODHAND_QA_MOVIE0_POLL_SCHEDULE");
+    if (!path || !*path)
+        return 1;
+    FILE *file = _wfopen(path, L"r");
+    if (!file)
+        return 0;
+    int valid = 1;
+    for (unsigned i = 0; i <= QA_MOVIE0_FRAMES; ++i) {
+        char line[32], *end;
+        if (!fgets(line, sizeof(line), file) || line[0] < '0' || line[0] > '9') {
+            valid = 0;
+            break;
+        }
+        const unsigned long poll = strtoul(line, &end, 10);
+        if (strcmp(end, "\n") || poll > QA_MOVIE0_MAX_POLL ||
+            (i == 0 ? poll != 0 : poll <= schedule->due[i - 1])) {
+            valid = 0;
+            break;
+        }
+        schedule->due[i] = poll;
+    }
+    if (fgetc(file) != EOF || ferror(file))
+        valid = 0;
+    fclose(file);
+    schedule->enabled = valid;
+    return valid;
+}
+#endif
 typedef struct {HANDLE process,read;} stream;
-struct gh_video_player {stream video;HWAVEOUT audio;WAVEHDR header;unsigned char *pcm,*rgba;size_t pcm_bytes;uint64_t frames;LARGE_INTEGER start,frequency;DWORD owner;gh_video_present present;void*context;int prepared,started,eof,muted,trace_done;unsigned trace_stream;uint32_t exit_code;gh_video_error error;};
+struct gh_video_player {stream video;HWAVEOUT audio;WAVEHDR header;unsigned char *pcm,*rgba;size_t pcm_bytes;uint64_t frames;LARGE_INTEGER start,frequency;DWORD owner;gh_video_present present;void*context;int prepared,started,eof,muted,trace_done;unsigned trace_stream;uint32_t exit_code;gh_video_error error;
+#if defined(GH_NATIVE_STARTUP_QA)
+qa_movie_schedule qa_schedule;
+#endif
+};
 static wchar_t *wide(const char*s){int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s,-1,NULL,0);wchar_t*w;if(!n)return NULL;w=malloc((size_t)n*sizeof(*w));if(w&&!MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s,-1,w,n)){free(w);return NULL;}return w;}
 static int quote(wchar_t *out,size_t *used,const wchar_t *in){size_t i=0;if(*used+2>=32760)return 0;out[(*used)++]=L'"';while(in[i]){size_t slashes=0;while(in[i]==L'\\'){slashes++;i++;}if(in[i]==L'"'||!in[i])slashes*=2;if(*used+slashes+3>=32760)return 0;while(slashes--)out[(*used)++]=L'\\';if(in[i]==L'"')out[(*used)++]=L'\\';if(in[i])out[(*used)++]=in[i++];}out[(*used)++]=L'"';out[(*used)++]=L' ';out[*used]=0;return 1;}
 static gh_video_error launch(const char*exe,const char*input,int audio,stream*out){
@@ -46,6 +89,10 @@ fail:stop(&audio);free(input);gh_video_close(p);return error;
 gh_video_error gh_video_set_muted(gh_video_player*p,int muted){if(!p||GetCurrentThreadId()!=p->owner||p->started||(muted!=0&&muted!=1))return GH_VIDEO_ARGUMENT;p->muted=muted;return GH_VIDEO_OK;}
 gh_video_error gh_video_poll(gh_video_player*p,gh_video_status*out){
  LARGE_INTEGER now;uint64_t ns,due;size_t used=0;DWORD count=0;if(!p||!out||GetCurrentThreadId()!=p->owner)return GH_VIDEO_ARGUMENT;memset(out,0,sizeof(*out));if(p->error)return p->error;
+#if defined(GH_NATIVE_STARTUP_QA)
+ if(!p->started&&!qa_movie_schedule_load(&p->qa_schedule))
+     return p->error=GH_VIDEO_ARGUMENT;
+#endif
  if(!p->started){
   gh_winmm_pcm_metrics decoded={0};
   if(p->trace_stream)decoded=gh_winmm_pcm16_stereo_metrics(p->pcm,p->pcm_bytes/4);
@@ -57,8 +104,20 @@ gh_video_error gh_video_poll(gh_video_player*p,gh_video_status*out){
   p->started=1;
  }
  QueryPerformanceCounter(&now);ns=(uint64_t)(now.QuadPart-p->start.QuadPart)*1000000000/(uint64_t)p->frequency.QuadPart;due=p->frames*UINT64_C(1001000000000)/30000;
- if(!p->eof&&ns>=due){
+ int consume=ns>=due;
+#if defined(GH_NATIVE_STARTUP_QA)
+ if(p->qa_schedule.enabled&&!p->eof){
+     if(p->frames>QA_MOVIE0_FRAMES)
+         return p->error=GH_VIDEO_CODEC;
+     consume=p->qa_schedule.poll++==p->qa_schedule.due[p->frames];
+ }
+#endif
+ if(!p->eof&&consume){
   while(used<640*448*4){BOOL ok=ReadFile(p->video.read,p->rgba+used,(DWORD)(640*448*4-used),&count,NULL);if(!ok&&GetLastError()!=ERROR_BROKEN_PIPE)return p->error=GH_VIDEO_PROCESS;if(!count)break;used+=count;}
+#if defined(GH_NATIVE_STARTUP_QA)
+  if(p->qa_schedule.enabled&&((used==0)!=(p->frames==QA_MOVIE0_FRAMES)))
+      return p->error=GH_VIDEO_CODEC;
+#endif
   if(!used){DWORD code;if(WaitForSingleObject(p->video.process,10000)!=WAIT_OBJECT_0||!GetExitCodeProcess(p->video.process,&code))return p->error=GH_VIDEO_PROCESS;p->exit_code=code;if(code||!p->frames)return p->error=GH_VIDEO_CODEC;p->eof=1;}
   else{if(used!=640*448*4)return p->error=GH_VIDEO_CODEC;if(!p->present(p->context,p->rgba,used,640,448,due))return p->error=GH_VIDEO_PRESENT;p->frames++;}
  }

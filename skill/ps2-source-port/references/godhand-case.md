@@ -336,3 +336,15 @@ black overlay. The observed composite becomes nonblack at scene401 and is
 fully revealed at408. A pre-UI image alone would not establish the displayed
 result. QA capture ranges preserve the first output name and record later
 serials so one run can verify the whole transition.
+
+## Reproduce the Movie0 decode timing in QA
+
+`startup-cpu-qa` and `startup-qa` can take
+`GODHAND_QA_MOVIE0_POLL_SCHEDULE` as a child environment override. Point it
+to a text file with the 90 zero-based, strictly increasing frame-read poll
+indices followed by the real EOF-read poll. The first index is 0 and the
+last is at most 600. Use one decimal index per line with a final newline.
+Hash the schedule in the replay receipt and check `compile-video_player` for
+`-DGH_NATIVE_STARTUP_QA=1` in the matching build report before launch.
+Compare the typed startup trace and continue only if the captured prefix
+matches. The 90 RGBA frames and EOF still come from the actual codec.

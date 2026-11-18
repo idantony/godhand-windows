@@ -168,7 +168,7 @@ def main():
         name, source = module
         obj = build / (name + ".o")
         driver = c_driver(compiler)
-        if args.target in ("startup-qa", "startup-cpu-qa") and name in ("startup_host", "game_services"):
+        if args.target in ("startup-qa", "startup-cpu-qa") and name in ("startup_host", "game_services", "video_player"):
             driver += ["-DGH_NATIVE_STARTUP_QA=1"]
         compile_object("compile-" + name, driver + ["-c", source, "-o", obj], source, obj)
         return obj
