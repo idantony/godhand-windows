@@ -38,6 +38,27 @@
       "player_updates": 1224,
       "card_bytes_unchanged": true,
       "graphics_errors": 0
+    },
+    "production_keyboard_triangle_contact": {
+      "room": "R100",
+      "tick": 1900,
+      "initial_enemy_hp": 74,
+      "final_enemy_hp": 50,
+      "attributed_hits": 2,
+      "damage_per_hit": 12,
+      "frontier": "00000000"
+    },
+    "controlled_r102_card_round_trip": {
+      "created_original_format_card": true,
+      "reopened_in_separate_direct3d_process": true,
+      "scene_frames_presented_after_reopen": 36,
+      "card_bytes_preserved_after_read": true
+    },
+    "unicode_windows_launch_paths": {
+      "native_iso_boot_verified": true,
+      "ffmpeg_and_controller_tape_verified": true,
+      "qa_capture_path_verified": true,
+      "original_format_card_load_verified": true
     }
   },
   "private_west_r105_integration": {

@@ -2,15 +2,10 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "../src/platform/startup_host.h"
+#include "../src/platform/windows_utf8_argument.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
-static char *utf8(const wchar_t *s)
-{
-    int n=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,s,-1,0,0,0,0);char *out;
-    if(!n)return 0;out=malloc((size_t)n);if(!out)return 0;
-    if(!WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,s,-1,out,n,0,0)){free(out);return 0;}return out;
-}
 int wmain(int argc,wchar_t **argv)
 {
     char *iso,*profile=0,*codec=0;unsigned i;gh_startup_host *host;gh_startup_snapshot s;
@@ -21,15 +16,15 @@ int wmain(int argc,wchar_t **argv)
     for(int a=2;a<argc;++a){
         if(!wcscmp(argv[a],L"--continue"))continuation.enabled=1;
         else if(!wcscmp(argv[a],L"--muted"))continuation.muted=1;
-        else if(!wcscmp(argv[a],L"--profile") && a+1<argc){free(profile);profile=utf8(argv[++a]);if(!profile)return 1;}
-        else if(!wcscmp(argv[a],L"--ffmpeg") && a+1<argc){free(codec);codec=utf8(argv[++a]);if(!codec)return 1;}
+        else if(!wcscmp(argv[a],L"--profile") && a+1<argc){free(profile);profile=gh_windows_utf8_argument(argv[++a]);if(!profile)return 1;}
+        else if(!wcscmp(argv[a],L"--ffmpeg") && a+1<argc){free(codec);codec=gh_windows_utf8_argument(argv[++a]);if(!codec)return 1;}
         else {
             wchar_t *end;unsigned long long value=wcstoull(argv[a],&end,0);
             if(flags_set || !*argv[a] || *end || value>UINT32_MAX){free(profile);free(codec);return 1;}
             flags598=(uint32_t)value;flags_set=1;
         }
     }
-    iso=utf8(argv[1]);if(!iso){free(profile);free(codec);return 1;}
+    iso=gh_windows_utf8_argument(argv[1]);if(!iso){free(profile);free(codec);return 1;}
     e=profile?gh_startup_host_create_with_profile(iso,profile,1,flags598,64*1024*1024,&host):
         gh_startup_host_create(iso,1,flags598,64*1024*1024,&host);free(iso);free(profile);
     if(e) {fprintf(stderr,"startup host create error%d\n",e);return 1;}

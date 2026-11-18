@@ -186,7 +186,8 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
         cpp_objects = list(executor.map(compile_cpp, cpp_sources))
     graphics_libraries = [] if args.target == "startup-cpu-qa" else ["-ld3d11", "-ldxgi", "-ld3dcompiler", "-luser32"]
-    run("link", [compiler, "c++", "-std=c++17", *flags, *objects, *cpp_objects,
+    entrypoint_flags = ["-municode"] if args.target in ("native", "startup-qa") else []
+    run("link", [compiler, "c++", "-std=c++17", *flags, *entrypoint_flags, *objects, *cpp_objects,
                  "-L" + str(sdk), *graphics_libraries, "-lwinmm", "-o", exe])
     if source_hashes(PROJECT, initial) != initial:
         report["status"] = "failed-source-changed-during-build"

@@ -17,7 +17,8 @@ struct QAR100PadTape {
     bool enabled=false;
     uint64_t victory_scene=0;
 
-    bool load(const char *path)
+    template <class Path>
+    bool load(const Path &path)
     {
         std::ifstream input(path);
         std::string line;

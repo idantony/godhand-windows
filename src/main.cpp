@@ -19,10 +19,13 @@
 #include "platform/actor_world_queue.h"
 #include "platform/effect_postprocess_reference.h"
 #include "core/ui_order.h"
+#include "platform/windows_utf8_argument.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
+#include <memory>
 #include <vector>
 #include <string>
 #include <utility>
@@ -980,13 +983,13 @@ static std::string qa_capture_path(const char *base,unsigned captured,uint64_t s
 
 static bool qa_write_capture(const std::string &path,const std::vector<unsigned char> &pixels)
 {
-    FILE *file=std::fopen(path.c_str(),"wbx");
+    FILE *file=_wfopen(std::filesystem::u8path(path).c_str(),L"wbx");
     if(!file)return false;
     bool complete=std::fwrite(pixels.data(),1,pixels.size(),file)==pixels.size();
     return std::fclose(file)==0&&complete;
 }
 #endif
-int main(int argc,char **argv)
+static int run_native_application(int argc,char **argv)
 {
     const char *iso=nullptr,*profile=nullptr,*ffmpeg=nullptr;
     bool show=false,muted=false,prefix=false;uint64_t max_ticks=0;
@@ -1089,7 +1092,8 @@ int main(int argc,char **argv)
         std::fprintf(stderr,"Controlled R003 QA requires a standalone title handoff.\n");return 2;
     }
     if(qa_pad_tape_path&&(qa_r003||qa_retry.enabled||prefix||!qa_capture||
-                        qa_control.mode||qa_repeat_square.enabled||!qa_pad_tape.load(qa_pad_tape_path))){
+                        qa_control.mode||qa_repeat_square.enabled||
+                        !qa_pad_tape.load(std::filesystem::u8path(qa_pad_tape_path)))){
         std::fprintf(stderr,"Pad tape QA requires a valid tape and standalone New Game capture.\n");
         return 2;
     }
@@ -1540,4 +1544,20 @@ int main(int argc,char **argv)
     gh_static_world_queue_destroy(app.world_queue);gh_actor_world_queue_destroy(app.actor_queue);gh_model_renderer_destroy(app.world_renderer);
     gh_mc_renderer_destroy(app.renderer);gh_window_destroy(app.window);
     return result;
+}
+
+int wmain(int argc, wchar_t **argv)
+{
+    std::vector<std::unique_ptr<char, decltype(&std::free)>> arguments;
+    arguments.reserve(argc);
+    std::vector<char *> utf8_argv(static_cast<size_t>(argc) + 1, nullptr);
+    for (int index = 0; index < argc; ++index) {
+        arguments.emplace_back(gh_windows_utf8_argument(argv[index]), &std::free);
+        if (!arguments.back()) {
+            std::fprintf(stderr, "Cannot decode Windows command-line argument %d as UTF-8.\n", index);
+            return 2;
+        }
+        utf8_argv[index] = arguments.back().get();
+    }
+    return run_native_application(argc, utf8_argv.data());
 }

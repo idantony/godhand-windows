@@ -230,6 +230,12 @@ typedef struct {
 } gh_qa_enemy_status;
 gh_qa_enemy_status gh_startup_host_qa_enemy_status(const gh_startup_host *,uint32_t handle);
 gh_qa_enemy_status gh_startup_host_qa_nearest_em00(const gh_startup_host *,const float origin[3]);
+typedef struct {
+    float heat, threshold;
+    unsigned heat_active, roulette_stock;
+    int32_t key_cards;
+} gh_qa_r101_resources;
+int gh_startup_host_qa_r101_resources(const gh_startup_host *,gh_qa_r101_resources *);
 #endif
 /* Advances selected tasks, then the actual DVD queue in original relative
  * order. A tick is a scheduler visit, not a timed/video frame. Audio startup

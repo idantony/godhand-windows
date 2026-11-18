@@ -353,6 +353,9 @@ hardware available as a fallback. Set `GODHAND_D3D11_ADAPTER_INDEX` to a DXGI
 adapter index to select it explicitly. The startup log records the selected
 vendor, device and LUID.
 
+The native Windows command accepts Unicode paths for the ISO, profile and
+FFmpeg.
+
 ```powershell
 python -B .\tools\build-windows.py --target native
 & '.\.work\build\windows-native\godhand-windows.exe' `
@@ -364,8 +367,9 @@ The native profile directory represents card slot0. A missing directory takes
 the original no-card path. Startup reads the original per-save header files
 and validates their version. Title Load restores the verified R100 test profile.
 In-game save creation and the full progression remain under development.
-Keyboard defaults are Z=Cross, X=Circle, arrows, Enter=Start and
-Escape=Triangle; original ELF tables determine logical confirm/cancel.
+Use WASD for movement and the arrow keys for the D-pad. Z maps to Cross,
+X to Circle, C to Square, Escape to Triangle and Enter to Start. The original
+ELF tables determine logical confirm and cancel.
 The window stays hidden unless `--show` is supplied. `--muted` silences only
 this program's output while retaining actual device processing/completion.
 
@@ -640,11 +644,12 @@ Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音
 窗口、模型与 UI 渲染器在同一个进程中使用同一块显卡。默认优先选支持 D3D11 功能级别 11.0
 的 NVIDIA 显卡，也可回退至满足要求的其他显卡。设置 `GODHAND_D3D11_ADAPTER_INDEX` 可以按
 DXGI 索引显式选卡。启动日志会记录厂商、设备编号和 LUID。
+标准 Windows 程序接受含中文等 Unicode 字符的 ISO、存档和 FFmpeg 路径。
 
 窗口默认隐藏，`--show` 才显示；`--muted` 仅静音本程序，不改系统音量。原生存档
 目录不存在时走原版无卡分支。标题读档已验证恢复 R100 测试档。游戏内存档和完整流程仍在开发。
-默认键位为 Z=Cross、X=Circle、
-方向键、Enter=Start、Escape=Triangle；确认/取消仍由原版 ELF 映射表决定。
+WASD 移动，方向键对应十字键。Z 对应叉键，X 对应圆圈，C 对应方块，Esc 对应三角，
+Enter 对应 Start。确认和取消由原版 ELF 映射表决定。
 
 当前以退出码 **4** 报告下一个尚未接通的原始调用，并非游戏完成。独立 `startup-qa` 目标才
 包含合成输入选项 `--qa-confirm` 和 `--qa-new-game`；生产目标没有该选项。真实图形、音频或视频消费失败

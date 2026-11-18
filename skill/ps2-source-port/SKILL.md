@@ -196,6 +196,11 @@ posts focus and key messages only to the hidden window of the owned child.
 Use live menu or gameplay readiness when startup timing varies. Preserve the
 event timeline and evidence of the resulting original state or rendered frame.
 
+On Windows, keep command-line arguments Unicode until the native boundary
+converts them to the encoding used by the platform APIs. Verify the actual
+disc, profile, codec and QA file paths using filenames outside the machine's
+ANSI code page.
+
 For a native Windows crash, resolve the failing module and relative address
 against the executable's matching PDB before editing. Pass the executable and
 the Application Error event's fault offset to

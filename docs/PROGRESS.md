@@ -25,10 +25,25 @@ run accounts for 0.05 units. C triggers the mapped Square attack and 18 attack
 samples are observed. The test reaches tick 1,930 with 225 player updates.
 Enemy HP stays at 74 for both enemies.
 
+A follow-up on the standard executable approaches the first enemy and starts
+the original Triangle attack with a single Escape key press. Two contacts
+attributed to the player deal 12 damage each, dropping the enemy's HP from
+74 to 50. The run reaches tick 1,900 in R100 with no unfinished entry.
+
 A separate visible standard-executable run reads the R102 card via the title
 menu and confirms Continue on the map. Pressing W in R102 moves the player in
 the captured client window. It reaches tick 3,000 with 2,223 scene presents and
 no graphics errors. The original card and isolated copy have matching bytes.
+
+In a separate controlled scenario, the integrated runtime writes a new
+original-format card into an empty profile. A new Direct3D process opens
+that card, loads R102, and presents 36 frames during the walk check.
+
+The Windows launchers accept Unicode inputs. A native boot uses an ISO path
+with Chinese characters and an emoji. A graphics replay decodes the opening
+movie, reads a controller tape and writes its capture using similarly named
+paths. The R102 card also reopens from a Unicode profile path without changing
+the card bytes.
 
 A separate muted WinMM test submitted original ADX audio to a real Windows
 output device. The device consumed all 4,800 frames. The test also exercised
@@ -45,8 +60,17 @@ Windows 原生渲染路径统一选卡。同一集成版 QA 程序在 RTX 4080 S
 个世界单位，无操作对照同期移动 0.05。按 C 触发原版方块攻击，采到 18 个攻击状态样本。测试跑到
 第 1,930 个 tick，完成 225 次角色更新，两名敌人的 HP 均保持 74。
 
+随后用标准程序接近第一名敌人，按一次 Esc 触发原版三角攻击。两次归属于玩家的命中各造成
+12 点伤害，敌人 HP 从 74 降到 50。回放在 R100 运行到第 1,900 个 tick，无未实现入口。
+
 另一轮标准程序在实际窗口通过标题读档，确认地图中的 Continue 后进入 R102。按 W 后窗口画面
 显示角色前移。测试到第 3,000 个 tick，呈现 2,223 帧，图形错误为零。原档与隔离副本内容一致。
+
+独立受控测试从空白存档目录写出原版格式存档。新启动的 Direct3D 进程读取该存档进入 R102，
+在行走验证中呈现 36 帧。
+
+Windows 启动支持 Unicode 路径。标准程序从包含中文和表情符号的路径读取 ISO。图形回放使用
+同类路径调用 FFmpeg、读取手柄记录并写出截图。R102 存档也从这样的路径成功读回，内容未变化。
 
 独立的静音 WinMM 测试将原版 ADX 音频送到实际 Windows 输出设备。设备消费了全部 4,800 帧，
 暂停、循环、定位、停止和流结束检查均通过。
