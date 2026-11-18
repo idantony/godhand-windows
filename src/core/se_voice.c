@@ -415,6 +415,18 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
  const uint8_t *p,const uint8_t *sample)
 {
  const int16_t request=v->requested_program;
+ if(bank==1&&v->requested_bank==1&&request==0x0c&&(program==0x0c||program==0x0d)&&
+    v->part_index==-1&&heavy_recoil_voice_source(v)&&v->model->work->room==0x200){
+  const uint8_t *actor=v->model->root.bytes;
+  if(w(actor+0x564)!=0x21a||h(actor+0x640))return 0;
+  const unsigned alternate=program==0x0d;
+  return w(p)==((uint32_t)program<<16|1u)&&w(p+4)==0x012e000au+alternate&&w(p+8)==0x255u&&
+      w(p+12)==0x00200000u&&w(p+16)==(alternate?0x007d007du:0x00780078u)&&w(p+20)==0x005a0040u&&
+      w(p+24)==0x0064ff9cu&&w(p+28)==0x00020000u&&w(p+32)==(alternate?0x00010045u:0x00010145u)&&
+      w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
+      (!sample||(w(sample)==(alternate?0xd9b0u:0xb590u)&&w(sample+4)==11025&&
+        w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
+ }
  if(bank==1&&v->requested_bank==1&&request==0x28&&(program==0x28||program==0x29)&&
     v->source_owner&&v->part_index==-1&&v->model&&v->model->work&&v->model->work->room==0x104&&
     v->model->root.bytes&&v->model->root.size>=0x300&&
@@ -1948,6 +1960,19 @@ static int heavy_recoil_voice_source(const struct voice *v)
  const uint8_t *boss=r103_boss_voice_actor(v);
  const uint8_t *em03=r104_em03_voice_actor(v);
  if(em03&&v->model->root.size>=0x17b8&&w(em03+0x17b4)==80)boss=em03;
+ const gh_actor_model *model=v->model;
+ if(v->source_owner&&model&&model->work&&model->work->room==0x200&&model->root.bytes&&
+    model->root.size>=0x17b8&&model->root.original_vtable214==0x4479c8){
+  const uint8_t *p=model->root.bytes;
+  if(h(p+0x2fe)==0x201&&!h(p+0x640)&&w(p+0x564)==0x21a&&
+     !p[0x1650]&&!h(p+0x54a)&&w(p+0x17b4)==80){
+   /* Same-frame wall contact can advance the already queued EM1A recoil PCM. */
+   if(v->requested_bank==1&&v->requested_program==0x0c&&
+      h(p+0x2f4)==0x0401&&p[0x2f6]==2&&p[0x2f7]<=1)
+    return v->part_index==-1&&(w(p+0x16d0)&0x1000u);
+   boss=p;
+  }
+ }
  /* The original voice allocation is queued at phase 0. Deferred PCM setup
   * can see phase 1 after this same frame advances the recoil motion. */
  return boss&&h(boss+0x2f4)==0x0301&&boss[0x2f6]<=1&&!boss[0x2f7]&&
@@ -2118,7 +2143,14 @@ static int core_knockdown_profile(const struct voice *v,int16_t bank,int16_t pro
   const unsigned state=h(root->bytes+0x2f4);
   const int boss_knockdown=r103_boss_voice_actor(v)&&!h(root->bytes+0x54a)&&
       (state==0x0701||(state==0x0102&&root->bytes[0x2f6]==1));
-  if(!arena_counter&&!arena_knockdown&&!boss_knockdown&&h(root->bytes+0x2fe)!=0x202)return 0;
+  /* The EM1A wall fall selects CORE B4 in the authored 2519E0/251A40 tail. */
+  const uint8_t *actor=root->bytes;
+  const int r200_wall_death=v->model->work&&v->model->work->room==0x200&&
+      root->size>=0x17b8&&h(actor+0x2fe)==0x201&&w(actor+0x564)==0x21a&&
+      !h(actor+0x640)&&!actor[0x1650]&&!h(actor+0x54a)&&w(actor+0x17b4)==80&&
+      state==0x0401&&actor[0x2f6]==5&&actor[0x2f7]<=1;
+  if(!arena_counter&&!arena_knockdown&&!boss_knockdown&&!r200_wall_death&&
+      h(actor+0x2fe)!=0x202)return 0;
   const uint32_t dep=w(root->bytes+0x564);
   const unsigned stamp=h(root->bytes+0x640);
   const int stamp8_death=dep==0x200&&stamp==8&&v->model->work&&v->model->work->room==0x100&&
@@ -2139,7 +2171,7 @@ static int core_knockdown_profile(const struct voice *v,int16_t bank,int16_t pro
   const int north_death=dep==0x203&&stamp==11&&v->model->work&&v->model->work->room==0x100&&
       root->size>=0x16c8&&root->bytes[0x1650]==5&&w(root->bytes+0x16c4)==6&&
       state==0x0701&&root->bytes[0x2f6]==1&&!root->bytes[0x2f7]&&!h(root->bytes+0x54a);
-  if(!arena_counter&&!arena_knockdown&&!boss_knockdown&&!((dep==0x203&&stamp==19)||(dep==0x200&&stamp==20)||
+  if(!arena_counter&&!arena_knockdown&&!boss_knockdown&&!r200_wall_death&&!((dep==0x203&&stamp==19)||(dep==0x200&&stamp==20)||
        r100_em0a_formation_source(v)||stamp8_death||at3_death||north_death||gate_blowaway||gate_em03||east_counter))return 0;
  }else if(!v->combat_profile)return 0;
  if(w(p+4)!=0x0420006cu||w(p+8)!=0x25a||w(p+12)!=0x00200000u||
@@ -3307,7 +3339,13 @@ static int core_grab_sequence(const struct voice *v)
  const uint8_t *boss=r103_boss_voice_actor(v);
  const int wall_recoil=v->source_owner&&v->part_index==-1&&boss&&
     h(boss+0x2f4)==0x0401&&boss[0x2f6]==3&&!boss[0x2f7];
- return (em00_counter_voice_model(v)||paired_grab_player_voice_model(v)||wall_recoil)&&
+ const gh_actor_model *model=v->model;
+ const uint8_t *p_actor=model?model->root.bytes:NULL;
+ const int r200_wall=v->source_owner&&v->part_index==-1&&model&&model->work&&model->work->room==0x200&&
+    p_actor&&model->root.size>=0x17b8&&model->root.original_vtable214==0x4479c8&&
+    h(p_actor+0x2fe)==0x201&&w(p_actor+0x564)==0x21a&&!h(p_actor+0x640)&&!p_actor[0x1650]&&
+    w(p_actor+0x17b4)==80&&h(p_actor+0x2f4)==0x0401&&p_actor[0x2f6]==3&&p_actor[0x2f7]<=1;
+ return (em00_counter_voice_model(v)||paired_grab_player_voice_model(v)||wall_recoil||r200_wall)&&
     !v->requested_bank&&v->requested_program==7&&
     !v->info.bank&&v->info.program==7&& w(p)==0x00070000u&&
     w(p+4)==0x01310000u&&w(p+8)==0x270u&&w(p+12)==0x00220000u&&

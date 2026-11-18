@@ -124,6 +124,14 @@ gh_effect_status gh_effect_create_enemy_death_part0_00306900(gh_effect_create_ca
 
 static int r104_charge_actor(const gh_title_player_view *actor);
 
+static int r200_shockwave_actor(const gh_title_player_view *actor)
+{
+ if(!actor||!actor->bytes||actor->size<0x17b8||actor->original_vtable214!=0x4479c8)return 0;
+ const uint8_t *p=actor->bytes;
+ return (w(p+0x2fc)>>16)==0x201&&w(p+0x564)==0x21a&&
+    !(w(p+0x640)&0xffffu)&&!p[0x1650]&&w(p+0x17b4)==80;
+}
+
 gh_effect_status gh_effect_create_enemy_knockdown_002a8608(gh_effect_create_call *c,
  const gh_title_player_view *actor,uint32_t index)
 {
@@ -135,7 +143,7 @@ gh_effect_status gh_effect_create_enemy_knockdown_002a8608(gh_effect_create_call
       actor->bytes[0x1650]==15&&(w(actor->bytes+0x2fc)>>16)==0x204&&
       w(actor->bytes+0x564)>=0x214&&w(actor->bytes+0x564)<=0x215;
   const int em03=r104_charge_actor(actor)&&actor->size>=0x17b8&&w(actor->bytes+0x17b4)==80;
-  if((!arena&&!em03)||(w(actor->bytes+0x2f4)&0xffffu)!=0x0301)return GH_EFFECT_UNSUPPORTED;
+  if((!arena&&!em03&&!r200_shockwave_actor(actor))||(w(actor->bytes+0x2f4)&0xffffu)!=0x0301)return GH_EFFECT_UNSUPPORTED;
  }
  /* 2A86A0 loads the same actor mirror bit for all of these effect IDs. */
  const int mirrored=(actor->bytes[0x434]&2)!=0;
@@ -1731,7 +1739,8 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
   c->config_flags=c->configuration_nested_flags;
   if(c->request.index==4||c->request.index==8){
    const int dust=c->request.index==4;
-   if((b->work->room!=0x103&&!(b->work->room==0x104&&r104_charge_actor(c->request.actor)))||
+   const int r200=b->work->room==0x200&&r200_shockwave_actor(c->request.actor);
+   if((b->work->room!=0x103&&!(b->work->room==0x104&&r104_charge_actor(c->request.actor))&&!r200)||
       c->count!=(dust?1u:2u))return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
    for(unsigned i=0;i<c->count;++i){
     const uint8_t *row=entry.bytes+16+i*0x2f0;
@@ -2417,8 +2426,9 @@ int gh_effect_knockdown_emitter_is_bound(const gh_effect_emitter_view *v)
  /* R104's 253DE8 uses the same attached rows as the arena boss.
   * Keep the original EM03 owner across the normal and mirrored entries. */
  const int r104_boss=v->model->work&&v->model->work->room==0x104&&r104_charge_actor(v->actor);
- if(recoil&&!arena_boss&&!r104_boss)return 0;
- if(!arena&&!arena_boss&&!r104_boss&&(kind!=0x202||
+ const int r200_recoil=recoil&&v->model->work&&v->model->work->room==0x200&&r200_shockwave_actor(v->actor);
+ if(recoil&&!arena_boss&&!r104_boss&&!r200_recoil)return 0;
+ if(!arena&&!arena_boss&&!r104_boss&&!r200_recoil&&(kind!=0x202||
     !((stamp==19&&dependency==0x203)||(stamp==20&&dependency==0x200)||
       (program==0x002f0058u&&v->model->work&&v->model->work->room==0x100&&
        stamp8_attack_actor(v->actor))||r100_west_death_owner(v->actor,v->model->work))))return 0;
