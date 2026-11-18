@@ -17,8 +17,9 @@ before choosing inputs or tools. For a new game, establish its own baseline and
 independent resume; do not start from the God Hand resume. Current instructions
 and scope (including a read-only request) override recorded historical authority.
 
-For the active God Hand project, read [references/resume.md](references/resume.md)
-for paths, authorization and current reports, then
+For the active God Hand project, start with the newest checkpoint section in
+[references/resume.md](references/resume.md). Search its headings or named
+artifacts for relevant older results. Use
 [references/godhand-case.md](references/godhand-case.md) for validated exceptions.
 Other games inherit neither its paths/counts/numerical assumptions nor public
 publishing permission. Read each project's instructions before modifications.
