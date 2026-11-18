@@ -7,7 +7,9 @@ import argparse
 import datetime
 import importlib.util
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+import re
+import stat
 import subprocess
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -280,7 +282,16 @@ def run(prepared, *, expected_tick_limit=None, wall_timeout=None):
     if pad_tape:
         proof.require(receipt["pad_tape_sha256_before"] == receipt["pad_tape_sha256_after"],
                       "pad tape changed during execution")
+    return validate_run(prepared, receipt, capture, expected_tick_limit=expected_tick_limit)
+
+
+def validate_run(prepared, receipt, capture, *, expected_tick_limit=None):
+    scratch = prepared["scratch"]
+    game_over_retry = prepared.get("game_over_retry", False)
+    pad_tape = prepared.get("pad_tape")
+    after_victory_frames = prepared.get("after_victory_frames")
     qa = json.loads((scratch / "startup-newgame.json").read_text(encoding="utf-8-sig"))
+    proof.require(isinstance(qa, dict), "invalid QA terminal JSON")
     proof.require(qa.get("hidden") is True and qa.get("muted") is True and qa.get("synthetic_input") is True
                   and qa.get("prefix_mode") is False, "QA did not confirm expected execution flags")
     control = prepared.get("control_probe")
@@ -317,6 +328,7 @@ def run(prepared, *, expected_tick_limit=None, wall_timeout=None):
             status_lines = [line[len(marker):] for line in stream if line.startswith(marker)]
         proof.require(len(status_lines) == 1, "missing or duplicate repeated attack status")
         status = json.loads(status_lines[0])
+        proof.require(isinstance(status, dict), "invalid repeated attack status")
         defeat_scene = status.get("defeat_scene")
         proof.require(type(defeat_scene) is int and defeat_scene >= 0
                       and (game_over_retry or continue_after_pair or bool(defeat_scene) == (receipt["exit_code"] == 0)),
@@ -337,7 +349,8 @@ def run(prepared, *, expected_tick_limit=None, wall_timeout=None):
             exit_status = json.loads(exit_lines[0])
             fields = ("door_tick", "continue_scene", "state5_tick", "room3_scene",
                       "door_presses", "continue_presses", "route_index", "battle_gate_waiting")
-            proof.require(all(type(exit_status.get(k)) is int and exit_status[k] >= 0 for k in fields),
+            proof.require(isinstance(exit_status, dict) and
+                          all(type(exit_status.get(k)) is int and exit_status[k] >= 0 for k in fields),
                           "invalid R100 exit status")
             door, menu, state5, room3 = (exit_status[k] for k in fields[:4])
             proof.require((not door or (defeat_scene and exit_status["door_presses"])) and
@@ -351,9 +364,93 @@ def run(prepared, *, expected_tick_limit=None, wall_timeout=None):
     return summary
 
 
+def verify_archive(scratch, receipt_sha256):
+    """Verify a successful Retry or pad replay using only contained evidence."""
+    def is_sha256(value):
+        return isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{64}", value) is not None
+
+    def contained_file(name):
+        path = scratch / name
+        info = path.lstat()
+        proof.require(stat.S_ISREG(info.st_mode) and
+                      not (getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT),
+                      "archive evidence must be a contained regular file: " + name)
+        return path
+
+    proof.require(is_sha256(receipt_sha256), "invalid pinned process receipt SHA256")
+    scratch = Path(scratch).resolve()
+    proof.require(proof.under(scratch, proof.SCRATCH_ROOT), "scratch must be below the active work root")
+    receipt_path = contained_file("startup-process.json")
+    proof.require(proof.digest(receipt_path) == receipt_sha256.lower(), "process receipt SHA256 mismatch")
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8-sig"))
+    proof.require(isinstance(receipt, dict) and "launch_error" not in receipt and
+                  receipt.get("wait_outcome", "exited") == "exited" and
+                  type(receipt.get("exit_code")) is int and receipt["exit_code"] == 0,
+                  "archive requires a successful completed QA process")
+    executable_sha256 = receipt.get("executable_sha256_before")
+    proof.require(is_sha256(executable_sha256) and executable_sha256 == receipt.get("executable_sha256_after"),
+                  "invalid or changed archived executable fingerprint")
+    command = receipt.get("command")
+    proof.require(isinstance(command, list) and command and all(isinstance(arg, str) for arg in command),
+                  "invalid archived command")
+    retry_count = command.count("--qa-game-over-retry")
+    pad_count = command.count("--qa-pad-tape")
+    proof.require(retry_count + pad_count == 1, "archive requires exactly one supported Retry or pad-tape mode")
+    retry, pad = bool(retry_count), bool(pad_count)
+
+    def option(flag):
+        proof.require(command.count(flag) == 1 and command.index(flag) + 1 < len(command),
+                      "invalid archived option " + flag)
+        value = command[command.index(flag) + 1]
+        proof.require(bool(value) and not value.startswith("--"), "missing archived argument for " + flag)
+        return value
+
+    # Archived executable, ISO, profile, tape and build paths are metadata only.
+    capture = scratch / "first-scene-candidate.rgba"
+    proof.require(PureWindowsPath(option("--qa-capture")).name == capture.name,
+                  "unexpected archived capture name")
+    required = {"startup-newgame.json", "startup-newgame.stderr.log"}
+    control = option("--qa-control") if "--qa-control" in command else None
+    proof.require(control is None or (retry and control in CONTROL_PROBES), "invalid archived control probe")
+    after_victory = None
+    if retry:
+        required.update(capture.with_suffix(suffix).name for suffix in (".game-over.rgba", ".retry.rgba"))
+    if pad:
+        option("--qa-pad-tape")
+        pad_sha256 = receipt.get("pad_tape_sha256_before")
+        proof.require(is_sha256(pad_sha256) and pad_sha256 == receipt.get("pad_tape_sha256_after"),
+                      "invalid or changed archived pad tape fingerprint")
+        required.update(capture.name + suffix for suffix in (".battle-won.rgba", ".battle-won.rgba.world.rgba"))
+        if "--qa-after-victory-frames" in command:
+            count = option("--qa-after-victory-frames")
+            proof.require(re.fullmatch(r"[1-9][0-9]{0,5}", count) is not None,
+                          "invalid archived post-victory frame count")
+            after_victory = int(count)
+            required.update(capture.name + suffix for suffix in (".post-victory.rgba", ".post-victory.rgba.world.rgba"))
+
+    outputs = receipt.get("outputs_sha256")
+    proof.require(isinstance(outputs, dict) and required <= outputs.keys(), "archive is missing required output fingerprints")
+    optional = {capture.name, capture.name + ".world.rgba"}
+    for name, digest in outputs.items():
+        proof.require((name in required or name in optional or
+                      re.fullmatch(r"first-scene-candidate\.scene-[0-9]+\.rgba(?:\.world\.rgba)?", name)) and is_sha256(digest),
+                      "invalid archived output name or fingerprint")
+        proof.require(proof.digest(contained_file(name)) == digest.lower(), "archived output SHA256 mismatch: " + name)
+
+    summary = validate_run({"scratch": scratch, "command": command, "game_over_retry": retry,
+                            "r003_controlled": "--qa-r003-controlled" in command,
+                            "control_probe": control, "pad_tape": pad, "after_victory_frames": after_victory},
+                           receipt, capture)
+    proof.require(type(summary["ticks"]) is int and summary["ticks"] > 0 and
+                  summary["frontier"] == "00000000", "invalid successful archive terminal observation")
+    return dict(summary, archive_verified=True, receipt_sha256=receipt_sha256.lower())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--snapshot", type=Path, required=True)
+    parser.add_argument("--snapshot", type=Path)
+    parser.add_argument("--verify-archive", metavar="SHA256",
+                        help="verify a pinned successful Retry or pad-tape receipt under scratch without launching")
     parser.add_argument("--scratch", type=Path, required=True)
     parser.add_argument("--build-scratch", type=Path, help="reuse the exact build in this workspace cohort")
     parser.add_argument("--iso", type=Path)
@@ -379,6 +476,11 @@ def main():
                         help="keep replaying R100 for this many presented frames after both opening enemies die")
     args = parser.parse_args()
     try:
+        if args.verify_archive is not None:
+            print(json.dumps(verify_archive(args.scratch, args.verify_archive)), flush=True)
+            return
+        if args.snapshot is None:
+            parser.error("--snapshot is required when launching a replay")
         prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame,
                            args.capture_count, args.control_probe, args.title_load, args.build_scratch, args.r003_controlled,
                            args.game_over_retry, args.pad_tape, args.level_confirm_tick, args.after_victory_frames,

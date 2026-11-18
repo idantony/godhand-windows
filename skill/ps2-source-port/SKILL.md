@@ -200,6 +200,9 @@ reports, and a match to the frozen snapshot receipt. Fail when a selected
 report is missing. Explicitly selected extra files must keep any digest
 already recorded in a build report.
 Record the process exit code even when it produces no replay report.
+When available, use `run-startup-qa.py --scratch RUN --verify-archive SHA256`
+to recheck a completed Retry or recorded-pad victory. Use the pinned
+`startup-process.json` digest. This mode reads the local logs and captures.
 When the Windows QA launcher offers `--trace-native-input`, enable it to
 pin the last observed input and resulting tick on a long run. An optional
 `--wall-timeout` keeps partial logs and capture hashes in the process receipt.

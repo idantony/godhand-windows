@@ -85,6 +85,80 @@ class StartupRunnerTests(unittest.TestCase):
             tool.game_over_observations(log.replace("retry scene=120", "retry scene=119") +
                                         json.dumps(status), capture, 0)
 
+    def write_archive(self, status, capture_names, mode, observations):
+        stdout = self.scratch / "startup-newgame.json"
+        stderr = self.scratch / "startup-newgame.stderr.log"
+        self.write(stdout, dict(exit_code=0, hidden=True, muted=True, prefix_mode=False,
+                                synthetic_input=True, ticks=142, frontier="00000000",
+                                room=status, game_state=4, scene_frames_presented=121,
+                                renderer_error=0, world_gpu_error=0, window_error=0))
+        stderr.write_text(observations, encoding="utf-8")
+        paths = [stdout, stderr]
+        for name in capture_names:
+            path = self.scratch / name
+            path.write_bytes(bytes(512 * 448 * 4))
+            paths.append(path)
+        return dict(exit_code=0, executable_sha256_before="1" * 64,
+                    executable_sha256_after="1" * 64,
+                    command=["Z:/missing/archive.exe", "--qa-capture",
+                             "Z:/missing/first-scene-candidate.rgba", *mode],
+                    outputs_sha256={path.name: tool.proof.digest(path) for path in paths})
+
+    def test_verify_archive_reuses_retry_validation_and_rejects_bad_receipts(self):
+        observations = ("QA_GAME_OVER_CAPTURE menu scene=90 room=0105\n"
+                        "QA_GAME_OVER_CAPTURE retry scene=120 room=0105\n"
+                        "QA_GAME_OVER_STATUS " + json.dumps(dict(room=261, menu_scene=90, menu_epoch=2,
+                            press_tick=100, confirm_edge=1, continue_tick=101, continues_before=0,
+                            continues_after=1, handoff_tick=130, first_reloaded_scene=110,
+                            reloaded_scene=120, reloaded_epoch=3, player_hp=100)))
+        names = ("first-scene-candidate.game-over.rgba", "first-scene-candidate.retry.rgba")
+        receipt = self.write_archive("0105", names, ["--qa-game-over-retry"], observations)
+        path = self.scratch / "startup-process.json"
+        self.write(path, receipt)
+        digest = tool.proof.digest(path)
+        with patch.object(tool.subprocess, "run") as launch:
+            summary = tool.verify_archive(self.scratch, digest)
+            launch.assert_not_called()
+        self.assertEqual(summary["game_over_retry"]["player_hp"], 100)
+        with self.assertRaisesRegex(tool.proof.ProofError, "receipt SHA256 mismatch"):
+            tool.verify_archive(self.scratch, "0" * 64)
+
+        for changed, error in [
+            (dict(receipt, wait_outcome="timed_out"), "successful completed"),
+            (dict(receipt, outputs_sha256={}), "missing required"),
+            (dict(receipt, outputs_sha256=dict(receipt["outputs_sha256"], **{"../outside.rgba": "0" * 64})),
+             "invalid archived output"),
+        ]:
+            with self.subTest(error=error):
+                self.write(path, changed)
+                with self.assertRaisesRegex(tool.proof.ProofError, error):
+                    tool.verify_archive(self.scratch, tool.proof.digest(path))
+
+        capture = self.scratch / names[1]
+        self.write(path, receipt)
+        capture.write_bytes(b"tampered")
+        with self.assertRaisesRegex(tool.proof.ProofError, "output SHA256 mismatch"):
+            tool.verify_archive(self.scratch, tool.proof.digest(path))
+
+    def test_verify_archive_reuses_pad_tape_victory_validation(self):
+        names = ("first-scene-candidate.rgba.battle-won.rgba",
+                 "first-scene-candidate.rgba.battle-won.rgba.world.rgba")
+        observation = "QA_R100_PAD_TAPE " + json.dumps(dict(sampled_moves=100, victory_scene=120,
+            stamp19_scene=110, stamp20_scene=119, stamp19_handle=19, stamp20_handle=20,
+            death_mask=3, scenario_flags=0x1000000, player_hp=1))
+        receipt = self.write_archive("0100", names, ["--qa-pad-tape", "Z:/missing/input.csv"], observation)
+        receipt.update(pad_tape_sha256_before="2" * 64, pad_tape_sha256_after="2" * 64)
+        path = self.scratch / "startup-process.json"
+        self.write(path, receipt)
+        self.assertEqual(tool.verify_archive(self.scratch, tool.proof.digest(path))["pad_tape"]["victory_scene"], 120)
+
+        log = self.scratch / "startup-newgame.stderr.log"
+        log.write_text(observation.replace('"death_mask": 3', '"death_mask": 0'), encoding="utf-8")
+        receipt["outputs_sha256"][log.name] = tool.proof.digest(log)
+        self.write(path, receipt)
+        with self.assertRaisesRegex(tool.proof.ProofError, "lacks original deaths"):
+            tool.verify_archive(self.scratch, tool.proof.digest(path))
+
     def test_frozen_launcher_uses_its_original_project(self):
         with patch.object(tool, "PROJECT", self.snapshot):
             prepared = self.prepare()
