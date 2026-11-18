@@ -3360,7 +3360,8 @@ static int core_roulette_sequence(const struct voice *v)
  const gh_actor_model *model=v->model;
  if(!v->source_owner||v->requested_bank||v->requested_program!=4||
     v->info.bank||v->info.program!=4||v->part_index!=-1||
-    !model||!model->work||(model->work->room!=0x103&&model->work->room!=0x104)||
+    !model||!model->work||(model->work->room!=0x103&&model->work->room!=0x104&&
+    model->work->room!=0x200)||
     !model->root.bytes||model->root.size<0x300||model->root.original_vtable214!=0x41d220)
   return 0;
  const uint8_t *actor=model->root.bytes,*p=v->descriptor;

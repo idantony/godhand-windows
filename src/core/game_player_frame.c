@@ -1238,9 +1238,16 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
      ((s->pending_damage_kind==0x3d&&w(take+0x4c)==5&&s->pending_damage==5&&!residual)||
       (at3_strike&&s->pending_damage_kind==0x3e&&w(take+0x4c)==10&&
        s->pending_damage==8&&residual==2));
-   /* The AT2 EM00's original 230F20 Give splits power 30 into 23 and 7. */
-   const int west_formation_fall=b->work->room==0x100&&dependency==0x200&&stamp==3&&
-     source->size>=0x16c8&&source->bytes[0x1650]==2&&w(source->bytes+0x16c4)==6&&
+   /* The original 230F20 Give splits power 30 into 23 and 7. */
+   const int at2_formation_owner=stamp==3&&source->size>=0x16c8&&
+     source->bytes[0x1650]==2&&w(source->bytes+0x16c4)==6;
+   const int opening_formation_owner=stamp==20&&source_kind==0x202&&source->size>=0x1896&&
+     !source->bytes[0x1650]&&!w(source->bytes+0x16c4)&&w(source->bytes+0x5f4)==1&&
+     w(source->bytes+0x1870)==2&&w(source->bytes+0x1874)==30&&w(source->bytes+0x1878)==0x3e&&
+     w(source->bytes+0x187c)==UINT32_MAX&&!half(source->bytes+0x1880)&&
+     !memcmp(source->bytes+0x1870,source->bytes+0x1884,18)&&w(take+0x60)==3;
+   const int west_formation_fall=b->work->room==0x100&&dependency==0x200&&
+     (at2_formation_owner||opening_formation_owner)&&
      half(source->bytes+0x2f4)==0x4200&&source->bytes[0x2f6]==1&&!source->bytes[0x2f7]&&
      override_bank==UINT32_MAX&&!cue&&s->pending_damage_kind==0x3e&&
      w(take+0x4c)==30&&s->pending_damage==23&&residual==7;
