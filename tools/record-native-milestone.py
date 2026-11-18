@@ -14,7 +14,7 @@ import re
 import subprocess
 import sys
 
-from workspace_paths import work_root
+from workspace_paths import windows_build_report, work_root
 
 PROJECT = Path(__file__).resolve().parents[1]
 SCRATCH_ROOT = work_root(PROJECT)
@@ -224,6 +224,13 @@ def artifact_path(raw, scratch, label):
     return path
 
 
+def startup_build_report(snapshot, scratch):
+    report = windows_build_report(scratch, "startup-qa")
+    if report.exists() or report.is_symlink():
+        return report
+    return snapshot / "analysis/windows-startup-qa-build.json"
+
+
 def startup_build_inputs(snapshot, scratch, project):
     """Shared launch/receipt preflight for an exact startup-qa build."""
     require(under(snapshot, SCRATCH_ROOT) and under(scratch, SCRATCH_ROOT),
@@ -238,7 +245,7 @@ def startup_build_inputs(snapshot, scratch, project):
     require(isinstance(hashes, dict) and hashes, "empty snapshot source map")
     for name, sha in hashes.items():
         inputs.checked(source_path(snapshot, name), sha)
-    report, report_fact = inputs.report(snapshot / "analysis/windows-startup-qa-build.json")
+    report, report_fact = inputs.report(startup_build_report(snapshot, scratch))
     require(report.get("status") == "built" and report.get("target") == "startup-qa",
             "matching startup-qa build must be built")
     require(report.get("is_playable_game") is False, "build must retain non-playable scope")
@@ -271,9 +278,11 @@ def validate(snapshot_arg, scratch_arg, frontier=None):
 
     analysis = snapshot / "analysis"
     reports, facts = {}, {"source_snapshot": receipt_fact}
-    for key, name in (("native", "native-verification.json"), ("windows", "windows-startup-qa-build.json"),
-                      ("rng", "rng-differential.json"), ("frame_rng", "frame-rng-differential.json")):
-        reports[key], facts[key] = inputs.report(analysis / name)
+    for key, path in (("native", analysis / "native-verification.json"),
+                      ("windows", startup_build_report(snapshot, scratch)),
+                      ("rng", analysis / "rng-differential.json"),
+                      ("frame_rng", analysis / "frame-rng-differential.json")):
+        reports[key], facts[key] = inputs.report(path)
         # Report the primary failed build before looking for subsequent RNG
         # reports that a failed native build legitimately never generated.
         if key == "native":

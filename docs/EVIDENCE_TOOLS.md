@@ -58,6 +58,11 @@ finished port or execute guest instructions in the production runtime.
   records its bank, program, part, flags and delay.
   The QA launcher rejects a mismatch with the snapshot's launcher before it
   reserves outputs, since the execution proof checks those exact bytes.
+  Each Windows build keeps `build-report.json` next to its executable. The QA
+  launcher and recorders use that report for the selected build scratch, so
+  another build of the same source can update the snapshot's latest report
+  without invalidating an earlier replay. Use a fresh build scratch to retain
+  both executables.
   `--capture-series` verifies each logged 512×448 world/composite pair against
   its process hash and counts nonblack RGB pixels independently of alpha.
   Compare both surfaces and the logged Fade color when diagnosing a black frame.
@@ -160,6 +165,8 @@ python -B tools/record-native-milestone.py --snapshot '.\.work\snapshots\room-tr
 
 西区的输入回放比对可加 `--require-baseline` 自动检查验收范围。工具会标出首条缺失的
 基准记录、首处玩法差异和场景编号偏移。完整路线的终点由回放终止报告确认。
+Windows 构建会在可执行文件旁保存 `build-report.json`。回放复用旧构建时读取这份
+报告。为每次构建指定新的输出目录，可保留先前的程序和证据。
 
 验收汇总工具核对固定源码、二进制、报告与实际运行是否属于同一批；失败报告、混合
 版本和覆盖旧证据都会被拒绝。未完成的停止必须明确指定预期地址；工具只记录事实，

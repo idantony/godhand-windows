@@ -3,11 +3,13 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
 spec = importlib.util.spec_from_file_location("startup_runner", ROOT / "tools/run-startup-qa.py")
 tool = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tool)
@@ -350,6 +352,33 @@ class StartupRunnerTests(unittest.TestCase):
         self.write(receipt, process)
         with self.assertRaisesRegex(frontier.proof.ProofError, "process build scratch differs"):
             frontier.validate(self.snapshot, replay, build_scratch=self.scratch, **options)
+
+    def test_older_build_remains_verifiable_after_a_second_build(self):
+        local_report = self.exe.with_name("build-report.json")
+        self.write(local_report, self.report)
+        replay = self.root / "replay"
+        prepared = tool.prepare(self.snapshot, replay, self.iso, self.ffmpeg, build_scratch=self.scratch)
+        self.assertEqual(prepared["windows_build"]["path"], str(local_report))
+        qa = self.qa(playable_game_verified=False, frontier_module="main ELF")
+        with patch.object(tool.subprocess, "run", self.fake_run(qa)):
+            tool.run(prepared)
+
+        newer_exe = self.root / "newer/build/windows-startup-qa/probe-native-startup.exe"
+        newer_exe.parent.mkdir(parents=True)
+        newer_exe.write_bytes(b"second build")
+        self.write(self.report_path, dict(self.report, executable=str(newer_exe),
+                                          executable_sha256=tool.proof.digest(newer_exe)))
+        runner = self.snapshot / "tools/run-startup-qa.py"
+        runner.parent.mkdir()
+        runner.write_bytes((ROOT / "tools/run-startup-qa.py").read_bytes())
+        result, _ = frontier.validate(self.snapshot, replay, build_scratch=self.scratch,
+                                      expected_frontier="00142060")
+        self.assertEqual(result["classification"], "original-frontier")
+
+    def test_invalid_local_build_report_cannot_fall_back_to_latest(self):
+        self.exe.with_name("build-report.json").write_text("incomplete", encoding="utf-8")
+        with self.assertRaisesRegex(tool.proof.ProofError, "invalid JSON"):
+            self.prepare()
 
     def test_square_presentation_requires_an_advancing_attack_sample(self):
         command = ["probe-native-startup.exe", "--qa-control", "square"]

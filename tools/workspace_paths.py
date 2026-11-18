@@ -24,3 +24,7 @@ def overlaps_project(path: Path, project: Path) -> bool:
 def overlaps_authored_tree(path: Path, project: Path) -> bool:
     local = (project / ".work").resolve()
     return overlaps_project(path, project) and path != local and local not in path.parents
+
+
+def windows_build_report(scratch: Path, target: str) -> Path:
+    return scratch / "build" / ("windows-" + target) / "build-report.json"
