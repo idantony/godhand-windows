@@ -5,6 +5,7 @@
 #include "audio_events.h"
 #include <windows.h>
 #include <xaudio2.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 static int32_t floor_pow2(int32_t n,unsigned shift)
@@ -83,8 +84,39 @@ typedef HRESULT (WINAPI *create_engine)(IXAudio2 **,UINT32,XAUDIO2_PROCESSOR);
 typedef HRESULT (WINAPI *com_init)(LPVOID,DWORD);
 typedef void (WINAPI *com_end)(void);
 #define GH_AUDIO_SOURCE_MAX_RATIO 8.0f
-typedef struct output_voice {IXAudio2SourceVoice *source;int16_t *samples;uint32_t id;uint8_t channels;} output_voice;
-struct gh_audio_output {HMODULE dll,ole;IXAudio2 *engine;IXAudio2MasteringVoice *master;com_end uninit;int owns_com;uint32_t next;output_voice voices[64];};
+typedef struct output_voice {
+ IXAudio2SourceVoice *source;
+ int16_t *samples;
+ uint64_t frames_observed;
+ uint32_t id;
+ uint8_t channels;
+} output_voice;
+struct gh_audio_output {
+ HMODULE dll,ole;
+ IXAudio2 *engine;
+ IXAudio2MasteringVoice *master;
+ com_end uninit;
+ int owns_com,trace;
+ uint32_t next;
+ output_voice voices[64];
+};
+
+static void observe_voice_progress(const gh_audio_output *s,output_voice *voice,
+ const XAUDIO2_VOICE_STATE *state)
+{
+ if(s->trace && state->SamplesPlayed>voice->frames_observed)
+  voice->frames_observed=state->SamplesPlayed;
+}
+
+static void trace_voice_completion(const gh_audio_output *s,output_voice *voice,
+ const XAUDIO2_VOICE_STATE *state)
+{
+ if(!s->trace || state->BuffersQueued)return;
+ /* SamplesPlayed can reset at end of stream. Preserve the observed lower bound. */
+ observe_voice_progress(s,voice,state);
+ fprintf(stderr,"NATIVE_XAUDIO2 {\"event\":\"complete\",\"voice\":%u,\"frames_observed\":%llu}\n",
+     voice->id,(unsigned long long)voice->frames_observed);
+}
 void gh_audio_output_destroy(gh_audio_output *s)
 {
  if(!s)return;
@@ -97,6 +129,8 @@ gh_voice_status gh_audio_output_create(gh_audio_output **out,int32_t *native)
 {
  gh_audio_output *s;create_engine create;com_init init;HRESULT hr;
  if(!out || !native)return GH_VOICE_ARGUMENT;*out=0;*native=0;s=calloc(1,sizeof(*s));if(!s)return GH_VOICE_MEMORY;
+ wchar_t trace[2]={0};
+ s->trace=GetEnvironmentVariableW(L"GODHAND_TRACE_XAUDIO2",trace,2)==1 && trace[0]==L'1';
  s->ole=LoadLibraryExW(L"ole32.dll",0,LOAD_LIBRARY_SEARCH_SYSTEM32);s->dll=LoadLibraryExW(L"xaudio2_9.dll",0,LOAD_LIBRARY_SEARCH_SYSTEM32);
  if(!s->ole || !s->dll){*native=(int32_t)GetLastError();gh_audio_output_destroy(s);return GH_VOICE_PLATFORM;}
  init=(com_init)(void *)GetProcAddress(s->ole,"CoInitializeEx");s->uninit=(com_end)(void *)GetProcAddress(s->ole,"CoUninitialize");create=(create_engine)(void *)GetProcAddress(s->dll,"XAudio2Create");
@@ -110,11 +144,27 @@ gh_voice_status gh_audio_output_create(gh_audio_output **out,int32_t *native)
 gh_voice_status gh_audio_output_set_gain(gh_audio_output *s,float gain)
 {
  if(!s || !(gain>=0 && gain<=1))return GH_VOICE_ARGUMENT;
- return SUCCEEDED(IXAudio2MasteringVoice_SetVolume(s->master,gain,0))?GH_VOICE_OK:GH_VOICE_PLATFORM;
+ if(FAILED(IXAudio2MasteringVoice_SetVolume(s->master,gain,0)))return GH_VOICE_PLATFORM;
+ if(s->trace)fprintf(stderr,"NATIVE_XAUDIO2 {\"event\":\"gain\",\"value\":%.8g}\n",(double)gain);
+ return GH_VOICE_OK;
 }
 void gh_audio_output_reap(gh_audio_output *s)
 {
- if(!s)return;for(unsigned i=0;i<64;++i)if(s->voices[i].source){XAUDIO2_VOICE_STATE v;IXAudio2SourceVoice_GetState(s->voices[i].source,&v,0);if(!v.BuffersQueued){IXAudio2SourceVoice_DestroyVoice(s->voices[i].source);free(s->voices[i].samples);memset(s->voices+i,0,sizeof(s->voices[i]));}}
+ if(!s)return;
+ for(unsigned i=0;i<64;++i){
+  output_voice *voice=s->voices+i;
+  if(!voice->source)continue;
+  XAUDIO2_VOICE_STATE state;
+  IXAudio2SourceVoice_GetState(voice->source,&state,0);
+  if(state.BuffersQueued){
+   observe_voice_progress(s,voice,&state);
+   continue;
+  }
+  trace_voice_completion(s,voice,&state);
+  IXAudio2SourceVoice_DestroyVoice(voice->source);
+  free(voice->samples);
+  memset(voice,0,sizeof(*voice));
+ }
 }
 static HRESULT set_voice_gain(gh_audio_output *s,output_voice *v,float left,float right)
 {
@@ -175,6 +225,19 @@ static gh_voice_status play(gh_audio_output *s,const gh_adpcm_pcm *p,uint32_t ra
  if(!++s->next)++s->next;
  v->id=s->next;
  *id=v->id;
+ if(s->trace){
+  size_t nonzero=0;
+  unsigned peak=0;
+  for(size_t sample=0;sample<bytes/sizeof(*v->samples);++sample){
+   const int value=v->samples[sample];
+   const unsigned magnitude=(unsigned)(value<0?-value:value);
+   nonzero+=magnitude!=0;
+   if(magnitude>peak)peak=magnitude;
+  }
+  fprintf(stderr,"NATIVE_XAUDIO2 {\"event\":\"start\",\"voice\":%u,\"frames\":%zu,"
+      "\"channels\":%u,\"nonzero_samples\":%zu,\"peak\":%u,\"looped\":%s}\n",
+      v->id,p->frames,(unsigned)channels,nonzero,peak,p->loop_frames?"true":"false");
+ }
  return GH_VOICE_OK;
 }
 gh_voice_status gh_audio_output_play(gh_audio_output *s,const gh_adpcm_pcm *p,uint32_t rate,float left,float right,uint32_t *id)
@@ -190,13 +253,26 @@ gh_voice_status gh_audio_output_play_q12(gh_audio_output *s,const gh_adpcm_pcm *
 gh_voice_status gh_audio_output_active(gh_audio_output *s,uint32_t id,int *active,uint64_t *played)
 {
  if(!s || !id || !active || !played)return GH_VOICE_ARGUMENT;
- for(unsigned i=0;i<64;++i)if(s->voices[i].id==id){XAUDIO2_VOICE_STATE v;IXAudio2SourceVoice_GetState(s->voices[i].source,&v,0);*active=v.BuffersQueued!=0;*played=v.SamplesPlayed;return GH_VOICE_OK;}
+ for(unsigned i=0;i<64;++i)if(s->voices[i].id==id){
+  output_voice *voice=s->voices+i;
+  XAUDIO2_VOICE_STATE state;
+  IXAudio2SourceVoice_GetState(voice->source,&state,0);
+  observe_voice_progress(s,voice,&state);
+  *active=state.BuffersQueued!=0;
+  *played=state.SamplesPlayed;
+  return GH_VOICE_OK;
+ }
  return GH_VOICE_BOUNDS;
 }
 gh_voice_status gh_audio_output_stop(gh_audio_output *s,uint32_t id)
 {
  if(!s || !id)return GH_VOICE_ARGUMENT;
  for(unsigned i=0;i<64;++i)if(s->voices[i].id==id){
+  if(s->trace){
+   XAUDIO2_VOICE_STATE state;
+   IXAudio2SourceVoice_GetState(s->voices[i].source,&state,0);
+   trace_voice_completion(s,s->voices+i,&state);
+  }
   IXAudio2SourceVoice_DestroyVoice(s->voices[i].source);free(s->voices[i].samples);
   memset(s->voices+i,0,sizeof(s->voices[i]));return GH_VOICE_OK;
  }

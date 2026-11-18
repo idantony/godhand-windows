@@ -14,6 +14,13 @@
     "compared_composed_pixels": 8257536,
     "max_rgb_channel_difference": 6,
     "muted_winmm_adx_frames_consumed": 4800,
+    "muted_xaudio2_gameplay": {
+      "room": "R100",
+      "tick": 1900,
+      "finite_nonzero_sources_with_device_progress_and_completion": 86,
+      "master_gain": 0,
+      "same_terminal_game_report_as_keyboard_baseline": true
+    },
     "production_window_keyboard_new_game": {
       "room": "R100",
       "tick": 700,

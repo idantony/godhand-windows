@@ -189,6 +189,10 @@ startup log and verify window, UI and model rendering on the selected hardware.
 Use the same input and save fixture across adapters. Report gameplay parity
 and pixel differences separately. For native sound, distinguish decoded
 samples, device buffer completion and audible output in the evidence.
+Use [check-xaudio2-trace.py](scripts/check-xaudio2-trace.py) with an opt-in
+XAudio2 trace that records source IDs, nonzero sample counts and queue
+completion. Retain observed progress before end-of-stream counters reset.
+Aggregate signal data in logs and keep original audio buffers local.
 
 For tests of the ordinary Windows keyboard path, launch the pinned standard
 executable with a fresh profile. [win32_keyboard.py](scripts/win32_keyboard.py)

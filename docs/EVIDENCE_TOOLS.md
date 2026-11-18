@@ -12,6 +12,12 @@ finished port or execute guest instructions in the production runtime.
   version ending in `left_trigger,right_trigger`. The older format uses
   zero for both triggers. Trigger-only changes are kept when multiple input
   samples fall between player updates.
+- Set `GODHAND_TRACE_XAUDIO2=1` in the test process to record source PCM
+  statistics, master gain and source queue completion on stderr.
+  [check-xaudio2-trace.py](../skill/ps2-source-port/scripts/check-xaudio2-trace.py)
+  joins finite sources by voice ID. It checks nonzero payload and observed
+  device progress before a queue empties. Use `--require-muted` to require
+  zero master gain throughout the recorded submissions.
 - `tools/run-ghidra.ps1` exports explicit function probes with the installed
   Ghidra/EmotionEngine language. `-MaxInstructions` accepts 1..65536 and defaults
   to 2048. Reports include the limit, captured count and `disassemblyTruncated`.
