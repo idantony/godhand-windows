@@ -112,6 +112,11 @@ process. A live mismatch stops that isolated child and preserves the trace
 through the divergent checkpoint. Prefer readiness-driven input for new
 routes and a focused control fixture for a local menu branch.
 
+If fast-forward drops a surface sampled by a later frame, require the
+exact expected preceding capture or render the missing history. Verify
+the archived capture's presented frame, input prefix and source range,
+then count new hardware presents from the resumed frame.
+
 Make integer wrapping, sign extension, alignment, endianness and guest-address
 resolution explicit. Establish numerical semantics for the actual PS2
 instructions: rounding, intermediate operations, denormals and exceptional

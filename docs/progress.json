@@ -120,6 +120,29 @@
       "diagnostic_stage": "enemy effect request construction before resource lookup"
     }
   },
+  "r105_retry_and_mixed_rendering": {
+    "observed_on": "2026-11-18",
+    "private_game_over_retry_cpu": {
+      "input_prefix_rows_matched": 17075,
+      "confirm_tick": 20464,
+      "active_room_after_retry": "R105",
+      "active_after_retry_tick": 20556,
+      "player_hp_after_retry": 100,
+      "next_combat_stop_tick": 20662,
+      "next_combat_stop": "0026F1D8"
+    },
+    "direct3d_after_archived_surface": {
+      "baseline_records_matched": 16007,
+      "archived_presented_scene": 20050,
+      "first_resumed_scene": 20051,
+      "captured_presented_scene": 20140,
+      "resumed_scene_frames_presented": 307,
+      "tick_limit_reached": 20500,
+      "graphics_errors": 0,
+      "diagnostic_wall_seconds": 327.406
+    },
+    "production_r102_keyboard_trace_matches_baseline": true
+  },
   "r104_victory_to_r021_stage_clear": {
     "entry_fixture": "original-format R104 test save; boss health set to 60 before an original 80-point Shockwave hit",
     "all_ev06_cuts_executed": 14,

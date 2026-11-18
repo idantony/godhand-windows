@@ -166,15 +166,25 @@ in the enemy's effect request constructor, before resource lookup. The
 exact request was subsequently captured. A private native build admits the
 original R105 actor to the already implemented CORE 58:46 effect and the
 existing post-attack path. The same retreat tape reaches the original
-grab, then the player death voice and music fade. The frame after the fade
-stops at an unsupported motion case.
+grab, then the player death voice and music fade. After the grab clip,
+the original Game Over menu offers Retry. One ordinary confirmation and
+release returns to active R105 at tick 20,556 with 100 HP. The next
+combat stop is an EM27 follow-up at tick 20,662.
 
 The original neutral tape reaches tick 20,500 on the private CPU build
 without hitting an unfinished entry. Direct3D on the same authored source
 presents 20,139 scene frames, 17 beyond the previous stop. It then stops
 while preparing scene 20,140. A world marker follows a UI item in the
-original ordering table, a combination the current renderer rejects
-before drawing the marker.
+original ordering table. The earlier renderer stopped before drawing it.
+
+The renderer now preserves the order of this UI and world-marker
+combination by passing the live color and depth surfaces between its
+existing drawing paths. A Direct3D replay matches all 16,007 archived
+startup and gameplay records, then restores display history from a
+previously presented scene 20,050. It presents 307 further scene frames
+and captures the actual window after presenting scene 20,140. It reaches
+the tick 20,500 limit with zero rendering errors. The test covers a
+bounded interval of actual presentation after the archived surface.
 
 内部原生 CPU 集成回放从新游戏出发，通过手柄录像完成西区战斗、R003 的 EV02 全部 28 个镜头，
 随后进入 R105。回放与归档中的 1,750 条启动记录和 14,257 条游戏记录一致。事件在第 20,046 个
@@ -188,12 +198,18 @@ tick 结束，第 20,053 个 tick 进入 R105，第 20,265 个 tick 停在敌人
 后撤触发原版闪避，Gene 仍有 1 点生命值。敌人随后走到另一条分支，回放在第 20,160 个 tick
 停在尚未覆盖的特效路径。
 诊断回放捕获了构造检查拒绝的实际请求。私有原生构建让 R105 的这名敌人复用已有的 CORE
-58:46 特效和攻击收尾。同一条后撤回放进入原版抓取，再运行角色死亡语音和音乐淡出，淡出后
-下一帧遇到尚未覆盖的动作情况。
+58:46 特效和攻击收尾。同一条后撤回放进入原版抓取，再运行角色死亡语音和音乐淡出。抓取动作
+结束后出现原版 Game Over。一次普通确认和释放触发 Retry，第 20,556 个 tick 恢复 R105 操作，
+Gene 回到 100 HP。第 20,662 个 tick 停在 EM27 另一条攻击后续分支。
 
 原版中立回放在私有 CPU 构建跑到第 20,500 个 tick，期间没有新的未完成入口。同一份源码的
 Direct3D 验证实际呈现 20,139 帧，比旧停点多 17 帧。第 20,140 帧的原版排序表中，世界标记
-排在 UI 项之后，当前渲染器在绘制标记之前停止。
+排在 UI 项之后。当时的渲染器在绘制标记前停止。
+
+新版渲染器在两个已有绘制路径间交接实时颜色和深度，保留该 UI 和世界标记的原排序。Direct3D
+验证匹配了全部 16,007 条归档启动和玩法记录，并由此前实际呈现的第 20,050 帧恢复显示历史。此后
+实际呈现 307 帧，在第 20,140 帧完成窗口读回，到第 20,500 个 tick 上限时图形错误为零。
+这次验证覆盖从归档画面恢复后的连续呈现区间。
 
 ## R104 victory event and R021 Stage Clear
 

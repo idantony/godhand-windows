@@ -68,6 +68,10 @@ gh_model_gpu_error gh_model_renderer_readback(gh_model_renderer *,uint8_t *rgba,
  * existing color UAV, depth, and cached material handles. Call after begin
  * on the renderer's owning thread. */
 gh_model_gpu_error gh_model_renderer_replace_color(gh_model_renderer *,const uint8_t *rgba,size_t rgba_bytes);
+/* Replace both active scene planes after begin on the owning thread.
+ * The buffers must hold full packed RGBA8 and one raw uint32 depth per pixel. */
+gh_model_gpu_error gh_model_renderer_replace_surface(gh_model_renderer *, const uint8_t *rgba,
+ size_t rgba_bytes, const uint32_t *depth, size_t depth_count);
 #ifdef __cplusplus
 }
 #endif

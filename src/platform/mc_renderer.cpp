@@ -658,15 +658,28 @@ extern "C" gh_id_error gh_mc_renderer_queued_message_depth(gh_mc_renderer *r,
     return GH_ID_OK;
 }
 
-static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t count,uint32_t clear_rgb,const uint8_t *background,size_t background_bytes,const uint32_t *depth,size_t depth_count)
+static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t count,uint32_t clear_rgb,const uint8_t *background,size_t background_bytes,const uint32_t *depth,size_t depth_count,
+    const gh_mc_scene_draw *draws=nullptr,size_t draw_count=0,
+    gh_mc_scene_draw_callback draw_scene=nullptr,void *draw_context=nullptr)
 {
     if(!r||!r->begun||(!order&&count)||count!=r->queued.size())return GH_ID_ARGUMENT;
     if((background&&background_bytes!=r->frame.size())||(!background&&background_bytes))return GH_ID_ARGUMENT;
     if(depth?(!background||depth_count!=r->frame.size()/4):depth_count!=0)return GH_ID_ARGUMENT;
     if(r->flushing||r->queue_failed)return GH_ID_BUSY;
+    if(draw_count&&(!draws||!draw_scene||!depth))return GH_ID_ARGUMENT;
     try {
         std::vector<unsigned char> seen(count,0);
         for(size_t i=0;i<count;++i){if(order[i]>=count||seen[order[i]])return GH_ID_ARGUMENT;seen[order[i]]=1;}
+        for(size_t i=0;i<draw_count;++i){
+            if(draws[i].before_ui_index>count||
+               (i&&draws[i].before_ui_index<draws[i-1].before_ui_index))return GH_ID_ARGUMENT;
+        }
+        if(draw_count){
+            for(size_t i=0;i<draws[draw_count-1].before_ui_index;++i){
+                const auto &command=r->queued[order[i]];
+                if(command.kind==CommandKind::FADE||!tracks_depth(command))return GH_ID_UNSUPPORTED;
+            }
+        }
         int message_depth=0;
         gh_id_error preflight=gh_mc_renderer_queued_message_depth(r,order,count,&message_depth);
         if(preflight!=GH_ID_OK)return preflight;
@@ -689,7 +702,15 @@ static gh_id_error flush_queued(gh_mc_renderer *r,const size_t *order,size_t cou
         if(depth)depth_samples.assign(depth,depth+depth_count);
         r->flushing=true;
         bool depth_known=depth!=nullptr;
-        for(size_t i=0;i<count;++i){
+        size_t scene_cursor=0;
+        for(size_t i=0;;++i){
+            while(scene_cursor<draw_count&&draws[scene_cursor].before_ui_index==i){
+                auto error=draw_scene(draw_context,draws[scene_cursor].marker_id,r->frame.data(),
+                    r->frame.size(),depth_samples.data(),depth_samples.size());
+                if(error!=GH_ID_OK){r->flushing=false;r->queue_failed=true;return error;}
+                ++scene_cursor;
+            }
+            if(i==count)break;
             auto &command=r->queued[order[i]];gh_id_error error;
             if(command.kind==CommandKind::FAN){
                 gh_ui_depth_write plane={depth_samples.data(),depth_samples.size(),0};
@@ -786,6 +807,15 @@ extern "C" gh_id_error gh_mc_renderer_flush_queued_on_background(gh_mc_renderer 
 extern "C" gh_id_error gh_mc_renderer_flush_queued_on_background_with_depth(gh_mc_renderer*r,const size_t *order,size_t count,
  const uint8_t *rgba,size_t bytes,const uint32_t *z,size_t z_count)
 {if(!rgba||!z)return GH_ID_ARGUMENT;return flush_queued(r,order,count,0,rgba,bytes,z,z_count);}
+
+extern "C" gh_id_error gh_mc_renderer_flush_queued_with_scene_draws(gh_mc_renderer *r,
+    const size_t *order,size_t count,const uint8_t *rgba,size_t bytes,const uint32_t *depth,
+    size_t depth_count,const gh_mc_scene_draw *draws,size_t draw_count,
+    gh_mc_scene_draw_callback draw_scene,void *draw_context)
+{
+    if(!rgba||!depth)return GH_ID_ARGUMENT;
+    return flush_queued(r,order,count,0,rgba,bytes,depth,depth_count,draws,draw_count,draw_scene,draw_context);
+}
 extern "C" gh_id_error gh_mc_renderer_draw(gh_mc_renderer *r,const gh_startup_snapshot *s,const gh_id_draw_job *job)
 {
     if(!s)return GH_ID_ARGUMENT;

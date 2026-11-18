@@ -8,6 +8,30 @@
 
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL %d %s\n", __LINE__, #x); std::exit(1); } } while (0)
 
+struct DrawRecord {
+    std::vector<size_t> ids;
+    bool saw_glyph_depth = false;
+};
+
+static gh_id_error scene_draw(void *opaque, size_t marker, uint8_t *rgba, size_t bytes,
+    uint32_t *depth, size_t count)
+{
+    auto &record = *static_cast<DrawRecord *>(opaque);
+    CHECK(count == 512u * 448u && bytes == count * 4);
+    if (marker == 12) {
+        CHECK(rgba[3] == 73 && depth[0] == 4112);
+        rgba[3] = 201;
+        depth[0] = 9000;
+    } else {
+        CHECK(rgba[3] == 201 && depth[0] == 9000);
+        for (size_t i = 1; i < count; ++i)
+            if (depth[i] == 65535) record.saw_glyph_depth = true;
+        rgba[0] = 93;
+    }
+    record.ids.push_back(marker);
+    return GH_ID_OK;
+}
+
 int main(int argc, char **argv)
 {
     CHECK(argc == 2);
@@ -64,6 +88,21 @@ int main(int argc, char **argv)
     CHECK(std::memcmp(back.data(),gh_mc_renderer_pixels(renderer,&bytes),back.size())!=0&&bytes==back.size());
 
     gh_mc_renderer_begin(renderer);
+    CHECK(!gh_mc_renderer_queue_message(renderer,&pair,tags));
+    DrawRecord mixed;
+    const gh_mc_scene_draw invalid[]={{2,90},{1,91}};
+    CHECK(gh_mc_renderer_flush_queued_with_scene_draws(renderer,order,2,back.data(),back.size(),
+        depth.data(),depth.size(),invalid,2,scene_draw,&mixed)==GH_ID_ARGUMENT);
+    CHECK(mixed.ids.empty());
+    const gh_mc_scene_draw draws[]={{0,12},{1,13},{2,14},{2,15}};
+    CHECK(!gh_mc_renderer_flush_queued_with_scene_draws(renderer,order,2,back.data(),back.size(),
+        depth.data(),depth.size(),draws,4,scene_draw,&mixed));
+    CHECK(mixed.ids == (std::vector<size_t>{12,13,14,15}) && mixed.saw_glyph_depth);
+    const auto *mixed_pixels=gh_mc_renderer_pixels(renderer,&bytes);
+    CHECK(mixed_pixels[0]==93 && mixed_pixels[3]==201 && depth[0]==4112);
+    puts("PASS interleaved scene draws preserve global order, RGBA alpha and glyph depth");
+
+    gh_mc_renderer_begin(renderer);
     auto discarded=pair;
     discarded.normal.quad.rgba&=0x00ffffffu;
     discarded.shadow.quad.rgba&=0x00ffffffu;
@@ -87,6 +126,11 @@ int main(int argc, char **argv)
     CHECK(gh_mc_renderer_flush_queued_on_background_with_depth(renderer,unsupported_order,3,back.data(),back.size(),depth.data(),depth.size())==GH_ID_UNSUPPORTED);
     gh_mc_renderer_inspect(renderer,&status);
     CHECK(status.frontier==0x2a53a8&&!status.jobs);
+    const gh_mc_scene_draw after_fade[]={{1,12}};
+    DrawRecord blocked;
+    CHECK(gh_mc_renderer_flush_queued_with_scene_draws(renderer,unsupported_order,3,
+        back.data(),back.size(),depth.data(),depth.size(),after_fade,1,scene_draw,&blocked)==GH_ID_UNSUPPORTED);
+    CHECK(blocked.ids.empty());
     gh_mc_renderer_destroy(renderer);
     puts("PASS actual ISO font Message depth request without Fade, discard-only no-depth, untracked predecessor rejected before drawing");
     return 0;

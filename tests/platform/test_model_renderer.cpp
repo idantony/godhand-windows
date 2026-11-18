@@ -294,6 +294,35 @@ int main(int argc,char**argv){C(argc==2);gh_disc*d;C(!gh_disc_open(argv[1],&d));
   C(!gh_model_renderer_draw(r,&write,texture,v.data(),3,indices,3));oracle(dstalpha,material,write,v);compare(r,dstalpha,"FBAalpha128/PABEnoblend");
   v=triangle(400,128,128);C(!gh_model_renderer_draw(r,&dat,texture,v.data(),3,indices,3));oracle(dstalpha,material,dat,v);compare(r,dstalpha,"DAT1afterFBA");
  }
+ // The two imported planes participate independently in the next native draw.
+ {
+  Surface transferred(0x314159, 300);
+  const size_t passed = 96 * W + 96, alpha_rejected = passed + 1, depth_rejected = passed + 2;
+  transferred.rgba[passed * 4 + 3] = 128;
+  transferred.rgba[depth_rejected * 4 + 3] = 128;
+  transferred.z[depth_rejected] = 301;
+  transferred.z.back() = 0xFEDCBA98u;
+  transferred.rgba.back() = 255;
+  C(!gh_model_renderer_begin(r, 0, 0));
+  C(!gh_model_renderer_replace_surface(r, transferred.rgba.data(), transferred.rgba.size(),
+     transferred.z.data(), transferred.z.size()));
+  compare(r, transferred, "surface-import/raw-RGBA-and-u32-Z");
+  C(gh_model_renderer_replace_surface(r, transferred.rgba.data(), transferred.rgba.size(),
+     transferred.z.data(), transferred.z.size() - 1) == GH_MODEL_GPU_ARGUMENT);
+  compare(r, transferred, "surface-import/invalid-depth-count-atomic");
+  auto draw = state;
+  draw.test = 0x5c003; // DATE requires destination alpha bit 7; ZTST is GEQUAL.
+  auto vertices = triangle(300, 255, 64);
+  const auto initial = transferred;
+  C(!gh_model_renderer_draw(r, &draw, texture, vertices.data(), 3, indices, 3));
+  oracle(transferred, material, draw, vertices);
+  C(transferred.rgba[passed * 4 + 3] == 64);
+  C(transferred.rgba[alpha_rejected * 4 + 3] == initial.rgba[alpha_rejected * 4 + 3]);
+  C(transferred.rgba[depth_rejected * 4 + 3] == initial.rgba[depth_rejected * 4 + 3]);
+  C(transferred.z[depth_rejected] == 301);
+  compare(r, transferred, "surface-import/draw-after-DATE-and-GEQUAL");
+  std::puts("PASS surface import: full RGBA8/R32_UINT readback, atomic invalid size, DATE and GEQUAL");
+ }
  // Original actor opacity prepass writes depth through alpha testing,
  // preserving all four bytes of the existing framebuffer.
  {

@@ -348,3 +348,22 @@ extern "C" gh_model_gpu_error gh_model_renderer_replace_color(
     GPU(renderer->device.p->GetDeviceRemovedReason());
     return GH_MODEL_GPU_OK;
 }
+
+extern "C" gh_model_gpu_error gh_model_renderer_replace_surface(
+    gh_model_renderer *renderer, const uint8_t *rgba, size_t rgba_bytes,
+    const uint32_t *depth, size_t depth_count) {
+    if (!renderer || !rgba || !depth || !renderer->begun ||
+        renderer->thread != GetCurrentThreadId()) {
+        return GH_MODEL_GPU_ARGUMENT;
+    }
+    const size_t pixels = static_cast<size_t>(renderer->width) * renderer->height;
+    if (rgba_bytes != pixels * 4 || depth_count != pixels) {
+        return GH_MODEL_GPU_ARGUMENT;
+    }
+
+    const UINT row_bytes = renderer->width * 4u;
+    renderer->context.p->UpdateSubresource(renderer->color.p, 0, nullptr, rgba, row_bytes, 0);
+    renderer->context.p->UpdateSubresource(renderer->depth.p, 0, nullptr, depth, row_bytes, 0);
+    GPU(renderer->device.p->GetDeviceRemovedReason());
+    return GH_MODEL_GPU_OK;
+}

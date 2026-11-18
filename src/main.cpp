@@ -606,6 +606,33 @@ static gh_id_error consume_effect(NativeApp &app,const gh_effect_trans_packet &p
     }
     ++app.effect_post_packets;app.world_frontier=0;return GH_ID_OK;
 }
+struct OrderedMarkerDraw {
+    NativeApp &app;
+    uint32_t x, y;
+};
+
+static gh_id_error draw_ordered_marker(void *opaque,size_t index,uint8_t *rgba,size_t bytes,
+    uint32_t *depth,size_t depth_count)
+{
+    auto &draw=*static_cast<OrderedMarkerDraw *>(opaque);
+    auto &app=draw.app;
+    const auto &packet=app.effect_queue[index].packet;
+    app.world_frontier=packet.original_callee;
+    app.world_gpu_error=gh_model_renderer_replace_surface(app.world_renderer,rgba,bytes,depth,depth_count);
+    if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
+    // 15BCF0 writes its own TEX1 and CLAMP. The draw inherits an unmasked scene target.
+    WorldSampler sampler;
+    PostFrame post;
+    auto error=consume_effect(app,packet,sampler,post,draw.x,draw.y,0);
+    if(error!=GH_ID_OK)return error;
+    app.world_gpu_error=gh_model_renderer_readback(app.world_renderer,rgba,bytes,depth,depth_count);
+    if(app.world_gpu_error!=GH_MODEL_GPU_OK){
+        app.world_frontier=packet.original_callee;
+        return GH_ID_UNSUPPORTED;
+    }
+    return GH_ID_OK;
+}
+
 static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
 {
     try {
@@ -631,23 +658,30 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
     std::memcpy(&clear,(const unsigned char*)app.snapshot.work+0x60c,4);
     std::vector<size_t> ui_order,world_order;
     std::vector<uint32_t> world_depth;
-    bool ui_started=false;
+    std::vector<gh_mc_scene_draw> ordered_markers;
+    size_t world_prefix_count=0;
     for(size_t i:order){const auto &g=app.groups[i];
         if(g.identity&world_identity){
             size_t encoded=(size_t)(g.identity&~world_identity);
-            if(ui_started){
+            if(ui_order.empty())++world_prefix_count;
+            else{
                 size_t effect_index=encoded&~effect_identity;
-                if((encoded&effect_identity)&&effect_index<app.effect_queue.size())
-                    app.world_frontier=app.effect_queue[effect_index].packet.original_callee;
-                return GH_ID_UNSUPPORTED;
+                if(!(encoded&effect_identity)||effect_index>=app.effect_queue.size())
+                    return GH_ID_UNSUPPORTED;
+                const auto &packet=app.effect_queue[effect_index].packet;
+                if(packet.original_callee!=0x15bcf0||packet.kind!=GH_EFFECT_PASS_SPRITE){
+                    app.world_frontier=packet.original_callee;
+                    return GH_ID_UNSUPPORTED;
+                }
+                ordered_markers.push_back({ui_order.size(),effect_index});
             }
             world_order.push_back(encoded);
         }
-        else {ui_started=true;ui_order.push_back((size_t)g.identity);}}
+        else ui_order.push_back((size_t)g.identity);
+    }
     if(world_order.size()!=gh_static_world_queue_count(app.world_queue)+app.shadow_queue.size()+
        gh_actor_world_queue_count(app.actor_queue)+app.effect_queue.size())return failure("world-count",GH_ID_ARGUMENT,world_order.size(),app.groups.size());
-    // ONEOT determines both domains. This bounded native path requires world
-    // and effects to precede UI; mixed UI/sprite depths remain strict.
+    // Validate the entire ONEOT, including markers deferred to the UI traversal.
     std::vector<unsigned char> world_seen(gh_static_world_queue_count(app.world_queue),0),shadow_seen(app.shadow_queue.size(),0),
         actor_seen(gh_actor_world_queue_count(app.actor_queue),0),effect_seen(app.effect_queue.size(),0),ui_seen(ui_order.size(),0);
     for(size_t encoded:world_order){
@@ -664,6 +698,7 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
     // plane when the chapter map contributes only UI commands to the OT.
     const bool fade_depth=app.frame_fade_seen&&app.frame_fade.test==0x70000;
     const bool world_surface=!world_order.empty()||message_depth||fade_depth;
+    OrderedMarkerDraw marker_draw{app,0,0};
     if(world_surface){
         const gh_display_state *display=app.snapshot.display;
         if(!scene||!display||!display->initialized||display->screen_width!=512||display->screen_lines!=448||display->gs_y_origin!=1824)return GH_ID_UNSUPPORTED;
@@ -678,7 +713,10 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
         uint32_t frame_mask=0;
         uint64_t gs_test=0,gs_alpha=0;bool tests_known=false;
         const uint32_t x=(2048-display->screen_width/2)*16,y=display->gs_y_origin*16;
-        for(size_t encoded:world_order){
+        marker_draw.x=x;
+        marker_draw.y=y;
+        for(size_t wi=0;wi<world_prefix_count;++wi){
+            size_t encoded=world_order[wi];
             if(encoded&effect_identity){
                 const auto &packet=app.effect_queue[encoded&~effect_identity].packet;
                 auto e=consume_effect(app,packet,sampler,post,x,y,frame_mask);
@@ -810,12 +848,19 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
         }
         if(frame_mask){app.world_frontier=0x15b0f0;return GH_ID_UNSUPPORTED;}
         app.world_pixels.resize(512*448*4);
-        if(message_depth||fade_depth)world_depth.resize(512*448);
+        if(message_depth||fade_depth||!ordered_markers.empty())world_depth.resize(512*448);
         app.world_gpu_error=gh_model_renderer_readback(app.world_renderer,app.world_pixels.data(),app.world_pixels.size(),
             world_depth.empty()?nullptr:world_depth.data(),world_depth.size());
         if(app.world_gpu_error!=GH_MODEL_GPU_OK)return GH_ID_UNSUPPORTED;
     }
-    gh_id_error error=!world_surface?gh_mc_renderer_flush_queued(app.renderer,ui_order.data(),ui_order.size(),clear):
+    gh_id_error error;
+    if(!ordered_markers.empty()){
+        app.world_frontier=0x15bcf0;
+        error=gh_mc_renderer_flush_queued_with_scene_draws(app.renderer,ui_order.data(),ui_order.size(),
+            app.world_pixels.data(),app.world_pixels.size(),world_depth.data(),world_depth.size(),
+            ordered_markers.data(),ordered_markers.size(),draw_ordered_marker,&marker_draw);
+        if(error==GH_ID_OK)app.world_frontier=0;
+    }else error=!world_surface?gh_mc_renderer_flush_queued(app.renderer,ui_order.data(),ui_order.size(),clear):
         world_depth.empty()?gh_mc_renderer_flush_queued_on_background(app.renderer,ui_order.data(),ui_order.size(),
             app.world_pixels.data(),app.world_pixels.size()):
         gh_mc_renderer_flush_queued_on_background_with_depth(app.renderer,ui_order.data(),ui_order.size(),

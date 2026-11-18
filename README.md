@@ -44,6 +44,11 @@ unfinished R105 enemy attack branch. A continuous Direct3D replay on the same
 route reaches that stop in R105 and presents 20,122 scene frames with zero
 graphics errors.
 
+A later private replay selects the original R105 Game Over Retry and
+returns to gameplay at 100 HP. A Direct3D diagnostic restores captured
+display history and presents scene 20,140 with the original HUD and
+enemy-marker ordering.
+
 A separate Windows title-load replay uses an original-format R101 test save,
 confirms the original chapter map and presents R101 at scene 461. It runs to
 the planned 800-tick limit with 187 player updates and zero renderer errors.
@@ -473,6 +478,9 @@ AT10 区域，Gene 仍然存活。
 tick 进入 R105。原生 CPU 回放与归档中的 16,007 条启动及游戏状态记录一致，随后停在 R105
 敌人一个尚未覆盖的攻击分支。相同路线的连续 Direct3D 回放也到达 R105 的同一处，呈现
 20,122 个场景帧，图形错误为零。
+
+后续私有回放确认 R105 原版 Game Over 的 Retry，重进关卡后 Gene 恢复到 100 HP。
+Direct3D 验证从已呈现的画面恢复显示历史，并按原版 HUD 和敌人标记顺序呈现第 20,140 帧。
 
 另一轮 Windows 回放从标题读取 R101 的原版格式测试档，经原版章节地图确认，在第 461 帧呈现
 R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染无报错。独立的无画面回放也
