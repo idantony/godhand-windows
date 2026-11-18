@@ -1754,7 +1754,18 @@
     "reload_epoch": 2,
     "scene_frames_presented": 224,
     "hp_after_reload": 100,
-    "renderer_and_window_errors": 0
+    "renderer_and_window_errors": 0,
+    "extended_playback": {
+      "control_ready_tick": 12481,
+      "left_stick_samples": 24,
+      "movement_scene_units": 1.0509347117901817,
+      "hp_after_movement": 100,
+      "final_tick": 12601,
+      "final_scene": 12453,
+      "scene_frames_presented": 350,
+      "terminal_player_hp": 82,
+      "renderer_and_window_errors": 0
+    }
   },
   "native_cpu_r101_box_throw_and_pickup": {
     "room": "0101",
