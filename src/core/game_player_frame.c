@@ -1266,7 +1266,14 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
    const int north_em00_timed=north_em00&&w(source->bytes+0x5f4)==1&&
      w(source->bytes+0x1874)==15&&w(source->bytes+0x1878)==0x3d&&
      s->pending_damage_kind==0x3d&&w(take+0x4c)==15&&s->pending_damage==15;
-   const int north_em00_short=north_em00&&!w(source->bytes+0x5f4)&&
+   /* The source timer can be one while both published Give rows
+    * still describe the same short Take. */
+   const int north_em00_matching_rows=north_em00&&source->size>=0x1896&&
+     w(source->bytes+0x5f4)==1&&w(source->bytes+0x187c)==UINT32_MAX&&
+     !half(source->bytes+0x1880)&&!w(source->bytes+0x1884)&&
+     w(source->bytes+0x1888)==20&&w(source->bytes+0x188c)==0x37&&
+     w(source->bytes+0x1890)==UINT32_MAX&&!half(source->bytes+0x1894);
+   const int north_em00_short=north_em00&&(!w(source->bytes+0x5f4)||north_em00_matching_rows)&&
      w(source->bytes+0x1874)==20&&w(source->bytes+0x1878)==0x37&&
      s->pending_damage_kind==0x37&&w(take+0x4c)==20&&s->pending_damage==20;
    const int short_hit=s->pending_damage_kind==0x37&&
