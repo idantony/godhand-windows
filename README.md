@@ -149,7 +149,10 @@ Retry and presses Square. The original hit takes the enemy from 74 to 71 HP
 while Gene stays at 100 HP. The replay reaches the enemy's next response.
 The native Windows replay also presents the hit and 80 more consecutive
 frames. The enemy remains at 71 HP. The last frame shows the original
-left-stick recovery prompt. In this run the renderer reports no errors.
+left-stick recovery prompt. A follow-up replay changes the stick direction
+seven times, restores control and presents the next regular walk. The enemy
+interrupts that walk and later defeats Gene. The run presents 443 scene
+frames with no graphics errors.
 
 The new-game east route now breaks the original door, continues into the
 armed encounter, and reaches the original Game Over menu after a lethal
@@ -592,7 +595,8 @@ Windows 验证在菜单出现前切换到 Direct3D，实际呈现 224 帧，捕�
 另一条原生 CPU 回放在重试后用左摇杆接近首名敌人，再按一次方块。原版攻击命中后，
 敌人从 74 降到 71 HP，Gene 保持 100 HP。回放推进到敌人的后续回应。
 原生 Windows 回放也实际呈现命中，并连续呈现之后的 80 帧，敌人保持 71 HP。
-最后一帧可见原版左摇杆恢复提示，这段回放的图形错误为零。
+最后一帧可见原版左摇杆恢复提示。后续回放交替拨动左摇杆七次，恢复控制并呈现下一次普通行走。
+敌人随后打断行走并再次击倒 Gene。这条回放实际呈现 443 帧，图形错误为零。
 
 从新游戏开始的东侧回放打破原版木门，在后续持械战斗中被击倒，并在原版 Game Over 界面
 确认重试，以 100 HP 回到 R100。西侧回放进入原版增援区域，在恶魔遭遇期间打出两次三角攻击。

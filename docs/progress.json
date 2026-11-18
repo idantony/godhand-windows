@@ -1767,6 +1767,34 @@
       "renderer_and_window_errors": 0
     }
   },
+  "native_windows_r100_retry_combat_and_recovery": {
+    "room": "0100",
+    "direct3d_handoff_tick": 12250,
+    "reload_tick": 12475,
+    "confirmed_example": "original Retry and ordinary controller samples",
+    "player_hit": {
+      "tick": 12521,
+      "scene": 12373,
+      "attack": "Square",
+      "attributed_kind": 7,
+      "damage": 3,
+      "enemy_hp_before": 74,
+      "enemy_hp_after": 71,
+      "player_hp": 100
+    },
+    "recovery": {
+      "left_stick_direction_samples": 7,
+      "idle_tick": 12608,
+      "first_walk_tick": 12609,
+      "first_walk_scene": 12461,
+      "player_hp": 35,
+      "next_defeat_tick": 12672
+    },
+    "terminal_tick": 12695,
+    "scene_frames_presented": 443,
+    "renderer_window_and_effect_errors": 0,
+    "gameplay_frontier": "00000000"
+  },
   "native_cpu_r101_box_throw_and_pickup": {
     "room": "0101",
     "circle_pickup_tick": 994,
