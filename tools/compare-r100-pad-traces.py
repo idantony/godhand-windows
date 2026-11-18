@@ -24,6 +24,9 @@ def samples(path):
                 for field in (*FIELDS, "tick", "scene"):
                     if field not in row:
                         raise ValueError(f"missing {field}")
+                for field in ("tick", "scene"):
+                    if type(row[field]) is not int:
+                        raise ValueError(f"expected integer {field}")
             except (KeyError, TypeError, ValueError) as error:
                 raise ValueError(f"{path}:{number}: {error}") from error
             result[move] = row
@@ -38,8 +41,14 @@ def compare(left, right):
     if not shared:
         raise ValueError("The runs have no player updates in common")
     first = {}
+    offsets = {}
     for move in shared:
         a, b = left[move], right[move]
+        for field in ("tick", "scene"):
+            delta = b[field] - a[field]
+            offset = offsets.setdefault(field, {"initial": delta, "first_change": None})
+            if offset["first_change"] is None and delta != offset["initial"]:
+                offset["first_change"] = {"move": move, "offset": delta}
         for field in FIELDS:
             if field not in first and a[field] != b[field]:
                 first[field] = {
@@ -47,21 +56,37 @@ def compare(left, right):
                     "left": {"tick": a["tick"], "scene": a["scene"], "value": a[field]},
                     "right": {"tick": b["tick"], "scene": b["scene"], "value": b[field]},
                 }
-    return {"shared_updates": len(shared), "first_shared_update": shared[0], "last_shared_update": shared[-1],
-            "left_samples": len(left), "right_samples": len(right), "first_difference_by_field": first}
+    return {
+        "shared_updates": len(shared),
+        "first_shared_update": shared[0],
+        "last_shared_update": shared[-1],
+        "left_samples": len(left),
+        "right_samples": len(right),
+        "right_covers_left_prefix": list(right)[:len(left)] == list(left),
+        "first_missing_left_update": next((move for move in left if move not in right), None),
+        "timeline_offsets": offsets,
+        "first_difference_by_field": first,
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("left", type=Path)
     parser.add_argument("right", type=Path)
+    parser.add_argument("--require-baseline", action="store_true",
+                        help="Exit 2 if right does not reproduce all left gameplay samples as its prefix.")
     args = parser.parse_args()
     try:
         result = compare(samples(args.left), samples(args.right))
     except (OSError, ValueError) as error:
         parser.exit(1, f"{error}\n")
     print(json.dumps(result, indent=2))
+    if args.require_baseline and (
+        not result["right_covers_left_prefix"] or result["first_difference_by_field"]
+    ):
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

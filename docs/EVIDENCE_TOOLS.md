@@ -81,6 +81,11 @@ finished port or execute guest instructions in the production runtime.
   against the build manifest before compilation. The build runs this check too.
   Conditional, optional or unrecognized contracts remain explicitly unknown;
   the actual tests still validate their arguments and behavior.
+- `tools/compare-r100-pad-traces.py BASELINE CANDIDATE --require-baseline`
+  checks that the candidate reproduces every recorded baseline gameplay update
+  in order. Exit status 2 means the candidate lost coverage or changed gameplay.
+  The report locates the first missing update and the first offset change for
+  each timeline. Check the terminal replay report for the route's endpoint.
 
 Example using your own prepared input and an installed analysis toolchain:
 
@@ -152,6 +157,9 @@ is not overwritten. It does not build, launch the game or publish progress.
 ```powershell
 python -B tools/record-native-milestone.py --snapshot '.\.work\snapshots\room-transition-67' --scratch '.\.work\verification\room-transition-67' --output 'E:\godhand_windows\analysis\new-proof-private.json' --expected-frontier 00186928
 ```
+
+西区的输入回放比对可加 `--require-baseline` 自动检查验收范围。工具会标出首条缺失的
+基准记录、首处玩法差异和场景编号偏移。完整路线的终点由回放终止报告确认。
 
 验收汇总工具核对固定源码、二进制、报告与实际运行是否属于同一批；失败报告、混合
 版本和覆盖旧证据都会被拒绝。未完成的停止必须明确指定预期地址；工具只记录事实，
