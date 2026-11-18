@@ -129,6 +129,8 @@ source inventory and run independent native fixtures against the later inputs.
 Report the first missing operation with its owner, source row and frame. Keep
 empty table slots distinct from invalid offsets. Use the native startup path to
 verify the composed result and expose dependencies outside the fixture.
+If multiple native guards report the same original address, record which
+source branch fired and its live predicates before changing eligibility.
 Where useful,
 compare actual instruction words with native output using a small offline model
 or isolated oracle. Record supported instructions, inputs, states and raw return

@@ -163,7 +163,18 @@ Retreating triggers the original dodge and Gene stays at 1 HP. The altered
 enemy encounter ends at an unfinished effect path at tick 20,160.
 The diagnostic replay reproduces that endpoint and locates the rejection
 in the enemy's effect request constructor, before resource lookup. The
-exact rejected request condition remains unverified.
+exact request was subsequently captured. A private native build admits the
+original R105 actor to the already implemented CORE 58:46 effect and the
+existing post-attack path. The same retreat tape reaches the original
+grab, then the player death voice and music fade. The frame after the fade
+stops at an unsupported motion case.
+
+The original neutral tape reaches tick 20,500 on the private CPU build
+without hitting an unfinished entry. Direct3D on the same authored source
+presents 20,139 scene frames, 17 beyond the previous stop. It then stops
+while preparing scene 20,140. A world marker follows a UI item in the
+original ordering table, a combination the current renderer rejects
+before drawing the marker.
 
 内部原生 CPU 集成回放从新游戏出发，通过手柄录像完成西区战斗、R003 的 EV02 全部 28 个镜头，
 随后进入 R105。回放与归档中的 1,750 条启动记录和 14,257 条游戏记录一致。事件在第 20,046 个
@@ -176,8 +187,13 @@ tick 结束，第 20,053 个 tick 进入 R105，第 20,265 个 tick 停在敌人
 后续 CPU 回放与此前 16,007 条启动及游戏记录全数一致，自然进入 R105 后才接入新的手柄输入。
 后撤触发原版闪避，Gene 仍有 1 点生命值。敌人随后走到另一条分支，回放在第 20,160 个 tick
 停在尚未覆盖的特效路径。
-诊断回放复现了同一停点，将拒绝点定位到敌人特效请求的构造检查，早于资源查找。具体触发条件
-仍待核实。
+诊断回放捕获了构造检查拒绝的实际请求。私有原生构建让 R105 的这名敌人复用已有的 CORE
+58:46 特效和攻击收尾。同一条后撤回放进入原版抓取，再运行角色死亡语音和音乐淡出，淡出后
+下一帧遇到尚未覆盖的动作情况。
+
+原版中立回放在私有 CPU 构建跑到第 20,500 个 tick，期间没有新的未完成入口。同一份源码的
+Direct3D 验证实际呈现 20,139 帧，比旧停点多 17 帧。第 20,140 帧的原版排序表中，世界标记
+排在 UI 项之后，当前渲染器在绘制标记之前停止。
 
 ## R104 victory event and R021 Stage Clear
 
