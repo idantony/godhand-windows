@@ -5,6 +5,7 @@ from collections import Counter
 from itertools import zip_longest
 import json
 from pathlib import Path
+import re
 
 
 def records(lines, tags, before_tick):
@@ -24,15 +25,29 @@ def records(lines, tags, before_tick):
             yield tag, row
 
 
-def compare(baseline, replay, tags, before_tick):
+def text_records(lines, prefixes, before_tick):
+    longest_first = sorted(prefixes, key=len, reverse=True)
+    for number, line in enumerate(lines, 1):
+        row = line.rstrip("\r\n")
+        for prefix in longest_first:
+            if row == prefix or row.startswith(prefix + " "):
+                match = re.match(r"tick=?([0-9]+)(?: |$)", row[len(prefix) + 1:])
+                if not match:
+                    raise ValueError(f"Line {number}, {prefix}: expected tickN or tick=N")
+                if int(match[1]) < before_tick:
+                    yield prefix, row
+                break
+
+
+def compare(baseline, replay, tags, before_tick, *, read_records=records):
     tags = set(tags)
-    expected = list(records(baseline, tags, before_tick))
+    expected = list(read_records(baseline, tags, before_tick))
     missing = tags.difference(tag for tag, _ in expected)
     if missing:
         raise ValueError("No baseline records in range for " + ", ".join(sorted(missing)))
     counts = Counter()
     difference = None
-    for wanted, actual in zip_longest(expected, records(replay, tags, before_tick)):
+    for wanted, actual in zip_longest(expected, read_records(replay, tags, before_tick)):
         if wanted != actual:
             difference = {"expected": wanted, "actual": actual}
             break
@@ -45,6 +60,13 @@ def compare(baseline, replay, tags, before_tick):
         "first_difference": difference,
         "full_baseline_match": difference is None,
     }
+
+
+def compare_text(baseline, replay, prefixes, before_tick):
+    prefixes = {prefix.rstrip(" ") for prefix in prefixes}
+    if not prefixes or any(not prefix.strip() or "\r" in prefix or "\n" in prefix for prefix in prefixes):
+        raise ValueError("Expected nonempty text prefixes without a line break")
+    return compare(baseline, replay, prefixes, before_tick, read_records=text_records)
 
 
 def compare_bytes_before(baseline, replay, marker):
@@ -84,20 +106,27 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("baseline", type=Path)
     parser.add_argument("replay", type=Path)
-    parser.add_argument("--tag", action="append", help="JSON record prefix to include. Repeat as needed.")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--tag", action="append", help="JSON record prefix to include. Repeat as needed.")
+    selection.add_argument("--text-prefix", action="append",
+                           help="plain-text record prefix before tickN or tick=N. Repeat as needed.")
     boundary = parser.add_mutually_exclusive_group(required=True)
-    boundary.add_argument("--before-tick", type=int, help="Exclusive tick limit for tagged JSON records.")
+    boundary.add_argument("--before-tick", type=int, help="Exclusive tick limit for selected records.")
     boundary.add_argument("--before-line-prefix", help="Compare raw bytes up to the first baseline line with this prefix.")
     args = parser.parse_args()
-    if args.before_tick is not None and not args.tag:
-        parser.error("--before-tick requires at least one --tag")
-    if args.before_line_prefix is not None and args.tag:
+    if args.before_tick is not None and not (args.tag or args.text_prefix):
+        parser.error("--before-tick requires at least one --tag or --text-prefix")
+    if args.before_line_prefix is not None and (args.tag or args.text_prefix):
         parser.error("--before-line-prefix includes every preceding line")
     try:
         if args.before_tick is not None:
-            with args.baseline.open(encoding="utf-8-sig", errors="replace") as baseline:
-                with args.replay.open(encoding="utf-8-sig", errors="replace") as replay:
-                    result = compare(baseline, replay, args.tag, args.before_tick)
+            errors = "strict" if args.text_prefix else "replace"
+            with args.baseline.open(encoding="utf-8-sig", errors=errors) as baseline:
+                with args.replay.open(encoding="utf-8-sig", errors=errors) as replay:
+                    if args.text_prefix:
+                        result = compare_text(baseline, replay, args.text_prefix, args.before_tick)
+                    else:
+                        result = compare(baseline, replay, args.tag, args.before_tick)
         else:
             with args.baseline.open("rb") as baseline, args.replay.open("rb") as replay:
                 result = compare_bytes_before(baseline, replay, args.before_line_prefix.encode("utf-8"))

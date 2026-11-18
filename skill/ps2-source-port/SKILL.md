@@ -226,6 +226,8 @@ record tags and a shared exclusive tick limit to verify an archived replay
 prefix. Its comparison function accepts a live line stream and returns at the
 first difference. Keep the replay runner responsible for the process lifetime,
 input hashes, and terminal-state verification beyond that prefix.
+For older plain-text traces, repeat `--text-prefix` for each record prefix
+followed by `tickN` or `tick=N`. Keep the tick limit shared with the baseline.
 Use `--before-line-prefix` when the baseline mixes state records and native
 diagnostics. This checks every preceding byte and excludes the selected
 baseline line, so a recovered failure can turn into a successful state update.

@@ -11,6 +11,8 @@ SPEC.loader.exec_module(PREFIX)
 START = 'START {"tick": 5, "room": 0}\n'
 PLAY = 'PLAY {"tick": 6, "hp": 10}\n'
 AFTER = 'PLAY {"tick": 7, "hp": 8}\n'
+TITLE = "QA Title tick152 move0 mode1\n"
+LOAD = "QA Title Load tick=510 slots00000001 done1\n"
 
 
 class ReplayPrefix(unittest.TestCase):
@@ -44,6 +46,42 @@ class ReplayPrefix(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No baseline records in range for PLAY"):
             self.compare([START, AFTER], [START, PLAY])
 
+    def test_plain_text_keeps_exact_order_and_chooses_longer_prefix(self):
+        prefixes = ["QA Title ", "QA Title Load "]
+        later = "QA Title Load tick511 another-row\n"
+        result = PREFIX.compare_text([TITLE, LOAD, later], [TITLE, PLAY, LOAD, later], prefixes, before_tick=511)
+        self.assertTrue(result["full_baseline_match"])
+        self.assertEqual(result["tag_counts"], {"QA Title": 1, "QA Title Load": 1})
+
+        changed = LOAD.replace(" done1", "  done1")
+        mismatch = PREFIX.compare_text([TITLE, LOAD], [TITLE, changed], prefixes, before_tick=511)
+        self.assertFalse(mismatch["full_baseline_match"])
+        self.assertEqual(mismatch["first_difference"], {
+            "expected": ("QA Title Load", LOAD.rstrip("\n")),
+            "actual": ("QA Title Load", changed.rstrip("\n")),
+        })
+        reordered = PREFIX.compare_text([TITLE, LOAD], [LOAD, TITLE], prefixes, before_tick=511)
+        self.assertEqual(reordered["records_matched"], 0)
+
+    def test_plain_text_missing_record_preserves_coverage_failure(self):
+        result = PREFIX.compare_text([TITLE, LOAD], [TITLE], ["QA Title", "QA Title Load"], before_tick=511)
+        self.assertEqual(result["records_matched"], 1)
+        self.assertIsNone(result["first_difference"]["actual"])
+        self.assertFalse(result["full_baseline_match"])
+
+    def test_plain_text_rejects_empty_or_missing_selection(self):
+        for prefixes in ([], [" "], ["QA Title\n"]):
+            with self.subTest(prefixes=prefixes), self.assertRaisesRegex(ValueError, "nonempty text prefixes"):
+                PREFIX.compare_text([TITLE], [TITLE], prefixes, before_tick=511)
+        with self.assertRaisesRegex(ValueError, "No baseline records in range for QA Title Load"):
+            PREFIX.compare_text([TITLE, LOAD], [TITLE, LOAD], ["QA Title", "QA Title Load"], before_tick=510)
+
+    def test_plain_text_rejects_malformed_selected_tick(self):
+        with self.assertRaisesRegex(ValueError, "Line 2, QA Title Load: expected tickN or tick=N"):
+            PREFIX.compare_text(
+                [TITLE, LOAD], [TITLE, "QA Title Load tick510x done1\n"],
+                ["QA Title", "QA Title Load"], before_tick=511,
+            )
 
     def test_raw_mode_excludes_boundary_and_does_not_read_replay_tail(self):
         def replay():
