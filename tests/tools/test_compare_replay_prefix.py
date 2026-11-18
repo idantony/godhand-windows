@@ -45,5 +45,33 @@ class ReplayPrefix(unittest.TestCase):
             self.compare([START, AFTER], [START, PLAY])
 
 
+    def test_raw_mode_excludes_boundary_and_does_not_read_replay_tail(self):
+        def replay():
+            yield b"native diagnostic\r\n"
+            yield b"INPUT tick=6 ready=1\r\n"
+            self.fail("Consumed replay at the excluded boundary")
+
+        result = PREFIX.compare_bytes_before(
+            [b"native diagnostic\r\n", b"INPUT tick=6 ready=1\r\n", b"STATE tick=7 old_stop\r\n"],
+            replay(), b"STATE tick=7 ",
+        )
+        self.assertTrue(result["full_baseline_match"])
+        self.assertEqual(result["baseline_boundary_line"], 3)
+        self.assertEqual(result["lines_matched"], 2)
+
+    def test_raw_mode_keeps_line_endings_and_rejects_a_truncated_replay(self):
+        baseline = [b"native diagnostic\r\n", b"STATE tick=7 old_stop\r\n"]
+        for replay in ([], [b"native diagnostic\n"]):
+            result = PREFIX.compare_bytes_before(baseline, replay, b"STATE tick=7 ")
+            self.assertFalse(result["full_baseline_match"])
+            self.assertEqual(result["first_difference"]["line"], 1)
+
+    def test_raw_mode_rejects_missing_or_empty_baseline_range(self):
+        with self.assertRaisesRegex(ValueError, "does not contain"):
+            PREFIX.compare_bytes_before([b"native diagnostic\n"], [b"native diagnostic\n"], b"STATE")
+        with self.assertRaisesRegex(ValueError, "no preceding lines"):
+            PREFIX.compare_bytes_before([b"STATE tick=7\n"], [], b"STATE")
+
+
 if __name__ == "__main__":
     unittest.main()
