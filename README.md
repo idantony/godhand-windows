@@ -87,6 +87,13 @@ frames with matching world and HUD-composited images. In a separate CPU
 replay from New Game, the same enemy's counterattack lowers Gene from 100
 to 91 HP.
 
+A controlled native replay from the R105 exit writes a fresh R102 slot
+through the original Event 04 save menu. A separate launch of the standard
+Windows executable loads a byte-identical copy through the original title
+menu, presents 539 frames, and moves Gene 2.83 scene units with keyboard
+input. A Direct3D combat replay from the same new save reproduces the
+Square hit. The save data and both icons retain their original bytes.
+
 A later R102 title-load replay presents 88 Direct3D frames covering an enemy
 attack, Gene's hit reaction at 45 to 36 HP, and the enemy's recovery. A CPU
 test starts with the mid-room gate's defeat conditions set in the card and
@@ -519,6 +526,11 @@ EV04 结尾的原版保存菜单已写出有效的 R102 存档。重新启动后
 还验证了 R102 首次近战命中，方块攻击将目标敌人的生命值从 74 降到 71，并播放原版受击动作。
 两次回放各捕获 32 个连续的 Direct3D 帧，对应的场景和 HUD 合成画面逐帧一致。
 另一轮从新游戏开始的 CPU 回放验证了同一敌人的反击，Gene 的生命值从 100 降到 91。
+
+一次从 R105 出口开始的受控原生回放，在 EV04 的原版保存菜单写入了新的 R102 存档。
+标准 Windows 程序重新启动后，通过原版标题菜单读取该存档的逐字节副本，呈现了 539 帧，
+并响应普通键盘输入让 Gene 移动 2.83 个场景单位。另一轮 Direct3D 回放从同一个新档
+复现了方块命中。存档数据和两个图标保持原有字节。
 
 后续 R102 读档回放呈现了 88 个 Direct3D 帧，覆盖敌人攻击、Gene 从 45 HP 降到 36 HP 的
 受击反应，以及敌人收招。CPU 测试用预置击败条件的存档验证了中段门和五个增援，运行了 120 个
