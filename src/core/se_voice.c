@@ -2683,6 +2683,16 @@ static int r105_gate_close_descriptor(const uint8_t *p)
     w(p+40)==0xffffu&&!w(p+44);
 }
 
+static int r100_devil_scenery_voice_actor(const struct voice *v)
+{
+ const gh_actor_model *model=v->model;
+ if(!model||!model->work||model->work->room!=0x100||
+    model->root.size<0x17b8||model->root.original_vtable214!=0x4479c8)return 0;
+ const uint8_t *actor=model->root.bytes;
+ return actor&&h(actor+0x2fe)==0x220&&w(actor+0x564)==0x220&&h(actor+0x640)==0xff&&
+    h(actor+0x2f4)==0x1101&&!actor[0x2f6]&&!actor[0x2f7]&&(h(actor+0x3ac)&0x100u);
+}
+
 static int boost_impact_voice(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
@@ -2718,7 +2728,8 @@ static int boost_impact_voice(const struct voice *v,int16_t bank,int16_t program
       v->model->root.original_vtable214==0x4479c8&&v->model->root.size>=0x17b8&&
       h(actor+0x2fe)==0x202&&w(actor+0x564)==0x203&&h(actor+0x640)==11&&actor[0x1650]==5&&
       w(actor+0x16c4)==6&&h(actor+0x2f4)==0x1101&&!actor[0x2f6]&&!actor[0x2f7]&&!w(actor+0x17b4);
-  if(!west_scenery&&!active_impact&&!local&&!r102_east_em27_voice(v,0x1101,0)&&
+  if(!west_scenery&&!r100_devil_scenery_voice_actor(v)&&!active_impact&&!local&&
+     !r102_east_em27_voice(v,0x1101,0)&&
      !(v->combat_profile&&r102_east_em27_voice(v,0x1101,1)))return 0;
  }else if(!v->combat_profile)return 0;
  return w(p)==0x01210000u&&w(p+4)==0x01000093u&&w(p+8)==0x64u&&
@@ -3294,9 +3305,6 @@ static int core_critical_sequence(const struct voice *v)
  const int arena=actor[0x2f6]==0&&
     ((state==0x0101&&(arena_em00||r103_em0a_voice_actor(v)||arena_boss))||(state==0x0701&&arena_em00));
  const unsigned dependency=w(actor+0x564);
- const int r100_devil=model->work->room==0x100&&model->root.size>=0x17b8&&
-    dependency==0x220&&h(actor+0x2fe)==0x220&&stamp==0xff&&state==0x1101&&
-    !actor[0x2f6]&&!actor[0x2f7];
  const int r101_actor=model->work->room==0x101&&model->root.size>0x1650&&
     !actor[0x2f6]&&!actor[0x2f7];
  const int r101_carrier=r101_actor&&state==0x0001&&stamp==9&&actor[0x1650]==4&&
@@ -3320,7 +3328,8 @@ static int core_critical_sequence(const struct voice *v)
     (state==0x0101||(state==0x0701&&model->root.size>=0x17b8&&w(actor+0x17b4)==24));
  const int r200=model->work->room==0x200&&model->root.size>=0x17b8&&h(actor+0x2fe)==0x201&&
     dependency==0x202&&stamp==1&&!actor[0x1650]&&w(actor+0x2f4)==0x0101u&&w(actor+0x17b4)==24;
- return (room_actor||arena||r104||r200||r100_devil||((west_em02||west_em03)&&h(actor+0x2fe)==0x202))&&
+ return (room_actor||arena||r104||r200||r100_devil_scenery_voice_actor(v)||
+    ((west_em02||west_em03)&&h(actor+0x2fe)==0x202))&&
     (h(actor+0x3ac)&0x100u)&&v->part_index==-1&&
     !v->requested_bank&&v->requested_program==1&&!v->info.bank&&v->info.program==1&&
     w(p)==0x00010000u&&w(p+4)==0x01310000u&&w(p+8)==0x272u&&w(p+12)==0x00220000u&&

@@ -1,10 +1,71 @@
 #include "se_voice.h"
+#include "game_actor_model.h"
 #include "../platform/disc.h"
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define C(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
 static void pcm(gh_se_voice_engine *s,uint32_t handle,size_t expected,uint64_t digest){const int16_t *data;size_t frames;uint64_t hash=UINT64_C(14695981039346656037);C(gh_se_voice_pcm_view(s,handle,&data,&frames)==GH_VOICE_OK && frames==expected);for(size_t i=0;i<frames;++i){uint16_t n=(uint16_t)data[i];hash=(hash^(n&255))*UINT64_C(1099511628211);hash=(hash^(n>>8))*UINT64_C(1099511628211);}C(hash==digest);}
+
+static gh_voice_status devil_impact_probe(void *context,const float position[4],int update,
+    gh_se_attached_environment *environment,uint32_t *frontier)
+{
+ (void)context;
+ (void)position;
+ (void)update;
+ *environment=(gh_se_attached_environment){.output_mode=1,.gain64_bits=0x3f800000,.se_level_q8=0x5a00,
+     .listener_matrix_d0={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1}};
+ *frontier=0;
+ return GH_VOICE_OK;
+}
+
+static void check_devil_impact(gh_audio_registry *registry,gh_disc *disc,gh_audio_output *output)
+{
+ gh_se_mix mix;
+ gh_se_voice_engine *voices;
+ C(!gh_se_mix_boot_defaults_002c9e78(&mix,0,GH_SE_DSP_NATIVE_LINEAR_REFERENCE));
+ C(!gh_se_voice_create(registry,output,&mix,&voices)&&!gh_se_voice_bind_pitch_reference(voices,disc));
+ gh_boot_work work={.room=0x100};
+ uint8_t raw[0x1980]={0};
+ memcpy(raw+0x2f4,&(const uint32_t){0x1101},4);
+ memcpy(raw+0x2fe,&(const uint16_t){0x220},2);
+ memcpy(raw+0x3ac,&(const uint16_t){0x100},2);
+ memcpy(raw+0x564,&(const uint32_t){0x220},4);
+ memcpy(raw+0x640,&(const uint16_t){0xfe},2);
+ memcpy(raw+0xb0,&(const float[]){3,0,0,1},16);
+ gh_actor_model model={.bound=1,.parts_ready=1,.work=&work,
+    .root={.bytes=raw,.size=sizeof(raw),.alias_f0=raw+0xb0,.original_vtable214=0x4479c8}};
+ model.native_identity=&model;
+ uint32_t handle=0;
+ C(gh_se_voice_request_attached(voices,&model,&handle,&model,-1,0,0x121,0,0,
+     devil_impact_probe,NULL,NULL,NULL,&handle)==GH_VOICE_UNSUPPORTED&&!handle);
+ C(gh_se_voice_frontier(voices)==0x2cbf78&&!gh_se_voice_abort_attached_owner(voices,&model)&&
+     !model.sound_borrowers);
+ raw[0x640]=0xff;
+ C(!gh_se_voice_request_attached(voices,&model,&handle,&model,-1,0,0x121,0,0,
+     devil_impact_probe,NULL,NULL,NULL,&handle)&&handle);
+ gh_se_voice_info info;
+ C(!gh_se_voice_query(voices,handle,&info)&&info.pending&&info.bank==0&&info.program==0x121&&
+     info.sample_slot==147&&info.rate==20000&&info.adsr2==0x5fc0&&
+     info.attached&&info.attached_model==&model&&info.attached_part==-1);
+ C(!gh_se_voice_update(voices)&&!gh_se_voice_query(voices,handle,&info)&&!info.pending&&
+     info.native_voice&&info.frames);
+ const ULONGLONG deadline=GetTickCount64()+8000;
+ uint64_t high_water=0;
+ int active;
+ do{
+  Sleep(5);
+  uint64_t played;
+  C(!gh_audio_output_active(output,info.native_voice,&active,&played));
+  if(played>high_water)high_water=played;
+ }while(active&&GetTickCount64()<deadline);
+ C(!active&&high_water&&high_water<=info.frames);
+ C(!gh_se_voice_abort_attached_owner(voices,&model)&&!model.sound_borrowers);
+ gh_se_voice_destroy(voices);
+ puts("PASS actual Devil CORE0:0121 slot147 on muted XAudio2, wrong stamp rejected");
+}
+
 int main(int argc,char **argv){
  gh_disc *disc;gh_disc_entry file;size_t index;void *data;gh_audio_registry *registry;gh_audio_token token;gh_audio_output *output;int32_t native;gh_se_voice_engine *engine;gh_se_mix mix={0x7f00,1,0,GH_SE_DSP_NATIVE_LINEAR_REFERENCE};gh_se_voice_info info;uint32_t handle[8],unknown;
  C(argc==2 && gh_disc_open(argv[1],&disc)==GH_DISC_OK && gh_disc_find(disc,"se/core.ses",&index)==GH_DISC_OK && gh_disc_entry_at(disc,index,&file)==GH_DISC_OK);
@@ -109,6 +170,8 @@ int main(int argc,char **argv){
  C(gate_active&&gate_played>815u*28u&&!gh_se_voice_stop_bank_002cbc58(engine,2,0)&&!gh_se_voice_update(engine));
  C(!gh_se_voice_query(engine,gate,&info)&&info.retiring&&!info.native_voice);
  puts("PASS actual R105 bank2 gate loop, original ADPCM markers and native SamplesPlayed");
- gh_se_voice_destroy(engine);gh_audio_output_destroy(output);gh_audio_registry_destroy(registry);gh_disc_close(disc);
+ gh_se_voice_destroy(engine);
+ check_devil_impact(registry,disc,output);
+ gh_audio_output_destroy(output);gh_audio_registry_destroy(registry);gh_disc_close(disc);
  printf("PASS actualMC/logo program->sample->nativePCM/ADSR->muted realXAudio2 voices; LIFO, five channels, equalpriority replacement, completion/reuse; progress%llu\n",(unsigned long long)progress);return 0;
 }
