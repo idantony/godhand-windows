@@ -7,6 +7,12 @@ finished port or execute guest instructions in the production runtime.
   save-file regression. Its fixture lives under scratch and needs no private
   ISO or extracted files. ISO-dependent checks resolve the disc baseline when
   selected.
+- `--focus mc-save-control` exercises the occupied slot's default No choice
+  through the original save control and verifies that all three files match
+  their starting bytes. The focused fixture uses the user's ISO.
+- [check-replay-checkpoints.py](../skill/ps2-source-port/scripts/check-replay-checkpoints.py)
+  checks ordered tick markers in a saved trace or during an isolated replay.
+  Use it on fixed input tapes with known title and menu readiness points.
 - The standard Windows executable accepts `--trace-native-input`. Each
   `NATIVE_INPUT` JSON line on stderr records the applied sample and the state
   after that tick. Read the menu fields for readiness and the player fields

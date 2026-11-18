@@ -90,7 +90,11 @@ static int sound(void *context,const gh_mc_sound_request *request)
     fixture->last=(unsigned)request->sound_id;
     return 0;
 }
-static void file_matches(const char *profile,const char *name,const void *expected,size_t bytes)
+typedef struct {
+    uint8_t record[GH_MC_SAVE_RECORD_BYTES],model[0x8618],system[0x3c4];
+} saved_slot;
+
+static void file_matches(const char *profile,const char *name,const void *expected,size_t bytes,int remove_file)
 {
     char path[1550];
     C(snprintf(path,sizeof(path),"%s\\BASLUS-21503GODHD000\\%s",profile,name)>0);
@@ -99,10 +103,17 @@ static void file_matches(const char *profile,const char *name,const void *expect
     C(file&&actual&&fread(actual,1,bytes,file)==bytes&&fgetc(file)==EOF&&!fclose(file));
     C(!memcmp(actual,expected,bytes));
     free(actual);
-    C(DeleteFileA(path));
+    if(remove_file)C(DeleteFileA(path));
 }
 
-static void verify_control(gh_disc *disc,save_call *call,const char *profile)
+static void verify_disk(const char *profile,const saved_slot *slot,int remove_files)
+{
+    file_matches(profile,"BASLUS-21503GODHD000",slot->record,sizeof(slot->record),remove_files);
+    file_matches(profile,"godh0.ico",slot->model,sizeof(slot->model),remove_files);
+    file_matches(profile,"icon.sys",slot->system,sizeof(slot->system),remove_files);
+}
+
+static void verify_control(gh_disc *disc,save_call *call,saved_slot *slot,int decline)
 {
     gh_mc_save_control control={0};
     gh_mc_load_menu_memory memory={-1,-1};
@@ -130,7 +141,21 @@ static void verify_control(gh_disc *disc,save_call *call,const char *profile)
         fprintf(stderr,"save status%u frontier%06x phase%u/%u mode%d\\n",actual,frontier,checks->phase,checks->subphase,checks->mode); \
         C(actual==(expected)&&!frontier);}while(0)
     for(unsigned i=0;checks->phase<6&&i<30;++i)STEP(GH_MC_SAVE_PENDING);
-    C(checks->phase==6&&!checks->present_mask&&control.scan.first_slot==0&&control.scan.selected_row==0);
+    C(checks->phase==6&&checks->present_mask==(decline?1u:0u)&&
+      control.scan.first_slot==0&&control.scan.selected_row==0);
+    if(decline){
+        INPUT(0x10000000,0);STEP(GH_MC_SAVE_PENDING);
+        INPUT(0,0);STEP(GH_MC_SAVE_PENDING);
+        C(checks->phase==8&&control.selected_slot==0&&!checkpoint.captured);
+        STEP(GH_MC_SAVE_PENDING);
+        C(checks->mode==7&&!control.choice);
+        INPUT(0x10000000,0);STEP(GH_MC_SAVE_PENDING);
+        C(checks->phase==8&&!control.choice&&sounds.last==0x15e);
+        INPUT(0,0);STEP(GH_MC_SAVE_PENDING);
+        C(checks->phase==6&&checks->present_mask==1&&!checkpoint.captured&&!control.complete);
+        gh_audio_registry_destroy(sounds.registry);
+        return;
+    }
     STEP(GH_MC_SAVE_PENDING);
     INPUT(0,0x01000000);STEP(GH_MC_SAVE_PENDING);
     C(control.scan.first_slot==17&&control.scan.selected_row==2&&sounds.last==0x161);
@@ -182,11 +207,9 @@ static void verify_control(gh_disc *disc,save_call *call,const char *profile)
     C(gh_mc_selected_load_step(&loaded,&frontier)==GH_MC_LOAD_PENDING);
     C(gh_mc_selected_load_step(&loaded,&frontier)==GH_MC_LOAD_VERIFIED&&!frontier);
     C(!memcmp(loaded.record,record,GH_MC_SAVE_RECORD_BYTES));
-    file_matches(profile,"BASLUS-21503GODHD000",record,GH_MC_SAVE_RECORD_BYTES);
-    file_matches(profile,"godh0.ico",call->save.icon_model.bytes,0x8618);
-    file_matches(profile,"icon.sys",call->save.icon_template.bytes,0x3c4);
-    char folder[1550];
-    C(snprintf(folder,sizeof(folder),"%s\\BASLUS-21503GODHD000",profile)>0&&RemoveDirectoryA(folder));
+    memcpy(slot->record,record,sizeof(slot->record));
+    memcpy(slot->model,call->save.icon_model.bytes,sizeof(slot->model));
+    memcpy(slot->system,call->save.icon_template.bytes,sizeof(slot->system));
     gh_audio_registry_destroy(sounds.registry);
 #undef INPUT
 #undef STEP
@@ -218,7 +241,7 @@ static void exit_save_task(void *context,int32_t argument)
     call->done=1;
 }
 
-static void save_entry_fixture(gh_disc *disc,gh_mc_task_bindings *bindings,const char *profile)
+static void save_entry_fixture(gh_disc *disc,gh_mc_task_bindings *bindings,saved_slot *slot,int decline)
 {
     save_call *call=calloc(1,sizeof(*call));
     C(call);
@@ -280,7 +303,22 @@ static void save_entry_fixture(gh_disc *disc,gh_mc_task_bindings *bindings,const
     C(heading->flags&0x20000000u);
     C(gh_id_base_get_work_002aa410(bindings->id_runtime,&call->save.common.id_base,2,&heading,NULL)==GH_ID_OK);
     C(heading->message==0x20a4);
-    verify_control(disc,call,profile);
+    verify_control(disc,call,slot,decline);
+    if(decline){
+        /* No returns to the list. Release the reopened task through the host
+         * abort path rather than pretending the Save operation completed. */
+        C(gh_mc_task_abort_save(&call->save,bindings,call->room_heap)==GH_MC_TASK_OK);
+        C(!call->save.common.module_loaded&&!call->save.card_begun);
+        C(!call->save.current_record.pointer&&!call->save.previous_record.pointer);
+        C(gh_heap_used(call->room_heap)==initial&&gh_memory_card_request_info(bindings->card)==GH_MC_ENDED);
+        C(!(work_word(bindings->work,0x5e8)&0x80000000u));
+        C(gh_task_threads_destroy(bindings->threads)==GH_THREAD_OK);
+        C(gh_game_room_pools_release(&call->pools)==GH_POOL_OK);
+        C(gh_heap_destroy(call->room_heap)==GH_MEM_OK);
+        free(bytes);
+        free(call);
+        return;
+    }
     int32_t exit_slot;
     call->done=0;
     C(gh_task_threads_start(bindings->threads,2,exit_save_task,call,0,&exit_slot)==GH_THREAD_OK&&exit_slot==2);
@@ -294,6 +332,7 @@ static void save_entry_fixture(gh_disc *disc,gh_mc_task_bindings *bindings,const
     }
     C(call->done&&call->exit_fades==11&&call->no_ui_sleeps==1&&call->exit.body_finished);
     C(call->save.phase==5&&!call->save.common.module_loaded&&!call->save.card_begun);
+    C(!call->save.current_record.pointer&&!call->save.previous_record.pointer);
     C(gh_heap_used(call->room_heap)==initial&&gh_memory_card_request_info(bindings->card)==GH_MC_ENDED);
     C(gh_scene_cursor_save_step_002bf478(&cursor,bindings->work,NULL,NULL)==GH_AUX_OK);
     C(cursor.save_load[0]==5&&cursor.save_load[0xc]==0);
@@ -347,8 +386,16 @@ int main(int argc,char **argv)
         .id_manager=id,.id_runtime=runtime,.fonts=&font,.packed=&packed,.language=&language,.work=&work,
         .game_suspend_word=&suspend};
     const size_t baseline=gh_heap_used(heap);
-    save_entry_fixture(disc,&bindings,profile);
+    static saved_slot slot;
+    save_entry_fixture(disc,&bindings,&slot,0);
     C(!suspend&&gh_heap_used(heap)==baseline&&!gh_heap_used(module_heap));
+    verify_disk(profile,&slot,0);
+    save_entry_fixture(disc,&bindings,&slot,1);
+    C(!suspend&&gh_heap_used(heap)==baseline&&!gh_heap_used(module_heap));
+    verify_disk(profile,&slot,1);
+    char folder[1550];
+    C(snprintf(folder,sizeof(folder),"%s\\BASLUS-21503GODHD000",profile)>0&&RemoveDirectoryA(folder));
+    puts("PASS occupied-slot default No returns to list, releases save task and preserves record and icons");
     C(gh_id_runtime_destroy(runtime)==GH_ID_OK&&gh_heap_release(heap,allocation)==GH_MEM_OK);
     C(gh_heap_destroy(heap)==GH_MEM_OK&&gh_heap_destroy(module_heap)==GH_MEM_OK);
     gh_memory_card_close(card);

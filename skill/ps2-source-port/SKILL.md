@@ -105,6 +105,13 @@ slot. Verify a read in a fresh process after normal commit. Keep host-only
 tests runnable without a disc package by resolving media prerequisites only
 for the tests whose inputs actually require them.
 
+When a fixed replay misses a menu twice, compare readiness timestamps before
+repeating the full run. [check-replay-checkpoints.py](scripts/check-replay-checkpoints.py)
+checks ordered `EVENT key=value ... tick=N` records from a log or a child
+process. A live mismatch stops that isolated child and preserves the trace
+through the divergent checkpoint. Prefer readiness-driven input for new
+routes and a focused control fixture for a local menu branch.
+
 Make integer wrapping, sign extension, alignment, endianness and guest-address
 resolution explicit. Establish numerical semantics for the actual PS2
 instructions: rounding, intermediate operations, denormals and exceptional
