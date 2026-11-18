@@ -43,7 +43,8 @@ def launch_project(snapshot):
 
 def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capture_frame=370,
             capture_count=1, control_probe=None, title_load=False, build_scratch=None, r003_controlled=False,
-            game_over_retry=False, pad_tape=None, level_confirm_tick=None, after_victory_frames=None):
+            game_over_retry=False, pad_tape=None, level_confirm_tick=None, after_victory_frames=None,
+            *, trace_native_input=False):
     """Read-only preflight. No launch or output creation occurs on rejection."""
     snapshot, scratch = Path(snapshot_arg).resolve(), Path(scratch_arg).resolve()
     build_scratch = scratch if build_scratch is None else Path(build_scratch).resolve()
@@ -98,6 +99,8 @@ def prepare(snapshot_arg, scratch_arg, iso_arg, ffmpeg_arg, max_ticks=1100, capt
         command.extend(("--qa-control", control_probe))
     if game_over_retry:
         command.append("--qa-game-over-retry")
+    if trace_native_input:
+        command.append("--trace-native-input")
     if pad_tape:
         command.extend(("--qa-pad-tape", str(pad_tape)))
     if level_confirm_tick is not None:
@@ -186,7 +189,33 @@ def pad_tape_observations(log, capture, qa, after_victory_frames=None):
     return status
 
 
-def run(prepared, *, expected_tick_limit=None):
+def last_logged_observations(path):
+    """Collect complete observations for diagnostics before validating the run."""
+    markers = {
+        b"NATIVE_INPUT": "last_native_input",
+        b"QA_GAME_OVER_STATUS": "game_over_status",
+    }
+    observations = {}
+    with path.open("rb") as stream:
+        for line in stream:
+            marker, _, payload = line.partition(b" ")
+            if marker not in markers or not line.endswith(b"\n"):
+                continue
+            try:
+                record = json.loads(payload)
+            except (ValueError, UnicodeError):
+                continue
+            if not isinstance(record, dict):
+                continue
+            if marker == b"NATIVE_INPUT" and (type(record.get("tick")) is not int or record["tick"] < 0):
+                continue
+            observations[markers[marker]] = record
+    return observations
+
+
+def run(prepared, *, expected_tick_limit=None, wall_timeout=None):
+    proof.require(wall_timeout is None or (type(wall_timeout) is int and wall_timeout > 0),
+                  "wall-timeout must be a positive number of seconds")
     scratch = prepared["scratch"]
     scratch.mkdir(parents=True, exist_ok=True)
     # Exclusive reservation prevents two agents from replacing one QA receipt.
@@ -202,12 +231,26 @@ def run(prepared, *, expected_tick_limit=None):
     if pad_tape:
         proof.require(proof.digest(pad_tape) == prepared["pad_tape_sha256"], "pad tape changed before launch")
         receipt["pad_tape_sha256_before"] = prepared["pad_tape_sha256"]
-    with (scratch / "startup-newgame.json").open("xb") as out, (scratch / "startup-newgame.stderr.log").open("xb") as err:
+    stdout_path = scratch / "startup-newgame.json"
+    stderr_path = scratch / "startup-newgame.stderr.log"
+    wait_options = {}
+    if wall_timeout is not None:
+        wait_options["timeout"] = wall_timeout
+        receipt["wall_timeout_seconds"] = wall_timeout
+    with stdout_path.open("xb") as out, stderr_path.open("xb") as err:
         try:
-            child = subprocess.run(prepared["command"], stdout=out, stderr=err)
+            child = subprocess.run(prepared["command"], stdout=out, stderr=err, **wait_options)
             receipt["exit_code"] = child.returncode
+            if wall_timeout is not None:
+                receipt["wait_outcome"] = "exited"
+        except subprocess.TimeoutExpired:
+            # subprocess.run terminates and waits for this child on timeout.
+            # The child's normal exit status and terminal state are unknown.
+            receipt["wait_outcome"] = "timed_out"
         except OSError as error:
             receipt["launch_error"] = str(error)
+            if wall_timeout is not None:
+                receipt["wait_outcome"] = "launch_error"
     # Fingerprint even if the child reports a renderer failure below.
     capture = Path(prepared["command"][prepared["command"].index("--qa-capture") + 1])
     captures = [capture, Path(str(capture) + ".world.rgba")]
@@ -221,15 +264,18 @@ def run(prepared, *, expected_tick_limit=None):
     if after_victory_frames:
         captures.extend(Path(str(capture) + suffix) for suffix in (".post-victory.rgba", ".post-victory.rgba.world.rgba"))
     captures.extend(sorted(scratch.glob(capture.stem + ".scene-*.rgba")))
-    outputs = [scratch / "startup-newgame.json", scratch / "startup-newgame.stderr.log"]
+    outputs = [stdout_path, stderr_path]
     outputs.extend(path for path in captures if path.is_file() and path.resolve().parent == scratch)
     receipt["outputs_sha256"] = {path.name: proof.digest(path) for path in outputs}
+    if wall_timeout is not None or "--trace-native-input" in prepared["command"]:
+        receipt["observations_unvalidated"] = last_logged_observations(stderr_path)
     receipt["finished_utc"] = now()
     receipt["executable_sha256_after"] = proof.digest(prepared["executable"])
     with (scratch / "startup-process.json").open("x", encoding="utf-8") as stream:
         json.dump(receipt, stream, indent=2)
         stream.write("\n")
     proof.require("launch_error" not in receipt, "QA launch failed; inspect process receipt")
+    proof.require(receipt.get("wait_outcome") != "timed_out", "QA wall-timeout expired; inspect process receipt")
     proof.require(receipt["executable_sha256_before"] == receipt["executable_sha256_after"], "QA executable changed during execution")
     if pad_tape:
         proof.require(receipt["pad_tape_sha256_before"] == receipt["pad_tape_sha256_after"],
@@ -323,6 +369,9 @@ def main():
     parser.add_argument("--title-load", action="store_true", help="select Load Game using the scratch profile-load directory")
     parser.add_argument("--r003-controlled", action="store_true", help="isolate R003 using the original A38 destination at title handoff")
     parser.add_argument("--game-over-retry", action="store_true", help="confirm the presented Game Over panel and capture the reloaded room")
+    parser.add_argument("--trace-native-input", action="store_true", help="record native input and simulation observations per tick")
+    parser.add_argument("--wall-timeout", type=int, metavar="SECONDS",
+                        help="terminate the QA child after this positive wall-clock limit and retain its partial evidence")
     parser.add_argument("--pad-tape", type=Path, help="replay recorded R100 gamepad samples by completed player Move")
     parser.add_argument("--level-confirm-tick", type=int,
                         help="delay the original New Game difficulty confirmation to this replay tick")
@@ -332,10 +381,11 @@ def main():
     try:
         prepared = prepare(args.snapshot, args.scratch, args.iso, args.ffmpeg, args.max_ticks, args.capture_frame,
                            args.capture_count, args.control_probe, args.title_load, args.build_scratch, args.r003_controlled,
-                           args.game_over_retry, args.pad_tape, args.level_confirm_tick, args.after_victory_frames)
+                           args.game_over_retry, args.pad_tape, args.level_confirm_tick, args.after_victory_frames,
+                           trace_native_input=args.trace_native_input)
         require_frozen_runner(args.snapshot)
         expected = args.max_ticks if args.expect_tick_limit else None
-        print(json.dumps(run(prepared, expected_tick_limit=expected)), flush=True)
+        print(json.dumps(run(prepared, expected_tick_limit=expected, wall_timeout=args.wall_timeout)), flush=True)
     except (proof.ProofError, OSError, ValueError) as error:
         parser.exit(1, str(error) + "\n")
 

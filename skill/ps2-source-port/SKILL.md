@@ -198,6 +198,11 @@ reports, and a match to the frozen snapshot receipt. Fail when a selected
 report is missing. Explicitly selected extra files must keep any digest
 already recorded in a build report.
 Record the process exit code even when it produces no replay report.
+When the Windows QA launcher offers `--trace-native-input`, enable it to
+pin the last observed input and resulting tick on a long run. An optional
+`--wall-timeout` keeps partial logs and capture hashes in the process receipt.
+Choose a deadline using measured wall time. A timeout records an interrupted
+observation with no normal exit status.
 
 Use [compare-replay-prefix.py](scripts/compare-replay-prefix.py) with selected
 record tags and a shared exclusive tick limit to verify an archived replay

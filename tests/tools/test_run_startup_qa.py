@@ -582,6 +582,59 @@ class StartupRunnerTests(unittest.TestCase):
         receipt = json.loads((self.scratch / "startup-process.json").read_text())
         self.assertIn("launch_error", receipt); self.assertNotIn("exit_code", receipt)
 
+    def test_wall_timeout_keeps_partial_log_fingerprints_without_native_exit(self):
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, trace_native_input=True)
+        self.assertIn("--trace-native-input", prepared["command"])
+
+        def interrupted(command, stdout, stderr, timeout):
+            self.assertEqual(timeout, 20)
+            stdout.write(b'{"ticks":')
+            stderr.write(b'QA_GAME_OVER_STATUS {"menu_scene":0}\n'
+                         b'NATIVE_INPUT {"tick":45,"room":261}\n'
+                         b'NATIVE_INPUT {"tick":46}\n'
+                         b'NATIVE_INPUT {"tick":47}')
+            raise subprocess.TimeoutExpired(command, timeout)
+
+        with patch.object(tool.subprocess, "run", interrupted):
+            with self.assertRaisesRegex(tool.proof.ProofError, "wall-timeout expired"):
+                tool.run(prepared, wall_timeout=20)
+        receipt = json.loads((self.scratch / "startup-process.json").read_text())
+        self.assertEqual(receipt["wait_outcome"], "timed_out")
+        self.assertEqual(receipt["wall_timeout_seconds"], 20)
+        self.assertNotIn("exit_code", receipt)
+        self.assertNotIn("launch_error", receipt)
+        self.assertEqual(receipt["observations_unvalidated"], {
+            "last_native_input": {"tick": 46},
+            "game_over_status": {"menu_scene": 0},
+        })
+        self.assertEqual(receipt["outputs_sha256"], {
+            name: tool.proof.digest(self.scratch / name)
+            for name in ("startup-newgame.json", "startup-newgame.stderr.log")
+        })
+
+    def test_wall_timeout_option_keeps_actual_exit_validation(self):
+        prepared = self.prepare()
+        self.assertNotIn("--trace-native-input", prepared["command"])
+
+        def exited(command, stdout, stderr, timeout):
+            self.assertEqual(timeout, 20)
+            return self.fake_run(self.qa(world_gpu_error=2))(command, stdout, stderr)
+
+        with patch.object(tool.subprocess, "run", exited):
+            with self.assertRaisesRegex(tool.proof.ProofError, "world_gpu_error"):
+                tool.run(prepared, wall_timeout=20)
+        receipt = json.loads((self.scratch / "startup-process.json").read_text())
+        self.assertEqual(receipt["wait_outcome"], "exited")
+        self.assertEqual(receipt["exit_code"], 4)
+        self.assertEqual(receipt["observations_unvalidated"], {})
+
+    def test_invalid_wall_timeout_does_not_reserve_outputs(self):
+        prepared = self.prepare()
+        for invalid in (0, -1, True):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(tool.proof.ProofError, "positive"):
+                tool.run(prepared, wall_timeout=invalid)
+        self.assertFalse((self.scratch / "startup-run.lock").exists())
+
     def test_frame_bounds_rejected(self):
         for ticks, capture in ((0, 370), (100, 370), (1100, 0), (100001, 370)):
             with self.subTest(ticks=ticks, capture=capture), self.assertRaises(tool.proof.ProofError):
