@@ -5,12 +5,14 @@
 #include <string.h>
 #include <math.h>
 #include "adx_stream.h"
+#include "winmm_trace.h"
 #define QUEUE_COUNT 4
 #define BUFFER_FRAMES 4096
-typedef struct {WAVEHDR header;int16_t pcm[BUFFER_FRAMES*2];uint32_t frames;int prepared,queued;} pcm_buffer;
+typedef struct {WAVEHDR header;int16_t pcm[BUFFER_FRAMES*2];uint64_t trace_buffer;uint32_t frames;int prepared,queued;} pcm_buffer;
 struct gh_adx_stream {
  gh_adx_decoder *decoder;gh_adx_info info;HWAVEOUT device;DWORD owner;
  pcm_buffer buffers[QUEUE_COUNT];uint64_t submitted,completed,loops;
+ uint64_t trace_next;unsigned trace_stream;
  int started,ever_started,paused,muted,loop,eof,complete;float gain;gh_adx_error error;
 };
 static int owned(const gh_adx_stream*p){return p&&p->owner==GetCurrentThreadId();}
@@ -25,7 +27,7 @@ gh_adx_error gh_adx_stream_open(const void*b,size_t n,const gh_adx_key*k,gh_adx_
  if(waveOutOpen(&p->device,WAVE_MAPPER,&f,0,0,CALLBACK_NULL)!=MMSYSERR_NOERROR||waveOutPause(p->device)!=MMSYSERR_NOERROR){gh_adx_stream_close(p);return GH_ADX_DEVICE;}
  for(i=0;i<QUEUE_COUNT;i++){pcm_buffer*q=&p->buffers[i];q->header.lpData=(LPSTR)q->pcm;q->header.dwBufferLength=sizeof(q->pcm);
   if(waveOutPrepareHeader(p->device,&q->header,sizeof(q->header))!=MMSYSERR_NOERROR){gh_adx_stream_close(p);return GH_ADX_DEVICE;}q->prepared=1;
- }*out=p;return GH_ADX_OK;
+ }p->trace_stream=gh_winmm_trace_stream();*out=p;return GH_ADX_OK;
 }
 gh_adx_error gh_adx_stream_set_muted(gh_adx_stream*p,int value){if(!owned(p)||(value!=0&&value!=1))return GH_ADX_ARGUMENT;if(p->ever_started)return GH_ADX_STATE;p->muted=value;return GH_ADX_OK;}
 gh_adx_error gh_adx_stream_set_gain(gh_adx_stream*p,float gain){if(!owned(p)||!isfinite(gain)||gain<0||gain>1)return GH_ADX_ARGUMENT;p->gain=gain;return GH_ADX_OK;}
@@ -36,13 +38,28 @@ static gh_adx_error fill(gh_adx_stream*p,pcm_buffer*q){size_t total=0;
   take=end-pos;if(take>BUFFER_FRAMES-total)take=BUFFER_FRAMES-total;e=gh_adx_decode(p->decoder,q->pcm+total*2,take,&n);if(e)return e;if(!n)return GH_ADX_FORMAT;total+=n;
  }
  if(!total)return GH_ADX_OK;
+ gh_winmm_pcm_metrics decoded={0},submitted={0};
+ if(p->trace_stream)decoded=gh_winmm_pcm16_stereo_metrics(q->pcm,total);
  {size_t i;for(i=0;i<total*2;i++){if(p->muted)q->pcm[i]=0;else q->pcm[i]=(int16_t)((float)q->pcm[i]*p->gain);}}
+ if(p->trace_stream)submitted=gh_winmm_pcm16_stereo_metrics(q->pcm,total);
  q->frames=(uint32_t)total;q->header.dwBufferLength=(DWORD)(total*4);
  if(waveOutWrite(p->device,&q->header,sizeof(q->header))!=MMSYSERR_NOERROR)return GH_ADX_DEVICE;
+ if(p->trace_stream){
+  q->trace_buffer=++p->trace_next;
+  gh_winmm_trace_submit("adx",p->trace_stream,q->trace_buffer,total,p->info.sample_rate,p->muted,
+      decoded,submitted);
+ }
  q->queued=1;p->submitted+=total;return GH_ADX_OK;
 }
 static gh_adx_error pump(gh_adx_stream*p){unsigned i;gh_adx_error e;
- for(i=0;i<QUEUE_COUNT;i++){pcm_buffer*q=&p->buffers[i];if(q->queued&&(q->header.dwFlags&WHDR_DONE)){p->completed+=q->frames;q->queued=0;}}
+ for(i=0;i<QUEUE_COUNT;i++){
+  pcm_buffer*q=&p->buffers[i];
+  if(q->queued&&(q->header.dwFlags&WHDR_DONE)){
+   if(p->trace_stream)gh_winmm_trace_complete("adx",p->trace_stream,q->trace_buffer,q->frames);
+   p->completed+=q->frames;
+   q->queued=0;
+  }
+ }
  for(i=0;i<QUEUE_COUNT&&!p->eof;i++)if(!p->buffers[i].queued){e=fill(p,&p->buffers[i]);if(e)return e;}
  p->complete=p->eof&&p->completed==p->submitted;return GH_ADX_OK;
 }

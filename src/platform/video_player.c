@@ -5,8 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "video_player.h"
+#include "winmm_trace.h"
 typedef struct {HANDLE process,read;} stream;
-struct gh_video_player {stream video;HWAVEOUT audio;WAVEHDR header;unsigned char *pcm,*rgba;size_t pcm_bytes;uint64_t frames;LARGE_INTEGER start,frequency;DWORD owner;gh_video_present present;void*context;int prepared,started,eof,muted;uint32_t exit_code;gh_video_error error;};
+struct gh_video_player {stream video;HWAVEOUT audio;WAVEHDR header;unsigned char *pcm,*rgba;size_t pcm_bytes;uint64_t frames;LARGE_INTEGER start,frequency;DWORD owner;gh_video_present present;void*context;int prepared,started,eof,muted,trace_done;unsigned trace_stream;uint32_t exit_code;gh_video_error error;};
 static wchar_t *wide(const char*s){int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s,-1,NULL,0);wchar_t*w;if(!n)return NULL;w=malloc((size_t)n*sizeof(*w));if(w&&!MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s,-1,w,n)){free(w);return NULL;}return w;}
 static int quote(wchar_t *out,size_t *used,const wchar_t *in){size_t i=0;if(*used+2>=32760)return 0;out[(*used)++]=L'"';while(in[i]){size_t slashes=0;while(in[i]==L'\\'){slashes++;i++;}if(in[i]==L'"'||!in[i])slashes*=2;if(*used+slashes+3>=32760)return 0;while(slashes--)out[(*used)++]=L'\\';if(in[i]==L'"')out[(*used)++]=L'\\';if(in[i])out[(*used)++]=in[i++];}out[(*used)++]=L'"';out[(*used)++]=L' ';out[*used]=0;return 1;}
 static gh_video_error launch(const char*exe,const char*input,int audio,stream*out){
@@ -39,18 +40,32 @@ gh_video_error gh_video_open_movie0(const char*iso,const char*ffmpeg,gh_video_pr
  memset(&format,0,sizeof(format));format.wFormatTag=WAVE_FORMAT_PCM;format.nChannels=2;format.nSamplesPerSec=48000;format.wBitsPerSample=16;format.nBlockAlign=4;format.nAvgBytesPerSec=192000;
  if(waveOutOpen(&p->audio,WAVE_MAPPER,&format,0,0,CALLBACK_NULL)!=MMSYSERR_NOERROR){error=GH_VIDEO_AUDIO;goto fail;}p->header.lpData=(LPSTR)p->pcm;p->header.dwBufferLength=(DWORD)p->pcm_bytes;
  if(waveOutPrepareHeader(p->audio,&p->header,sizeof(p->header))!=MMSYSERR_NOERROR){error=GH_VIDEO_AUDIO;goto fail;}p->prepared=1;
- error=launch(ffmpeg,input,0,&p->video);if(error)goto fail;free(input);*out=p;return GH_VIDEO_OK;
+ error=launch(ffmpeg,input,0,&p->video);if(error)goto fail;p->trace_stream=gh_winmm_trace_stream();free(input);*out=p;return GH_VIDEO_OK;
 fail:stop(&audio);free(input);gh_video_close(p);return error;
 }
 gh_video_error gh_video_set_muted(gh_video_player*p,int muted){if(!p||GetCurrentThreadId()!=p->owner||p->started||(muted!=0&&muted!=1))return GH_VIDEO_ARGUMENT;p->muted=muted;return GH_VIDEO_OK;}
 gh_video_error gh_video_poll(gh_video_player*p,gh_video_status*out){
  LARGE_INTEGER now;uint64_t ns,due;size_t used=0;DWORD count=0;if(!p||!out||GetCurrentThreadId()!=p->owner)return GH_VIDEO_ARGUMENT;memset(out,0,sizeof(*out));if(p->error)return p->error;
- if(!p->started){QueryPerformanceFrequency(&p->frequency);QueryPerformanceCounter(&p->start);if(p->muted)memset(p->pcm,0,p->pcm_bytes);if(waveOutWrite(p->audio,&p->header,sizeof(p->header))!=MMSYSERR_NOERROR)return p->error=GH_VIDEO_AUDIO;p->started=1;}
+ if(!p->started){
+  gh_winmm_pcm_metrics decoded={0};
+  if(p->trace_stream)decoded=gh_winmm_pcm16_stereo_metrics(p->pcm,p->pcm_bytes/4);
+  QueryPerformanceFrequency(&p->frequency);QueryPerformanceCounter(&p->start);
+  if(p->muted)memset(p->pcm,0,p->pcm_bytes);
+  if(waveOutWrite(p->audio,&p->header,sizeof(p->header))!=MMSYSERR_NOERROR)return p->error=GH_VIDEO_AUDIO;
+  if(p->trace_stream)gh_winmm_trace_submit("movie",p->trace_stream,1,p->pcm_bytes/4,48000,p->muted,
+      decoded,p->muted?(gh_winmm_pcm_metrics){0}:decoded);
+  p->started=1;
+ }
  QueryPerformanceCounter(&now);ns=(uint64_t)(now.QuadPart-p->start.QuadPart)*1000000000/(uint64_t)p->frequency.QuadPart;due=p->frames*UINT64_C(1001000000000)/30000;
  if(!p->eof&&ns>=due){
   while(used<640*448*4){BOOL ok=ReadFile(p->video.read,p->rgba+used,(DWORD)(640*448*4-used),&count,NULL);if(!ok&&GetLastError()!=ERROR_BROKEN_PIPE)return p->error=GH_VIDEO_PROCESS;if(!count)break;used+=count;}
   if(!used){DWORD code;if(WaitForSingleObject(p->video.process,10000)!=WAIT_OBJECT_0||!GetExitCodeProcess(p->video.process,&code))return p->error=GH_VIDEO_PROCESS;p->exit_code=code;if(code||!p->frames)return p->error=GH_VIDEO_CODEC;p->eof=1;}
   else{if(used!=640*448*4)return p->error=GH_VIDEO_CODEC;if(!p->present(p->context,p->rgba,used,640,448,due))return p->error=GH_VIDEO_PRESENT;p->frames++;}
  }
- out->frames_presented=p->frames;out->audio_sample_frames=p->pcm_bytes/4;out->video_eof=p->eof;out->audio_done=(p->header.dwFlags&WHDR_DONE)!=0;out->complete=p->eof&&out->audio_done;out->process_exit=p->exit_code;return GH_VIDEO_OK;
+ out->frames_presented=p->frames;out->audio_sample_frames=p->pcm_bytes/4;out->video_eof=p->eof;out->audio_done=(p->header.dwFlags&WHDR_DONE)!=0;out->complete=p->eof&&out->audio_done;out->process_exit=p->exit_code;
+ if(p->trace_stream&&out->audio_done&&!p->trace_done){
+  gh_winmm_trace_complete("movie",p->trace_stream,1,out->audio_sample_frames);
+  p->trace_done=1;
+ }
+ return GH_VIDEO_OK;
 }

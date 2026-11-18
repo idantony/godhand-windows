@@ -14,6 +14,20 @@
     "compared_composed_pixels": 8257536,
     "max_rgb_channel_difference": 6,
     "muted_winmm_adx_frames_consumed": 4800,
+    "winmm_nonzero_focused_tests": {
+      "adx_frames_completed": 48000,
+      "adx_nonzero_submitted_samples": 5117,
+      "movie_frames_completed": 123328,
+      "movie_nonzero_submitted_samples": 229804,
+      "movie_own_device_handle_attenuated": true
+    },
+    "production_muted_winmm": {
+      "room": "R102",
+      "tick": 850,
+      "movie_frames_completed": 123328,
+      "adx_buffers_completed": 313,
+      "pcm_submitted_silent": true
+    },
     "muted_xaudio2_gameplay": {
       "room": "R100",
       "tick": 1900,

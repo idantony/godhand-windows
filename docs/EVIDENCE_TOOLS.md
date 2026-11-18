@@ -18,6 +18,11 @@ finished port or execute guest instructions in the production runtime.
   joins finite sources by voice ID. It checks nonzero payload and observed
   device progress before a queue empties. Use `--require-muted` to require
   zero master gain throughout the recorded submissions.
+- Set `GODHAND_TRACE_WINMM=1` in the test process to trace ADX and movie
+  submission and normal completion. [check-winmm-trace.py](../skill/ps2-source-port/scripts/check-winmm-trace.py)
+  matches each completed buffer by source, stream and buffer ID. It reports
+  nonzero decoded PCM and nonzero submitted PCM separately. Use
+  `--require-submitted-nonzero` for a check of the actual payload sent to WinMM.
 - `tools/run-ghidra.ps1` exports explicit function probes with the installed
   Ghidra/EmotionEngine language. `-MaxInstructions` accepts 1..65536 and defaults
   to 2048. Reports include the limit, captured count and `disassemblyTruncated`.

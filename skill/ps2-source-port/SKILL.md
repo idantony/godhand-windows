@@ -193,6 +193,11 @@ Use [check-xaudio2-trace.py](scripts/check-xaudio2-trace.py) with an opt-in
 XAudio2 trace that records source IDs, nonzero sample counts and queue
 completion. Retain observed progress before end-of-stream counters reset.
 Aggregate signal data in logs and keep original audio buffers local.
+For WinMM, record decoded and submitted PCM statistics separately. An
+app mute can zero samples before they reach the device.
+[check-winmm-trace.py](scripts/check-winmm-trace.py) matches normal completion
+to the exact submitted buffer. A focused handle-volume test can verify
+nonzero payload delivery while keeping the test stream quiet.
 
 For tests of the ordinary Windows keyboard path, launch the pinned standard
 executable with a fresh profile. [win32_keyboard.py](scripts/win32_keyboard.py)
