@@ -112,6 +112,12 @@ process. A live mismatch stops that isolated child and preserves the trace
 through the divergent checkpoint. Prefer readiness-driven input for new
 routes and a focused control fixture for a local menu branch.
 
+A gameplay controller tape may omit startup input supplied by the reference
+driver. Check memory-card prompts, keyboard events and movie timing before
+replacing or disabling its menu driver. Compare the first title and completed
+load checkpoints before running the full route. Record any fixed clock and
+out-of-band input with the tape.
+
 If fast-forward drops a surface sampled by a later frame, require the
 exact expected preceding capture or render the missing history. Verify
 the archived capture's presented frame, input prefix and source range,
