@@ -6065,7 +6065,10 @@ static gh_actor_motion_status advance_substate69_0023afd8(gh_enemy202_move *s,ui
     const int arena=r103_arena_em00(&enemy->entry)||r103_arena_em03(&enemy->entry)||arena_em0a||boss;
     const int east_em00=work->room==0x102&&dependency==0x200&&stamp==3&&p[0x1650]==1;
     const int at0b_em02=r102_area11_em02(work,p);
-    if((!r100&&!r101&&!r102&&!em0a&&!arena&&!em03&&!east_em00&&!at0b_em02&&!west_counter&&!r104)||
+    const int r200_em02=dependency==0x202&&stamp==1&&!p[0x1650]&&
+        gh_enemy201_is_r200_entry(&enemy->entry.request,work->room)&&
+        (word(p+0x17b4)==12||word(p+0x17b4)==24);
+    if((!r100&&!r101&&!r102&&!em0a&&!arena&&!em03&&!east_em00&&!at0b_em02&&!west_counter&&!r104&&!r200_em02)||
        p[0x2f7]>(unsigned)(r101||em0a||em03||arena_em0a||east_em00||at0b_em02||boss||west_counter||r104))
         return stop(s,0x23afd8,GH_ACTOR_MOTION_UNSUPPORTED);
     if(!s->substate67_stage){

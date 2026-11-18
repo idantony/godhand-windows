@@ -1204,7 +1204,9 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
       (w(actor+0x2f4)==0x00016b00u||(state==0x0800&&phase==1&&actor[0x2f7]<=1)||
        w(actor+0x2f4)==0x00010500u||w(actor+0x2f4)==0x00010600u||
        w(actor+0x2f4)==0x00010700u||w(actor+0x2f4)==0x00010900u||
-       w(actor+0x2f4)==0x00011300u||w(actor+0x2f4)==0x00011500u))||
+       w(actor+0x2f4)==0x00011300u||w(actor+0x2f4)==0x00011500u||
+       (w(actor+0x2f4)==0x00010101u&&root->size>=0x17b8&&
+        (w(actor+0x17b4)==12||w(actor+0x17b4)==24))))||
      (dependency==0x202&&h(actor+0x640)==1&&
       (w(actor+0x2f4)==0x00011500u||w(actor+0x2f4)==0x00010101u||
        w(actor+0x2f4)==0x00010500u||w(actor+0x2f4)==0x00010600u||
@@ -1887,7 +1889,9 @@ static int centered_enemy_motion_profile(const struct voice *v,int16_t bank,int1
      w(p+0x1c)==0x00ff0000u&&w(p+0x20)==4&&!w(p+0x24)&&w(p+0x28)==0xffffu&&!w(p+0x2c)&&
      (!sample||(w(sample)==0x38280u&&w(sample+4)==20000&&w(sample+8)==0x5fc080ffu&&!w(sample+12)));
  }
- if(!grab_escape&&(h(actor+0x2fe)!=0x202||w(actor+0x564)!=0x200||h(actor+0x640)!=3||
+ const int opening_pair=program==0x70&&h(actor+0x2fe)==0x202&&w(actor+0x564)==0x200&&
+    h(actor+0x640)==20&&!actor[0x1650]&&!w(actor+0x16c4)&&w(actor+0x2f4)==0x00014200u;
+ if(!grab_escape&&!opening_pair&&(h(actor+0x2fe)!=0x202||w(actor+0x564)!=0x200||h(actor+0x640)!=3||
     actor[0x1650]!=2||w(actor+0x16c4)!=6||h(actor+0x2f4)!=0x4200||actor[0x2f6]!=1))return 0;
  if(program==0xae){
   if(w(p)!=0x00ae0000u||w(p+4)!=0x021c0067u||w(p+8)!=0x23cu||w(p+12)!=0x00100000u||

@@ -147,6 +147,8 @@ combat takes Gene to 82 HP before the bounded replay ends in R100.
 On a separate native CPU replay, Gene approaches the opening enemy after
 Retry and presses Square. The original hit takes the enemy from 74 to 71 HP
 while Gene stays at 100 HP. The replay reaches the enemy's next response.
+The native Windows replay also presents the hit and 59 more consecutive
+frames. The enemy remains at 71 HP. The replay stops on a HUD sprite draw.
 
 The new-game east route now breaks the original door, continues into the
 armed encounter, and reaches the original Game Over menu after a lethal
@@ -588,6 +590,8 @@ Windows 验证在菜单出现前切换到 Direct3D，实际呈现 224 帧，捕�
 100 HP 时移动 1.05 个场景单位。随后交战让 Gene 降到 82 HP，回放在 R100 达到预定结束点。
 另一条原生 CPU 回放在重试后用左摇杆接近首名敌人，再按一次方块。原版攻击命中后，
 敌人从 74 降到 71 HP，Gene 保持 100 HP。回放推进到敌人的后续回应。
+原生 Windows 回放也实际呈现命中，并连续呈现之后的 59 帧，敌人保持 71 HP。
+回放随后停在一条 HUD 精灵绘制请求。
 
 从新游戏开始的东侧回放打破原版木门，在后续持械战斗中被击倒，并在原版 Game Over 界面
 确认重试，以 100 HP 回到 R100。西侧回放进入原版增援区域，在恶魔遭遇期间打出两次三角攻击。

@@ -1209,6 +1209,10 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         (triangle&&(r100_stamp8(enemy,p)||r103_first_wave_em00(enemy)))||
         (heat_contact&&r103_first_wave_em00(enemy))||west_em00;
     const int opening_pair = opening_203 || opening_200;
+    const int opening_square_pressure = effect==7&&r100_stamp19(enemy,p)&&
+        word(p+0x2f4)==0x00001500u&&!p[0x1650]&&!word(p+0x16c4)&&
+        word(body->bytes+0x4c)==3&&word(player->bytes+0x2f4)==0x00010b00u&&
+        !word(player->bytes+0x5e8);
     const int ordinary_punch = room_unarmed_punch(enemy, p, effect);
     const int side_em0f=dependency==0x20f&&r101_side_arena_punch(enemy,p,effect);
     const int em27_punch = original_em27_punch(enemy, p, effect);
@@ -1352,7 +1356,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         put(p + 0x54c, back_circle ? 0x41200000u : 0x40400000u);
         put(p + 0x16dc, 0); /* 26EE40(actor, 0, 0) */
-        if(triangle&&word(p+0x17ac)&&p[0x17bd]==1&&rank>=3){
+        if((triangle||opening_square_pressure)&&word(p+0x17ac)&&p[0x17bd]==1&&rank>=3){
             const uint32_t increase=(int32_t)word(p+0x16ec)<1?(power>9?20u:5u):0u;
             const uint32_t total=word(p+0x16e8)+increase;
             if(increase)put(p+0x16e8,total);
@@ -1488,7 +1492,8 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
             call->phase = 5;
             return GH_ACTOR_MOTION_OK;
         }
-        if (!triangle && p[0x17bd] == 1 && rank >= 3) return stop(frontier, 0x26ecd0);
+        if (!triangle && !opening_square_pressure && p[0x17bd] == 1 && rank >= 3)
+            return stop(frontier, 0x26ecd0);
         /* 20B988 routes an active fall through 20DA18. Its saved HP
          * is zero here, so 20CA40 preserves 01/07 and returns one. */
         if(continued_fall&&!word(p+0x17ac)&&!(behavior&0x802000u)&&!(status&0x180040u)){
@@ -1754,7 +1759,7 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
                 /* 20D2A0 always draws before the face test. A rear turn cannot enter 274238 here. */
                 const int r104_rear_pressure=r104_recovery&&p[0x2f5]==8&&!faces;
                 if(!triangle&&!r102_em00&&!synchronous_counter&&!r103_arena_punch_target(enemy,dependency)&&
-                   !r104_rear_pressure){
+                   !r104_rear_pressure&&!opening_square_pressure){
                     call->phase = 6;
                     return stop(frontier, 0x20d2a0);
                 }
