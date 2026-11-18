@@ -178,6 +178,12 @@ prefix. Its comparison function accepts a live line stream and returns at the
 first difference. Keep the replay runner responsible for the process lifetime,
 input hashes, and terminal-state verification beyond that prefix.
 
+For a bounded window check that omits intermediate drawing, preserve the
+verified startup pacing and compare the original input and state records.
+Count omitted frames separately from successful window presents. Resume at a
+frame with verified display-history requirements, then read back the presented
+target frame. Report missing renderer history as an incomplete capture.
+
 For a native Windows crash, resolve the failing module and relative address
 against the executable's matching PDB before editing. Pass the executable and
 the Application Error event's fault offset to
