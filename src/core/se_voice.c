@@ -677,6 +677,24 @@ static int r103_paired_attack_voice_profile(const struct voice *v,int16_t bank,i
 static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t program,
  const uint8_t *p,const uint8_t *sample)
 {
+ /* Stamp 2 uses the original dep0200 recovery SEQ and live bank 8. */
+ if(bank==8&&(program==0x0a||program==0x0b)&&v->source_owner&&v->requested_bank==bank&&
+    v->requested_program==program&&v->part_index==-1&&v->model&&v->model->work&&
+    v->model->work->room==0x200){
+  const gh_title_player_view *root=&v->model->root;
+  const uint8_t *a=root->bytes;
+  if(a&&root->size>0x1650&&root->original_vtable214==0x4479c8&&
+     h(a+0x2fe)==0x201&&w(a+0x564)==0x200&&h(a+0x640)==2&&!a[0x1650]&&
+     w(a+0x2f4)==0x00016b00u){
+   const unsigned alternate=program==0x0b;
+   return w(p)==(((uint32_t)program<<16)|8u)&&w(p+4)==0x022d0009u+alternate&&
+      w(p+8)==0x255u&&w(p+12)==0x00200000u&&w(p+16)==0x007d007du&&w(p+20)==0x005a0040u&&
+      w(p+24)==(alternate?0x0064ff38u:0x00640000u)&&w(p+28)==0x00030000u&&w(p+32)==0x00010085u&&
+      w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
+      (!sample||(w(sample)==(alternate?0x11bc0u:0xff80u)&&w(sample+4)==11025u&&
+        w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
+  }
+ }
  /* The two R200 opening cEm01 instances use different dependency-loaded banks. */
  if(bank==9&&(program==0x0a||program==0x0b||program==0x10)&&v->source_owner&&v->requested_bank==bank&&
     v->requested_program==program&&v->part_index==-1&&v->model&&v->model->work&&
@@ -1794,6 +1812,7 @@ static int core_enemy_turn_profile(const struct voice *v,int16_t bank,int16_t pr
          /* EM01.DAT rows 3D4, 3DC and 3EC submit CORE8D during 6C. */
          (h(actor+0x640)==7&&w(actor+0x2f4)==0x00016c00u)||
          (h(actor+0x2f4)==0x0800&&actor[0x2f6]==1&&actor[0x2f7]<=1)))||
+       (w(actor+0x564)==0x200&&h(actor+0x640)==2&&w(actor+0x2f4)==0x00016b00u)||
        (w(actor+0x564)==0x21a&&!h(actor+0x640)&&
         (w(actor+0x2f4)==0x00010d01u||
          (h(actor+0x2f4)==0x0800&&actor[0x2f6]==1&&actor[0x2f7]<=1)))||
@@ -2973,7 +2992,8 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
      (candidate->model->work->room==0x103&&(skill==0||skill==29))||
      (candidate->model->work->room==0x104&&skill==29&&h(player+0x2f6)==1)))||
     (player&&candidate->model->work&&
-     (candidate->model->work->room==0x103||candidate->model->work->room==0x104)&&
+     (candidate->model->work->room==0x103||candidate->model->work->room==0x104||
+      candidate->model->work->room==0x200)&&
      candidate->model->root.original_vtable214==0x41d220&&h(player+0x2fe)==0x100&&
      h(player+0x2f4)==0x2b00&&player[0x2f6]==1&&!player[0x2f7])||
     (player&&candidate->model->work&&candidate->model->work->room==0x104&&
@@ -3360,8 +3380,7 @@ static int core_roulette_sequence(const struct voice *v)
  const gh_actor_model *model=v->model;
  if(!v->source_owner||v->requested_bank||v->requested_program!=4||
     v->info.bank||v->info.program!=4||v->part_index!=-1||
-    !model||!model->work||(model->work->room!=0x103&&model->work->room!=0x104&&
-    model->work->room!=0x200)||
+    !model||!model->work||(model->work->room!=0x103&&model->work->room!=0x104&&model->work->room!=0x200)||
     !model->root.bytes||model->root.size<0x300||model->root.original_vtable214!=0x41d220)
   return 0;
  const uint8_t *actor=model->root.bytes,*p=v->descriptor;

@@ -1335,7 +1335,7 @@ static gh_effect_status select_est(gh_effect_create_call*c,const gh_effect_creat
      (w(actor->bytes+0x2fc)>>16)!=0x100||c->request.mode!=3||c->request.selector!=-1||
      actor->bytes[0x5f2]!=3||(w(actor->bytes+0x15f4)&0x20u)||c->count!=10||
      ((b->work->room<0x100||b->work->room>0x103)&&
-      !(b->work->room==0x104&&!actor->bytes[0x2f4]&&actor->bytes[0x2f5]==0x23&&
+      !((b->work->room==0x104||b->work->room==0x200)&&!actor->bytes[0x2f4]&&actor->bytes[0x2f5]==0x23&&
         actor->bytes[0x2f6]==1&&!actor->bytes[0x2f7])))
    return fail(c,0x3066d0,GH_EFFECT_UNSUPPORTED);
   for(unsigned i=0;i<c->count;++i)
@@ -2026,7 +2026,7 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
   return 0;
  }
  if(profile==0x00210000u&&w(payload+0x110)==3&&view->model->work&&
-    view->model->work->room>=0x100&&view->model->work->room<=0x104){
+    ((view->model->work->room>=0x100&&view->model->work->room<=0x104)||view->model->work->room==0x200)){
   const unsigned part=record[0xbe];
   if(part>=view->model->part_count||view->part!=view->model->parts+part)return 0;
   for(unsigned i=0;i<10;++i)if(player_heat_active_row(record,i))return 1;
@@ -2070,7 +2070,7 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
  /* PL00 114608 emits CORE0:0E from Gene's model part 9. The two
   * original class-0 rows use type-0 sprites and texture 11. */
  if(profile==0x000e0000u&&w(payload+0x110)==UINT32_MAX&&view->model->work&&
-    (view->model->work->room==0x103||view->model->work->room==0x104)&&
+    (view->model->work->room==0x103||view->model->work->room==0x104||view->model->work->room==0x200)&&
     view->model->part_count>9&&view->part==view->model->parts+9&&
     record[0xbe]==9&&!record[0x128]&&!record[0x133]&&!record[0x136]&&
     record[0x12e]==11&&w(record+4)==0x00802000u)
@@ -2079,7 +2079,7 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
  /* 129578's original CORE19 charge and 129630's CORE2E release
   * retain the canonical PL00 model and the authored positive parts. */
  if((profile==0x00190000u||profile==0x002e0000u)&&w(payload+0x110)==UINT32_MAX&&
-    view->model->work&&(view->model->work->room==0x103||view->model->work->room==0x104)&&record[0xbe]<view->model->part_count&&
+    view->model->work&&(view->model->work->room==0x103||view->model->work->room==0x104||view->model->work->room==0x200)&&record[0xbe]<view->model->part_count&&
     view->part==view->model->parts+record[0xbe]&&!record[0x128]&&!record[0x136]){
   const unsigned part=record[0xbe],type=record[0x133],texture=record[0x12e];
   const uint32_t flags=w(record+4);
@@ -2099,7 +2099,7 @@ int gh_effect_player_attachment_emitter_is_bound(const gh_effect_emitter_view *v
  /* PL00 motion 0450 uses CORE39's original roulette launch sequence.
   * Positive part attachments use the existing typed part transform. */
  if(profile==0x00390000u&&!w(payload+0x110)&&view->model->work&&
-    (view->model->work->room==0x103||view->model->work->room==0x104)&&
+    (view->model->work->room==0x103||view->model->work->room==0x104||view->model->work->room==0x200)&&
     record[0xbe]<view->model->part_count&&
     view->part==view->model->parts+record[0xbe]&&!record[0x128]&&!record[0x136]){
   const unsigned part=record[0xbe],type=record[0x133],texture=record[0x12e];
@@ -2317,10 +2317,19 @@ static int enemy_light_row(const gh_game_effects *owner,gh_effect_view record,
     (row==est.bytes+16||row==est.bytes+16+0x2f0);
 }
 
+static int r200_roulette_light_actor(const gh_title_player_view *actor)
+{
+ if(!actor||!actor->bytes||actor->size<=0x1650||actor->original_vtable214!=0x4479c8||
+    (w(actor->bytes+0x2fc)>>16)!=0x201||actor->bytes[0x1650])return 0;
+ const uint8_t *p=actor->bytes;
+ const unsigned stamp=w(p+0x640)&0xffffu;
+ return (stamp==0&&w(p+0x564)==0x21a)||(stamp==1&&w(p+0x564)==0x202);
+}
+
 static int roulette_light_row(const gh_game_effects *effects,gh_effect_view row,
  const gh_title_player_view *actor,const gh_title_player_view *selector)
 {
- if((!r103_pincer_boss(actor)&&!r104_charge_actor(actor))||actor!=selector||!row.bytes||row.size!=0x2f0)return 0;
+ if((!r103_pincer_boss(actor)&&!r104_charge_actor(actor)&&!r200_roulette_light_actor(actor))||actor!=selector||!row.bytes||row.size!=0x2f0)return 0;
  const uint8_t *r=row.bytes;
  gh_effect_view est;
  return !gh_effect_est_at_00306030(effects,0,0x61,&est)&&est.bytes&&est.size>=16+0x2f0&&
@@ -2337,7 +2346,8 @@ int gh_effect_enemy_light_emitter_is_bound(const gh_game_effects *owner,
   return roulette_light_row(owner,v->record,v->actor,v->selector)&&
       v->model&&v->model->work&&
       ((v->model->work->room==0x103&&r103_pincer_boss(v->actor))||
-       (v->model->work->room==0x104&&r104_charge_actor(v->actor)))&&v->model->root.bytes==v->actor->bytes&&v->model->part_count&&v->part==v->model->parts;
+       (v->model->work->room==0x104&&r104_charge_actor(v->actor))||
+       (v->model->work->room==0x200&&r200_roulette_light_actor(v->actor)))&&v->model->root.bytes==v->actor->bytes&&v->model->part_count&&v->part==v->model->parts;
  }
  return v&&v->initialized&&v->payload&&v->payload_size==0x260&&
      (w(v->payload+0x18c)==0x000b0058u||w(v->payload+0x18c)==0x000c0058u)&&

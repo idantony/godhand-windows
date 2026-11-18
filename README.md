@@ -152,7 +152,10 @@ frames. The enemy remains at 71 HP. The last frame shows the original
 left-stick recovery prompt. A follow-up replay changes the stick direction
 seven times, restores control and presents the next regular walk. The enemy
 interrupts that walk and later defeats Gene. The run presents 443 scene
-frames with no graphics errors.
+frames with no graphics errors. A separate right-stick dodge avoids the
+attack that interrupted the walk and preserves Gene's 35 HP. A follow-up
+Square lowers the enemy from 71 to 68 HP in the native battle state. The
+next enemy response stops that replay before the second hit frame presents.
 
 The new-game east route now breaks the original door, continues into the
 armed encounter, and reaches the original Game Over menu after a lethal
@@ -250,6 +253,9 @@ the original road trigger. It records the room flag change and starts the
 next two enemies while Gene stays at 100 HP. A follow-up replay presents
 1,446 Direct3D scene frames through the encounter. Original enemy hits take
 Gene from 89 to 78, 67 and then 56 HP, with no graphics errors recorded.
+A recorded route from an original-format R200 test save opens the Roulette
+Wheel with R1, navigates with the stick and confirms Shockwave. The original
+command 14 dispatches and the replay reaches the player's launch entry.
 
 The progression replay uses the earlier EV07 Start shortcut and sets the
 boss to 60 HP immediately before the original 80-point Shockwave. A separate
@@ -597,6 +603,8 @@ Windows 验证在菜单出现前切换到 Direct3D，实际呈现 224 帧，捕�
 原生 Windows 回放也实际呈现命中，并连续呈现之后的 80 帧，敌人保持 71 HP。
 最后一帧可见原版左摇杆恢复提示。后续回放交替拨动左摇杆七次，恢复控制并呈现下一次普通行走。
 敌人随后打断行走并再次击倒 Gene。这条回放实际呈现 443 帧，图形错误为零。
+另一条回放用右摇杆侧闪避开这次攻击，Gene 保持 35 HP。侧闪后再次按方块，原生战斗状态记录
+敌人从 71 降到 68 HP。回放在敌人的后续回应处停止，第二次命中的画面仍待验证。
 
 从新游戏开始的东侧回放打破原版木门，在后续持械战斗中被击倒，并在原版 Game Over 界面
 确认重试，以 100 HP 回到 R100。西侧回放进入原版增援区域，在恶魔遭遇期间打出两次三角攻击。
@@ -656,6 +664,8 @@ Gene 从 100 HP 降到 92 HP，并触发了原版受击动作。
 一条更长的 Windows 回放走过开场交战区，触发了原版道路事件。房间进度标记随之写入，
 下一批两名敌人入场，Gene 保持 100 HP。后续回放用 Direct3D 呈现了这场战斗的 1,446 帧，
 原版敌人的几次攻击让 Gene 的血量从 89 依次降到 78、67 和 56 HP。全程记录的图形错误为零。
+另一条回放从原版格式的 R200 测试存档开始，按 R1 打开轮盘，用摇杆选择并确认冲击波。
+原版命令 14 已执行，回放推进到玩家的发射入口。
 
 这条流程回放此前用了原版 Start 快捷键跳过 EV07，并在原版 80 点冲击波命中前将
 头目血量设为 60 HP。另一条满血战斗回放通过 L2 挑衅积攒斗气，闪避反击后命中两次。

@@ -6322,7 +6322,8 @@ gh_scene_step_status gh_game_services_roulette_command_00125f38(gh_game_services
  *frontier=0x125f38;
  gh_title_player_view *player=&s->title_player.view;
  uint8_t *p=player->bytes;
- if(command!=14||(s->b.work->room!=0x103&&s->b.work->room!=0x104)||!p||player->size<0x1660||
+ if(command!=14||(s->b.work->room!=0x103&&s->b.work->room!=0x104&&s->b.work->room!=0x200)||
+    !p||player->size<0x1660||
     p[0x2f4]||p[0x2f5]!=0x2b||p[0x2f6]!=1||p[0x2f7]||!s->b.sound_control)
   return GH_SCENE_STEP_UNSUPPORTED;
  if(u32(p+0x698)||u32(p+0x6a0)){
@@ -6614,10 +6615,12 @@ static const gh_title_player_view *player_roulette_target_owner(void *context,ui
 {
  gh_game_services *s=context;
  gh_enemy_ems_live live;
- if(s->b.work->room!=0x104||gh_enemy_ems_live_at(s->enemies,handle,&live)||
-    !live.enemy202||!live.actor||
-    !gh_enemy203_is_r104_entry(&live.enemy202->entry.request,s->b.work->room))
-  return NULL;
+ const unsigned room=s->b.work->room;
+ if((room!=0x104&&room!=0x200)||gh_enemy_ems_live_at(s->enemies,handle,&live)||
+    !live.enemy202||!live.actor)return NULL;
+ const gh_enemy_request *request=&live.enemy202->entry.request;
+ if(room==0x104&&!gh_enemy203_is_r104_entry(request,room))return NULL;
+ if(room==0x200&&!gh_enemy201_is_r200_entry(request,room))return NULL;
  return &live.actor->view;
 }
 
@@ -6628,9 +6631,9 @@ static gh_player_frame_status player_frame_effect_create(void*p,const gh_player_
   const gh_player_tail_target_slot *slot=&s->player_target_644;
   gh_enemy_ems_live live;
   const uint8_t *player=s->title_player.view.bytes;
-  const int r104_target=s->b.work->room==0x104&&
+  const int room_target=(s->b.work->room==0x104||s->b.work->room==0x200)&&
       player_roulette_target_owner(s,slot->expected_guest_token)==r->actor;
-  if((s->b.work->room!=0x103&&!r104_target)||player[0x2f4]||player[0x2f5]!=0x2b||
+  if((s->b.work->room!=0x103&&!room_target)||player[0x2f4]||player[0x2f5]!=0x2b||
      slot->view!=r->actor||!slot->expected_guest_token||r->parameter_bits||r->kind!=0x61||
      r->mode!=6||r->selector!=-1||r->sequence_scale||
      gh_enemy_ems_live_at(s->enemies,slot->expected_guest_token,&live)||

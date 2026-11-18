@@ -2544,7 +2544,7 @@ static gh_player_frame_status roulette_00114608(gh_game_player_frame *s)
  uint8_t *p=actor->bytes;
  const gh_player_idle_input_bindings *input=b->idle_input_bindings;
  uint32_t pc=0;
- if((b->work->room!=0x103&&b->work->room!=0x104)||p[0x2f7]||p[0x2f6]>1)
+ if((b->work->room!=0x103&&b->work->room!=0x104&&b->work->room!=0x200)||p[0x2f7]||p[0x2f6]>1)
   return fail(s,0x114608,GH_PLAYER_FRAME_UNSUPPORTED);
  if(!input||input->targets.player!=actor||!actor->alias_f0)
   return fail(s,0x124540,GH_PLAYER_FRAME_ARGUMENT);
@@ -2626,7 +2626,7 @@ static gh_player_frame_status roulette_00114608(gh_game_player_frame *s)
     const gh_game_title_player *boss=b->init->enemy_r103_boss[i];
     if(boss&&boss->view.bytes==target.view.bytes)owner=&boss->view;
    }
-   if(!owner&&b->work->room==0x104&&b->roulette_target_owner)
+   if(!owner&&(b->work->room==0x104||b->work->room==0x200)&&b->roulette_target_owner)
     owner=b->roulette_target_owner(b->effect_context,target.handle);
    if(!owner||owner->bytes!=target.view.bytes)return fail(s,0x12cc70,GH_PLAYER_FRAME_UNSUPPORTED);
    put(p+0x644,target.handle);
@@ -4424,7 +4424,7 @@ static gh_player_frame_status body(gh_game_player_frame*s){const gh_player_frame
        entry[1]==0x35&&mode==UINT32_MAX&&flags==1&&r103_grab_attacker(b->work,b->grab_attacker,0x20a);
      const int boss_throw=b->work->room==0x103&&s->state_entry==0x11d4b0&&
        p[0x2f6]==1&&p[0x2f7]==1&&entry[0]==0x6c&&entry[1]==0x3b&&mode==UINT32_MAX&&flags==1;
-     const int roulette_launch=(b->work->room==0x103||b->work->room==0x104)&&s->state_entry==0x112a48&&
+     const int roulette_launch=(b->work->room==0x103||b->work->room==0x104||b->work->room==0x200)&&s->state_entry==0x112a48&&
        p[0x2f6]==1&&!p[0x2f7]&&entry[1]==0x39&&mode==0;
      const int heat=entry[1]==0x22&&mode==UINT32_MAX&&s->state_entry==0x114120&&flags==1&&
        (b->work->room>=0x100&&b->work->room<=0x103);
