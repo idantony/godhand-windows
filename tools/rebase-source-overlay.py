@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 
-from workspace_paths import overlaps_authored_tree, work_root
+from workspace_paths import overlaps_authored_tree, retry_windows_file_operation, work_root
 
 SCRATCH_ROOT = work_root(Path(__file__).resolve().parents[1])
 
@@ -349,7 +349,7 @@ def rebase(overlay_receipt, overlay_sha256, target_receipt, target_sha256, outpu
                 result["supersedes"][name] = digest(target_bytes)
 
         (stage / "receipt.json").write_bytes((json.dumps(result, indent=2) + "\n").encode("utf-8"))
-        stage.rename(output)
+        retry_windows_file_operation(lambda: stage.rename(output))
     return result
 
 
@@ -396,7 +396,7 @@ def collect(base_receipt, base_sha256, source_receipt, source_sha256, output):
         (stage / "receipt.json").write_bytes((json.dumps(result, indent=2) + "\n").encode("utf-8"))
         checked(base_receipt, base_sha256)
         checked(source_receipt, source_sha256)
-        stage.rename(output)
+        retry_windows_file_operation(lambda: stage.rename(output))
     return result
 
 

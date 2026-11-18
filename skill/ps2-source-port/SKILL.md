@@ -171,6 +171,12 @@ report is missing. Explicitly selected extra files must keep any digest
 already recorded in a build report.
 Record the process exit code even when it produces no replay report.
 
+Use [compare-replay-prefix.py](scripts/compare-replay-prefix.py) with selected
+record tags and a shared exclusive tick limit to verify an archived replay
+prefix. Its comparison function accepts a live line stream and returns at the
+first difference. Keep the replay runner responsible for the process lifetime,
+input hashes, and terminal-state verification beyond that prefix.
+
 For a native Windows crash, resolve the failing module and relative address
 against the executable's matching PDB before editing. Pass the executable and
 the Application Error event's fault offset to

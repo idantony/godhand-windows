@@ -34,9 +34,14 @@ room exit to R105. After Gene's defeat, Cross confirms Continue in the original
 Game Over menu. Windows presents the reloaded R105 with Gene at 100 HP. A
 separate native CPU replay continues for 60 game frames after that reload.
 Another actual-disc CPU replay restores the R100 checkpoint from Game Over and
-registers movement and a Square attack after the reload. The normal R100 exit
-after the opening encounter is still in development. An original controller
-recording now reaches the AT10 area with Gene alive in a native CPU replay.
+registers movement and a Square attack after the reload. An original controller
+recording reaches the AT10 area with Gene alive in a native CPU replay.
+
+A separate integration test followed the continuous West route from New Game
+through all 28 EV02 cuts in R003 and entered R105 at tick 20,053. The native CPU
+run matched 16,007 archived startup and gameplay records. It stopped at an
+unfinished R105 enemy attack branch. Separate Direct3D runs verified the first
+R003 cut on that same route and drew R105 after a controlled R003 start.
 
 A separate Windows title-load replay uses an original-format R101 test save,
 confirms the original chapter map and presents R101 at scene 461. It runs to
@@ -442,7 +447,12 @@ Windows 新游戏回放通过摇杆走到首个教程，按圆圈打开原版面
 Gene 战败后，按叉键在原版 Game Over 菜单中选择继续。Windows 呈现重载后的 R105，Gene
 恢复到 100 HP。单独的无画面原盘回放在这次重载后又完成 60 帧。另一轮无画面原盘回放恢复了
 R100 检查点，重载后接收移动和方块攻击。一轮原盘无画面回放通过录制的原版手柄输入走到 R100 的
-AT10 区域，Gene 仍然存活。首战后从原版出口前往下一场景的流程仍在开发。
+AT10 区域，Gene 仍然存活。
+
+一轮独立集成测试从新游戏沿西区连续推进，在 R003 播完 EV02 全部 28 个镜头，于第 20,053 个
+tick 进入 R105。原生 CPU 回放与归档中的 16,007 条启动及游戏状态记录一致，随后停在 R105
+敌人一个尚未覆盖的攻击分支。另有 Direct3D 回放验证了同一路线上的 R003 首个镜头，以及在
+受控 R003 起点进入 R105 后的窗口画面。
 
 另一轮 Windows 回放从标题读取 R101 的原版格式测试档，经原版章节地图确认，在第 461 帧呈现
 R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染无报错。独立的无画面回放也

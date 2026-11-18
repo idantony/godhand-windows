@@ -8,12 +8,12 @@ import subprocess
 import sys
 import unittest
 import uuid
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT / "tools"))
 from test_contracts import check_contracts, literal_argc, manifest_cases, TestContractError
-from workspace_paths import native_build_report, windows_build_report
+from workspace_paths import native_build_report, retry_windows_file_operation, windows_build_report
 
 spec = importlib.util.spec_from_file_location("staged_eof", PROJECT / "tools/normalize-staged-eof.py")
 eof = importlib.util.module_from_spec(spec)
@@ -148,6 +148,20 @@ class WorkflowTools(unittest.TestCase):
         with patch.object(snapshot_stage, "git", wraps=snapshot_stage.git) as git:
             self.assertEqual(snapshot_stage.filtered_blobs(self.root, snapshot, files), blobs)
             self.assertFalse(any("--stdin-paths" in call.args[1] for call in git.call_args_list))
+
+    def test_windows_sharing_retry_preserves_permanent_errors(self):
+        sharing = PermissionError("temporary sharing lock")
+        sharing.winerror = 32
+        operation = Mock(side_effect=[sharing, "published"])
+        with patch("workspace_paths.sleep") as sleep:
+            self.assertEqual(retry_windows_file_operation(operation), "published")
+            sleep.assert_called_once_with(0.05)
+        for error, attempts in ((FileExistsError("target exists"), 1), (sharing, 5)):
+            with self.subTest(error=error):
+                operation = Mock(side_effect=error)
+                with patch("workspace_paths.sleep"), self.assertRaises(type(error)):
+                    retry_windows_file_operation(operation)
+                self.assertEqual(operation.call_count, attempts)
 
     def test_snapshot_selects_reports_from_independent_builds(self):
         snapshot = self.root / "snapshot"

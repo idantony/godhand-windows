@@ -4,6 +4,25 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## West route from New Game to R105
+
+An internal native CPU integration run replays the controller recording from
+New Game through the West encounter, all 28 R003 EV02 cuts and entry into R105.
+It matches 1,750 archived startup records and 14,257 archived gameplay records.
+The event clears at tick 20,046, R105 loads at 20,053, and an unfinished enemy
+attack branch stops the run at 20,265.
+
+Direct3D shows the first R003 cut on the original West route. A separate run
+starts at R003, plays all 28 cuts and verifies the visible R105 window by
+reading it back after presentation.
+
+内部原生 CPU 集成回放从新游戏出发，通过手柄录像完成西区战斗、R003 的 EV02 全部 28 个镜头，
+随后进入 R105。回放与归档中的 1,750 条启动记录和 14,257 条游戏记录一致。事件在第 20,046 个
+tick 结束，第 20,053 个 tick 进入 R105，第 20,265 个 tick 停在敌人一个尚未覆盖的攻击分支。
+
+Direct3D 回放验证了原西区路线上的 R003 首个镜头。另一轮测试从 R003 开始，播完全部 28 个
+镜头后进入 R105，并在画面提交后读回像素，验证了实际窗口。
+
 ## R104 victory event and R021 Stage Clear
 
 The R104 victory replay now presents the original Stage Clear screen in R021.
