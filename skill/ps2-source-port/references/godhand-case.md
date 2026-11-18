@@ -348,3 +348,14 @@ Hash the schedule in the replay receipt and check `compile-video_player` for
 `-DGH_NATIVE_STARTUP_QA=1` in the matching build report before launch.
 Compare the typed startup trace and continue only if the captured prefix
 matches. The 90 RGBA frames and EOF still come from the actual codec.
+
+## Inspect original T32 uploads
+
+Use `inspect-title-graphics --texture SLOT ITEM` with the local ISO after an
+ID renderer failure. The report includes TEX0 and first image and CLUT
+transfer dimensions, destination base, buffer width and payload size, even
+if the texture cannot yet be opened by the native renderer.
+Do not infer the indexed page row pitch from the intermediate CT32 upload
+width. The 256×256 PSMT4 HUD entry uses a 64×128 CT32 stream and two GS
+pages per indexed row. The real-disc inverse oracle in `test_title_texture.c`
+checks the 256×256 HUD and 512×512 title profiles independently.

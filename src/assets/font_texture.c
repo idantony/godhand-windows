@@ -1,4 +1,5 @@
 #include "font_texture.h"
+#include "gs_indexed_layout.h"
 #include <stdlib.h>
 static uint64_t word64(const unsigned char *p){uint64_t v=0;unsigned i;for(i=0;i<8;i++)v|=(uint64_t)p[i]<<(i*8);return v;}
 gh_font_error gh_font_transfer_at(const gh_font_slot *slot,unsigned table,unsigned index,gh_font_transfer *out){
@@ -28,13 +29,6 @@ static unsigned addr32(unsigned x,unsigned y){
  unsigned block=(bx&1)^((bx&2)<<1)^((bx&4)<<2)^((by&1)<<1)^((by&2)<<2);
  return (y/32)*2048+block*64+col32(x%8,y%8);
 }
-static unsigned addr4(unsigned x,unsigned y){
- unsigned bx=(x%128)/32,by=(y%128)/16;
- unsigned block=((bx&1)<<1)^((bx&2)<<2)^(by&1)^((by&2)<<1)^((by&4)<<2);
- unsigned cx=x%32,cy=y%16;
- unsigned col=((cx&1)<<3)^((cx&2)<<4)^((cx&4)<<4)^((cx&8)>>2)^((cx&16)>>2)^((cy&1)<<4)^((cy&2)?65:0)^((cy&4)?192:0)^((cy&8)<<5);
- return ((x/128)+(y/128)*4)*16384+block*512+col;
-}
 gh_font_error gh_font_atlas_bank_rgba(const gh_font_slot *s,unsigned parity,void *rgba,size_t capacity){
  gh_font_transfer image,clut;gh_font_error e;unsigned *inverse;unsigned char *out=rgba;unsigned x,y,i;
  if(!s||!rgba)return GH_FONT_ARGUMENT;
@@ -50,7 +44,7 @@ gh_font_error gh_font_atlas_bank_rgba(const gh_font_slot *s,unsigned parity,void
   unsigned a=addr32(x,y);if(a>=16384||inverse[a]!=0xffffffffU){free(inverse);return GH_FONT_UNSUPPORTED;}inverse[a]=y*64+x;
  }
  for(y=0;y<256;y++)for(x=0;x<512;x++){
-  unsigned nibble=addr4(x,y),word=nibble/8,shift=(nibble%8)*4,index;const unsigned char *pixel,*color;
+  unsigned nibble=(unsigned)gh_gs_psmt4_nibble_offset(x,y,4),word=nibble/8,shift=(nibble%8)*4,index;const unsigned char *pixel,*color;
   if(word>=16384){free(inverse);return GH_FONT_BOUNDS;}
   pixel=image.pixels+inverse[word]*4;index=(unsigned)((word64((const unsigned char[8]){pixel[0],pixel[1],pixel[2],pixel[3],0,0,0,0})>>shift)&15);
   color=clut.pixels+((index&7)+(index>>3)*16+parity*8)*4;i=(y*512+x)*4;

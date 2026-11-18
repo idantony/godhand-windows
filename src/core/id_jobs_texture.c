@@ -73,7 +73,10 @@ gh_id_error gh_id_texture_open_view(const gh_id_view *source,gh_id_texture *out)
  {unsigned psm=(unsigned)((t.tex0>>20)&63),power=(unsigned)((t.tex0>>30)&15);
   unsigned tw=(unsigned)((t.tex0>>26)&15);if(((t.tex0>>51)&31)!=0)return GH_ID_UNSUPPORTED;
   if(psm==19){if(t.tex0==GH_ID_PAD_ICON_TEX0){t.width=128;t.height=128;*out=t;return GH_ID_OK;}if(t.tex0==UINT64_C(0x20000001e1310000)){t.width=256;t.height=128;*out=t;return GH_ID_OK;}if(t.tex0==GH_ID_RADAR_TEX0){t.width=128;t.height=256;*out=t;return GH_ID_OK;}if(t.tex0==GH_ID_SAVE_MAP_MARKER_TEX0){t.width=256;t.height=256;*out=t;return GH_ID_OK;}if(tw!=9||(power!=8&&power!=9))return GH_ID_UNSUPPORTED;}
-  else if(psm==20){if(tw!=9||power!=9||((t.tex0>>56)&31))return GH_ID_UNSUPPORTED;}
+  else if(psm==20){
+   if(t.tex0==GH_ID_T32_256X256_PSMT4_TEX0){t.width=256;t.height=256;*out=t;return GH_ID_OK;}
+   if(tw!=9||power!=9||((t.tex0>>56)&31))return GH_ID_UNSUPPORTED;
+  }
   else return GH_ID_UNSUPPORTED;
   t.width=512;t.height=(uint16_t)(1U<<power);
  }
@@ -84,14 +87,6 @@ static unsigned addr32(unsigned x,unsigned y){
  unsigned block=(bx&1)^((bx&2)<<1)^((bx&4)<<2)^((by&1)<<1)^((by&2)<<2);
  unsigned col=(x&1)^((x&2)<<1)^((x&4)<<1)^((y&1)<<1)^((y&2)<<3)^((y&4)<<3);
  return (y/32)*2048+block*64+col;
-}
-static unsigned addr4(unsigned x,unsigned y){
- /* Actual512widePSMT4: 128x128page,32x16block,4x8column. Sameindependently
-  * derivedGSbitpermutation asfontatlas; extendYpages, notlinear-nibbleguess. */
- unsigned bx=(x%128)/32,by=(y%128)/16,cx=x%32,cy=y%16;
- unsigned block=((bx&1)<<1)^((bx&2)<<2)^(by&1)^((by&2)<<1)^((by&4)<<2);
- unsigned column=((cx&1)<<3)^((cx&2)<<4)^((cx&4)<<4)^((cx&8)>>2)^((cx&16)>>2)^((cy&1)<<4)^((cy&2)?65:0)^((cy&4)?192:0)^((cy&8)<<5);
- return ((x/128)+(y/128)*4)*16384+block*512+column;
 }
 gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity){
  gh_font_slot slot;gh_font_transfer image,clut;unsigned *inverse;unsigned x,y,i,words,psm;unsigned char *out=rgba;
@@ -124,9 +119,12 @@ gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity
  int pad_icon=t->width==128&&t->height==128&&t->tex0==GH_ID_PAD_ICON_TEX0;
  int radar=t->width==128&&t->height==256&&t->tex0==GH_ID_RADAR_TEX0;
  int map_marker=t->width==256&&t->height==256&&t->tex0==GH_ID_SAVE_MAP_MARKER_TEX0;
- if(t->source.size<48||(!level&&!radar&&!pad_icon&&!map_marker&&
+ const int hud4=t->width==256&&t->height==256&&t->tex0==GH_ID_T32_256X256_PSMT4_TEX0;
+ if(t->source.size<48||(!level&&!radar&&!pad_icon&&!map_marker&&!hud4&&
     (t->width!=512||(t->height!=256&&t->height!=512))))return GH_ID_UNSUPPORTED;
- psm=(unsigned)((t->tex0>>20)&63);if(psm!=19&&(psm!=20||t->height!=512||((t->tex0>>51)&63)||((t->tex0>>56)&31)))return GH_ID_UNSUPPORTED;
+ psm=(unsigned)((t->tex0>>20)&63);
+ if(psm!=19&&(psm!=20||(!hud4&&t->height!=512)||((t->tex0>>51)&63)||((t->tex0>>56)&31)))
+  return GH_ID_UNSUPPORTED;
  memset(&slot,0,sizeof(slot));slot.bound=1;slot.mst=t->source.bytes;slot.mst_size=t->source.size;
  for(i=0;i<2;i++){slot.table_offset[i]=u32(slot.mst+8+i*4);slot.table_count[i]=u16(slot.mst+16+i*2);}
  if(pad_icon&&(slot.table_count[0]!=1||slot.table_count[1]!=1))return GH_ID_UNSUPPORTED;
@@ -138,7 +136,7 @@ gh_id_error gh_id_texture_rgba(const gh_id_texture *t,void *rgba,size_t capacity
  for(i=0;i<words;i++)inverse[i]=UINT32_MAX;
  for(y=0;y<image.height;y++)for(x=0;x<64;x++){unsigned a=addr32(x,y);if(a>=words||inverse[a]!=UINT32_MAX){free(inverse);return GH_ID_FORMAT;}inverse[a]=y*64+x;}
  for(y=0;y<t->height;y++)for(x=0;x<t->width;x++){
-  unsigned a=psm==20?addr4(x,y):(unsigned)gh_gs_psmt8_offset(x,y,t->width/128),index,palette;const unsigned char *color;
+  unsigned a=psm==20?(unsigned)gh_gs_psmt4_nibble_offset(x,y,t->width/128):(unsigned)gh_gs_psmt8_offset(x,y,t->width/128),index,palette;const unsigned char *color;
   if(a/(psm==20?8:4)>=words){free(inverse);return GH_ID_BOUNDS;}
   if(psm==20){index=(image.pixels[inverse[a/8]*4+(a%8)/2]>>((a&1)*4))&15;palette=(index&7)+(index>>3)*16;}
   else{index=image.pixels[inverse[a/4]*4+a%4];

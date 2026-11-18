@@ -53,6 +53,23 @@ static int inspect_core_texture(const gh_id_state *manager,unsigned slot,unsigne
     }else if(size>=48){
         printf(",\"format\":\"T32 candidate\",\"tex0\":\"%08X%08X\"",
             word(bytes+36),word(bytes+32));
+        gh_font_slot packet={.bound=1,.mst=bytes,.mst_size=size};
+        const char *const names[]={"image_transfer","clut_transfer"};
+        for(unsigned table=0;table<2;++table){
+            packet.table_offset[table]=word(bytes+8+table*4);
+            packet.table_count[table]=(uint16_t)(bytes[16+table*2]|bytes[17+table*2]<<8);
+        }
+        for(unsigned table=0;table<2;++table){
+            gh_font_transfer transfer;
+            const gh_font_error error=gh_font_transfer_at(&packet,table,0,&transfer);
+            printf(",\"%s\":{\"count\":%u,\"status\":%u",
+                names[table],(unsigned)packet.table_count[table],(unsigned)error);
+            if(!error)printf(",\"width\":%u,\"height\":%u,\"psm\":%u,"
+                "\"destination_base\":%u,\"buffer_width\":%u,\"pixel_bytes\":%zu",
+                (unsigned)transfer.width,(unsigned)transfer.height,(unsigned)transfer.psm,
+                (unsigned)transfer.destination_base,(unsigned)transfer.buffer_width,transfer.pixel_bytes);
+            putchar('}');
+        }
     }
     puts("}");
     return 0;

@@ -83,7 +83,8 @@ extern "C" gh_ui_error gh_ui_sprite_upload(gh_ui_sprite_renderer *r,const gh_id_
  bool caption=t->width==128&&t->height==64&&t->tex0==GH_ID_CAPTION_TEX0;
  bool map_marker=t->width==256&&t->height==256&&t->tex0==GH_ID_SAVE_MAP_MARKER_TEX0;
  bool t32=(t->width==512&&(t->height==256||t->height==512)&&((t->tex0>>20)&63)==19)||
-     level||radar||pad||map_marker;
+     level||radar||pad||map_marker||
+     (t->width==256&&t->height==256&&t->tex0==GH_ID_T32_256X256_PSMT4_TEX0);
  bool logo=t->width==512&&t->height==512&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==9&&((t->tex0>>30)&15)==9&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  bool cursor=t->width==32&&t->height==32&&((t->tex0>>20)&63)==20&&((t->tex0>>26)&15)==5&&((t->tex0>>30)&15)==5&&((t->tex0>>51)&63)==0&&((t->tex0>>56)&31)==0;
  bool loading=t->width==32&&t->height==16&&t->tex0==UINT64_C(0x115408000);

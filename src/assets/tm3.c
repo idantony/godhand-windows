@@ -52,12 +52,6 @@ gh_tm3_error gh_tm3_picture_open(const void *raw,size_t size,gh_tm3_picture *out
  else if(!fast4_dimensions(w,h))return GH_TM3_UNSUPPORTED;
  *out=(gh_tm3_picture){b,p+head,p+head+image,size,image,clut,w,h,tex0,b[5]};return GH_TM3_OK;
 }
-static size_t addr4(unsigned x,unsigned y,unsigned pitch){
- unsigned bx=(x%128)/32,by=(y%128)/16,cx=x%32,cy=y%16;
- unsigned block=((bx&1)<<1)^((bx&2)<<2)^(by&1)^((by&2)<<1)^((by&4)<<2);
- unsigned column=((cx&1)<<3)^((cx&2)<<4)^((cx&4)<<4)^((cx&8)>>2)^((cx&16)>>2)^((cy&1)<<4)^((cy&2)?65:0)^((cy&4)?192:0)^((cy&8)<<5);
- return ((x/128)+(size_t)(y/128)*pitch)*16384+block*512+column;
-}
 static unsigned bit(size_t a,unsigned n){return (unsigned)(a>>n)&1u;}
 static size_t upload_word(size_t word,unsigned pitch){
  size_t page=word/2048;
@@ -102,7 +96,7 @@ gh_tm3_error gh_tm3_rgba_gs(const gh_tm3_picture*p,void*raw,size_t capacity){
   size_t nibble=(size_t)y*p->width+x;
   if(p->transfer_kind==6){
    if(!fast4_dimensions(p->width,p->height))return GH_TM3_UNSUPPORTED;
-   unsigned pitch=p->width/128;size_t a=addr4(x,y,pitch);
+   unsigned pitch=p->width/128;size_t a=(size_t)gh_gs_psmt4_nibble_offset(x,y,pitch);
    nibble=upload_word(a/8,pitch)*8+a%8;
   }
   if(nibble/2>=p->image_bytes)return GH_TM3_BOUNDS;
