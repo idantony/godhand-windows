@@ -3294,6 +3294,9 @@ static int core_critical_sequence(const struct voice *v)
  const int arena=actor[0x2f6]==0&&
     ((state==0x0101&&(arena_em00||r103_em0a_voice_actor(v)||arena_boss))||(state==0x0701&&arena_em00));
  const unsigned dependency=w(actor+0x564);
+ const int r100_devil=model->work->room==0x100&&model->root.size>=0x17b8&&
+    dependency==0x220&&h(actor+0x2fe)==0x220&&stamp==0xff&&state==0x1101&&
+    !actor[0x2f6]&&!actor[0x2f7];
  const int r101_actor=model->work->room==0x101&&model->root.size>0x1650&&
     !actor[0x2f6]&&!actor[0x2f7];
  const int r101_carrier=r101_actor&&state==0x0001&&stamp==9&&actor[0x1650]==4&&
@@ -3317,7 +3320,7 @@ static int core_critical_sequence(const struct voice *v)
     (state==0x0101||(state==0x0701&&model->root.size>=0x17b8&&w(actor+0x17b4)==24));
  const int r200=model->work->room==0x200&&model->root.size>=0x17b8&&h(actor+0x2fe)==0x201&&
     dependency==0x202&&stamp==1&&!actor[0x1650]&&w(actor+0x2f4)==0x0101u&&w(actor+0x17b4)==24;
- return (room_actor||arena||r104||r200||((west_em02||west_em03)&&h(actor+0x2fe)==0x202))&&
+ return (room_actor||arena||r104||r200||r100_devil||((west_em02||west_em03)&&h(actor+0x2fe)==0x202))&&
     (h(actor+0x3ac)&0x100u)&&v->part_index==-1&&
     !v->requested_bank&&v->requested_program==1&&!v->info.bank&&v->info.program==1&&
     w(p)==0x00010000u&&w(p+4)==0x01310000u&&w(p+8)==0x272u&&w(p+12)==0x00220000u&&

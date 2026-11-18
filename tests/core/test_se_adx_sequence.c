@@ -326,6 +326,74 @@ static void check_paired_player_grab(gh_audio_registry *registry,gh_disc *disc,
     CHECK(!model.sound_borrowers);
 }
 
+static gh_voice_status devil_probe(void *context,const float position[4],int update,
+    gh_se_attached_environment *environment,uint32_t *frontier)
+{
+    const gh_voice_status status=grab_probe(context,position,update,environment,frontier);
+    const float listener[16]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+    memcpy(environment->listener_matrix_d0,listener,sizeof(listener));
+    environment->se_level_q8=0x5a00;
+    environment->gain64_bits=0x3f800000;
+    return status;
+}
+
+static void check_devil_critical_owner(gh_audio_registry *registry,gh_disc *disc,
+    const gh_sound_control *control,const void *elf,size_t elf_bytes)
+{
+    gh_boot_work work={.room=0x100};
+    uint8_t raw[0x1980]={0};
+    memcpy(raw+0x2f4,&(const uint32_t){0x1101},4);
+    memcpy(raw+0x2fe,&(const uint16_t){0x220},2);
+    memcpy(raw+0x3ac,&(const uint16_t){0x100},2);
+    memcpy(raw+0x564,&(const uint32_t){0x220},4);
+    memcpy(raw+0x640,&(const uint16_t){0xff},2);
+    gh_actor_model model={.bound=1,.parts_ready=1,.work=&work,
+        .root={.bytes=raw,.size=sizeof(raw),.alias_f0=raw+0xb0,.original_vtable214=0x4479c8}};
+    model.native_identity=&model;
+
+    gh_se_voice_engine *voices=new_engine(registry,disc,control,elf,elf_bytes);
+    uint32_t handle=0;
+    const unsigned submitted=transport.count;
+    CHECK(!gh_se_voice_request_attached(voices,&model,&handle,&model,-1,0,1,0,0,
+          devil_probe,NULL,NULL,NULL,&handle)&&handle);
+    const gh_se_voice_info info=voice_info(voices,handle);
+    CHECK(info.pending&&info.sample_slot==26&&info.rate==48000&&model.sound_borrowers==1);
+    const gh_voice_status update=gh_se_voice_update(voices);
+    if(update)fprintf(stderr,"CORE01 update status %u frontier %08x\n",update,gh_se_voice_frontier(voices));
+    CHECK(!update&&transport.count==submitted+1);
+    const recorded_voice *recorded=transport.voices+submitted;
+    CHECK(recorded->channels==2&&recorded->frames==130514);
+    gh_sound_span afd;
+    uint64_t offset,bytes;
+    size_t archive;
+    CHECK(!gh_audio_external_sample(registry,0,26,&afd,&offset,&bytes)&&
+          afd.size==32&&afd.data[2]==3&&bytes==146902&&!gh_disc_find(disc,"se/core.afs",&archive));
+    uint8_t *encoded=malloc((size_t)bytes);
+    int16_t *samples=malloc(recorded->frames*2*sizeof(*samples));
+    CHECK(encoded&&samples&&!gh_disc_read(disc,archive,offset,encoded,(size_t)bytes));
+    gh_adx_key key;
+    gh_adx_decoder *decoder;
+    size_t frames;
+    CHECK(!gh_adx_key_from_elf(elf,elf_bytes,&key)&&!gh_adx_open(encoded,(size_t)bytes,&key,&decoder));
+    CHECK(!gh_adx_decode(decoder,samples,recorded->frames,&frames)&&frames==recorded->frames);
+    CHECK(recorded->hash==pcm_hash(samples,frames*2));
+    gh_adx_close(decoder);
+    free(samples);
+    free(encoded);
+    gh_se_voice_destroy(voices);
+    CHECK(!model.sound_borrowers);
+
+    voices=new_engine(registry,disc,control,elf,elf_bytes);
+    raw[0x640]=0xfe;
+    handle=0;
+    CHECK(gh_se_voice_request_attached(voices,&model,&handle,&model,-1,0,1,0,0,
+          devil_probe,NULL,NULL,NULL,&handle)==GH_VOICE_UNSUPPORTED&&!handle);
+    CHECK(gh_se_voice_frontier(voices)==0x2ce588&&transport.count==submitted+1);
+    gh_se_voice_destroy(voices);
+    CHECK(!model.sound_borrowers);
+    puts("PASS actual CORE0:01 stereo ADX for typed Devil owner; wrong stamp rejected");
+}
+
 static void check_gate_local_cues(gh_se_voice_engine *voices,gh_sound_control *control)
 {
     const unsigned before=transport.count;
@@ -406,6 +474,7 @@ int main(int argc,char **argv)
     }
     check_paired_player_grab(registry,disc,&control,elf,elf_bytes,0x100);
     check_paired_player_grab(registry,disc,&control,elf,elf_bytes,0x105);
+    check_devil_critical_owner(registry,disc,&control,elf,elf_bytes);
     ses=read_asset(disc,"se/r105.ses",&ses_bytes);
     CHECK(!gh_audio_commit_se_with_external_index(registry,2,ses,ses_bytes,disc,&token)&&
         gh_audio_token_complete(registry,token));
