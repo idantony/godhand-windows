@@ -36,7 +36,7 @@ static gh_scene_placement_status select_placement_texture(gh_om_init_state *s,
 
 gh_scene_placement_status gh_om_common_initialize_001b6fb8(gh_om_init_state*s,gh_om_object*o,const gh_om_initializer_bindings*b,int*out){
  if(!s||!o||!b||!out||!b->work||!b->packet_heap||!b->fog_rgb||!o->registered||!o->view.bytes||o->view.size<0x5f8||!o->resource.bytes||!o->resource.file_extent_known||!o->resource.file_extent||o->resource.file_extent>o->resource.size)return GH_PLACE_ARGUMENT;
- int runtime=o->runtime_created&&(o->runtime_kind==0x3eb||o->runtime_kind==0x376||o->runtime_kind==0x363||o->runtime_kind==0x364||o->runtime_kind==0x353||o->runtime_kind==0x3be||(o->runtime_kind==0x3bd&&b->work->room==0x200)||o->runtime_kind==0x3d6||o->runtime_kind==0x3da||o->runtime_kind==0x3c3||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1||o->runtime_kind==0x3e3)&&!o->source.bytes;
+ int runtime=o->runtime_created&&(o->runtime_kind==0x3eb||o->runtime_kind==0x376||o->runtime_kind==0x363||o->runtime_kind==0x364||o->runtime_kind==0x353||o->runtime_kind==0x3be||(o->runtime_kind==0x3bd&&b->work->room==0x200)||o->runtime_kind==0x3d6||o->runtime_kind==0x3da||o->runtime_kind==0x3c3||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||(o->runtime_kind==0x3d9&&b->work->room==0x200)||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1||o->runtime_kind==0x3e3)&&!o->source.bytes;
  if(!runtime&&!gh_om_fragment_profile_for(o->source.type)&&(o->source.type!=0x300&&o->source.type!=0x303&&o->source.type!=0x304&&o->source.type!=0x305&&o->source.type!=0x307&&o->source.type!=0x30a&&o->source.type!=0x30e&&o->source.type!=0x310&&o->source.type!=0x311&&o->source.type!=0x313&&o->source.type!=0x317&&o->source.type!=0x318&&o->source.type!=0x31a&&o->source.type!=0x320&&o->source.type!=0x322&&o->source.type!=0x323&&o->source.type!=0x324&&o->source.type!=0x325&&o->source.type!=0x326&&o->source.type!=0x330&&o->source.type!=0x331&&o->source.type!=0x332&&o->source.type!=0x333&&o->source.type!=0x338&&o->source.type!=0x339&&o->source.type!=0x351&&o->source.type!=0x33f&&o->source.type!=0x346&&o->source.type!=0x354&&o->source.type!=0x355&&o->source.type!=0x356&&o->source.type!=0x357&&o->source.type!=0x35d&&o->source.type!=0x382&&o->source.type!=0x308&&o->source.type!=0x309&&o->source.type!=0x30b&&o->source.type!=0x30c&&o->source.type!=0x3d3&&o->source.type!=0x3d4&&o->source.type!=0x3d5&&o->source.type!=0x41c))return GH_PLACE_ARGUMENT;
  if(!runtime&&(!o->source.bytes||o->source.size<0x2e))return GH_PLACE_BOUNDS;
  if(runtime&&w(o->view.bytes+0x5e0))return fail(s,0x1b7de8,GH_PLACE_UNSUPPORTED);
@@ -140,10 +140,10 @@ gh_scene_placement_status gh_om_r101_item_initialize_001c0128(gh_om_init_state *
   put(actor,0x600,0x3ca3d70a);put(actor,0x614,0x3e4ccccc);put(actor,0x670,0x31);
   put(actor,0x610,0);put(actor,0x618,0);put(actor,0x630,0);put(actor,0x634,0);
   actor[0x660]=actor[0x674]=actor[0x675]=0;
-  if(pickup&&kind!=0x3c8&&kind!=0x3d1&&kind!=0x3df&&kind!=0x3e0&&kind!=0x3e3){
+  if(pickup&&kind!=0x3c8&&kind!=0x3d1&&kind!=0x3df&&kind!=0x3e0&&kind!=0x3e3&&kind!=0x3d9){
    put(actor,0x110,0x40000000);put(actor,0x114,0x40000000);put(actor,0x118,0x40000000);
   }
-  if(kind==0x3e3)actor[0x531]=1;
+  if(kind==0x3e3||kind==0x3d9)actor[0x531]=1;
   if(ticket){ /* 1C0128's item-ID class 3DA selects fixed scale and action kind 0. */
    for(size_t offset=0x110;offset<=0x118;offset+=4)put(actor,offset,0x3fc00000);
    put(actor,0x670,0);

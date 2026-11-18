@@ -128,7 +128,8 @@ unsigned gh_actor_motion_begin_flags(const gh_actor_motion_bindings *b)
     root->original_vtable214==0x4479c8&&half(p+0x2fe)==0x201&&rd(p+0x564)==0x21a&&
     !half(p+0x640)&&rd(p+0x17b4)==80&&p[0x17c3]&&
     ((half(p+0x2f4)==0x0301&&!p[0x2f7])||
-     (half(p+0x2f4)==0x0401&&p[0x2f7]<=1));
+     (half(p+0x2f4)==0x0401&&p[0x2f7]<=1)||
+     (half(p+0x2f4)==0x0102&&!p[0x2f7]&&!half(p+0x54a)));
  return (r101_grenade||side_em27||blowaway||east_rear||boss_mirror||r200_blowaway||r200_recoil||
       gh_actor_motion_mirror_supported(b->model))?0x42u:0x40u;
 }

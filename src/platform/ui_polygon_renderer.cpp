@@ -90,6 +90,9 @@ extern "C" gh_ui_error gh_ui_polygon_upload(gh_ui_polygon_renderer*r,const gh_id
  // Cockpit radar arrows use language TBL1 item20 on this shared path.
  if(t&&t->tex0==GH_ID_TIM2_64X32_PSMT8_TEX0)
   return upload(r,t,p,n,h,64,32,19);
+ // Core TBL1 item45 is the original rotated 128x64 room-key pickup graphic.
+ if(t&&t->tex0==GH_ID_TIM2_128X64_PSMT4_TEX0)
+  return upload(r,t,p,n,h,128,64,20);
  // Actual ActionButton recovery arrow uses the rectangular PSMT8 atlas.
  if(t&&t->width==128&&t->height==64)
   return upload(r,t,p,n,h,128,64,19);

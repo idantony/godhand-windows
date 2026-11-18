@@ -415,6 +415,24 @@ static int enemy_attack_sequence_profile(const struct voice *v,int16_t bank,int1
  const uint8_t *p,const uint8_t *sample)
 {
  const int16_t request=v->requested_program;
+ const gh_actor_model *model=v->model;
+ if(bank==1&&(program==8||program==9)&&v->requested_bank==1&&request==8&&v->source_owner&&
+    v->part_index==-1&&model&&model->work&&model->work->room==0x200&&
+    model->root.bytes&&model->root.size>=0x17b8&&model->root.original_vtable214==0x4479c8){
+  /* 25F08C plays the local EM1A death cue after the original pose bind. */
+  const uint8_t *actor=model->root.bytes;
+  if(h(actor+0x2fe)==0x201&&w(actor+0x564)==0x21a&&!h(actor+0x640)&&!actor[0x1650]&&
+     !h(actor+0x54a)&&w(actor+0x17b4)==80&&h(actor+0x2f4)==0x0102&&
+     actor[0x2f6]<=1&&!actor[0x2f7]){
+   const unsigned alternate=program==9;
+   return w(p)==((uint32_t)program<<16|1u)&&w(p+4)==0x012e0006u+alternate&&w(p+8)==0x25fu&&
+      w(p+12)==0x00200000u&&w(p+16)==(alternate?0x00730073u:0x00780078u)&&w(p+20)==0x005a0040u&&
+      w(p+24)==0x0064ff38u&&!w(p+28)&&w(p+32)==(alternate?0x00010045u:0x00010145u)&&
+      w(p+36)==0x400u&&w(p+40)==0xffffu&&!w(p+44)&&
+      (!sample||(w(sample)==(alternate?0x88c0u:0x5b00u)&&w(sample+4)==11025&&
+        w(sample+8)==0x5fcb80ffu&&!w(sample+12)));
+  }
+ }
  if(bank==1&&v->requested_bank==1&&request==0x0c&&(program==0x0c||program==0x0d)&&
     v->part_index==-1&&heavy_recoil_voice_source(v)&&v->model->work->room==0x200){
   const uint8_t *actor=v->model->root.bytes;
@@ -1230,7 +1248,9 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
  const gh_title_player_view *root=&v->model->root;
  const int r200_step=root->size>0x1650&&v->model->work&&v->model->work->room==0x200&&
     v->part_index==-1&&other_surface&&h(actor+0x2fe)==0x201&&!actor[0x1650]&&
-    ((dependency==0x21a&&!h(actor+0x640)&&
+    ((dependency==0x200&&h(actor+0x640)==2&&
+      (w(actor+0x2f4)==0x00010600u||w(actor+0x2f4)==0x00010700u))||
+     (dependency==0x21a&&!h(actor+0x640)&&
       (w(actor+0x2f4)==0x00016b00u||(state==0x0800&&phase==1&&actor[0x2f7]<=1)||
        w(actor+0x2f4)==0x00010500u||w(actor+0x2f4)==0x00010600u||
        w(actor+0x2f4)==0x00010700u||w(actor+0x2f4)==0x00010900u||
@@ -1240,6 +1260,7 @@ static int core_enemy_footstep_profile(const struct voice *v,int16_t bank,int16_
      (dependency==0x202&&h(actor+0x640)==1&&
       (w(actor+0x2f4)==0x00011500u||w(actor+0x2f4)==0x00010101u||
        w(actor+0x2f4)==0x00010500u||w(actor+0x2f4)==0x00010600u||
+       (state==0x0700&&phase==1&&actor[0x2f7]<=1)||
        w(actor+0x2f4)==0x00011300u||((state==0x0800||state==0x0900)&&phase==1&&actor[0x2f7]<=1)))||
      (dependency==0x20c&&h(actor+0x640)==12&&
       (w(actor+0x2f4)==0x00010600u||w(actor+0x2f4)==0x00011300u))||
@@ -2143,12 +2164,13 @@ static int core_knockdown_profile(const struct voice *v,int16_t bank,int16_t pro
   const unsigned state=h(root->bytes+0x2f4);
   const int boss_knockdown=r103_boss_voice_actor(v)&&!h(root->bytes+0x54a)&&
       (state==0x0701||(state==0x0102&&root->bytes[0x2f6]==1));
-  /* The EM1A wall fall selects CORE B4 in the authored 2519E0/251A40 tail. */
+  /* EM1A uses CORE B4 in wall-fall rows 12A8/12C8 and death rows 1390/1398. */
   const uint8_t *actor=root->bytes;
   const int r200_wall_death=v->model->work&&v->model->work->room==0x200&&
       root->size>=0x17b8&&h(actor+0x2fe)==0x201&&w(actor+0x564)==0x21a&&
       !h(actor+0x640)&&!actor[0x1650]&&!h(actor+0x54a)&&w(actor+0x17b4)==80&&
-      state==0x0401&&actor[0x2f6]==5&&actor[0x2f7]<=1;
+      ((state==0x0401&&actor[0x2f6]==5&&actor[0x2f7]<=1)||
+       (state==0x0102&&actor[0x2f6]==1&&!actor[0x2f7]));
   if(!arena_counter&&!arena_knockdown&&!boss_knockdown&&!r200_wall_death&&
       h(actor+0x2fe)!=0x202)return 0;
   const uint32_t dep=w(root->bytes+0x564);
@@ -2712,7 +2734,7 @@ static int item_drop_profile(const struct voice *v)
     (room==0x103&&(kind==0x3d0||kind==0x3c8||kind==0x3d1||kind==0x3d7))||((room==0x101||room==0x102)&&kind==0x3df)||
     (room==0x101&&(kind==0x3c3||kind==0x3e3||kind==0x3e0))||
     (room==0x100&&(kind==0x3c4||kind==0x3c8||kind==0x3d6||kind==0x3e0||kind==0x3e1))||
-    (room==0x104&&(kind==0x3d6||kind==0x3e0||kind==0x3e1)));
+    (room==0x104&&(kind==0x3d6||kind==0x3e0||kind==0x3e1))||(room==0x200&&kind==0x3d9));
  const int collect=program==0xfc&&(room==0x101||room==0x102)&&kind==0x3df&&model->root.bytes[0x2f6]==4;
  if(!drop&&!collect)return 0;
  return !h(p)&&h(p+2)==program&&h(p+4)==(collect?0x7cu:0x7au)&&
@@ -3078,7 +3100,8 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
  const int large_currency_cue=program==0x16&&candidate->requested_program==0xde&&
     (pickup_room==0x101||pickup_room==0x103);
  /* R101 cOmItem 03E3 ordinary acquisition maps CORE D3 to PL00 row 11. */
- const int key_card_cue=program==11&&candidate->requested_program==0xd3&&pickup_room==0x101;
+ const int key_card_cue=program==11&&candidate->requested_program==0xd3&&
+    (pickup_room==0x101||pickup_room==0x200);
  const int currency_cue=program==12&&candidate->requested_program==0xd4&&
      (pickup_room==0x100||pickup_room==0x101||pickup_room==0x102||pickup_room==0x103);
  const int full_heal_cue=program==20&&candidate->requested_program==0xdc&&(pickup_room==0x101||pickup_room==0x103);

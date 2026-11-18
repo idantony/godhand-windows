@@ -258,8 +258,9 @@ A recorded route from an original-format R200 test save opens the Roulette
 Wheel with R1, navigates with the stick and confirms Shockwave. The original
 command 14 spawns a rank-one projectile. The projectile hits the first key
 carrier and takes its HP from 72 to 0. Direct3D presents the recoil and
-wall reaction, and the replay reaches the carrier's death handler. The key
-drop remains to be verified on this build.
+wall reaction. A recorded walk collects the dropped key at tick 1221 and
+the original HUD shows ×1 at tick 1225. The isolated save-file bytes stay
+unchanged. The second key and the two-key gate remain in development.
 
 The progression replay uses the earlier EV07 Start shortcut and sets the
 boss to 60 HP immediately before the original 80-point Shockwave. A separate
@@ -671,7 +672,9 @@ Gene 从 100 HP 降到 92 HP，并触发了原版受击动作。
 原版敌人的几次攻击让 Gene 的血量从 89 依次降到 78、67 和 56 HP。全程记录的图形错误为零。
 另一条回放从原版格式的 R200 测试存档开始，按 R1 打开轮盘，用摇杆选择并确认冲击波。
 原版命令 14 发射了一阶弹体，命中首枚钥匙携带者，使其从 72 降到 0 HP。Direct3D 呈现了
-受击和撞墙反应，回放随后进入敌人的退场处理。当前构建仍需验证钥匙掉落。
+受击和撞墙反应。主角按录制的摇杆输入走近，在第 1221 个运行节拍拾取掉落的钥匙，
+原版 HUD 在第 1225 个节拍显示 ×1。隔离测试存档的文件内容保持一致。第二把钥匙和
+需要两把钥匙的门仍在开发。
 
 这条流程回放此前用了原版 Start 快捷键跳过 EV07，并在原版 80 点冲击波命中前将
 头目血量设为 60 HP。另一条满血战斗回放通过 L2 挑衅积攒斗气，闪避反击后命中两次。

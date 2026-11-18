@@ -28,9 +28,10 @@ gh_actor_model_status gh_enemy202_initialize_prefix_002022d0(gh_enemy_initialize
   static const uint16_t zero[]={0x6ec,0x6f0,0x6f8,0x6fc,0x700,0x704,0x708,0x734,0x6f4,0x70c,0x1964,0x196c,0x1970,0x1974,0x740,0x744,0x748,0x74c,0x750};
   for(unsigned i=0;i<sizeof(zero)/sizeof(zero[0]);i++)put(p,zero[i],0);s->stage=2;
  }
- if(s->stage==2&&(r104||(r103&&r->entry_number<2))&&!s->effect_bank.bytes){
+ const int em1a=r200&&r->dependency_kind==0x21a;
+ if(s->stage==2&&(r104||(r103&&r->entry_number<2)||em1a)&&!s->effect_bank.bytes){
   /* 2022D0 registers the dependency-specific embedded bundle before the model. */
-  const size_t directory=r104?0x18ec:0x1a94;
+  const size_t directory=em1a?0x10a4:r104?0x18ec:0x1a94;
   if(!s->effects){s->frontier=0x305758;return GH_ACTOR_MODEL_UNSUPPORTED;}
   if(!resource->bytes||resource->kind!=constructed_kind||!resource->file_extent_known||
      resource->file_extent>resource->size||resource->file_extent<directory+4){
@@ -39,7 +40,8 @@ gh_actor_model_status gh_enemy202_initialize_prefix_002022d0(gh_enemy_initialize
   const uint32_t offset=word(resource->bytes,directory);
   if(offset<directory+4||offset>=resource->file_extent){s->frontier=0x2024f8;return GH_ACTOR_MODEL_BOUNDS;}
   const gh_effect_view bank={resource->bytes+offset,resource->file_extent-offset};
-  const gh_effect_status error=r104?gh_game_effects_register_250_00305758(s->effects,bank):
+  const gh_effect_status error=em1a?gh_game_effects_register_21a_00305758(s->effects,bank):
+      r104?gh_game_effects_register_250_00305758(s->effects,bank):
       gh_game_effects_register_204_00305758(s->effects,bank);
   if(error){
    s->frontier=s->effects->frontier?s->effects->frontier:0x305758;
@@ -57,8 +59,9 @@ gh_actor_model_status gh_enemy204_release_effect_bank_00305778(gh_enemy_initiali
  if(!s->effect_bank.bytes)return GH_ACTOR_MODEL_OK;
  int borrowed;
  if(gh_effect_create_source_has_live_refs(s->effects,s->effect_bank.bytes,s->effect_bank.size,&borrowed)||
-    borrowed||(s->request.dependency_kind==0x250?
-       gh_game_effects_release_250_00305778(s->effects,s->effect_bank):
+    borrowed||(s->request.dependency_kind==0x21a?
+       gh_game_effects_release_21a_00305778(s->effects,s->effect_bank):
+       s->request.dependency_kind==0x250?gh_game_effects_release_250_00305778(s->effects,s->effect_bank):
        gh_game_effects_release_204_00305778(s->effects,s->effect_bank))){
   s->frontier=0x305778;return GH_ACTOR_MODEL_BUSY;
  }

@@ -1594,7 +1594,12 @@ gh_actor_motion_status gh_enemy_ems_remove_00290770(gh_enemy_ems *owner,gh_enemy
         const int r103=kind==0x204&&gh_enemy204_is_r103_entry(&actor->request,actor->b.work->room);
         const int r104=kind==0x203&&gh_enemy203_is_r104_entry(&actor->request,actor->b.work->room);
         const int r200=actor->b.work->room==0x200&&gh_enemy2a2_is_r200_entry(&actor->request);
-        if(kind!=0x202&&kind!=0x2a2&&!r103&&!r104&&!r200)return retire_stop(frontier,0x2956f0);
+        const unsigned hp=bytes[0x54a]|(unsigned)bytes[0x54b]<<8;
+        const unsigned request_stamp=actor->request.entry_number;
+        const int r200_key=kind==0x201&&!hp&&bytes[0x2f4]==2&&bytes[0x2f5]==2&&
+            (request_stamp==0||request_stamp==11)&&gh_enemy201_is_r200_entry(&actor->request,actor->b.work->room);
+        if(kind!=0x202&&kind!=0x2a2&&!r103&&!r104&&!r200&&!r200_key)
+            return retire_stop(frontier,0x2956f0);
         /* 2956F0 only stores surviving 220/223 actors. 2956A0 separately
          * preserves current vitality in the current placement page. */
         unsigned stamp=bytes[0x640]|(unsigned)bytes[0x641]<<8;

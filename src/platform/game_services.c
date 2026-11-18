@@ -7406,9 +7406,14 @@ static gh_actor_motion_status enemy_drop_item_002923e8(void *context,gh_om_box_i
  const int boss_drop=(kind==0x3d1&&r103_grab_attacker(s,enemy,0x214))||
      (kind==0x3d7&&r103_grab_attacker(s,enemy,0x215));
  const uint8_t *actor=enemy?enemy->entry.object.view.bytes:NULL;
- const int key_drop=kind==0x3e3&&s->b.work->room==0x101&&actor&&enemy->entry.object.view.size>=0x1651&&
+ const int key_card=kind==0x3e3&&s->b.work->room==0x101&&actor&&enemy->entry.object.view.size>=0x1651&&
      ((actor[0x640]==9&&actor[0x641]==0&&u32(actor+0x564)==0x227&&actor[0x1650]==4)||
       (actor[0x640]==7&&actor[0x641]==0&&u32(actor+0x564)==0x20a&&actor[0x1650]==1));
+ /* R200 REL1578 gives original OM03D9 to these two live EMS placements. */
+ const int road_key=kind==0x3d9&&actor&&enemy->entry.object.view.size>=0x1651&&
+     gh_enemy201_is_r200_entry(&enemy->entry.request,s->b.work->room)&&
+     (enemy->entry.request.entry_number==0||enemy->entry.request.entry_number==11)&&!actor[0x1650];
+ const int key_drop=key_card||road_key;
  const int side_currency=kind==0x3c4&&s->b.work->room==0x101&&actor&&enemy->entry.object.view.size>=0x1651&&
      actor[0x1650]==6&&actor[0x641]==0&&
      ((actor[0x640]==0x16&&u32(actor+0x564)==0x200)||
@@ -7487,11 +7492,12 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
  const int heal=full_heal||partial_heal||half_heal;
  const int roulette_orb=room==0x101&&kind==0x3e0;
  const int key_card=room==0x101&&kind==0x3e3;
+ const int road_key=room==0x200&&kind==0x3d9;
  const int placed_currency=room==0x101&&(kind==0x3d3||kind==0x3d4);
  const int large_currency=room==0x101&&kind==0x3c3;
  if((room==0x101||room==0x102)&&kind==0x3df)return om_attack_boost_0012c708(s,pickup,item,frontier);
  if(!(((room>=0x100&&room<=0x103)&&kind==0x3d6)||
-      (room>=0x100&&room<=0x103&&kind==0x3c4)||heal||boss_currency||key_card||placed_currency||large_currency||roulette_orb))return GH_OBJSTEP_ARGUMENT;
+      (room>=0x100&&room<=0x103&&kind==0x3c4)||heal||boss_currency||key_card||road_key||placed_currency||large_currency||roulette_orb))return GH_OBJSTEP_ARGUMENT;
  *frontier=0;
  const gh_title_player_view *player=&s->title_player.view;
  uint8_t *work=(uint8_t *)s->b.work;
@@ -7518,12 +7524,13 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
    roulette_slots=save[0x156]>6?6:save[0x156];
    roulette_full=save[0x156]<=stock;
   }
-  if(key_card){
-   /* Original 1FA968 adds one carried key card and clamps the signed count to 0..9. */
+  if(key_card||road_key){
+   /* OM03D9 calls 1FAA18, using the key count at +6C. */
+   const size_t offset=road_key?0x6c:0x68;
    int32_t count;
-   memcpy(&count,save+0x68,sizeof(count));
+   memcpy(&count,save+offset,sizeof(count));
    count=count>=8?9:count<-1?0:count+1;
-   memcpy(save+0x68,&count,sizeof(count));
+   memcpy(save+offset,&count,sizeof(count));
   }else if(roulette_orb?roulette_full:!heal||hp==maximum){
    const int32_t amount=(premium?2:1)*(roulette_orb?300:full_heal||boss_currency?1000:(half_heal||large_currency)?500:200);
    int32_t count,money;
@@ -7554,7 +7561,7 @@ static gh_object_step_status om_item_award_001c2408(void *context,gh_om_item_pic
   }
   /* Original 13E2F8 returns without drawing. The live HUD consumes +24/+28. */
   const int devil=(u32(player->bytes+0x15f4)&0x1000u)!=0;
-  const int16_t program=full_heal||placed_currency?0xdc:partial_heal?0xd2:half_heal?0xdf:(boss_currency||large_currency)?0xde:key_card?0xd3:0xd4;
+  const int16_t program=full_heal||placed_currency?0xdc:partial_heal?0xd2:half_heal?0xdf:(boss_currency||large_currency)?0xde:(key_card||road_key)?0xd3:0xd4;
   pickup->sound=(gh_motion_sound_request){.model=&s->player_model,.actor=player,
       .bank=devil?2:0,.program=devil?200:program};
   pickup->stage=1;

@@ -2854,7 +2854,9 @@ static gh_actor_motion_status attack_choice_00262aa8(gh_enemy202_move *s,uint8_t
     const int r200_at06=dependency==0x201&&(stamp==6||stamp==7);
     /* 44414C -> 263214 only selects EM0C's special 44 below 6.25. */
     const int r200_em0c_road=dependency==0x20c&&stamp==12&&distance>=6.25f;
-    if(r200&&(distance>144.0f||dependency==0x202||dependency==0x21a||r200_at06||r200_em0c_road)){
+    const int r200_em00=dependency==0x200&&stamp==2&&!p[0x1650];
+    if(r200&&(distance>144.0f||r200_em00||dependency==0x202||dependency==0x21a||
+       r200_at06||r200_em0c_road)){
         if(number(word(p+0x16c0))<=0){
             float duration=number(word(p+0x1734));
             if(!isfinite(duration))return stop(s,0x262b20,GH_ACTOR_MOTION_UNSUPPORTED);
@@ -3504,8 +3506,8 @@ static gh_actor_motion_status advance_substate0_00211c08(gh_enemy202_move *s,uin
                     r101_em02_stamp5(room_work->room,p)||r101_em03_stamp0(room_work->room,p)||r101_em03_stamp13(room_work->room,p)||r102_em00||r103_arena_jumper(actor_state->entry)||r103_arena_boss(actor_state->entry)||
                     r103_arena_em0a(actor_state->entry)||r100_em0a||r102_gate_em0a(room_work,p)||
                     r100_stamp18_armed_approach(s->enemy,p)||r100_far_stamp18(s->enemy,p,distance)||
-                    r100_far_em03||(r200&&(distance>144.0f||dependency==0x202||dependency==0x21a||
-                    (dependency==0x201&&(stamp==6||stamp==7))||
+                    r100_far_em03||(r200&&(distance>144.0f||(dependency==0x200&&stamp==2&&!p[0x1650])||
+                    dependency==0x202||dependency==0x21a||(dependency==0x201&&(stamp==6||stamp==7))||
                     (dependency==0x20c&&stamp==12&&distance>=6.25f)))||em03_approach_range(s,p,distance)||
                     (r101_arena_airborne(s->enemy)&&(dependency==0x200||dependency==0x203||(dependency==0x202&&stamp==0x27)))||
                     r101_arena_em0f(s->enemy)||
@@ -4924,8 +4926,12 @@ static gh_actor_motion_status advance_substate7_00213ea8(gh_enemy202_move *s,uin
     const int r200_em1a=dependency==0x21a&&!stamp;
     /* The dep0201 wave uses the original short chase row B8/BC. */
     const int r200_wave=dependency==0x201&&(stamp==6||stamp==7);
-    const int r200=work->room==0x200&&(r200_em1a||r200_wave||(dependency==0x202&&stamp==1))&&
-        p[0x2f7]<=(unsigned)r200_em1a&&gh_enemy201_is_r200_entry(&runtime->entry->request,work->room);
+    const int r200_em02=dependency==0x202&&stamp==1&&!p[0x1650];
+    const int r200_em00=dependency==0x200&&stamp==2&&!p[0x1650];
+    /* 213F68 selects B8/BC for EM00. EM02 uses 658/65C in both variants. */
+    const int r200=work->room==0x200&&(r200_em1a||r200_wave||r200_em02||r200_em00)&&
+        p[0x2f7]<=(unsigned)(r200_em1a||r200_em02)&&
+        gh_enemy201_is_r200_entry(&runtime->entry->request,work->room);
     if((!r100&&!r101&&!r101_armed&&!r102&&!r104&&!r200&&!r105_opening_enemy(work,p)&&
         !r103_arena_jumper(runtime->entry)&&!arena_em0a&&!boss)||
         !isfinite(distance)||distance<0)
@@ -5060,7 +5066,8 @@ static gh_actor_motion_status advance_substate6_00213710(gh_enemy202_move *s,uin
      * and binds the original C0/C4 default at 213794. */
     const int r200_wave_em01=dependency==0x201&&(stamp==6||stamp==7)&&!p[0x2f7];
     const int r200_em0c=dependency==0x20c&&stamp==12&&!p[0x2f7];
-    const int r200=((dependency==0x202&&stamp==1)||r200_em1a||r200_wave_em01||r200_em0c)&&
+    const int r200_em00=dependency==0x200&&stamp==2&&!p[0x1650]&&!p[0x2f7];
+    const int r200=((dependency==0x202&&stamp==1)||r200_em1a||r200_wave_em01||r200_em0c||r200_em00)&&
         gh_enemy201_is_r200_entry(&enemy->entry.request,work->room);
     if((!r200&&!r100&&!r101&&!r101_unarmed&&!r101_scenery&&!r102&&!r105&&!arena&&!arena_em0a&&!r104&&!r100_at2_enemy(work,p)&&
         ((dependency!=0x200&&!r100_em03&&!r100_at2_formation(work,p)&&!em0a)||work->room!=0x100))||
@@ -14423,9 +14430,13 @@ static gh_actor_motion_status death_drop_002923e8(gh_enemy202_move *s,uint8_t *p
              (stamp==7&&word(p+0x564)==0x20a&&p[0x1650]==1));
         /* Original 292620 skips the direct factory for the 9C1 sentinel.
          * 292648 then continues to the ordinary 292650 draw. */
+        /* REL1578 writes an ordinary identity-mapped room key on stamps 0 and 11. */
+        const gh_enemy_entry *entry=&s->enemy->entry;
+        const int r200_key=item==0x3d9&&(stamp==0||stamp==11)&&!p[0x1650]&&
+            gh_enemy201_is_r200_entry(&entry->request,entry->b.work->room);
         if(item==0x9c1&&r101_arena_em27(s->enemy->b.entry.work,p))
             s->death_fade_phase=DEATH_DROP_FALLBACK_DRAW;
-        else if(r101_key_card||(item==0x3c3&&r101_arena_em27(s->enemy->b.entry.work,p))||
+        else if(r101_key_card||r200_key||(item==0x3c3&&r101_arena_em27(s->enemy->b.entry.work,p))||
                 (r103_arena_boss(&s->enemy->entry)&&item==(stamp==0?0x3d1u:0x3d7u))){
             s->death_item=(uint16_t)item;
             s->death_fade_phase=DEATH_DROP_AUTHORED;
@@ -14654,19 +14665,23 @@ static gh_actor_motion_status advance_knockdown_death_0025ed00(gh_enemy202_move 
     const int em0a=r102_gate_em0a(work,p)||r103_arena_em0a(&enemy->entry);
     const int grenade=r101_arena_em0f(enemy)&&word(p+0x17b4)==50;
     const int em03=gh_enemy203_is_r104_entry(&enemy->entry.request,work->room)&&word(p+0x17b4)==80;
+    const int r200_stamp0=r200_shockwave_recoil_actor(&enemy->entry,p)&&!half(p+0x640);
     if(s->death_phase==1){
-        if(p[0x2f6]>1||positive_hp(p)||(!em0a&&!em03&&!grenade&&p[0x17c3]))
+        if(p[0x2f6]>1||positive_hp(p)||(!em0a&&!em03&&!grenade&&!r200_stamp0&&p[0x17c3]))
             return stop(s,0x25ed00,GH_ACTOR_MOTION_UNSUPPORTED);
         if(p[0x2f6])s->death_phase=5;
         else{
             const gh_object_view *resource=&enemy->entry.resource;
-            const size_t required=grenade?0xf74:(em0a||em03)?0xb4c:0x390;
+            const size_t required=r200_stamp0?0x13a0:grenade?0xf74:(em0a||em03)?0xb4c:0x390;
             if(!resource->file_extent_known||resource->file_extent<required||
                resource->file_extent>resource->size||motion->b.resource!=resource->bytes)
                 return stop(s,0x25ed00,GH_ACTOR_MOTION_BOUNDS);
             if(grenade){
                 /* 25ED00 selects one of the original 020F rows without a draw. */
                 s->reaction_resource_offset=half(p+0x3ac)&0x200u?0xf6c:0xf64;
+            }else if(r200_stamp0){
+                /* Dependency 021A uses 25F02C and EM1A's death row pair. */
+                s->reaction_resource_offset=half(p+0x3ac)&0x200u?0x1398:0x1390;
             }else if(em0a||em03){
                 /* 020A uses 25EE6C. 0250 uses 25EE9C and adds a
                  * local voice before binding the same offset pair. */
@@ -14882,7 +14897,9 @@ static gh_actor_motion_status advance_death_0025e600(gh_enemy202_move *s,uint8_t
             word(p+0x17b4)==50&&(p[0x2f5]==1||p[0x2f5]==2);
         const int wave4=r101_arena_em27(work,p)&&!positive_hp(p)&&!p[0x2f7]&&
             (p[0x2f5]==0||p[0x2f5]==2);
-        if(!opening&&!r102&&!arena&&!west&&!r104&&!side&&!grenade&&!wave4)
+        const int r200=r200_shockwave_recoil_actor(&enemy->entry,p)&&!stamp&&
+            !positive_hp(p)&&(p[0x2f5]==1||p[0x2f5]==2)&&!p[0x2f7];
+        if(!opening&&!r102&&!arena&&!west&&!r104&&!side&&!grenade&&!wave4&&!r200)
             return stop(s,0x25e600,GH_ACTOR_MOTION_UNSUPPORTED);
         if(word(p+0x6e4)||word(p+0x6e8))return stop(s,0x26a938,GH_ACTOR_MOTION_UNSUPPORTED);
         if(word(p+0x6ec)||gh_enemy_timers_weapon_kind(&enemy->timers))

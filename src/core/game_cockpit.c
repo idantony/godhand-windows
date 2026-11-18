@@ -1830,6 +1830,13 @@ static gh_id_error radar_draw_markers(gh_game_cockpit *s,const gh_cockpit_frame_
     gh_cockpit_radar_quad quad;
     gh_id_error e=radar_make_quad(s,record,code,&quad);
     if(e)return frame_stop(s,0x144888);
+    /* 144844 starts the key pulse at scale zero. A zero-area GS sprite
+     * after 15BCF0's 12.4 coordinate conversion covers no pixels. */
+    if(code==1&&((int)(quad.xy[0]*16)>=(int)(quad.xy[2]*16)||
+                 (int)(quad.xy[1]*16)>=(int)(quad.xy[3]*16))){
+     s->radar_draw_index++;
+     continue;
+    }
     uint32_t frontier=0;
     e=c->radar(c->context,&quad,&frontier);
     if(e){s->frontier=frontier?frontier:0x15bcf0;return e;}

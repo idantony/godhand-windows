@@ -60,7 +60,7 @@ static int weapon(const gh_om_object*o){return o&&(o->source.type==0x382||paper(
 static int r101_item(const gh_om_object *o)
 {
  if(!o)return 0;
- if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c3||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1||o->runtime_kind==0x3e3||
+ if(o->runtime_created)return o->runtime_kind==0x3d6||o->runtime_kind==0x3c3||o->runtime_kind==0x3c4||o->runtime_kind==0x3c8||o->runtime_kind==0x3d0||o->runtime_kind==0x3d1||o->runtime_kind==0x3d7||o->runtime_kind==0x3df||o->runtime_kind==0x3e0||o->runtime_kind==0x3e1||o->runtime_kind==0x3e3||o->runtime_kind==0x3d9||
      (o->runtime_kind==0x3da&&o->view.bytes&&o->view.size>=0x690&&(word(o->view.bytes+0x560)==0x905||word(o->view.bytes+0x560)==0xa5d));
  return o->source.type>=0x3d3&&o->source.type<=0x3d5;
 }

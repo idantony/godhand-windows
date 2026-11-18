@@ -114,6 +114,18 @@ static int r104_203(const gh_enemy_ems_live *entry,uint32_t kind)
         gh_enemy203_is_r104_entry(&enemy->entry.request,enemy->entry.b.work->room);
 }
 
+static int r200_key_carrier(const gh_enemy_ems_live *entry,uint32_t kind)
+{
+    const gh_enemy_actor *enemy=entry->enemy202;
+    const gh_title_player_view *view=&entry->actor->view;
+    if(kind!=0x201||!enemy||view->size<0x1978||view->original_vtable214!=0x4479c8||
+       !gh_enemy201_is_r200_entry(&enemy->entry.request,enemy->entry.b.work->room))
+        return 0;
+    const unsigned stamp=enemy->entry.request.entry_number;
+    return (stamp==0||stamp==11)&&view->bytes[0x2f4]==2&&view->bytes[0x2f5]==2&&
+        !view->bytes[0x54a]&&!view->bytes[0x54b];
+}
+
 static int scenery_2ad(const gh_enemy_ems_live *entry,uint32_t kind)
 {
     const gh_title_player_view *view=&entry->actor->view;
@@ -140,7 +152,7 @@ gh_actor_motion_status gh_enemy_death_mark_00312708(gh_enemy_death_mark *state,
     const uint32_t vtable=word(view->bytes+0x214);
     const unsigned kind=(unsigned)view->bytes[0x2fe]|(unsigned)view->bytes[0x2ff]<<8;
     const int em202=(kind==0x202&&vtable==0x4479c8&&entry.enemy202&&view->size>=0x1978)||
-        devil_220(&entry,kind)||r103_204(&entry,kind)||r104_203(&entry,kind);
+        devil_220(&entry,kind)||r103_204(&entry,kind)||r104_203(&entry,kind)||r200_key_carrier(&entry,kind);
     const int r200=kind==0x2a3&&entry.enemy2a2&&entry.enemy2a2->prefix.bindings.work->room==0x200&&
         gh_enemy2a2_is_r200_entry(&entry.enemy2a2->prefix.request);
     const int em2a2=(kind==0x2a2||r200)&&vtable==0x448ca0&&entry.enemy2a2&&view->size>=0x15f0;
@@ -206,8 +218,9 @@ gh_actor_motion_status gh_enemy_destroy_prefix_mode3(gh_enemy_destructor *state,
     const int devil=devil_220(&entry,kind);
     const int r103=r103_204(&entry,kind);
     const int r104=r104_203(&entry,kind);
+    const int r200_key=r200_key_carrier(&entry,kind);
     const int standard=(kind==0x202&&entry.enemy202&&view->size>=0x1978&&view->original_vtable214==0x4479c8)||
-        devil||r103||r104;
+        devil||r103||r104||r200_key;
     const int r200_ema3=kind==0x2a3&&entry.enemy2a2&&entry.enemy2a2->prefix.bindings.work->room==0x200&&
         gh_enemy2a2_is_r200_entry(&entry.enemy2a2->prefix.request);
     const int heavy=(kind==0x2a2||r200_ema3)&&entry.enemy2a2&&view->size>=0x15f0&&view->original_vtable214==0x448ca0;
@@ -245,12 +258,14 @@ gh_actor_motion_status gh_enemy_destroy_prefix_mode3(gh_enemy_destructor *state,
                 !(word(bytes+0x548)>>16)&&word(bytes+0x17b4)==50;
             /* 0200/0202/0203 lie below the switch; 020A/0227 jump to 2022A0.
              * R104's kind0203 also branches directly there at 202094. */
-            if(r103&&(dependency==0x214||dependency==0x215)){
+            if((r103&&(dependency==0x214||dependency==0x215))||(r200_key&&dependency==0x21a)){
+                /* 42C848 branches to 202278 to release EM1A bank 72. */
                 if(gh_enemy204_release_effect_bank_00305778(&entry.enemy202->entry.initialize))
                     return stop(frontier,0x305778);
             }else if(dependency!=0x200&&dependency!=0x202&&dependency!=0x203&&
                dependency!=0x20a&&dependency!=0x227&&!(r104&&dependency==0x250)&&
-               !r102_runner&&!r101_grenade&&!devil)return stop(frontier,0x202098);
+               !(r200_key&&dependency==0x201)&&!r102_runner&&!r101_grenade&&!devil)
+                return stop(frontier,0x202098);
         }else if(heavy){
             if(word(bytes+0x15c4))return stop(frontier,0x1c2370);
         }else{
