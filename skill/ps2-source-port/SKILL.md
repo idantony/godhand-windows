@@ -163,7 +163,12 @@ update and report tick or presentation offsets alongside it. Use partial
 overlap to locate the next failure. For reruns, reuse binaries when their
 hashes and source pins match and write results to a fresh scratch directory.
 Keep the build report in the executable's scratch directory so each build
-preserves its own evidence.
+preserves its own evidence. When verification and Windows builds use separate
+scratch directories, pass each directory explicitly to the release check.
+Require a passing full verification report, matching source digests from both
+reports, and a match to the frozen snapshot receipt. Fail when a selected
+report is missing. Explicitly selected extra files must keep any digest
+already recorded in a build report.
 Record the process exit code even when it produces no replay report.
 
 For a native Windows crash, resolve the failing module and relative address

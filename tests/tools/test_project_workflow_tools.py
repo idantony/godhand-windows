@@ -1,5 +1,7 @@
 """Workflow regression tests; all generated repositories remain under the active work root."""
 import importlib.util
+import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -11,6 +13,7 @@ from unittest.mock import patch
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT / "tools"))
 from test_contracts import check_contracts, literal_argc, manifest_cases, TestContractError
+from workspace_paths import native_build_report, windows_build_report
 
 spec = importlib.util.spec_from_file_location("staged_eof", PROJECT / "tools/normalize-staged-eof.py")
 eof = importlib.util.module_from_spec(spec)
@@ -145,6 +148,62 @@ class WorkflowTools(unittest.TestCase):
         with patch.object(snapshot_stage, "git", wraps=snapshot_stage.git) as git:
             self.assertEqual(snapshot_stage.filtered_blobs(self.root, snapshot, files), blobs)
             self.assertFalse(any("--stdin-paths" in call.args[1] for call in git.call_args_list))
+
+    def test_snapshot_selects_reports_from_independent_builds(self):
+        snapshot = self.root / "snapshot"
+        source = snapshot / "src/model.c"
+        source.parent.mkdir(parents=True)
+        source.write_bytes(b"int model;\n")
+        name = "src/model.c"
+        sources = {name: hashlib.sha256(source.read_bytes()).hexdigest()}
+        analysis = snapshot / "analysis"
+        native = {"status": "passed", "source_sha256": sources}
+        windows = {"status": "built", "target": "startup-qa", "source_sha256": sources}
+
+        def write_report(path, report):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(report), encoding="utf-8")
+
+        def check(*options):
+            args = ["stage", "--snapshot", str(snapshot), "--check-only", *options]
+            with patch.object(snapshot_stage, "ROOT", self.root), patch.object(sys, "argv", args):
+                snapshot_stage.main()
+
+        write_report(analysis / "source-snapshot.json", {
+            "source_project": str(self.root), "snapshot": str(snapshot), "source_sha256": sources,
+        })
+        native_scratch = self.root / "native-run"
+        windows_scratch = self.root / "windows-run"
+        local_native = native_build_report(native_scratch)
+        local_windows = windows_build_report(windows_scratch, "startup-qa")
+        latest_native = analysis / "native-verification.json"
+        latest_windows = analysis / "windows-startup-qa-build.json"
+        select_native = ("--native-build-scratch", str(native_scratch))
+        select_windows = ("--windows-build-scratch", str(windows_scratch))
+        target = ("--windows-target", "startup-qa")
+
+        write_report(latest_native, native)
+        write_report(latest_windows, windows)
+        check(*target)
+        with self.assertRaisesRegex(SystemExit, "Native verification report missing"):
+            check(*target, *select_native)
+        with self.assertRaisesRegex(SystemExit, "Windows build report missing"):
+            check(*target, *select_windows)
+
+        write_report(local_native, native)
+        write_report(local_windows, windows)
+        write_report(latest_native, {"status": "running"})
+        write_report(latest_windows, {"status": "running"})
+        check(*target, *select_native, *select_windows)
+        write_report(local_windows, {**windows, "target": "native"})
+        with self.assertRaisesRegex(SystemExit, "Requested Windows target"):
+            check(*target, *select_native, *select_windows)
+        write_report(local_windows, {**windows, "source_sha256": {name: "0" * 64}})
+        with self.assertRaisesRegex(SystemExit, "Reports disagree"):
+            check(*target, *select_native, *select_windows)
+        write_report(local_native, {**native, "source_sha256": {name: "0" * 64}})
+        with self.assertRaisesRegex(SystemExit, "Source changed"):
+            check(*select_native, "--extra-authored", name)
 
     def test_unicode_spaces_and_executable_mode(self):
         name = "src/测试 名称.py"

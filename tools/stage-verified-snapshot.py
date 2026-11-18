@@ -10,6 +10,8 @@ import json
 from pathlib import Path, PurePosixPath
 import subprocess
 
+from workspace_paths import native_build_report, windows_build_report
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -46,20 +48,38 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path, required=True)
     parser.add_argument("--windows-target", choices=("startup-qa", "native", "mc-frame", "title-ui"))
+    parser.add_argument("--native-build-scratch", type=Path,
+                        help="Use the full native test report from this build scratch")
+    parser.add_argument("--windows-build-scratch", type=Path,
+                        help="Use the selected Windows target's report from this build scratch")
     parser.add_argument("--extra-authored", action="append", default=[])
     parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
+    if args.windows_build_scratch and not args.windows_target:
+        parser.error("--windows-build-scratch requires --windows-target")
     snapshot = args.snapshot.resolve()
-    receipt = json.loads((snapshot / "analysis/source-snapshot.json").read_text(encoding="utf-8"))
+    analysis = snapshot / "analysis"
+    receipt = json.loads((analysis / "source-snapshot.json").read_text(encoding="utf-8"))
     if Path(receipt["source_project"]).resolve() != ROOT or Path(receipt["snapshot"]).resolve() != snapshot:
         raise SystemExit("Receipt does not identify this project and source copy")
-    native = json.loads((snapshot / "analysis/native-verification.json").read_text(encoding="utf-8"))
+    native_path = (native_build_report(args.native_build_scratch) if args.native_build_scratch
+                   else analysis / "native-verification.json")
+    try:
+        native = json.loads(native_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SystemExit(f"Native verification report missing at {native_path}") from None
     if native.get("status") != "passed" or not native.get("source_sha256"):
         raise SystemExit("Native source copy has not passed verification")
     inputs = dict(native["source_sha256"])
     if args.windows_target:
-        window = json.loads((snapshot / ("analysis/windows-" + args.windows_target + "-build.json")).read_text(encoding="utf-8"))
-        if window.get("status") != "built":
+        windows_path = (windows_build_report(args.windows_build_scratch, args.windows_target)
+                        if args.windows_build_scratch else analysis / f"windows-{args.windows_target}-build.json")
+        try:
+            window = json.loads(windows_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            raise SystemExit(f"Windows build report missing at {windows_path}") from None
+        if (window.get("status") != "built" or window.get("target") != args.windows_target
+                or not window.get("source_sha256")):
             raise SystemExit("Requested Windows target has not finished building")
         for name, sha in window["source_sha256"].items():
             if name in inputs and inputs[name] != sha:
@@ -68,7 +88,7 @@ def main():
     for name in args.extra_authored:
         if name not in receipt["source_sha256"]:
             raise SystemExit("Extra file is absent from original source copy: " + name)
-        inputs[name] = receipt["source_sha256"][name]
+        inputs.setdefault(name, receipt["source_sha256"][name])
     files = {}
     for name, expected in sorted(inputs.items()):
         path = PurePosixPath(name)
