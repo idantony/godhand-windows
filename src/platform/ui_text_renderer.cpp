@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <climits>
 #include "ui_text_renderer.h"
+#include "d3d11_adapter.h"
 #include "../assets/font_texture.h"
 template<class T>struct TPtr{T*p=nullptr;~TPtr(){if(p)p->Release();}T**out(){return&p;}TPtr()=default;TPtr(const TPtr&)=delete;};
 struct TextGlyph{int rectangle[4];unsigned uv[4],info[4];};
@@ -48,7 +49,7 @@ extern "C" gh_ui_error gh_ui_text_create(const gh_font_slot *font,unsigned w,uns
  for(unsigned i=0;i<2;i++){if(gh_font_atlas_bank_rgba(font,i,banks[i].data(),banks[i].size())!=GH_FONT_OK)return GH_UI_UNSUPPORTED;for(size_t a=3;a<banks[i].size();a+=4){if((banks[i][a]&1)&&banks[i][a]!=255)return GH_UI_UNSUPPORTED;banks[i][a]=banks[i][a]==255?128:(unsigned char)(banks[i][a]/2);}}
  std::unique_ptr<gh_ui_text_renderer> r(new(std::nothrow)gh_ui_text_renderer);if(!r)return GH_UI_MEMORY;r->width=w;r->height=h;r->thread=GetCurrentThreadId();
  TPtr<IDXGIFactory1> factory;TPtr<IDXGIAdapter1> adapter;TGPU(CreateDXGIFactory1(__uuidof(IDXGIFactory1),(void**)factory.out()));
- for(UINT i=0;;i++){IDXGIAdapter1*a=nullptr;HRESULT hr=factory.p->EnumAdapters1(i,&a);if(hr==DXGI_ERROR_NOT_FOUND)break;TGPU(hr);DXGI_ADAPTER_DESC1 d={};a->GetDesc1(&d);if(d.VendorId==0x10de&&!(d.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)){adapter.p=a;break;}a->Release();}if(!adapter.p)return GH_UI_GPU;
+ TGPU(gh_d3d11_hardware_adapter(factory.p,adapter.out()));
  TGPU(D3D11CreateDevice(adapter.p,D3D_DRIVER_TYPE_UNKNOWN,nullptr,0,nullptr,0,D3D11_SDK_VERSION,r->device.out(),nullptr,r->context.out()));
  TPtr<ID3DBlob> code,errors;HRESULT compiled=D3DCompile(text_shader,strlen(text_shader),nullptr,nullptr,nullptr,"main","cs_5_0",D3DCOMPILE_ENABLE_STRICTNESS,0,code.out(),errors.out());if(FAILED(compiled)){if(errors.p)std::fprintf(stderr,"%s",(char*)errors.p->GetBufferPointer());return GH_UI_GPU;}
  TGPU(r->device.p->CreateComputeShader(code.p->GetBufferPointer(),code.p->GetBufferSize(),nullptr,r->shader.out()));

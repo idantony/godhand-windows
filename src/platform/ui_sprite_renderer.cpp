@@ -11,6 +11,7 @@
 #include <cstdio>
 #include "ui_sprite_renderer.h"
 #include "ui_depth_target.h"
+#include "d3d11_adapter.h"
 template<class T>struct SPtr{T*p=nullptr;~SPtr(){if(p)p->Release();}T**out(){return &p;}SPtr()=default;SPtr(const SPtr&)=delete;};
 struct SpriteTexture{SPtr<ID3D11Texture2D> image;SPtr<ID3D11ShaderResourceView> view;unsigned width,height;};
 struct gh_ui_sprite_renderer{
@@ -63,8 +64,7 @@ extern "C" gh_ui_error gh_ui_sprite_create(unsigned w,unsigned h,gh_ui_sprite_re
  if(!out)return GH_UI_ARGUMENT;*out=nullptr;if(!w||!h||w>2048||h>2048)return GH_UI_ARGUMENT;
  std::unique_ptr<gh_ui_sprite_renderer> r(new(std::nothrow)gh_ui_sprite_renderer);if(!r)return GH_UI_MEMORY;
  r->width=w;r->height=h;r->thread=GetCurrentThreadId();SPtr<IDXGIFactory1> factory;SGPU(CreateDXGIFactory1(__uuidof(IDXGIFactory1),(void**)factory.out()));SPtr<IDXGIAdapter1> adapter;
- for(UINT i=0;;i++){IDXGIAdapter1 *candidate=nullptr;HRESULT hr=factory.p->EnumAdapters1(i,&candidate);if(hr==DXGI_ERROR_NOT_FOUND)break;SGPU(hr);DXGI_ADAPTER_DESC1 desc={};candidate->GetDesc1(&desc);if(desc.VendorId==0x10de&&!(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)){adapter.p=candidate;break;}candidate->Release();}
- if(!adapter.p)return GH_UI_GPU;
+ SGPU(gh_d3d11_hardware_adapter(factory.p,adapter.out()));
  SGPU(D3D11CreateDevice(adapter.p,D3D_DRIVER_TYPE_UNKNOWN,nullptr,0,nullptr,0,D3D11_SDK_VERSION,r->device.out(),nullptr,r->context.out()));
  SPtr<ID3DBlob> code,errors;HRESULT compiled=D3DCompile(sprite_shader,strlen(sprite_shader),nullptr,nullptr,nullptr,"main","cs_5_0",D3DCOMPILE_ENABLE_STRICTNESS,0,code.out(),errors.out());
  if(FAILED(compiled)){if(errors.p)std::fprintf(stderr,"%s",(char*)errors.p->GetBufferPointer());return GH_UI_GPU;}

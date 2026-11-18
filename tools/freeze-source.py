@@ -247,6 +247,17 @@ def main():
         frozen_files[source] = actual
     if rebases:
         parser.error("Unused dependency rebases: " + str(sorted(rebases)))
+    resources = base if args.base_snapshot else PROJECT
+    disc_baseline = resources / "analysis/disc-baseline.json"
+    if not disc_baseline.is_file():
+        parser.error("Disc baseline is missing: " + str(disc_baseline))
+    baseline_digest = digest(disc_baseline)
+    if args.base_snapshot and receipt.get("disc_baseline_sha256", baseline_digest) != baseline_digest:
+        parser.error("Disc baseline changed in the base snapshot")
+    frozen_files[disc_baseline] = baseline_digest
+    junctions = {name: (resources / name).resolve() for name in (".tools", "reference")}
+    if any(not target.is_dir() for target in junctions.values()):
+        parser.error("The selected source lacks its tool or game-data directory")
     require_frozen()
     destination.mkdir(parents=True)
     for attempt in range(3):
@@ -265,17 +276,21 @@ def main():
         raise SystemExit("Sources kept changing during copy; keep this failed scratch and use a new destination")
     analysis = destination / "analysis"
     analysis.mkdir(exist_ok=True)
-    shutil.copyfile(PROJECT / "analysis/disc-baseline.json", analysis / "disc-baseline.json")
+    copied_baseline = analysis / "disc-baseline.json"
+    shutil.copyfile(disc_baseline, copied_baseline)
+    if digest(copied_baseline) != baseline_digest:
+        raise SystemExit("Disc baseline changed during copy")
     # Constant script plus argument array: paths are not composed as shell code.
-    for name in (".tools", "reference"):
+    for name, target in junctions.items():
         subprocess.run(["powershell", "-NoProfile", "-Command",
             "& { param($linkPath,$targetPath) New-Item -ItemType Junction -Path $linkPath -Target $targetPath -ErrorAction Stop | Out-Null }",
-            str(destination / name), str(PROJECT / name)], check=True)
-        if (destination / name).resolve() != (PROJECT / name).resolve():
+            str(destination / name), str(target)], check=True)
+        if (destination / name).resolve() != target:
             raise SystemExit("Borrowed junction did not resolve to its recorded source")
     receipt = {"created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "source_project": str(PROJECT), "snapshot": str(destination),
-        "source_sha256": copied, "game_data_and_tools": "Borrowed from E:, never copied into authored source",
+        "source_sha256": copied, "disc_baseline_sha256": baseline_digest,
+        "game_data_and_tools": "Borrowed from E:, never copied into authored source",
         "status": "copied-exact-bytes; not-yet-built-or-tested"}
     if args.base_snapshot:
         receipt.update(base_snapshot=str(base), base_snapshot_receipt_sha256=base_receipt_sha256,

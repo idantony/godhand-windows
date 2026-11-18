@@ -184,6 +184,12 @@ Count omitted frames separately from successful window presents. Resume at a
 frame with verified display-history requirements, then read back the presented
 target frame. Report missing renderer history as an incomplete capture.
 
+For Windows GPU portability, record the actual adapter LUID and vendor in the
+startup log and verify window, UI and model rendering on the selected hardware.
+Use the same input and save fixture across adapters. Report gameplay parity
+and pixel differences separately. For native sound, distinguish decoded
+samples, device buffer completion and audible output in the evidence.
+
 For a native Windows crash, resolve the failing module and relative address
 against the executable's matching PDB before editing. Pass the executable and
 the Application Error event's fault offset to

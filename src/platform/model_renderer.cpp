@@ -13,6 +13,7 @@
 #include "model_renderer.h"
 #include "../core/game_effects_trans.h"
 #include "model_raster_bounds.h"
+#include "d3d11_adapter.h"
 template<class T>struct Owned{T*p=nullptr;~Owned(){if(p)p->Release();}T**out(){return &p;}Owned()=default;Owned(const Owned&)=delete;};
 struct Material{uint64_t identity;unsigned width,height;Owned<ID3D11Texture2D> image;Owned<ID3D11ShaderResourceView> view;};
 struct Vertex{int32_t xyzd[4];float stq[4];uint32_t rgba[4];};
@@ -128,9 +129,7 @@ extern "C" gh_model_gpu_error gh_model_renderer_create(unsigned width,unsigned h
  if(!out)return GH_MODEL_GPU_ARGUMENT;*out=nullptr;if(width!=512||height!=448)return GH_MODEL_GPU_UNSUPPORTED;
  auto r=std::unique_ptr<gh_model_renderer>(new(std::nothrow)gh_model_renderer);if(!r)return GH_MODEL_GPU_MEMORY;
  r->width=width;r->height=height;r->thread=GetCurrentThreadId();Owned<IDXGIFactory1> factory;GPU(CreateDXGIFactory1(__uuidof(IDXGIFactory1),(void**)factory.out()));
- Owned<IDXGIAdapter1> adapter;for(UINT i=0;;i++){IDXGIAdapter1*candidate=nullptr;HRESULT h=factory.p->EnumAdapters1(i,&candidate);if(h==DXGI_ERROR_NOT_FOUND)break;GPU(h);
-  DXGI_ADAPTER_DESC1 desc={};candidate->GetDesc1(&desc);if(!(desc.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)){adapter.p=candidate;break;}candidate->Release();}
- if(!adapter.p)return GH_MODEL_GPU_FAILURE;
+ Owned<IDXGIAdapter1> adapter;GPU(gh_d3d11_hardware_adapter(factory.p,adapter.out()));
  GPU(D3D11CreateDevice(adapter.p,D3D_DRIVER_TYPE_UNKNOWN,nullptr,0,nullptr,0,D3D11_SDK_VERSION,r->device.out(),nullptr,r->context.out()));
  Owned<ID3DBlob> code,errors;HRESULT compiled=D3DCompile(shader,std::strlen(shader),nullptr,nullptr,nullptr,"main","cs_5_0",D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_IEEE_STRICTNESS,0,code.out(),errors.out());
  if(FAILED(compiled)){if(errors.p)std::fprintf(stderr,"%s",(const char*)errors.p->GetBufferPointer());return GH_MODEL_GPU_FAILURE;}

@@ -65,6 +65,43 @@ class WorkflowTools(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "hash pair"):
             snapshot_freeze.overlay_receipt([{"path": name, "overlay": new}])
 
+    def test_freeze_from_worktree_inherits_base_disc_and_junctions(self):
+        base = self.root / "base"
+        analysis = base / "analysis"
+        analysis.mkdir(parents=True)
+        source = base / "src/model.c"
+        source.parent.mkdir()
+        source.write_bytes(b"int model;\n")
+        baseline = analysis / "disc-baseline.json"
+        baseline.write_bytes(b'{"disc": "fixture"}\n')
+        pinned_disc = snapshot_freeze.digest(baseline)
+        (analysis / "source-snapshot.json").write_text(json.dumps({
+            "source_sha256": {"src/model.c": snapshot_freeze.digest(source)},
+            "disc_baseline_sha256": pinned_disc,
+        }), encoding="utf-8")
+        for name in (".tools", "reference"):
+            (base / name).mkdir()
+
+        def freeze(destination):
+            args = ["freeze", "--base-snapshot", str(base), "--destination", str(destination)]
+            with patch.object(snapshot_freeze, "PROJECT", self.root), \
+                 patch.object(snapshot_freeze, "SCRATCH", self.root), patch.object(sys, "argv", args):
+                snapshot_freeze.main()
+
+        output = self.root / "verified"
+        freeze(output)
+        self.assertEqual((output / "analysis/disc-baseline.json").read_bytes(), baseline.read_bytes())
+        for name in (".tools", "reference"):
+            self.assertEqual((output / name).resolve(), (base / name).resolve())
+        receipt = json.loads((output / "analysis/source-snapshot.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["disc_baseline_sha256"], pinned_disc)
+
+        baseline.write_bytes(b'{"disc": "different"}\n')
+        rejected = self.root / "rejected"
+        with self.assertRaises(SystemExit):
+            freeze(rejected)
+        self.assertFalse(rejected.exists())
+
     def test_index_only_preserves_worker_and_snapshot(self):
         path = self.stage("src/demo.c", b"int value;\n\n\n")
         snapshot = self.root / "immutable-copy.c"

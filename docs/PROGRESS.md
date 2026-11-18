@@ -4,6 +4,26 @@ This is an early source port, **not a playable Windows game**. The chosen route
 is readable recovery of original game code with native platform adaptation.
 See [progress.json](progress.json) for the latest verified, machine-readable state.
 
+## Windows graphics adapters and native audio
+
+The native Windows renderers share one hardware adapter selection. The same
+integrated QA executable loaded an original-format R102 card and walked in the
+scene on an RTX 4080 SUPER and an AMD Radeon integrated GPU. Both runs presented
+36 scene frames, reached the same player position and left the card bytes
+unchanged. About 1.1% of composed RGB pixels differed across the two GPUs. The
+largest per-channel difference was 6 on an 8-bit scale.
+
+A separate muted WinMM test submitted original ADX audio to a real Windows
+output device. The device consumed all 4,800 frames. The test also exercised
+pause, loop, seek, stop and end of stream.
+
+Windows 原生渲染路径统一选卡。同一集成版 QA 程序在 RTX 4080 SUPER 和 AMD Radeon 核显上读取
+原版格式的 R102 存档并完成行走。两张显卡各呈现 36 个场景帧，角色位置一致，存档文件未变化。
+跨显卡对照中约 1.1% 的合成像素有 RGB 差异，8 位单通道最大差值为 6。
+
+独立的静音 WinMM 测试将原版 ADX 音频送到实际 Windows 输出设备。设备消费了全部 4,800 帧，
+暂停、循环、定位、停止和流结束检查均通过。
+
 ## West route from New Game to R105
 
 An internal native CPU integration run replays the controller recording from

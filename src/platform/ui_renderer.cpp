@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <climits>
 #include "ui_renderer.h"
+#include "d3d11_adapter.h"
 template<class T> struct Ptr{T*p=nullptr;~Ptr(){if(p)p->Release();}T**out(){return &p;}};
 #define GPU(x) do{HRESULT gpu_result=(x);if(FAILED(gpu_result)){std::fprintf(stderr,"ui GPU failure %d: %08lx\n",__LINE__,(unsigned long)gpu_result);return GH_UI_GPU;}}while(0)
 extern "C" gh_ui_error gh_ui_font_quad(const gh_font_quad *q,const gh_ui_gs_state *s,
@@ -28,8 +29,7 @@ extern "C" gh_ui_error gh_ui_font_quad(const gh_font_quad *q,const gh_ui_gs_stat
  if(q->u1/16>512||q->v1/16>256)return GH_UI_ARGUMENT;
  Ptr<IDXGIFactory1> factory;GPU(CreateDXGIFactory1(__uuidof(IDXGIFactory1),(void**)factory.out()));
  Ptr<IDXGIAdapter1> adapter;
- for(UINT i=0;;i++){IDXGIAdapter1 *a=nullptr;HRESULT hr=factory.p->EnumAdapters1(i,&a);if(hr==DXGI_ERROR_NOT_FOUND)break;GPU(hr);DXGI_ADAPTER_DESC1 d={};a->GetDesc1(&d);if(d.VendorId==0x10de&&!(d.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)){adapter.p=a;break;}a->Release();}
- if(!adapter.p)return GH_UI_GPU;
+ GPU(gh_d3d11_hardware_adapter(factory.p,adapter.out()));
  Ptr<ID3D11Device> device;Ptr<ID3D11DeviceContext> ctx;
  GPU(D3D11CreateDevice(adapter.p,D3D_DRIVER_TYPE_UNKNOWN,nullptr,0,nullptr,0,D3D11_SDK_VERSION,device.out(),nullptr,ctx.out()));
  const char *source=R"(

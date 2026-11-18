@@ -347,6 +347,12 @@ for D3D11/DXGI/D3DCompiler, a hardware D3D11 device and an audio device. Movie0
 requires an explicit FFmpeg executable; the tested build is Gyan FFmpeg9.0.2
 essentials, distributed separately under its own license. Pass its path below.
 
+The window, model and UI renderers select one hardware adapter for the process.
+They prefer a D3D11 feature level 11.0 NVIDIA adapter, with other capable
+hardware available as a fallback. Set `GODHAND_D3D11_ADAPTER_INDEX` to a DXGI
+adapter index to select it explicitly. The startup log records the selected
+vendor, device and LUID.
+
 ```powershell
 python -B .\tools\build-windows.py --target native
 & '.\.work\build\windows-native\godhand-windows.exe' `
@@ -631,6 +637,9 @@ Heat 和段位分。实战收齐三张卡和完成头目战仍在开发。
 按上方英文段落的准备、构建和运行命令操作，替换为自己的 ISO、原生存档目录及
 FFmpeg 路径。公共仓库不含游戏程序/资源、BIOS、私有 SDK、工具二进制或密钥。
 Windows 窗口目标还需要 Windows SDK 的 x64 图形库、D3D11 硬件和音频设备。
+窗口、模型与 UI 渲染器在同一个进程中使用同一块显卡。默认优先选支持 D3D11 功能级别 11.0
+的 NVIDIA 显卡，也可回退至满足要求的其他显卡。设置 `GODHAND_D3D11_ADAPTER_INDEX` 可以按
+DXGI 索引显式选卡。启动日志会记录厂商、设备编号和 LUID。
 
 窗口默认隐藏，`--show` 才显示；`--muted` 仅静音本程序，不改系统音量。原生存档
 目录不存在时走原版无卡分支。标题读档已验证恢复 R100 测试档。游戏内存档和完整流程仍在开发。
