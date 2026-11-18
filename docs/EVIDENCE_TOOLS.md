@@ -22,6 +22,10 @@ finished port or execute guest instructions in the production runtime.
   version ending in `left_trigger,right_trigger`. The older format uses
   zero for both triggers. Trigger-only changes are kept when multiple input
   samples fall between player updates.
+  Use `tools/make-r100-pad-variant.py` to change the left stick or the right
+  trigger over a Player Move interval in a fresh output tape. The end Move
+  is exclusive. Compare the observed startup and input traces through the
+  last unedited Move before classifying a route change.
 - Set `GODHAND_TRACE_XAUDIO2=1` in the test process to record source PCM
   statistics, master gain and source queue completion on stderr.
   [check-xaudio2-trace.py](../skill/ps2-source-port/scripts/check-xaudio2-trace.py)
