@@ -837,9 +837,39 @@ static gh_id_error prepare_ui_display(NativeApp &app,bool scene)
     app.frame_building=false;return GH_ID_OK;
     }catch(const std::bad_alloc&){return GH_ID_MEMORY;}
 }
+static void write_native_input_trace(const NativeApp &app, const gh_native_input_snapshot &input,
+                                     bool synthetic_input)
+{
+    const auto &s = app.snapshot;
+    uint32_t position[3];
+    std::memcpy(position, s.player_world_position, sizeof(position));
+    std::fprintf(stderr,
+        "NATIVE_INPUT {\"tick\":%llu,\"room\":%u,\"next_room\":%u,\"game_state\":%u,"
+        "\"scene_serial\":%llu,\"scene_presents\":%llu,\"event_number\":%d,\"event_state\":%u,\"frontier\":\"%08X\","
+        "\"title\":{\"live\":%u,\"mode\":%u,\"phase\":%u,\"subphase\":%u,\"timer\":%u,\"selection\":%u,\"level\":%u},"
+        "\"card\":{\"phase\":%u,\"subphase\":%u,\"load_mode\":%u,\"load_phase\":%u,\"present_mask\":%u},"
+        "\"save_map\":{\"active\":%u,\"phase\":%u,\"selected\":%u},"
+        "\"player\":{\"ready\":%u,\"updates\":%llu,\"state_entry\":%u,\"hp\":%u,\"position_bits\":[%u,%u,%u]},"
+        "\"input\":{\"synthetic\":%s,\"focused\":%d,\"connected\":%d,\"held\":%u,\"pressed\":%u,"
+        "\"released\":%u,\"analog_valid\":%u,\"axes\":[%d,%d,%d,%d]}}\n",
+        (unsigned long long)s.ticks, (unsigned)s.current_room, (unsigned)s.next_room, (unsigned)s.game_state,
+        (unsigned long long)s.scene_frame_serial, (unsigned long long)app.presented_scene,
+        s.event_number, (unsigned)s.event_state, s.unavailable_entry,
+        (unsigned)s.title_live, (unsigned)s.title_mode, (unsigned)s.title_phase,
+        (unsigned)s.title_subphase, s.title_timer, s.title_game_selection, s.title_level,
+        s.mc_phase, s.mc_subphase, (unsigned)s.mc_load_mode, (unsigned)s.mc_load_phase, s.mc_present_mask,
+        (unsigned)s.save_map_active, (unsigned)s.save_map_phase, (unsigned)s.save_map_selected,
+        (unsigned)s.player_pose_ready, (unsigned long long)s.player_updates_completed,
+        s.player_state_entry, (unsigned)s.player_hp, position[0], position[1], position[2],
+        synthetic_input ? "true" : "false", input.focused, input.connected,
+        input.raw_held, input.raw_pressed, input.raw_released, (unsigned)input.analog_valid,
+        input.analog.axes[0], input.analog.axes[1], input.analog.axes[2], input.analog.axes[3]);
+}
+
 static void usage()
 {
     std::fprintf(stderr,"usage: godhand-windows --iso ISO --profile DIRECTORY [--ffmpeg EXE] [--show|--hidden] [--muted] [--prefix] [--max-ticks N]\n");
+    std::fprintf(stderr,"       --trace-native-input  emit input and resulting state to stderr\n");
 #ifdef GH_NATIVE_STARTUP_QA
     std::fprintf(stderr,"       --qa-game-over-retry --qa-capture FILE [--qa-r003-controlled | --qa-r102-capture]\n");
     std::fprintf(stderr,"       --qa-r102-walk [--qa-load] --qa-capture FILE [--qa-capture-count 36]\n");
@@ -992,7 +1022,7 @@ static bool qa_write_capture(const std::string &path,const std::vector<unsigned 
 static int run_native_application(int argc,char **argv)
 {
     const char *iso=nullptr,*profile=nullptr,*ffmpeg=nullptr;
-    bool show=false,muted=false,prefix=false;uint64_t max_ticks=0;
+    bool show=false,muted=false,prefix=false,trace_native_input=false;uint64_t max_ticks=0;
 #ifdef GH_NATIVE_STARTUP_QA
     bool qa_confirm=false,qa_new_game=false,qa_load=false;unsigned qa_captured=0,qa_capture_count=1;gh_native_input qa_input={};
     bool qa_r003=false,qa_r102=false;
@@ -1019,6 +1049,7 @@ static int run_native_application(int argc,char **argv)
     for(int i=1;i<argc;++i){
         if(!std::strcmp(argv[i],"--show"))show=true;
         else if(!std::strcmp(argv[i],"--hidden"))show=false;
+        else if(!std::strcmp(argv[i],"--trace-native-input"))trace_native_input=true;
 #ifdef GH_NATIVE_STARTUP_QA
         else if(!std::strcmp(argv[i],"--qa-new-game")){qa_new_game=true;qa_confirm=true;}
         else if(!std::strcmp(argv[i],"--qa-load")){qa_load=true;qa_confirm=true;}
@@ -1326,6 +1357,7 @@ static int run_native_application(int argc,char **argv)
             host_error=gh_startup_host_set_input(app.host,&input);if(host_error!=GH_HOST_OK)break;
             gh_host_phase phase=gh_startup_host_tick(app.host);
             host_error=gh_startup_host_snapshot(app.host,&app.snapshot);if(host_error!=GH_HOST_OK)break;
+            if(trace_native_input)write_native_input_trace(app,input,synthetic_input);
 #ifdef GH_NATIVE_STARTUP_QA
             if(qa_r003&&!qa_r003_handoff&&app.snapshot.current_room==0x20&&
                app.snapshot.game_state==5&&app.snapshot.next_room==0x100){

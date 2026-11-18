@@ -30,6 +30,12 @@ the original Triangle attack with a single Escape key press. Two contacts
 attributed to the player deal 12 damage each, dropping the enemy's HP from
 74 to 50. The run reaches tick 1,900 in R100 with no unfinished entry.
 
+An opt-in trace on a standard executable exposes input and the resulting
+state after each tick. A keyboard test uses the trace to wait for the original
+menus and opening event, then moves the player 3.18 world units and starts the
+Triangle attack. It records 1,900 consecutive state samples and 1,751 actual
+scene presents, with zero graphics errors.
+
 A separate visible standard-executable run reads the R102 card via the title
 menu and confirms Continue on the map. Pressing W in R102 moves the player in
 the captured client window. It reaches tick 3,000 with 2,223 scene presents and
@@ -63,6 +69,9 @@ Windows 原生渲染路径统一选卡。同一集成版 QA 程序在 RTX 4080 S
 随后用标准程序接近第一名敌人，按一次 Esc 触发原版三角攻击。两次归属于玩家的命中各造成
 12 点伤害，敌人 HP 从 74 降到 50。回放在 R100 运行到第 1,900 个 tick，无未实现入口。
 
+标准程序增加了按需开启的状态追踪。键盘测试通过日志等待原版菜单和开场事件就绪，随后移动
+3.18 个世界单位并触发三角攻击。连续记录 1,900 条状态，实际呈现 1,751 帧，图形错误为零。
+
 另一轮标准程序在实际窗口通过标题读档，确认地图中的 Continue 后进入 R102。按 W 后窗口画面
 显示角色前移。测试到第 3,000 个 tick，呈现 2,223 帧，图形错误为零。原档与隔离副本内容一致。
 
@@ -90,6 +99,11 @@ and reports zero graphics errors. Scene 20,050 is captured and confirmed
 presented. A separate run starts at R003, plays all 28 cuts and verifies the
 visible R105 window by reading it back after presentation.
 
+A follow-up CPU replay matches all 16,007 prior startup and gameplay records
+and applies new controller inputs only after natural entry into R105.
+Retreating triggers the original dodge and Gene stays at 1 HP. The altered
+enemy encounter ends at an unfinished effect path at tick 20,160.
+
 内部原生 CPU 集成回放从新游戏出发，通过手柄录像完成西区战斗、R003 的 EV02 全部 28 个镜头，
 随后进入 R105。回放与归档中的 1,750 条启动记录和 14,257 条游戏记录一致。事件在第 20,046 个
 tick 结束，第 20,053 个 tick 进入 R105，第 20,265 个 tick 停在敌人一个尚未覆盖的攻击分支。
@@ -97,6 +111,10 @@ tick 结束，第 20,053 个 tick 进入 R105，第 20,265 个 tick 停在敌人
 连续 Direct3D 回放同样在第 20,265 个 tick 到达 R105 的停止点。14,257 条已归档玩法记录全部
 匹配，实际呈现 20,122 个场景帧，图形错误为零。第 20,050 个场景帧已捕获并确认呈现。另一轮
 测试从 R003 开始，播完全部 28 个镜头后进入 R105，并在画面提交后读取实际窗口像素。
+
+后续 CPU 回放与此前 16,007 条启动及游戏记录全数一致，自然进入 R105 后才接入新的手柄输入。
+后撤触发原版闪避，Gene 仍有 1 点生命值。敌人随后走到另一条分支，回放在第 20,160 个 tick
+停在尚未覆盖的特效路径。
 
 ## R104 victory event and R021 Stage Clear
 

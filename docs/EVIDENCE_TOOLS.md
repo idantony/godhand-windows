@@ -3,6 +3,11 @@
 These project tools support readable source recovery. They do not generate a
 finished port or execute guest instructions in the production runtime.
 
+- The standard Windows executable accepts `--trace-native-input`. Each
+  `NATIVE_INPUT` JSON line on stderr records the applied sample and the state
+  after that tick. Read the menu fields for readiness and the player fields
+  for input response. `scene_serial` tracks the scheduler and
+  `scene_presents` counts successful window presents.
 - `tools/run-ghidra.ps1` exports explicit function probes with the installed
   Ghidra/EmotionEngine language. `-MaxInstructions` accepts 1..65536 and defaults
   to 2048. Reports include the limit, captured count and `disassemblyTruncated`.

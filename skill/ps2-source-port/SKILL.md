@@ -195,6 +195,9 @@ executable with a fresh profile. [win32_keyboard.py](scripts/win32_keyboard.py)
 posts focus and key messages only to the hidden window of the owned child.
 Use live menu or gameplay readiness when startup timing varies. Preserve the
 event timeline and evidence of the resulting original state or rendered frame.
+When the application exposes an opt-in typed input trace, use its complete
+records to gate menu and gameplay input. Bind the emitted sample to the same
+tick's resulting state and keep scheduler serials distinct from present counts.
 
 On Windows, keep command-line arguments Unicode until the native boundary
 converts them to the encoding used by the platform APIs. Verify the actual
