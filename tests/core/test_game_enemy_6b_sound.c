@@ -597,6 +597,39 @@ int main(int argc,char **argv)
  C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
  C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
 
+ /* The authored R105 EM00 uses its original finite recovery cue after Retry. */
+ {
+ C(!gh_enemy_request_from_room_00294ca0(&r105_room,0,GH_EM_NUMERIC_PCSX2_CHOPZERO_REFERENCE,
+    &req,&spawn,&saved,&frontier)&&spawn&&!req.entry_number&&!req.appearance&&
+    req.object_kind==0x202&&req.dependency_kind==0x200);
+ C(!gh_enemy_se_resolve_002cb418(banks,req.dependency_kind,&resolved)&&resolved==1&&resolved==bank);
+ C(!gh_enemy202_allocate_003130e0(&enemy,heap,&work,&original)&&original);
+ memcpy(enemy.view.bytes+0x2fe,&req.object_kind,2);
+ memcpy(enemy.view.bytes+0x564,&req.dependency_kind,4);
+ memcpy(enemy.view.bytes+0x640,&(uint16_t){req.entry_number},2);
+ C(!gh_enemy_model_initialize_00208268(&model,&enemy.view,&resource,&work,&r105_pools,heap,&fog,
+    GH_STATIC_BINARY32_REFERENCE,&original)&&original);
+ memcpy(enemy.view.alias_f0,anchor,sizeof(anchor));
+ store(enemy.view.bytes+0x5a8,1);
+ memcpy(enemy.view.bytes+0x2f4,&(uint32_t){0x00016c00},4);
+ C(!gh_actor_attached_sound_bind(&source,&binding)&&
+    !gh_actor_attached_sound_bind_scene_tables(&source,&r105_tables));
+ const gh_motion_sound_request cue={.model=&model.model,.actor=&enemy.view,.bank=1,.program=0x10};
+ const unsigned before=submissions;
+ uint32_t handle=0;
+ expected=random;
+ C(!gh_actor_attached_sound_motion(&source,&cue,&handle,&frontier)&&handle&&!frontier&&
+    !memcmp(&random,&expected,sizeof(random))&&!gh_se_voice_update(voices));
+ gh_se_voice_info info;
+ C(!gh_se_voice_query(voices,handle,&info)&&!info.pending&&info.native_voice&&info.attached&&
+    info.attached_model==&model.model&&info.attached_part==-1&&info.bank==1&&info.program==0x10&&
+    info.sample_slot==em00_slots[2]&&info.rate==11025&&info.adsr2==0x5fcb);
+ C(submissions==before+1&&submitted[before].frames>em00_frames[2]);
+ C(!gh_actor_attached_sound_abort(&source)&&stops==submissions&&!model.model.sound_borrowers);
+ C(!gh_enemy_model_release_prefix(&model)&&!gh_game_title_player_release(&enemy));
+ puts("PASS R105 stamp0 EM00 phase1 recovery uses attached local program 10 and original slot 12");
+ }
+
  /* Both original gate enemies select CORE AC/AD. */
  C(r105_room.active[8]==9);
  for(unsigned stamp=7;stamp<=8;++stamp){

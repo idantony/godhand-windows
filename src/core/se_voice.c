@@ -926,11 +926,15 @@ static int enemy_local_cue_profile(const struct voice *v,int16_t bank,int16_t pr
    const int r102_at0b=room==0x102&&stamp==7&&dependency==0x200&&root->size>=0x16c8&&
        !root->bytes[0x1650]&&w(root->bytes+0x16c4)==2&&h(root->bytes+0x2f4)==0x6c00&&
        root->bytes[0x2f6]==1;
+   const int r105_em00=room==0x105&&bank==1&&v->requested_bank==bank&&
+       dependency==0x200&&!stamp&&root->size==0x1980&&h(actor+0x2fe)==0x202&&
+       !actor[0x1650]&&w(actor+0x2f4)==0x00016c00u;
    const int west_wave=room==0x100&&root->size>=0x16c8&&!root->bytes[0x1650]&&
        ((dependency==0x203&&stamp==30&&w(root->bytes+0x16c4)==2)||
         (dependency==0x202&&stamp==32&&!w(root->bytes+0x16c4)))&&
        h(root->bytes+0x2f4)==0x6c00&&root->bytes[0x2f6]==1;
-   if(!r100&&!r100_armed_em02&&!west_wave&&!r101&&!r102&&!r102_at0b&&!r103_em00_voice_actor(v)&&!arena_em03)return 0;
+   if(!r100&&!r100_armed_em02&&!west_wave&&!r101&&!r102&&!r102_at0b&&!r105_em00&&
+      !r103_em00_voice_actor(v)&&!arena_em03)return 0;
   }
  }else if(!v->combat_profile||program==0x10)return 0;
  const unsigned alternate=program==0x0b;
