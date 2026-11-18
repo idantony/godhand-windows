@@ -40,8 +40,9 @@ recording reaches the AT10 area with Gene alive in a native CPU replay.
 A separate integration test followed the continuous West route from New Game
 through all 28 EV02 cuts in R003 and entered R105 at tick 20,053. The native CPU
 run matched 16,007 archived startup and gameplay records. It stopped at an
-unfinished R105 enemy attack branch. Separate Direct3D runs verified the first
-R003 cut on that same route and drew R105 after a controlled R003 start.
+unfinished R105 enemy attack branch. A continuous Direct3D replay on the same
+route reaches that stop in R105 and presents 20,122 scene frames with zero
+graphics errors.
 
 A separate Windows title-load replay uses an original-format R101 test save,
 confirms the original chapter map and presents R101 at scene 461. It runs to
@@ -451,8 +452,8 @@ AT10 区域，Gene 仍然存活。
 
 一轮独立集成测试从新游戏沿西区连续推进，在 R003 播完 EV02 全部 28 个镜头，于第 20,053 个
 tick 进入 R105。原生 CPU 回放与归档中的 16,007 条启动及游戏状态记录一致，随后停在 R105
-敌人一个尚未覆盖的攻击分支。另有 Direct3D 回放验证了同一路线上的 R003 首个镜头，以及在
-受控 R003 起点进入 R105 后的窗口画面。
+敌人一个尚未覆盖的攻击分支。相同路线的连续 Direct3D 回放也到达 R105 的同一处，呈现
+20,122 个场景帧，图形错误为零。
 
 另一轮 Windows 回放从标题读取 R101 的原版格式测试档，经原版章节地图确认，在第 461 帧呈现
 R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染无报错。独立的无画面回放也

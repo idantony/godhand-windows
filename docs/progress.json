@@ -13,7 +13,12 @@
     "cpu_stop_tick": 20265,
     "cpu_stop_reason": "an unfinished R105 enemy attack branch",
     "direct3d_west_first_r003_cut_verified": true,
-    "direct3d_controlled_r105_window_verified": true
+    "direct3d_controlled_r105_window_verified": true,
+    "direct3d_continuous_gameplay_records_matched": 14257,
+    "direct3d_continuous_presented_scene_frames": 20122,
+    "direct3d_continuous_stop_tick": 20265,
+    "direct3d_continuous_captured_presented_scene": 20050,
+    "direct3d_continuous_graphics_errors": 0
   },
   "r104_victory_to_r021_stage_clear": {
     "entry_fixture": "original-format R104 test save; boss health set to 60 before an original 80-point Shockwave hit",
