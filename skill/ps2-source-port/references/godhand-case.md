@@ -359,3 +359,11 @@ Do not infer the indexed page row pitch from the intermediate CT32 upload
 width. The 256×256 PSMT4 HUD entry uses a 64×128 CT32 stream and two GS
 pages per indexed row. The real-disc inverse oracle in `test_title_texture.c`
 checks the 256×256 HUD and 512×512 title profiles independently.
+
+## Export a late Direct3D replay capture
+
+`export-startup-capture.py` also reads late replay receipts containing
+`actual_presented` and `files`. Pass the receipt and a scene number to
+export the corresponding capture. The exporter requires that scene's
+actual Present record and validates the exact RGBA size and SHA-256.
+Queued or simulated frames alone do not establish a presented capture.
