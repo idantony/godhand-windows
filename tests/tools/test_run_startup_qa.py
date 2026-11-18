@@ -217,6 +217,55 @@ class StartupRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(tool.proof.ProofError, "mismatched R102 capture"):
             tool.r102_walk_observations(log, capture, 2, qa, hashes)
 
+    def test_r102_punch_uses_title_load_trace_and_exact_capture_count(self):
+        profile = self.scratch / "profile-load"
+        profile.mkdir()
+        prepared = tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                                max_ticks=1400, capture_count=32, r102_punch=True)
+        self.assertIn("--qa-load", prepared["command"])
+        self.assertIn("--qa-r102-punch", prepared["command"])
+        self.assertIn("--trace-native-input", prepared["command"])
+        self.assertEqual(prepared["command"][prepared["command"].index("--profile") + 1], str(profile))
+        with self.assertRaisesRegex(tool.proof.ProofError, "requires 32 captured"):
+            tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg, r102_punch=True)
+        with self.assertRaisesRegex(tool.proof.ProofError, "own Title Load route"):
+            tool.prepare(self.snapshot, self.scratch, self.iso, self.ffmpeg,
+                         r102_punch=True, r102_walk=True)
+
+    def test_r102_punch_proves_load_mapped_square_hit_and_presented_tail(self):
+        qa = dict(exit_code=0, room="0102", game_state=4, assets_loaded=True, frontier="00000000",
+                  effect_post_error=0, mc_load_mode=1, mc_load_phase=5, ticks=919, scene_frame_serial=766)
+        room = dict(first_scene=467, last_scene=766, frames=300)
+        hit = dict(press_tick=888, press_room_frame=268, hit_tick=899, hit_scene=746,
+                   target=174, stamp=11, hp_before=74, hp_after=71, reaction=0, reaction_phase=1)
+        rows = [
+            "QA Title Load tick510 mode-phase5 control6/1 slots00000001 done1",
+            "QA_R102_STATUS " + json.dumps(room), "QA_R102_PUNCH " + json.dumps(hit),
+        ]
+        for tick, scene, pressed in ((888, 735, 128), (899, 746, 0)):
+            rows.append("NATIVE_INPUT " + json.dumps(dict(tick=tick, scene_serial=scene, room=0x102,
+                game_state=4, input=dict(synthetic=True, pressed=pressed))))
+        capture = self.scratch / "first-scene-candidate.rgba"
+        fingerprints = {}
+        for serial in range(735, 767):
+            rows.append(f"QA_CAPTURE_PRESENTED {serial}")
+            raster = capture if serial == 735 else capture.with_name(f"{capture.stem}.scene-{serial}.rgba")
+            for path in (raster, Path(str(raster) + ".world.rgba")):
+                path.write_bytes(bytes(512 * 448 * 4))
+                fingerprints[path.name] = tool.proof.digest(path)
+        log = "\n".join(rows)
+        result = tool.r102_punch_observations(log, capture, qa, fingerprints)
+        self.assertEqual(result["r102_punch"], hit)
+        for before, after, why in [
+            ("done1", "done0", "completed original Title Load"),
+            ('"pressed": 128', '"pressed": 0', "mapped Square edge"),
+            ('"hp_after": 71', '"hp_after": 74', "target damage"),
+            ("QA_CAPTURE_PRESENTED 756", "QA_CAPTURE_PRESENTED 757", "presentation order"),
+        ]:
+            with self.subTest(why=why):
+                with self.assertRaisesRegex(tool.proof.ProofError, why):
+                    tool.r102_punch_observations(log.replace(before, after), capture, qa, fingerprints)
+
     def test_frozen_launcher_uses_its_original_project(self):
         with patch.object(tool, "PROJECT", self.snapshot):
             prepared = self.prepare()

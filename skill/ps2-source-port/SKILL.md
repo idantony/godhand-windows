@@ -207,6 +207,8 @@ When a project exposes a controlled transition route through its QA launcher,
 verify the original menu inputs and the first presentations in the next room.
 The God Hand `--r102-walk` mode uses the saved-open R105 fixture and checks
 EV04, Continue, R102 movement, and both composited and pre-UI captures.
+Its `--r102-punch` mode uses an isolated `profile-load` card. It checks title
+load, the mapped Square input, target HP change, and the presented hit sequence.
 When the Windows QA launcher offers `--trace-native-input`, enable it to
 pin the last observed input and resulting tick on a long run. An optional
 `--wall-timeout` keeps partial logs and capture hashes in the process receipt.
