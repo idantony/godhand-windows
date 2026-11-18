@@ -13,7 +13,9 @@ from unittest.mock import Mock, patch
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT / "tools"))
 from test_contracts import check_contracts, literal_argc, manifest_cases, TestContractError
-from workspace_paths import native_build_report, retry_windows_file_operation, windows_build_report
+from compiled_objects import OBJECT_CACHE_DIRECTORY
+from workspace_paths import (default_object_cache, native_build_report, retry_windows_file_operation,
+                             windows_build_report, work_root)
 
 spec = importlib.util.spec_from_file_location("staged_eof", PROJECT / "tools/normalize-staged-eof.py")
 eof = importlib.util.module_from_spec(spec)
@@ -45,6 +47,36 @@ class WorkflowTools(unittest.TestCase):
         path.write_bytes(data)
         self.git("add", "--", name)
         return path
+
+    def test_plain_snapshot_shares_only_default_object_cache(self):
+        canonical = self.root / "canonical"
+        (canonical / ".tools").mkdir(parents=True)
+        (canonical / "tools").mkdir()
+        for name in ("build-native.py", "build-windows.py", "compiled_objects.py"):
+            (canonical / "tools" / name).touch()
+        common = canonical / ".work"
+        first = common / "verification/first/source"
+        second = common / "verification/second/source"
+        for donor in (first, second):
+            donor.mkdir(parents=True)
+        with patch.dict(os.environ, {"GODHAND_WORK_ROOT": ""}):
+            for donor in (first, second):
+                self.assertEqual(work_root(donor), donor / ".work")
+                self.assertEqual(default_object_cache(donor, OBJECT_CACHE_DIRECTORY),
+                                 common / OBJECT_CACHE_DIRECTORY)
+            self.assertEqual(default_object_cache(canonical, OBJECT_CACHE_DIRECTORY),
+                             common / OBJECT_CACHE_DIRECTORY)
+        override = self.root / "explicit"
+        with patch.dict(os.environ, {"GODHAND_WORK_ROOT": str(override)}):
+            self.assertEqual(default_object_cache(first, OBJECT_CACHE_DIRECTORY),
+                             override / OBJECT_CACHE_DIRECTORY)
+
+    def test_unrelated_work_directory_keeps_local_object_cache(self):
+        project = self.root / "unrelated/.work/copy"
+        project.mkdir(parents=True)
+        with patch.dict(os.environ, {"GODHAND_WORK_ROOT": ""}):
+            self.assertEqual(default_object_cache(project, OBJECT_CACHE_DIRECTORY),
+                             project / ".work" / OBJECT_CACHE_DIRECTORY)
 
     def test_worker_hash_pairs_keep_both_file_versions(self):
         name = "src/model.c"
@@ -93,6 +125,9 @@ class WorkflowTools(unittest.TestCase):
         self.assertEqual((output / "analysis/disc-baseline.json").read_bytes(), baseline.read_bytes())
         for name in (".tools", "reference"):
             self.assertEqual((output / name).resolve(), (base / name).resolve())
+        with patch.dict(os.environ, {"GODHAND_WORK_ROOT": ""}):
+            self.assertEqual(default_object_cache(output, OBJECT_CACHE_DIRECTORY),
+                             base / ".work" / OBJECT_CACHE_DIRECTORY)
         receipt = json.loads((output / "analysis/source-snapshot.json").read_text(encoding="utf-8"))
         self.assertEqual(receipt["disc_baseline_sha256"], pinned_disc)
 

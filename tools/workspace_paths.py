@@ -19,6 +19,25 @@ def work_root(project: Path) -> Path:
     return ((project / ".tools").resolve().parent / ".work").resolve()
 
 
+def default_object_cache(project: Path, relative: str) -> Path:
+    """Share content-keyed objects from plain snapshot copies, preserving scratch."""
+    project = project.resolve()
+    fallback = work_root(project) / relative
+    if os.environ.get("GODHAND_WORK_ROOT") or (project / ".tools").exists():
+        return fallback
+    ancestor = next((parent for parent in project.parents if parent.name == ".work"), None)
+    if ancestor is None:
+        return fallback
+    canonical = ancestor.parent
+    if not (canonical / ".tools").is_dir() or not all(
+        (canonical / "tools" / name).is_file()
+        for name in ("build-native.py", "build-windows.py", "compiled_objects.py")
+    ):
+        return fallback
+    cache = (ancestor / relative).resolve()
+    return cache if ancestor in cache.parents else fallback
+
+
 def overlaps_project(path: Path, project: Path) -> bool:
     return path == project or project in path.parents
 

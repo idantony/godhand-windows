@@ -13,7 +13,8 @@ from compiler_response import write_response_file
 from compiled_objects import (OBJECT_CACHE_DIRECTORY, WINDOWS_COMPILER_FLAGS, ObjectCache,
                               c_driver, project_inputs, source_hashes)
 
-from workspace_paths import overlaps_authored_tree, windows_build_report, work_root, write_build_report
+from workspace_paths import (default_object_cache, overlaps_authored_tree, windows_build_report,
+                             work_root, write_build_report)
 
 PROJECT = Path(__file__).resolve().parents[1]
 DEFAULT_SCRATCH = work_root(PROJECT)
@@ -29,7 +30,7 @@ def main():
                         help="Shared Zig toolchain cache")
     parser.add_argument("--compiler", type=Path, default=PROJECT / ".tools/zig-x86_64-windows-0.17.1/zig.exe")
     parser.add_argument("--sdk-lib", type=Path, help="Windows SDK um/x64 import-library directory")
-    parser.add_argument("--object-cache", type=Path, default=DEFAULT_SCRATCH / OBJECT_CACHE_DIRECTORY,
+    parser.add_argument("--object-cache", type=Path, default=default_object_cache(PROJECT, OBJECT_CACHE_DIRECTORY),
                         help="Share unchanged compiled objects with Windows and native verification builds")
     parser.add_argument("--no-object-cache", action="store_true", help="Compile every object afresh")
     args = parser.parse_args()

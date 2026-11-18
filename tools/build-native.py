@@ -15,7 +15,8 @@ from test_contracts import check_contracts, TestContractError
 from compiler_response import write_response_file
 from compiled_objects import OBJECT_CACHE_DIRECTORY, ObjectCache, c_driver, project_inputs, source_hashes
 
-from workspace_paths import native_build_report, overlaps_authored_tree, work_root, write_build_report
+from workspace_paths import (default_object_cache, native_build_report, overlaps_authored_tree,
+                             work_root, write_build_report)
 
 PROJECT = Path(__file__).resolve().parents[1]
 SCRATCH = work_root(PROJECT)
@@ -38,7 +39,7 @@ def main():
     parser.add_argument("--scratch", type=Path, default=SCRATCH, help="External build/cache root")
     parser.add_argument("--compiler-cache", type=Path, default=SCRATCH / "cache/zig-global",
                         help="Shared Zig toolchain cache")
-    parser.add_argument("--object-cache", type=Path, default=SCRATCH / OBJECT_CACHE_DIRECTORY,
+    parser.add_argument("--object-cache", type=Path, default=default_object_cache(PROJECT, OBJECT_CACHE_DIRECTORY),
                         help="Share unchanged compiled objects with Windows and native verification builds")
     parser.add_argument("--no-object-cache", action="store_true", help="Compile every object afresh")
     args = parser.parse_args()

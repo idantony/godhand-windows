@@ -187,6 +187,9 @@ terminal report for the intended endpoint. Compare simulation state by gameplay
 update and report tick or presentation offsets alongside it. Use partial
 overlap to locate the next failure. For reruns, reuse binaries when their
 hashes and source pins match and write results to a fresh scratch directory.
+For parallel builds from isolated source copies, keep scratch and logs
+separate and share only content-keyed compiled objects. Check the cache
+directory and reused object count in both receipts before timing a change.
 Keep the build report in the executable's scratch directory so each build
 preserves its own evidence. When verification and Windows builds use separate
 scratch directories, pass each directory explicitly to the release check.
