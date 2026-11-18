@@ -2962,7 +2962,7 @@ static gh_voice_status prepare_pcm_with_pitch(gh_se_voice_engine*s,int16_t bank,
     ((candidate->model&&candidate->model->work&&candidate->model->root.bytes&&
     candidate->model->root.size>=0x5ec&&candidate->model->root.original_vtable214==0x41d220&&
     h(candidate->model->root.bytes+0x2fe)==0x100&&h(candidate->model->root.bytes+0x2f4)==0x0b00&&
-    ((candidate->model->work->room==0x100&&w(candidate->model->root.bytes+0x5e8)==29)||
+    ((candidate->model->work->room==0x100&&(skill==29||(skill==0&&h(player+0x2f6)==1)))||
      (candidate->model->work->room==0x101&&skill==0&&h(player+0x2f6)==1)||
      (candidate->model->work->room==0x102&&(skill==0||skill==4||skill==10||skill==13)&&
       h(candidate->model->root.bytes+0x2f6)==1)||

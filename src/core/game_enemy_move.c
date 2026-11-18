@@ -9138,7 +9138,23 @@ static gh_actor_motion_status advance_formation_00230f20(gh_enemy202_move *s,uin
     gh_title_player_view *actor=&enemy->entry.object.view;
     gh_actor_motion *motion=&enemy->motion.motion;
     uint32_t pc=0;
-    if(word(p+0x564)!=0x200||!r100_at2_formation(work,p)||p[0x2f7])
+    const int opening_actor=work&&work->room==0x100&&half(p+0x2fe)==0x202&&
+        word(p+0x564)==0x200&&half(p+0x640)==20&&!p[0x1650]&&!word(p+0x16c4)&&
+        half(p+0x2f4)==0x4200&&p[0x2f6]<=1&&!p[0x2f7];
+    int opening_pair=0;
+    if(opening_actor){
+        const uint32_t partner=word(p+0x17a0);
+        gh_title_player_view peer={0};
+        uint32_t target_pc=0;
+        const int resolved=partner&&s->targets.resolve&&
+            !s->targets.resolve(s->targets.context,partner,&peer,&target_pc);
+        const int peer_match=resolved&&peer.bytes&&peer.size>=0x642&&
+            peer.original_vtable214==0x4479c8&&half(peer.bytes+0x2fe)==0x202&&
+            word(peer.bytes+0x564)==0x203&&half(peer.bytes+0x640)==19;
+        /* This marker clears the partner after it starts the paired response. */
+        opening_pair=peer_match||(!partner&&p[0x2f6]==1&&word(p+0x5f4)==1);
+    }
+    if(word(p+0x564)!=0x200||(!r100_at2_formation(work,p)&&!opening_pair)||p[0x2f7])
         return stop(s,0x230f20,GH_ACTOR_MOTION_UNSUPPORTED);
     if(!s->substate67_stage){
         p[0x186a]=2;
@@ -9255,7 +9271,10 @@ static gh_actor_motion_status advance_formation_partner_002311a8(gh_enemy202_mov
     const gh_title_player_view *actor=&enemy->entry.object.view;
     gh_actor_motion *motion=&enemy->motion.motion;
     uint32_t pc=0;
-    if(!r100_at2_formation(work,p)||p[0x2f7])
+    const int opening_partner=work&&work->room==0x100&&actor->original_vtable214==0x4479c8&&
+        half(p+0x2fe)==0x202&&word(p+0x564)==0x203&&half(p+0x640)==19&&
+        !p[0x1650]&&!word(p+0x16c4)&&half(p+0x2f4)==0x6500&&p[0x2f6]<=1&&!p[0x2f7];
+    if((!r100_at2_formation(work,p)&&!opening_partner)||p[0x2f7])
         return stop(s,0x2311a8,GH_ACTOR_MOTION_UNSUPPORTED);
     if(!s->substate67_stage)
         s->substate67_stage=p[0x2f6]==0?BIND:p[0x2f6]==1?STEP:5;
