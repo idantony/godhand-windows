@@ -135,6 +135,13 @@ for 120 gameplay frames. A longer R101 replay runs for 4,494 native CPU
 frames and verifies the box and item releases, the original DIE marker
 and enemy audio. R101's later combat presentation remains in development.
 
+A later R100 controller replay reaches Game Over after a West encounter.
+The original Cross confirmation increments the Continue count. The room
+retires the stopped Heat effects and the Devil before reloading. The native
+CPU replay restores Gene to 100 HP and records three updated player frames.
+The Windows QA replay switches to Direct3D before the menu and presents
+224 frames, including Game Over and the reloaded R100 scene at 100 HP.
+
 The new-game east route now breaks the original door, continues into the
 armed encounter, and reaches the original Game Over menu after a lethal
 hit. Confirming Retry restores Gene to 100 HP in R100. A separate west-route
@@ -565,6 +572,12 @@ Gene 仍带着从 R102 拿到的纸片，随后第一下敌方命中将他的生
 原生 CPU 回放验证了 R100 的原版 Game Over 和重试，以及 R101 的投箱和拾取 200 金币。
 R100 重载后以 100 点生命值开始并继续运行 120 帧。较长的 R101 回放运行了 4,494 个原生 CPU 帧，
 验证了箱子与掉落物释放、原版 DIE 标记和敌人音效。R101 后续战斗的画面仍待验收。
+
+另一轮手柄回放在 R100 西侧遭遇战后进入原版 Game Over。按叉键确认后，Continue 计数加一。
+重载前释放已停止的热力特效并退役 Devil。原生 CPU 回放中，Gene 恢复到 100 HP，
+重载后又完成了三次玩家更新。
+Windows 验证在菜单出现前切换到 Direct3D，实际呈现 224 帧，捕获了 Game Over
+菜单和以 100 HP 重载后的 R100 场景。
 
 从新游戏开始的东侧回放打破原版木门，在后续持械战斗中被击倒，并在原版 Game Over 界面
 确认重试，以 100 HP 回到 R100。西侧回放进入原版增援区域，在恶魔遭遇期间打出两次三角攻击。

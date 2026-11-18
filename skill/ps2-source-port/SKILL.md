@@ -198,6 +198,8 @@ separate and share only content-keyed compiled objects. Check the cache
 directory and reused object count in both receipts before timing a change.
 For behavior guarded by a compile definition, check the affected source's
 recorded compile command for the required flag, including on a cache hit.
+Before launching, use [check-windows-build-steps.py](scripts/check-windows-build-steps.py)
+with one `--require STEP=ARG` per exact argument needed by the replay.
 Keep the build report in the executable's scratch directory so each build
 preserves its own evidence. When verification and Windows builds use separate
 scratch directories, pass each directory explicitly to the release check.

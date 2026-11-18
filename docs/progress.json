@@ -1732,6 +1732,30 @@
     "frames_after_reload": 120,
     "frontier_at_bounded_exit": "00000000"
   },
+  "native_cpu_r100_west_retry_with_heat": {
+    "room": "0100",
+    "lethal_hit_tick": 12215,
+    "original_menu_confirm_tick": 12379,
+    "continue_count_after": 1,
+    "same_room_handoff_tick": 12411,
+    "reload_tick": 12475,
+    "ui_resource_epoch_after": 2,
+    "hp_after_reload": 100,
+    "player_updates_after_reload": 3,
+    "frontier_at_bounded_exit": "00000000"
+  },
+  "native_windows_r100_west_retry_with_heat": {
+    "room": "0100",
+    "direct3d_handoff_tick": 12250,
+    "menu_scene": 12232,
+    "confirm_tick": 12379,
+    "reload_scene": 12327,
+    "reload_tick": 12475,
+    "reload_epoch": 2,
+    "scene_frames_presented": 224,
+    "hp_after_reload": 100,
+    "renderer_and_window_errors": 0
+  },
   "native_cpu_r101_box_throw_and_pickup": {
     "room": "0101",
     "circle_pickup_tick": 994,
