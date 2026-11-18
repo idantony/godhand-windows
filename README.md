@@ -94,6 +94,14 @@ menu, presents 539 frames, and moves Gene 2.83 scene units with keyboard
 input. A Direct3D combat replay from the same new save reproduces the
 Square hit. The save data and both icons retain their original bytes.
 
+A native CPU replay loads the same fresh save and follows recorded controller
+input through the R102 exit and the original Continue menu. It reaches R103
+with scene-frame serial 11,632 and no unfinished call at the planned tick
+limit. A separate Windows QA run follows the same input and switches to
+Direct3D before the end of Event 1A. It presents 26 frames, including eight
+R103 frames after the event, with zero renderer or window errors. The copied
+save is unchanged. The resulting images differ from the earlier build.
+
 A later R102 title-load replay presents 88 Direct3D frames covering an enemy
 attack, Gene's hit reaction at 45 to 36 HP, and the enemy's recovery. A CPU
 test starts with the mid-room gate's defeat conditions set in the card and
@@ -531,6 +539,12 @@ EV04 结尾的原版保存菜单已写出有效的 R102 存档。重新启动后
 标准 Windows 程序重新启动后，通过原版标题菜单读取该存档的逐字节副本，呈现了 539 帧，
 并响应普通键盘输入让 Gene 移动 2.83 个场景单位。另一轮 Direct3D 回放从同一个新档
 复现了方块命中。存档数据和两个图标保持原有字节。
+
+原生 CPU 回放读取同一个新档，用录制的手柄输入通过 R102 出口，在原版菜单选择「继续」。
+回放到达 R103，达到预定上限时场景帧编号为 11,632，未遇到未实现调用。
+另一轮 Windows 验证使用同样的输入，在 EV1A 结束前切换到 Direct3D，实际呈现了 26 帧，
+其中 8 帧位于过场结束后的 R103。渲染与窗口错误均为零，存档副本保持原样。
+采集画面与较早构建存在像素差异。
 
 后续 R102 读档回放呈现了 88 个 Direct3D 帧，覆盖敌人攻击、Gene 从 45 HP 降到 36 HP 的
 受击反应，以及敌人收招。CPU 测试用预置击败条件的存档验证了中段门和五个增援，运行了 120 个

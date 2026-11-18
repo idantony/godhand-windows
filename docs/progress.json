@@ -75,6 +75,20 @@
       "scene_frames_presented_after_reopen": 36,
       "card_bytes_preserved_after_read": true
     },
+    "fresh_r102_to_r103_qa_replay": {
+      "build": "fef3673",
+      "cpu_terminal_tick": 11786,
+      "cpu_terminal_room": "R103",
+      "cpu_terminal_frontier": "00000000",
+      "direct3d_handoff_tick": 11736,
+      "direct3d_terminal_tick": 11762,
+      "scene_frames_presented": 26,
+      "r103_post_ev1a_frames_presented": 8,
+      "renderer_and_window_errors": 0,
+      "card_bytes_preserved_after_read": true,
+      "captured_composite_rgb_pixels_changed_from_earlier_build": 17086,
+      "captured_composite_pixels": 229376
+    },
     "unicode_windows_launch_paths": {
       "native_iso_boot_verified": true,
       "ffmpeg_and_controller_tape_verified": true,
