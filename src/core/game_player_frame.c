@@ -2750,7 +2750,8 @@ static gh_player_frame_status roulette_shot_00112a48(gh_game_player_frame *s)
  gh_title_player_view *actor=&b->player->view;
  uint8_t *p=actor->bytes;
  uint32_t pc=0;
- if((b->work->room!=0x103&&b->work->room!=0x104)||p[0x2f7]||actor->size<0x1685)
+ if((b->work->room!=0x103&&b->work->room!=0x104&&b->work->room!=0x200)||
+    p[0x2f7]||actor->size<0x1685)
   return fail(s,0x112a48,GH_PLAYER_FRAME_UNSUPPORTED);
  if(!s->hurt_phase){
   put(p+0x54c,0x41f00000);

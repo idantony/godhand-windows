@@ -950,6 +950,14 @@ static gh_actor_motion_status em0a_counter_00274238(gh_enemy202_hit_call *call,
     return GH_ACTOR_MOTION_OK;
 }
 
+static int r200_shockwave_receiver(const gh_enemy_actor *enemy,const uint8_t *p)
+{
+    const unsigned stamp=half(p+0x640);
+    return enemy->entry.b.work&&
+        gh_enemy201_is_r200_entry(&enemy->entry.request,enemy->entry.b.work->room)&&
+        stamp==0&&enemy->entry.request.dependency_kind==0x21a&&!p[0x1650]&&word(p+0x214)==0x4479c8;
+}
+
 /* 20A178 Give27 uses the projectile as the damage source. Its unscaled
  * VT+AC call, heat gain, and recovery enter 20CA90's 01/03 state. */
 static gh_actor_motion_status roulette_shockwave_hit(gh_enemy202_hit_call *call,
@@ -974,7 +982,9 @@ static gh_actor_motion_status roulette_shockwave_hit(gh_enemy202_hit_call *call,
     const int turn=move==0x0800&&p[0x2f6]==1&&p[0x2f7]<=1;
     const int em03=r104_em03_damage_receiver(enemy,p)&&(call->phase||
         ((charge_recovery||turn)&&rank==1));
-    if(!arena&&!em03)return stop(frontier,0x20a178);
+    const int r200=r200_shockwave_receiver(enemy,p)&&(call->phase||
+        (move==0x0700&&p[0x2f6]==1&&p[0x2f7]==1));
+    if(!arena&&!em03&&!r200)return stop(frontier,0x20a178);
     if (call->phase==0) {
         const float drain=number(p+0x770), cooldown=number(p+0x54c);
         const float block=number(p+0x1740), armor=number(p+0x1734);
@@ -1209,8 +1219,16 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         (triangle&&(r100_stamp8(enemy,p)||r103_first_wave_em00(enemy)))||
         (heat_contact&&r103_first_wave_em00(enemy))||west_em00;
     const int opening_pair = opening_203 || opening_200;
-    const int opening_square_pressure = effect==7&&r100_stamp19(enemy,p)&&
-        word(p+0x2f4)==0x00001500u&&!p[0x1650]&&!word(p+0x16c4)&&
+    const uint32_t opening_move=word(p+0x2f4);
+    const int opening_square_followup=opening_move==0x00011800u&&rank==3&&
+        word(p+0x16d0)==0x04200002u&&word(p+0x16d4)==0x08000400u&&
+        !half(p+0x3ac)&&!word(p+0x16ec);
+    const int opening_square_collateral=r100_stamp20(enemy,p)&&opening_move==0x00011500u&&rank==3&&
+        word(p+0x16d0)==0x04200002u&&word(p+0x16d4)==0x08000400u&&
+        half(p+0x3ac)==0x0840u&&!word(p+0x16ec);
+    const int opening_square_pressure = effect==7&&
+        ((r100_stamp19(enemy,p)&&(opening_move==0x00001500u||opening_square_followup))||opening_square_collateral)&&
+        !p[0x1650]&&!word(p+0x16c4)&&
         word(body->bytes+0x4c)==3&&word(player->bytes+0x2f4)==0x00010b00u&&
         !word(player->bytes+0x5e8);
     const int ordinary_punch = room_unarmed_punch(enemy, p, effect);
@@ -1685,7 +1703,8 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
          * The rank2+ selector1 branch has an additional counter draw. */
         if (boss_strike && triangle && rank >= 2)
             return stop(frontier, 0x20d398);
-        if (!triangle && counter_selector && rank >= 2)
+        const int opening_collateral_counter=opening_square_pressure&&opening_square_collateral;
+        if (!triangle && counter_selector && rank >= 2 && !opening_collateral_counter)
             return stop(frontier, 0x20cd00);
         /* Selector 2 validates the east EM27 row without the selector 1 draw. */
         if (hit_probe_selector && !side_em0f) {
@@ -1708,9 +1727,9 @@ gh_actor_motion_status gh_enemy202_hit_0020a178(
         }
         const float block = number(p + 0x1740);
         if (!isfinite(block)) return stop(frontier, 0x20d140);
-        if(boss_recovery){
-            /* 20CAC8 selector2 and 20D398 Give 7 do not draw. 20CD00
-             * selector2 uses the original 1/32 roll at rank one. */
+        if(boss_recovery||opening_collateral_counter){
+            /* 20CD00 uses the original 1/32 roll for the boss at rank one
+             * and the opening stamp20 Give07 with selector1 at rank three. */
             const float face=number(p+0x760),rate=number(p+0x5a8),stun=number(p+0x17cc);
             if(!isfinite(face)||!isfinite(rate)||!isfinite(stun))
                 return stop(frontier,0x20cd00);
@@ -1984,7 +2003,8 @@ gh_actor_motion_status gh_enemy202_hit_stun_0028ed28(gh_enemy_actor *enemy, uint
     const int grenade=has_source&&r101_grenade_contact(enemy,source,effect,word(body->bytes+0x4c));
     const int triangle = triangle_take_supported(enemy, p, effect);
     const int amplified = (half(p + 0x3ac) & 0x100u) != 0;
-    const int shockwave=effect==0x27&&(word(p+0x564)==0x214||word(p+0x564)==0x215||r104_em03_damage_receiver(enemy,p));
+    const int shockwave=effect==0x27&&(word(p+0x564)==0x214||word(p+0x564)==0x215||
+        r104_em03_damage_receiver(enemy,p)||r200_shockwave_receiver(enemy,p));
     const int boss_square=effect==7&&r103_boss_player_strike_target(enemy,p);
     const gh_title_player_view *catapult_source=NULL;
     const int catapult=effect==0x52&&!gh_hitarea_object_last_hit_actor(body,&catapult_source)&&
@@ -2235,7 +2255,8 @@ gh_actor_motion_status gh_enemy202_impact_00271810(
         call->phase=10;
         return GH_ACTOR_MOTION_OK;
     }
-    const int shockwave=call->effect==0x27&&(dependency==0x214||dependency==0x215||r104_em03_damage_receiver(enemy,p));
+    const int shockwave=call->effect==0x27&&(dependency==0x214||dependency==0x215||
+        r104_em03_damage_receiver(enemy,p)||r200_shockwave_receiver(enemy,p));
     const gh_title_player_view *grenade_source=NULL;
     const int grenade=call->effect==0x30&&take_effect==0x30&&
         !gh_hitarea_object_last_hit_actor(body,&grenade_source)&&

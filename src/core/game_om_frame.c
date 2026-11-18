@@ -1862,7 +1862,7 @@ static gh_object_step_status projectile_move_001b93e8(gh_om_frame_state *frame,
  gh_om3be_state *state=(gh_om3be_state *)frame->object->initialization;
  uint8_t *p=frame->object->view.bytes,*position=frame->object->view.alias_f0;
  const uint32_t kind=word(p+0x610);
- const int roulette=kind==0x2c&&(work->room==0x103||work->room==0x104)&&state->shooter;
+ const int roulette=kind==0x2c&&(work->room==0x103||work->room==0x104||work->room==0x200)&&state->shooter;
  const int devil=kind==3&&work->room==0x100;
  const int em03=kind==0&&work->room==0x104&&state->shooter;
  const int uses_contact=devil||em03;

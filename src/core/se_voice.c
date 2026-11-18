@@ -2818,7 +2818,8 @@ static int r103_roulette_motion_voice_profile(const struct voice *voice,
  const gh_actor_model *model=voice->model;
  if(!voice->source_owner||bank!=3||program<0x1a||program>0x1c||
     voice->requested_bank||voice->requested_program!=program+200||voice->part_index!=-1||
-    !model||!model->work||(model->work->room!=0x103&&model->work->room!=0x104)||!model->root.bytes||
+    !model||!model->work||(model->work->room!=0x103&&model->work->room!=0x104&&model->work->room!=0x200)||
+    !model->root.bytes||
     model->root.size<0x300||model->root.original_vtable214!=0x41d220||
     h(model->root.bytes+0x2fe)!=0x100||h(model->root.bytes+0x2f4)!=0x2300)
   return 0;
@@ -4006,7 +4007,8 @@ static int r103_roulette_windup_cue(const struct voice *voice)
  const int heavy=program==0x120;
  return voice->source_owner&&!voice->requested_bank&&(heavy||program==0x3f)&&
     voice->requested_program==voice->info.program&&!voice->info.bank&&voice->part_index==-1&&
-    model&&model->work&&(model->work->room==0x103||model->work->room==0x104)&&model->root.bytes&&
+    model&&model->work&&(model->work->room==0x103||model->work->room==0x104||model->work->room==0x200)&&
+    model->root.bytes&&
     model->root.size>=0x300&&model->root.original_vtable214==0x41d220&&
     h(model->root.bytes+0x2fe)==0x100&&h(model->root.bytes+0x2f4)==0x2300&&
     w(row)==program<<16&&w(row+4)==(heavy?0x01000092u:0x0114002bu)&&
@@ -4557,7 +4559,7 @@ static gh_voice_status attached_update(gh_se_voice_engine *s,struct voice *v)
  const int roulette_cue=!v->info.pending&&v->info.native_voice&&
     !v->external_channels&&(v->flags18==4||v->flags18==5)&&(v->flags1c==3||v->flags1c==5)&&
     v->part_index==-1&&v->model&&v->model->work&&
-    (v->model->work->room==0x103||v->model->work->room==0x104)&&
+    (v->model->work->room==0x103||v->model->work->room==0x104||v->model->work->room==0x200)&&
     h(v->descriptor+0x14)==64&&h(v->descriptor+0x10)==h(v->descriptor+0x12)&&
     ((env.sound_flags_ac&&env.sound_flags_b0&&
       (*env.sound_flags_ac&*env.sound_flags_b0&0x400000u))||v->spatial_slow);

@@ -1197,7 +1197,13 @@ static gh_actor_motion_status advance_sequence_effects_0014fb48(gh_enemy202_move
         (r102_mount_passenger(s->enemy)||r101_arena_airborne(s->enemy)||r102_area11_obstacle(work,p)||
          r103_arena_jumper(s->runtime.entry)||r103_arena_em0a(s->runtime.entry)||
          r103_arena_boss(s->runtime.entry));
-    const int formation_pair=s->pending_ai_pc==0x230f20&&r100_at2_formation(work,p);
+    const int opening_owner=work&&work->room==0x100&&s->pending_ai_pc==0x230f20&&
+        dependency==0x200&&half(p+0x2fe)==0x202&&half(p+0x640)==20&&!p[0x1650]&&
+        !word(p+0x16c4)&&word(p+0x2f4)==0x00014200u&&!word(p+0x17a0)&&word(p+0x5f4)==1;
+    const uint8_t *opening_record=p+0x3b0;
+    const int opening_pair=opening_owner&&half(p+0x3ae)==1&&opening_record[0]==0x58&&
+        opening_record[1]==2&&word(opening_record+4)==UINT32_MAX&&!opening_record[8]&&opening_record[9]==1;
+    const int formation_pair=s->pending_ai_pc==0x230f20&&(r100_at2_formation(work,p)||opening_pair);
     const int recoil_landing=s->pending_ai_pc==0x24f638&&p[0x2f6]==3&&!p[0x2f7]&&
         word(p+0x17b4)==80&&gh_enemy203_is_r104_entry(&s->runtime.entry->request,work->room);
     const int r200_melee=work->room==0x200&&dependency==0x21a&&!half(p+0x640)&&
@@ -4918,8 +4924,8 @@ static gh_actor_motion_status advance_substate7_00213ea8(gh_enemy202_move *s,uin
     const int r200_em1a=dependency==0x21a&&!stamp;
     /* The dep0201 wave uses the original short chase row B8/BC. */
     const int r200_wave=dependency==0x201&&(stamp==6||stamp==7);
-    const int r200=work->room==0x200&&(r200_em1a||r200_wave||(dependency==0x202&&stamp==1))&&!p[0x2f7]&&
-        gh_enemy201_is_r200_entry(&runtime->entry->request,work->room);
+    const int r200=work->room==0x200&&(r200_em1a||r200_wave||(dependency==0x202&&stamp==1))&&
+        p[0x2f7]<=(unsigned)r200_em1a&&gh_enemy201_is_r200_entry(&runtime->entry->request,work->room);
     if((!r100&&!r101&&!r101_armed&&!r102&&!r104&&!r200&&!r105_opening_enemy(work,p)&&
         !r103_arena_jumper(runtime->entry)&&!arena_em0a&&!boss)||
         !isfinite(distance)||distance<0)

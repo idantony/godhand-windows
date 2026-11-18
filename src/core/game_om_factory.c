@@ -197,7 +197,7 @@ gh_scene_placement_status gh_om_factory_create_0030fa98(gh_om_factory*f,gh_om_ru
  const int mount=kind==0x353&&room==0x102;
  const int ticket=kind==0x3da&&(room==0x102||room==0x104);
  const int catapult=kind==0x3bd&&room==0x200;
- const int projectile=kind==0x3be&&(room==0x100||room==0x103||room==0x104);
+ const int projectile=kind==0x3be&&(room==0x100||room==0x103||room==0x104||room==0x200);
  const int item=gh_om_runtime_pickup_supported(room,kind)||((room==0x100||room==0x104)&&(kind==0x3e0||kind==0x3e1));
  if(id!=0xffff||(kind!=0x3eb&&!paper&&!room_weapon&&!em0f_throw&&!mount&&!catapult&&!projectile&&!item&&!ticket))
   return fail(f,0x30fe68,kind,GH_PLACE_UNSUPPORTED);
