@@ -125,7 +125,8 @@ def main():
         log = logs / (name + ".log")
         log.write_text(result.stdout, encoding="utf-8")
         with report_lock:
-            report["steps"].append({"name": name, "returncode": result.returncode, "log": str(log)})
+            report["steps"].append({"name": name, "command": [str(part) for part in command],
+                                    "returncode": result.returncode, "log": str(log)})
         if result.returncode:
             with report_lock:
                 report["status"] = "failed"
@@ -142,7 +143,8 @@ def main():
             log = logs / (name + ".log")
             log.write_text(f"Restored verified object from cache {key}\n", encoding="utf-8")
             with report_lock:
-                report["steps"].append({"name": name, "returncode": 0, "log": str(log), "object_cache": key})
+                report["steps"].append({"name": name, "command": [str(part) for part in command],
+                                        "returncode": 0, "log": str(log), "object_cache": key})
             print(name + ": PASS (cache)", flush=True)
             return
         run(name, command)
