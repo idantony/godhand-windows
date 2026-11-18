@@ -72,6 +72,11 @@ replay selects Continue with the original pad input. A follow-up replay
 presents the first 16 consecutive R102 frames with the original stage, Gene,
 enemies and HUD.
 
+A newer controlled Windows run completes the same transition and continues
+through the first 36 R102 presentations. After the original Continue menu,
+24 stick inputs move Gene 3.08 scene units with 100 HP. The run verifies 16
+consecutive captures with matching pre-UI frames and zero renderer errors.
+
 The original save menu at the end of Event 04 writes a valid R102 checkpoint.
 A fresh launch loads that checkpoint through the original title and save-map
 flow. Direct3D presents 36 consecutive R102 frames while a controlled stick
@@ -504,6 +509,10 @@ R101。运行到预定的 800 tick 上限，完成 187 次玩家更新，渲染�
 播放开门声，原版房间切换载入 R002。Direct3D 连续呈现了 R002 的 3,390 帧，完整播放 EV04 的
 24 个镜头并显示原版保存界面。回放用原版按键选择继续。后续回放连续呈现了 R102 的前 16 帧，
 显示原版场景、Gene、敌人与 HUD。
+
+新一轮受控 Windows 回放完成了同一转场，并继续呈现 R102 的前 36 帧。通过原版菜单选择
+继续后，24 次摇杆输入使 Gene 移动约 3.08 个场景单位，生命值保持 100。回放核验了
+连续 16 张截图及其对应的界面合成前画面，渲染错误为零。
 
 EV04 结尾的原版保存菜单已写出有效的 R102 存档。重新启动后，通过原版标题菜单和存档地图
 读入该存档。测试用摇杆让 Gene 移动，Direct3D 连续呈现 R102 的 36 帧。两次独立读档
