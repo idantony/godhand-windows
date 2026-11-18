@@ -1280,8 +1280,10 @@ static gh_player_frame_status damage_frame(gh_game_player_frame*s){const gh_play
    const int north_em00_short=north_em00&&(!w(source->bytes+0x5f4)||north_em00_matching_rows)&&
      w(source->bytes+0x1874)==20&&w(source->bytes+0x1878)==0x37&&
      s->pending_damage_kind==0x37&&w(take+0x4c)==20&&s->pending_damage==20;
+   const int opening_em00_short=opening_em00&&!w(source->bytes+0x5f4)&&
+     w(source->bytes+0x1874)==15&&w(source->bytes+0x1878)==0x37&&w(take+0x4c)==15;
    const int short_hit=s->pending_damage_kind==0x37&&
-     ((s->pending_damage==15&&(dependency==0x20a||at3_em00_timed))||
+     ((s->pending_damage==15&&(dependency==0x20a||at3_em00_timed||opening_em00_short))||
       (s->pending_damage==20&&(close_enemy||stamp8_attack)));
    const int stamp19_fall=s->pending_damage_kind==0x3e&&(s->pending_damage==45||s->pending_damage==23)&&
      dependency==0x203&&stamp==19;
