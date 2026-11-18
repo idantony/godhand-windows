@@ -13,7 +13,14 @@
     "different_composed_rgb_pixels": 91349,
     "compared_composed_pixels": 8257536,
     "max_rgb_channel_difference": 6,
-    "muted_winmm_adx_frames_consumed": 4800
+    "muted_winmm_adx_frames_consumed": 4800,
+    "production_window_keyboard_new_game": {
+      "room": "R100",
+      "tick": 700,
+      "movie_frames_presented": 90,
+      "scene_frames_presented": 539,
+      "graphics_errors": 0
+    }
   },
   "private_west_r105_integration": {
     "observed_on": "2026-11-18",

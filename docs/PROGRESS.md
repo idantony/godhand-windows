@@ -13,6 +13,11 @@ scene on an RTX 4080 SUPER and an AMD Radeon integrated GPU. Both runs presented
 unchanged. About 1.1% of composed RGB pixels differed across the two GPUs. The
 largest per-channel difference was 6 on an 8-bit scale.
 
+The standard Windows executable also reaches R100 from New Game using its
+ordinary window keyboard path. A hidden-window test posted key messages to
+that process and reached tick 700 with 90 opening movie frames, 539 scene
+presents and zero graphics errors. The run used the production executable.
+
 A separate muted WinMM test submitted original ADX audio to a real Windows
 output device. The device consumed all 4,800 frames. The test also exercised
 pause, loop, seek, stop and end of stream.
@@ -20,6 +25,9 @@ pause, loop, seek, stop and end of stream.
 Windows 原生渲染路径统一选卡。同一集成版 QA 程序在 RTX 4080 SUPER 和 AMD Radeon 核显上读取
 原版格式的 R102 存档并完成行走。两张显卡各呈现 36 个场景帧，角色位置一致，存档文件未变化。
 跨显卡对照中约 1.1% 的合成像素有 RGB 差异，8 位单通道最大差值为 6。
+
+标准 Windows 可执行文件也通过普通窗口键盘处理进入了 R100。测试只向同一进程的隐藏窗口发送
+按键消息，从新游戏运行到第 700 个 tick，呈现 90 帧开场影片和 539 个场景帧，图形错误为零。
 
 独立的静音 WinMM 测试将原版 ADX 音频送到实际 Windows 输出设备。设备消费了全部 4,800 帧，
 暂停、循环、定位、停止和流结束检查均通过。
