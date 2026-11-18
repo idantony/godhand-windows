@@ -157,6 +157,22 @@ can drift across decoder and device runs. Reuse the same tape on the
 packet-only and device replay paths, and compare their original state
 transitions before chasing presentation differences.
 
+For a completed replay check, require every expected gameplay sample and a
+terminal report for the intended endpoint. Compare simulation state by gameplay
+update and report tick or presentation offsets alongside it. Use partial
+overlap to locate the next failure. For reruns, reuse binaries when their
+hashes and source pins match and write results to a fresh scratch directory.
+Record the process exit code even when it produces no replay report.
+
+For a native Windows crash, resolve the failing module and relative address
+against the executable's matching PDB before editing. Pass the executable and
+the Application Error event's fault offset to
+[resolve-windows-crash.py](scripts/resolve-windows-crash.py) for a source line
+using local symbols. Audit the failing call
+site for host ownership changes introduced by the merge. A shared runtime path
+can legitimately lack the pointer used by one actor subtype. Re-run the same
+input and verify the original simulation state beyond the failed update.
+
 When reusing a QA observer from an older snapshot, transplant only its
 guarded inspection code into the current platform host. Verify the host
 outside that block matches production before replaying. Confirm the input
@@ -211,3 +227,8 @@ Update the skill during ongoing work when useful. Keep reusable, supported
 lessons here; game-specific findings in the case reference; changing status in
 the resume reference. Include no game bytes, binaries, ISO/assets, credentials
 or copied decompiler output. Revalidate changes with the skill validator.
+
+After a requested milestone upload, review the whole port and its verification
+pipeline. Implement and test a bounded improvement to the most consequential
+workflow bottleneck the evidence supports. Estimate overall completion against
+the agreed acceptance matrix and note the major work still open.
