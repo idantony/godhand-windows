@@ -14,7 +14,7 @@ import re
 import subprocess
 import sys
 
-from workspace_paths import windows_build_report, work_root
+from workspace_paths import native_build_report, windows_build_report, work_root
 
 PROJECT = Path(__file__).resolve().parents[1]
 SCRATCH_ROOT = work_root(PROJECT)
@@ -224,11 +224,13 @@ def artifact_path(raw, scratch, label):
     return path
 
 
+def per_build_report(local, fallback):
+    return local if local.exists() or local.is_symlink() else fallback
+
+
 def startup_build_report(snapshot, scratch):
-    report = windows_build_report(scratch, "startup-qa")
-    if report.exists() or report.is_symlink():
-        return report
-    return snapshot / "analysis/windows-startup-qa-build.json"
+    return per_build_report(windows_build_report(scratch, "startup-qa"),
+                            snapshot / "analysis/windows-startup-qa-build.json")
 
 
 def startup_build_inputs(snapshot, scratch, project):
@@ -278,7 +280,7 @@ def validate(snapshot_arg, scratch_arg, frontier=None):
 
     analysis = snapshot / "analysis"
     reports, facts = {}, {"source_snapshot": receipt_fact}
-    for key, path in (("native", analysis / "native-verification.json"),
+    for key, path in (("native", per_build_report(native_build_report(scratch), analysis / "native-verification.json")),
                       ("windows", startup_build_report(snapshot, scratch)),
                       ("rng", analysis / "rng-differential.json"),
                       ("frame_rng", analysis / "frame-rng-differential.json")):

@@ -2,6 +2,8 @@
 
 import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from time import sleep
 
 
 def work_root(project: Path) -> Path:
@@ -28,3 +30,28 @@ def overlaps_authored_tree(path: Path, project: Path) -> bool:
 
 def windows_build_report(scratch: Path, target: str) -> Path:
     return scratch / "build" / ("windows-" + target) / "build-report.json"
+
+
+def native_build_report(scratch: Path) -> Path:
+    return scratch / "logs/native/native-verification.json"
+
+
+def write_build_report(path: Path, data: str) -> None:
+    """Publish a complete report, allowing brief Windows file sharing locks."""
+    path.parent.mkdir(exist_ok=True)
+    temporary = None
+    try:
+        with NamedTemporaryFile(dir=path.parent, encoding="utf-8", mode="w", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(data)
+        for attempt in range(5):
+            try:
+                temporary.replace(path)
+                return
+            except PermissionError as error:
+                if getattr(error, "winerror", None) not in (5, 32, 33) or attempt == 4:
+                    raise
+                sleep(0.05 * (attempt + 1))
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)

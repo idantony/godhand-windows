@@ -96,6 +96,17 @@ class MilestoneTests(unittest.TestCase):
         with self.assertRaisesRegex(tool.ProofError, "failed step"):
             self.validate()
 
+    def test_native_receipt_survives_a_newer_failed_run(self):
+        latest = self.analysis / "native-verification.json"
+        local = tool.native_build_report(self.scratch)
+        self.write(local, json.loads(latest.read_bytes()))
+        self.change(latest, lambda data: data.update(status="failed"))
+        report, _ = self.validate()
+        self.assertEqual(report["reports"]["native"]["path"], str(local))
+        self.change(local, lambda data: data.update(status="running"))
+        with self.assertRaisesRegex(tool.ProofError, "native.status"):
+            self.validate()
+
     def test_zero_exit_accepts_only_zero_host_and_frontier(self):
         self.change(self.scratch / "startup-process.json", lambda d: d.update(exit_code=0))
         self.change(self.scratch / "startup-newgame.json", lambda d: d.update(exit_code=0, host_error=0, subsystem_error=0, frontier="00000000"))

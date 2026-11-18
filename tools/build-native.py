@@ -15,7 +15,7 @@ from test_contracts import check_contracts, TestContractError
 from compiler_response import write_response_file
 from compiled_objects import OBJECT_CACHE_DIRECTORY, ObjectCache, c_driver, project_inputs, source_hashes
 
-from workspace_paths import overlaps_authored_tree, work_root
+from workspace_paths import native_build_report, overlaps_authored_tree, work_root, write_build_report
 
 PROJECT = Path(__file__).resolve().parents[1]
 SCRATCH = work_root(PROJECT)
@@ -73,7 +73,14 @@ def main():
                 "compiler_cache": str(compiler_cache),
                 "target": "x86_64-windows-gnu", "status": "running", "steps": [],
                 "is_playable_game": False, "purpose": "Verify recovered game functions and native original-disc resource access"}
-    report = logs / "focused-verification.json" if args.focus else PROJECT / "analysis" / "native-verification.json"
+    report = logs / "focused-verification.json" if args.focus else native_build_report(scratch)
+    latest_report = PROJECT / "analysis/native-verification.json"
+
+    def save_report(*, terminal=False):
+        data = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+        write_build_report(report, data)
+        if terminal and not args.focus:
+            write_build_report(latest_report, data)
 
     report_lock = threading.Lock()
     last_report = 0.0
@@ -96,6 +103,7 @@ def main():
         log.write_text(result.stdout, encoding="utf-8")
         step = {"name": label, "command": [str(item) for item in command], "returncode": result.returncode,
                 "seconds": round(time.monotonic() - started, 3), "log": str(log), "output": result.stdout[-8000:]}
+        terminal_failure = result.returncode != 0 and (not args.keep_going or not label.startswith("test-"))
         with report_lock:
             manifest["steps"].append(step)
             if result.returncode:
@@ -104,12 +112,12 @@ def main():
             # current without rewriting its growing history for every worker.
             now = time.monotonic()
             if result.returncode or now - last_report >= 1:
-                report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                save_report(terminal=terminal_failure)
                 last_report = now
             print(label + ": " + ("PASS" if result.returncode == 0 else "FAIL"), flush=True)
         if result.returncode:
             print(result.stdout, flush=True)
-            if not args.keep_going or not label.startswith("test-"):
+            if terminal_failure:
                 raise SystemExit(result.returncode)
 
     common = c_driver(compiler)
@@ -832,9 +840,9 @@ def main():
         manifest["test_contracts"] = check_contracts(PROJECT, extra_tests)
     except TestContractError as error:
         manifest.update(status="failed", error=str(error))
-        report.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        save_report(terminal=True)
         raise SystemExit(str(error))
-    source_inputs = {"tools/build-native.py", "tools/test_contracts.py", "tools/compiler_response.py",
+    source_inputs = {"tools/build-native.py", "tools/test_contracts.py", "tools/compiler_response.py", "tools/workspace_paths.py",
                      "tools/compiled_objects.py", "tests/test_cpp_abi.cpp", "tests/core/test_rng.c",
                      "tests/core/test_boot.c", "tests/platform/test_disc.c", "tests/rooms/test_r207.c",
                      "tests/platform/test_memory.c", "tests/core/test_tasks.c",
@@ -872,7 +880,7 @@ def main():
         PROJECT, (source for _, source in modules), source_inputs)
     cache = None if args.no_object_cache else ObjectCache.for_build(cache_root, compiler, env)
     cache_writes = []
-    report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    save_report()
     last_report = time.monotonic()
 
     def compile_object(label, source, target, extra_flags=()):
@@ -901,7 +909,7 @@ def main():
         final_sources = source_hashes(PROJECT, initial_sources)
         if initial_sources != final_sources:
             manifest["status"] = "failed-source-changed-during-build"
-            report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            save_report(terminal=True)
             raise SystemExit("Source changed during compilation/testing; rebuild the stabilized inputs")
         if cache:
             for key, target in cache_writes:
@@ -916,7 +924,7 @@ def main():
         manifest["artifacts"] = [{"path": str(path), "size": path.stat().st_size,
                                   "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
                                  for path in sorted(output.glob("*")) if path.is_file()]
-        report.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        save_report(terminal=True)
         print("Report: " + str(report), flush=True)
         if failed:
             print("Failed checks: " + ", ".join(failed), flush=True)

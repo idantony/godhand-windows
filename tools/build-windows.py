@@ -8,29 +8,15 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import tempfile
 import threading
 from compiler_response import write_response_file
 from compiled_objects import (OBJECT_CACHE_DIRECTORY, WINDOWS_COMPILER_FLAGS, ObjectCache,
                               c_driver, project_inputs, source_hashes)
 
-from workspace_paths import overlaps_authored_tree, windows_build_report, work_root
+from workspace_paths import overlaps_authored_tree, windows_build_report, work_root, write_build_report
 
 PROJECT = Path(__file__).resolve().parents[1]
 DEFAULT_SCRATCH = work_root(PROJECT)
-
-
-def write_report(path, data):
-    path.parent.mkdir(exist_ok=True)
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(dir=path.parent, encoding="utf-8", mode="w", delete=False) as stream:
-            temporary = Path(stream.name)
-            stream.write(data)
-        temporary.replace(path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
 
 
 def main():
@@ -122,8 +108,8 @@ def main():
     report_lock = threading.Lock()
     def save():
         data = json.dumps(report, indent=2) + "\n"
-        write_report(report_path, data)
-        write_report(latest_report, data)
+        write_build_report(report_path, data)
+        write_build_report(latest_report, data)
     def run(name, command):
         if name == "link":
             response = write_response_file(build / "link.rsp", command[2:])

@@ -63,6 +63,9 @@ finished port or execute guest instructions in the production runtime.
   another build of the same source can update the snapshot's latest report
   without invalidating an earlier replay. Use a fresh build scratch to retain
   both executables.
+  Full native test runs keep their progress and final result under the selected
+  scratch at `logs/native/native-verification.json`. The snapshot's analysis
+  copy records the latest terminal result.
   `--capture-series` verifies each logged 512×448 world/composite pair against
   its process hash and counts nonblack RGB pixels independently of alpha.
   Compare both surfaces and the logged Fade color when diagnosing a black frame.

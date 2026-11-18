@@ -162,6 +162,8 @@ terminal report for the intended endpoint. Compare simulation state by gameplay
 update and report tick or presentation offsets alongside it. Use partial
 overlap to locate the next failure. For reruns, reuse binaries when their
 hashes and source pins match and write results to a fresh scratch directory.
+Keep the build report in the executable's scratch directory so each build
+preserves its own evidence.
 Record the process exit code even when it produces no replay report.
 
 For a native Windows crash, resolve the failing module and relative address
